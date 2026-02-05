@@ -1,0 +1,60 @@
+name: Unified Dogfooding scans
+
+# PREREQUISITES:
+# This workflow requires your repository to be onboarded to multiple SonarQube platforms
+# and have access to specific Vault secrets for authentication.
+#
+# Required Platform Onboarding:
+# - Next (SonarQube Next platform)
+# - SonarQube Cloud EU
+# - SonarQube Cloud US
+# ℹ️  Use the SPEED "Onboard to SonarQube" action to onboard your repository to these platforms
+#
+# Required Vault Secrets (can be requested through SPEED):
+# - development/kv/data/iris: {}
+# - development/kv/data/next: {}
+# - development/kv/data/sonarcloud: {}
+# - development/kv/data/sonarqube-us: {}
+#
+# 📖 Documentation: https://xtranet-sonarsource.atlassian.net/wiki/spaces/Platform/pages/4285333581/GitHub+CI+CD+Starting+Guide+-+GitHub#Unified-Platform-Dogfooding-(Shadow-Scanning)
+
+on:
+  # TODO: Uncomment and configure the schedule when ready for automated runs
+  # schedule:
+  #   # Run the workflow every day at 04:00 UTC
+  #   - cron: '0 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Runner selection based on repository visibility:
+    # - Private/internal repositories: sonar-xs
+    # - Public repositories: github-ubuntu-latest-s
+    runs-on: sonar-xs
+    name: Build
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      # TODO: Choose and uncomment the appropriate build action for your project:
+      # - uses: SonarSource/ci-github-actions/build-maven@v1       # For Maven-based Java projects
+      # - uses: SonarSource/ci-github-actions/build-gradle@v1      # For Gradle-based Java projects
+      # - uses: SonarSource/ci-github-actions/build-poetry@v1      # For Python projects using Poetry
+      # - uses: SonarSource/ci-github-actions/build-npm@v1         # For Node.js projects using npm
+      # - uses: SonarSource/ci-github-actions/build-yarn@v1        # For Node.js projects using Yarn
+      - uses: SonarSource/ci-github-actions/BUILD-ACTION-HERE@v1
+        with:
+          run-shadow-scans: true
+
+      - name: Run IRIS Analysis
+        uses: SonarSource/unified-dogfooding-actions/run-iris@master
+        with:
+          # TODO: Replace these placeholders with your actual project keys and platforms
+          primary_project_key: "YOUR-PROJECT-KEY"
+          primary_platform: "SQC-EU"  # Options: SQC-EU, SQC-US, Next
+          shadow1_project_key: "YOUR-PROJECT-KEY"
+          shadow1_platform: "Next"  # Options: SQC-EU, SQC-US, Next
+          shadow2_project_key: "YOUR-PROJECT-KEY"
+          shadow2_platform: "SQC-US"  # Options: SQC-EU, SQC-US, Next

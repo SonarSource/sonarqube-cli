@@ -1,0 +1,16 @@
+---
+name: Release
+on:
+  release:
+    types:
+      - published
+
+env:
+  PYTHONUNBUFFERED: 1
+
+jobs:
+  release:
+    permissions:
+      id-token: write
+      contents: write
+    uses: SonarSource/gh-action_release/.github/workflows/main.yaml@f610ee562da0eb743c378afb819f6bfb39e812cf # 6.2.1

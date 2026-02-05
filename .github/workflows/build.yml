@@ -1,0 +1,49 @@
+name: Build
+on:
+  push:
+    branches:
+      - master
+      - branch-*
+      - dogfood-*
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
+
+jobs:
+  build:
+    # TODO: Choose the appropriate runner for your repository
+    # For guidance on runner selection, visit:
+    # https://xtranet-sonarsource.atlassian.net/wiki/spaces/Platform/pages/3694231566/GitHub+Actions+Runner+-+GitHub
+    runs-on: sonar-xs  # Recommended for private/internal repositories
+    name: Build
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1 #TODO: update to the last version
+
+      # SECURITY BEST PRACTICES:
+      # - Pin all external actions to specific SHA commits (not tags) for security
+      # - All secrets MUST come from Vault using SonarSource/vault-action-wrapper
+      # - Never use GitHub Secrets for sensitive data
+
+      # TODO: Add your build steps here
+      #
+      # For ready-to-use SonarSource GitHub Actions with real-world examples
+      # and production-ready implementations, visit:
+      # https://github.com/SonarSource/ci-github-actions
+      #
+      # For caching, use SonarSource/gh-action_cache@v1
+      # It automatically chooses GitHub Actions cache (public) or S3 cache (private)
+      #
+      # Real-world reference repositories:
+      # - sonar-dummy: Private Java/Maven
+      # - sonar-dummy-gradle-oss: Public Java/Gradle
+      # - sonar-dummy-python-oss: Public Python/Poetry
+      # - sonar-dummy-js: Public NodeJS/Yarn
+      #
