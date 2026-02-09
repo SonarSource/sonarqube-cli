@@ -85,8 +85,9 @@ export class SonarQubeClient {
   async getOrganizations(): Promise<Array<{ key: string; name: string }>> {
     try {
       const result = await this.get<{ organizations: Array<{ key: string; name: string }> }>('/api/organizations');
-      return result.organizations;
-    } catch {
+      return result.organizations || [];
+    } catch (error) {
+      console.error('[DEBUG] Failed to get organizations:', error instanceof Error ? error.message : String(error));
       return [];
     }
   }

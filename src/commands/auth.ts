@@ -45,7 +45,7 @@ export async function authLoginCommand(options: {
         const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
         console.log(`✓ Token already exists for: ${displayServer}`);
         console.log('You are already authenticated');
-        return;
+        process.exit(0);
       }
 
       // Open browser to get token
@@ -71,7 +71,11 @@ export async function authLoginCommand(options: {
         const organizations = await client.getOrganizations();
 
         if (organizations.length === 0) {
-          console.error('Error: No organizations found. Check your token.');
+          console.error('Error: No organizations found.');
+          console.error('This could mean:');
+          console.error('  - You don\'t have access to any organizations');
+          console.error('  - The token has insufficient permissions');
+          console.error('  - Try specifying organization explicitly: sonar auth login -o <organization>');
           process.exit(1);
         }
 
@@ -120,6 +124,7 @@ export async function authLoginCommand(options: {
 
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     console.log(`✓ Authentication successful for: ${displayServer}`);
+    process.exit(0);
   } catch (error) {
     console.error(`Error: ${(error as Error).message}`);
     process.exit(1);
@@ -142,16 +147,17 @@ export async function authLogoutCommand(options: {
       process.exit(1);
     }
 
-    const token = await getToken(server);
+    const token = await getToken(server, org);
     if (!token) {
       const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
       console.log(`ℹ No token found for: ${displayServer}`);
-      return;
+      process.exit(0);
     }
 
     await deleteToken(server, org);
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     console.log(`✓ Logged out from: ${displayServer}`);
+    process.exit(0);
   } catch (error) {
     console.error(`Error: ${(error as Error).message}`);
     process.exit(1);
@@ -167,7 +173,7 @@ export async function authPurgeCommand(): Promise<void> {
 
     if (credentials.length === 0) {
       console.log('ℹ No tokens found in keychain');
-      return;
+      process.exit(0);
     }
 
     console.log(`Found ${credentials.length} token(s):`);
@@ -179,11 +185,12 @@ export async function authPurgeCommand(): Promise<void> {
     const confirm = await getUserInput('Remove all tokens? (y/n): ');
     if (confirm.toLowerCase() !== 'y') {
       console.log('Cancelled');
-      return;
+      process.exit(0);
     }
 
     await purgeAllTokens();
     console.log('✓ All tokens have been removed from keychain');
+    process.exit(0);
   } catch (error) {
     console.error(`Error: ${(error as Error).message}`);
     process.exit(1);
@@ -202,6 +209,7 @@ async function getUserInput(prompt: string): Promise<string> {
     process.stdin.setEncoding('utf-8');
     process.stdin.once('data', (data) => {
       input = data.toString().trim();
+      process.stdin.destroy();
       resolve(input);
     });
   });

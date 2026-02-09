@@ -16,7 +16,7 @@ const program = new Command();
 program
   .name('sonar')
   .description('SonarQube CLI for AI coding agents')
-  .version('0.2.59');
+  .version('0.2.60');
 
 // Analyze a file for code issues
 program
