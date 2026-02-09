@@ -319,6 +319,63 @@ async function isGitRepository(projectRoot: string): Promise<boolean> {
 }
 
 /**
+ * Pre-commit uninstall command
+ */
+export async function preCommitUninstallCommand(): Promise<void> {
+  try {
+    const projectRoot = process.cwd();
+    
+    console.log('\n🗑️  Removing SonarSource secrets pre-commit hook\n');
+    
+    // Check if in a git repository
+    if (!await isGitRepository(projectRoot)) {
+      console.error('Error: Not a git repository');
+      console.error('Please run this command from the root of a git repository');
+      process.exit(1);
+    }
+    
+    // Step 1: Uninstall pre-commit hooks
+    console.log('🔧 Uninstalling pre-commit hooks...');
+    console.log('   Running: pre-commit uninstall');
+    
+    const uninstallResult = await spawnProcess('pre-commit', ['uninstall'], {
+      cwd: projectRoot,
+      stdout: 'inherit',
+      stderr: 'inherit'
+    });
+    
+    if (uninstallResult.exitCode === 0) {
+      console.log('   ✓ Pre-commit hooks uninstalled');
+    } else {
+      console.log('   ⚠️  Warning: pre-commit uninstall failed or hooks were not installed');
+    }
+    
+    console.log('');
+    
+    // Step 2: Remove .pre-commit-config.yaml
+    const configPath = join(projectRoot, PRE_COMMIT_CONFIG);
+    
+    if (existsSync(configPath)) {
+      console.log('📝 Removing configuration file...');
+      const fs = await import('fs/promises');
+      await fs.unlink(configPath);
+      console.log('   ✓ Removed .pre-commit-config.yaml');
+    } else {
+      console.log('ℹ️  Configuration file not found (already removed)');
+    }
+    
+    console.log('');
+    console.log('✅ SonarSource secrets pre-commit hook uninstalled successfully!');
+    console.log('');
+    
+    process.exit(0);
+  } catch (error) {
+    console.error(`\nError: ${(error as Error).message}`);
+    process.exit(1);
+  }
+}
+
+/**
  * Pre-commit install command
  */
 export async function preCommitInstallCommand(): Promise<void> {

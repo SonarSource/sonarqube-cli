@@ -98,9 +98,19 @@ sonar pre-commit install
 This command will:
 1. Install `pre-commit` CLI tool (tries brew first on macOS, falls back to pip if brew is not available; uses pip on Linux/Windows)
 2. Create `.pre-commit-config.yaml` with Sonar secrets detection hook
-3. Configure the hook to run on every git commit to detect hardcoded secrets
+3. Run `pre-commit autoupdate` to get the latest hook versions
+4. Configure the hook to run on every git commit to detect hardcoded secrets
 
 The hook will automatically scan your code for secrets before each commit, preventing accidental credential leaks.
+
+**Uninstall Sonar secrets pre-commit hook:**
+```bash
+sonar pre-commit uninstall
+```
+
+This command will:
+1. Run `pre-commit uninstall` to remove the git hooks
+2. Delete the `.pre-commit-config.yaml` configuration file
 
 ### Issues Management
 
