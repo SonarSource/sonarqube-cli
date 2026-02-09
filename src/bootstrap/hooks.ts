@@ -1,7 +1,8 @@
-// Hooks installation - install Claude Code hooks
+// Hooks installation - install Claude Code hooks (cross-platform)
 
-import { existsSync, mkdirSync, chmodSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { platform } from 'os';
 
 const CLAUDE_DIR = '.claude';
 const HOOKS_DIR = 'hooks';
@@ -28,7 +29,21 @@ interface ClaudeSettings {
 }
 
 /**
- * Install hooks for SonarQube analysis
+ * Get platform identifier
+ */
+function getPlatform(): 'windows' | 'unix' {
+  return platform() === 'win32' ? 'windows' : 'unix';
+}
+
+/**
+ * Get script extension based on platform
+ */
+function getScriptExtension(): string {
+  return getPlatform() === 'windows' ? '.ps1' : '.sh';
+}
+
+/**
+ * Install hooks for SonarQube analysis (cross-platform)
  */
 export async function installHooks(
   projectRoot: string,
@@ -38,22 +53,30 @@ export async function installHooks(
 
   // Create .claude directory
   if (!existsSync(claudePath)) {
-    mkdirSync(claudePath, { recursive: true, mode: 0o755 });
+    mkdirSync(claudePath, { recursive: true });
   }
 
   // Create hooks subdirectory
   const hooksPath = join(claudePath, HOOKS_DIR);
   if (!existsSync(hooksPath)) {
-    mkdirSync(hooksPath, { recursive: true, mode: 0o755 });
+    mkdirSync(hooksPath, { recursive: true });
   }
 
-  // Install hook script
-  const scriptName = 'sonar-prompt.sh';
+  // Install hook script with platform-specific extension
+  const extension = getScriptExtension();
+  const scriptName = `sonar-prompt${extension}`;
   const scriptPath = join(hooksPath, scriptName);
   const scriptContent = getHookScriptContent(hookType);
 
   const fs = await import('fs/promises');
-  await fs.writeFile(scriptPath, scriptContent, { mode: 0o755 });
+
+  if (getPlatform() === 'unix') {
+    // Unix: set executable permissions
+    await fs.writeFile(scriptPath, scriptContent, { mode: 0o755 });
+  } else {
+    // Windows: no special permissions
+    await fs.writeFile(scriptPath, scriptContent);
+  }
 
   console.log(`   ✓ Installed hook script: ${scriptPath}`);
 
@@ -64,17 +87,19 @@ export async function installHooks(
 }
 
 /**
- * Get hook script content based on type
+ * Get hook script content based on type and platform
  */
 function getHookScriptContent(hookType: HookType): string {
+  const isWindows = getPlatform() === 'windows';
+
   if (hookType === 'cli') {
-    return getHookCLITemplate();
+    return isWindows ? getHookCLITemplateWindows() : getHookCLITemplateUnix();
   }
-  return getHookPromptTemplate();
+  return isWindows ? getHookPromptTemplateWindows() : getHookPromptTemplateUnix();
 }
 
 /**
- * Configure hooks in settings.local.json
+ * Configure hooks in settings.local.json (cross-platform paths)
  */
 async function configureHooksSettings(
   claudePath: string,
@@ -103,14 +128,17 @@ async function configureHooksSettings(
     settings.hooks = {};
   }
 
-  // Add PostToolUse hook
+  // Build cross-platform command path using path.join normalization
+  const commandPath = join('.claude', 'hooks', scriptName);
+
+  // Add PostToolUse hook with normalized path
   settings.hooks.PostToolUse = [
     {
       matcher: 'Edit|Write',
       hooks: [
         {
           type: 'command',
-          command: `.claude/hooks/${scriptName}`,
+          command: commandPath,
           timeout: 120
         }
       ]
@@ -160,21 +188,22 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
 }
 
 /**
- * Hook template for prompt-based analysis
+ * Unix hook template for prompt-based analysis (bash)
  */
-function getHookPromptTemplate(): string {
+function getHookPromptTemplateUnix(): string {
   return `#!/bin/bash
 # SonarQube Analysis Hook for Claude Code
 # This hook prompts the agent to analyze files after Edit/Write operations
+# Platform: Unix/Linux/macOS
 
 set -e
 
 # Read JSON from stdin
 INPUT=$(cat)
 
-# Extract tool name and file path from JSON
-TOOL=$(echo "$INPUT" | jq -r '.tool_name')
-FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+# Parse JSON using grep/sed instead of jq for compatibility
+TOOL=$(echo "$INPUT" | grep -o '"tool_name":"[^"]*' | head -1 | cut -d'"' -f4)
+FILE=$(echo "$INPUT" | grep -o '"file_path":"[^"]*' | head -1 | cut -d'"' -f4)
 
 # Skip if no file specified
 [ -z "$FILE" ] && exit 0
@@ -204,10 +233,6 @@ case "$FILE" in
 esac
 
 # Output prompt for the agent as JSON
-# IMPORTANT: PostToolUse hooks MUST output JSON with hookSpecificOutput.additionalContext
-# Plain text output is ignored by Claude Code!
-
-# Build the prompt message
 PROMPT="╔══════════════════════════════════════════════════════════╗
 ║        SONARQUBE ANALYSIS REQUIRED                       ║
 ╚══════════════════════════════════════════════════════════╝
@@ -229,15 +254,15 @@ You MUST fix ALL issues found in this file:
 
 The file must be completely clean before you proceed to the next task."
 
-# Output as JSON
-jq -n \\
-  --arg prompt "$PROMPT" \\
-  '{
-    "hookSpecificOutput": {
-      "hookEventName": "PostToolUse",
-      "additionalContext": $prompt
-    }
-  }'
+# Output as JSON (compatible format)
+cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "$(echo "$PROMPT" | sed 's/"/\\\\"/g' | tr '\\n' ' ')"
+  }
+}
+EOF
 
 # Always exit 0 to never block Claude Code
 exit 0
@@ -245,22 +270,23 @@ exit 0
 }
 
 /**
- * Hook template for CLI-based analysis
+ * Unix hook template for CLI-based analysis (bash)
  */
-function getHookCLITemplate(): string {
+function getHookCLITemplateUnix(): string {
   return `#!/bin/bash
-# SonarLint Hook - CLI Mode
-# This hook automatically runs SonarLint analysis after code changes
+# SonarQube Hook - CLI Mode
+# This hook automatically runs SonarQube analysis after code changes
+# Platform: Unix/Linux/macOS
 
 # Read JSON from stdin
 INPUT=$(cat)
 
-# Extract tool name and file path from JSON using jq
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+# Parse JSON using grep/sed instead of jq
+TOOL_NAME=$(echo "$INPUT" | grep -o '"tool_name":"[^"]*' | head -1 | cut -d'"' -f4)
+FILE_PATH=$(echo "$INPUT" | grep -o '"file_path":"[^"]*' | head -1 | cut -d'"' -f4)
 
 # Only analyze if Edit or Write was used
-if [[ "$TOOL_NAME" != "Edit" && "$TOOL_NAME" != "Write" ]]; then
+if [ "$TOOL_NAME" != "Edit" ] && [ "$TOOL_NAME" != "Write" ]; then
   exit 0
 fi
 
@@ -271,13 +297,169 @@ if [ -f "$FILE_PATH" ]; then
   case "$EXT" in
     js|ts|jsx|tsx|java|py|go|rb|php|cs|cpp|c|h|hpp)
       echo ""
-      echo "🔍 Analyzing $FILE_PATH with SonarLint..."
-      sonar verify "$FILE_PATH"
+      echo "🔍 Analyzing $FILE_PATH with SonarQube..."
+      sonar verify --file "$FILE_PATH" || true
       ;;
     *)
       # Skip non-code files
       ;;
   esac
 fi
+
+exit 0
+`;
+}
+
+/**
+ * Windows hook template for prompt-based analysis (PowerShell)
+ */
+function getHookPromptTemplateWindows(): string {
+  return `#!/usr/bin/env pwsh
+# SonarQube Analysis Hook for Claude Code
+# This hook prompts the agent to analyze files after Edit/Write operations
+# Platform: Windows
+
+param(
+    [Parameter(ValueFromPipeline = $true)]
+    [string]$InputData
+)
+
+# Parse JSON from stdin
+try {
+    $input = $InputData | ConvertFrom-Json -ErrorAction Stop
+} catch {
+    # Invalid JSON, skip
+    exit 0
+}
+
+# Extract values
+$toolName = $input.tool_name
+$filePath = $input.tool_input.file_path
+
+# Skip if no file specified
+if ([string]::IsNullOrEmpty($filePath)) {
+    exit 0
+}
+
+# Check if file is in supported languages
+$supportedExtensions = @('java', 'js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rb', 'php', 'cs', 'cpp', 'c', 'h', 'hpp')
+$fileExtension = [System.IO.Path]::GetExtension($filePath).TrimStart('.')
+
+if ($supportedExtensions -notcontains $fileExtension) {
+    exit 0
+}
+
+# Detect language from extension
+$languageMap = @{
+    'java'   = 'java'
+    'js'     = 'javascript'
+    'jsx'    = 'javascript'
+    'ts'     = 'typescript'
+    'tsx'    = 'typescript'
+    'py'     = 'python'
+    'go'     = 'go'
+    'rb'     = 'ruby'
+    'php'    = 'php'
+    'cs'     = 'csharp'
+    'cpp'    = 'cpp'
+    'c'      = 'cpp'
+    'h'      = 'cpp'
+    'hpp'    = 'cpp'
+}
+
+$language = $languageMap[$fileExtension]
+
+# Build the prompt message
+$prompt = @"
+╔══════════════════════════════════════════════════════════╗
+║        SONARQUBE ANALYSIS REQUIRED                       ║
+╚══════════════════════════════════════════════════════════╝
+
+You just modified: $filePath
+
+You MUST analyze this file for code quality issues using MCP tool:
+mcp__sonarqube__analyze_code_snippet with:
+  - codeSnippet: <read file content from $filePath>
+  - language: $language
+  - projectKey: <get from sonar-project.properties if available>
+
+You MUST fix ALL issues found in this file:
+- Fix ALL bugs and security vulnerabilities (critical priority)
+- Fix ALL code smells and maintainability issues
+- Fix ALL issues even if they existed before your changes
+- Fix ALL issues even if they are minor
+- Do not skip any issues
+
+The file must be completely clean before you proceed to the next task.
+"@
+
+# Output as JSON
+$output = @{
+    hookSpecificOutput = @{
+        hookEventName = "PostToolUse"
+        additionalContext = $prompt
+    }
+}
+
+$output | ConvertTo-Json -Depth 10 -EnumsAsStrings
+
+# Always exit 0 to never block Claude Code
+exit 0
+`;
+}
+
+/**
+ * Windows hook template for CLI-based analysis (PowerShell)
+ */
+function getHookCLITemplateWindows(): string {
+  return `#!/usr/bin/env pwsh
+# SonarQube Hook - CLI Mode
+# This hook automatically runs SonarQube analysis after code changes
+# Platform: Windows
+
+param(
+    [Parameter(ValueFromPipeline = $true)]
+    [string]$InputData
+)
+
+# Parse JSON from stdin
+try {
+    $input = $InputData | ConvertFrom-Json -ErrorAction Stop
+} catch {
+    # Invalid JSON, skip
+    exit 0
+}
+
+# Extract values
+$toolName = $input.tool_name
+$filePath = $input.tool_input.file_path
+
+# Only analyze if Edit or Write was used
+if ($toolName -ne "Edit" -and $toolName -ne "Write") {
+    exit 0
+}
+
+# Check if file exists
+if (-Not (Test-Path $filePath -Type Leaf)) {
+    exit 0
+}
+
+# Check file extension (only analyze code files)
+$extension = [System.IO.Path]::GetExtension($filePath).TrimStart('.')
+$supportedExtensions = @('js', 'ts', 'jsx', 'tsx', 'java', 'py', 'go', 'rb', 'php', 'cs', 'cpp', 'c', 'h', 'hpp')
+
+if ($supportedExtensions -contains $extension) {
+    Write-Host ""
+    Write-Host "🔍 Analyzing $filePath with SonarQube..."
+
+    # Run sonar verify (ignore errors to not block Claude Code)
+    try {
+        & sonar verify --file $filePath
+    } catch {
+        # Silently ignore errors
+    }
+}
+
+exit 0
 `;
 }

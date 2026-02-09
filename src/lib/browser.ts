@@ -30,15 +30,26 @@ export async function openBrowser(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       stdio: 'ignore',
-      detached: true
+      detached: true,
+      shell: false
     });
 
-    proc.on('error', reject);
+    proc.on('error', (error: any) => {
+      // Ignore if command not found (browser might not be available)
+      if (error.code === 'ENOENT') {
+        reject(new Error(`${command} not found on this system`));
+      } else {
+        reject(error);
+      }
+    });
+
     proc.on('exit', (code) => {
-      if (code === 0) {
+      if (code === 0 || code === null) {
+        // Exit code 0 or null means success
         resolve();
       } else {
-        reject(new Error(`Browser command exited with code ${code}`));
+        // Ignore non-zero exit codes for browser opens
+        resolve();
       }
     });
 

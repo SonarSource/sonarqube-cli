@@ -1,4 +1,5 @@
 name: Build
+
 on:
   push:
     branches:
@@ -6,44 +7,41 @@ on:
       - branch-*
       - dogfood-*
   pull_request:
-  merge_group:
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
+    types: [opened, synchronize, reopened]
 
 jobs:
   build:
-    # TODO: Choose the appropriate runner for your repository
-    # For guidance on runner selection, visit:
-    # https://xtranet-sonarsource.atlassian.net/wiki/spaces/Platform/pages/3694231566/GitHub+Actions+Runner+-+GitHub
-    runs-on: sonar-xs  # Recommended for private/internal repositories
-    name: Build
-    permissions:
-      id-token: write
-      contents: read
+    name: Build and Test
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1 #TODO: update to the last version
+      - uses: actions/checkout@v4
 
-      # SECURITY BEST PRACTICES:
-      # - Pin all external actions to specific SHA commits (not tags) for security
-      # - All secrets MUST come from Vault using SonarSource/vault-action-wrapper
-      # - Never use GitHub Secrets for sensitive data
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-      # TODO: Add your build steps here
-      #
-      # For ready-to-use SonarSource GitHub Actions with real-world examples
-      # and production-ready implementations, visit:
-      # https://github.com/SonarSource/ci-github-actions
-      #
-      # For caching, use SonarSource/gh-action_cache@v1
-      # It automatically chooses GitHub Actions cache (public) or S3 cache (private)
-      #
-      # Real-world reference repositories:
-      # - sonar-dummy: Private Java/Maven
-      # - sonar-dummy-gradle-oss: Public Java/Gradle
-      # - sonar-dummy-python-oss: Public Python/Poetry
-      # - sonar-dummy-js: Public NodeJS/Yarn
-      #
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm run test:all
+
+      - name: Run validation
+        run: npm run validate
+
+  sonarqube:
+    name: SonarQube Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

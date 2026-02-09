@@ -1,8 +1,8 @@
 // MCP Server configuration - manages Claude Code MCP settings
 
 import { existsSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
+import { join, dirname } from 'path';
+import { homedir, platform } from 'os';
 
 interface MCPServer {
   type: string;
@@ -75,13 +75,17 @@ async function loadClaudeConfig(): Promise<ClaudeConfig> {
  */
 async function saveClaudeConfig(config: ClaudeConfig): Promise<void> {
   const configPath = getClaudeConfigPath();
-  const configDir = configPath.split('/').slice(0, -1).join('/');
+  const configDir = dirname(configPath);
 
   const fs = await import('fs/promises');
   const { mkdirSync } = await import('fs');
 
   // Ensure directory exists
-  mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  if (platform() === 'win32') {
+    mkdirSync(configDir, { recursive: true });
+  } else {
+    mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  }
 
   const data = JSON.stringify(config, null, 2);
   await fs.writeFile(configPath, data, 'utf-8');
@@ -184,7 +188,11 @@ async function saveProjectSettings(projectRoot: string, settings: ProjectSetting
   // Create .claude directory if needed
   if (!existsSync(claudePath)) {
     const { mkdirSync } = await import('fs');
-    mkdirSync(claudePath, { recursive: true, mode: 0o755 });
+    if (platform() === 'win32') {
+      mkdirSync(claudePath, { recursive: true });
+    } else {
+      mkdirSync(claudePath, { recursive: true, mode: 0o755 });
+    }
   }
 
   const settingsPath = getProjectSettingsPath(projectRoot);
