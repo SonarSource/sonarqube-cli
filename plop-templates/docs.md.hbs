@@ -1,0 +1,91 @@
+# {{spec.cli.name}} - CLI Documentation
+
+{{spec.cli.description}}
+
+**Version:** {{spec.cli.version}}
+**Generated:** {{generatedAt}}
+
+---
+
+## Commands
+
+{{#each spec.commands}}
+### `{{../spec.cli.name}} {{name}}`
+
+{{description}}
+
+{{#if options}}
+**Options:**
+
+| Option | Type | Required | Description | Default |
+|--------|------|----------|-------------|---------|
+{{#each options}}
+| `--{{name}}`{{#if alias}}, `-{{alias}}`{{/if}} | {{type}} | {{#if required}}✅{{else}}❌{{/if}} | {{description}} | {{#if default}}`{{default}}`{{else}}-{{/if}} |
+{{/each}}
+
+{{/if}}
+{{#if examples}}
+**Examples:**
+
+{{#each examples}}
+```bash
+{{command}}
+```
+{{description}}
+
+{{/each}}
+{{/if}}
+{{#if subcommands}}
+
+#### Subcommands:
+
+{{#each subcommands}}
+##### `{{../../spec.cli.name}} {{../name}} {{name}}`
+
+{{description}}
+
+{{#if options}}
+**Options:**
+
+| Option | Type | Required | Description | Default |
+|--------|------|----------|-------------|---------|
+{{#each options}}
+| `--{{name}}`{{#if alias}}, `-{{alias}}`{{/if}} | {{type}} | {{#if required}}✅{{else}}❌{{/if}} | {{description}} | {{#if default}}`{{default}}`{{else}}-{{/if}} |
+{{/each}}
+
+{{/if}}
+{{#if examples}}
+**Examples:**
+
+{{#each examples}}
+```bash
+{{command}}
+```
+{{description}}
+
+{{/each}}
+{{/if}}
+{{/each}}
+{{/if}}
+
+---
+
+{{/each}}
+
+## Option Types
+
+- `string` - Text value (e.g., `--server https://sonarcloud.io`)
+- `boolean` - Flag (e.g., `--verbose`)
+- `number` - Numeric value (e.g., `--page-size 100`)
+- `array` - Multiple values (e.g., `--tags tag1 tag2`)
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Error (validation, execution, etc.) |
+
+---
+
+*This documentation was auto-generated from `cli-spec.yaml`*

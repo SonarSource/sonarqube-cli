@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Sonar CLI Specification",
+  "description": "Schema for declarative CLI command definition",
+  "type": "object",
+  "required": ["cli", "commands"],
+  "properties": {
+    "cli": {
+      "type": "object",
+      "required": ["name", "version", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "CLI binary name (e.g., 'sonar')",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version (e.g., '0.2.0')",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "description": {
+          "type": "string",
+          "description": "CLI description shown in --help"
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "description": "List of CLI commands",
+      "items": {
+        "$ref": "#/definitions/command"
+      }
+    }
+  },
+  "definitions": {
+    "command": {
+      "type": "object",
+      "required": ["name", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Command name (e.g., 'status', 'daemon')",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Command description for help text"
+        },
+        "handler": {
+          "type": "string",
+          "description": "Path to handler function file (relative to src/)",
+          "pattern": "^\\./src/commands/.*\\.ts$"
+        },
+        "options": {
+          "type": "array",
+          "description": "Command-line options/flags",
+          "items": {
+            "$ref": "#/definitions/option"
+          }
+        },
+        "subcommands": {
+          "type": "array",
+          "description": "Nested subcommands (e.g., 'daemon start')",
+          "items": {
+            "$ref": "#/definitions/command"
+          }
+        },
+        "examples": {
+          "type": "array",
+          "description": "Usage examples for documentation",
+          "items": {
+            "type": "object",
+            "required": ["command", "description"],
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Example command line"
+              },
+              "description": {
+                "type": "string",
+                "description": "What this example demonstrates"
+              }
+            }
+          }
+        }
+      }
+    },
+    "option": {
+      "type": "object",
+      "required": ["name", "type", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Option name (without -- prefix)",
+          "pattern": "^[a-z][a-zA-Z0-9-]*$"
+        },
+        "alias": {
+          "type": "string",
+          "description": "Short alias (single letter)",
+          "pattern": "^[a-z]$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "boolean", "number", "array"],
+          "description": "Option data type"
+        },
+        "description": {
+          "type": "string",
+          "description": "Option description for help text"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether option is required",
+          "default": false
+        },
+        "default": {
+          "description": "Default value if not provided"
+        },
+        "choices": {
+          "type": "array",
+          "description": "Allowed values (enum)",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

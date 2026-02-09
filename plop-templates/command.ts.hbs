@@ -1,0 +1,92 @@
+// {{command.description}}
+//
+// Generated from cli-spec.yaml by Plop.js
+// Command: {{command.fullName}}
+
+{{#if hasOptions}}
+/**
+ * Options for {{camelCase command.name}} command
+ */
+export interface {{pascalCase command.name}}Options {
+{{#each command.options}}
+  /**
+   * {{description}}
+{{#if choices}}
+   * Allowed values: {{#each choices}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}
+{{#if default}}
+   * Default: {{default}}
+{{/if}}
+   */
+  {{camelCase name}}?: {{tsType type}};
+{{/each}}
+}
+
+{{/if}}
+/**
+ * {{command.description}}
+ *
+{{#if command.examples}}
+ * @example
+{{#each command.examples}}
+ * ```bash
+ * {{command}}
+ * ```
+ * {{description}}
+ *
+{{/each}}
+{{/if}}
+{{#if command.arguments}}
+{{#each command.arguments}}
+ * @param {{name}} - {{description}}{{#if choices}} ({{#each choices}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}){{/if}}
+{{/each}}
+{{/if}}
+{{#if hasOptions}}
+ * @param options - Command options
+{{/if}}
+ */
+export async function {{camelCase command.name}}Command(
+  {{#if command.arguments}}{{#each command.arguments}}{{name}}: string, {{/each}}{{/if}}{{#if hasOptions}}options: {{pascalCase command.name}}Options{{/if}}
+): Promise<void> {
+{{#if command.arguments}}
+{{#each command.arguments}}
+{{#if choices}}
+  // Validate {{name}} argument
+  const valid{{pascalCase name}} = [{{#each choices}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}];
+  if (!valid{{pascalCase name}}.includes({{name}})) {
+    console.error('Error: Invalid {{name}}. Must be one of: {{#each choices}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}');
+    process.exit(1);
+  }
+{{/if}}
+{{/each}}
+
+{{/if}}
+{{#if hasOptions}}
+{{#each command.options}}
+{{#if required}}
+  // Validate required option: {{name}}
+  if (!options.{{camelCase name}}) {
+    console.error('Error: --{{name}} is required');
+    process.exit(1);
+  }
+{{/if}}
+{{/each}}
+
+{{/if}}
+  // TODO: Implement {{command.name}} command logic
+  console.log('{{command.description}}');
+{{#if command.arguments}}
+{{#each command.arguments}}
+  console.log('{{pascalCase name}}:', {{name}});
+{{/each}}
+{{/if}}
+{{#if hasOptions}}
+  console.log('Options:', options);
+{{/if}}
+
+  // Example implementation:
+  // 1. Parse and validate arguments
+  // 2. Parse and validate options
+  // 3. Perform business logic
+  // 4. Output results
+}

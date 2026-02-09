@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+
+// Main CLI entry point
+// Generated from cli-spec.yaml by Plop.js
+
+import { Command } from 'commander';
+{{#each commands}}
+{{#if handler}}
+import { {{camelCase name}}Command } from './commands/{{name}}.js';
+{{/if}}
+{{#if subcommands}}
+{{#each subcommands}}
+{{#if handler}}
+import { {{camelCase ../name}}{{pascalCase name}}Command } from './commands/{{../name}}.js';
+{{/if}}
+{{/each}}
+{{/if}}
+{{/each}}
+
+const program = new Command();
+
+program
+  .name('{{cli.name}}')
+  .description('{{cli.description}}')
+  .version('{{cli.version}}');
+
+{{#each commands}}
+{{#if subcommands}}
+// {{description}}
+const {{camelCase name}} = program
+  .command('{{name}}')
+  .description('{{description}}');
+
+{{#each subcommands}}
+{{camelCase ../name}}
+  .command('{{name}}')
+  .description('{{description}}')
+{{#each options}}
+{{#if required}}
+  .requiredOption('{{#if alias}}-{{alias}}, {{/if}}--{{name}} <{{name}}>', '{{description}}')
+{{else}}
+  .option('{{#if alias}}-{{alias}}, {{/if}}--{{name}}{{#unless (eq type "boolean")}} <{{name}}>{{/unless}}', '{{description}}'{{#if default}}, '{{default}}'{{/if}})
+{{/if}}
+{{/each}}
+  .action(async ({{#if options}}options{{/if}}) => {
+    try {
+      await {{camelCase ../name}}{{pascalCase name}}Command({{#if options}}options{{/if}});
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+{{/each}}
+{{else}}
+// {{description}}
+program
+  .command('{{name}}{{#if arguments}}{{#each arguments}}{{#if required}} <{{name}}>{{else}} [{{name}}]{{/if}}{{/each}}{{/if}}')
+  .description('{{description}}')
+{{#each options}}
+{{#if required}}
+  .requiredOption('{{#if alias}}-{{alias}}, {{/if}}--{{name}} <{{name}}>', '{{description}}')
+{{else}}
+  .option('{{#if alias}}-{{alias}}, {{/if}}--{{name}}{{#unless (eq type "boolean")}} <{{name}}>{{/unless}}', '{{description}}'{{#if default}}, '{{default}}'{{/if}})
+{{/if}}
+{{/each}}
+  .action(async ({{#if arguments}}{{#each arguments}}{{name}}, {{/each}}options{{else}}{{#if options}}options{{/if}}{{/if}}) => {
+    try {
+{{#if arguments}}
+      // Validate argument choices
+{{#each arguments}}
+{{#if choices}}
+      const valid{{pascalCase name}} = [{{#each choices}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}];
+      if (!valid{{pascalCase name}}.includes({{name}})) {
+        console.error(`Error: Invalid {{name}}. Must be one of: {{#each choices}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}`);
+        process.exit(1);
+      }
+{{/if}}
+{{/each}}
+
+{{/if}}
+      await {{camelCase name}}Command({{#if arguments}}{{#each arguments}}{{name}}, {{/each}}options{{else}}{{#if options}}options{{/if}}{{/if}});
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+{{/if}}
+{{/each}}
+program.parse();

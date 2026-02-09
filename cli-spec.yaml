@@ -1,0 +1,229 @@
+# Sonar CLI Specification
+# This declarative spec defines all CLI commands, options, and structure
+
+cli:
+  name: sonar
+  version: 0.2.59
+  description: SonarQube CLI for AI coding agents
+
+commands:
+  # Command with single file argument
+  - name: verify
+    description: Analyze a file for code issues
+    handler: ./src/commands/verify.ts
+    options:
+      - name: file
+        type: string
+        description: File path to analyze
+        required: true
+    examples:
+      - command: sonar verify src/MyClass.java
+        description: Analyze a single Java file
+
+  # Command with nested subcommands
+  - name: issues
+    description: Manage SonarQube issues
+    subcommands:
+      - name: search
+        description: Search for issues in SonarQube
+        handler: ./src/commands/issues.ts
+        options:
+          - name: server
+            alias: s
+            type: string
+            description: SonarQube server URL
+            required: true
+
+          - name: token
+            alias: t
+            type: string
+            description: Authentication token
+
+          - name: project
+            alias: p
+            type: string
+            description: Project key
+            required: true
+
+          - name: severity
+            type: string
+            description: Filter by severity
+            choices:
+              - INFO
+              - MINOR
+              - MAJOR
+              - CRITICAL
+              - BLOCKER
+
+          - name: format
+            type: string
+            description: Output format
+            choices:
+              - json
+              - toon
+              - table
+              - csv
+            default: json
+
+          - name: branch
+            type: string
+            description: Branch name
+
+          - name: pull-request
+            type: string
+            description: Pull request ID
+
+          - name: all
+            type: boolean
+            description: Fetch all issues with pagination
+            default: false
+
+          - name: page-size
+            type: number
+            description: Page size for pagination
+            default: 500
+
+        examples:
+          - command: sonar issues search -s https://sonarcloud.io -p my-project -t TOKEN
+            description: Search issues in a project
+
+          - command: sonar issues search -s https://sonarcloud.io -p my-project --format toon
+            description: Output issues in TOON format for AI agents
+
+          - command: sonar issues search -s https://sonarcloud.io -p my-project --severity CRITICAL --all
+            description: Fetch all critical issues
+
+  # Complex command with many options
+  - name: onboard-agent
+    description: Setup SonarQube integration for AI coding agent
+    handler: ./src/commands/onboard-agent.ts
+    arguments:
+      - name: agent
+        description: AI coding agent to onboard
+        required: true
+        choices:
+          - claude
+          - gemini
+          - codex
+    options:
+      - name: server
+        alias: s
+        type: string
+        description: SonarQube server URL
+
+      - name: project
+        alias: p
+        type: string
+        description: Project key
+
+      - name: token
+        alias: t
+        type: string
+        description: Existing authentication token
+
+      - name: org
+        alias: o
+        type: string
+        description: Organization key (for SonarCloud)
+
+      - name: non-interactive
+        type: boolean
+        description: Non-interactive mode (no prompts)
+        default: false
+
+      - name: skip-hooks
+        type: boolean
+        description: Skip hooks installation
+        default: false
+
+      - name: hook-type
+        type: string
+        description: Hook type to install
+        choices:
+          - prompt
+          - cli
+        default: prompt
+
+      - name: verbose
+        alias: v
+        type: boolean
+        description: Verbose output
+        default: false
+
+    examples:
+      - command: sonar onboard-agent claude -s https://sonarcloud.io -p my-project
+        description: Onboard Claude Code with interactive setup
+
+      - command: sonar onboard-agent gemini -s https://sonarcloud.io -p my-project -t TOKEN --non-interactive
+        description: Non-interactive onboarding for Gemini (not yet supported)
+
+      - command: sonar onboard-agent claude --skip-hooks -v
+        description: Onboard without installing hooks (verbose mode)
+
+  # Authentication command
+  - name: auth
+    description: Manage authentication tokens and credentials
+    subcommands:
+      - name: login
+        description: Save authentication token to keychain
+        handler: ./src/commands/auth.ts
+        options:
+          - name: server
+            alias: s
+            type: string
+            description: SonarQube server URL (default is SonarCloud)
+
+          - name: org
+            alias: o
+            type: string
+            description: SonarCloud organization key (required for SonarCloud)
+
+          - name: with-token
+            alias: t
+            type: string
+            description: Token value (skips browser, non-interactive mode)
+
+        examples:
+          - command: sonar auth login
+            description: Interactive login for SonarCloud with browser
+
+          - command: sonar auth login -o my-org
+            description: Interactive login for specific SonarCloud organization
+
+          - command: sonar auth login -s https://my-sonarqube.io
+            description: Interactive login for custom SonarQube server
+
+          - command: sonar auth login -o my-org -t squ_abc123
+            description: Non-interactive login with direct token
+
+          - command: sonar auth login -s https://my-sonarqube.io --with-token squ_def456
+            description: Non-interactive login for custom server with token
+
+      - name: logout
+        description: Remove authentication token from keychain
+        handler: ./src/commands/auth.ts
+        options:
+          - name: server
+            alias: s
+            type: string
+            description: SonarQube server URL
+
+          - name: org
+            alias: o
+            type: string
+            description: SonarCloud organization key (required for SonarCloud)
+
+        examples:
+          - command: sonar auth logout -o my-org
+            description: Remove token for SonarCloud organization
+
+          - command: sonar auth logout -s https://my-sonarqube.io
+            description: Remove token for custom SonarQube server
+
+      - name: purge
+        description: Remove all authentication tokens from keychain
+        handler: ./src/commands/auth.ts
+        examples:
+          - command: sonar auth purge
+            description: Interactively remove all saved tokens
+
