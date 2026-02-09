@@ -312,3 +312,14 @@ commands:
           - command: sonar auth purge
             description: Interactively remove all saved tokens
 
+  # Pre-commit hooks command
+  - name: pre-commit
+    description: Manage pre-commit hooks for secrets detection
+    subcommands:
+      - name: install
+        description: Install Sonar secrets pre-commit hook
+        handler: ./src/commands/pre-commit.ts
+        examples:
+          - command: sonar pre-commit install
+            description: Install pre-commit and configure SonarSource secrets hook
+
