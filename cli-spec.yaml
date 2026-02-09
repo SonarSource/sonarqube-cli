@@ -323,3 +323,10 @@ commands:
           - command: sonar pre-commit install
             description: Install pre-commit and configure SonarSource secrets hook
 
+      - name: uninstall
+        description: Uninstall Sonar secrets pre-commit hook
+        handler: ./src/commands/pre-commit.ts
+        examples:
+          - command: sonar pre-commit uninstall
+            description: Remove pre-commit hook and configuration file
+

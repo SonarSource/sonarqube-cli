@@ -9,7 +9,7 @@ import { configCommand } from './commands/config.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
 import { authLoginCommand, authLogoutCommand, authPurgeCommand } from './commands/auth.js';
-import { preCommitInstallCommand } from './commands/pre-commit.js';
+import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
 
 const program = new Command();
 
@@ -167,6 +167,18 @@ preCommit
   .action(async () => {
     try {
       await preCommitInstallCommand();
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+preCommit
+  .command('uninstall')
+  .description('Uninstall SonarSource secrets pre-commit hook')
+  .action(async () => {
+    try {
+      await preCommitUninstallCommand();
     } catch (error) {
       console.error('Error:', (error as Error).message);
       process.exit(1);
