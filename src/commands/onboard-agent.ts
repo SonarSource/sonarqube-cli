@@ -5,6 +5,7 @@ import { runHealthChecks } from '../bootstrap/health.js';
 import { runRepair } from '../bootstrap/repair.js';
 // Config is read from sonar-project.properties, no need to save separate file
 import { getToken } from '../bootstrap/auth.js';
+import { getAllCredentials } from '../lib/keychain.js';
 import type { HookType } from '../bootstrap/hooks.js';
 
 export interface OnboardAgentOptions {
@@ -61,6 +62,7 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
   let serverURL = options.server;
   let projectKey = options.project;
   let organization = options.org;
+  let token = options.token;
 
   // Use discovered configuration if available
   if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
@@ -77,9 +79,64 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
     console.log(`✓ Found .sonarlint/connectedMode.json`);
   }
 
+  // Try to get credentials from OS keychain if not fully provided
+  if (!token || !organization || !serverURL) {
+    try {
+      // First, try to get token for the specific organization/server if provided
+      if ((organization || serverURL) && !token) {
+        const keychainToken = await getToken(serverURL || 'https://sonarcloud.io', organization);
+        if (keychainToken) {
+          token = keychainToken;
+          console.log(`✓ Found stored credentials`);
+        }
+      }
+      
+      // If still missing values, try to find any stored SonarCloud credentials
+      if (!token || !organization) {
+        const credentials = await getAllCredentials();
+        const sonarCloudCreds = credentials.filter(cred => 
+          cred.account.startsWith('sonarcloud.io:')
+        );
+        
+        if (sonarCloudCreds.length > 0) {
+          // Use the first available SonarCloud credential
+          const cred = sonarCloudCreds[0];
+          const [, org] = cred.account.split(':');
+          
+          if (!organization) {
+            organization = org;
+          }
+          
+          if (!token) {
+            token = cred.password;
+          }
+
+          if (!serverURL) {
+            serverURL = 'https://sonarcloud.io';
+          }
+          
+          console.log(`✓ Using stored credentials for organization: ${org}`);
+          
+          if (sonarCloudCreds.length > 1) {
+            console.log(`ℹ Multiple organizations found (${sonarCloudCreds.length}). Using: ${org}`);
+            console.log('  To use a different organization, specify --org');
+          }
+        }
+      }
+    } catch (error) {
+      // Silently fail keychain access - will validate required values below
+    }
+  }
+
+  // If organization is provided but no server URL, default to SonarCloud
+  if (organization && !serverURL) {
+    serverURL = 'https://sonarcloud.io';
+    console.log(`✓ Organization provided, defaulting to SonarCloud`);
+  }
+
   // Validate required parameters
   if (!serverURL) {
-    console.error('\nError: Server URL is required. Use --server flag');
+    console.error('\nError: Server URL is required. Use --server flag or --org flag for SonarCloud');
     process.exit(1);
   }
 
@@ -94,10 +151,9 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
     console.log(`Organization: ${organization}`);
   }
 
-  // Get or validate token
-  let token = options.token;
+  // If token still not found, try one more time with determined server/org
   if (!token) {
-    const storedToken = await getToken(serverURL);
+    const storedToken = await getToken(serverURL, organization);
     token = storedToken || undefined;
   }
 
