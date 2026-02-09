@@ -10,21 +10,26 @@ on:
   merge_group:
   workflow_dispatch:
 
+# Workflow-level concurrency
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
 
+# Required permissions for Vault OIDC and repo operations
 permissions:
   id-token: write
   contents: read
 
 jobs:
   build:
-    runs-on: sonar-xs
+    runs-on: ubuntu-latest
     name: Build
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: SonarSource/ci-github-actions/build-npm@v1
         with:
           sonar-platform: sqc-eu
+          deploy-pull-request: true
