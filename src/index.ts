@@ -7,9 +7,9 @@ import { Command } from 'commander';
 import { verifyCommand } from './commands/verify.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
-import { authLoginCommand } from './commands/auth.js';
-import { authLogoutCommand } from './commands/auth.js';
-import { authPurgeCommand } from './commands/auth.js';
+import { authLoginCommand, authLogoutCommand, authPurgeCommand } from './commands/auth.js';
+import { analyzeCommand } from './commands/analyze.js';
+import { configCommand } from './commands/config.js';
 
 const program = new Command();
 
@@ -26,6 +26,44 @@ program
   .action(async (options) => {
     try {
       await verifyCommand(options);
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+// Analyze a file using SonarCloud A3S API
+program
+  .command('analyze')
+  .description('Analyze a file using SonarCloud A3S API')
+  .requiredOption('--file <file>', 'File path to analyze')
+  .option('--organization-key <organizationKey>', 'Organization key (or use saved config)')
+  .option('--project-key <projectKey>', 'Project key (or use saved config)')
+  .option('-t, --token <token>', 'Authentication token (or use saved config)')
+  .option('-b, --branch <branch>', 'Branch name')
+  .option('--save-config', 'Save organization key, project key, and token to config file')
+  .action(async (options) => {
+    try {
+      await analyzeCommand(options);
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+// Manage analyze configuration
+program
+  .command('config')
+  .description('Manage analyze command configuration')
+  .option('--show', 'Show current configuration')
+  .option('--clear', 'Clear configuration file')
+  .option('--set', 'Set configuration values')
+  .option('--organization-key <organizationKey>', 'Organization key to set')
+  .option('--project-key <projectKey>', 'Project key to set')
+  .option('--token <token>', 'Token to set')
+  .action(async (options) => {
+    try {
+      await configCommand(options);
     } catch (error) {
       console.error('Error:', (error as Error).message);
       process.exit(1);

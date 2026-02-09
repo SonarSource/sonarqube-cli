@@ -1,17 +1,14 @@
 // SonarQube API HTTP client
 
-import type { IssuesSearchParams, IssuesSearchResponse } from '../lib/types.js';
 import { VERSION } from '../version.js';
 
 export class SonarQubeClient {
-  private serverURL: string;
-  private token: string;
-  private organization?: string;
+  private readonly serverURL: string;
+  private readonly token: string;
 
-  constructor(serverURL: string, token: string, organization?: string) {
+  constructor(serverURL: string, token: string) {
     this.serverURL = serverURL.replace(/\/$/, ''); // Remove trailing slash
     this.token = token;
-    this.organization = organization;
   }
 
   /**
@@ -43,6 +40,32 @@ export class SonarQubeClient {
 
     if (!response.ok) {
       throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
+    }
+
+    return await response.json() as T;
+  }
+
+  /**
+   * Make POST request to SonarQube API using Bearer token
+   */
+  async post<T>(endpoint: string, body: unknown): Promise<T> {
+    const url = `${this.serverURL}${endpoint}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': `sonar-cli/${VERSION}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000) // 60s timeout for analysis
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     return await response.json() as T;

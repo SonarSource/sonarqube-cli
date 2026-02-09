@@ -7,7 +7,7 @@
     "resolveJsonModule": true,
     "allowJs": true,
     "outDir": "./dist",
-    "rootDir": "./",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -19,8 +19,7 @@
     "types": ["node"]
   },
   "include": [
-    "src/**/*",
-    "bin/**/*"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",
