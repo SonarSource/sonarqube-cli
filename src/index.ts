@@ -9,16 +9,7 @@ import { configCommand } from './commands/config.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
 import { authLoginCommand, authLogoutCommand, authPurgeCommand } from './commands/auth.js';
-<<<<<<< HEAD
 import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
-=======
-<<<<<<< HEAD
-=======
-import { analyzeCommand } from './commands/analyze.js';
-import { configCommand } from './commands/config.js';
-import { preCommitInstallCommand } from './commands/pre-commit.js';
->>>>>>> 73ef0e8 (SLCORE-2040 command for installing secrets pre-commit hook)
->>>>>>> 942418d (SLCORE-2040 command for installing secrets pre-commit hook)
 
 const program = new Command();
 
