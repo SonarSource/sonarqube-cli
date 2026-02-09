@@ -1,13 +1,12 @@
-/* eslint-disable sonarjs/no-nested-switch,sonarjs/cognitive-complexity,sonarjs/no-magic-numbers,sonarjs/regex-complexity -- S134, S3776, S109, S5852: SonarQube cache */
 // Install sonar-secrets binary from GitHub releases
 
-import {existsSync, mkdirSync, copyFileSync, chmodSync} from 'node:fs';
+import {existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {homedir} from 'node:os';
 import {spawnProcess} from '../lib/process.js';
 import {buildAssetName, buildLocalBinaryName, detectPlatform} from '../lib/platform-detector.js';
 import {downloadBinary, fetchLatestRelease, findAssetForPlatform} from '../lib/github-releases.js';
-import {loadState, saveState, getActiveConnection} from '../lib/state-manager.js';
+import {getActiveConnection, loadState, saveState} from '../lib/state-manager.js';
 import {getToken} from '../lib/keychain.js';
 import {VERSION} from '../version.js';
 import logger from '../lib/logger.js';
@@ -16,18 +15,14 @@ import {BINARY_NAME, SONAR_SECRETS_REPO} from '../lib/install-types.js';
 
 const SCAN_TIMEOUT_MS = 30000; // 30 seconds max for secret scanning
 const ISSUE_NUMBER_OFFSET = 1;
-// NOSONAR: S109 (magic number cache)
-// eslint-disable-next-line sonarjs/no-magic-numbers -- S109: Octal permission literal
 const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
 const VERSION_REGEX_MAX_SEGMENT = 20;
-// NOSONAR: S109 (magic number cache)
-// eslint-disable-next-line sonarjs/no-magic-numbers -- S109: SonarQube cache issue
-const BACKTRACKING_SAFE_LIMIT = 10000;
+const FIVE_SEC_TIMEOUT = 5000;
 
 /**
  * Main command: sonar secret install
  */
-// eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/no-nested-switch -- S3776, S134: SonarQube cache
+// eslint-disable-next-line sonarjs/cognitive-complexity -- S3776: SonarQube cache
 export async function secretInstallCommand(
   options: { force?: boolean }
 ): Promise<void> {
@@ -41,8 +36,6 @@ export async function secretInstallCommand(
 
   await performInstallationWithErrorHandling(options, platform, binaryPath);
 
-  // Register hooks regardless of installation status
-  await registerClaudeCodeHooks();
   logInstallationSuccess(binaryPath);
   process.exit(0);
 }
@@ -175,10 +168,6 @@ function setupBinaryPath(): string {
 }
 
 async function setupAuth(): Promise<{ authUrl: string; authToken: string }> {
-  // TODO: Add fallback to environment variables for CI/debug scenarios
-  // TODO: const envToken = process.env.SONAR_SECRETS_TOKEN;
-  // TODO: if (!authToken) { authToken = envToken; }
-
   const state = loadState(VERSION);
   const activeConnection = getActiveConnection(state);
 
@@ -249,7 +238,7 @@ async function performFileScan(
  */
 export async function secretStatusCommand(): Promise<void> {
   const platform = detectPlatform();
-  const binDir = join(homedir(), '.sonarqube-cli', 'bin');
+  const binDir = join(homedir(), '.sonar-cli', 'bin');
   const binaryPath = join(binDir, buildLocalBinaryName(platform));
 
   logger.info('\n🔍 Checking sonar-secrets installation status\n');
@@ -323,7 +312,7 @@ async function checkInstalledVersion(path: string): Promise<string | null> {
       // Parse version from output (limit backtracking: max 20 chars per segment)
       // NOSONAR: S5852, S6535 (regex backtracking cache)
       // eslint-disable-next-line sonarjs/regex-complexity -- S5852: Limited backtracking
-      const pattern = `(\\\\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\\\\.\\\\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
+      const pattern = String.raw`(\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\.\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
       const versionRegex = new RegExp(pattern);
       const match = versionRegex.exec(result.stdout);
       return match ? match[1] : null;
@@ -367,125 +356,9 @@ async function recordInstallationInState(
     });
 
     saveState(state);
-
-    // Register Claude Code hooks if on macOS
-    await registerClaudeCodeHooks();
   } catch (error) {
     logger.warn('Warning: Failed to update state:', (error as Error).message);
   }
-}
-
-async function registerClaudeCodeHooks(): Promise<void> {
-  try {
-    logger.info('');
-    logger.info('⚙️  Registering Claude Code hooks');
-
-    const platform = detectPlatform();
-
-    // Only register hooks on macOS for now
-    if (platform.os !== 'macos') {
-      logger.info('  Skip: Not on macOS');
-      return;
-    }
-
-    const sourceHooksDir = join(
-      homedir(),
-      '.claude',
-      'hooks',
-      'sonar-secrets'
-    );
-
-    // Verify source hooks exist
-    if (!existsSync(sourceHooksDir)) {
-      logger.warn('  Warning: Hooks template not found at', sourceHooksDir);
-      return;
-    }
-
-    logger.info(`  Found template hooks at: ${sourceHooksDir}`);
-
-    // Find project root and install hooks there
-    const projectRoot = findProjectRoot(process.cwd());
-    if (!projectRoot) {
-      logger.info('  Note: No project root found (not in a project), skipping');
-      return;
-    }
-
-    logger.info(`  Found project at: ${projectRoot}`);
-
-    const projectHooksDir = join(projectRoot, '.claude', 'hooks', 'sonar-secrets');
-    installHooksToProject(sourceHooksDir, projectHooksDir);
-
-    logger.info('✓ Claude Code hooks installed to project');
-    logger.info(`  Location: ${projectHooksDir}`);
-  } catch (error) {
-    // Non-critical - don't fail installation if hook registration fails
-    logger.debug('Debug: Hook registration error:', (error as Error).message);
-  }
-}
-
-function findProjectRoot(startDir: string): string | null {
-  let currentDir = startDir;
-
-  // Search up to 10 levels for package.json or .git
-  for (let i = 0; i < 10; i++) {
-    if (
-      existsSync(join(currentDir, 'package.json')) ||
-      existsSync(join(currentDir, '.git'))
-    ) {
-      return currentDir;
-    }
-
-    const parentDir = join(currentDir, '..');
-    if (parentDir === currentDir) {
-      // Reached filesystem root
-      break;
-    }
-    currentDir = parentDir;
-  }
-
-  return null;
-}
-
-function installHooksToProject(sourceDir: string, targetDir: string): void {
-  // Create target directory
-  mkdirSync(targetDir, { recursive: true });
-
-  // Copy hooks.json
-  const sourceHooksJson = join(sourceDir, 'hooks.json');
-  const targetHooksJson = join(targetDir, 'hooks.json');
-  if (existsSync(sourceHooksJson)) {
-    copyFileSync(sourceHooksJson, targetHooksJson);
-  }
-
-  // Create scripts directory and copy all scripts
-  const sourceScriptsDir = join(sourceDir, 'scripts');
-  const targetScriptsDir = join(targetDir, 'scripts');
-  if (!existsSync(sourceScriptsDir)) {
-    return;
-  }
-
-  mkdirSync(targetScriptsDir, { recursive: true });
-
-  const scriptFiles = [
-    'setup.sh',
-    'prompt-secrets.sh',
-    'pretool-secrets.sh'
-  ];
-
-  for (const scriptFile of scriptFiles) {
-    copyScriptIfExists(sourceScriptsDir, targetScriptsDir, scriptFile);
-  }
-}
-
-function copyScriptIfExists(sourceDir: string, targetDir: string, fileName: string): void {
-  const sourceScript = join(sourceDir, fileName);
-  if (!existsSync(sourceScript)) {
-    return;
-  }
-
-  const targetScript = join(targetDir, fileName);
-  copyFileSync(sourceScript, targetScript);
-  chmodSync(targetScript, FILE_EXECUTABLE_PERMS);
 }
 
 async function checkExistingInstallation(binaryPath: string): Promise<boolean> {
@@ -571,13 +444,6 @@ function validateCheckCommandEnvironment(binaryPath: string): void {
   }
 }
 
-function getAuthEnvironment(): { authUrl: string | undefined; authToken: string | undefined } {
-  return {
-    authUrl: process.env.SONAR_SECRETS_AUTH_URL,
-    authToken: process.env.SONAR_SECRETS_TOKEN
-  };
-}
-
 function logAuthConfigError(): void {
   logger.error('Error: sonar-secrets authentication is not configured');
   logger.info('');
@@ -635,7 +501,7 @@ async function runScanFromStdin(
     writeFileSync(tempFile, stdinData);
     logger.debug(`Wrote ${stdinData.length} bytes to tempfile: ${tempFile}`);
 
-    const result = await Promise.race([
+    return await Promise.race([
       spawnProcess(binaryPath, [tempFile], {
         stdout: 'pipe',
         stderr: 'pipe',
@@ -651,8 +517,6 @@ async function runScanFromStdin(
         )
       )
     ]);
-
-    return result;
   } finally {
     // Clean up temp file
     try {
@@ -682,14 +546,14 @@ async function readStdin(): Promise<string> {
       });
 
       process.stdin.on('error', (err) => {
-        logger.error(`stdin error: ${(err as Error).message}`);
+        logger.error(`stdin error: ${(err).message}`);
         reject(err);
       });
     }),
     new Promise<never>((_resolve, reject) =>
       setTimeout(
         () => reject(new Error('stdin read timeout after 5 seconds')),
-        5000
+        FIVE_SEC_TIMEOUT
       )
     )
   ]);

@@ -1,7 +1,6 @@
 // Authentication command tests
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
+import { it, expect } from 'bun:test';
 import { getToken, saveToken, deleteToken, getAllCredentials, purgeAllTokens, setMockKeytar } from '../../src/lib/keychain.js';
 
 // Create mock keytar store
@@ -18,7 +17,7 @@ const mockKeytar = {
   },
   deletePassword: async (service: string, account: string) => {
     const key = `${service}:${account}`;
-    mockKeytarTokens.delete(key);
+    return mockKeytarTokens.delete(key);
   },
   findCredentials: async (service: string) => {
     const credentials = [];
@@ -35,7 +34,7 @@ const mockKeytar = {
 // Set mock before tests
 setMockKeytar(mockKeytar);
 
-test('keychain: generate correct account key for SonarCloud', async () => {
+it('keychain: generate correct account key for SonarCloud', async () => {
   // This is tested indirectly through saveToken/getToken behavior
   const token1 = 'token-org1';
   const token2 = 'token-org2';
@@ -46,16 +45,16 @@ test('keychain: generate correct account key for SonarCloud', async () => {
   const retrieved1 = await getToken('https://sonarcloud.io', 'my-org-1');
   const retrieved2 = await getToken('https://sonarcloud.io', 'my-org-2');
 
-  assert.equal(retrieved1, token1, 'Should retrieve token for org1');
-  assert.equal(retrieved2, token2, 'Should retrieve token for org2');
+  expect(retrieved1).toBe(token1);
+  expect(retrieved2).toBe(token2);
 
   // Different orgs should have different keys
-  assert.notEqual(retrieved1, retrieved2, 'Different orgs should have different tokens');
+  expect(retrieved1).not.toBe(retrieved2);
 
   await purgeAllTokens();
 });
 
-test('keychain: generate correct account key for SonarQube', async () => {
+it('keychain: generate correct account key for SonarQube', async () => {
   const token1 = 'token-sq1';
   const token2 = 'token-sq2';
 
@@ -65,13 +64,13 @@ test('keychain: generate correct account key for SonarQube', async () => {
   const retrieved1 = await getToken('https://sonarqube1.io');
   const retrieved2 = await getToken('https://sonarqube2.io');
 
-  assert.equal(retrieved1, token1, 'Should retrieve token for server1');
-  assert.equal(retrieved2, token2, 'Should retrieve token for server2');
+  expect(retrieved1).toBe(token1);
+  expect(retrieved2).toBe(token2);
 
   await purgeAllTokens();
 });
 
-test('keychain: save and get token for SonarCloud with org', async () => {
+it('keychain: save and get token for SonarCloud with org', async () => {
   const server = 'https://sonarcloud.io';
   const org = 'my-org';
   const token = 'squ_abc123def456';
@@ -79,78 +78,78 @@ test('keychain: save and get token for SonarCloud with org', async () => {
   await saveToken(server, token, org);
 
   const retrieved = await getToken(server, org);
-  assert.equal(retrieved, token, 'Should retrieve saved token');
+  expect(retrieved).toBe(token);
 
   await purgeAllTokens();
 });
 
-test('keychain: save and get token for SonarQube server', async () => {
+it('keychain: save and get token for SonarQube server', async () => {
   const server = 'https://my-sonarqube.io';
   const token = 'squ_xyz789uvw012';
 
   await saveToken(server, token);
 
   const retrieved = await getToken(server);
-  assert.equal(retrieved, token, 'Should retrieve saved token');
+  expect(retrieved).toBe(token);
 
   await purgeAllTokens();
 });
 
-test('keychain: delete token', async () => {
+it('keychain: delete token', async () => {
   const server = 'https://sonarcloud.io';
   const org = 'test-org';
   const token = 'test-token-123';
 
   await saveToken(server, token, org);
-  assert.equal(await getToken(server, org), token, 'Token should exist');
+  expect(await getToken(server, org)).toBe(token);
 
   await deleteToken(server, org);
-  assert.equal(await getToken(server, org), null, 'Token should be deleted');
+  expect(await getToken(server, org)).toBe(null);
 
   await purgeAllTokens();
 });
 
-test('keychain: get non-existent token returns null', async () => {
+it('keychain: get non-existent token returns null', async () => {
   const token = await getToken('https://nonexistent.io', 'no-org');
-  assert.equal(token, null, 'Should return null for non-existent token');
+  expect(token).toBe(null);
 });
 
-test('keychain: getAllCredentials returns all tokens', async () => {
+it('keychain: getAllCredentials returns all tokens', async () => {
   await saveToken('https://sonarcloud.io', 'token1', 'org1');
   await saveToken('https://sonarcloud.io', 'token2', 'org2');
   await saveToken('https://sonarqube.io', 'token3');
 
   const credentials = await getAllCredentials();
-  assert.equal(credentials.length, 3, 'Should return all 3 tokens');
+  expect(credentials.length).toBe(3);
 
   const accounts = credentials.map(c => c.account);
-  assert.ok(accounts.includes('sonarcloud.io:org1'), 'Should include sonarcloud.io:org1');
-  assert.ok(accounts.includes('sonarcloud.io:org2'), 'Should include sonarcloud.io:org2');
-  assert.ok(accounts.includes('sonarqube.io'), 'Should include sonarqube.io');
+  expect(accounts.includes('sonarcloud.io:org1')).toBe(true);
+  expect(accounts.includes('sonarcloud.io:org2')).toBe(true);
+  expect(accounts.includes('sonarqube.io')).toBe(true);
 
   await purgeAllTokens();
 });
 
-test('keychain: getAllCredentials returns empty array when no tokens', async () => {
+it('keychain: getAllCredentials returns empty array when no tokens', async () => {
   const credentials = await getAllCredentials();
-  assert.equal(credentials.length, 0, 'Should return empty array');
+  expect(credentials.length).toBe(0);
 });
 
-test('keychain: purgeAllTokens removes all tokens', async () => {
+it('keychain: purgeAllTokens removes all tokens', async () => {
   await saveToken('https://sonarcloud.io', 'token1', 'org1');
   await saveToken('https://sonarcloud.io', 'token2', 'org2');
   await saveToken('https://sonarqube.io', 'token3');
 
   let credentials = await getAllCredentials();
-  assert.equal(credentials.length, 3, 'Should have 3 tokens before purge');
+  expect(credentials.length).toBe(3);
 
   await purgeAllTokens();
 
   credentials = await getAllCredentials();
-  assert.equal(credentials.length, 0, 'Should have 0 tokens after purge');
+  expect(credentials.length).toBe(0);
 });
 
-test('keychain: same server with different orgs have different keys', async () => {
+it('keychain: same server with different orgs have different keys', async () => {
   const server = 'https://sonarcloud.io';
 
   await saveToken(server, 'token-for-org1', 'org1');
@@ -159,14 +158,14 @@ test('keychain: same server with different orgs have different keys', async () =
   const token1 = await getToken(server, 'org1');
   const token2 = await getToken(server, 'org2');
 
-  assert.equal(token1, 'token-for-org1', 'Should get correct token for org1');
-  assert.equal(token2, 'token-for-org2', 'Should get correct token for org2');
-  assert.notEqual(token1, token2, 'Tokens should be different');
+  expect(token1).toBe('token-for-org1');
+  expect(token2).toBe('token-for-org2');
+  expect(token1).not.toBe(token2);
 
   await purgeAllTokens();
 });
 
-test('keychain: normalize server URLs with trailing slashes', async () => {
+it('keychain: normalize server URLs with trailing slashes', async () => {
   const serverWithSlash = 'https://sonarqube.io/';
   const serverWithoutSlash = 'https://sonarqube.io';
   const token = 'test-token';
@@ -176,12 +175,12 @@ test('keychain: normalize server URLs with trailing slashes', async () => {
 
   // Should be able to retrieve without trailing slash (normalized)
   const retrieved = await getToken(serverWithoutSlash);
-  assert.equal(retrieved, token, 'Should normalize URLs with trailing slashes');
+  expect(retrieved).toBe(token);
 
   await purgeAllTokens();
 });
 
-test('keychain: delete only specific org token, not all', async () => {
+it('keychain: delete only specific org token, not all', async () => {
   const server = 'https://sonarcloud.io';
 
   await saveToken(server, 'token-org1', 'org1');
@@ -190,13 +189,13 @@ test('keychain: delete only specific org token, not all', async () => {
   // Delete only org1
   await deleteToken(server, 'org1');
 
-  assert.equal(await getToken(server, 'org1'), null, 'org1 token should be deleted');
-  assert.equal(await getToken(server, 'org2'), 'token-org2', 'org2 token should still exist');
+  expect(await getToken(server, 'org1')).toBe(null);
+  expect(await getToken(server, 'org2')).toBe('token-org2');
 
   await purgeAllTokens();
 });
 
-test('keychain: handle special characters in org names', async () => {
+it('keychain: handle special characters in org names', async () => {
   const server = 'https://sonarcloud.io';
   const org = 'my-org_with.special-chars';
   const token = 'token-special';
@@ -204,12 +203,12 @@ test('keychain: handle special characters in org names', async () => {
   await saveToken(server, token, org);
   const retrieved = await getToken(server, org);
 
-  assert.equal(retrieved, token, 'Should handle special characters in org names');
+  expect(retrieved).toBe(token);
 
   await purgeAllTokens();
 });
 
-test('keychain: multiple servers with same org key', async () => {
+it('keychain: multiple servers with same org key', async () => {
   const org = 'my-org';
   const token1 = 'token-sc';
   const token2 = 'token-sq';
@@ -220,13 +219,13 @@ test('keychain: multiple servers with same org key', async () => {
   const retrieved1 = await getToken('https://sonarcloud.io', org);
   const retrieved2 = await getToken('https://sonarqube.io');
 
-  assert.equal(retrieved1, token1, 'Should get SonarCloud token');
-  assert.equal(retrieved2, token2, 'Should get SonarQube token');
+  expect(retrieved1).toBe(token1);
+  expect(retrieved2).toBe(token2);
 
   await purgeAllTokens();
 });
 
-test('keychain: org parameter is optional for SonarQube', async () => {
+it('keychain: org parameter is optional for SonarQube', async () => {
   const server = 'https://sonarqube.io';
   const token = 'sq-token';
 
@@ -237,13 +236,13 @@ test('keychain: org parameter is optional for SonarQube', async () => {
   const retrieved1 = await getToken(server);
   const retrieved2 = await getToken(server, undefined);
 
-  assert.equal(retrieved1, token, 'Should retrieve token without org');
-  assert.equal(retrieved2, token, 'Should retrieve token with undefined org');
+  expect(retrieved1).toBe(token);
+  expect(retrieved2).toBe(token);
 
   await purgeAllTokens();
 });
 
-test('auth: keychain account key format for SonarCloud is "hostname:org"', async () => {
+it('auth: keychain account key format for SonarCloud is "hostname:org"', async () => {
   const server = 'https://sonarcloud.io';
   const org = 'my-org';
   const token = 'token123';
@@ -253,13 +252,12 @@ test('auth: keychain account key format for SonarCloud is "hostname:org"', async
   const credentials = await getAllCredentials();
   const sonarCloudCreds = credentials.filter(c => c.account.includes('sonarcloud.io'));
 
-  assert.ok(sonarCloudCreds.some(c => c.account === 'sonarcloud.io:my-org'),
-    'Should create key as sonarcloud.io:my-org');
+  expect(sonarCloudCreds.some(c => c.account === 'sonarcloud.io:my-org')).toBe(true);
 
   await purgeAllTokens();
 });
 
-test('auth: keychain account key format for SonarQube is "hostname" only', async () => {
+it('auth: keychain account key format for SonarQube is "hostname" only', async () => {
   const server = 'https://my-sonarqube.io';
   const token = 'token123';
 
@@ -268,14 +266,13 @@ test('auth: keychain account key format for SonarQube is "hostname" only', async
   const credentials = await getAllCredentials();
   const sonarQubeCreds = credentials.filter(c => c.account === 'my-sonarqube.io');
 
-  assert.equal(sonarQubeCreds.length, 1, 'Should have exactly one credential');
-  assert.ok(sonarQubeCreds[0].account === 'my-sonarqube.io',
-    'Should create key as just hostname without org');
+  expect(sonarQubeCreds.length).toBe(1);
+  expect(sonarQubeCreds[0].account === 'my-sonarqube.io').toBe(true);
 
   await purgeAllTokens();
 });
 
-test('auth: multiple organizations on SonarCloud have separate tokens', async () => {
+it('auth: multiple organizations on SonarCloud have separate tokens', async () => {
   const server = 'https://sonarcloud.io';
 
   await saveToken(server, 'token-for-org-alpha', 'org-alpha');
@@ -283,28 +280,16 @@ test('auth: multiple organizations on SonarCloud have separate tokens', async ()
   await saveToken(server, 'token-for-org-gamma', 'org-gamma');
 
   const allCreds = await getAllCredentials();
-  assert.equal(allCreds.length, 3, 'Should have 3 separate credentials');
+  expect(allCreds.length).toBe(3);
 
-  assert.equal(
-    await getToken(server, 'org-alpha'),
-    'token-for-org-alpha',
-    'Should retrieve correct token for org-alpha'
-  );
-  assert.equal(
-    await getToken(server, 'org-beta'),
-    'token-for-org-beta',
-    'Should retrieve correct token for org-beta'
-  );
-  assert.equal(
-    await getToken(server, 'org-gamma'),
-    'token-for-org-gamma',
-    'Should retrieve correct token for org-gamma'
-  );
+  expect(await getToken(server, 'org-alpha')).toBe('token-for-org-alpha');
+  expect(await getToken(server, 'org-beta')).toBe('token-for-org-beta');
+  expect(await getToken(server, 'org-gamma')).toBe('token-for-org-gamma');
 
   await purgeAllTokens();
 });
 
-test('auth: deleting one org token does not affect others', async () => {
+it('auth: deleting one org token does not affect others', async () => {
   const server = 'https://sonarcloud.io';
 
   await saveToken(server, 'token-org1', 'org1');
@@ -313,17 +298,17 @@ test('auth: deleting one org token does not affect others', async () => {
   // Delete org1
   await deleteToken(server, 'org1');
 
-  assert.equal(await getToken(server, 'org1'), null, 'org1 should be deleted');
-  assert.equal(await getToken(server, 'org2'), 'token-org2', 'org2 should remain');
+  expect(await getToken(server, 'org1')).toBe(null);
+  expect(await getToken(server, 'org2')).toBe('token-org2');
 
   const remaining = await getAllCredentials();
-  assert.equal(remaining.length, 1, 'Should have 1 remaining credential');
-  assert.equal(remaining[0].account, 'sonarcloud.io:org2', 'Should be org2');
+  expect(remaining.length).toBe(1);
+  expect(remaining[0].account).toBe('sonarcloud.io:org2');
 
   await purgeAllTokens();
 });
 
-test('auth: can have multiple SonarQube servers with different tokens', async () => {
+it('auth: can have multiple SonarQube servers with different tokens', async () => {
   const server1 = 'https://sonarqube1.io';
   const server2 = 'https://sonarqube2.io';
   const server3 = 'https://sonarqube3.io';
@@ -333,16 +318,16 @@ test('auth: can have multiple SonarQube servers with different tokens', async ()
   await saveToken(server3, 'token-server3');
 
   const allCreds = await getAllCredentials();
-  assert.equal(allCreds.length, 3, 'Should have 3 credentials');
+  expect(allCreds.length).toBe(3);
 
-  assert.equal(await getToken(server1), 'token-server1', 'Should get token for server1');
-  assert.equal(await getToken(server2), 'token-server2', 'Should get token for server2');
-  assert.equal(await getToken(server3), 'token-server3', 'Should get token for server3');
+  expect(await getToken(server1)).toBe('token-server1');
+  expect(await getToken(server2)).toBe('token-server2');
+  expect(await getToken(server3)).toBe('token-server3');
 
   await purgeAllTokens();
 });
 
-test('auth: mixed SonarCloud orgs and SonarQube servers', async () => {
+it('auth: mixed SonarCloud orgs and SonarQube servers', async () => {
   const sonarcloud = 'https://sonarcloud.io';
   const sonarqube1 = 'https://sq1.io';
   const sonarqube2 = 'https://sq2.io';
@@ -353,21 +338,21 @@ test('auth: mixed SonarCloud orgs and SonarQube servers', async () => {
   await saveToken(sonarqube2, 'sq-token-2');
 
   const allCreds = await getAllCredentials();
-  assert.equal(allCreds.length, 4, 'Should have 4 total credentials');
+  expect(allCreds.length).toBe(4);
 
   // Verify all can be retrieved
-  assert.equal(await getToken(sonarcloud, 'org1'), 'sc-token-org1', 'SC org1');
-  assert.equal(await getToken(sonarcloud, 'org2'), 'sc-token-org2', 'SC org2');
-  assert.equal(await getToken(sonarqube1), 'sq-token-1', 'SQ1');
-  assert.equal(await getToken(sonarqube2), 'sq-token-2', 'SQ2');
+  expect(await getToken(sonarcloud, 'org1')).toBe('sc-token-org1');
+  expect(await getToken(sonarcloud, 'org2')).toBe('sc-token-org2');
+  expect(await getToken(sonarqube1)).toBe('sq-token-1');
+  expect(await getToken(sonarqube2)).toBe('sq-token-2');
 
   // Purge all and verify empty
   await purgeAllTokens();
   const afterPurge = await getAllCredentials();
-  assert.equal(afterPurge.length, 0, 'Should have no credentials after purge');
+  expect(afterPurge.length).toBe(0);
 });
 
-test('auth: purgeAllTokens with mixed credentials', async () => {
+it('auth: purgeAllTokens with mixed credentials', async () => {
   const sonarcloud = 'https://sonarcloud.io';
   const sonarqube = 'https://sonarqube.io';
 
@@ -377,21 +362,21 @@ test('auth: purgeAllTokens with mixed credentials', async () => {
   await saveToken(sonarqube, 'sq-token');
 
   let allCreds = await getAllCredentials();
-  assert.equal(allCreds.length, 3, 'Should have 3 tokens before purge');
+  expect(allCreds.length).toBe(3);
 
   // Purge all
   await purgeAllTokens();
 
   allCreds = await getAllCredentials();
-  assert.equal(allCreds.length, 0, 'Should have 0 tokens after purge');
+  expect(allCreds.length).toBe(0);
 
   // Verify can't retrieve anything
-  assert.equal(await getToken(sonarcloud, 'org-a'), null, 'org-a should be purged');
-  assert.equal(await getToken(sonarcloud, 'org-b'), null, 'org-b should be purged');
-  assert.equal(await getToken(sonarqube), null, 'SQ should be purged');
+  expect(await getToken(sonarcloud, 'org-a')).toBe(null);
+  expect(await getToken(sonarcloud, 'org-b')).toBe(null);
+  expect(await getToken(sonarqube)).toBe(null);
 });
 
-test('auth: embedded server cleanup does not hang process', async () => {
+it('auth: embedded server cleanup does not hang process', async () => {
   // This test verifies that after the generateTokenViaBrowser flow,
   // there are no lingering resources (open sockets, timers) that would
   // prevent the process from exiting gracefully.
@@ -415,5 +400,5 @@ test('auth: embedded server cleanup does not hang process', async () => {
   // 2. sonar onboard-agent claude --non-interactive --skip-hooks
   // Both should complete and return to prompt immediately without hanging.
 
-  assert.ok(true, 'Process resource cleanup documented and verified');
+  expect(true).toBe(true);
 });

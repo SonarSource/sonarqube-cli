@@ -221,13 +221,13 @@ describe('State Manager', () => {
     it('should replace on-premise with SonarCloud', () => {
       const state = getDefaultState('0.2.61');
 
-      const onprem = addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise', {
+      addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise', {
         keystoreKey: 'onprem-key',
       });
 
       expect(state.auth.connections[0].type).toBe('on-premise');
 
-      const cloud = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'sonarsource',
         region: 'us',
         keystoreKey: 'cloud-key',
