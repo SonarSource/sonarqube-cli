@@ -1,0 +1,376 @@
+// Pre-commit command - manage pre-commit hooks for secrets detection
+
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { platform } from 'os';
+import { spawnProcess } from '../lib/process.js';
+
+const PRE_COMMIT_CONFIG = '.pre-commit-config.yaml';
+
+const PRE_COMMIT_CONFIG_CONTENT = `repos:
+-   repo: https://github.com/SonarSource/sonar-secrets-pre-commit
+    rev: v2.38.0.10279
+    hooks:
+    -   id: sonar-secrets
+        stages: [pre-commit]
+`;
+
+/**
+ * Check if pre-commit is installed
+ */
+async function isPreCommitInstalled(): Promise<boolean> {
+  try {
+    const result = await spawnProcess('pre-commit', ['--version'], {
+      stdout: 'pipe',
+      stderr: 'pipe'
+    });
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Install pre-commit using package manager
+ */
+async function installPreCommit(): Promise<void> {
+  const os = platform();
+  
+  console.log('📦 Installing pre-commit...');
+  
+  let installCmd: string;
+  let installArgs: string[];
+  
+  // Determine installation method based on OS
+  if (os === 'darwin') {
+    // macOS - try brew first, fall back to pip
+    const hasBrew = await commandExists('brew');
+    if (hasBrew) {
+      installCmd = 'brew';
+      installArgs = ['install', 'pre-commit'];
+    } else {
+      // Brew not available, try pip
+      const hasPip = await commandExists('pip3') || await commandExists('pip');
+      if (hasPip) {
+        installCmd = hasPip === 'pip3' ? 'pip3' : 'pip';
+        installArgs = ['install', 'pre-commit'];
+      } else {
+        throw new Error('Unable to install pre-commit. Please install brew or pip first.');
+      }
+    }
+  } else if (os === 'linux') {
+    // Linux - check for different package managers
+    const hasPip = await commandExists('pip3') || await commandExists('pip');
+    if (hasPip) {
+      installCmd = hasPip === 'pip3' ? 'pip3' : 'pip';
+      installArgs = ['install', 'pre-commit'];
+    } else {
+      throw new Error('Unable to install pre-commit. Please install pip or use your package manager.');
+    }
+  } else if (os === 'win32') {
+    // Windows - use pip
+    const hasPip = await commandExists('pip3') || await commandExists('pip');
+    if (hasPip) {
+      installCmd = hasPip === 'pip3' ? 'pip3' : 'pip';
+      installArgs = ['install', 'pre-commit'];
+    } else {
+      throw new Error('Unable to install pre-commit. Please install pip first.');
+    }
+  } else {
+    throw new Error(`Unsupported platform: ${os}`);
+  }
+  
+  console.log(`   Running: ${installCmd} ${installArgs.join(' ')}`);
+  
+  const result = await spawnProcess(installCmd, installArgs, {
+    stdout: 'inherit',
+    stderr: 'inherit'
+  });
+  
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to install pre-commit (exit code: ${result.exitCode})`);
+  }
+  
+  console.log('   ✓ pre-commit installed successfully');
+}
+
+/**
+ * Check if a command exists
+ */
+async function commandExists(command: string): Promise<string | false> {
+  try {
+    const result = await spawnProcess(command, ['--version'], {
+      stdout: 'pipe',
+      stderr: 'pipe'
+    });
+    return result.exitCode === 0 ? command : false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create .pre-commit-config.yaml file
+ */
+async function createPreCommitConfig(projectRoot: string): Promise<void> {
+  const configPath = join(projectRoot, PRE_COMMIT_CONFIG);
+  
+  if (existsSync(configPath)) {
+    console.log('⚠️  .pre-commit-config.yaml already exists');
+    console.log('   Skipping file creation');
+    return;
+  }
+  
+  const fs = await import('fs/promises');
+  await fs.writeFile(configPath, PRE_COMMIT_CONFIG_CONTENT, 'utf-8');
+  
+  console.log('   ✓ Created .pre-commit-config.yaml');
+}
+
+/**
+ * Run pre-commit autoupdate to get latest hook versions
+ */
+async function runPreCommitAutoupdate(projectRoot: string): Promise<void> {
+  console.log('🔄 Updating hook versions...');
+  console.log('   Running: pre-commit autoupdate');
+  
+  const result = await spawnProcess('pre-commit', ['autoupdate'], {
+    cwd: projectRoot,
+    stdout: 'inherit',
+    stderr: 'inherit'
+  });
+  
+  if (result.exitCode === 0) {
+    console.log('   ✓ Hook versions updated');
+  } else {
+    console.log('   ⚠️  Warning: autoupdate failed, continuing with existing version');
+  }
+  
+  console.log('');
+}
+
+/**
+ * Check if git core.hooksPath is set and at which scope
+ */
+async function checkGitHooksPath(projectRoot: string): Promise<{ path: string; scope: 'local' | 'global' | 'system' } | null> {
+  try {
+    // Check local first
+    let result = await spawnProcess('git', ['config', '--local', '--get', 'core.hooksPath'], {
+      cwd: projectRoot,
+      stdout: 'pipe',
+      stderr: 'pipe'
+    });
+    
+    if (result.exitCode === 0 && result.stdout.trim()) {
+      return { path: result.stdout.trim(), scope: 'local' };
+    }
+    
+    // Check global
+    result = await spawnProcess('git', ['config', '--global', '--get', 'core.hooksPath'], {
+      cwd: projectRoot,
+      stdout: 'pipe',
+      stderr: 'pipe'
+    });
+    
+    if (result.exitCode === 0 && result.stdout.trim()) {
+      return { path: result.stdout.trim(), scope: 'global' };
+    }
+    
+    // Check system
+    result = await spawnProcess('git', ['config', '--system', '--get', 'core.hooksPath'], {
+      cwd: projectRoot,
+      stdout: 'pipe',
+      stderr: 'pipe'
+    });
+    
+    if (result.exitCode === 0 && result.stdout.trim()) {
+      return { path: result.stdout.trim(), scope: 'system' };
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Unset git core.hooksPath
+ */
+async function unsetGitHooksPath(projectRoot: string, scope: 'local' | 'global' | 'system'): Promise<void> {
+  const scopeFlag = `--${scope}`;
+  const result = await spawnProcess('git', ['config', scopeFlag, '--unset-all', 'core.hooksPath'], {
+    cwd: projectRoot,
+    stdout: 'pipe',
+    stderr: 'pipe'
+  });
+  
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to unset core.hooksPath at ${scope} scope. Error: ${result.stderr}`);
+  }
+}
+
+/**
+ * Get user confirmation
+ */
+async function getUserConfirmation(prompt: string): Promise<boolean> {
+  process.stdout.write(prompt);
+  
+  return new Promise((resolve) => {
+    let input = '';
+    
+    process.stdin.setEncoding('utf-8');
+    process.stdin.once('data', (data) => {
+      input = data.toString().trim().toLowerCase();
+      process.stdin.destroy();
+      resolve(input === 'y' || input === 'yes');
+    });
+  });
+}
+
+/**
+ * Run pre-commit commands
+ */
+async function runPreCommitSetup(projectRoot: string): Promise<void> {
+  console.log('🔧 Configuring pre-commit hooks...');
+  
+  // Check if core.hooksPath is set
+  const hooksPathInfo = await checkGitHooksPath(projectRoot);
+  if (hooksPathInfo) {
+    console.log('');
+    console.log(`   ⚠️  WARNING: Git core.hooksPath is currently set to: ${hooksPathInfo.path}`);
+    console.log(`   (Set at ${hooksPathInfo.scope} scope)`);
+    console.log('');
+    console.log('   This means Git is using a custom hooks directory instead of .git/hooks/');
+    console.log('   Pre-commit requires using the standard .git/hooks/ directory.');
+    console.log('');
+    console.log('   What will happen if we proceed:');
+    console.log('   ✓ Pre-commit will be installed successfully');
+    console.log('   ✗ Existing hooks in the custom directory will stop working');
+    console.log('   ✗ Claude Code hooks (if installed) will be disabled');
+    console.log('');
+    console.log('   Alternative: Manually add sonar-secrets to your existing hook setup');
+    console.log('   See: https://docs.sonarsource.com/sonarqube-server/~/changes/76/analyzing-source-code/scanners/secrets-cli-beta');
+    console.log('');
+    
+    const confirm = await getUserConfirmation('   Unset core.hooksPath and continue? (y/n): ');
+    
+    if (!confirm) {
+      console.log('');
+      console.log('Installation cancelled.');
+      console.log('');
+      console.log('To install manually with existing hooks:');
+      console.log(`1. Add sonar-secrets to your hooks in: ${hooksPathInfo.path}`);
+      console.log(`2. Or unset core.hooksPath: git config --${hooksPathInfo.scope} --unset-all core.hooksPath`);
+      process.exit(0);
+    }
+    
+    console.log('');
+    console.log(`   Unsetting core.hooksPath (${hooksPathInfo.scope} scope)...`);
+    await unsetGitHooksPath(projectRoot, hooksPathInfo.scope);
+    console.log('   ✓ Unset core.hooksPath');
+    console.log('');
+  }
+  
+  // Run: pre-commit uninstall
+  console.log('   Running: pre-commit uninstall');
+  const uninstallResult = await spawnProcess('pre-commit', ['uninstall'], {
+    cwd: projectRoot,
+    stdout: 'pipe',
+    stderr: 'pipe'
+  });
+  
+  if (uninstallResult.exitCode === 0) {
+    console.log('   ✓ Uninstalled previous hooks');
+  }
+  
+  // Run: pre-commit clean
+  console.log('   Running: pre-commit clean');
+  const cleanResult = await spawnProcess('pre-commit', ['clean'], {
+    cwd: projectRoot,
+    stdout: 'pipe',
+    stderr: 'pipe'
+  });
+  
+  if (cleanResult.exitCode === 0) {
+    console.log('   ✓ Cleaned pre-commit cache');
+  }
+  
+  // Run: pre-commit install
+  console.log('   Running: pre-commit install');
+  const installResult = await spawnProcess('pre-commit', ['install'], {
+    cwd: projectRoot,
+    stdout: 'inherit',
+    stderr: 'inherit'
+  });
+  
+  if (installResult.exitCode !== 0) {
+    throw new Error('Failed to install pre-commit hooks');
+  }
+  
+  console.log('   ✓ Installed pre-commit hooks');
+}
+
+/**
+ * Check if current directory is a git repository
+ */
+async function isGitRepository(projectRoot: string): Promise<boolean> {
+  const gitDir = join(projectRoot, '.git');
+  return existsSync(gitDir);
+}
+
+/**
+ * Pre-commit install command
+ */
+export async function preCommitInstallCommand(): Promise<void> {
+  try {
+    const projectRoot = process.cwd();
+    
+    console.log('\n🔐 Setting up Sonar secrets pre-commit hook\n');
+    
+    // Check if in a git repository
+    if (!await isGitRepository(projectRoot)) {
+      console.error('Error: Not a git repository');
+      console.error('Please run this command from the root of a git repository');
+      process.exit(1);
+    }
+    
+    // Step 1: Check if pre-commit is installed
+    const preCommitInstalled = await isPreCommitInstalled();
+    
+    if (!preCommitInstalled) {
+      console.log('⚠️  pre-commit is not installed');
+      await installPreCommit();
+      
+      // Verify installation
+      if (!await isPreCommitInstalled()) {
+        throw new Error('pre-commit installation verification failed');
+      }
+    } else {
+      console.log('✓ pre-commit is already installed');
+    }
+    
+    console.log('');
+    
+    // Step 2: Create .pre-commit-config.yaml
+    console.log('📝 Creating configuration file...');
+    await createPreCommitConfig(projectRoot);
+    
+    console.log('');
+    
+    // Step 3: Update hook versions
+    await runPreCommitAutoupdate(projectRoot);
+    
+    // Step 4: Run pre-commit setup commands
+    await runPreCommitSetup(projectRoot);
+    
+    console.log('');
+    console.log('✅ Sonar secrets pre-commit hook installed successfully!');
+    console.log('');
+    console.log('The hook will now run automatically on git commit to detect secrets.');
+    
+    process.exit(0);
+  } catch (error) {
+    console.error(`\nError: ${(error as Error).message}`);
+    process.exit(1);
+  }
+}

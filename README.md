@@ -88,6 +88,20 @@ sonar auth logout -s https://my-sonarqube.io
 sonar auth purge
 ```
 
+### Pre-commit Hooks
+
+**Install Sonar secrets pre-commit hook:**
+```bash
+sonar pre-commit install
+```
+
+This command will:
+1. Install `pre-commit` CLI tool (tries brew first on macOS, falls back to pip if brew is not available; uses pip on Linux/Windows)
+2. Create `.pre-commit-config.yaml` with Sonar secrets detection hook
+3. Configure the hook to run on every git commit to detect hardcoded secrets
+
+The hook will automatically scan your code for secrets before each commit, preventing accidental credential leaks.
+
 ### Issues Management
 
 **Search for issues:**
@@ -246,7 +260,8 @@ src/
 ├── commands/              # CLI command implementations
 │   ├── auth.ts           # Authentication (login, logout, purge)
 │   ├── issues.ts         # Issue search and display
-│   └── onboard-agent.ts  # Claude Code integration setup
+│   ├── onboard-agent.ts  # Claude Code integration setup
+│   └── pre-commit.ts     # Pre-commit hooks for secrets detection
 ├── bootstrap/            # Initialization and setup modules
 │   ├── auth.ts           # OAuth and token management
 │   ├── hooks.ts          # Claude Code hooks installation
@@ -311,6 +326,7 @@ Commands:
   auth [command]           Manage authentication tokens (login, logout, purge)
   issues search [options]  Search for issues in SonarQube
   onboard-agent [options]  Setup Claude Code integration
+  pre-commit [command]     Manage pre-commit hooks for secrets detection
 
 Options:
   -V, --version           Output version number
