@@ -167,7 +167,7 @@ export async function authLoginCommand(options: {
       org = await validateOrSelectOrganization(client, org, isNonInteractive);
 
       console.log('');
-      console.log('⚠️  Note: If the organization is incorrect, you may get 403');
+      console.log('ℹ️   Note: If the organization is incorrect, you may get 403');
       console.log('   Unauthorized errors in later requests. Logout and login again if needed.');
     }
 
@@ -188,7 +188,7 @@ export async function authLoginCommand(options: {
     saveState(state);
 
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
-    console.log(`✓ Authentication successful for: ${displayServer}`);
+    console.log(`✅ Authentication successful for: ${displayServer}`);
     process.exit(0);
   } catch (error) {
     console.error(`Error: ${(error as Error).message}`);
@@ -209,6 +209,12 @@ export async function authLogoutCommand(options: {
 
     if (isSonarCloud(server) && !org) {
       console.error('Error: Organization key is required for SonarCloud logout');
+      console.error('');
+      console.error('Usage:');
+      console.error('  sonar auth logout -o <organization-key>');
+      console.error('');
+      console.error('To see your saved connections, run:');
+      console.error('  sonar auth list');
       process.exit(1);
     }
 

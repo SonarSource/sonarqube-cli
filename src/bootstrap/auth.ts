@@ -271,7 +271,6 @@ function handleTokenPOST(
   });
 
   req.on('end', () => {
-    debugLog(`Body content: ${body}`);
 
     try {
       const data = JSON.parse(body) as Record<string, unknown>;
