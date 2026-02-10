@@ -2,6 +2,7 @@
  * Tests for state manager
  */
 
+import { describe, it, expect } from 'bun:test';
 import {
   generateConnectionId,
   addOrUpdateConnection,

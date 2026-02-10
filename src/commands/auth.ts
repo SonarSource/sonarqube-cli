@@ -11,8 +11,8 @@ import {
   generateConnectionId
 } from '../lib/state-manager.js';
 
+import { VERSION as CLI_VERSION, VERSION } from '../version.js';
 const SONARCLOUD_URL = 'https://sonarcloud.io';
-const CLI_VERSION = '0.2.62';
 
 /**
  * Check if server is SonarCloud
@@ -175,7 +175,7 @@ export async function authLoginCommand(options: {
     await saveToken(server, token, org);
 
     // Update state
-    const state = loadState(CLI_VERSION);
+    const state = loadState(VERSION);
     const isCloud = isSonarCloud(server);
     const keystoreKey = generateConnectionId(server, org);
 

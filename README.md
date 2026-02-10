@@ -163,8 +163,7 @@ This command will:
 ```bash
 sonar issues search \
   -s https://sonarcloud.io \
-  -p my-project \
-  -o my-org
+  -p my-project
 ```
 
 **Filter by severity:**

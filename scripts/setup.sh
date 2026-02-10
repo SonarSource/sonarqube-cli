@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # Cross-platform installation script for macOS and Linux
+# Installs to user directory (no sudo required) and auto-configures shell
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,17 +9,16 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BINARY_NAME="sonar-cli"
 INSTALL_NAME="sonar"
 
+# Install to user directory (no sudo needed)
+INSTALL_DIR="$HOME/.sonar-cli/bin"
+
 echo "🚀 Installing Sonar CLI..."
 echo ""
 
 # Detect OS
 OS="$(uname -s)"
 case "$OS" in
-    Darwin*)
-        INSTALL_DIR="/usr/local/bin"
-        ;;
-    Linux*)
-        INSTALL_DIR="/usr/local/bin"
+    Darwin*|Linux*)
         ;;
     *)
         echo "❌ Unsupported OS: $OS"
@@ -57,13 +57,16 @@ echo ""
 echo "✅ Binary built"
 echo ""
 
-# Step 3: Install binary to PATH
+# Step 3: Install binary to user directory (no sudo needed)
 BINARY_PATH="dist/$BINARY_NAME"
 
 if [ ! -f "$BINARY_PATH" ]; then
     echo "❌ Binary not found at $BINARY_PATH"
     exit 1
 fi
+
+# Create install directory
+mkdir -p "$INSTALL_DIR"
 
 # Make binary executable
 chmod +x "$BINARY_PATH"
@@ -78,27 +81,86 @@ if [ -f "$INSTALL_DIR/$INSTALL_NAME" ] || [ -L "$INSTALL_DIR/$INSTALL_NAME" ]; t
         exit 0
     fi
     echo "   Removing old installation..."
-    sudo rm -f "$INSTALL_DIR/$INSTALL_NAME"
+    rm -f "$INSTALL_DIR/$INSTALL_NAME"
 fi
 
-# Install binary
+# Install binary (no sudo needed)
 echo "📦 Installing $INSTALL_NAME to $INSTALL_DIR..."
-if cp "$BINARY_PATH" "$INSTALL_DIR/$INSTALL_NAME" 2>/dev/null; then
-    echo "✅ Installed successfully!"
-else
-    echo "   Need sudo permissions..."
-    sudo cp "$BINARY_PATH" "$INSTALL_DIR/$INSTALL_NAME"
-    echo "✅ Installed successfully with sudo!"
+cp "$BINARY_PATH" "$INSTALL_DIR/$INSTALL_NAME"
+echo "✅ Installed successfully!"
+
+# Step 4: Auto-configure shell PATH (like Bun does)
+echo ""
+echo "🔧 Configuring shell..."
+
+# Detect shell and config file
+SHELL_NAME="$(basename "$SHELL")"
+SHELL_CONFIG=""
+PATH_EXPORT="export PATH=\"\$HOME/.sonar-cli/bin:\$PATH\""
+
+case "$SHELL_NAME" in
+    zsh)
+        SHELL_CONFIG="$HOME/.zshrc"
+        ;;
+    bash)
+        # Check for .bash_profile first (macOS), then .bashrc (Linux)
+        if [ -f "$HOME/.bash_profile" ]; then
+            SHELL_CONFIG="$HOME/.bash_profile"
+        else
+            SHELL_CONFIG="$HOME/.bashrc"
+        fi
+        ;;
+    fish)
+        SHELL_CONFIG="$HOME/.config/fish/config.fish"
+        PATH_EXPORT="fish_add_path \$HOME/.sonar-cli/bin"
+        ;;
+    *)
+        echo "⚠️  Shell '$SHELL_NAME' not automatically supported."
+        SHELL_CONFIG=""
+        ;;
+esac
+
+# Check if PATH already configured
+PATH_CONFIGURED=false
+if [ -n "$SHELL_CONFIG" ] && [ -f "$SHELL_CONFIG" ]; then
+    if grep -q ".sonar-cli/bin" "$SHELL_CONFIG" 2>/dev/null; then
+        PATH_CONFIGURED=true
+        echo "✅ Shell already configured ($SHELL_CONFIG)"
+    fi
+fi
+
+# Add to PATH if not already configured
+if [ "$PATH_CONFIGURED" = false ] && [ -n "$SHELL_CONFIG" ]; then
+    echo "" >> "$SHELL_CONFIG"
+    echo "# Sonar CLI" >> "$SHELL_CONFIG"
+    echo "$PATH_EXPORT" >> "$SHELL_CONFIG"
+    echo "✅ Added to PATH in $SHELL_CONFIG"
+    echo ""
+    echo "📝 To use immediately, run:"
+    echo "   source $SHELL_CONFIG"
+    echo "   OR restart your terminal"
+elif [ -z "$SHELL_CONFIG" ]; then
+    echo ""
+    echo "📝 Manual PATH setup required:"
+    echo "   Add this line to your shell config:"
+    echo "   $PATH_EXPORT"
 fi
 
 echo ""
 echo "🎉 Installation complete!"
 echo ""
-echo "Testing installation:"
-"$INSTALL_DIR/$INSTALL_NAME" --version
+
+# Test if sonar is in PATH (in current session)
+if command -v "$INSTALL_NAME" &> /dev/null; then
+    echo "Testing installation:"
+    "$INSTALL_NAME" --version
+    echo ""
+    echo "✅ Ready to use: $INSTALL_NAME --help"
+else
+    echo "⚠️  Note: Restart your terminal or run 'source $SHELL_CONFIG' to use '$INSTALL_NAME'"
+fi
 
 echo ""
-echo "Usage: $INSTALL_NAME --help"
-echo ""
 echo "To uninstall, run:"
-echo "  sudo rm $INSTALL_DIR/$INSTALL_NAME"
+echo "  rm -rf ~/.sonar-cli"
+echo "  (and remove the PATH line from $SHELL_CONFIG)"

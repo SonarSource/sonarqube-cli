@@ -5,9 +5,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { CliState, getDefaultState, AuthConnection, CloudRegion } from './state';
+import os from 'node:os';
+import { CliState, getDefaultState, AuthConnection, CloudRegion } from './state.js';
 
-const STATE_DIR = path.join(process.env.HOME || process.env.USERPROFILE || '~', '.sonar-cli');
+const STATE_DIR = path.join(os.homedir(), '.sonar-cli');
 const STATE_FILE = path.join(STATE_DIR, 'state.json');
 
 /**

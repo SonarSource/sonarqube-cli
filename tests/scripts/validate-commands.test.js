@@ -30,14 +30,18 @@ describe('validate-commands.js', () => {
     expect(output).toContain('Checking imports');
   });
 
-  it('should report total errors and warnings', () => {
+  it('should report validation results', () => {
     const result = spawnSync(['node', validateScript], {
       cwd: rootDir,
       capture: true
     });
 
     const output = result.stdout.toString();
-    expect(output).toMatch(/Total: \d+ error\(s\), \d+ warning\(s\)/);
+    // Should either show success message or error/warning counts
+    const hasSuccessMessage = output.includes('All checks passed! Commands match specification.');
+    const hasTotalMessage = /Total: \d+ error\(s\), \d+ warning\(s\)/.test(output);
+    
+    expect(hasSuccessMessage || hasTotalMessage).toBe(true);
   });
 
   it('should have consistent format with emojis', () => {

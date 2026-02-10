@@ -42,26 +42,21 @@ export class IssuesClient {
     let page = 1;
     let allIssues: IssuesSearchResponse['issues'] = [];
     let totalPages = 1;
+    let lastResponse: IssuesSearchResponse;
 
-    while (page <= totalPages) {
-      const response = await this.searchIssues({
+    do {
+      lastResponse = await this.searchIssues({
         ...params,
         p: page,
         ps: params.ps || DEFAULT_PAGE_SIZE_ISSUES
       });
 
-      allIssues = allIssues.concat(response.issues);
-      totalPages = Math.ceil(response.paging.total / response.paging.pageSize);
+      allIssues = allIssues.concat(lastResponse.issues);
+      totalPages = Math.ceil(lastResponse.paging.total / lastResponse.paging.pageSize);
       page++;
-    }
+    } while (page <= totalPages);
 
-    // Return combined response
-    const lastResponse = await this.searchIssues({
-      ...params,
-      p: 1,
-      ps: params.ps || DEFAULT_PAGE_SIZE_ISSUES
-    });
-
+    // Return last response with all accumulated issues
     return {
       ...lastResponse,
       issues: allIssues,
