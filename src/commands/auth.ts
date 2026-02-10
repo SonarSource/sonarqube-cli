@@ -1,7 +1,8 @@
 // Authentication command - manage tokens and credentials
 
-import { generateTokenViaBrowser, getToken, saveToken, deleteToken } from '../bootstrap/auth.js';
+import { generateTokenViaBrowser, getToken as getKeystoreToken, saveToken, deleteToken } from '../bootstrap/auth.js';
 import { getAllCredentials, purgeAllTokens } from '../lib/keychain.js';
+import { discoverProject } from '../bootstrap/discovery.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import {
   loadState,
@@ -26,6 +27,29 @@ function isSonarCloud(serverURL: string): boolean {
 }
 
 /**
+ * Try to find organization from project configs
+ */
+async function findOrganizationInConfigs(): Promise<string | null> {
+  try {
+    const projectInfo = await discoverProject(process.cwd(), false);
+
+    // Check sonar-project.properties
+    if (projectInfo.sonarPropsData?.organization) {
+      return projectInfo.sonarPropsData.organization;
+    }
+
+    // Check .sonarlint config
+    if (projectInfo.sonarLintData?.organization) {
+      return projectInfo.sonarLintData.organization;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get token for authentication
  */
 async function getOrGenerateToken(
@@ -38,7 +62,7 @@ async function getOrGenerateToken(
     return withToken || '';
   }
 
-  const existingToken = await getToken(server, org);
+  const existingToken = await getKeystoreToken(server, org);
   if (existingToken) {
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     console.log(`✓ Token already exists for: ${displayServer}`);
@@ -70,33 +94,30 @@ async function validateOrSelectOrganization(
     return org;
   }
 
-  const organizations = await client.getOrganizations();
-
-  if (organizations.length === 0) {
-    console.error('Error: No organizations found.');
-    console.error('This could mean:');
-    console.error('  - You don\'t have access to any organizations');
-    console.error('  - The token has insufficient permissions');
-    console.error('  - Try specifying organization explicitly: sonar auth login -o <organization>');
-    process.exit(1);
+  // Try to find organization in project configs first (skip API call)
+  const configOrg = await findOrganizationInConfigs();
+  if (configOrg) {
+    console.log(`✓ Using organization from config: ${configOrg}`);
+    return configOrg;
   }
 
-  if (organizations.length === 1) {
-    const selectedOrg = organizations[0].key;
-    console.log(`✓ Using organization: ${selectedOrg} (${organizations[0].name})`);
-    return selectedOrg;
-  }
+  // If not in config, prompt user
+  console.log('Please specify your organization key or run this command in a project with sonar-project.properties or .sonarlint config.');
+  console.log('');
 
   if (isNonInteractive) {
-    console.error('Error: Multiple organizations found. Please specify with -o/--org');
-    console.log('Available organizations:');
-    organizations.forEach((o) => {
-      console.log(`  - ${o.key} (${o.name})`);
-    });
+    console.error('Error: Organization must be specified with -o/--org in non-interactive mode');
     process.exit(1);
   }
 
-  return selectOrganizationInteractive(organizations);
+  const selectedOrg = await getUserInput('Enter organization key: ');
+  if (!selectedOrg.trim()) {
+    console.error('Error: Organization key is required');
+    process.exit(1);
+  }
+
+  console.log(`✓ Using organization: ${selectedOrg.trim()}`);
+  return selectedOrg.trim();
 }
 
 /**
@@ -191,7 +212,7 @@ export async function authLogoutCommand(options: {
       process.exit(1);
     }
 
-    const token = await getToken(server, org);
+    const token = await getKeystoreToken(server, org);
     if (!token) {
       const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
       console.log(`ℹ No token found for: ${displayServer}`);
@@ -258,6 +279,55 @@ export async function authPurgeCommand(): Promise<void> {
     saveState(state);
 
     console.log('✓ All tokens have been removed from keychain');
+    process.exit(0);
+  } catch (error) {
+    console.error(`Error: ${(error as Error).message}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * List saved authentication connections with token verification
+ */
+export async function authListCommand(): Promise<void> {
+  try {
+    const state = loadState(CLI_VERSION);
+
+    if (state.auth.connections.length === 0) {
+      console.log('ℹ No saved authentication connections');
+      process.exit(0);
+    }
+
+    console.log(`Found ${state.auth.connections.length} saved connection(s):\n`);
+
+    let validCount = 0;
+    let missingCount = 0;
+
+    for (const conn of state.auth.connections) {
+      // Check if token exists in keychain
+      const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
+      const isValid = token !== null;
+
+
+      if (isValid) {
+        validCount++;
+        const checkmark = '✓';
+        const orgDisplay = conn.orgKey ? ` (org: ${conn.orgKey})` : '';
+        console.log(`  ${checkmark} ${conn.serverUrl}${orgDisplay}`);
+      } else {
+        missingCount++;
+        const cross = '✗';
+        const orgDisplay = conn.orgKey ? ` (org: ${conn.orgKey})` : '';
+        console.log(`  ${cross} ${conn.serverUrl}${orgDisplay} [token missing]`);
+      }
+    }
+
+    console.log(`\nSummary: ${validCount} valid, ${missingCount} missing`);
+
+    if (missingCount > 0) {
+      console.log('Run "sonar auth login" to add missing tokens');
+    }
+
     process.exit(0);
   } catch (error) {
     console.error(`Error: ${(error as Error).message}`);

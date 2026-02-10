@@ -12,6 +12,24 @@ const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TOON_FORMAT_THRESHOLD = 5; // Use TOON format for result sets larger than this
 
+/**
+ * Try to find projectKey from sonar-project.properties
+ */
+async function findProjectKeyInConfig(): Promise<string | undefined> {
+  try {
+    const { discoverProject } = await import('../bootstrap/discovery.js');
+    const projectInfo = await discoverProject(process.cwd(), false);
+
+    if (projectInfo.sonarPropsData?.projectKey) {
+      return projectInfo.sonarPropsData.projectKey;
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface VerifyOptions {
   file: string;
   token?: string;
@@ -160,8 +178,9 @@ function validateConfiguration(
 
   if (!projectKey) {
     console.error('❌ Error: --project-key is required');
-    console.error('  Provide via: --project-key flag');
+    console.error('  Provide via: --project-key flag, or in sonar-project.properties');
     console.error(`  Config location: ${getConfigLocation()}`);
+    console.error('  Add to sonar-project.properties: sonar.projectKey=<key>');
     process.exit(1);
   }
 
@@ -253,7 +272,12 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
     options.organizationKey,
     options.token
   );
-  const projectKey = options.projectKey;
+
+  // Try to find projectKey from flag first, then from config
+  let projectKey = options.projectKey;
+  if (!projectKey) {
+    projectKey = await findProjectKeyInConfig();
+  }
 
   validateConfiguration(org, projectKey, token, options.file);
 

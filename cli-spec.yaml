@@ -3,7 +3,7 @@
 
 cli:
   name: sonar
-  version: 0.2.62
+  version: 0.2.89
   description: SonarQube CLI for AI coding agents
 
 commands:
@@ -19,84 +19,6 @@ commands:
     examples:
       - command: sonar verify src/MyClass.java
         description: Analyze a single Java file
-
-  # Command to analyze file using SonarCloud A3S API
-  - name: analyze
-    description: Analyze a file using SonarCloud A3S API
-    handler: ./src/commands/analyze.ts
-    options:
-      - name: file
-        type: string
-        description: File path to analyze
-        required: true
-
-      - name: organization-key
-        type: string
-        description: Organization key (or use saved config)
-
-      - name: project-key
-        type: string
-        description: Project key (or use saved config)
-
-      - name: token
-        alias: t
-        type: string
-        description: Authentication token (or use saved config)
-
-      - name: branch
-        alias: b
-        type: string
-        description: Branch name
-
-      - name: save-config
-        type: boolean
-        description: Save organization key, project key, and token to config file
-        default: false
-
-    examples:
-      - command: sonar analyze --file src/MyClass.java --organization-key sonarsource --project-key my-project -t TOKEN --save-config
-        description: Analyze a file and save config for future use
-
-      - command: sonar analyze --file src/MyClass.java
-        description: Analyze using saved configuration
-
-      - command: sonar analyze --file src/MyClass.java --branch main
-        description: Analyze file on a specific branch
-
-  # Command to manage analyze configuration
-  - name: config
-    description: Manage analyze command configuration
-    handler: ./src/commands/config.ts
-    options:
-      - name: show
-        type: boolean
-        description: Show current configuration
-        default: false
-
-      - name: clear
-        type: boolean
-        description: Clear configuration file
-        default: false
-
-      - name: set
-        type: boolean
-        description: Set configuration values
-        default: false
-
-      - name: organization-key
-        type: string
-        description: Organization key to set
-
-      - name: project-key
-        type: string
-        description: Project key to set
-
-      - name: token
-        type: string
-        description: Token to set
-
-    examples:
-      - command: sonar config --show
         description: Show current configuration
 
       - command: sonar config --set --organization-key sonarsource --token TOKEN

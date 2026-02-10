@@ -4,52 +4,32 @@
 // Generated from cli-spec.yaml by Plop.js
 
 import { Command } from 'commander';
+import { VERSION } from './version.js';
 import { verifyCommand } from './commands/verify.js';
-import { configCommand } from './commands/config.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
-import { authLoginCommand, authLogoutCommand, authPurgeCommand } from './commands/auth.js';
-import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
+import { authLoginCommand, authLogoutCommand, authPurgeCommand, authListCommand } from './commands/auth.js';
 
 const program = new Command();
 
 program
   .name('sonar')
   .description('SonarQube CLI for AI coding agents')
-  .version('0.2.62', '-v, --version', 'output the current version');
+  .version(VERSION, '-v, --version', 'output the current version');
 
-// Verify a file using SonarCloud A3S API
+// Analyze a file for code issues
 program
   .command('verify')
-  .description('Analyze a file for code issues using SonarCloud A3S API')
+  .description('Analyze a file for code issues')
   .requiredOption('--file <file>', 'File path to analyze')
-  .option('--organization-key <organizationKey>', 'Organization key (or use saved config)')
-  .option('--project-key <projectKey>', 'Project key (or use saved config)')
-  .option('-t, --token <token>', 'Authentication token (or use saved config)')
+  .option('-t, --token <token>', 'Authentication token')
+  .option('-o, --organization-key <organization-key>', 'Organization key (for SonarCloud)')
+  .option('-p, --project-key <project-key>', 'Project key')
   .option('-b, --branch <branch>', 'Branch name')
-  .option('--save-config', 'Save organization key, project key, and token to config file')
+  .option('--save-config', 'Save configuration for future use')
   .action(async (options) => {
     try {
       await verifyCommand(options);
-    } catch (error) {
-      console.error('Error:', (error as Error).message);
-      process.exit(1);
-    }
-  });
-
-// Manage analyze command configuration
-program
-  .command('config')
-  .description('Manage analyze command configuration')
-  .option('--show', 'Show current configuration')
-  .option('--clear', 'Clear configuration file')
-  .option('--set', 'Set configuration values')
-  .option('--organization-key <organization-key>', 'Organization key to set')
-  .option('--project-key <project-key>', 'Project key to set')
-  .option('--token <token>', 'Token to set')
-  .action(async (options) => {
-    try {
-      await configCommand(options);
     } catch (error) {
       console.error('Error:', (error as Error).message);
       process.exit(1);
@@ -71,7 +51,7 @@ issues
   .option('--format <format>', 'Output format', 'json')
   .option('--branch <branch>', 'Branch name')
   .option('--pull-request <pull-request>', 'Pull request ID')
-  .option('--all', 'Fetch all issues with pagination')
+  .option('--all', 'Fetch all issues with pagination', 'false')
   .option('--page-size <page-size>', 'Page size for pagination', '500')
   .action(async (options) => {
     try {
@@ -91,9 +71,9 @@ program
   .option('-t, --token <token>', 'Existing authentication token')
   .option('-o, --org <org>', 'Organization key (for SonarCloud)')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option('--skip-hooks', 'Skip hooks installation')
+  .option('--skip-hooks', 'Skip hooks installation', 'false')
   .option('--hook-type <hook-type>', 'Hook type to install', 'prompt')
-  .option('-v, --verbose', 'Verbose output')
+  .option('-v, --verbose', 'Verbose output', 'false')
   .action(async (agent, options) => {
     try {
       // Validate argument choices
@@ -113,7 +93,18 @@ program
 // Manage authentication tokens and credentials
 const auth = program
   .command('auth')
-  .description('Manage authentication tokens and credentials');
+  .description('Manage authentication tokens and credentials')
+  .action(async (options, cmd) => {
+    // If no subcommand provided, default to login
+    if (cmd.args.length === 0) {
+      try {
+        await authLoginCommand(options);
+      } catch (error) {
+        console.error('Error:', (error as Error).message);
+        process.exit(1);
+      }
+    }
+  });
 
 auth
   .command('login')
@@ -156,29 +147,12 @@ auth
     }
   });
 
-// Manage pre-commit hooks for secrets detection
-const preCommit = program
-  .command('pre-commit')
-  .description('Manage pre-commit hooks for secrets detection');
-
-preCommit
-  .command('install')
-  .description('Install SonarSource secrets pre-commit hook')
+auth
+  .command('list')
+  .description('List saved authentication connections with token verification')
   .action(async () => {
     try {
-      await preCommitInstallCommand();
-    } catch (error) {
-      console.error('Error:', (error as Error).message);
-      process.exit(1);
-    }
-  });
-
-preCommit
-  .command('uninstall')
-  .description('Uninstall SonarSource secrets pre-commit hook')
-  .action(async () => {
-    try {
-      await preCommitUninstallCommand();
+      await authListCommand();
     } catch (error) {
       console.error('Error:', (error as Error).message);
       process.exit(1);
