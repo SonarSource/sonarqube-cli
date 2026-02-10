@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Cross-platform installation script for macOS and Linux
 set -e
@@ -41,6 +41,13 @@ fi
 echo ""
 echo "✅ Dependencies installed"
 echo ""
+
+# Ensure bun is available for build:binary (which uses bun build ...)
+if ! command -v bun &> /dev/null; then
+    echo "❌ bun not found. The build:binary script requires Bun (https://bun.sh)."
+    echo "   Please install Bun and ensure 'bun' is available on your PATH, then re-run this script."
+    exit 1
+fi
 
 # Step 2: Build binary
 echo "🔨 Building binary..."

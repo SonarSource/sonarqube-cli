@@ -28,7 +28,13 @@ Write-Host ""
 
 # Step 2: Build binary
 Write-Host "🔨 Building binary..." -ForegroundColor Yellow
-npm run build:binary
+if (Get-Command bun -ErrorAction SilentlyContinue) {
+    npm run build:binary
+} else {
+    Write-Host "❌ bun not found. The 'npm run build:binary' script requires Bun to be installed." -ForegroundColor Red
+    Write-Host "   Please install Bun from https://bun.sh/ and try again." -ForegroundColor Red
+    exit 1
+}
 
 Write-Host ""
 Write-Host "✅ Binary built" -ForegroundColor Green
@@ -55,12 +61,22 @@ Copy-Item -Path $BinaryPath -Destination (Join-Path $InstallDir $InstallName) -F
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$InstallDir*") {
     Write-Host "📝 Adding to PATH..." -ForegroundColor Yellow
+    if ([string]::IsNullOrEmpty($UserPath)) {
+        $newUserPath = $InstallDir
+    } else {
+        $newUserPath = "$UserPath;$InstallDir"
+    }
     [Environment]::SetEnvironmentVariable(
         "Path",
-        "$UserPath;$InstallDir",
+        $newUserPath,
         "User"
     )
-    $env:Path = "$env:Path;$InstallDir"
+    $currentProcessPath = $env:Path
+    if ([string]::IsNullOrEmpty($currentProcessPath)) {
+        $env:Path = $InstallDir
+    } else {
+        $env:Path = "$currentProcessPath;$InstallDir"
+    }
     Write-Host "✅ Added to PATH (restart terminal for changes to take effect)" -ForegroundColor Green
 } else {
     Write-Host "✅ Already in PATH" -ForegroundColor Green

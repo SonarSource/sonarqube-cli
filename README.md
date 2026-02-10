@@ -19,9 +19,8 @@ Command-line tool for SonarQube/SonarCloud integration with Claude Code. Manages
 #### Prerequisites
 
 - Node.js >= 18.0.0
-- npm or Bun package manager
-  - **Bun** (recommended): For faster builds and binary compilation. Install from [bun.sh](https://bun.sh)
-  - **npm**: Included with Node.js
+- **Bun**: (optional, but required for binary compilation and the quick install path that runs `npm run build:binary`)
+- **npm**: Included with Node.js
 - Git
 
 ### Quick Install
@@ -42,7 +41,7 @@ npm run setup
 
 ```powershell
 # Run the setup script
-powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+powershell -ExecutionPolicy RemoteSigned -File scripts/setup.ps1
 ```
 
 **What the installation does:**
