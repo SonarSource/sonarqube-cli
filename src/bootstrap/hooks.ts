@@ -1,8 +1,8 @@
 // Hooks installation - install Claude Code hooks (cross-platform)
 
-import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { platform } from 'os';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { platform } from 'node:os';
 
 const CLAUDE_DIR = '.claude';
 const HOOKS_DIR = 'hooks';
@@ -10,22 +10,27 @@ const SETTINGS_FILE = 'settings.local.json';
 
 export type HookType = 'prompt' | 'cli';
 
+interface HookConfig {
+  matcher: string;
+  hooks: Array<{
+    type: string;
+    command: string;
+    timeout: number;
+  }>;
+}
+
+interface PermissionsConfig {
+  allow: string[];
+  [key: string]: unknown;
+}
+
 interface ClaudeSettings {
   hooks?: {
-    [eventType: string]: Array<{
-      matcher: string;
-      hooks: Array<{
-        type: string;
-        command: string;
-        timeout: number;
-      }>;
-    }>;
+    [eventType: string]: HookConfig[];
   };
-  permissions?: {
-    allow: string[];
-    [key: string]: any;
-  };
-  [key: string]: any;
+  permissions?: PermissionsConfig;
+  mcpServers?: unknown;
+  [key: string]: unknown;
 }
 
 /**
@@ -68,7 +73,7 @@ export async function installHooks(
   const scriptPath = join(hooksPath, scriptName);
   const scriptContent = getHookScriptContent(hookType);
 
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
 
   if (getPlatform() === 'unix') {
     // Unix: set executable permissions
@@ -111,7 +116,7 @@ async function configureHooksSettings(
 
   // Load existing settings or create new
   if (existsSync(settingsPath)) {
-    const fs = await import('fs/promises');
+    const fs = await import('node:fs/promises');
     const data = await fs.readFile(settingsPath, 'utf-8');
     settings = JSON.parse(data);
   } else {
@@ -124,9 +129,7 @@ async function configureHooksSettings(
   }
 
   // Ensure hooks exist
-  if (!settings.hooks) {
-    settings.hooks = {};
-  }
+  settings.hooks ??= {};
 
   // Build cross-platform command path using path.join normalization
   const commandPath = join('.claude', 'hooks', scriptName);
@@ -145,22 +148,14 @@ async function configureHooksSettings(
     }
   ];
 
-  // Ensure permissions section exists and add MCP tool permission
-  if (!settings.permissions) {
-    settings.permissions = { allow: [] };
-  }
+  // Ensure permissions section exists
+  settings.permissions ??= {allow: []};
   if (!Array.isArray(settings.permissions.allow)) {
     settings.permissions.allow = [];
   }
 
-  // Add MCP tool permission if not already present
-  const mcpToolPermission = 'mcp__sonarqube__analyze_code_snippet';
-  if (!settings.permissions.allow.includes(mcpToolPermission)) {
-    settings.permissions.allow.unshift(mcpToolPermission);
-  }
-
   // Save settings
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   const data = JSON.stringify(settings, null, 2);
   await fs.writeFile(settingsPath, data, 'utf-8');
 }
@@ -176,7 +171,7 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
   }
 
   try {
-    const fs = await import('fs/promises');
+    const fs = await import('node:fs/promises');
     const data = await fs.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(data);
 
@@ -191,7 +186,7 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
  * Unix hook template for prompt-based analysis (bash)
  */
 function getHookPromptTemplateUnix(): string {
-  return `#!/bin/bash
+  return String.raw`#!/bin/bash
 # SonarQube Analysis Hook for Claude Code
 # This hook prompts the agent to analyze files after Edit/Write operations
 # Platform: Unix/Linux/macOS
@@ -219,19 +214,6 @@ case "$FILE" in
         ;;
 esac
 
-# Detect language from extension
-case "$FILE" in
-    *.java) LANGUAGE="java" ;;
-    *.js|*.jsx) LANGUAGE="javascript" ;;
-    *.ts|*.tsx) LANGUAGE="typescript" ;;
-    *.py) LANGUAGE="python" ;;
-    *.go) LANGUAGE="go" ;;
-    *.rb) LANGUAGE="ruby" ;;
-    *.php) LANGUAGE="php" ;;
-    *.cs) LANGUAGE="csharp" ;;
-    *.cpp|*.c|*.h|*.hpp) LANGUAGE="cpp" ;;
-esac
-
 # Output prompt for the agent as JSON
 PROMPT="╔══════════════════════════════════════════════════════════╗
 ║        SONARQUBE ANALYSIS REQUIRED                       ║
@@ -239,11 +221,8 @@ PROMPT="╔═══════════════════════
 
 You just modified: $FILE
 
-You MUST analyze this file for code quality issues using MCP tool:
-mcp__sonarqube__analyze_code_snippet with:
-  - codeSnippet: <read file content from $FILE>
-  - language: $LANGUAGE
-  - projectKey: <get from sonar-project.properties if available>
+You MUST analyze this file for code quality issues by running:
+  sonar verify --file $FILE
 
 You MUST fix ALL issues found in this file:
 - Fix ALL bugs and security vulnerabilities (critical priority)
@@ -259,7 +238,7 @@ cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "$(echo "$PROMPT" | sed 's/"/\\\\"/g' | tr '\\n' ' ')"
+    "additionalContext": "$(echo "$PROMPT" | sed 's/"/\\"/g' | tr '\n' ' ')"
   }
 }
 EOF
@@ -349,26 +328,6 @@ if ($supportedExtensions -notcontains $fileExtension) {
     exit 0
 }
 
-# Detect language from extension
-$languageMap = @{
-    'java'   = 'java'
-    'js'     = 'javascript'
-    'jsx'    = 'javascript'
-    'ts'     = 'typescript'
-    'tsx'    = 'typescript'
-    'py'     = 'python'
-    'go'     = 'go'
-    'rb'     = 'ruby'
-    'php'    = 'php'
-    'cs'     = 'csharp'
-    'cpp'    = 'cpp'
-    'c'      = 'cpp'
-    'h'      = 'cpp'
-    'hpp'    = 'cpp'
-}
-
-$language = $languageMap[$fileExtension]
-
 # Build the prompt message
 $prompt = @"
 ╔══════════════════════════════════════════════════════════╗
@@ -377,11 +336,8 @@ $prompt = @"
 
 You just modified: $filePath
 
-You MUST analyze this file for code quality issues using MCP tool:
-mcp__sonarqube__analyze_code_snippet with:
-  - codeSnippet: <read file content from $filePath>
-  - language: $language
-  - projectKey: <get from sonar-project.properties if available>
+You MUST analyze this file for code quality issues by running:
+  sonar verify --file $filePath
 
 You MUST fix ALL issues found in this file:
 - Fix ALL bugs and security vulnerabilities (critical priority)

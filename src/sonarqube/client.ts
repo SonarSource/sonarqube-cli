@@ -2,6 +2,9 @@
 
 import { VERSION } from '../version.js';
 
+const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
+
 export class SonarQubeClient {
   private readonly serverURL: string;
   private readonly token: string;
@@ -35,7 +38,7 @@ export class SonarQubeClient {
         'User-Agent': `sonar-cli/${VERSION}`,
         'Accept': 'application/json'
       },
-      signal: AbortSignal.timeout(30000) // 30s timeout
+      signal: AbortSignal.timeout(GET_REQUEST_TIMEOUT_MS)
     });
 
     if (!response.ok) {
@@ -60,7 +63,7 @@ export class SonarQubeClient {
         'Accept': 'application/json'
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60000) // 60s timeout for analysis
+      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS)
     });
 
     if (!response.ok) {

@@ -2,8 +2,6 @@
 
 import { validateToken } from './auth.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
-import { isDockerRunning, hasImage } from './docker.js';
-import { isMCPServerConfigured } from './mcp.js';
 import { areHooksInstalled } from './hooks.js';
 
 export interface HealthCheckResult {
@@ -12,9 +10,6 @@ export interface HealthCheckResult {
   projectAccessible: boolean;
   organizationAccessible: boolean;
   qualityProfilesAccessible: boolean;
-  dockerRunning: boolean;
-  dockerImagePresent: boolean;
-  mcpConfigured: boolean;
   hooksInstalled: boolean;
   errors: string[];
 }
@@ -90,25 +85,6 @@ export async function runHealthChecks(
     errors.push(`Failed to check quality profiles: ${(error as Error).message}`);
   }
 
-  // Check Docker
-  console.log('   Checking Docker status...');
-  const dockerRunning = await isDockerRunning();
-  if (!dockerRunning) {
-    errors.push('Docker is not running');
-  }
-
-  const dockerImagePresent = await hasImage('mcp/sonarqube');
-  if (!dockerImagePresent) {
-    errors.push('Docker image mcp/sonarqube not found');
-  }
-
-  // Check MCP configuration in ~/.config/claude/mcp_settings.json
-  console.log('   Checking MCP configuration...');
-  const mcpConfigured = await isMCPServerConfigured(serverURL);
-  if (!mcpConfigured) {
-    errors.push('MCP Server not configured');
-  }
-
   // Check hooks
   console.log('   Checking hooks installation...');
   const hooksInstalled = await areHooksInstalled(projectRoot);
@@ -122,9 +98,6 @@ export async function runHealthChecks(
     projectAccessible,
     organizationAccessible,
     qualityProfilesAccessible,
-    dockerRunning,
-    dockerImagePresent,
-    mcpConfigured,
     hooksInstalled,
     errors
   };

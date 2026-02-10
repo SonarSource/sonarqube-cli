@@ -1,8 +1,8 @@
 // MCP Server configuration - manages Claude Code MCP settings
 
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { homedir, platform } from 'os';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { homedir, platform } from 'node:os';
 
 interface MCPServer {
   type: string;
@@ -13,37 +13,21 @@ interface MCPServer {
 
 interface ClaudeConfig {
   mcpServers?: Record<string, MCPServer>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ProjectSettings {
   mcpServers?: Record<string, MCPServer>;
-  hooks?: any;
+  hooks?: unknown;
   permissions?: {
     allow: string[];
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 const CLAUDE_DIR = '.claude';
 const SETTINGS_FILE = 'settings.local.json';
-
-/**
- * Generate MCP server key based on server URL
- */
-function getMCPServerKey(serverURL: string): string {
-  // Normalize server URL
-  let normalized = serverURL.replace(/^https?:\/\//, '');
-  normalized = normalized.replace(/\/$/, '');
-
-  // Replace special characters
-  normalized = normalized.replace(/:/g, '_');
-  normalized = normalized.replace(/\//g, '_');
-  normalized = normalized.replace(/\./g, '_');
-
-  return 'sonarqube_' + normalized;
-}
 
 /**
  * Get Claude config path
@@ -65,7 +49,7 @@ async function loadClaudeConfig(): Promise<ClaudeConfig> {
     return { mcpServers: {} };
   }
 
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   const data = await fs.readFile(configPath, 'utf-8');
   return JSON.parse(data);
 }
@@ -77,8 +61,8 @@ async function saveClaudeConfig(config: ClaudeConfig): Promise<void> {
   const configPath = getClaudeConfigPath();
   const configDir = dirname(configPath);
 
-  const fs = await import('fs/promises');
-  const { mkdirSync } = await import('fs');
+  const fs = await import('node:fs/promises');
+  const { mkdirSync } = await import('node:fs');
 
   // Ensure directory exists
   if (platform() === 'win32') {
@@ -105,11 +89,9 @@ export async function configureMCPServer(
   const config = await loadClaudeConfig();
 
   // Get or create mcpServers section
-  if (!config.mcpServers) {
-    config.mcpServers = {};
-  }
+  config.mcpServers ??= {};
 
-  // Build MCP server configuration
+  // Build and assign MCP server configuration directly
   const args = ['run', '-i', '--rm', '-e', 'SONARQUBE_TOKEN', '-e', 'SONARQUBE_URL'];
   const env: Record<string, string> = {
     SONARQUBE_TOKEN: token,
@@ -123,16 +105,14 @@ export async function configureMCPServer(
 
   args.push('mcp/sonarqube');
 
-  const serverConfig: MCPServer = {
+  // Use simple 'sonarqube' key for global configuration
+  // This ensures Claude Code can discover the MCP server and tools
+  config.mcpServers.sonarqube = {
     type: 'stdio',
     command: 'docker',
     args,
     env
   };
-
-  // Use simple 'sonarqube' key for global configuration
-  // This ensures Claude Code can discover the MCP server and tools
-  config.mcpServers.sonarqube = serverConfig;
 
   // Save updated config
   await saveClaudeConfig(config);
@@ -142,7 +122,7 @@ export async function configureMCPServer(
  * Check if MCP Server is configured
  * Checks for the standard 'sonarqube' key in ~/.claude.json
  */
-export async function isMCPServerConfigured(serverURL?: string): Promise<boolean> {
+export async function isMCPServerConfigured(): Promise<boolean> {
   try {
     const config = await loadClaudeConfig();
 
@@ -174,7 +154,7 @@ async function loadProjectSettings(projectRoot: string): Promise<ProjectSettings
     return { mcpServers: {} };
   }
 
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   const data = await fs.readFile(settingsPath, 'utf-8');
   return JSON.parse(data);
 }
@@ -187,7 +167,7 @@ async function saveProjectSettings(projectRoot: string, settings: ProjectSetting
 
   // Create .claude directory if needed
   if (!existsSync(claudePath)) {
-    const { mkdirSync } = await import('fs');
+    const { mkdirSync } = await import('node:fs');
     if (platform() === 'win32') {
       mkdirSync(claudePath, { recursive: true });
     } else {
@@ -196,7 +176,7 @@ async function saveProjectSettings(projectRoot: string, settings: ProjectSetting
   }
 
   const settingsPath = getProjectSettingsPath(projectRoot);
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   const data = JSON.stringify(settings, null, 2);
   await fs.writeFile(settingsPath, data, 'utf-8');
 }
@@ -252,20 +232,13 @@ export async function configureProjectMCPServer(
   const settings = await loadProjectSettings(projectRoot);
 
   // Ensure mcpServers section exists
-  if (!settings.mcpServers) {
-    settings.mcpServers = {};
-  }
+  settings.mcpServers ??= {};
 
-  // Build server configuration
-  const serverConfig = buildMCPServerConfig(serverURL, token, projectKey, organization);
-
-  // Use 'sonarqube' as the standard key for project-specific MCP server
-  settings.mcpServers.sonarqube = serverConfig;
+  // Build and assign server configuration directly
+  settings.mcpServers.sonarqube = buildMCPServerConfig(serverURL, token, projectKey, organization);
 
   // Ensure permissions section exists
-  if (!settings.permissions) {
-    settings.permissions = { allow: [] };
-  }
+  settings.permissions ??= {allow: []};
   if (!Array.isArray(settings.permissions.allow)) {
     settings.permissions.allow = [];
   }

@@ -3,8 +3,10 @@
 import { SonarQubeClient } from './client.js';
 import type { IssuesSearchParams, IssuesSearchResponse } from '../lib/types.js';
 
+const DEFAULT_PAGE_SIZE_ISSUES = 500;
+
 export class IssuesClient {
-  private client: SonarQubeClient;
+  private readonly client: SonarQubeClient;
 
   constructor(client: SonarQubeClient) {
     this.client = client;
@@ -45,7 +47,7 @@ export class IssuesClient {
       const response = await this.searchIssues({
         ...params,
         p: page,
-        ps: params.ps || 500
+        ps: params.ps || DEFAULT_PAGE_SIZE_ISSUES
       });
 
       allIssues = allIssues.concat(response.issues);
@@ -57,7 +59,7 @@ export class IssuesClient {
     const lastResponse = await this.searchIssues({
       ...params,
       p: 1,
-      ps: params.ps || 500
+      ps: params.ps || DEFAULT_PAGE_SIZE_ISSUES
     });
 
     return {

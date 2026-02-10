@@ -1,6 +1,6 @@
 // JSON formatter
 
-export function formatJSON(data: any, pretty: boolean = true): string {
+export function formatJSON(data: unknown, pretty: boolean = true): string {
   if (pretty) {
     return JSON.stringify(data, null, 2);
   }

@@ -5,24 +5,28 @@
 
 import { Command } from 'commander';
 import { verifyCommand } from './commands/verify.js';
+import { configCommand } from './commands/config.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
 import { authLoginCommand, authLogoutCommand, authPurgeCommand } from './commands/auth.js';
-import { analyzeCommand } from './commands/analyze.js';
-import { configCommand } from './commands/config.js';
 
 const program = new Command();
 
 program
   .name('sonar')
   .description('SonarQube CLI for AI coding agents')
-  .version('0.2.61');
+  .version('0.2.62', '-v, --version', 'output the current version');
 
-// Analyze a file for code issues
+// Verify a file using SonarCloud A3S API
 program
   .command('verify')
-  .description('Analyze a file for code issues')
+  .description('Analyze a file for code issues using SonarCloud A3S API')
   .requiredOption('--file <file>', 'File path to analyze')
+  .option('--organization-key <organizationKey>', 'Organization key (or use saved config)')
+  .option('--project-key <projectKey>', 'Project key (or use saved config)')
+  .option('-t, --token <token>', 'Authentication token (or use saved config)')
+  .option('-b, --branch <branch>', 'Branch name')
+  .option('--save-config', 'Save organization key, project key, and token to config file')
   .action(async (options) => {
     try {
       await verifyCommand(options);
@@ -32,34 +36,15 @@ program
     }
   });
 
-// Analyze a file using SonarCloud A3S API
-program
-  .command('analyze')
-  .description('Analyze a file using SonarCloud A3S API')
-  .requiredOption('--file <file>', 'File path to analyze')
-  .option('--organization-key <organizationKey>', 'Organization key (or use saved config)')
-  .option('--project-key <projectKey>', 'Project key (or use saved config)')
-  .option('-t, --token <token>', 'Authentication token (or use saved config)')
-  .option('-b, --branch <branch>', 'Branch name')
-  .option('--save-config', 'Save organization key, project key, and token to config file')
-  .action(async (options) => {
-    try {
-      await analyzeCommand(options);
-    } catch (error) {
-      console.error('Error:', (error as Error).message);
-      process.exit(1);
-    }
-  });
-
-// Manage analyze configuration
+// Manage analyze command configuration
 program
   .command('config')
   .description('Manage analyze command configuration')
   .option('--show', 'Show current configuration')
   .option('--clear', 'Clear configuration file')
   .option('--set', 'Set configuration values')
-  .option('--organization-key <organizationKey>', 'Organization key to set')
-  .option('--project-key <projectKey>', 'Project key to set')
+  .option('--organization-key <organization-key>', 'Organization key to set')
+  .option('--project-key <project-key>', 'Project key to set')
   .option('--token <token>', 'Token to set')
   .action(async (options) => {
     try {

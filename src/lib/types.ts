@@ -96,9 +96,6 @@ export interface HealthCheckResult {
   tokenValid: boolean;
   serverAvailable: boolean;
   projectAccessible: boolean;
-  dockerRunning: boolean;
-  dockerImagePresent: boolean;
-  mcpConfigured: boolean;
   hooksInstalled: boolean;
   errors: string[];
 }

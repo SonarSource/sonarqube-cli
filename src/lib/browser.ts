@@ -1,7 +1,7 @@
 // Cross-platform browser opening utility
 
-import { spawn } from 'child_process';
-import { platform } from 'os';
+import { spawn } from 'node:child_process';
+import { platform } from 'node:os';
 
 /**
  * Open URL in default browser
@@ -34,7 +34,7 @@ export async function openBrowser(url: string): Promise<void> {
       shell: false
     });
 
-    proc.on('error', (error: any) => {
+    proc.on('error', (error: NodeJS.ErrnoException) => {
       // Ignore if command not found (browser might not be available)
       if (error.code === 'ENOENT') {
         reject(new Error(`${command} not found on this system`));
@@ -43,14 +43,9 @@ export async function openBrowser(url: string): Promise<void> {
       }
     });
 
-    proc.on('exit', (code) => {
-      if (code === 0 || code === null) {
-        // Exit code 0 or null means success
-        resolve();
-      } else {
-        // Ignore non-zero exit codes for browser opens
-        resolve();
-      }
+    proc.on('exit', () => {
+      // Exit code 0 or null means success, ignore non-zero exit codes
+      resolve();
     });
 
     proc.unref();

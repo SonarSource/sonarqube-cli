@@ -10,18 +10,28 @@
  * 4. All handler files exist
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 
+// Regex match group indices
+const REGEX_CMDNAME = 1;
+const REGEX_DESCRIPTION = 2;
+const REGEX_OPTIONS = 3;
+const REGEX_SUBNAME = 1;
+const REGEX_SUBOPTIONS = 3;
+const SHORT_FLAG_INDEX = 1;
+const LONG_FLAG_INDEX = 2;
+
 // Load spec
 const specPath = join(rootDir, 'cli-spec.yaml');
-const spec = yaml.load(readFileSync(specPath, 'utf8'));
+const specContent = readFileSync(specPath, 'utf8');
+const spec = yaml.load(specContent);
 
 // Load index.ts
 const indexPath = join(rootDir, 'src/index.ts');
@@ -31,7 +41,20 @@ let errors = [];
 let warnings = [];
 
 /**
+ * Command definition from spec
+ * @typedef {Object} CommandDef
+ * @property {string} name
+ * @property {string} [handler]
+ * @property {Array} [options]
+ * @property {string} [description]
+ * @property {Array<CommandDef>} [subcommands]
+ */
+
+/**
  * Extract commands from cli-spec.yaml
+ * @param {Array<CommandDef>} commands - Commands from spec
+ * @param {string} [parentName] - Parent command name
+ * @returns {Array} Flattened list of commands
  */
 function getSpecCommands(commands, parentName = '') {
   const result = [];
@@ -48,12 +71,47 @@ function getSpecCommands(commands, parentName = '') {
       isGroup: !!cmd.subcommands && !cmd.handler
     });
 
-    if (cmd.subcommands) {
+    if (cmd.subcommands && Array.isArray(cmd.subcommands)) {
       result.push(...getSpecCommands(cmd.subcommands, fullName));
     }
   }
 
   return result;
+}
+
+/**
+ * Remove pattern from string using loop and replaceAll
+ * @param {string} str - Input string
+ * @param {string} open - Opening character
+ * @param {string} close - Closing character
+ * @returns {string} String with pattern removed
+ */
+function removePattern(str, open, close) {
+  let result = str;
+  while (result.includes(open)) {
+    const start = result.indexOf(open);
+    const end = result.indexOf(close, start);
+    if (end > start) {
+      result = result.slice(0, start) + result.slice(end + 1);
+    } else {
+      break;
+    }
+  }
+  return result;
+}
+
+/**
+ * Strip positional arguments from command name
+ * @param {string} name - Command name to strip
+ * @returns {string} Command name without positional arguments
+ */
+function stripPositionalArgs(name) {
+  // Remove <arg> and [arg] patterns
+  let result = removePattern(name, '<', '>');
+  result = removePattern(result, '[', ']');
+
+  // Normalize multiple spaces and trim
+  return result.replaceAll('  ', ' ').trim();
 }
 
 /**
@@ -63,16 +121,17 @@ function parseIndexCommands(content) {
   const commands = [];
 
   // Match simple commands: program.command('name')
-  const simplePattern = /program\s*\.command\(['"]([^'"]+)['"]\)\s*\.description\(['"]([^'"]+)['"]\)([\s\S]*?)\.action\(/g;
+  // Pattern limits content length to prevent backtracking vulnerability
+  const simplePattern = /program\s*\.command\(['"]([^'"]+)['"]\)\s*\.description\(['"]([^'"]+)['"]\)([\s\S]{0,10000}?)\.action\(/g;
 
   let match;
   while ((match = simplePattern.exec(content)) !== null) {
-    let name = match[1];
-    const description = match[2];
-    const optionsBlock = match[3];
+    let name = match[REGEX_CMDNAME];
+    const description = match[REGEX_DESCRIPTION];
+    const optionsBlock = match[REGEX_OPTIONS];
 
-    // Remove positional arguments from command name: 'onboard-agent <agent>' -> 'onboard-agent'
-    name = name.replace(/\s*<[^>]+>/g, '').replace(/\s*\[[^\]]+\]/g, '').trim();
+    // Remove positional arguments from command name
+    name = stripPositionalArgs(name);
 
     const options = parseOptions(optionsBlock);
 
@@ -84,21 +143,32 @@ function parseIndexCommands(content) {
   const subcommandGroupPattern = /const\s+(\w+)\s*=\s*program\s*\.command\(['"]([^'"]+)['"]\)/g;
 
   while ((match = subcommandGroupPattern.exec(content)) !== null) {
-    const varName = match[1];
-    const groupName = match[2];
+    const varName = match[REGEX_CMDNAME];
+    const groupName = match[REGEX_DESCRIPTION];
 
     // Find subcommands for this group
+    // Escape special regex characters (excluding brackets which are already handled)
+    const specialChars = '.*+?^${}()|\\';
+    let escapedVarName = '';
+    for (const char of varName) {
+      if (specialChars.includes(char)) {
+        escapedVarName += '\\' + char;
+      } else {
+        escapedVarName += char;
+      }
+    }
+
     const subPattern = new RegExp(
-      varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
-      '\\s*\\.command\\([\'"]([^\'"]+)[\'"]\\)\\s*\\.description\\([\'"]([^\'"]+)[\'"]\\)([\\s\\S]*?)\\.action\\(',
+      escapedVarName +
+      String.raw`\s*\.command\(['"]([^'"]+)['"]\)\s*\.description\(['"]([^'"]+)['"]\)([\s\S]{0,10000}?)\.action\(`,
       'g'
     );
 
     let subMatch;
     while ((subMatch = subPattern.exec(content)) !== null) {
-      const subName = subMatch[1];
-      const description = subMatch[2];
-      const optionsBlock = subMatch[3];
+      const subName = subMatch[REGEX_SUBNAME];
+      const description = subMatch[REGEX_DESCRIPTION];
+      const optionsBlock = subMatch[REGEX_SUBOPTIONS];
 
       const options = parseOptions(optionsBlock);
 
@@ -119,22 +189,38 @@ function parseIndexCommands(content) {
 function parseOptions(optionsBlock) {
   const options = [];
 
-  // Match .option() and .requiredOption()
-  const optionPattern = /\.(required)?[Oo]ption\(['"]([^'"]+)['"](?:,\s*['"]([^'"]+)['"])?(?:,\s*['"]([^'"]+)['"])?\)/g;
+  if (!optionsBlock) return options;
 
-  let match;
-  while ((match = optionPattern.exec(optionsBlock)) !== null) {
-    const isRequired = match[1] === 'required';
-    const flags = match[2];
-    const description = match[3] || '';
-    const defaultValue = match[4];
+  // Match .option() and .requiredOption() - simplified with split approach
+  const lines = optionsBlock.split('\n');
+
+  for (const line of lines) {
+    const isOption = line.includes('.option(') || line.includes('.requiredOption(');
+    if (!isOption) continue;
+
+    const isRequired = line.includes('requiredOption');
+
+    // Extract quoted strings (flags, description, default)
+    const quoted = /['"]([^'"]{0,100})['"]/g;
+    const matches = [];
+    let match;
+    while ((match = quoted.exec(line)) !== null) {
+      matches.push(match[1]);
+    }
+
+    if (matches.length === 0) continue;
+
+    const flags = matches[0];
+    const description = matches[1] || '';
+    const defaultValue = matches[2];
 
     // Parse flags: '-n, --name <name>' or '--verbose'
-    const flagMatch = flags.match(/(?:-(\w),?\s*)?--([a-z-]+)(?:\s*<[^>]+>)?/);
+    const flagRegex = /(?:-(\w),?\s*)?--([a-z-]+)/;
+    const flagMatch = flagRegex.exec(flags);
     if (flagMatch) {
       options.push({
-        name: flagMatch[2],
-        alias: flagMatch[1],
+        name: flagMatch[LONG_FLAG_INDEX],
+        alias: flagMatch[SHORT_FLAG_INDEX],
         required: isRequired,
         description,
         default: defaultValue
@@ -146,10 +232,28 @@ function parseOptions(optionsBlock) {
 }
 
 /**
+ * Convert kebab-case to camelCase
+ */
+function toCamelCase(str) {
+  const chars = [];
+  let i = 0;
+  while (i < str.length) {
+    if (str[i] === '-' && i + 1 < str.length) {
+      i++;
+      chars.push(str[i].toUpperCase());
+    } else {
+      chars.push(str[i]);
+    }
+    i++;
+  }
+  return chars.join('');
+}
+
+/**
  * Normalize option name (convert kebab-case to camelCase for comparison)
  */
 function normalizeOptionName(name) {
-  return name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+  return toCamelCase(name);
 }
 
 // Get commands from spec and index.ts
@@ -246,7 +350,7 @@ for (const specCmd of specCommands) {
   const nameParts = specCmd.name.split(' ');
   const functionName = nameParts
     .map((part, i) => {
-      const camelPart = part.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      const camelPart = toCamelCase(part);
       return i === 0 ? camelPart : camelPart.charAt(0).toUpperCase() + camelPart.slice(1);
     })
     .join('') + 'Command';

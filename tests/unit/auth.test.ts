@@ -2,20 +2,23 @@
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { tmpdir } from 'os';
+import { getToken, saveToken, deleteToken, getAllCredentials, purgeAllTokens, setMockKeytar } from '../../src/lib/keychain.js';
 
-// Mock keytar before importing auth module
+// Create mock keytar store
 const mockKeytarTokens = new Map<string, string>();
 
 const mockKeytar = {
   getPassword: async (service: string, account: string) => {
-    return mockKeytarTokens.get(`${service}:${account}`) || null;
+    const key = `${service}:${account}`;
+    return mockKeytarTokens.get(key) || null;
   },
   setPassword: async (service: string, account: string, password: string) => {
-    mockKeytarTokens.set(`${service}:${account}`, password);
+    const key = `${service}:${account}`;
+    mockKeytarTokens.set(key, password);
   },
   deletePassword: async (service: string, account: string) => {
-    mockKeytarTokens.delete(`${service}:${account}`);
+    const key = `${service}:${account}`;
+    mockKeytarTokens.delete(key);
   },
   findCredentials: async (service: string) => {
     const credentials = [];
@@ -29,20 +32,8 @@ const mockKeytar = {
   }
 };
 
-// Stub module resolution for keytar
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-require.cache[require.resolve('keytar')] = {
-  exports: mockKeytar,
-  id: 'keytar',
-  filename: '',
-  loaded: true,
-  children: [],
-  parent: null,
-  paths: []
-};
-
-import { getToken, saveToken, deleteToken, getAllCredentials, purgeAllTokens } from '../../src/lib/keychain.js';
+// Set mock before tests
+setMockKeytar(mockKeytar);
 
 test('keychain: generate correct account key for SonarCloud', async () => {
   // This is tested indirectly through saveToken/getToken behavior

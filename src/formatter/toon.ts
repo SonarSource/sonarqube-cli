@@ -29,7 +29,7 @@ import { encode } from '@toon-format/toon';
  * // total: 1
  * ```
  */
-export function encodeToToon(value: any): string {
+export function encodeToToon(value: unknown): string {
   return encode(value);
 }
 

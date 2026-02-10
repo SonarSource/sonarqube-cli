@@ -3,6 +3,8 @@
 import { loadAnalyzeConfig, saveAnalyzeConfig, getConfigLocation, configExists } from '../lib/analyze-config.js';
 import { unlinkSync } from 'node:fs';
 
+const TOKEN_DISPLAY_SUFFIX_LENGTH = 4;
+
 export interface ConfigOptions {
   show?: boolean;
   clear?: boolean;
@@ -30,7 +32,7 @@ function showConfig(): void {
     console.log('\n✅ Current configuration:');
     console.log(`  Organization Key: ${config.organizationKey}`);
     console.log(`  Project Key: ${config.projectKey || '(not set)'}`);
-    console.log(`  Token: ${config.token ? '***' + config.token.slice(-4) : '(not set)'}`);
+    console.log(`  Token: ${config.token ? '***' + config.token.slice(-TOKEN_DISPLAY_SUFFIX_LENGTH) : '(not set)'}`);
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "sonar-cli",
-  "version": "0.2.61",
+  "version": "0.2.62",
   "description": "SonarQube CLI for AI coding agents",
   "type": "module",
   "bin": {
@@ -11,9 +11,10 @@
     "build:binary": "bun build src/index.ts --compile --outfile dist/sonar-cli",
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test tests/unit/**/*.test.ts",
-    "test:integration": "bun test tests/integration/**/*.test.ts",
-    "test:all": "bun test tests/**/*.test.ts",
+    "test": "bun test ./tests/unit/",
+    "test:integration": "bun test ./tests/integration/",
+    "test:scripts": "bun test ./tests/scripts/",
+    "test:all": "bun test ./tests/",
     "typecheck": "tsc --noEmit",
     "validate": "npm run spec:validate && npm run commands:validate",
     "spec:validate": "node scripts/validate-spec.js",

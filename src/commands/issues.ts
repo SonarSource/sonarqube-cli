@@ -9,6 +9,8 @@ import { formatTable } from '../formatter/table.js';
 import { formatCSV } from '../formatter/csv.js';
 import type { IssuesSearchParams } from '../lib/types.js';
 
+const DEFAULT_PAGE_SIZE = 500;
+
 export interface IssuesSearchOptions {
   server?: string;
   token?: string;
@@ -68,7 +70,7 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
     branch: options.branch,
     pullRequest: options.pullRequest,
     resolved: options.resolved,
-    ps: options.pageSize || 500,
+    ps: options.pageSize || DEFAULT_PAGE_SIZE,
     p: options.page || 1
   };
 

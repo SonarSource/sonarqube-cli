@@ -1,8 +1,33 @@
 // Keychain operations wrapper for keytar
 
-import keytar from 'keytar';
-
 const SERVICE_NAME = 'sonar-cli';
+
+interface Credential {
+  account: string;
+  password: string;
+}
+
+interface KeytarModule {
+  getPassword(service: string, account: string): Promise<string | null>;
+  setPassword(service: string, account: string, password: string): Promise<void>;
+  deletePassword(service: string, account: string): Promise<boolean>;
+  findCredentials(service: string): Promise<Credential[]>;
+}
+
+let keytar: KeytarModule | null = null;
+let mockKeytar: KeytarModule | null = null;
+
+export function setMockKeytar(mock: KeytarModule | null) {
+  mockKeytar = mock;
+}
+
+async function getKeytar() {
+  if (mockKeytar !== null) {
+    return mockKeytar;
+  }
+  keytar ??= (await import('keytar')).default;
+  return keytar;
+}
 
 /**
  * Generate keychain account key
@@ -32,7 +57,8 @@ function generateKeychainAccount(serverURL: string, org?: string): string {
  */
 export async function getToken(serverURL: string, org?: string): Promise<string | null> {
   const account = generateKeychainAccount(serverURL, org);
-  return await keytar.getPassword(SERVICE_NAME, account);
+  const kt = await getKeytar();
+  return await kt.getPassword(SERVICE_NAME, account);
 }
 
 /**
@@ -42,7 +68,8 @@ export async function getToken(serverURL: string, org?: string): Promise<string 
  */
 export async function saveToken(serverURL: string, token: string, org?: string): Promise<void> {
   const account = generateKeychainAccount(serverURL, org);
-  await keytar.setPassword(SERVICE_NAME, account, token);
+  const kt = await getKeytar();
+  await kt.setPassword(SERVICE_NAME, account, token);
 }
 
 /**
@@ -52,14 +79,16 @@ export async function saveToken(serverURL: string, token: string, org?: string):
  */
 export async function deleteToken(serverURL: string, org?: string): Promise<void> {
   const account = generateKeychainAccount(serverURL, org);
-  await keytar.deletePassword(SERVICE_NAME, account);
+  const kt = await getKeytar();
+  await kt.deletePassword(SERVICE_NAME, account);
 }
 
 /**
  * Get all credentials for this service
  */
 export async function getAllCredentials(): Promise<Array<{ account: string; password: string }>> {
-  return await keytar.findCredentials(SERVICE_NAME);
+  const kt = await getKeytar();
+  return await kt.findCredentials(SERVICE_NAME);
 }
 
 /**
@@ -67,7 +96,8 @@ export async function getAllCredentials(): Promise<Array<{ account: string; pass
  */
 export async function purgeAllTokens(): Promise<void> {
   const credentials = await getAllCredentials();
+  const kt = await getKeytar();
   for (const cred of credentials) {
-    await keytar.deletePassword(SERVICE_NAME, cred.account);
+    await kt.deletePassword(SERVICE_NAME, cred.account);
   }
 }

@@ -2,6 +2,9 @@
 
 import type { SonarQubeIssue } from '../lib/types.js';
 
+const MIN_RULE_WIDTH = 15;
+const MIN_MESSAGE_WIDTH = 50;
+
 export function formatTable(issues: SonarQubeIssue[]): string {
   if (issues.length === 0) {
     return 'No issues found';
@@ -9,8 +12,8 @@ export function formatTable(issues: SonarQubeIssue[]): string {
 
   // Calculate column widths
   const severityWidth = Math.max(8, ...issues.map(i => i.severity.length));
-  const ruleWidth = Math.max(15, ...issues.map(i => i.rule.length));
-  const messageWidth = Math.max(50, ...issues.map(i => i.message.length));
+  const ruleWidth = Math.max(MIN_RULE_WIDTH, ...issues.map(i => i.rule.length));
+  const messageWidth = Math.max(MIN_MESSAGE_WIDTH, ...issues.map(i => i.message.length));
 
   // Header
   const header = [

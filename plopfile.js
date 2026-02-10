@@ -8,10 +8,10 @@
  *   npx plop docs
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 
-export default function (plop) {
+export default function registerPlopGenerators(plop) {
   // Load CLI specification
   const spec = yaml.load(readFileSync('./cli-spec.yaml', 'utf8'));
 
@@ -90,22 +90,22 @@ export default function (plop) {
 
       // Generate handler file
       if (cmd.handler) {
-        actions.push({
-          type: 'add',
-          path: cmd.handler,
-          templateFile: 'plop-templates/command.ts.hbs',
-          data: {
-            command: cmd,
-            cli: spec.cli,
-            hasOptions: cmd.options && cmd.options.length > 0
+        actions.push(
+          {
+            type: 'add',
+            path: cmd.handler,
+            templateFile: 'plop-templates/command.ts.hbs',
+            data: {
+              command: cmd,
+              cli: spec.cli,
+              hasOptions: cmd.options && cmd.options.length > 0
+            },
+            skipIfExists: true
           },
-          skipIfExists: true
-        });
-
-        // Note: Run "npx plop sync-index" to register the command in src/index.ts
-        actions.push(() => {
-          return '✓ Command generated! Run "npx plop sync-index" to register it in src/index.ts';
-        });
+          () => {
+            return '✓ Command generated! Run "npx plop sync-index" to register it in src/index.ts';
+          }
+        );
       }
 
       return actions;

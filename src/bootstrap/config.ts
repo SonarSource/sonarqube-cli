@@ -1,7 +1,7 @@
 // Config management - load and save sonar-cli configuration
 
-import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 export interface Config {
   version: string;
@@ -42,10 +42,9 @@ export async function loadConfig(projectRoot: string): Promise<Config | null> {
   }
 
   try {
-    const fs = await import('fs/promises');
+    const fs = await import('node:fs/promises');
     const data = await fs.readFile(configPath, 'utf-8');
-    const config = JSON.parse(data) as Config;
-    return config;
+    return JSON.parse(data) as Config;
   } catch (error) {
     throw new Error(`Failed to parse config: ${error}`);
   }
@@ -64,7 +63,7 @@ export async function saveConfig(projectRoot: string, config: Config): Promise<v
 
   const configPath = join(configDir, CONFIG_FILE);
 
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   const data = JSON.stringify(config, null, 2);
   await fs.writeFile(configPath, data, { mode: 0o644 });
 }

@@ -1,12 +1,18 @@
 // Auth module - OAuth flow and token management
 
-import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { getToken as getKeychainToken, saveToken as saveKeychainToken, deleteToken as deleteKeychainToken } from '../lib/keychain.js';
 import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 
 const MIN_PORT = 64130;
 const MAX_PORT = 64140;
+const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_BAD_REQUEST = 400;
+const HTTP_STATUS_NOT_FOUND = 404;
+const PORT_TIMEOUT_MS = 50000;
+const TOKEN_ENDPOINT = '/sonarlint/api/token';
+const TOKEN_QUERY_PREFIX = '/?token=';
 
 /**
  * Get token from keychain
@@ -83,7 +89,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
     const token = await Promise.race([
       tokenPromise,
       new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), 50000)
+        setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), PORT_TIMEOUT_MS)
       )
     ]);
 
@@ -141,7 +147,6 @@ async function startEmbeddedServer(): Promise<{
       }
     } catch (error) {
       console.log(`[DEBUG] Port ${p} error: ${error}`);
-      continue;
     }
   }
 
@@ -153,24 +158,24 @@ async function startEmbeddedServer(): Promise<{
 
   // Set up request handler
   const finalServer = server;
-  finalServer.on('request', (req: IncomingMessage, res: ServerResponse) => {
+  finalServer.on('request', (req, res) => {
     console.log(`[DEBUG] Received HTTP request: ${req.method} ${req.url}`);
 
-    if (req.url === '/sonarlint/api/token' && req.method === 'POST') {
-      handleTokenPOST(req, res, resolveToken!);
-    } else if (req.url?.startsWith('/?token=') && req.method === 'GET') {
+    if (req.url === TOKEN_ENDPOINT && req.method === 'POST') {
+      handleTokenPOST(req, res, resolveToken);
+    } else if (req.url?.startsWith(TOKEN_QUERY_PREFIX) && req.method === 'GET') {
       // Legacy fallback: GET with query parameter
-      handleTokenGET(req, res, resolveToken!);
+      handleTokenGET(req, res, resolveToken);
     } else {
       console.log(`[DEBUG] Unknown endpoint: ${req.method} ${req.url}`);
-      res.writeHead(404);
+      res.writeHead(HTTP_STATUS_NOT_FOUND);
       res.end('Not Found');
     }
   });
 
   const shutdown = () => {
     console.log('[DEBUG] Shutting down embedded server...');
-    server!.close();
+    finalServer.close();
   };
 
   return { port, tokenPromise, shutdown };
@@ -194,12 +199,12 @@ function handleTokenPOST(
     console.log(`[DEBUG] Body content: ${body}`);
 
     try {
-      const data = JSON.parse(body);
+      const data = JSON.parse(body) as Record<string, unknown>;
       const token = data.token;
 
       if (!token || typeof token !== 'string') {
         console.log('[DEBUG] Token missing or invalid in JSON');
-        res.writeHead(400);
+        res.writeHead(HTTP_STATUS_BAD_REQUEST);
         res.end('Invalid token');
         return;
       }
@@ -207,14 +212,14 @@ function handleTokenPOST(
       console.log(`[DEBUG] Token extracted from JSON (length: ${token.length})`);
 
       // Send success page
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
       res.end(getSuccessHTML());
 
       // Resolve with token
       resolveToken(token);
     } catch (error) {
       console.log(`[DEBUG] Failed to parse JSON: ${error}`);
-      res.writeHead(400);
+      res.writeHead(HTTP_STATUS_BAD_REQUEST);
       res.end('Invalid JSON');
     }
   });
@@ -228,12 +233,12 @@ function handleTokenGET(
   res: ServerResponse,
   resolveToken: (token: string) => void
 ): void {
-  const url = new URL(req.url!, `http://${req.headers.host}`);
+  const url = new URL(`http://${req.headers.host}${req.url}`);
   const token = url.searchParams.get('token');
 
   if (!token) {
     console.log('[DEBUG] Token missing in query parameter');
-    res.writeHead(400);
+    res.writeHead(HTTP_STATUS_BAD_REQUEST);
     res.end('Token missing');
     return;
   }
@@ -241,7 +246,7 @@ function handleTokenGET(
   console.log(`[DEBUG] Token extracted from query (length: ${token.length})`);
 
   // Send success page
-  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
   res.end(getSuccessHTML());
 
   // Resolve with token
@@ -254,7 +259,7 @@ function handleTokenGET(
 function getSuccessHTML(): string {
   return `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <title>SonarLint Authentication</title>
   <style>

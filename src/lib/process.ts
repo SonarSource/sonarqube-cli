@@ -1,13 +1,15 @@
 // Process management helpers
 
-import { spawn } from 'child_process';
+import { spawn } from 'node:child_process';
+
+type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
 export interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
-  stdin?: 'pipe' | 'ignore' | 'inherit';
-  stdout?: 'pipe' | 'ignore' | 'inherit';
-  stderr?: 'pipe' | 'ignore' | 'inherit';
+  stdin?: StdioMode;
+  stdout?: StdioMode;
+  stderr?: StdioMode;
   detached?: boolean;
 }
 

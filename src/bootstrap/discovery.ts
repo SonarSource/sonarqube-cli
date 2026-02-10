@@ -1,7 +1,7 @@
 // Discovery module - discovers project information
 
-import { existsSync, statSync } from 'fs';
-import { join, dirname, basename } from 'path';
+import { existsSync, statSync } from 'node:fs';
+import { join, dirname, basename } from 'node:path';
 import { spawnProcess } from '../lib/process.js';
 
 export interface ProjectInfo {
@@ -124,8 +124,8 @@ export function suggestProjectKey(projectInfo: ProjectInfo): string {
     remote = remote.replace(/\.git$/, '');
 
     // Replace special characters
-    remote = remote.replace(/:/g, '/');
-    remote = remote.replace(/\//g, '_');
+    remote = remote.replaceAll(':', '/');
+    remote = remote.replaceAll('/', '_');
 
     if (remote) {
       return remote;
@@ -133,7 +133,7 @@ export function suggestProjectKey(projectInfo: ProjectInfo): string {
   }
 
   // Fallback to directory name
-  return projectInfo.name.replace(/-/g, '_');
+  return projectInfo.name.replaceAll('-', '_');
 }
 
 /**
@@ -145,6 +145,48 @@ export async function checkDockerAvailable(): Promise<boolean> {
     return result.exitCode === 0;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Parse a single property line and update props
+ */
+function parsePropertyLine(line: string, props: Partial<SonarProperties>, verbose: boolean): void {
+  const trimmed = line.trim();
+
+  // Skip empty lines and comments
+  if (!trimmed || trimmed.startsWith('#')) {
+    return;
+  }
+
+  // Parse key=value
+  const parts = trimmed.split('=');
+  if (parts.length !== 2) {
+    return;
+  }
+
+  const key = parts[0].trim();
+  const value = parts[1].trim();
+
+  // Map property keys to SonarProperties fields
+  const propertyMap: Record<string, keyof SonarProperties> = {
+    'sonar.host.url': 'hostURL',
+    'sonar.projectKey': 'projectKey',
+    'sonar.projectName': 'projectName',
+    'sonar.organization': 'organization',
+    'sonar.login': 'login',
+    'sonar.sources': 'sources',
+    'sonar.tests': 'tests'
+  };
+
+  if (key in propertyMap) {
+    const field = propertyMap[key];
+    props[field] = value;
+
+    // Log important properties
+    if (verbose && ['sonar.host.url', 'sonar.projectKey', 'sonar.projectName', 'sonar.organization', 'sonar.login'].includes(key)) {
+      console.log(`   Debug: Found ${key}="${value}"`);
+    }
   }
 }
 
@@ -162,56 +204,13 @@ async function loadSonarProperties(projectRoot: string, verbose: boolean): Promi
     console.log(`   Debug: Parsing sonar-project.properties from: ${propPath}`);
   }
 
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   const content = await fs.readFile(propPath, 'utf-8');
 
   const props: Partial<SonarProperties> = {};
 
   for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-
-    // Skip empty lines and comments
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
-    }
-
-    // Parse key=value
-    const parts = trimmed.split('=');
-    if (parts.length !== 2) {
-      continue;
-    }
-
-    const key = parts[0].trim();
-    const value = parts[1].trim();
-
-    switch (key) {
-      case 'sonar.host.url':
-        props.hostURL = value;
-        if (verbose) console.log(`   Debug: Found sonar.host.url="${value}"`);
-        break;
-      case 'sonar.projectKey':
-        props.projectKey = value;
-        if (verbose) console.log(`   Debug: Found sonar.projectKey="${value}"`);
-        break;
-      case 'sonar.projectName':
-        props.projectName = value;
-        if (verbose) console.log(`   Debug: Found sonar.projectName="${value}"`);
-        break;
-      case 'sonar.organization':
-        props.organization = value;
-        if (verbose) console.log(`   Debug: Found sonar.organization="${value}"`);
-        break;
-      case 'sonar.login':
-        props.login = value;
-        if (verbose) console.log(`   Debug: Found sonar.login="${value}"`);
-        break;
-      case 'sonar.sources':
-        props.sources = value;
-        break;
-      case 'sonar.tests':
-        props.tests = value;
-        break;
-    }
+    parsePropertyLine(line, props, verbose);
   }
 
   // Return null if no relevant properties found
@@ -220,6 +219,37 @@ async function loadSonarProperties(projectRoot: string, verbose: boolean): Promi
   }
 
   return props as SonarProperties;
+}
+
+/**
+ * Try loading and parsing a single SonarLint config file
+ */
+async function tryLoadSonarLintFile(configPath: string, verbose: boolean): Promise<SonarLintConfig | null> {
+  const fs = await import('node:fs/promises');
+
+  try {
+    const data = await fs.readFile(configPath, 'utf-8');
+    if (verbose) {
+      console.log(`   Debug: Found SonarLint config: ${configPath}`);
+      console.log(`   Debug: Content: ${data}`);
+    }
+
+    const config = parseSonarLintConfig(data);
+    if (config && (config.serverURL || config.projectKey)) {
+      return config;
+    }
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === 'ENOENT') {
+      if (verbose) {
+        console.log(`   Debug: File not found: ${configPath}`);
+      }
+      return null;
+    }
+    throw error;
+  }
+
+  return null;
 }
 
 /**
@@ -236,28 +266,10 @@ async function loadSonarLintConfig(projectRoot: string, verbose: boolean): Promi
     console.log(`   Debug: Looking for SonarLint config in: ${projectRoot}`);
   }
 
-  const fs = await import('fs/promises');
-
   for (const configPath of possiblePaths) {
-    try {
-      const data = await fs.readFile(configPath, 'utf-8');
-      if (verbose) {
-        console.log(`   Debug: Found SonarLint config: ${configPath}`);
-        console.log(`   Debug: Content: ${data}`);
-      }
-
-      const config = parseSonarLintConfig(data);
-      if (config && (config.serverURL || config.projectKey)) {
-        return config;
-      }
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        if (verbose) {
-          console.log(`   Debug: File not found: ${configPath}`);
-        }
-        continue;
-      }
-      throw error;
+    const config = await tryLoadSonarLintFile(configPath, verbose);
+    if (config) {
+      return config;
     }
   }
 

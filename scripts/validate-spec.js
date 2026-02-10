@@ -7,7 +7,7 @@
  *   node scripts/validate-spec.js
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import Ajv from 'ajv';
 
@@ -31,14 +31,14 @@ if (valid) {
 
   // Count total commands including subcommands
   let totalCommands = 0;
-  function countCommands(commands) {
+  const countCommands = (commands) => {
     commands.forEach(cmd => {
       totalCommands++;
       if (cmd.subcommands) {
         countCommands(cmd.subcommands);
       }
     });
-  }
+  };
   countCommands(spec.commands);
 
   console.log(`   Total commands (including subcommands): ${totalCommands}`);
