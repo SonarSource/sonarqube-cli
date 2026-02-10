@@ -3,7 +3,6 @@
 import { resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { SonarQubeClient } from '../sonarqube/client.js';
-import { saveAnalyzeConfig, getConfigLocation } from '../lib/analyze-config.js';
 import { encodeToToon } from '../formatter/toon.js';
 import { getToken, getAllCredentials } from '../lib/keychain.js';
 
@@ -110,7 +109,7 @@ function logMultipleOrganizationsIfFound(count: number, org: string): void {
     console.log(
       `ℹ Multiple organizations found (${count}). Using: ${org}`
     );
-    console.log('  To use a different organization, specify --organization-key');
+    console.log('  To use a different organization, specify --organization');
   }
 }
 
@@ -171,15 +170,13 @@ function validateConfiguration(
 
   if (!organizationKey) {
     console.error('❌ Error: --organization-key is required');
-    console.error('  Provide via: --organization-key flag, or login with: sonar-cli auth login');
-    console.error(`  Config location: ${getConfigLocation()}`);
+    console.error('  Provide via: --organization flag, or login with: sonar-cli auth login');
     process.exit(1);
   }
 
   if (!projectKey) {
-    console.error('❌ Error: --project-key is required');
-    console.error('  Provide via: --project-key flag, or in sonar-project.properties');
-    console.error(`  Config location: ${getConfigLocation()}`);
+    console.error('❌ Error: --project is required');
+    console.error('  Provide via: --project flag, or in sonar-project.properties');
     console.error('  Add to sonar-project.properties: sonar.projectKey=<key>');
     process.exit(1);
   }
@@ -187,7 +184,6 @@ function validateConfiguration(
   if (!token) {
     console.error('❌ Error: --token is required');
     console.error('  Provide via: --token flag, or login with: sonar-cli auth login');
-    console.error(`  Config location: ${getConfigLocation()}`);
     process.exit(1);
   }
 }
@@ -285,15 +281,6 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
   if (!org || !projectKey || !token) {
     // This will never happen due to validateConfiguration, but TypeScript needs this check
     return;
-  }
-
-  if (options.saveConfig) {
-    saveAnalyzeConfig({
-      organizationKey: org,
-      projectKey,
-      token
-    });
-    console.log(`Configuration saved to: ${getConfigLocation()}`);
   }
 
   const fileContent = readFileContent(options.file);

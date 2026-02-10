@@ -16,17 +16,14 @@ commands:
         type: string
         description: File path to analyze
         required: true
-    examples:
-      - command: sonar verify src/MyClass.java
-        description: Analyze a single Java file
 
-      - name: organization-key
+      - name: organization
         type: string
         description: Organization key (or use saved config)
 
-      - name: project-key
+      - name: project
         type: string
-        description: Project key (or use saved config)
+        description: Project key
 
       - name: token
         alias: t
@@ -38,13 +35,10 @@ commands:
         type: string
         description: Branch name
 
-      - name: save-config
-        type: boolean
-        description: Save organization key, project key, and token to config file
-        default: false
-
     examples:
-      - command: sonar verify --file src/MyClass.java --organization-key sonarsource --project-key my-project -t TOKEN --save-config
+      - command: sonar verify src/MyClass.java
+        description: Analyze a single Java file
+      - command: sonar verify --file src/MyClass.java --organization sonarsource --project my-project -t TOKEN --save-config
         description: Analyze a file and save config for future use
 
       - command: sonar verify --file src/MyClass.java
@@ -52,48 +46,6 @@ commands:
 
       - command: sonar verify --file src/MyClass.java --branch main
         description: Analyze file on a specific branch
-
-  # Command to manage analyze configuration
-  - name: config
-    description: Manage analyze command configuration
-    handler: ./src/commands/config.ts
-    options:
-      - name: show
-        type: boolean
-        description: Show current configuration
-        default: false
-
-      - name: clear
-        type: boolean
-        description: Clear configuration file
-        default: false
-
-      - name: set
-        type: boolean
-        description: Set configuration values
-        default: false
-
-      - name: organization-key
-        type: string
-        description: Organization key to set
-
-      - name: project-key
-        type: string
-        description: Project key to set
-
-      - name: token
-        type: string
-        description: Token to set
-
-    examples:
-      - command: sonar config --show
-        description: Show current configuration
-
-      - command: sonar config --set --organization-key sonarsource --token TOKEN
-        description: Set organization key and token
-
-      - command: sonar config --clear
-        description: Clear configuration file
 
   # Command with nested subcommands
   - name: issues
