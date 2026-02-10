@@ -16,7 +16,7 @@ Command-line tool for SonarQube/SonarCloud integration with Claude Code. Manages
 
 ## Installation
 
-### Prerequisites
+#### Prerequisites
 
 - Node.js >= 18.0.0
 - npm or Bun package manager
@@ -24,7 +24,53 @@ Command-line tool for SonarQube/SonarCloud integration with Claude Code. Manages
   - **npm**: Included with Node.js
 - Git
 
-### Setup
+### Quick Install
+
+The easiest way to install the Sonar CLI globally on your system:
+
+#### macOS / Linux
+
+```bash
+# Run the setup script
+bash scripts/setup.sh
+
+# Or use npm
+npm run setup
+```
+
+#### Windows (PowerShell)
+
+```powershell
+# Run the setup script
+powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+```
+
+**What the installation does:**
+
+1. Installs dependencies via `npm install`
+2. Builds the binary into a standalone executable
+3. Adds the binary to your PATH so you can run `sonar` from anywhere
+   - macOS/Linux: Installs to `/usr/local/bin/sonar`
+   - Windows: Installs to `%LOCALAPPDATA%\Programs\sonar-cli\sonar.exe`
+
+**Verify installation:**
+
+```bash
+sonar --version
+sonar --help
+```
+
+**Uninstall:**
+
+```bash
+# macOS/Linux
+sudo rm /usr/local/bin/sonar
+
+# Windows (PowerShell)
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Programs\sonar-cli"
+```
+
+#### Manual Setup
 
 1. Install dependencies:
 ```bash
