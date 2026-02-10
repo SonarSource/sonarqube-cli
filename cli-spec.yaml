@@ -90,7 +90,7 @@ commands:
               - toon
               - table
               - csv
-            default: json
+            default: "json"
 
           - name: branch
             type: string
@@ -103,12 +103,12 @@ commands:
           - name: all
             type: boolean
             description: Fetch all issues with pagination
-            default: 'false'
+            default: "false"
 
           - name: page-size
             type: number
             description: Page size for pagination
-            default: '500'
+            default: "500"
 
         examples:
           - command: sonar issues search -s https://sonarcloud.io -p my-project -t TOKEN
@@ -161,7 +161,7 @@ commands:
       - name: skip-hooks
         type: boolean
         description: Skip hooks installation
-        default: 'false'
+        default: false
 
       - name: hook-type
         type: string
@@ -175,7 +175,7 @@ commands:
         alias: v
         type: boolean
         description: Verbose output
-        default: 'false'
+        default: false
 
     examples:
       - command: sonar onboard-agent claude -s https://sonarcloud.io -p my-project

@@ -67,7 +67,7 @@ async function getOrGenerateToken(
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     console.log(`✓ Token already exists for: ${displayServer}`);
     console.log('You are already authenticated');
-    process.exit(0);
+    return '';
   }
 
   console.log(`\nAuthenticating with: ${server}`);
@@ -87,8 +87,7 @@ async function validateOrSelectOrganization(
   if (org) {
     const orgExists = await client.checkOrganization(org);
     if (!orgExists) {
-      console.error(`Error: Organization "${org}" not found or not accessible`);
-      process.exit(1);
+      throw new Error(`Organization "${org}" not found or not accessible`);
     }
     console.log(`✓ Using organization: ${org}`);
     return org;
@@ -106,14 +105,12 @@ async function validateOrSelectOrganization(
   console.log('');
 
   if (isNonInteractive) {
-    console.error('Error: Organization must be specified with -o/--org in non-interactive mode');
-    process.exit(1);
+    throw new Error('Organization must be specified with -o/--org in non-interactive mode');
   }
 
   const selectedOrg = await getUserInput('Enter organization key: ');
   if (!selectedOrg.trim()) {
-    console.error('Error: Organization key is required');
-    process.exit(1);
+    throw new Error('Organization key is required');
   }
 
   console.log(`✓ Using organization: ${selectedOrg.trim()}`);
@@ -136,8 +133,7 @@ async function selectOrganizationInteractive(
   const index = Number.parseInt(choice, 10) - 1;
 
   if (index < 0 || index >= organizations.length) {
-    console.error('Error: Invalid organization selection');
-    process.exit(1);
+    throw new Error('Invalid organization selection');
   }
 
   const org = organizations[index].key;
@@ -189,10 +185,8 @@ export async function authLoginCommand(options: {
 
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     console.log(`✅ Authentication successful for: ${displayServer}`);
-    process.exit(0);
   } catch (error) {
-    console.error(`Error: ${(error as Error).message}`);
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -208,21 +202,14 @@ export async function authLogoutCommand(options: {
     const org = options.org;
 
     if (isSonarCloud(server) && !org) {
-      console.error('Error: Organization key is required for SonarCloud logout');
-      console.error('');
-      console.error('Usage:');
-      console.error('  sonar auth logout -o <organization-key>');
-      console.error('');
-      console.error('To see your saved connections, run:');
-      console.error('  sonar auth list');
-      process.exit(1);
+      throw new Error('Organization key is required for SonarCloud logout');
     }
 
     const token = await getKeystoreToken(server, org);
     if (!token) {
       const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
       console.log(`ℹ No token found for: ${displayServer}`);
-      process.exit(0);
+      return;
     }
 
     await deleteToken(server, org);
@@ -242,12 +229,10 @@ export async function authLogoutCommand(options: {
 
     saveState(state);
 
-    const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
-    console.log(`✓ Logged out from: ${displayServer}`);
-    process.exit(0);
+    const displayServerLogout = isSonarCloud(server) ? `${server} (${org})` : server;
+    console.log(`✓ Logged out from: ${displayServerLogout}`);
   } catch (error) {
-    console.error(`Error: ${(error as Error).message}`);
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -260,7 +245,7 @@ export async function authPurgeCommand(): Promise<void> {
 
     if (credentials.length === 0) {
       console.log('ℹ No tokens found in keychain');
-      process.exit(0);
+      return;
     }
 
     console.log(`Found ${credentials.length} token(s):`);
@@ -272,7 +257,7 @@ export async function authPurgeCommand(): Promise<void> {
     const confirm = await getUserInput('Remove all tokens? (y/n): ');
     if (confirm.toLowerCase() !== 'y') {
       console.log('Cancelled');
-      process.exit(0);
+      return;
     }
 
     await purgeAllTokens();
@@ -285,10 +270,8 @@ export async function authPurgeCommand(): Promise<void> {
     saveState(state);
 
     console.log('✓ All tokens have been removed from keychain');
-    process.exit(0);
   } catch (error) {
-    console.error(`Error: ${(error as Error).message}`);
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -301,7 +284,7 @@ export async function authListCommand(): Promise<void> {
 
     if (state.auth.connections.length === 0) {
       console.log('ℹ No saved authentication connections');
-      process.exit(0);
+      return;
     }
 
     console.log(`Found ${state.auth.connections.length} saved connection(s):\n`);
@@ -333,11 +316,8 @@ export async function authListCommand(): Promise<void> {
     if (missingCount > 0) {
       console.log('Run "sonar auth login" to add missing tokens');
     }
-
-    process.exit(0);
   } catch (error) {
-    console.error(`Error: ${(error as Error).message}`);
-    process.exit(1);
+    throw error;
   }
 }
 

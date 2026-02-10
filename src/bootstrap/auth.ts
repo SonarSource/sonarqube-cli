@@ -10,10 +10,7 @@ const MIN_PORT = 64130;
 const MAX_PORT = 64140;
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_BAD_REQUEST = 400;
-const HTTP_STATUS_NOT_FOUND = 404;
 const PORT_TIMEOUT_MS = 50000;
-const TOKEN_ENDPOINT = '/sonarlint/api/token';
-const TOKEN_QUERY_PREFIX = '/?token=';
 const DEBUG = false;
 
 /**
@@ -79,10 +76,18 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   console.log('\n   Press Enter to open browser');
   console.log('   ');
 
-  // Wait for user to press Enter
-  await new Promise<void>(resolve => {
-    process.stdin.once('data', () => resolve());
+  // Wait for user to press Enter and ensure stdin is closed after
+  const userPressedEnter = new Promise<void>(resolve => {
+    const onData = () => {
+      process.stdin.removeListener('data', onData);
+      process.stdin.pause();
+      process.stdin.unref();
+      resolve();
+    };
+    process.stdin.once('data', onData);
   });
+
+  await userPressedEnter;
 
   // 4. Open browser
   debugLog('Opening browser...');
@@ -97,8 +102,9 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   debugLog(`Waiting for callback on http://127.0.0.1:${port}`);
 
   // 5. Wait for token with timeout (50 seconds)
+  let token: string | undefined;
   try {
-    const token = await Promise.race([
+    token = await Promise.race([
       tokenPromise,
       new Promise<string>((_, reject) =>
         setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), PORT_TIMEOUT_MS)
@@ -110,11 +116,12 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
     if (!token) {
       throw new Error('Received empty token');
     }
-
-    return token;
   } finally {
-    shutdown();
+    // Always shutdown and ensure all resources are cleaned up
+    await shutdown();
   }
+
+  return token;
 }
 
 /**
@@ -240,17 +247,25 @@ async function startEmbeddedServer(): Promise<{
     }
   });
 
-  const shutdown = () => {
+  const shutdown = async (): Promise<void> => {
     debugLog('Shutting down embedded server...');
-    // Destroy all active connections to force closure
-    finalServer.close(() => {
-      debugLog('Server closed successfully');
+
+    return new Promise<void>((resolve) => {
+      // Close the server and wait for it to finish
+      finalServer.close(() => {
+        debugLog('Server closed successfully');
+        resolve();
+      });
+
+      // Force close any remaining connections after 2 seconds with unref
+      const forceCloseTimer = setTimeout(() => {
+        debugLog('Force closing remaining connections');
+        finalServer.closeAllConnections?.();
+      }, 2000);
+
+      // Don't let this timer keep the process alive
+      forceCloseTimer.unref();
     });
-    // Force close any remaining connections after 2 seconds
-    setTimeout(() => {
-      debugLog('Force closing remaining connections');
-      finalServer.closeAllConnections?.();
-    }, 2000);
   };
 
   return { port, tokenPromise, shutdown };

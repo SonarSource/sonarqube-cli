@@ -28,12 +28,13 @@ program
   .option('-t, --token <token>', 'Authentication token (or use saved config)')
   .option('-b, --branch <branch>', 'Branch name')
   .option('--save-config', 'Save configuration for future use')
-  .action(async (options) => {
+  .action(async (options, cmd) => {
     try {
       await verifyCommand(options);
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
@@ -54,18 +55,19 @@ issues
   .option('--pull-request <pull-request>', 'Pull request ID')
   .option('--all', 'Fetch all issues with pagination', 'false')
   .option('--page-size <page-size>', 'Page size for pagination', '500')
-  .action(async (options) => {
+  .action(async (options, cmd) => {
     try {
       await issuesSearchCommand(options);
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
 // Setup SonarQube integration for AI coding agent
 program
-  .command('onboard-agent <agent>')
+  .command('onboard-agent [agent]')
   .description('Setup SonarQube integration for AI coding agent')
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-p, --project <project>', 'Project key')
@@ -75,19 +77,30 @@ program
   .option('--skip-hooks', 'Skip hooks installation', 'false')
   .option('--hook-type <hook-type>', 'Hook type to install', 'prompt')
   .option('-v, --verbose', 'Verbose output', 'false')
-  .action(async (agent, options) => {
+  .action(async (agent, options, cmd) => {
     try {
+      // Validate that agent is provided
+      if (!agent) {
+        console.error('Error: Missing required argument <agent>');
+        console.log('');
+        cmd.help();
+        return;
+      }
+
       // Validate argument choices
       const validAgent = ['claude', 'gemini', 'codex'];
       if (!validAgent.includes(agent)) {
         console.error(`Error: Invalid agent. Must be one of: claude, gemini, codex`);
-        process.exit(1);
+        console.log('');
+        cmd.help();
+        return;
       }
 
       await onboardAgentCommand(agent, options);
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
@@ -113,12 +126,13 @@ auth
   .option('-s, --server <server>', 'SonarQube server URL (default is SonarCloud)')
   .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
-  .action(async (options) => {
+  .action(async (options, cmd) => {
     try {
       await authLoginCommand(options);
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
@@ -127,36 +141,39 @@ auth
   .description('Remove authentication token from keychain')
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
-  .action(async (options) => {
+  .action(async (options, cmd) => {
     try {
       await authLogoutCommand(options);
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
 auth
   .command('purge')
   .description('Remove all authentication tokens from keychain')
-  .action(async () => {
+  .action(async (options, cmd) => {
     try {
       await authPurgeCommand();
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
 auth
   .command('list')
   .description('List saved authentication connections with token verification')
-  .action(async () => {
+  .action(async (options, cmd) => {
     try {
       await authListCommand();
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
@@ -168,24 +185,26 @@ const preCommit = program
 preCommit
   .command('install')
   .description('Install Sonar secrets pre-commit hook')
-  .action(async () => {
+  .action(async (options, cmd) => {
     try {
       await preCommitInstallCommand();
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 
 preCommit
   .command('uninstall')
   .description('Uninstall Sonar secrets pre-commit hook')
-  .action(async () => {
+  .action(async (options, cmd) => {
     try {
       await preCommitUninstallCommand();
     } catch (error) {
       console.error('Error:', (error as Error).message);
-      process.exit(1);
+      console.log('');
+      cmd.help();
     }
   });
 

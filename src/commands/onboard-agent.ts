@@ -402,4 +402,6 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
 
   const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization);
   printFinalVerificationResults(finalHealth);
+
+  process.exit(0);
 }
