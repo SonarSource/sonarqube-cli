@@ -23,7 +23,7 @@ export async function runRepair(
 
     // Delete old token
     try {
-      await deleteToken(serverURL);
+      await deleteToken(serverURL, organization);
     } catch {
       // Ignore errors
     }
@@ -38,7 +38,7 @@ export async function runRepair(
     }
 
     // Save to keychain
-    await saveToken(serverURL, token);
+    await saveToken(serverURL, token, organization);
     console.log('   ✓ Token saved to keychain');
   }
 

@@ -2,7 +2,7 @@
 
 SonarQube CLI for Claude Code integration
 
-**Version:** 0.2.59
+**Version:** 0.0.1
 **Generated:** 2026-02-09T00:00:00.000Z
 
 ---

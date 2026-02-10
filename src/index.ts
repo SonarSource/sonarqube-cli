@@ -9,6 +9,7 @@ import { verifyCommand } from './commands/verify.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
 import { authLoginCommand, authLogoutCommand, authPurgeCommand, authListCommand } from './commands/auth.js';
+import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
 
 const program = new Command();
 
@@ -17,14 +18,14 @@ program
   .description('SonarQube CLI for AI coding agents')
   .version(VERSION, '-v, --version', 'output the current version');
 
-// Analyze a file for code issues
+// Analyze a file using SonarCloud A3S API
 program
   .command('verify')
-  .description('Analyze a file for code issues')
+  .description('Analyze a file using SonarCloud A3S API')
   .requiredOption('--file <file>', 'File path to analyze')
-  .option('-t, --token <token>', 'Authentication token')
-  .option('-o, --organization-key <organization-key>', 'Organization key (for SonarCloud)')
-  .option('-p, --project-key <project-key>', 'Project key')
+  .option('--organization-key <organization-key>', 'Organization key (or use saved config)')
+  .option('--project-key <project-key>', 'Project key (or use saved config)')
+  .option('-t, --token <token>', 'Authentication token (or use saved config)')
   .option('-b, --branch <branch>', 'Branch name')
   .option('--save-config', 'Save configuration for future use')
   .action(async (options) => {
@@ -153,6 +154,35 @@ auth
   .action(async () => {
     try {
       await authListCommand();
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+// Manage pre-commit hooks for secrets detection
+const preCommit = program
+  .command('pre-commit')
+  .description('Manage pre-commit hooks for secrets detection');
+
+preCommit
+  .command('install')
+  .description('Install Sonar secrets pre-commit hook')
+  .action(async () => {
+    try {
+      await preCommitInstallCommand();
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+preCommit
+  .command('uninstall')
+  .description('Uninstall Sonar secrets pre-commit hook')
+  .action(async () => {
+    try {
+      await preCommitUninstallCommand();
     } catch (error) {
       console.error('Error:', (error as Error).message);
       process.exit(1);

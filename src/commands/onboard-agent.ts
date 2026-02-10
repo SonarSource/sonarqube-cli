@@ -293,7 +293,7 @@ async function runRepairWithoutToken(
     skipHooks ? undefined : hookType
   );
 
-  const repairedToken = await getToken(serverURL);
+  const repairedToken = await getToken(serverURL, organization);
   if (!repairedToken) {
     console.error('\nError: Failed to obtain token');
     process.exit(1);

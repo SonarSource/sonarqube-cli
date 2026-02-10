@@ -28,13 +28,10 @@ export class SonarQubeClient {
       });
     }
 
-    // SonarQube uses Basic Auth with token as username, empty password
-    const authHeader = 'Basic ' + Buffer.from(this.token + ':').toString('base64');
-
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
-        'Authorization': authHeader,
+        'Authorization': `Bearer ${this.token}`,
         'User-Agent': `sonar-cli/${VERSION}`,
         'Accept': 'application/json'
       },

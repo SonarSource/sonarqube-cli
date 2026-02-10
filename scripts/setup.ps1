@@ -1,96 +1,37 @@
-# Cross-platform installation script for Windows (PowerShell)
-$ErrorActionPreference = "Stop"
+# --- 1. Dependencies ---
+Write-Host "Checking Node, NPM, and Bun..." -ForegroundColor Cyan
+if (!(Get-Command node -ErrorAction SilentlyContinue)) { throw "Node missing" }
+if (!(Get-Command npm -ErrorAction SilentlyContinue)) { throw "NPM missing" }
+if (!(Get-Command bun -ErrorAction SilentlyContinue)) { throw "Bun missing" }
+Write-Host "[x] All dependencies found." -ForegroundColor Green
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = Split-Path -Parent $ScriptDir
-$BinaryName = "sonar-cli.exe"
-$InstallName = "sonar.exe"
-$InstallDir = "$env:LOCALAPPDATA\Programs\sonar-cli"
+# --- 2. Paths ---
+$installDir = "$env:LOCALAPPDATA\Programs\sonar-cli"
+$sourcePath = "$PSScriptRoot\..\dist\sonar-cli.exe"
+$destPath = "$installDir\sonar-cli.exe"
 
-Write-Host "🚀 Installing Sonar CLI..." -ForegroundColor Cyan
-Write-Host ""
+# --- 3. Build ---
+Write-Host "`nBuilding project..." -ForegroundColor Cyan
+bun install
+bun run build:binary
 
-# Change to project root
-Set-Location $ProjectRoot
+# --- 4. Install ---
+if (!(Test-Path $installDir)) { 
+    New-Item -ItemType Directory -Force -Path $installDir | Out-Null 
+}
+Copy-Item -Path $sourcePath -Destination $destPath -Force
+Write-Host "[x] Binary installed to $installDir" -ForegroundColor Green
 
-# Step 1: Install dependencies
-Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
-if (Get-Command npm -ErrorAction SilentlyContinue) {
-    npm install
+# --- 5. Path Update (or Skip if already exists) ---
+$regPath = "HKCU:\Environment"
+$oldPath = (Get-ItemProperty -Path $regPath -Name Path).Path
+
+# Split the path by semicolons and check for an exact match
+if ($oldPath -split ';' -contains $installDir) {
+    Write-Host "`n[i] Note: $installDir is already in your PATH. Skipping update." -ForegroundColor Gray
 } else {
-    Write-Host "❌ npm not found. Please install Node.js." -ForegroundColor Red
-    exit 1
+    $newPath = "$oldPath;$installDir"
+    $newPath = $newPath.Replace(";;", ";")
+    Set-ItemProperty -Path $regPath -Name Path -Value $newPath
+    Write-Host "`nSUCCESS: Added to PATH. Restart terminal to use 'sonar-cli'." -ForegroundColor Green
 }
-
-Write-Host ""
-Write-Host "✅ Dependencies installed" -ForegroundColor Green
-Write-Host ""
-
-# Step 2: Build binary
-Write-Host "🔨 Building binary..." -ForegroundColor Yellow
-if (Get-Command bun -ErrorAction SilentlyContinue) {
-    npm run build:binary
-} else {
-    Write-Host "❌ bun not found. The 'npm run build:binary' script requires Bun to be installed." -ForegroundColor Red
-    Write-Host "   Please install Bun from https://bun.sh/ and try again." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host ""
-Write-Host "✅ Binary built" -ForegroundColor Green
-Write-Host ""
-
-# Step 3: Install binary to PATH
-$BinaryPath = Join-Path $ProjectRoot "dist\$BinaryName"
-
-if (-not (Test-Path $BinaryPath)) {
-    Write-Host "❌ Binary not found at $BinaryPath" -ForegroundColor Red
-    exit 1
-}
-
-# Create install directory if it doesn't exist
-if (-not (Test-Path $InstallDir)) {
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-}
-
-# Copy binary
-Write-Host "📦 Installing $InstallName to $InstallDir..." -ForegroundColor Yellow
-Copy-Item -Path $BinaryPath -Destination (Join-Path $InstallDir $InstallName) -Force
-
-# Add to PATH if not already there
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($UserPath -notlike "*$InstallDir*") {
-    Write-Host "📝 Adding to PATH..." -ForegroundColor Yellow
-    if ([string]::IsNullOrEmpty($UserPath)) {
-        $newUserPath = $InstallDir
-    } else {
-        $newUserPath = "$UserPath;$InstallDir"
-    }
-    [Environment]::SetEnvironmentVariable(
-        "Path",
-        $newUserPath,
-        "User"
-    )
-    $currentProcessPath = $env:Path
-    if ([string]::IsNullOrEmpty($currentProcessPath)) {
-        $env:Path = $InstallDir
-    } else {
-        $env:Path = "$currentProcessPath;$InstallDir"
-    }
-    Write-Host "✅ Added to PATH (restart terminal for changes to take effect)" -ForegroundColor Green
-} else {
-    Write-Host "✅ Already in PATH" -ForegroundColor Green
-}
-
-Write-Host ""
-Write-Host "🎉 Installation complete!" -ForegroundColor Green
-Write-Host ""
-Write-Host "Testing installation:"
-& (Join-Path $InstallDir $InstallName) --version
-
-Write-Host ""
-Write-Host "Usage: sonar --help"
-Write-Host ""
-Write-Host "To uninstall, run:"
-Write-Host "  Remove-Item -Recurse -Force '$InstallDir'"
-Write-Host "  And manually remove '$InstallDir' from your PATH environment variable"

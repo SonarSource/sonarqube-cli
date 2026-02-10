@@ -1,4 +1,4 @@
-// Version management - auto-generated, do not edit manually
-// Use npm run version:update <version> to update version
+// Version management - imported from package.json at build time
+import packageJson from '../package.json';
 
-export const VERSION = '0.2.89';
+export const VERSION = packageJson.version;
