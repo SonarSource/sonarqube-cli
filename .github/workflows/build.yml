@@ -18,7 +18,7 @@ concurrency:
 # Required permissions for Vault OIDC and repo operations
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   prepare:
@@ -169,13 +169,20 @@ jobs:
         with:
           version: 2025.7.12
 
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          version: 2.77.0
+
       - name: Vault Secrets
         id: secrets
         uses: SonarSource/vault-action-wrapper@v3
         with:
           secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
       - name: Cache NPM dependencies
         uses: SonarSource/gh-action_cache@v1
@@ -197,6 +204,25 @@ jobs:
       - name: Build binary
         run: bun build src/index.ts --compile --outfile dist/${{ matrix.artifact-name }} --target ${{ matrix.bun-target }}
 
+      - name: Deploy binary to Artifactory QA
+        shell: bash
+        env:
+          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
+          ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
+          ARTIFACTORY_DEPLOY_REPO: sonarsource-npm-public-qa
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
+          BUILD_NAME: ${{ github.event.repository.name }}
+          ARTIFACT_NAME: ${{ matrix.artifact-name }}
+        run: |
+          echo "Deploying ${ARTIFACT_NAME} to Artifactory QA..."
+          jf rt u "dist/${ARTIFACT_NAME}" \
+            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/" \
+            --url="${ARTIFACTORY_URL}" \
+            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
+            --build-name="${BUILD_NAME}" \
+            --build-number="${BUILD_NUMBER}"
+
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -211,70 +237,11 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-')
     permissions:
       id-token: write
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download all binary artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/binaries
-
-      - name: Display downloaded artifacts
-        run: |
-          echo "## 📦 Downloaded Binaries" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Artifact | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
-          for artifact in dist/binaries/*/sonar-cli-*; do
-            if [ -f "$artifact" ]; then
-              size=$(ls -lh "$artifact" | awk '{print $5}')
-              name=$(basename "$artifact")
-              echo "| \`$name\` | $size |" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: 2025.7.12
-
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@v3
-        with:
-          secrets: |
-            development/kv/data/repox url | ARTIFACTORY_URL;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
-
-      - name: Deploy binaries to Artifactory
-        shell: bash
-        env:
-          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
-          ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
-          ARTIFACTORY_DEPLOY_REPO: sonarsource-npm-public-qa
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          BUILD_NAME: ${{ github.event.repository.name }}
-        run: |
-          echo "Deploying binaries to Artifactory QA..."
-          for artifact_dir in dist/binaries/*; do
-            if [ -d "$artifact_dir" ]; then
-              for binary in "$artifact_dir"/sonar-cli-*; do
-                if [ -f "$binary" ]; then
-                  artifact_name=$(basename "$binary")
-                  echo "Uploading ${artifact_name}..."
-                  jf rt u "$binary" \
-                    "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/" \
-                    --url="${ARTIFACTORY_URL}" \
-                    --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
-                    --build-name="${BUILD_NAME}" \
-                    --build-number="${BUILD_NUMBER}"
-                fi
-              done
-            fi
-          done
 
       - uses: SonarSource/ci-github-actions/promote@v1
         env:
