@@ -18,7 +18,7 @@ concurrency:
 # Required permissions for Vault OIDC and repo operations
 permissions:
   id-token: write
-  contents: write
+  contents: read
 
 jobs:
   prepare:
@@ -55,7 +55,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    name: Build and Test
+    name: Build and SonarQube Scan
     needs: prepare
     steps:
       - uses: actions/checkout@v4
@@ -232,12 +232,12 @@ jobs:
 
   promote:
     name: Promote
-    runs-on: ubuntu-latest
+    runs-on: github-ubuntu-latest-s
     needs: [prepare, build, build-binaries, test-all]
     if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-')
     permissions:
       id-token: write
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
