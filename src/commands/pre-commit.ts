@@ -1,8 +1,8 @@
 // Pre-commit command - manage pre-commit hooks for secrets detection
 
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { platform } from 'os';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { platform } from 'node:os';
 import { spawnProcess } from '../lib/process.js';
 
 const PRE_COMMIT_CONFIG = '.pre-commit-config.yaml';
@@ -121,7 +121,7 @@ async function createPreCommitConfig(projectRoot: string): Promise<void> {
     return;
   }
   
-  const fs = await import('fs/promises');
+  const fs = await import('node:fs/promises');
   await fs.writeFile(configPath, PRE_COMMIT_CONFIG_CONTENT, 'utf-8');
   
   console.log('   ✓ Created .pre-commit-config.yaml');
@@ -357,7 +357,7 @@ export async function preCommitUninstallCommand(): Promise<void> {
     
     if (existsSync(configPath)) {
       console.log('📝 Removing configuration file...');
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       await fs.unlink(configPath);
       console.log('   ✓ Removed .pre-commit-config.yaml');
     } else {
@@ -393,17 +393,17 @@ export async function preCommitInstallCommand(): Promise<void> {
     
     // Step 1: Check if pre-commit is installed
     const preCommitInstalled = await isPreCommitInstalled();
-    
-    if (!preCommitInstalled) {
+
+    if (preCommitInstalled) {
+      console.log('✓ pre-commit is already installed');
+    } else {
       console.log('⚠️  pre-commit is not installed');
       await installPreCommit();
-      
+
       // Verify installation
       if (!await isPreCommitInstalled()) {
         throw new Error('pre-commit installation verification failed');
       }
-    } else {
-      console.log('✓ pre-commit is already installed');
     }
     
     console.log('');

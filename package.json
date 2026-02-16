@@ -1,6 +1,6 @@
 {
   "name": "sonar-cli",
-  "version": "0.2.93",
+  "version": "0.2.94",
   "description": "SonarQube CLI for AI coding agents",
   "type": "module",
   "bin": {

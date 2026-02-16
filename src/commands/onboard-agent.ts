@@ -329,7 +329,7 @@ function printFinalVerificationResults(finalHealth: Awaited<ReturnType<typeof ru
  * Onboard-agent command handler
  */
 export async function onboardAgentCommand(agent: string, options: OnboardAgentOptions): Promise<void> {
-  const verbose = options.verbose || false;
+  const verbose = false;
 
   // Validate agent
   const agentName = validateAgent(agent);

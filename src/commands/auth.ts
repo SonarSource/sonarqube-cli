@@ -185,6 +185,7 @@ export async function authLoginCommand(options: {
 
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     console.log(`✅ Authentication successful for: ${displayServer}`);
+    process.exit(0);
   } catch (error) {
     throw error;
   }
