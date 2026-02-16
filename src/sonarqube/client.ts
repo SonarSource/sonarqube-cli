@@ -1,6 +1,7 @@
 // SonarQube API HTTP client
 
 import { VERSION } from '../version.js';
+import logger from '../lib/logger.js';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
@@ -110,7 +111,7 @@ export class SonarQubeClient {
       const result = await this.get<{ organizations: Array<{ key: string; name: string }> }>('/api/organizations');
       return result.organizations || [];
     } catch (error) {
-      console.error('[DEBUG] Failed to get organizations:', error instanceof Error ? error.message : String(error));
+      logger.debug('[DEBUG] Failed to get organizations:', error instanceof Error ? error.message : String(error));
       return [];
     }
   }

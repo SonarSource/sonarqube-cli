@@ -5,23 +5,13 @@ import { VERSION } from '../version.js';
 import { getToken as getKeystoreToken, saveToken as saveKeystoreToken, deleteToken as deleteKeystoreToken } from '../lib/keychain.js';
 import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
+import logger from '../lib/logger.js';
 
 const MIN_PORT = 64130;
 const MAX_PORT = 64140;
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_BAD_REQUEST = 400;
 const PORT_TIMEOUT_MS = 50000;
-const DEBUG = false;
-
-/**
- * Helper to log debug messages (controlled by DEBUG constant)
- */
-function debugLog(message: string): void {
-  if (DEBUG) {
-    console.log(`[DEBUG] ${message}`);
-  }
-}
-
 /**
  * Get token from keychain
  */
@@ -59,22 +49,22 @@ export async function validateToken(serverURL: string, token: string): Promise<b
  * Generate token via browser OAuth flow
  */
 export async function generateTokenViaBrowser(serverURL: string): Promise<string> {
-  debugLog(`=== AUTH FLOW v${VERSION} ===`);
-  debugLog('Starting token generation flow...');
+  logger.debug(`=== AUTH FLOW v${VERSION} ===`);
+  logger.debug('Starting token generation flow...');
 
   // 1. Start embedded HTTP server
   const { port, tokenPromise, shutdown } = await startEmbeddedServer();
-  debugLog(`HTTP server started on port ${port}`);
+  logger.debug(`HTTP server started on port ${port}`);
 
   // 2. Build auth URL
   const cleanServerURL = serverURL.replace(/\/$/, '');
   const authURL = `${cleanServerURL}/sonarlint/auth?ideName=sonar-cli&port=${port}`;
 
   // 3. Show prompt
-  console.log('\n🔑 Obtaining access token from SonarQube...');
-  console.log(`\n   URL: ${authURL}`);
-  console.log('\n   Press Enter to open browser');
-  console.log('   ');
+  logger.info('\n🔑 Obtaining access token from SonarQube...');
+  logger.info(`\n   URL: ${authURL}`);
+  logger.info('\n   Press Enter to open browser');
+  logger.info('   ');
 
   // Wait for user to press Enter and ensure stdin is closed after
   const userPressedEnter = new Promise<void>(resolve => {
@@ -90,16 +80,16 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   await userPressedEnter;
 
   // 4. Open browser
-  debugLog('Opening browser...');
+  logger.debug('Opening browser...');
   try {
     await openBrowser(authURL);
   } catch (error) {
-    console.log(`   ⚠️  Failed to open browser automatically: ${error}`);
-    console.log('   Copy the URL above and open it manually');
+    logger.info(`   ⚠️  Failed to open browser automatically: ${error}`);
+    logger.info('   Copy the URL above and open it manually');
   }
 
-  console.log('\n   ⏳ Waiting for authorization (50 second timeout)...');
-  debugLog(`Waiting for callback on http://127.0.0.1:${port}`);
+  logger.info('\n   ⏳ Waiting for authorization (50 second timeout)...');
+  logger.debug(`Waiting for callback on http://127.0.0.1:${port}`);
 
   // 5. Wait for token with timeout (50 seconds)
   let token: string | undefined;
@@ -111,7 +101,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
       )
     ]);
 
-    debugLog(`Token received (length: ${token.length})`);
+    logger.debug(`Token received (length: ${token.length})`);
 
     if (!token) {
       throw new Error('Received empty token');
@@ -132,7 +122,7 @@ async function startEmbeddedServer(): Promise<{
   tokenPromise: Promise<string>;
   shutdown: () => void;
 }> {
-  debugLog('Creating token promise...');
+  logger.debug('Creating token promise...');
 
   let resolveToken: (token: string) => void;
   const tokenPromise = new Promise<string>(resolve => {
@@ -140,7 +130,7 @@ async function startEmbeddedServer(): Promise<{
   });
 
   // Try to find an available port
-  debugLog(`Searching for available port in range ${MIN_PORT}-${MAX_PORT}...`);
+  logger.debug(`Searching for available port in range ${MIN_PORT}-${MAX_PORT}...`);
 
   let port: number | null = null;
   let server: ReturnType<typeof createServer> | null = null;
@@ -150,11 +140,11 @@ async function startEmbeddedServer(): Promise<{
       const testServer = createServer();
       const listening = await new Promise<boolean>((resolve) => {
         testServer.once('error', () => {
-          debugLog(`Port ${p} is busy`);
+          logger.debug(`Port ${p} is busy`);
           resolve(false);
         });
         testServer.listen(p, '127.0.0.1', () => {
-          debugLog(`Port ${p} is available`);
+          logger.debug(`Port ${p} is available`);
           resolve(true);
         });
       });
@@ -165,7 +155,7 @@ async function startEmbeddedServer(): Promise<{
         break;
       }
     } catch (error) {
-      debugLog(`Port ${p} error: ${error}`);
+      logger.debug(`Port ${p} error: ${error}`);
       continue;
     }
   }
@@ -174,92 +164,92 @@ async function startEmbeddedServer(): Promise<{
     throw new Error(`No available ports in range ${MIN_PORT}-${MAX_PORT}`);
   }
 
-  debugLog(`Listener created on 127.0.0.1:${port}`);
+  logger.debug(`Listener created on 127.0.0.1:${port}`);
 
   // Set up connection handler (low-level socket events)
   const finalServer = server;
   finalServer.on('connection', (socket) => {
     const remoteAddr = socket.remoteAddress;
     const remotePort = socket.remotePort;
-    debugLog(`NEW CONNECTION from ${remoteAddr}:${remotePort}`);
+    logger.debug(`NEW CONNECTION from ${remoteAddr}:${remotePort}`);
 
     socket.on('data', (chunk) => {
-      debugLog(`Socket received ${chunk.length} bytes`);
+      logger.debug(`Socket received ${chunk.length} bytes`);
     });
 
     socket.on('error', (error) => {
-      debugLog(`Socket error: ${(error as Error).message}`);
+      logger.debug(`Socket error: ${(error as Error).message}`);
     });
 
     socket.on('end', () => {
-      debugLog('Socket connection ended');
+      logger.debug('Socket connection ended');
     });
   });
 
   // Set up request handler - catch ALL requests
   finalServer.on('request', (req, res) => {
-    debugLog(`*** HTTP REQUEST: ${req.method} ${req.url} ***`);
+    logger.debug(`*** HTTP REQUEST: ${req.method} ${req.url} ***`);
 
     // Try to extract token from any request (POST body or GET query)
     if (req.method === 'POST') {
-      debugLog('POST request detected, reading body...');
+      logger.debug('POST request detected, reading body...');
       let body = '';
       req.on('data', chunk => {
         body += chunk.toString();
       });
       req.on('end', () => {
-        debugLog(`POST body: ${body}`);
+        logger.debug(`POST body: ${body}`);
         try {
           const data = JSON.parse(body) as Record<string, unknown>;
           const token = data.token as string | undefined;
           if (token) {
-            debugLog(`✓ Token extracted from POST body: ${token.substring(0, 20)}...`);
+            logger.debug(`✓ Token extracted from POST body: ${token.substring(0, 20)}...`);
             res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
             res.end(getSuccessHTML());
             resolveToken(token);
           }
         } catch {
-          debugLog('Failed to parse POST body as JSON');
+          logger.debug('Failed to parse POST body as JSON');
         }
       });
     } else if (req.method === 'GET') {
-      debugLog('GET request detected, checking query parameters...');
+      logger.debug('GET request detected, checking query parameters...');
       try {
         const url = new URL(`http://${req.headers.host}${req.url}`);
         const token = url.searchParams.get('token');
         if (token) {
-          debugLog(`✓ Token extracted from GET query: ${token.substring(0, 20)}...`);
+          logger.debug(`✓ Token extracted from GET query: ${token.substring(0, 20)}...`);
           res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
           res.end(getSuccessHTML());
           resolveToken(token);
           return;
         }
       } catch {
-        debugLog('Failed to parse GET URL');
+        logger.debug('Failed to parse GET URL');
       }
       // No token in GET, return success anyway (might be just browser check)
       res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
       res.end(getSuccessHTML());
     } else {
-      debugLog(`Unexpected HTTP method: ${req.method}`);
+      logger.debug(`Unexpected HTTP method: ${req.method}`);
       res.writeHead(HTTP_STATUS_OK);
       res.end('OK');
     }
   });
 
   const shutdown = async (): Promise<void> => {
-    debugLog('Shutting down embedded server...');
+    logger.debug('Shutting down embedded server...');
 
     return new Promise<void>((resolve) => {
       // Close the server and wait for it to finish
       finalServer.close(() => {
-        debugLog('Server closed successfully');
+        logger.debug('Server closed successfully');
         resolve();
       });
 
       // Force close any remaining connections after 2 seconds with unref
       const forceCloseTimer = setTimeout(() => {
-        debugLog('Force closing remaining connections');
+        logger.debug('Force closing remaining connections');
         finalServer.closeAllConnections?.();
       }, 2000);
 
@@ -292,13 +282,13 @@ function handleTokenPOST(
       const token = data.token;
 
       if (!token || typeof token !== 'string') {
-        debugLog('Token missing or invalid in JSON');
+        logger.debug('Token missing or invalid in JSON');
         res.writeHead(HTTP_STATUS_BAD_REQUEST);
         res.end('Invalid token');
         return;
       }
 
-      debugLog(`Token extracted from JSON (length: ${token.length})`);
+      logger.debug(`Token extracted from JSON (length: ${token.length})`);
 
       // Send success page
       res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
@@ -307,7 +297,7 @@ function handleTokenPOST(
       // Resolve with token
       resolveToken(token);
     } catch (error) {
-      debugLog(`Failed to parse JSON: ${error}`);
+      logger.debug(`Failed to parse JSON: ${error}`);
       res.writeHead(HTTP_STATUS_BAD_REQUEST);
       res.end('Invalid JSON');
     }
@@ -326,13 +316,13 @@ function handleTokenGET(
   const token = url.searchParams.get('token');
 
   if (!token) {
-    debugLog('Token missing in query parameter');
+    logger.debug('Token missing in query parameter');
     res.writeHead(HTTP_STATUS_BAD_REQUEST);
     res.end('Token missing');
     return;
   }
 
-  debugLog(`Token extracted from query (length: ${token.length})`);
+  logger.debug(`Token extracted from query (length: ${token.length})`);
 
   // Send success page
   res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });

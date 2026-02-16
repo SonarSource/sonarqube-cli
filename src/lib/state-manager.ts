@@ -34,7 +34,7 @@ export function loadState(cliVersion: string): CliState {
     const content = fs.readFileSync(STATE_FILE, 'utf-8');
     return JSON.parse(content) as CliState;
   } catch (error) {
-    console.warn(`Failed to load state from ${STATE_FILE}, using defaults:`, error);
+    // Silently fall back to defaults on load error
     return getDefaultState(cliVersion);
   }
 }

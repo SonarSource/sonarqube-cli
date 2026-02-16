@@ -1,6 +1,7 @@
 // Docker checks - verify Docker installation and MCP image
 
 import { spawnProcess } from '../lib/process.js';
+import logger from '../lib/logger.js';
 
 /**
  * Check if Docker is installed
@@ -42,7 +43,7 @@ export async function hasImage(imageName: string): Promise<boolean> {
  * Pull MCP Docker image
  */
 export async function pullMcpImage(): Promise<void> {
-  console.log('\n📦 Pulling SonarQube MCP Server Docker image...');
+  logger.info('\n📦 Pulling SonarQube MCP Server Docker image...');
 
   const result = await spawnProcess('docker', ['pull', 'mcp/sonarqube'], {
     stdout: 'inherit',
@@ -53,5 +54,5 @@ export async function pullMcpImage(): Promise<void> {
     throw new Error('Failed to pull Docker image');
   }
 
-  console.log('   ✓ Docker image pulled');
+  logger.info('   ✓ Docker image pulled');
 }

@@ -3,6 +3,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { spawnProcess } from '../lib/process.js';
+import logger from '../lib/logger.js';
 
 export interface ProjectInfo {
   root: string;
@@ -185,7 +186,7 @@ function parsePropertyLine(line: string, props: Partial<SonarProperties>, verbos
 
     // Log important properties
     if (verbose && ['sonar.host.url', 'sonar.projectKey', 'sonar.projectName', 'sonar.organization', 'sonar.login'].includes(key)) {
-      console.log(`   Debug: Found ${key}="${value}"`);
+      logger.info(`   Debug: Found ${key}="${value}"`);
     }
   }
 }
@@ -201,7 +202,7 @@ async function loadSonarProperties(projectRoot: string, verbose: boolean): Promi
   }
 
   if (verbose) {
-    console.log(`   Debug: Parsing sonar-project.properties from: ${propPath}`);
+    logger.info(`   Debug: Parsing sonar-project.properties from: ${propPath}`);
   }
 
   const fs = await import('node:fs/promises');
@@ -230,8 +231,8 @@ async function tryLoadSonarLintFile(configPath: string, verbose: boolean): Promi
   try {
     const data = await fs.readFile(configPath, 'utf-8');
     if (verbose) {
-      console.log(`   Debug: Found SonarLint config: ${configPath}`);
-      console.log(`   Debug: Content: ${data}`);
+      logger.info(`   Debug: Found SonarLint config: ${configPath}`);
+      logger.info(`   Debug: Content: ${data}`);
     }
 
     const config = parseSonarLintConfig(data);
@@ -242,7 +243,7 @@ async function tryLoadSonarLintFile(configPath: string, verbose: boolean): Promi
     const err = error as NodeJS.ErrnoException;
     if (err.code === 'ENOENT') {
       if (verbose) {
-        console.log(`   Debug: File not found: ${configPath}`);
+        logger.info(`   Debug: File not found: ${configPath}`);
       }
       return null;
     }
@@ -263,7 +264,7 @@ async function loadSonarLintConfig(projectRoot: string, verbose: boolean): Promi
   ];
 
   if (verbose) {
-    console.log(`   Debug: Looking for SonarLint config in: ${projectRoot}`);
+    logger.info(`   Debug: Looking for SonarLint config in: ${projectRoot}`);
   }
 
   for (const configPath of possiblePaths) {

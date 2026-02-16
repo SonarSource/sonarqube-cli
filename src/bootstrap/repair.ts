@@ -3,6 +3,7 @@
 import { generateTokenViaBrowser, saveToken, validateToken, deleteToken } from './auth.js';
 import { installHooks, type HookType } from './hooks.js';
 import type { HealthCheckResult } from './health.js';
+import logger from '../lib/logger.js';
 
 /**
  * Run repair actions based on health check results
@@ -19,7 +20,7 @@ export async function runRepair(
 
   // Fix token if invalid
   if (!healthResult.tokenValid) {
-    console.log('\n→ 🔑 Obtaining access token...');
+    logger.info('\n→ 🔑 Obtaining access token...');
 
     // Delete old token
     try {
@@ -39,13 +40,13 @@ export async function runRepair(
 
     // Save to keychain
     await saveToken(serverURL, token, organization);
-    console.log('   ✓ Token saved to keychain');
+    logger.info('   ✓ Token saved to keychain');
   }
 
   // Fix hooks if not installed
   if (!healthResult.hooksInstalled) {
-    console.log('\n→ 🪝 Installing hooks...');
+    logger.info('\n→ 🪝 Installing hooks...');
     await installHooks(projectRoot, hookType);
-    console.log('   ✓ Hooks installed');
+    logger.info('   ✓ Hooks installed');
   }
 }

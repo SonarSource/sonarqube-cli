@@ -5,6 +5,7 @@
 
 import { Command } from 'commander';
 import { VERSION } from './version.js';
+import logger from './lib/logger.js';
 import { verifyCommand } from './commands/verify.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
@@ -32,8 +33,8 @@ program
     try {
       await verifyCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -59,8 +60,8 @@ issues
     try {
       await issuesSearchCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -81,8 +82,8 @@ program
     try {
       // Validate that agent is provided
       if (!agent) {
-        console.error('Error: Missing required argument <agent>');
-        console.log('');
+        logger.error('Error: Missing required argument <agent>');
+        logger.info('');
         cmd.help();
         return;
       }
@@ -90,16 +91,16 @@ program
       // Validate argument choices
       const validAgent = ['claude', 'gemini', 'codex'];
       if (!validAgent.includes(agent)) {
-        console.error(`Error: Invalid agent. Must be one of: claude, gemini, codex`);
-        console.log('');
+        logger.error(`Error: Invalid agent. Must be one of: claude, gemini, codex`);
+        logger.info('');
         cmd.help();
         return;
       }
 
       await onboardAgentCommand(agent, options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -114,7 +115,7 @@ const auth = program
       try {
         await authLoginCommand(options);
       } catch (error) {
-        console.error('Error:', (error as Error).message);
+        logger.error('Error:', (error as Error).message);
         process.exit(1);
       }
     }
@@ -130,8 +131,8 @@ auth
     try {
       await authLoginCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -145,8 +146,8 @@ auth
     try {
       await authLogoutCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -158,8 +159,8 @@ auth
     try {
       await authPurgeCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -171,8 +172,8 @@ auth
     try {
       await authListCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -189,8 +190,8 @@ preCommit
     try {
       await preCommitInstallCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });
@@ -202,8 +203,8 @@ preCommit
     try {
       await preCommitUninstallCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
-      console.log('');
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
       cmd.help();
     }
   });

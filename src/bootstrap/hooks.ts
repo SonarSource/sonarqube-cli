@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform } from 'node:os';
+import logger from '../lib/logger.js';
 
 const CLAUDE_DIR = '.claude';
 const HOOKS_DIR = 'hooks';
@@ -83,12 +84,12 @@ export async function installHooks(
     await fs.writeFile(scriptPath, scriptContent);
   }
 
-  console.log(`   ✓ Installed hook script: ${scriptPath}`);
+  logger.info(`   ✓ Installed hook script: ${scriptPath}`);
 
   // Configure hooks in settings.local.json
   await configureHooksSettings(claudePath, scriptName);
 
-  console.log('   ✓ Hooks configured');
+  logger.info('   ✓ Hooks configured');
 }
 
 /**

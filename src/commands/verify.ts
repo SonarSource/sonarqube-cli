@@ -5,6 +5,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { encodeToToon } from '../formatter/toon.js';
 import { getToken, getAllCredentials } from '../lib/keychain.js';
+import { loadState, getActiveConnection } from '../lib/state-manager.js';
+import { VERSION } from '../version.js';
+import logger from '../lib/logger.js';
 
 // Hardcoded SonarCloud A3S API base URL
 const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';
@@ -68,7 +71,33 @@ async function getTokenFromKeychain(
     const token = await getToken(SONARCLOUD_URL, organizationKey);
     return token ?? undefined;
   } catch (error) {
-    console.debug(`Failed to retrieve token from keychain for org "${organizationKey}": ${(error as Error).message}`);
+    logger.debug(`Failed to retrieve token from keychain for org "${organizationKey}": ${(error as Error).message}`);
+    return undefined;
+  }
+}
+
+/**
+ * Try to get SonarCloud credential from saved state
+ */
+async function getCredentialFromSavedState(): Promise<
+  { org: string; token: string } | undefined
+> {
+  try {
+    const state = loadState(VERSION);
+    const activeConnection = getActiveConnection(state);
+
+    if (!activeConnection || activeConnection.type !== 'cloud' || !activeConnection.orgKey) {
+      return undefined;
+    }
+
+    const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
+    if (!token) {
+      return undefined;
+    }
+
+    return { org: activeConnection.orgKey, token };
+  } catch (error) {
+    logger.debug(`Failed to retrieve credential from saved state: ${(error as Error).message}`);
     return undefined;
   }
 }
@@ -96,7 +125,7 @@ async function getFirstSonarCloudCredential(): Promise<
 
     return { org: foundOrg, token: cred.password };
   } catch (error) {
-    console.debug(`Failed to retrieve credentials from keychain: ${(error as Error).message}`);
+    logger.debug(`Failed to retrieve credentials from keychain: ${(error as Error).message}`);
     return undefined;
   }
 }
@@ -106,10 +135,10 @@ async function getFirstSonarCloudCredential(): Promise<
  */
 function logMultipleOrganizationsIfFound(count: number, org: string): void {
   if (count > 1) {
-    console.log(
+    logger.info(
       `ℹ Multiple organizations found (${count}). Using: ${org}`
     );
-    console.log('  To use a different organization, specify --organization');
+    logger.info('  To use a different organization, specify --organization');
   }
 }
 
@@ -146,9 +175,17 @@ async function getCredentials(
   }
 
   if (!credentials || !org) {
-    const saved = await getFirstSonarCloudCredential();
-    org = org || saved?.org;
-    credentials = credentials || saved?.token;
+    // Try saved state first
+    const savedState = await getCredentialFromSavedState();
+    if (savedState) {
+      org = org || savedState.org;
+      credentials = credentials || savedState.token;
+    } else {
+      // Fall back to keychain
+      const saved = await getFirstSonarCloudCredential();
+      org = org || saved?.org;
+      credentials = credentials || saved?.token;
+    }
   }
 
   return { organizationKey: org, token: credentials };
@@ -164,26 +201,26 @@ function validateConfiguration(
   file: string | undefined
 ): void {
   if (!file) {
-    console.error('Error: --file is required');
+    logger.error('Error: --file is required');
     process.exit(1);
   }
 
   if (!organizationKey) {
-    console.error('❌ Error: --organization-key is required');
-    console.error('  Provide via: --organization flag, or login with: sonar-cli auth login');
+    logger.error('❌ Error: --organization-key is required');
+    logger.error('  Provide via: --organization flag, or login with: sonar-cli auth login');
     process.exit(1);
   }
 
   if (!projectKey) {
-    console.error('❌ Error: --project is required');
-    console.error('  Provide via: --project flag, or in sonar-project.properties');
-    console.error('  Add to sonar-project.properties: sonar.projectKey=<key>');
+    logger.error('❌ Error: --project is required');
+    logger.error('  Provide via: --project flag, or in sonar-project.properties');
+    logger.error('  Add to sonar-project.properties: sonar.projectKey=<key>');
     process.exit(1);
   }
 
   if (!token) {
-    console.error('❌ Error: --token is required');
-    console.error('  Provide via: --token flag, or login with: sonar-cli auth login');
+    logger.error('❌ Error: --token is required');
+    logger.error('  Provide via: --token flag, or login with: sonar-cli auth login');
     process.exit(1);
   }
 }
@@ -195,14 +232,14 @@ function readFileContent(filePath: string): string {
   const absPath = resolve(filePath);
 
   if (!existsSync(absPath)) {
-    console.error(`Error: File not found: ${absPath}`);
+    logger.error(`Error: File not found: ${absPath}`);
     process.exit(1);
   }
 
   try {
     return readFileSync(absPath, 'utf-8');
   } catch (error) {
-    console.error(`Error reading file: ${(error as Error).message}`);
+    logger.error(`Error reading file: ${(error as Error).message}`);
     process.exit(1);
   }
 }
@@ -238,9 +275,9 @@ function formatResults(result: AnalyzeResponse): void {
   const issuesCount = result.issues?.length ?? 0;
 
   if (issuesCount > TOON_FORMAT_THRESHOLD) {
-    console.log(encodeToToon(result));
+    logger.info(encodeToToon(result));
   } else {
-    console.log(JSON.stringify(result, null, 2));
+    logger.info(JSON.stringify(result, null, 2));
   }
 }
 
@@ -248,15 +285,15 @@ function formatResults(result: AnalyzeResponse): void {
  * Handle analysis errors with helpful troubleshooting
  */
 function handleAnalysisError(error: Error, organizationKey: string, projectKey: string): never {
-  console.error('\n❌ Analysis failed!');
-  console.error(`   Error: ${error.message}`);
-  console.error('');
-  console.error('💡 Troubleshooting:');
-  console.error(`   - Verify organization "${organizationKey}" has access to project "${projectKey}"`);
-  console.error('   - Check that your token has the correct permissions');
-  console.error(`   - Try running: sonar-cli auth logout --org ${organizationKey}`);
-  console.error(`   - Then: sonar-cli auth login --org ${organizationKey}`);
-  console.error('');
+  logger.error('\n❌ Analysis failed!');
+  logger.error(`   Error: ${error.message}`);
+  logger.error('');
+  logger.error('💡 Troubleshooting:');
+  logger.error(`   - Verify organization "${organizationKey}" has access to project "${projectKey}"`);
+  logger.error('   - Check that your token has the correct permissions');
+  logger.error(`   - Try running: sonar-cli auth logout --org ${organizationKey}`);
+  logger.error(`   - Then: sonar-cli auth login --org ${organizationKey}`);
+  logger.error('');
   process.exit(1);
 }
 
@@ -294,7 +331,7 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
   );
 
   try {
-    console.log('Analyzing file...');
+    logger.info('Analyzing file...');
     const result = await client.post<AnalyzeResponse>(
       '/a3s-analysis/analyses',
       requestBody

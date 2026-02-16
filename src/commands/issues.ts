@@ -8,6 +8,9 @@ import { formatJSON } from '../formatter/json.js';
 import { formatTable } from '../formatter/table.js';
 import { formatCSV } from '../formatter/csv.js';
 import type { IssuesSearchParams } from '../lib/types.js';
+import { loadState, getActiveConnection } from '../lib/state-manager.js';
+import { VERSION } from '../version.js';
+import logger from '../lib/logger.js';
 
 const DEFAULT_PAGE_SIZE = 500;
 
@@ -30,33 +33,48 @@ export interface IssuesSearchOptions {
 }
 
 /**
+ * Get server URL from saved state if available
+ */
+function getServerFromState(): string | undefined {
+  try {
+    const state = loadState(VERSION);
+    const activeConnection = getActiveConnection(state);
+    return activeConnection?.serverUrl;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Issues search command handler
  */
 export async function issuesSearchCommand(options: IssuesSearchOptions): Promise<void> {
-  // Validate required options
-  if (!options.server) {
-    console.error('Error: --server is required');
+  // Validate required options - try to get from saved state if not provided
+  let server = options.server || getServerFromState();
+  if (!server) {
+    logger.error('Error: --server is required');
+    logger.error('  Provide via: --server flag, or login with: sonar auth login');
     process.exit(1);
   }
 
   if (!options.project) {
-    console.error('Error: --project is required');
+    logger.error('Error: --project is required');
     process.exit(1);
   }
 
   // Get token from keychain or option
   let token = options.token;
   if (!token) {
-    const storedToken = await getToken(options.server);
+    const storedToken = await getToken(server);
     if (!storedToken) {
-      console.error('Error: No token found. Use --token or run onboard-agent');
+      logger.error('Error: No token found. Use --token or run auth login');
       process.exit(1);
     }
     token = storedToken;
   }
 
   // Create clients
-  const client = new SonarQubeClient(options.server, token);
+  const client = new SonarQubeClient(server, token);
   const issuesClient = new IssuesClient(client);
 
   // Build search params
@@ -98,13 +116,13 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
         output = formatCSV(result.issues);
         break;
       default:
-        console.error(`Unknown format: ${format}`);
+        logger.error(`Unknown format: ${format}`);
         process.exit(1);
     }
 
-    console.log(output);
+    logger.log(output);
   } catch (error) {
-    console.error('Error searching issues:', (error as Error).message);
+    logger.error('Error searching issues:', (error as Error).message);
     process.exit(1);
   }
 }

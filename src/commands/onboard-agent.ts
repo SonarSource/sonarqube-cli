@@ -7,6 +7,9 @@ import { runRepair } from '../bootstrap/repair.js';
 import { getToken } from '../bootstrap/auth.js';
 import { getAllCredentials } from '../lib/keychain.js';
 import type { HookType } from '../bootstrap/hooks.js';
+import { loadState, saveState, markAgentConfigured, addInstalledHook } from '../lib/state-manager.js';
+import { VERSION } from '../version.js';
+import logger from '../lib/logger.js';
 
 export interface OnboardAgentOptions {
   server?: string;
@@ -31,9 +34,9 @@ interface ConfigurationData {
  */
 function validateAgent(agent: string): string {
   if (agent !== 'claude') {
-    console.error(`\nError: Agent "${agent}" is not yet supported.`);
-    console.error('Currently supported agents: claude');
-    console.error('Coming soon: gemini, codex\n');
+    logger.error(`\nError: Agent "${agent}" is not yet supported.`);
+    logger.error('Currently supported agents: claude');
+    logger.error('Coming soon: gemini, codex\n');
     process.exit(1);
   }
 
@@ -56,14 +59,14 @@ function getDiscoveredConfiguration(projectInfo: ProjectInfo): Partial<Configura
     config.serverURL = projectInfo.sonarPropsData.hostURL;
     config.projectKey = projectInfo.sonarPropsData.projectKey;
     config.organization = projectInfo.sonarPropsData.organization;
-    console.log('✓ Found sonar-project.properties');
+    logger.info('✓ Found sonar-project.properties');
   }
 
   if (projectInfo.hasSonarLintConfig && projectInfo.sonarLintData) {
     config.serverURL = config.serverURL || projectInfo.sonarLintData.serverURL;
     config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
     config.organization = config.organization || projectInfo.sonarLintData.organization;
-    console.log('✓ Found .sonarlint/connectedMode.json');
+    logger.info('✓ Found .sonarlint/connectedMode.json');
   }
 
   return config;
@@ -76,7 +79,7 @@ async function tryGetTokenForServerOrg(serverURL: string | undefined, organizati
   if ((organization || serverURL) && serverURL) {
     const keychainToken = await getToken(serverURL, organization);
     if (keychainToken) {
-      console.log('✓ Found stored credentials');
+      logger.info('✓ Found stored credentials');
       return keychainToken;
     }
   }
@@ -101,11 +104,11 @@ async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }
 
   const result: { token?: string; org?: string } = { token: cred.password, org };
 
-  console.log(`✓ Using stored credentials for organization: ${org}`);
+  logger.info(`✓ Using stored credentials for organization: ${org}`);
 
   if (sonarCloudCreds.length > 1) {
-    console.log(`ℹ Multiple organizations found (${sonarCloudCreds.length}). Using: ${org}`);
-    console.log('  To use a different organization, specify --org');
+    logger.info(`ℹ Multiple organizations found (${sonarCloudCreds.length}). Using: ${org}`);
+    logger.info('  To use a different organization, specify --org');
   }
 
   return result;
@@ -166,7 +169,7 @@ async function loadConfiguration(projectInfo: ProjectInfo, options: OnboardAgent
   // If organization is provided but no server URL, default to SonarCloud
   if (config.organization && !config.serverURL) {
     config.serverURL = 'https://sonarcloud.io';
-    console.log('✓ Organization provided, defaulting to SonarCloud');
+    logger.info('✓ Organization provided, defaulting to SonarCloud');
   }
 
   return config;
@@ -177,19 +180,19 @@ async function loadConfiguration(projectInfo: ProjectInfo, options: OnboardAgent
  */
 function validateAndPrintConfiguration(config: ConfigurationData): { serverURL: string; projectKey: string } {
   if (!config.serverURL) {
-    console.error('\nError: Server URL is required. Use --server flag or --org flag for SonarCloud');
+    logger.error('\nError: Server URL is required. Use --server flag or --org flag for SonarCloud');
     process.exit(1);
   }
 
   if (!config.projectKey) {
-    console.error('\nError: Project key is required. Use --project flag');
+    logger.error('\nError: Project key is required. Use --project flag');
     process.exit(1);
   }
 
-  console.log(`\nServer: ${config.serverURL}`);
-  console.log(`Project: ${config.projectKey}`);
+  logger.info(`\nServer: ${config.serverURL}`);
+  logger.info(`Project: ${config.projectKey}`);
   if (config.organization) {
-    console.log(`Organization: ${config.organization}`);
+    logger.info(`Organization: ${config.organization}`);
   }
 
   return { serverURL: config.serverURL, projectKey: config.projectKey };
@@ -205,7 +208,7 @@ async function ensureToken(token: string | undefined, serverURL: string, organiz
   }
 
   if (!token) {
-    console.log('\n⚠️  No token found. Will generate during repair phase.');
+    logger.info('\n⚠️  No token found. Will generate during repair phase.');
   }
 
   return token;
@@ -223,31 +226,31 @@ async function runHealthCheckAndRepair(
   skipHooks: boolean | undefined,
   hookType: HookType
 ): Promise<string | undefined> {
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Phase 2/4: Health Check');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('Phase 2/4: Health Check');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   if (!token) {
-    console.log('⏭️  Skipping health check (no token available)');
+    logger.info('⏭️  Skipping health check (no token available)');
     return undefined;
   }
 
   const healthResult = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, organization);
 
   if (healthResult.errors.length === 0) {
-    console.log('\n✅ All checks passed! Configuration is healthy.');
+    logger.info('\n✅ All checks passed! Configuration is healthy.');
     return token;
   }
 
-  console.log(`\n⚠️  Found ${healthResult.errors.length} issue(s):`);
+  logger.info(`\n⚠️  Found ${healthResult.errors.length} issue(s):`);
   for (const error of healthResult.errors) {
-    console.log(`   - ${error}`);
+    logger.info(`   - ${error}`);
   }
 
   // Phase 3: Repair
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Phase 3/4: Repair');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('Phase 3/4: Repair');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   await runRepair(
     serverURL,
@@ -272,9 +275,9 @@ async function runRepairWithoutToken(
   skipHooks: boolean | undefined,
   hookType: HookType
 ): Promise<string> {
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Phase 3/4: Repair');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('Phase 3/4: Repair');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   await runRepair(
     serverURL,
@@ -295,7 +298,7 @@ async function runRepairWithoutToken(
 
   const repairedToken = await getToken(serverURL, organization);
   if (!repairedToken) {
-    console.error('\nError: Failed to obtain token');
+    logger.error('\nError: Failed to obtain token');
     process.exit(1);
   }
 
@@ -306,22 +309,47 @@ async function runRepairWithoutToken(
  * Print final verification results
  */
 function printFinalVerificationResults(finalHealth: Awaited<ReturnType<typeof runHealthChecks>>): void {
-  if (finalHealth.tokenValid) console.log('✓ Token valid');
-  if (finalHealth.serverAvailable) console.log('✓ Server available');
-  if (finalHealth.projectAccessible) console.log('✓ Project accessible');
-  if (finalHealth.organizationAccessible) console.log('✓ Organization accessible');
-  if (finalHealth.qualityProfilesAccessible) console.log('✓ Quality profiles accessible');
-  if (finalHealth.hooksInstalled) console.log('✓ Hooks installed');
+  if (finalHealth.tokenValid) logger.info('✓ Token valid');
+  if (finalHealth.serverAvailable) logger.info('✓ Server available');
+  if (finalHealth.projectAccessible) logger.info('✓ Project accessible');
+  if (finalHealth.organizationAccessible) logger.info('✓ Organization accessible');
+  if (finalHealth.qualityProfilesAccessible) logger.info('✓ Quality profiles accessible');
+  if (finalHealth.hooksInstalled) logger.info('✓ Hooks installed');
 
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('✅ Setup complete!');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('✅ Setup complete!');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   if (finalHealth.errors.length > 0) {
-    console.log('\n⚠️  Some issues remain:');
+    logger.info('\n⚠️  Some issues remain:');
     for (const error of finalHealth.errors) {
-      console.log(`   - ${error}`);
+      logger.info(`   - ${error}`);
     }
+  }
+}
+
+/**
+ * Update state after successful configuration
+ */
+async function updateStateAfterConfiguration(
+  hooksInstalled: boolean,
+  hookType: HookType
+): Promise<void> {
+  try {
+    const state = loadState(VERSION);
+
+    // Mark agent as configured
+    markAgentConfigured(state, 'claude-code', VERSION);
+
+    // Track installed hooks
+    if (hooksInstalled) {
+      addInstalledHook(state, 'claude-code', 'sonar-prompt', hookType === 'cli' ? 'PreToolUse' : 'PostToolUse');
+    }
+
+    saveState(state);
+  } catch (error) {
+    logger.warn('Warning: Failed to update configuration state:', (error as Error).message);
+    // Don't fail the whole setup if state update fails
   }
 }
 
@@ -334,20 +362,20 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
   // Validate agent
   const agentName = validateAgent(agent);
 
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`🚀 SonarQube Integration Setup for ${agentName}`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info(`🚀 SonarQube Integration Setup for ${agentName}`);
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   // Phase 1: Discovery & Validation
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Phase 1/4: Discovery & Validation');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('Phase 1/4: Discovery & Validation');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   const projectInfo = await discoverProject(process.cwd(), verbose);
 
-  console.log(`✓ Project root: ${projectInfo.root}`);
+  logger.info(`✓ Project root: ${projectInfo.root}`);
   if (projectInfo.isGitRepo) {
-    console.log('✓ Git repository detected');
+    logger.info('✓ Git repository detected');
   }
 
   // Load configuration from all sources
@@ -360,6 +388,7 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
   let token = await ensureToken(config.token, serverURL, config.organization);
 
   // Phase 2 & 3: Health Check and Repair
+  const hookType = (options.hookType || 'prompt') as HookType;
   if (token) {
     token = await runHealthCheckAndRepair(
       serverURL,
@@ -368,17 +397,21 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
       token,
       config.organization,
       options.skipHooks,
-      (options.hookType || 'prompt') as HookType
+      hookType
     );
 
     if (token) {
       // Health check passed, skip to final verification
-      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Phase 4/4: Final Verification');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      logger.info('Phase 4/4: Final Verification');
+      logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization);
       printFinalVerificationResults(finalHealth);
+
+      // Update state with configuration
+      await updateStateAfterConfiguration(!options.skipHooks, hookType);
+
       return;
     }
   }
@@ -391,17 +424,20 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
       projectInfo,
       config.organization,
       options.skipHooks,
-      (options.hookType || 'prompt') as HookType
+      hookType
     );
   }
 
   // Phase 4: Final Verification
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('Phase 4/4: Final Verification');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('Phase 4/4: Final Verification');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization);
   printFinalVerificationResults(finalHealth);
+
+  // Update state with configuration
+  await updateStateAfterConfiguration(!options.skipHooks, hookType);
 
   process.exit(0);
 }

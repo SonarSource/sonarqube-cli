@@ -3,6 +3,7 @@
 import { validateToken } from './auth.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { areHooksInstalled } from './hooks.js';
+import logger from '../lib/logger.js';
 
 export interface HealthCheckResult {
   tokenValid: boolean;
@@ -27,14 +28,14 @@ export async function runHealthChecks(
   const errors: string[] = [];
 
   // Check token
-  console.log('   Validating token...');
+  logger.info('   Validating token...');
   const tokenValid = await validateToken(serverURL, token);
   if (!tokenValid) {
     errors.push('Token is invalid');
   }
 
   // Check server
-  console.log('   Checking server availability...');
+  logger.info('   Checking server availability...');
   let serverAvailable = false;
   try {
     const client = new SonarQubeClient(serverURL, token);
@@ -45,7 +46,7 @@ export async function runHealthChecks(
   }
 
   // Check project
-  console.log('   Verifying project access...');
+  logger.info('   Verifying project access...');
   let projectAccessible = false;
   try {
     const client = new SonarQubeClient(serverURL, token);
@@ -60,7 +61,7 @@ export async function runHealthChecks(
   // Check organization (if specified)
   let organizationAccessible = true; // Default to true if not specified
   if (organization) {
-    console.log('   Verifying organization access...');
+    logger.info('   Verifying organization access...');
     try {
       const client = new SonarQubeClient(serverURL, token);
       organizationAccessible = await client.checkOrganization(organization);
@@ -73,7 +74,7 @@ export async function runHealthChecks(
   }
 
   // Check quality profiles access
-  console.log('   Verifying quality profiles access...');
+  logger.info('   Verifying quality profiles access...');
   let qualityProfilesAccessible = false;
   try {
     const client = new SonarQubeClient(serverURL, token);
@@ -86,7 +87,7 @@ export async function runHealthChecks(
   }
 
   // Check hooks
-  console.log('   Checking hooks installation...');
+  logger.info('   Checking hooks installation...');
   const hooksInstalled = await areHooksInstalled(projectRoot);
   if (!hooksInstalled) {
     errors.push('Hooks not installed');
