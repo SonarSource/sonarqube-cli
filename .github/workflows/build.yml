@@ -170,7 +170,7 @@ jobs:
           version: 2025.7.12
 
       - name: Setup JFrog CLI
-        uses: jfrog/setup-jfrog-cli@v4
+        uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
         with:
           version: 2.77.0
 
