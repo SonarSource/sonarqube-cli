@@ -57,7 +57,7 @@ jobs:
         with:
           version: 2025.7.12
 
-      - uses: SonarSource/ci-github-actions/get-build-number@v1
+      - uses: SonarSource/ci-github-actions/get-build-number@148774f456203f228b7bd1bd68ed0c22254d9cd1
         id: get-build-number
 
       - name: Get project version
@@ -75,7 +75,7 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@v3
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
         with:
           secrets: |
             development/kv/data/repox url | ARTIFACTORY_URL;
@@ -84,7 +84,7 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
       - name: Cache NPM dependencies
-        uses: SonarSource/gh-action_cache@v1
+        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
         with:
           path: |
             ~/.npm
@@ -127,32 +127,12 @@ jobs:
           echo "Deploying ${{ matrix.artifact }} to Artifactory QA..."
           jf rt u "dist/${{ matrix.artifact }}" \
             "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/" \
+            --flat=true \
             --url="${ARTIFACTORY_URL}" \
             --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
             --build-name="${BUILD_NAME}" \
             --build-number="${BUILD_NUMBER}"
           echo "✅ Binary deployed to Artifactory"
-
-  publish-build-info:
-    name: Publish Build Info to Artifactory
-    runs-on: ubuntu-latest
-    needs: build-binaries
-    steps:
-      - name: Setup JFrog CLI
-        uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
-        with:
-          version: 2.77.0
-
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@v3
-        with:
-          secrets: |
-            development/kv/data/repox url | ARTIFACTORY_URL;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
-
-      - uses: SonarSource/ci-github-actions/get-build-number@v1
-        id: get-build-number
 
       - name: Publish build info
         shell: bash
@@ -168,7 +148,7 @@ jobs:
             --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
             "${BUILD_NAME}" \
             "${BUILD_NUMBER}"
-          echo "✅ Build info published to Artifactory"
+          echo "✅ Build info published"
 
   build:
     runs-on: sonar-s
@@ -185,14 +165,14 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@v3
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
         with:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
 
       - name: Cache NPM dependencies
-        uses: SonarSource/gh-action_cache@v1
+        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
         with:
           path: |
             ~/.npm
@@ -209,7 +189,7 @@ jobs:
         run: |
           npm ci
 
-      - uses: SonarSource/ci-github-actions/build-npm@v1
+      - uses: SonarSource/ci-github-actions/build-npm@148774f456203f228b7bd1bd68ed0c22254d9cd1
         with:
           sonar-platform: sqc-eu
           deploy-pull-request: true
@@ -229,14 +209,14 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@v3
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
         with:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
 
       - name: Cache NPM dependencies
-        uses: SonarSource/gh-action_cache@v1
+        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
         with:
           path: |
             ~/.npm
@@ -258,7 +238,7 @@ jobs:
   promote:
     name: Promote
     runs-on: sonar-s
-    needs: [publish-build-info, build, test-all]
+    needs: [build-binaries, build, test-all]
     if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-')
     permissions:
       id-token: write
@@ -268,7 +248,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: SonarSource/ci-github-actions/get-build-number@v1
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
+
+      - uses: SonarSource/ci-github-actions/get-build-number@148774f456203f228b7bd1bd68ed0c22254d9cd1
         id: get-build-number
 
       - name: Get project version
@@ -278,11 +262,8 @@ jobs:
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           echo "PROJECT_VERSION=${PACKAGE_VERSION}.${{ steps.get-build-number.outputs.BUILD_NUMBER }}" >> $GITHUB_OUTPUT
 
-      - uses: SonarSource/ci-github-actions/promote@v1
+      - uses: SonarSource/ci-github-actions/promote@148774f456203f228b7bd1bd68ed0c22254d9cd1
         env:
-          BUILD_NAME: ${{ github.event.repository.name }}
-          BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
           PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
-          ARTIFACTORY_DEPLOY_REPO: sonarsource-npm-public-qa
         with:
           promote-pull-request: true
