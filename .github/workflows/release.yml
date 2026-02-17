@@ -1,19 +1,31 @@
----
-name: Release
-on:
-  release:
-    types:
-      - published
+name: sonar-release
 
-env:
-  PYTHONUNBUFFERED: 1
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        description: Version
+        required: true
+      releaseId:
+        type: string
+        description: Release ID
+        required: true
+      dryRun:
+        type: boolean
+        description: Flag to enable the dry-run execution
+        default: false
+        required: false
 
 jobs:
   release:
     permissions:
       id-token: write
       contents: write
-    uses: SonarSource/gh-action_release/.github/workflows/main.yaml@1100202a84d61bb9aab08f9e623e42e9d769f010 # 6.2.4
+    uses: SonarSource/gh-action_release/.github/workflows/main.yaml@v6
     with:
+      version: ${{ inputs.version }}
+      releaseId: ${{ inputs.releaseId }}
+      dryRun: ${{ inputs.dryRun }}
       publishToBinaries: true
       slackChannel: squad-ide-private
