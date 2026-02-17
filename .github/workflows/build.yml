@@ -21,34 +21,14 @@ permissions:
   contents: read
 
 jobs:
-  build-binaries:
-    name: Build Binary - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            runner: sonar-s
-            target: bun-linux-x64
-            artifact: sonar-cli-linux
-          - os: macos
-            runner: macos-latest-xlarge
-            target: bun-darwin-arm64
-            artifact: sonar-cli-macos
-          - os: windows
-            runner: warp-custom-windows-2022-s
-            target: bun-windows-x64
-            artifact: sonar-cli-windows.exe
+  prepare:
+    name: Prepare Build
+    runs-on: sonar-s
     outputs:
-      PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
-      PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
+      PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
+      PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
     steps:
-      # TODO: need access to additional secrets to run this step
-      # - name: Setup Cloudflare WARP (macOS only)
-      #   if: matrix.os == 'macos'
-      #   uses: SonarSource/gh-action_setup-cloudflare-warp@v1
-
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
@@ -67,6 +47,39 @@ jobs:
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "PROJECT_VERSION=${PACKAGE_VERSION}.${{ steps.get-build-number.outputs.BUILD_NUMBER }}" >> $GITHUB_OUTPUT
+
+  build-binaries:
+    name: Build Binary - ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            runner: sonar-s
+            target: bun-linux-x64
+            artifact: sonar-cli-linux
+          - os: macos
+            runner: macos-latest-xlarge
+            target: bun-darwin-arm64
+            artifact: sonar-cli-macos
+          - os: windows
+            runner: warp-custom-windows-2022-s
+            target: bun-windows-x64
+            artifact: sonar-cli-windows.exe
+    steps:
+      # TODO: need access to additional secrets to run this step
+      # - name: Setup Cloudflare WARP (macOS only)
+      #   if: matrix.os == 'macos'
+      #   uses: SonarSource/gh-action_setup-cloudflare-warp@v1
+
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
 
       - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
@@ -120,8 +133,8 @@ jobs:
           ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
           ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-npm-public-qa
-          PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
-          BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
           BUILD_NAME: ${{ github.event.repository.name }}
         run: |
           echo "Deploying ${{ matrix.artifact }} to Artifactory QA..."
@@ -139,7 +152,7 @@ jobs:
         env:
           ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
           ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
-          BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
           BUILD_NAME: ${{ github.event.repository.name }}
         run: |
           echo "Publishing build info for ${BUILD_NAME} #${BUILD_NUMBER}..."
@@ -153,7 +166,7 @@ jobs:
   build:
     runs-on: sonar-s
     name: Build and Scan with SonarQube
-    needs: build-binaries
+    needs: [prepare, build-binaries]
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -197,7 +210,7 @@ jobs:
   test-all:
     name: Run All Tests
     runs-on: sonar-s
-    needs: build-binaries
+    needs: [prepare, build-binaries]
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -236,9 +249,9 @@ jobs:
         run: npm run test:all
 
   promote:
-    name: Promote
+    name: Promote Binaries
     runs-on: sonar-s
-    needs: [build-binaries, build, test-all]
+    needs: [prepare, build-binaries, build, test-all]
     if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-')
     permissions:
       id-token: write
@@ -248,22 +261,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
         with:
-          version: 2025.7.12
+          version: 2.77.0
 
-      - uses: SonarSource/ci-github-actions/get-build-number@148774f456203f228b7bd1bd68ed0c22254d9cd1
-        id: get-build-number
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-promoter access_token | ARTIFACTORY_PROMOTE_ACCESS_TOKEN;
 
-      - name: Get project version
-        id: project_version
+      - name: Promote binaries to builds repository
         shell: bash
-        run: |
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          echo "PROJECT_VERSION=${PACKAGE_VERSION}.${{ steps.get-build-number.outputs.BUILD_NUMBER }}" >> $GITHUB_OUTPUT
-
-      - uses: SonarSource/ci-github-actions/promote@148774f456203f228b7bd1bd68ed0c22254d9cd1
         env:
-          PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
-        with:
-          promote-pull-request: true
+          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
+          ARTIFACTORY_PROMOTE_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_PROMOTE_ACCESS_TOKEN }}
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          SOURCE_REPO: sonarsource-npm-public-qa
+          TARGET_REPO: sonarsource-npm-public-builds
+        run: |
+          echo "Promoting binaries from ${SOURCE_REPO} to ${TARGET_REPO}..."
+
+          # Copy each binary artifact
+          for ARTIFACT in sonar-cli-linux sonar-cli-macos sonar-cli-windows.exe; do
+            SOURCE_PATH="${SOURCE_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/${ARTIFACT}"
+            TARGET_PATH="${TARGET_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/${ARTIFACT}"
+
+            echo "Promoting ${ARTIFACT}..."
+            jf rt cp \
+              "${SOURCE_PATH}" \
+              "${TARGET_PATH}" \
+              --url="${ARTIFACTORY_URL}" \
+              --access-token="${ARTIFACTORY_PROMOTE_ACCESS_TOKEN}" \
+              --flat=true
+          done
+
+          echo "✅ All binaries promoted successfully"
