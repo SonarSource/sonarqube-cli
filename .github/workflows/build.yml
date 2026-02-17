@@ -22,30 +22,51 @@ permissions:
 
 jobs:
   build-binaries:
-    name: Build and Deploy Binaries
-    runs-on: sonar-s
+    name: Build Binary - ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            runner: sonar-s
+            target: bun-linux-x64
+            artifact: sonar-cli-linux
+          - os: macos
+            runner: macos-latest-xlarge
+            target: bun-darwin-arm64
+            artifact: sonar-cli-macos
+          - os: windows
+            runner: warp-custom-windows-2022-s
+            target: bun-windows-x64
+            artifact: sonar-cli-windows.exe
     outputs:
       PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
     steps:
+      # TODO: need access to additional secrets to run this step
+      # - name: Setup Cloudflare WARP (macOS only)
+      #   if: matrix.os == 'macos'
+      #   uses: SonarSource/gh-action_setup-cloudflare-warp@v1
+
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
 
       - uses: SonarSource/ci-github-actions/get-build-number@v1
         id: get-build-number
 
       - name: Get project version
         id: project_version
+        shell: bash
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "PROJECT_VERSION=${PACKAGE_VERSION}.${{ steps.get-build-number.outputs.BUILD_NUMBER }}" >> $GITHUB_OUTPUT
-
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: 2025.7.12
 
       - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
@@ -79,21 +100,21 @@ jobs:
           NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: npm ci
 
-      - name: Build binaries for all platforms
+      - name: Build binary for ${{ matrix.os }}
         run: |
-          echo "Building Linux binary..."
-          bun build src/index.ts --compile --outfile dist/sonar-cli-linux --target bun-linux-x64
-          
-          echo "Building macOS binary..."
-          bun build src/index.ts --compile --outfile dist/sonar-cli-macos --target bun-darwin-arm64
-          
-          echo "Building Windows binary..."
-          bun build src/index.ts --compile --outfile dist/sonar-cli-windows.exe --target bun-windows-x64
-          
-          echo "✅ All binaries built successfully"
-          ls -lh dist/
+          echo "Building ${{ matrix.os }} binary..."
+          bun build src/index.ts --compile --outfile dist/${{ matrix.artifact }} --target ${{ matrix.target }}
+          echo "✅ Binary built successfully"
 
-      - name: Deploy binaries to Artifactory QA
+      - name: List built artifacts (Unix)
+        if: matrix.os != 'windows'
+        run: ls -lh dist/
+
+      - name: List built artifacts (Windows)
+        if: matrix.os == 'windows'
+        run: dir dist\
+
+      - name: Deploy binary to Artifactory QA
         shell: bash
         env:
           ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
@@ -103,19 +124,14 @@ jobs:
           BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
           BUILD_NAME: ${{ github.event.repository.name }}
         run: |
-          echo "Deploying binaries to Artifactory QA..."
-          
-          for artifact in sonar-cli-linux sonar-cli-macos sonar-cli-windows.exe; do
-            echo "Uploading ${artifact}..."
-            jf rt u "dist/${artifact}" \
-              "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/" \
-              --url="${ARTIFACTORY_URL}" \
-              --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
-              --build-name="${BUILD_NAME}" \
-              --build-number="${BUILD_NUMBER}"
-          done
-          
-          echo "✅ All binaries deployed to Artifactory"
+          echo "Deploying ${{ matrix.artifact }} to Artifactory QA..."
+          jf rt u "dist/${{ matrix.artifact }}" \
+            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/" \
+            --url="${ARTIFACTORY_URL}" \
+            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
+            --build-name="${BUILD_NAME}" \
+            --build-number="${BUILD_NUMBER}"
+          echo "✅ Binary deployed to Artifactory"
 
   build:
     runs-on: sonar-s
