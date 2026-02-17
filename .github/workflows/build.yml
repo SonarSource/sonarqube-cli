@@ -23,7 +23,7 @@ permissions:
 jobs:
   build-binaries:
     name: Build and Deploy Binaries
-    runs-on: sonar-s-public
+    runs-on: sonar-s
     outputs:
       PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
@@ -118,7 +118,7 @@ jobs:
           echo "✅ All binaries deployed to Artifactory"
 
   build:
-    runs-on: sonar-s-public
+    runs-on: sonar-s
     name: Build and Scan with SonarQube
     needs: build-binaries
     steps:
@@ -163,7 +163,7 @@ jobs:
 
   test-all:
     name: Run All Tests
-    runs-on: sonar-s-public
+    runs-on: sonar-s
     needs: build-binaries
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -204,7 +204,7 @@ jobs:
 
   promote:
     name: Promote
-    runs-on: sonar-s-public
+    runs-on: sonar-s
     needs: [build-binaries, build, test-all]
     if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-')
     permissions:
