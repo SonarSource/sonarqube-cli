@@ -20,7 +20,7 @@
     "validate": "npm run spec:validate && npm run commands:validate",
     "spec:validate": "node scripts/validate-spec.js",
     "commands:validate": "node scripts/validate-commands.js",
-    "gen": "bash scripts/generate.sh",
+    "gen": "node scripts/generate.js",
     "gen:command": "plop command",
     "gen:docs": "plop docs",
     "gen:all": "plop all-commands",

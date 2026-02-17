@@ -12,9 +12,9 @@ import logger from '../lib/logger.js';
 import {BINARY_NAME, SONAR_SECRETS_REPO} from '../lib/install-types.js';
 
 /**
- * Main command: sonar install secret
+ * Main command: sonar secret install
  */
-export async function installSecretCommand(
+export async function secretInstallCommand(
   options: { force?: boolean }
 ): Promise<void> {
   logger.info('\n🔐 Installing sonar-secrets binary\n');
@@ -100,7 +100,7 @@ export async function installSecretCommand(
     logger.info('Next steps:');
     logger.info('  • Binary will be used automatically by Claude Code hooks');
     logger.info(`  • Manual usage: ${binaryPath} scan <file>`);
-    logger.info('  • Check status: sonar install secrets status');
+    logger.info('  • Check status: sonar secret status');
 
     process.exit(0);
 
@@ -129,7 +129,7 @@ export async function secretStatusCommand(): Promise<void> {
   if (!existsSync(binaryPath)) {
     logger.info('Status: ❌ Not installed');
     logger.info('');
-    logger.info('Install with: sonar install secrets');
+    logger.info('Install with: sonar secret install');
     process.exit(0);
   }
 
@@ -153,9 +153,10 @@ export async function secretStatusCommand(): Promise<void> {
       } else {
         logger.info('');
         logger.info(`⚠️  Update available: v${latestVersion}`);
-        logger.info('   Run: sonar install secrets');
+        logger.info('   Run: sonar secret install');
       }
-    } catch {
+    } catch (error) {
+      logger.debug(`Failed to check for updates: ${(error as Error).message}`);
       logger.warn('');
       logger.warn('Could not check for updates (network/API error)');
     }
@@ -166,7 +167,7 @@ export async function secretStatusCommand(): Promise<void> {
   logger.info('Status: ⚠️  Binary exists but not working');
   logger.info(`Path: ${binaryPath}`);
   logger.info('');
-  logger.info('Reinstall with: sonar install secrets --force');
+  logger.info('Reinstall with: sonar secret install --force');
   process.exit(1);
 }
 

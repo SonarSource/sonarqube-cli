@@ -1,17 +1,140 @@
 # sonar - CLI Documentation
 
-SonarQube CLI for Claude Code integration
+SonarQube CLI for AI coding agents
 
-**Version:** 0.0.1
-**Generated:** 2026-02-09T00:00:00.000Z
+**Version:** 0.2.97
+**Generated:** 2026-02-17T10:57:12.343Z
 
 ---
 
 ## Commands
 
+### `sonar verify`
+
+Analyze a file using SonarCloud A3S API
+
+**Options:**
+
+| Option | Type | Required | Description | Default |
+|--------|------|----------|-------------|---------|
+| `--file` | string | ✅ | File path to analyze | - |
+| `--organization` | string | ❌ | Organization key (or use saved config) | - |
+| `--project` | string | ❌ | Project key | - |
+| `--token`, `-t` | string | ❌ | Authentication token (or use saved config) | - |
+| `--branch`, `-b` | string | ❌ | Branch name | - |
+| `--save-config` | boolean | ❌ | Save configuration for future use | - |
+
+**Examples:**
+
+```bash
+sonar verify src/MyClass.java
+```
+Analyze a single Java file
+
+```bash
+sonar verify --file src/MyClass.java --organization sonarsource --project my-project -t TOKEN --save-config
+```
+Analyze a file and save config for future use
+
+```bash
+sonar verify --file src/MyClass.java
+```
+Analyze using saved configuration
+
+```bash
+sonar verify --file src/MyClass.java --branch main
+```
+Analyze file on a specific branch
+
+
+---
+
+### `sonar issues`
+
+Manage SonarQube issues
+
+
+#### Subcommands:
+
+##### `sonar issues search`
+
+Search for issues in SonarQube
+
+**Options:**
+
+| Option | Type | Required | Description | Default |
+|--------|------|----------|-------------|---------|
+| `--server`, `-s` | string | ✅ | SonarQube server URL | - |
+| `--token`, `-t` | string | ❌ | Authentication token | - |
+| `--project`, `-p` | string | ✅ | Project key | - |
+| `--severity` | string | ❌ | Filter by severity | - |
+| `--format` | string | ❌ | Output format | `json` |
+| `--branch` | string | ❌ | Branch name | - |
+| `--pull-request` | string | ❌ | Pull request ID | - |
+| `--all` | boolean | ❌ | Fetch all issues with pagination | `false` |
+| `--page-size` | number | ❌ | Page size for pagination | `500` |
+
+**Examples:**
+
+```bash
+sonar issues search -s https://sonarcloud.io -p my-project -t TOKEN
+```
+Search issues in a project
+
+```bash
+sonar issues search -s https://sonarcloud.io -p my-project --format toon
+```
+Output issues in TOON format for AI agents
+
+```bash
+sonar issues search -s https://sonarcloud.io -p my-project --severity CRITICAL --all
+```
+Fetch all critical issues
+
+
+---
+
+### `sonar onboard-agent`
+
+Setup SonarQube integration for AI coding agent
+
+**Options:**
+
+| Option | Type | Required | Description | Default |
+|--------|------|----------|-------------|---------|
+| `--server`, `-s` | string | ❌ | SonarQube server URL | - |
+| `--project`, `-p` | string | ❌ | Project key | - |
+| `--token`, `-t` | string | ❌ | Existing authentication token | - |
+| `--org`, `-o` | string | ❌ | Organization key (for SonarCloud) | - |
+| `--non-interactive` | boolean | ❌ | Non-interactive mode (no prompts) | - |
+| `--skip-hooks` | boolean | ❌ | Skip hooks installation | - |
+| `--hook-type` | string | ❌ | Hook type to install | `prompt` |
+| `--verbose`, `-v` | boolean | ❌ | Verbose output | - |
+
+**Examples:**
+
+```bash
+sonar onboard-agent claude -s https://sonarcloud.io -p my-project
+```
+Onboard Claude Code with interactive setup
+
+```bash
+sonar onboard-agent gemini -s https://sonarcloud.io -p my-project -t TOKEN --non-interactive
+```
+Non-interactive onboarding for Gemini (not yet supported)
+
+```bash
+sonar onboard-agent claude --skip-hooks -v
+```
+Onboard without installing hooks (verbose mode)
+
+
+---
+
 ### `sonar auth`
 
 Manage authentication tokens and credentials
+
 
 #### Subcommands:
 
@@ -54,8 +177,6 @@ sonar auth login -s https://my-sonarqube.io --with-token squ_def456
 ```
 Non-interactive login for custom server with token
 
----
-
 ##### `sonar auth logout`
 
 Remove authentication token from keychain
@@ -79,8 +200,6 @@ sonar auth logout -s https://my-sonarqube.io
 ```
 Remove token for custom SonarQube server
 
----
-
 ##### `sonar auth purge`
 
 Remove all authentication tokens from keychain
@@ -92,107 +211,102 @@ sonar auth purge
 ```
 Interactively remove all saved tokens
 
+##### `sonar auth list`
+
+List saved authentication connections with token verification
+
+**Examples:**
+
+```bash
+sonar auth list
+```
+Show all saved authentication connections
+
+
 ---
 
-### `sonar issues`
+### `sonar pre-commit`
 
-Manage SonarQube issues
+Manage pre-commit hooks for secrets detection
+
 
 #### Subcommands:
 
-##### `sonar issues search`
+##### `sonar pre-commit install`
 
-Search for issues in SonarQube
+Install Sonar secrets pre-commit hook
+
+**Examples:**
+
+```bash
+sonar pre-commit install
+```
+Install pre-commit and configure SonarSource secrets hook
+
+##### `sonar pre-commit uninstall`
+
+Uninstall Sonar secrets pre-commit hook
+
+**Examples:**
+
+```bash
+sonar pre-commit uninstall
+```
+Remove pre-commit hook and configuration file
+
+
+---
+
+### `sonar secret`
+
+Manage sonar-secrets binary
+
+
+#### Subcommands:
+
+##### `sonar secret install`
+
+Install sonar-secrets binary from GitHub releases
 
 **Options:**
 
 | Option | Type | Required | Description | Default |
 |--------|------|----------|-------------|---------|
-| `--server`, `-s` | string | ✅ | SonarQube server URL | - |
-| `--token`, `-t` | string | ❌ | Authentication token | - |
-| `--project`, `-p` | string | ✅ | Project key | - |
-| `--severity` | string | ❌ | Filter by severity (INFO, MINOR, MAJOR, CRITICAL, BLOCKER) | - |
-| `--format` | string | ❌ | Output format (json, toon, table, csv) | `json` |
-| `--branch` | string | ❌ | Branch name | - |
-| `--pull-request` | string | ❌ | Pull request ID | - |
-| `--all` | boolean | ❌ | Fetch all issues with pagination | - |
-| `--page-size` | number | ❌ | Page size for pagination | `500` |
+| `--force` | boolean | ❌ | Force reinstall even if already installed | - |
 
 **Examples:**
 
 ```bash
-sonar issues search -s https://sonarcloud.io -p my-project -t TOKEN
+sonar secret install
 ```
-Search issues in a project
+Install latest sonar-secrets binary
 
 ```bash
-sonar issues search -s https://sonarcloud.io -p my-project --format toon
+sonar secret install --force
 ```
-Output issues in TOON format for AI agents
+Reinstall sonar-secrets (overwrite existing)
 
-```bash
-sonar issues search -s https://sonarcloud.io -p my-project --severity CRITICAL --all
-```
-Fetch all critical issues
+##### `sonar secret status`
 
----
-
-### `sonar onboard-agent`
-
-Setup SonarQube integration for Claude Code
-
-**Arguments:**
-
-| Argument | Type | Required | Description |
-|----------|------|----------|-------------|
-| `agent` | string | ✅ | Agent name (only 'claude' is currently supported) |
-
-**Options:**
-
-| Option | Type | Required | Description | Default |
-|--------|------|----------|-------------|---------|
-| `--server`, `-s` | string | ❌ | SonarQube server URL | - |
-| `--project`, `-p` | string | ❌ | Project key | - |
-| `--token`, `-t` | string | ❌ | Existing authentication token | - |
-| `--org`, `-o` | string | ❌ | Organization key (for SonarCloud) | - |
-| `--non-interactive` | boolean | ❌ | Non-interactive mode (no prompts) | - |
-| `--skip-hooks` | boolean | ❌ | Skip hooks installation | - |
-| `--hook-type` | string | ❌ | Hook type to install (prompt, cli) | `prompt` |
-| `--verbose`, `-v` | boolean | ❌ | Verbose output | - |
+Check sonar-secrets installation status
 
 **Examples:**
 
 ```bash
-sonar onboard-agent claude -s https://sonarcloud.io -p my-project
+sonar secret status
 ```
-Setup Claude Code integration with interactive prompts
+Check if sonar-secrets is installed and up to date
 
-```bash
-sonar onboard-agent claude -s https://sonarcloud.io -p my-project -t TOKEN --non-interactive
-```
-Non-interactive setup for Claude Code with token
-
-```bash
-sonar onboard-agent claude --skip-hooks -v
-```
-Setup without installing hooks (verbose mode)
 
 ---
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `-V, --version` | Output version number |
-| `-h, --help` | Display help for command |
-
----
 
 ## Option Types
 
 - `string` - Text value (e.g., `--server https://sonarcloud.io`)
 - `boolean` - Flag (e.g., `--verbose`)
 - `number` - Numeric value (e.g., `--page-size 100`)
+- `array` - Multiple values (e.g., `--tags tag1 tag2`)
 
 ## Exit Codes
 
@@ -203,12 +317,4 @@ Setup without installing hooks (verbose mode)
 
 ---
 
-## Supported Agents
-
-Currently, only **Claude Code** is supported for integration setup.
-
-Future support: Gemini, Codex (coming soon)
-
----
-
-*Documentation reflects CLI specification. For source code, see cli-spec.yaml*
+*This documentation was auto-generated from `cli-spec.yaml`*
