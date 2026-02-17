@@ -157,6 +157,34 @@ This command will:
 1. Run `pre-commit uninstall` to remove the git hooks
 2. Delete the `.pre-commit-config.yaml` configuration file
 
+### Managing sonar-secrets Binary
+
+Install the standalone `sonar-secrets` binary from GitHub releases:
+
+```bash
+sonar secret install
+```
+
+The binary will be downloaded and installed to `~/.sonar-cli/bin/`.
+
+**Check installation status:**
+
+```bash
+sonar secret status
+```
+
+**Force reinstall:**
+
+```bash
+sonar secret install --force
+```
+
+The binary will be automatically used by Claude Code hooks when configured. For manual usage:
+
+```bash
+~/.sonar-cli/bin/sonar-secrets scan <file>
+```
+
 ### Issues Management
 
 **Search for issues:**

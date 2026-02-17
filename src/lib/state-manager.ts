@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
+import logger from './logger.js';
 import { CliState, getDefaultState, AuthConnection, CloudRegion } from './state.js';
 
 const STATE_DIR = path.join(os.homedir(), '.sonar-cli');
@@ -34,7 +35,7 @@ export function loadState(cliVersion: string): CliState {
     const content = fs.readFileSync(STATE_FILE, 'utf-8');
     return JSON.parse(content) as CliState;
   } catch (error) {
-    // Silently fall back to defaults on load error
+    logger.debug(`Failed to load state from ${STATE_FILE}: ${(error as Error).message}`);
     return getDefaultState(cliVersion);
   }
 }

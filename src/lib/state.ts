@@ -123,6 +123,30 @@ export interface CliConfig {
 }
 
 /**
+ * Installed tool metadata
+ */
+export interface InstalledTool {
+  /** Tool name identifier */
+  name: string;
+  /** Tool version */
+  version: string;
+  /** Installation path */
+  path: string;
+  /** Timestamp when installed */
+  installedAt: string;
+  /** CLI version that performed installation */
+  installedByCliVersion: string;
+}
+
+/**
+ * Tools installation state
+ */
+export interface ToolsState {
+  /** List of installed tools */
+  installed: InstalledTool[];
+}
+
+/**
  * Complete state structure for ~/.sonar-cli/state.json
  */
 export interface CliState {
@@ -136,6 +160,8 @@ export interface CliState {
   agents: AgentsState;
   /** CLI configuration */
   config: CliConfig;
+  /** Installed tools */
+  tools?: ToolsState;
 }
 
 /**
@@ -165,6 +191,9 @@ export function getDefaultState(cliVersion: string): CliState {
     },
     config: {
       cliVersion,
+    },
+    tools: {
+      installed: [],
     },
   };
 }

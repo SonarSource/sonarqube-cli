@@ -11,6 +11,7 @@ import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
 import { authLoginCommand, authLogoutCommand, authPurgeCommand, authListCommand } from './commands/auth.js';
 import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
+import { installSecretCommand, secretStatusCommand } from './commands/install-secret.js';
 
 const program = new Command();
 
@@ -205,6 +206,37 @@ preCommit
     } catch (error) {
       logger.error('Error:', (error as Error).message);
       logger.info('');
+      cmd.help();
+    }
+  });
+
+// Manage sonar-secrets binary
+const secret = program
+  .command('secret')
+  .description('Manage sonar-secrets binary');
+
+secret
+  .command('install')
+  .description('Install sonar-secrets binary from GitHub releases')
+  .option('--force', 'Force reinstall even if already installed')
+  .action(async (options, cmd) => {
+    try {
+      await installSecretCommand(options);
+    } catch (error) {
+      logger.error('Error:', (error as Error).message);
+      logger.info('');
+      cmd.help();
+    }
+  });
+
+secret
+  .command('status')
+  .description('Check sonar-secrets installation status')
+  .action(async (options, cmd) => {
+    try {
+      await secretStatusCommand();
+    } catch (error) {
+      logger.error('Error:', (error as Error).message);
       cmd.help();
     }
   });

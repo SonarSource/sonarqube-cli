@@ -1,6 +1,6 @@
 // Auth module - OAuth flow and token management
 
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer } from 'node:http';
 import { VERSION } from '../version.js';
 import { getToken as getKeystoreToken, saveToken as saveKeystoreToken, deleteToken as deleteKeystoreToken } from '../lib/keychain.js';
 import { openBrowser } from '../lib/browser.js';
@@ -10,7 +10,6 @@ import logger from '../lib/logger.js';
 const MIN_PORT = 64130;
 const MAX_PORT = 64140;
 const HTTP_STATUS_OK = 200;
-const HTTP_STATUS_BAD_REQUEST = 400;
 const PORT_TIMEOUT_MS = 50000;
 /**
  * Get token from keychain
@@ -108,7 +107,9 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
     }
   } finally {
     // Always shutdown and ensure all resources are cleaned up
-    await shutdown();
+    void shutdown().catch(error => {
+      logger.debug(`Error during shutdown: ${(error as Error).message}`);
+    });
   }
 
   return token;
@@ -120,7 +121,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
 async function startEmbeddedServer(): Promise<{
   port: number;
   tokenPromise: Promise<string>;
-  shutdown: () => void;
+  shutdown: () => Promise<void>;
 }> {
   logger.debug('Creating token promise...');
 
@@ -156,7 +157,6 @@ async function startEmbeddedServer(): Promise<{
       }
     } catch (error) {
       logger.debug(`Port ${p} error: ${error}`);
-      continue;
     }
   }
 
@@ -178,7 +178,7 @@ async function startEmbeddedServer(): Promise<{
     });
 
     socket.on('error', (error) => {
-      logger.debug(`Socket error: ${(error as Error).message}`);
+      logger.debug(`Socket error: ${(error).message}`);
     });
 
     socket.on('end', () => {
@@ -224,8 +224,8 @@ async function startEmbeddedServer(): Promise<{
           resolveToken(token);
           return;
         }
-      } catch {
-        logger.debug('Failed to parse GET URL');
+      } catch (error) {
+        logger.debug(`Failed to parse GET URL: ${(error as Error).message}`);
       }
       // No token in GET, return success anyway (might be just browser check)
       res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
@@ -259,77 +259,6 @@ async function startEmbeddedServer(): Promise<{
   };
 
   return { port, tokenPromise, shutdown };
-}
-
-/**
- * Handle POST /sonarlint/api/token
- */
-function handleTokenPOST(
-  req: IncomingMessage,
-  res: ServerResponse,
-  resolveToken: (token: string) => void
-): void {
-  let body = '';
-
-  req.on('data', chunk => {
-    body += chunk.toString();
-  });
-
-  req.on('end', () => {
-
-    try {
-      const data = JSON.parse(body) as Record<string, unknown>;
-      const token = data.token;
-
-      if (!token || typeof token !== 'string') {
-        logger.debug('Token missing or invalid in JSON');
-        res.writeHead(HTTP_STATUS_BAD_REQUEST);
-        res.end('Invalid token');
-        return;
-      }
-
-      logger.debug(`Token extracted from JSON (length: ${token.length})`);
-
-      // Send success page
-      res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-      res.end(getSuccessHTML());
-
-      // Resolve with token
-      resolveToken(token);
-    } catch (error) {
-      logger.debug(`Failed to parse JSON: ${error}`);
-      res.writeHead(HTTP_STATUS_BAD_REQUEST);
-      res.end('Invalid JSON');
-    }
-  });
-}
-
-/**
- * Handle GET /?token= (legacy fallback)
- */
-function handleTokenGET(
-  req: IncomingMessage,
-  res: ServerResponse,
-  resolveToken: (token: string) => void
-): void {
-  const url = new URL(`http://${req.headers.host}${req.url}`);
-  const token = url.searchParams.get('token');
-
-  if (!token) {
-    logger.debug('Token missing in query parameter');
-    res.writeHead(HTTP_STATUS_BAD_REQUEST);
-    res.end('Token missing');
-    return;
-  }
-
-  logger.debug(`Token extracted from query (length: ${token.length})`);
-
-  // Send success page
-  res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-  res.end(getSuccessHTML());
-
-  // Resolve with token
-  resolveToken(token);
 }
 
 /**

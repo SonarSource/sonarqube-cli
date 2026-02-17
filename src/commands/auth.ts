@@ -119,30 +119,6 @@ async function validateOrSelectOrganization(
 }
 
 /**
- * Select organization interactively
- */
-async function selectOrganizationInteractive(
-  organizations: Array<{ key: string; name: string }>
-): Promise<string> {
-  logger.info('\nYour organizations:');
-  organizations.forEach((o, i) => {
-    logger.info(`  ${i + 1}) ${o.key} (${o.name})`);
-  });
-  logger.info('');
-
-  const choice = await getUserInput('Select organization (number): ');
-  const index = Number.parseInt(choice, 10) - 1;
-
-  if (index < 0 || index >= organizations.length) {
-    throw new Error('Invalid organization selection');
-  }
-
-  const org = organizations[index].key;
-  logger.info(`✓ Selected organization: ${org}`);
-  return org;
-}
-
-/**
  * Login command - authenticate and save token with organization
  */
 export async function authLoginCommand(options: {
@@ -188,6 +164,7 @@ export async function authLoginCommand(options: {
     logger.success(`✅ Authentication successful for: ${displayServer}`);
     process.exit(0);
   } catch (error) {
+    logger.debug(`Authentication error: ${(error as Error).message}`);
     throw error;
   }
 }
@@ -199,14 +176,14 @@ export async function authLogoutCommand(options: {
   server?: string;
   org?: string;
 }): Promise<void> {
+  const server = options.server || SONARCLOUD_URL;
+  const org = options.org;
+
+  if (isSonarCloud(server) && !org) {
+    throw new Error('Organization key is required for SonarCloud logout');
+  }
+
   try {
-    const server = options.server || SONARCLOUD_URL;
-    const org = options.org;
-
-    if (isSonarCloud(server) && !org) {
-      throw new Error('Organization key is required for SonarCloud logout');
-    }
-
     const token = await getKeystoreToken(server, org);
     if (!token) {
       const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
@@ -234,6 +211,7 @@ export async function authLogoutCommand(options: {
     const displayServerLogout = isSonarCloud(server) ? `${server} (${org})` : server;
     logger.info(`✓ Logged out from: ${displayServerLogout}`);
   } catch (error) {
+    logger.debug(`Logout error: ${(error as Error).message}`);
     throw error;
   }
 }
@@ -273,6 +251,7 @@ export async function authPurgeCommand(): Promise<void> {
 
     logger.success('✓ All tokens have been removed from keychain');
   } catch (error) {
+    logger.debug(`Purge error: ${(error as Error).message}`);
     throw error;
   }
 }
@@ -319,6 +298,7 @@ export async function authListCommand(): Promise<void> {
       logger.info('Run "sonar auth login" to add missing tokens');
     }
   } catch (error) {
+    logger.debug(`List error: ${(error as Error).message}`);
     throw error;
   }
 }

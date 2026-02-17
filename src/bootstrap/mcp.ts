@@ -3,6 +3,7 @@
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir, platform } from 'node:os';
+import logger from '../lib/logger.js';
 
 interface MCPServer {
   type: string;
@@ -279,7 +280,7 @@ export async function cleanupProjectMCPConfig(projectRoot: string): Promise<void
       // Save updated settings (removing mcpServers but keeping hooks and permissions)
       await saveProjectSettings(projectRoot, settings);
     }
-  } catch {
-    // Silently ignore if settings file doesn't exist
+  } catch (error) {
+    logger.debug(`Failed to save MCP project settings: ${(error as Error).message}`);
   }
 }

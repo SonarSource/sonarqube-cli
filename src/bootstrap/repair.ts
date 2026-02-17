@@ -25,8 +25,8 @@ export async function runRepair(
     // Delete old token
     try {
       await deleteToken(serverURL, organization);
-    } catch {
-      // Ignore errors
+    } catch (error) {
+      logger.debug(`Failed to delete token during repair: ${(error as Error).message}`);
     }
 
     // Generate new token

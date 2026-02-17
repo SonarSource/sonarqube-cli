@@ -86,7 +86,7 @@ async function getCredentialFromSavedState(): Promise<
     const state = loadState(VERSION);
     const activeConnection = getActiveConnection(state);
 
-    if (!activeConnection || activeConnection.type !== 'cloud' || !activeConnection.orgKey) {
+    if (activeConnection?.type !== 'cloud' || !activeConnection?.orgKey) {
       return undefined;
     }
 

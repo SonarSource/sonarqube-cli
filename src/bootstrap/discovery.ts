@@ -102,8 +102,8 @@ async function getGitRemote(gitRoot: string): Promise<string> {
     if (result.exitCode === 0) {
       return result.stdout.trim();
     }
-  } catch {
-    // Ignore errors
+  } catch (error) {
+    logger.debug(`Failed to detect SonarLint installation: ${(error as Error).message}`);
   }
   return '';
 }

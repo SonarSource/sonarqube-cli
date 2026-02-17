@@ -3,7 +3,7 @@
 
 cli:
   name: sonar
-  version: 0.0.1
+  version: 0.2.97
   description: SonarQube CLI for AI coding agents
 
 commands:
@@ -34,6 +34,11 @@ commands:
         alias: b
         type: string
         description: Branch name
+
+      - name: save-config
+        type: boolean
+        description: Save configuration for future use
+        default: false
 
     examples:
       - command: sonar verify src/MyClass.java
@@ -278,4 +283,31 @@ commands:
         examples:
           - command: sonar pre-commit uninstall
             description: Remove pre-commit hook and configuration file
+
+  # Manage sonar-secrets binary
+  - name: secret
+    description: Manage sonar-secrets binary
+    subcommands:
+      - name: install
+        description: Install sonar-secrets binary from GitHub releases
+        handler: ./src/commands/install-secret.ts
+        options:
+          - name: force
+            type: boolean
+            description: Force reinstall even if already installed
+            default: false
+
+        examples:
+          - command: sonar secret install
+            description: Install latest sonar-secrets binary
+
+          - command: sonar secret install --force
+            description: Reinstall sonar-secrets (overwrite existing)
+
+      - name: status
+        description: Check sonar-secrets installation status
+        handler: ./src/commands/install-secret.ts
+        examples:
+          - command: sonar secret status
+            description: Check if sonar-secrets is installed and up to date
 
