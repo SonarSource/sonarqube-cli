@@ -2,7 +2,6 @@
   "name": "sonar-cli",
   "version": "0.0.1",
   "description": "SonarQube CLI for AI coding agents",
-  "type": "module",
   "bin": {
     "sonar": "./dist/index.js"
   },
