@@ -23,7 +23,7 @@ permissions:
 jobs:
   prepare:
     name: Prepare Build
-    runs-on: sonar-s
+    runs-on: sonar-xs
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
@@ -56,7 +56,7 @@ jobs:
       matrix:
         include:
           - os: linux
-            runner: sonar-s
+            runner: sonar-m
             target: bun-linux-x64
             artifact: sonarqube-cli-linux
           - os: macos
@@ -194,7 +194,7 @@ jobs:
 
   publish-binaries:
     name: Publish Binaries to Artifactory
-    runs-on: sonar-s
+    runs-on: sonar-m
     needs:
       - prepare
       - build-binaries
