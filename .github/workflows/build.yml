@@ -147,22 +147,6 @@ jobs:
             --build-number="${BUILD_NUMBER}"
           echo "✅ Binary deployed to Artifactory"
 
-      - name: Publish build info
-        shell: bash
-        env:
-          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
-          ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
-          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          BUILD_NAME: ${{ github.event.repository.name }}
-        run: |
-          echo "Publishing build info for ${BUILD_NAME} #${BUILD_NUMBER}..."
-          jf rt build-publish \
-            --url="${ARTIFACTORY_URL}" \
-            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
-            "${BUILD_NAME}" \
-            "${BUILD_NUMBER}"
-          echo "✅ Build info published"
-
   test-and-scan:
     name: Run Tests and Scan with SonarQube
     runs-on: sonar-s
@@ -181,8 +165,10 @@ jobs:
         uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
         with:
           secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
       - name: Cache NPM dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
@@ -209,6 +195,25 @@ jobs:
       - name: Run all tests
         run: npm run test:all
 
+      - name: Publish build info
+        shell: bash
+        env:
+          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
+          ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
+          ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
+          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
+          BUILD_NAME: ${{ github.event.repository.name }}
+        run: |
+          echo "Publishing build info for ${BUILD_NAME} #${BUILD_NUMBER}..."
+          jf rt build-publish \
+            --collect-env \
+            --env-exclude "*password*;*secret*;*key*;*token*;*auth*" \
+            --url="${ARTIFACTORY_URL}" \
+            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
+            "${BUILD_NAME}" \
+            "${BUILD_NUMBER}"
+          echo "✅ Build info published"
+
   promote:
     runs-on: sonar-s
     name: Promote
@@ -216,13 +221,11 @@ jobs:
       - prepare
       - build-binaries
       - test-and-scan
-    env:
-      PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-      ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
       - uses: SonarSource/ci-github-actions/promote@v1
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
         with:
             promote-pull-request: true
