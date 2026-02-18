@@ -132,14 +132,14 @@ jobs:
         env:
           ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
           ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
-          ARTIFACTORY_DEPLOY_REPO: sonarsource-npm-public-qa
+          ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
           BUILD_NAME: ${{ github.event.repository.name }}
         run: |
           echo "Deploying ${{ matrix.artifact }} to Artifactory QA..."
           jf rt u "dist/${{ matrix.artifact }}" \
-            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/" \
+            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonar-cli/${PROJECT_VERSION}/" \
             --flat=true \
             --url="${ARTIFACTORY_URL}" \
             --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
@@ -163,52 +163,8 @@ jobs:
             "${BUILD_NUMBER}"
           echo "✅ Build info published"
 
-  build:
-    runs-on: sonar-s
-    name: Build and Scan with SonarQube
-    needs: [prepare, build-binaries]
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          fetch-depth: 0
-
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: 2025.7.12
-
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
-        with:
-          secrets: |
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-
-      - name: Cache NPM dependencies
-        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
-        with:
-          path: |
-            ~/.npm
-            node_modules/
-          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: npm-${{ runner.os }}
-
-      - name: Prepare build
-        env:
-          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-          NPM_CONFIG_registry: https://repox.jfrog.io/artifactory/api/npm/npm
-          NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: |
-          npm ci
-
-      - uses: SonarSource/ci-github-actions/build-npm@148774f456203f228b7bd1bd68ed0c22254d9cd1
-        with:
-          sonar-platform: sqc-eu
-          deploy-pull-request: true
-
-  test-all:
-    name: Run All Tests
+  test-and-scan:
+    name: Run Tests and Scan with SonarQube
     runs-on: sonar-s
     needs: [prepare, build-binaries]
     steps:
@@ -245,58 +201,25 @@ jobs:
           NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: npm ci
 
+      - uses: SonarSource/ci-github-actions/build-npm@148774f456203f228b7bd1bd68ed0c22254d9cd1
+        with:
+          sonar-platform: sqc-eu
+          deploy-pull-request: true
+
       - name: Run all tests
         run: npm run test:all
 
   promote:
-    name: Promote Binaries
-    runs-on: sonar-s
-    needs: [prepare, build-binaries, build, test-all]
-    if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-')
-    permissions:
-      id-token: write
-      contents: read
+    runs-on: github-ubuntu-latest-s
+    name: Promote
+    needs:
+      - prepare
+      - build-binaries
+      - test-and-scan
+    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          fetch-depth: 0
-
-      - name: Setup JFrog CLI
-        uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
-        with:
-          version: 2.77.0
-
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
-        with:
-          secrets: |
-            development/kv/data/repox url | ARTIFACTORY_URL;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-promoter access_token | ARTIFACTORY_PROMOTE_ACCESS_TOKEN;
-
-      - name: Promote binaries to builds repository
-        shell: bash
+      - uses: SonarSource/ci-github-actions/promote@v1
         env:
-          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
-          ARTIFACTORY_PROMOTE_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_PROMOTE_ACCESS_TOKEN }}
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-          SOURCE_REPO: sonarsource-npm-public-qa
-          TARGET_REPO: sonarsource-npm-public-builds
-        run: |
-          echo "Promoting binaries from ${SOURCE_REPO} to ${TARGET_REPO}..."
-
-          # Copy each binary artifact
-          for ARTIFACT in sonar-cli-linux sonar-cli-macos sonar-cli-windows.exe; do
-            SOURCE_PATH="${SOURCE_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/${ARTIFACT}"
-            TARGET_PATH="${TARGET_REPO}/org/sonarsource/sonarlint/sonar-cli/${PROJECT_VERSION}/${ARTIFACT}"
-
-            echo "Promoting ${ARTIFACT}..."
-            jf rt cp \
-              "${SOURCE_PATH}" \
-              "${TARGET_PATH}" \
-              --url="${ARTIFACTORY_URL}" \
-              --access-token="${ARTIFACTORY_PROMOTE_ACCESS_TOKEN}" \
-              --flat=true
-          done
-
-          echo "✅ All binaries promoted successfully"
+        with:
+            promote-pull-request: true
