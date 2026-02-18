@@ -135,7 +135,7 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          BUILD_NAME: ${{ github.event.repository.name }}
+          BUILD_NAME: sonar-cli
         run: |
           echo "Deploying ${{ matrix.artifact }} to Artifactory QA..."
           jf rt u "dist/${{ matrix.artifact }}" \
@@ -201,17 +201,25 @@ jobs:
           ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
           ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          BUILD_NAME: ${{ github.event.repository.name }}
+          BUILD_NAME: sonar-cli
+          BUILD_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GIT_SHA: ${{ github.sha }}
+          GIT_URL: https://github.com/${{ github.repository }}.git
+          GITHUB_BRANCH: ${{ github.ref_name }}
         run: |
           echo "Publishing build info for ${BUILD_NAME} #${BUILD_NUMBER}..."
-          jf rt build-publish \
-            --collect-env \
-            --env-exclude "*password*;*secret*;*key*;*token*;*auth*" \
-            --url="${ARTIFACTORY_URL}" \
-            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
-            "${BUILD_NAME}" \
-            "${BUILD_NUMBER}"
+          export BUILD_STARTED=$(date -u +'%Y-%m-%dT%H:%M:%S.000+0000')
+          BUILD_INFO=$(envsubst < .github/build-info.json.template)
+          echo "Build info payload:"
+          echo "${BUILD_INFO}" | jq '.'
+          curl --fail --silent --show-error \
+            --request PUT \
+            --header "Content-Type: application/json" \
+            --header "Authorization: Bearer ${ARTIFACTORY_DEPLOY_PASSWORD}" \
+            --data "${BUILD_INFO}" \
+            "${ARTIFACTORY_URL}/api/build"
           echo "✅ Build info published"
 
   promote:
