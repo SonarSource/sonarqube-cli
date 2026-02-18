@@ -45,7 +45,7 @@
     "ajv": "^8.18.0",
     "js-yaml": "^4.1.1",
     "plop": "^4.0.5",
-    "sonar-scanner": "^3.1.0",
+    "@sonar/scan": "^4.3.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   },

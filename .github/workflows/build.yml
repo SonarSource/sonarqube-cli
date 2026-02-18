@@ -179,16 +179,12 @@ jobs:
 
       - name: Analyze on SonarQubeCloud
         env:
-          SONAR_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
+          SONAR_HOST_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
           SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_TOKEN }}
-          SONAR_PROJECT_KEY: "SonarSource_sonarqube-cli"
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_BRANCH: ${{ github.ref_name }}
-          GITHUB_BASE_BRANCH: ${{ github.base_ref }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          CURRENT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PULL_REQUEST: ${{ github.event.pull_request.number || 'false' }}
         run: |
           .github/scripts/sonarqube-analysis.sh
 
@@ -198,7 +194,6 @@ jobs:
     needs:
       - prepare
       - build-binaries
-      # - test-and-scan
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
       - name: Vault Secrets
@@ -255,7 +250,7 @@ jobs:
     needs:
       - prepare
       - build-binaries
-      # - test-and-scan
+      - test-and-scan
       - publish-binaries
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:

@@ -60,7 +60,7 @@ echo ""
 # Step 3: Install binary to user directory (no sudo needed)
 BINARY_PATH="dist/$BINARY_NAME"
 
-if [ ! -f "$BINARY_PATH" ]; then
+if [[ ! -f "$BINARY_PATH" ]]; then
     echo "❌ Binary not found at $BINARY_PATH"
     exit 1
 fi
@@ -72,7 +72,7 @@ mkdir -p "$INSTALL_DIR"
 chmod +x "$BINARY_PATH"
 
 # Check if already installed
-if [ -f "$INSTALL_DIR/$INSTALL_NAME" ] || [ -L "$INSTALL_DIR/$INSTALL_NAME" ]; then
+if [[ -f "$INSTALL_DIR/$INSTALL_NAME" ]] || [[ -L "$INSTALL_DIR/$INSTALL_NAME" ]]; then
     echo "⚠️  $INSTALL_NAME is already installed at $INSTALL_DIR/$INSTALL_NAME"
     read -p "   Overwrite? (y/N): " -n 1 -r
     echo
@@ -122,15 +122,14 @@ esac
 
 # Check if PATH already configured
 PATH_CONFIGURED=false
-if [ -n "$SHELL_CONFIG" ] && [ -f "$SHELL_CONFIG" ]; then
-    if grep -q ".sonarqube-cli/bin" "$SHELL_CONFIG" 2>/dev/null; then
-        PATH_CONFIGURED=true
-        echo "✅ Shell already configured ($SHELL_CONFIG)"
-    fi
+if [[ -n "$SHELL_CONFIG" ]] && [[ -f "$SHELL_CONFIG" ]] \
+    && grep -q ".sonarqube-cli/bin" "$SHELL_CONFIG" 2>/dev/null; then
+    PATH_CONFIGURED=true
+    echo "✅ Shell already configured ($SHELL_CONFIG)"
 fi
 
 # Add to PATH if not already configured
-if [ "$PATH_CONFIGURED" = false ] && [ -n "$SHELL_CONFIG" ]; then
+if [[ "$PATH_CONFIGURED" = false ]] && [[ -n "$SHELL_CONFIG" ]]; then
     echo "" >> "$SHELL_CONFIG"
     echo "# Sonar CLI" >> "$SHELL_CONFIG"
     echo "$PATH_EXPORT" >> "$SHELL_CONFIG"
@@ -139,7 +138,7 @@ if [ "$PATH_CONFIGURED" = false ] && [ -n "$SHELL_CONFIG" ]; then
     echo "📝 To use immediately, run:"
     echo "   source $SHELL_CONFIG"
     echo "   OR restart your terminal"
-elif [ -z "$SHELL_CONFIG" ]; then
+elif [[ -z "$SHELL_CONFIG" ]]; then
     echo ""
     echo "📝 Manual PATH setup required:"
     echo "   Add this line to your shell config:"
