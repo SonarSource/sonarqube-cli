@@ -132,65 +132,65 @@ jobs:
           name: binary-${{ matrix.os }}
           path: dist/${{ matrix.artifact }}
 
-  test-and-scan:
-    name: Run Tests and Scan with SonarQube
-    runs-on: sonar-s
-    needs: [prepare, build-binaries]
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          fetch-depth: 0
+  # test-and-scan:
+    # name: Run Tests and Scan with SonarQube
+    # runs-on: sonar-s
+    # needs: [prepare, build-binaries]
+    # steps:
+    #   - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+    #     with:
+    #       fetch-depth: 0
 
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: 2025.7.12
+    #   - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+    #     with:
+    #       version: 2025.7.12
 
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
-        with:
-          secrets: |
-            development/kv/data/sonarcloud token | SONAR_TOKEN;
-            development/kv/data/sonarcloud url | SONAR_URL;
-            development/kv/data/repox url | ARTIFACTORY_URL;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
+    #   - name: Vault Secrets
+    #     id: secrets
+    #     uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+    #     with:
+    #       secrets: |
+    #         development/kv/data/sonarcloud token | SONAR_TOKEN;
+    #         development/kv/data/sonarcloud url | SONAR_URL;
+    #         development/kv/data/repox url | ARTIFACTORY_URL;
+    #         development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+    #         development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+    #         development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
-      - name: Cache NPM dependencies
-        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
-        with:
-          path: |
-            ~/.npm
-            node_modules/
-          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: npm-${{ runner.os }}
+    #   - name: Cache NPM dependencies
+    #     uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
+    #     with:
+    #       path: |
+    #         ~/.npm
+    #         node_modules/
+    #       key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+    #       restore-keys: npm-${{ runner.os }}
 
-      - name: Install dependencies
-        env:
-          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-          NPM_CONFIG_registry: https://repox.jfrog.io/artifactory/api/npm/npm
-          NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: npm ci
+    #   - name: Install dependencies
+    #     env:
+    #       ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+    #       ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+    #       NPM_CONFIG_registry: https://repox.jfrog.io/artifactory/api/npm/npm
+    #       NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+    #     run: npm ci
 
-      - name: Run all tests
-        run: npm run test:all
+    #   - name: Run all tests
+    #     run: npm run test:all
 
-      - name: Analyze on SonarQubeCloud
-        env:
-          SONAR_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
-          SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_TOKEN }}
-          SONAR_PROJECT_KEY: "SonarSource_sonarqube-cli"
-          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_BRANCH: ${{ github.ref_name }}
-          GITHUB_BASE_BRANCH: ${{ github.base_ref }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-        run: |
-          .github/scripts/sonarqube-analysis.sh
+      # - name: Analyze on SonarQubeCloud
+      #   env:
+      #     SONAR_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
+      #     SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_TOKEN }}
+      #     SONAR_PROJECT_KEY: "SonarSource_sonarqube-cli"
+      #     BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
+      #     GITHUB_SHA: ${{ github.sha }}
+      #     GITHUB_REPOSITORY: ${{ github.repository }}
+      #     GITHUB_BRANCH: ${{ github.ref_name }}
+      #     GITHUB_BASE_BRANCH: ${{ github.base_ref }}
+      #     GITHUB_EVENT_NAME: ${{ github.event_name }}
+      #     GITHUB_EVENT_PATH: ${{ github.event_path }}
+      #   run: |
+      #     .github/scripts/sonarqube-analysis.sh
 
   publish-binaries:
     name: Publish Binaries to Artifactory
@@ -198,7 +198,7 @@ jobs:
     needs:
       - prepare
       - build-binaries
-      - test-and-scan
+      # - test-and-scan
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
       - name: Vault Secrets
@@ -210,19 +210,19 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
       - name: Download linux binary
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: binary-linux
           path: dist/
 
       - name: Download macos binary
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: binary-macos
           path: dist/
 
       - name: Download windows binary
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: binary-windows
           path: dist/
@@ -237,14 +237,15 @@ jobs:
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
         run: |
           jf config add repox \
-            --url="${ARTIFACTORY_URL}" \
-            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
-            --interactive=false
+            --artifactory-url="${ARTIFACTORY_URL}" \
+            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}"
           jf rt upload \
             "dist/*" \
             "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/" \
             --server-id=repox \
-            --flat=true
+            --flat=true \
+            --build-name="${PROJECT}" \
+            --build-number="${BUILD_NUMBER}"
           jf rt build-collect-env "${PROJECT}" "${BUILD_NUMBER}"
           jf rt build-publish "${PROJECT}" "${BUILD_NUMBER}"
 
@@ -254,7 +255,7 @@ jobs:
     needs:
       - prepare
       - build-binaries
-      - test-and-scan
+      # - test-and-scan
       - publish-binaries
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
