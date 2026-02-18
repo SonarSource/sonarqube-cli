@@ -378,7 +378,9 @@ async function getUserInput(prompt: string): Promise<string> {
     process.stdin.resume();
     process.stdin.once('data', (data) => {
       input = data.toString().trim();
+      process.stdin.pause();
       process.stdin.removeAllListeners('data');
+      process.stdin.unref();
       resolve(input);
     });
   });

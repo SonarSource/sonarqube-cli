@@ -257,9 +257,12 @@ async function getUserConfirmation(prompt: string): Promise<boolean> {
     let input = '';
 
     process.stdin.setEncoding('utf-8');
+    process.stdin.resume();
     process.stdin.once('data', (data) => {
       input = data.toString().trim().toLowerCase();
-      process.stdin.destroy();
+      process.stdin.pause();
+      process.stdin.removeAllListeners('data');
+      process.stdin.unref();
       resolve(input === 'y' || input === 'yes');
     });
   });

@@ -298,9 +298,36 @@ function handleAnalysisError(error: Error, organizationKey: string, projectKey: 
 }
 
 /**
+ * Check if connected server supports file analysis (Cloud only)
+ */
+function checkServerType(): void {
+  try {
+    const state = loadState(VERSION);
+    const activeConnection = getActiveConnection(state);
+
+    if (activeConnection && activeConnection.type === 'on-premise') {
+      logger.error('❌ File analysis is not supported on SonarQube Server (on-premise)');
+      logger.error('');
+      logger.error('File analysis via API is available only on SonarCloud.');
+      logger.error('');
+      logger.error('To analyze files:');
+      logger.error('  1. Switch to SonarCloud (https://sonarcloud.io)');
+      logger.error('  2. Run: sonar auth login');
+      logger.error('  3. Then retry: sonar verify --file <file>');
+      process.exit(1);
+    }
+  } catch (error) {
+    logger.debug(`Warning: Could not verify server type: ${(error as Error).message}`);
+  }
+}
+
+/**
  * Verify file command handler
  */
 export async function verifyCommand(options: VerifyOptions): Promise<void> {
+  // Check server type early
+  checkServerType();
+
   const { organizationKey: org, token } = await getCredentials(
     options.organizationKey,
     options.token

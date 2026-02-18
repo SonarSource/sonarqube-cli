@@ -28,7 +28,7 @@ const program = new Command();
 program
   .name('sonar')
   .description('SonarQube CLI for AI coding agents')
-  .version('0.2.107', '-v, --version', 'display version for command');
+  .version('0.2.109', '-v, --version', 'display version for command');
 
 // Analyze a file using SonarCloud A3S API
 program
