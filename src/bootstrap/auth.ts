@@ -65,7 +65,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   logger.info('\n   Press Enter to open browser');
   logger.info('   ');
 
-  // Wait for user to press Enter and ensure stdin is closed after
+  // Wait for user to press Enter and ensure stdin is ready
   const userPressedEnter = new Promise<void>(resolve => {
     const onData = () => {
       process.stdin.removeListener('data', onData);
@@ -73,6 +73,8 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
       process.stdin.unref();
       resolve();
     };
+    process.stdin.setEncoding('utf-8');
+    process.stdin.resume();
     process.stdin.once('data', onData);
   });
 
@@ -140,11 +142,12 @@ async function startEmbeddedServer(): Promise<{
     try {
       const testServer = createServer();
       const listening = await new Promise<boolean>((resolve) => {
-        testServer.once('error', () => {
-          logger.debug(`Port ${p} is busy`);
+        testServer.once('error', (err) => {
+          logger.debug(`Port ${p} is busy: ${(err as Error).message}`);
           resolve(false);
         });
         testServer.listen(p, '127.0.0.1', () => {
+          logger.info(`✓ Listening on port ${p}`);
           logger.debug(`Port ${p} is available`);
           resolve(true);
         });

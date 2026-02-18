@@ -2,8 +2,8 @@
 
 SonarQube CLI for AI coding agents
 
-**Version:** 0.2.97
-**Generated:** 2026-02-17T10:57:12.343Z
+**Version:** 0.2.107
+**Generated:** 2026-02-18T11:54:34.396Z
 
 ---
 
@@ -109,7 +109,7 @@ Setup SonarQube integration for AI coding agent
 | `--non-interactive` | boolean | ❌ | Non-interactive mode (no prompts) | - |
 | `--skip-hooks` | boolean | ❌ | Skip hooks installation | - |
 | `--hook-type` | string | ❌ | Hook type to install | `prompt` |
-| `--verbose`, `-v` | boolean | ❌ | Verbose output | - |
+| `--verbose` | boolean | ❌ | Verbose output | - |
 
 **Examples:**
 

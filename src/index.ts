@@ -4,6 +4,13 @@
 // Generated from cli-spec.yaml by Plop.js
 
 import { Command } from 'commander';
+import logger from './lib/logger.js';
+
+// Constants for argument validation
+const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
+const MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT = 3;
+const AUTH_SUBCOMMAND_INDEX = 3;
+
 import { verifyCommand } from './commands/verify.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
@@ -21,7 +28,7 @@ const program = new Command();
 program
   .name('sonar')
   .description('SonarQube CLI for AI coding agents')
-  .version('0.2.97');
+  .version('0.2.107', '-v, --version', 'display version for command');
 
 // Analyze a file using SonarCloud A3S API
 program
@@ -37,7 +44,7 @@ program
     try {
       await verifyCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -63,7 +70,7 @@ issues
     try {
       await issuesSearchCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -79,19 +86,18 @@ program
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-hooks', 'Skip hooks installation')
   .option('--hook-type <hook-type>', 'Hook type to install', 'prompt')
-  .option('-v, --verbose', 'Verbose output')
+  .option('--verbose', 'Verbose output')
   .action(async (agent, options) => {
     try {
       // Validate argument choices
-      const validAgent = ['claude', 'gemini', 'codex'];
-      if (!validAgent.includes(agent)) {
-        console.error(`Error: Invalid agent. Must be one of: claude, gemini, codex`);
+      if (!VALID_AGENTS.includes(agent)) {
+        logger.error(`Error: Invalid agent. Must be one of: ${VALID_AGENTS.join(', ')}`);
         process.exit(1);
       }
 
       await onboardAgentCommand(agent, options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -111,7 +117,7 @@ auth
     try {
       await authLoginCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -125,7 +131,7 @@ auth
     try {
       await authLogoutCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -137,7 +143,7 @@ auth
     try {
       await authPurgeCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -149,7 +155,7 @@ auth
     try {
       await authListCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -166,7 +172,7 @@ preCommit
     try {
       await preCommitInstallCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -178,7 +184,7 @@ preCommit
     try {
       await preCommitUninstallCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -196,7 +202,7 @@ secret
     try {
       await secretInstallCommand(options);
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
@@ -208,9 +214,16 @@ secret
     try {
       await secretStatusCommand();
     } catch (error) {
-      console.error('Error:', (error as Error).message);
+      logger.error('Error: ' + (error as Error).message);
       process.exit(1);
     }
   });
+
+
+// Handle `sonar auth` without subcommand (defaults to login)
+if (process.argv.length === MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT && process.argv[2] === 'auth') {
+  // User ran `sonar auth` without subcommand - inject 'login' subcommand
+  process.argv.splice(AUTH_SUBCOMMAND_INDEX, 0, 'login');
+}
 
 program.parse();

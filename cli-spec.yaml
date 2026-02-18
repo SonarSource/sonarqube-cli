@@ -3,7 +3,7 @@
 
 cli:
   name: sonar
-  version: 0.2.97
+  version: 0.2.107
   description: SonarQube CLI for AI coding agents
 
 commands:
@@ -177,7 +177,6 @@ commands:
         default: prompt
 
       - name: verbose
-        alias: v
         type: boolean
         description: Verbose output
         default: false

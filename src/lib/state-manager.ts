@@ -65,6 +65,8 @@ export function generateConnectionId(serverUrl: string, orgKey?: string): string
 
 /**
  * Add or update authentication connection
+ * Note: Currently supports only one connection. Logging in to a different server
+ * will replace the previous connection.
  */
 export function addOrUpdateConnection(
   state: CliState,
@@ -94,11 +96,8 @@ export function addOrUpdateConnection(
     connection.region = options.region;
   }
 
-  // Remove existing connection with same ID
-  state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
-
-  // Add new connection
-  state.auth.connections.push(connection);
+  // Support only one connection - clear all previous and add new one
+  state.auth.connections = [connection];
 
   // Set as active
   state.auth.activeConnectionId = connectionId;

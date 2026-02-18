@@ -172,4 +172,90 @@ describe('State Manager', () => {
       expect(state.agents['claude-code'].skills.installed).toHaveLength(1);
     });
   });
+
+  describe('single connection support', () => {
+    it('should maintain only one connection when adding new server', () => {
+      const state = getDefaultState('0.2.61');
+
+      // Add first connection
+      const conn1 = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+        orgKey: 'org-one',
+        region: 'eu',
+        keystoreKey: 'key1',
+      });
+
+      expect(state.auth.connections).toHaveLength(1);
+      expect(state.auth.activeConnectionId).toBe(conn1.id);
+
+      // Add second connection to different server - should replace first
+      const conn2 = addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise', {
+        keystoreKey: 'key2',
+      });
+
+      expect(state.auth.connections).toHaveLength(1);
+      expect(state.auth.connections[0].serverUrl).toBe('https://sonar.internal.com');
+      expect(state.auth.activeConnectionId).toBe(conn2.id);
+      expect(conn1.id).not.toBe(conn2.id);
+    });
+
+    it('should replace SonarCloud with on-premise', () => {
+      const state = getDefaultState('0.2.61');
+
+      addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+        orgKey: 'my-org',
+        region: 'eu',
+        keystoreKey: 'cloud-key',
+      });
+
+      expect(state.auth.connections[0].type).toBe('cloud');
+
+      addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise', {
+        keystoreKey: 'onprem-key',
+      });
+
+      expect(state.auth.connections).toHaveLength(1);
+      expect(state.auth.connections[0].type).toBe('on-premise');
+      expect(state.auth.connections[0].serverUrl).toBe('https://sonar.company.com');
+    });
+
+    it('should replace on-premise with SonarCloud', () => {
+      const state = getDefaultState('0.2.61');
+
+      const onprem = addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise', {
+        keystoreKey: 'onprem-key',
+      });
+
+      expect(state.auth.connections[0].type).toBe('on-premise');
+
+      const cloud = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+        orgKey: 'sonarsource',
+        region: 'us',
+        keystoreKey: 'cloud-key',
+      });
+
+      expect(state.auth.connections).toHaveLength(1);
+      expect(state.auth.connections[0].type).toBe('cloud');
+      expect(state.auth.connections[0].orgKey).toBe('sonarsource');
+    });
+
+    it('should remain authenticated with single connection', () => {
+      const state = getDefaultState('0.2.61');
+
+      addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+        orgKey: 'org1',
+        region: 'eu',
+        keystoreKey: 'key1',
+      });
+
+      expect(state.auth.isAuthenticated).toBe(true);
+      expect(state.auth.connections).toHaveLength(1);
+
+      addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise', {
+        keystoreKey: 'key2',
+      });
+
+      expect(state.auth.isAuthenticated).toBe(true);
+      expect(state.auth.connections).toHaveLength(1);
+    });
+  });
 });

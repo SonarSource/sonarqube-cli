@@ -1,4 +1,2 @@
-// Version management - imported from package.json at build time
-import packageJson from '../package.json';
-
-export const VERSION = packageJson.version;
+// Version management
+export const VERSION = '0.2.107';

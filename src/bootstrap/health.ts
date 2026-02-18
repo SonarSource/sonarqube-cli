@@ -15,6 +15,19 @@ export interface HealthCheckResult {
   errors: string[];
 }
 
+async function logAndValidate(message: string, validator: () => Promise<boolean>, errorMsg: string, errors: string[], verbose: boolean): Promise<boolean> {
+  if (verbose) logger.info(`   ${message}`);
+  try {
+    const result = await validator();
+    if (!result) errors.push(errorMsg);
+    return result;
+  } catch (error) {
+    logger.debug(`Validation failed: ${(error as Error).message}`);
+    errors.push(errorMsg);
+    return false;
+  }
+}
+
 /**
  * Run health checks
  */
@@ -23,75 +36,65 @@ export async function runHealthChecks(
   token: string,
   projectKey: string,
   projectRoot: string,
-  organization?: string
+  organization?: string,
+  verbose: boolean = true
 ): Promise<HealthCheckResult> {
+  const client = new SonarQubeClient(serverURL, token);
   const errors: string[] = [];
 
-  // Check token
-  logger.info('   Validating token...');
-  const tokenValid = await validateToken(serverURL, token);
-  if (!tokenValid) {
-    errors.push('Token is invalid');
-  }
+  const tokenValid = await logAndValidate(
+    'Validating token...',
+    () => validateToken(serverURL, token),
+    'Token is invalid',
+    errors,
+    verbose
+  );
 
-  // Check server
-  logger.info('   Checking server availability...');
-  let serverAvailable = false;
-  try {
-    const client = new SonarQubeClient(serverURL, token);
-    await client.getSystemStatus();
-    serverAvailable = true;
-  } catch (error) {
-    errors.push(`Server unavailable: ${(error as Error).message}`);
-  }
+  const serverAvailable = await logAndValidate(
+    'Checking server availability...',
+    async () => {
+      await client.getSystemStatus();
+      return true;
+    },
+    'Server unavailable',
+    errors,
+    verbose
+  );
 
-  // Check project
-  logger.info('   Verifying project access...');
-  let projectAccessible = false;
-  try {
-    const client = new SonarQubeClient(serverURL, token);
-    projectAccessible = await client.checkComponent(projectKey);
-    if (!projectAccessible) {
-      errors.push(`Project not accessible: ${projectKey}`);
-    }
-  } catch (error) {
-    errors.push(`Failed to check project: ${(error as Error).message}`);
-  }
+  const projectAccessible = await logAndValidate(
+    'Verifying project access...',
+    () => client.checkComponent(projectKey),
+    `Project not accessible: ${projectKey}`,
+    errors,
+    verbose
+  );
 
-  // Check organization (if specified)
-  let organizationAccessible = true; // Default to true if not specified
+  let organizationAccessible = true;
   if (organization) {
-    logger.info('   Verifying organization access...');
-    try {
-      const client = new SonarQubeClient(serverURL, token);
-      organizationAccessible = await client.checkOrganization(organization);
-      if (!organizationAccessible) {
-        errors.push(`Organization not accessible: ${organization}`);
-      }
-    } catch (error) {
-      errors.push(`Failed to check organization: ${(error as Error).message}`);
-    }
+    organizationAccessible = await logAndValidate(
+      'Verifying organization access...',
+      () => client.checkOrganization(organization),
+      `Organization not accessible: ${organization}`,
+      errors,
+      verbose
+    );
   }
 
-  // Check quality profiles access
-  logger.info('   Verifying quality profiles access...');
-  let qualityProfilesAccessible = false;
-  try {
-    const client = new SonarQubeClient(serverURL, token);
-    qualityProfilesAccessible = await client.checkQualityProfiles(projectKey, organization);
-    if (!qualityProfilesAccessible) {
-      errors.push(`Quality profiles not accessible for project: ${projectKey}`);
-    }
-  } catch (error) {
-    errors.push(`Failed to check quality profiles: ${(error as Error).message}`);
-  }
+  const qualityProfilesAccessible = await logAndValidate(
+    'Verifying quality profiles access...',
+    () => client.checkQualityProfiles(projectKey, organization),
+    `Quality profiles not accessible for project: ${projectKey}`,
+    errors,
+    verbose
+  );
 
-  // Check hooks
-  logger.info('   Checking hooks installation...');
-  const hooksInstalled = await areHooksInstalled(projectRoot);
-  if (!hooksInstalled) {
-    errors.push('Hooks not installed');
-  }
+  const hooksInstalled = await logAndValidate(
+    'Checking hooks installation...',
+    () => areHooksInstalled(projectRoot),
+    'Hooks not installed',
+    errors,
+    verbose
+  );
 
   return {
     tokenValid,

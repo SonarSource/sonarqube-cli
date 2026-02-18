@@ -93,14 +93,21 @@ export async function secretInstallCommand(
 
     // 10. Success message
     logger.info('');
-    logger.info('✅ Installation complete!');
+    logger.info('Installation complete!');
     logger.info('');
     logger.info(`Binary path: ${binaryPath}`);
     logger.info('');
-    logger.info('Next steps:');
-    logger.info('  • Binary will be used automatically by Claude Code hooks');
-    logger.info(`  • Manual usage: ${binaryPath} scan <file>`);
-    logger.info('  • Check status: sonar secret status');
+    logger.info('Next steps to enable Claude Code protection:');
+    logger.info('  1. Open Claude Code and run:');
+    logger.info('     /plugin marketplace add SonarSource/sonar-secrets-agent-hook-internal');
+    logger.info('  2. Then install the plugin:');
+    logger.info('     /plugin install sonar-secrets');
+    logger.info('');
+    logger.info('Manual usage:');
+    logger.info(`  sonar-secrets scan <file>`);
+    logger.info('');
+    logger.info('Check installation status:');
+    logger.info('  sonar secret status');
 
     process.exit(0);
 

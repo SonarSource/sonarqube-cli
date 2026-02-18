@@ -227,7 +227,7 @@ async function runHealthCheckAndRepair(
   hookType: HookType
 ): Promise<string | undefined> {
   logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  logger.info('Phase 2/4: Health Check');
+  logger.info('Phase 2/3: Health Check & Repair');
   logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   if (!token) {
@@ -247,10 +247,8 @@ async function runHealthCheckAndRepair(
     logger.info(`   - ${error}`);
   }
 
-  // Phase 3: Repair
-  logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  logger.info('Phase 3/4: Repair');
-  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  // Repair (part of Phase 2)
+  logger.info('\n   Running repair...');
 
   await runRepair(
     serverURL,
@@ -275,9 +273,7 @@ async function runRepairWithoutToken(
   skipHooks: boolean | undefined,
   hookType: HookType
 ): Promise<string> {
-  logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  logger.info('Phase 3/4: Repair');
-  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('\n   Running repair...');
 
   await runRepair(
     serverURL,
@@ -368,7 +364,7 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
 
   // Phase 1: Discovery & Validation
   logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  logger.info('Phase 1/4: Discovery & Validation');
+  logger.info('Phase 1/3: Discovery & Validation');
   logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   const projectInfo = await discoverProject(process.cwd(), verbose);
@@ -403,10 +399,10 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
     if (token) {
       // Health check passed, skip to final verification
       logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      logger.info('Phase 4/4: Final Verification');
+      logger.info('Phase 3/3: Final Verification');
       logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization);
+      const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization, false);
       printFinalVerificationResults(finalHealth);
 
       // Update state with configuration
@@ -428,12 +424,12 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
     );
   }
 
-  // Phase 4: Final Verification
+  // Phase 3: Final Verification
   logger.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  logger.info('Phase 4/4: Final Verification');
+  logger.info('Phase 3/3: Final Verification');
   logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization);
+  const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization, false);
   printFinalVerificationResults(finalHealth);
 
   // Update state with configuration

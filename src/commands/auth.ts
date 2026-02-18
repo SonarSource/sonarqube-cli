@@ -28,6 +28,53 @@ function isSonarCloud(serverURL: string): boolean {
 }
 
 /**
+ * Try to find server URL from project configs
+ */
+async function findServerInConfigs(): Promise<string | null> {
+  try {
+    const projectInfo = await discoverProject(process.cwd(), false);
+
+    // Check sonar-project.properties first
+    if (projectInfo.sonarPropsData?.hostURL) {
+      const url = projectInfo.sonarPropsData.hostURL;
+      logger.info(`✓ Found server in sonar-project.properties: ${url}`);
+      return url;
+    }
+
+    // Check .sonarlint config
+    if (projectInfo.sonarLintData?.serverURL) {
+      const url = projectInfo.sonarLintData.serverURL;
+      logger.info(`✓ Found server in .sonarlint config: ${url}`);
+      return url;
+    }
+
+    return null;
+  } catch (error) {
+    logger.debug(`Error finding server in configs: ${(error as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * Handle on-premise server organization setup
+ */
+async function setupOnPremiseOrganization(org: string | undefined): Promise<string | undefined> {
+  if (org) {
+    logger.info(`✓ Using organization: ${org}`);
+    return org;
+  }
+
+  const configOrg = await findOrganizationInConfigs();
+  if (configOrg) {
+    logger.info(`✓ Using organization from config: ${configOrg}`);
+    return configOrg;
+  }
+
+  logger.debug('No organization specified for on-premise server');
+  return undefined;
+}
+
+/**
  * Try to find organization from project configs
  */
 async function findOrganizationInConfigs(): Promise<string | null> {
@@ -128,20 +175,31 @@ export async function authLoginCommand(options: {
   region?: string;
 }): Promise<void> {
   try {
-    const server = options.server || SONARCLOUD_URL;
+    // Try to find server from project configs if not provided
+    let server = options.server;
+    if (!server) {
+      const configServer = await findServerInConfigs();
+      server = configServer || SONARCLOUD_URL;
+    }
+
+    const isCloud = isSonarCloud(server);
     const region = (options.region || 'eu') as 'eu' | 'us';
     const isNonInteractive = !!options.withToken;
 
     const token = await getOrGenerateToken(server, options.org, isNonInteractive, options.withToken);
 
     let org = options.org;
-    if (isSonarCloud(server)) {
+
+    if (isCloud) {
       const client = new SonarQubeClient(server, token);
       org = await validateOrSelectOrganization(client, org, isNonInteractive);
 
       logger.info('');
       logger.info('ℹ️   Note: If the organization is incorrect, you may get 403');
       logger.info('   Unauthorized errors in later requests. Logout and login again if needed.');
+    } else {
+      // For on-premise servers, organization is optional
+      org = await setupOnPremiseOrganization(org);
     }
 
     // Save token to keychain
@@ -149,7 +207,6 @@ export async function authLoginCommand(options: {
 
     // Update state
     const state = loadState(VERSION);
-    const isCloud = isSonarCloud(server);
     const keystoreKey = generateConnectionId(server, org);
 
     addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
@@ -176,7 +233,12 @@ export async function authLogoutCommand(options: {
   server?: string;
   org?: string;
 }): Promise<void> {
-  const server = options.server || SONARCLOUD_URL;
+  // Try to find server from project configs if not provided
+  let server = options.server;
+  if (!server) {
+    const configServer = await findServerInConfigs();
+    server = configServer || SONARCLOUD_URL;
+  }
   const org = options.org;
 
   if (isSonarCloud(server) && !org) {
@@ -313,9 +375,10 @@ async function getUserInput(prompt: string): Promise<string> {
     let input = '';
 
     process.stdin.setEncoding('utf-8');
+    process.stdin.resume();
     process.stdin.once('data', (data) => {
       input = data.toString().trim();
-      process.stdin.destroy();
+      process.stdin.removeAllListeners('data');
       resolve(input);
     });
   });

@@ -16,7 +16,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "jsx": "react",
-    "types": ["node"]
+    "types": ["node", "bun"]
   },
   "include": [
     "src/**/*"
