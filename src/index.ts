@@ -22,6 +22,7 @@ import { preCommitInstallCommand } from './commands/pre-commit.js';
 import { preCommitUninstallCommand } from './commands/pre-commit.js';
 import { secretInstallCommand } from './commands/secret.js';
 import { secretStatusCommand } from './commands/secret.js';
+import { secretCheckCommand } from './commands/secret.js';
 
 const program = new Command();
 
@@ -213,6 +214,20 @@ secret
   .action(async () => {
     try {
       await secretStatusCommand();
+    } catch (error) {
+      logger.error('Error: ' + (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+secret
+  .command('check')
+  .description('Scan a file or stdin for hardcoded secrets')
+  .option('--file <file>', 'File path to scan for secrets')
+  .option('--stdin', 'Read from standard input instead of a file')
+  .action(async (options) => {
+    try {
+      await secretCheckCommand(options);
     } catch (error) {
       logger.error('Error: ' + (error as Error).message);
       process.exit(1);

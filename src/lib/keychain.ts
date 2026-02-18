@@ -16,9 +16,14 @@ interface KeytarModule {
 
 let keytar: KeytarModule | null = null;
 let mockKeytar: KeytarModule | null = null;
+const tokenCache = new Map<string, string | null>();
 
 export function setMockKeytar(mock: KeytarModule | null) {
   mockKeytar = mock;
+}
+
+export function clearTokenCache(): void {
+  tokenCache.clear();
 }
 
 async function getKeytar() {
@@ -54,33 +59,50 @@ function generateKeychainAccount(serverURL: string, org?: string): string {
  * Get token from system keychain
  * For SonarCloud: pass org parameter
  * For SonarQube: org parameter is ignored
+ * Uses in-memory cache to avoid repeated keychain prompts
  */
 export async function getToken(serverURL: string, org?: string): Promise<string | null> {
   const account = generateKeychainAccount(serverURL, org);
+
+  // Check cache first (avoids multiple keychain prompts)
+  if (tokenCache.has(account)) {
+    return tokenCache.get(account) ?? null;
+  }
+
   const kt = await getKeytar();
-  return await kt.getPassword(SERVICE_NAME, account);
+  const token = await kt.getPassword(SERVICE_NAME, account);
+
+  // Cache the result (including null for "not found")
+  tokenCache.set(account, token);
+  return token;
 }
 
 /**
  * Save token to system keychain
  * For SonarCloud: pass org parameter
  * For SonarQube: org parameter is ignored
+ * Updates in-memory cache
  */
 export async function saveToken(serverURL: string, token: string, org?: string): Promise<void> {
   const account = generateKeychainAccount(serverURL, org);
   const kt = await getKeytar();
   await kt.setPassword(SERVICE_NAME, account, token);
+  // Update cache
+  tokenCache.set(account, token);
 }
 
 /**
  * Delete token from system keychain
  * For SonarCloud: pass org parameter
  * For SonarQube: org parameter is ignored
+ * Removes from cache
  */
 export async function deleteToken(serverURL: string, org?: string): Promise<void> {
   const account = generateKeychainAccount(serverURL, org);
   const kt = await getKeytar();
   await kt.deletePassword(SERVICE_NAME, account);
+  // Remove from cache
+  tokenCache.delete(account);
 }
 
 /**
@@ -92,7 +114,7 @@ export async function getAllCredentials(): Promise<Array<{ account: string; pass
 }
 
 /**
- * Clear all tokens for this service
+ * Clear all tokens for this service and cache
  */
 export async function purgeAllTokens(): Promise<void> {
   const credentials = await getAllCredentials();
@@ -100,4 +122,6 @@ export async function purgeAllTokens(): Promise<void> {
   for (const cred of credentials) {
     await kt.deletePassword(SERVICE_NAME, cred.account);
   }
+  // Clear cache
+  tokenCache.clear();
 }

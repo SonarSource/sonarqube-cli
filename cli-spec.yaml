@@ -310,3 +310,25 @@ commands:
           - command: sonar secret status
             description: Check if sonar-secrets is installed and up to date
 
+      - name: check
+        description: Scan a file or stdin for hardcoded secrets
+        handler: ./src/commands/secret.ts
+        options:
+          - name: file
+            type: string
+            description: File path to scan for secrets
+
+          - name: stdin
+            type: boolean
+            description: Read from standard input instead of a file
+
+        examples:
+          - command: sonar secret check --file src/config.ts
+            description: Scan a file for hardcoded secrets
+
+          - command: sonar secret check --file .env
+            description: Scan environment file for exposed secrets
+
+          - command: cat .env | sonar secret check --stdin
+            description: Scan stdin for hardcoded secrets
+
