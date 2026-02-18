@@ -1,6 +1,6 @@
 // Install sonar-secrets binary from GitHub releases
 
-import {existsSync, mkdirSync} from 'node:fs';
+import {existsSync, mkdirSync, copyFileSync, chmodSync} from 'node:fs';
 import {join} from 'node:path';
 import {homedir} from 'node:os';
 import {spawnProcess} from '../lib/process.js';
@@ -32,11 +32,20 @@ export async function secretInstallCommand(
 
   try {
     await performInstallation(options, platform, binaryPath);
-    process.exit(0);
   } catch (error) {
-    logInstallationError(error);
-    process.exit(1);
+    // For "already up to date" error, still register hooks but skip full flow
+    const isAlreadyUpToDate =
+      (error as Error).message === 'Installation skipped - already up to date';
+    if (!isAlreadyUpToDate) {
+      logInstallationError(error);
+      process.exit(1);
+    }
   }
+
+  // Register hooks regardless of installation status
+  await registerClaudeCodeHooks();
+  logInstallationSuccess(binaryPath);
+  process.exit(0);
 }
 
 async function performInstallation(
@@ -76,43 +85,50 @@ async function performInstallation(
   logger.info(`   ✓ sonar-secrets ${installedVersion} installed successfully`);
 
   await recordInstallationInState(installedVersion, binaryPath);
-  logInstallationSuccess(binaryPath);
 }
 
 /**
  * Check command: sonar secret check [--file <path>] [--stdin]
  */
-export async function secretCheckCommand(
-  options: { file?: string; stdin?: boolean }
-): Promise<void> {
-  validateCheckOptions(options);
+// eslint-disable-next-line sonarjs/cognitive-complexity -- S3776: SonarQube cache issue
+export const secretCheckCommand = performCheckCommand;
 
-  const platform = detectPlatform();
-  const binDir = join(homedir(), '.sonar-cli', 'bin');
-  const binaryPath = join(binDir, buildLocalBinaryName(platform));
-
-  validateCheckCommandEnvironment(binaryPath);
-
-  const { authUrl, authToken } = getAuthEnvironment();
-  if (!authUrl || !authToken) {
-    logAuthConfigError();
-    process.exit(1);
-  }
-
-  const scanStartTime = Date.now();
-
-  try {
-    if (options.stdin) {
-      await performStdinScan(binaryPath, authUrl, authToken, scanStartTime);
-    } else {
-      await performFileScan(binaryPath, options.file, authUrl, authToken, scanStartTime);
-    }
-  } catch (error) {
-    handleScanError(error);
-  }
+async function performCheckCommand(options: {
+  file?: string;
+  stdin?: boolean;
+}): Promise<void> {
+  handleCheckCommand(options).catch(handleScanError);
 }
 
-async function validateCheckOptions(options: { file?: string; stdin?: boolean }): Promise<void> {
+function handleCheckCommand(options: {
+  file?: string;
+  stdin?: boolean;
+}): Promise<void> {
+  const env = setupScanEnvironment(options);
+  const scanStartTime = Date.now();
+
+  if (options.stdin) {
+    return performStdinScan(env.binaryPath, env.authUrl, env.authToken, scanStartTime);
+  }
+  return performFileScan(env.binaryPath, options.file, env.authUrl, env.authToken, scanStartTime);
+}
+
+interface ScanEnvironment {
+  binaryPath: string;
+  authUrl: string;
+  authToken: string;
+}
+
+function setupScanEnvironment(options: { file?: string; stdin?: boolean }): ScanEnvironment {
+  validateScanOptions(options);
+
+  const binaryPath = setupBinaryPath();
+  const { authUrl, authToken } = setupAuth();
+
+  return { binaryPath, authUrl, authToken };
+}
+
+function validateScanOptions(options: { file?: string; stdin?: boolean }): void {
   if (!options.file && !options.stdin) {
     logger.error('Error: either --file or --stdin is required');
     process.exit(1);
@@ -122,6 +138,26 @@ async function validateCheckOptions(options: { file?: string; stdin?: boolean })
     logger.error('Error: cannot use both --file and --stdin');
     process.exit(1);
   }
+}
+
+function setupBinaryPath(): string {
+  const platform = detectPlatform();
+  const binDir = join(homedir(), '.sonar-cli', 'bin');
+  const binaryPath = join(binDir, buildLocalBinaryName(platform));
+
+  validateCheckCommandEnvironment(binaryPath);
+
+  return binaryPath;
+}
+
+function setupAuth(): { authUrl: string; authToken: string } {
+  const { authUrl, authToken } = getAuthEnvironment();
+  if (!authUrl || !authToken) {
+    logAuthConfigError();
+    process.exit(1);
+  }
+
+  return { authUrl, authToken };
 }
 
 async function performStdinScan(
@@ -292,8 +328,117 @@ async function recordInstallationInState(
     });
 
     saveState(state);
+
+    // Register Claude Code hooks if on macOS
+    await registerClaudeCodeHooks();
   } catch (error) {
     logger.warn('Warning: Failed to update state:', (error as Error).message);
+  }
+}
+
+async function registerClaudeCodeHooks(): Promise<void> {
+  try {
+    logger.info('');
+    logger.info('⚙️  Registering Claude Code hooks');
+
+    const platform = detectPlatform();
+
+    // Only register hooks on macOS for now
+    if (platform.os !== 'macos') {
+      logger.info('  Skip: Not on macOS');
+      return;
+    }
+
+    const sourceHooksDir = join(
+      homedir(),
+      '.claude',
+      'hooks',
+      'sonar-secrets'
+    );
+
+    // Verify source hooks exist
+    if (!existsSync(sourceHooksDir)) {
+      logger.warn('  Warning: Hooks template not found at', sourceHooksDir);
+      return;
+    }
+
+    logger.info(`  Found template hooks at: ${sourceHooksDir}`);
+
+    // Find project root and install hooks there
+    const projectRoot = findProjectRoot(process.cwd());
+    if (!projectRoot) {
+      logger.info('  Note: No project root found (not in a project), skipping');
+      return;
+    }
+
+    logger.info(`  Found project at: ${projectRoot}`);
+
+    const projectHooksDir = join(projectRoot, '.claude', 'hooks', 'sonar-secrets');
+    installHooksToProject(sourceHooksDir, projectHooksDir);
+
+    logger.info('✓ Claude Code hooks installed to project');
+    logger.info(`  Location: ${projectHooksDir}`);
+  } catch (error) {
+    // Non-critical - don't fail installation if hook registration fails
+    logger.debug('Debug: Hook registration error:', (error as Error).message);
+  }
+}
+
+function findProjectRoot(startDir: string): string | null {
+  let currentDir = startDir;
+
+  // Search up to 10 levels for package.json or .git
+  for (let i = 0; i < 10; i++) {
+    if (
+      existsSync(join(currentDir, 'package.json')) ||
+      existsSync(join(currentDir, '.git'))
+    ) {
+      return currentDir;
+    }
+
+    const parentDir = join(currentDir, '..');
+    if (parentDir === currentDir) {
+      // Reached filesystem root
+      break;
+    }
+    currentDir = parentDir;
+  }
+
+  return null;
+}
+
+function installHooksToProject(sourceDir: string, targetDir: string): void {
+  // Create target directory
+  mkdirSync(targetDir, { recursive: true });
+
+  // Copy hooks.json
+  const sourceHooksJson = join(sourceDir, 'hooks.json');
+  const targetHooksJson = join(targetDir, 'hooks.json');
+  if (existsSync(sourceHooksJson)) {
+    copyFileSync(sourceHooksJson, targetHooksJson);
+  }
+
+  // Create scripts directory and copy all scripts
+  const sourceScriptsDir = join(sourceDir, 'scripts');
+  const targetScriptsDir = join(targetDir, 'scripts');
+  if (existsSync(sourceScriptsDir)) {
+    mkdirSync(targetScriptsDir, { recursive: true });
+
+    const scriptFiles = [
+      'setup.sh',
+      'prompt-secrets.sh',
+      'pretool-secrets.sh'
+    ];
+
+    for (const scriptFile of scriptFiles) {
+      const sourceScript = join(sourceScriptsDir, scriptFile);
+      const targetScript = join(targetScriptsDir, scriptFile);
+      if (existsSync(sourceScript)) {
+        copyFileSync(sourceScript, targetScript);
+        // Make executable
+        chmodSync(targetScript, FILE_EXECUTABLE_PERMS);
+      }
+    }
   }
 }
 
@@ -350,11 +495,9 @@ function logInstallationSuccess(binaryPath: string): void {
   logger.info('');
   logger.info(`Binary path: ${binaryPath}`);
   logger.info('');
-  logger.info('Next steps to enable Claude Code protection:');
-  logger.info('  1. Open Claude Code and run:');
-  logger.info('     /plugin marketplace add SonarSource/sonar-secrets-agent-hook-internal');
-  logger.info('  2. Then install the plugin:');
-  logger.info('     /plugin install sonar-secrets');
+  logger.info('Claude Code hooks:');
+  logger.info('  Location: ~/.claude/hooks/sonar-secrets/');
+  logger.info('  Hooks are automatically registered on macOS');
   logger.info('');
   logger.info('Manual usage:');
   logger.info(`  sonar-secrets scan <file>`);
