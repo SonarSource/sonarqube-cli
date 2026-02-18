@@ -50,7 +50,7 @@ powershell -ExecutionPolicy RemoteSigned -File scripts/setup.ps1
 2. Builds the binary into a standalone executable
 3. Adds the binary to your PATH so you can run `sonar` from anywhere
    - macOS/Linux: Installs to `/usr/local/bin/sonar`
-   - Windows: Installs to `%LOCALAPPDATA%\Programs\sonar-cli\sonar.exe`
+   - Windows: Installs to `%LOCALAPPDATA%\Programs\sonarqube-cli\sonar.exe`
 
 **Verify installation:**
 
@@ -66,7 +66,7 @@ sonar --help
 sudo rm /usr/local/bin/sonar
 
 # Windows (PowerShell)
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Programs\sonar-cli"
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Programs\sonarqube-cli"
 ```
 
 #### Manual Setup
@@ -89,7 +89,7 @@ npm run build
 ```bash
 npm run build:binary
 ```
-This creates a standalone executable at `dist/sonar-cli`.
+This creates a standalone executable at `dist/sonarqube-cli`.
 
 4. Install globally (optional, for development):
 ```bash
@@ -165,7 +165,7 @@ Install the standalone `sonar-secrets` binary from GitHub releases:
 sonar secret install
 ```
 
-The binary will be downloaded and installed to `~/.sonar-cli/bin/`.
+The binary will be downloaded and installed to `~/.sonarqube-cli/bin/`.
 
 **Check installation status:**
 
@@ -182,7 +182,7 @@ sonar secret install --force
 The binary will be automatically used by Claude Code hooks when configured. For manual usage:
 
 ```bash
-~/.sonar-cli/bin/sonar-secrets scan <file>
+~/.sonarqube-cli/bin/sonar-secrets scan <file>
 ```
 
 ### Issues Management
@@ -266,14 +266,14 @@ Build a standalone executable binary using Bun:
 npm run build:binary
 ```
 
-Output: `dist/sonar-cli` (standalone executable, ~57MB)
+Output: `dist/sonarqube-cli` (standalone executable, ~57MB)
 
 This creates a self-contained binary that doesn't require Node.js to run. The binary is automatically linked in `package.json` as the CLI entry point.
 
 **Usage:**
 ```bash
 # Direct binary execution
-./dist/sonar-cli --version
+./dist/sonarqube-cli --version
 
 # Via npm (uses package.json bin entry)
 npm install -g .
@@ -383,12 +383,12 @@ Tokens are securely stored in the system keychain:
 Example:
 ```bash
 # SonarCloud token for "my-org"
-Service: sonar-cli
+Service: sonarqube-cli
 Account: sonarcloud.io:my-org
 Password: your-token
 
 # SonarQube token for custom server
-Service: sonar-cli
+Service: sonarqube-cli
 Account: my-sonarqube.io
 Password: your-token
 ```

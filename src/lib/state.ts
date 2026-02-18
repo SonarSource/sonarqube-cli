@@ -1,6 +1,6 @@
 /**
- * State management types for sonar-cli
- * Manages persistent state in ~/.sonar-cli/state.json
+ * State management types for sonarqube-cli
+ * Manages persistent state in ~/.sonarqube-cli/state.json
  */
 
 /**
@@ -147,7 +147,7 @@ export interface ToolsState {
 }
 
 /**
- * Complete state structure for ~/.sonar-cli/state.json
+ * Complete state structure for ~/.sonarqube-cli/state.json
  */
 export interface CliState {
   /** State format version */

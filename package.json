@@ -1,5 +1,5 @@
 {
-  "name": "sonar-cli",
+  "name": "sonarqube-cli",
   "version": "0.0.1",
   "description": "SonarQube CLI for AI coding agents",
   "bin": {
@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:binary": "bun build src/index.ts --compile --outfile dist/sonar-cli",
+    "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
     "setup": "bash scripts/setup.sh",
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",

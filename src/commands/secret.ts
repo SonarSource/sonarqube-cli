@@ -249,7 +249,7 @@ async function performFileScan(
  */
 export async function secretStatusCommand(): Promise<void> {
   const platform = detectPlatform();
-  const binDir = join(homedir(), '.sonar-cli', 'bin');
+  const binDir = join(homedir(), '.sonarqube-cli', 'bin');
   const binaryPath = join(binDir, buildLocalBinaryName(platform));
 
   logger.info('\n🔍 Checking sonar-secrets installation status\n');
@@ -300,7 +300,7 @@ export async function secretStatusCommand(): Promise<void> {
 }
 
 function ensureBinDirectory(): string {
-  const binDir = join(homedir(), '.sonar-cli', 'bin');
+  const binDir = join(homedir(), '.sonarqube-cli', 'bin');
   if (!existsSync(binDir)) {
     mkdirSync(binDir, { recursive: true });
   }

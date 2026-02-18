@@ -57,7 +57,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
 
   // 2. Build auth URL
   const cleanServerURL = serverURL.replace(/\/$/, '');
-  const authURL = `${cleanServerURL}/sonarlint/auth?ideName=sonar-cli&port=${port}`;
+  const authURL = `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
 
   // 3. Show prompt
   logger.info('\n🔑 Obtaining access token from SonarQube...');

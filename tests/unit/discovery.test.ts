@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 import { discoverProject } from '../../src/bootstrap/discovery.js';
 
 test('discovery: sonar-project.properties parsing', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-discovery-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-discovery-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
@@ -38,7 +38,7 @@ sonar.tests=test
 });
 
 test('discovery: .sonarlint/connectedMode.json parsing', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-sonarlint-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-sonarlint-' + Date.now());
   const sonarlintDir = join(testDir, '.sonarlint');
   mkdirSync(sonarlintDir, { recursive: true });
 
@@ -67,7 +67,7 @@ test('discovery: .sonarlint/connectedMode.json parsing', async () => {
 });
 
 test('discovery: sonar-project.properties with comments and empty lines', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-comments-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-comments-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
@@ -96,7 +96,7 @@ sonar.organization=test-org
 });
 
 test('discovery: no configuration files', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-empty-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-empty-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {

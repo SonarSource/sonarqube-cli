@@ -6,9 +6,9 @@ if (!(Get-Command bun -ErrorAction SilentlyContinue)) { throw "Bun missing" }
 Write-Host "[x] All dependencies found." -ForegroundColor Green
 
 # --- 2. Paths ---
-$installDir = "$env:LOCALAPPDATA\Programs\sonar-cli"
-$sourcePath = "$PSScriptRoot\..\dist\sonar-cli.exe"
-$destPath = "$installDir\sonar-cli.exe"
+$installDir = "$env:LOCALAPPDATA\Programs\sonarqube-cli"
+$sourcePath = "$PSScriptRoot\..\dist\sonarqube-cli.exe"
+$destPath = "$installDir\sonarqube-cli.exe"
 
 # --- 3. Build ---
 Write-Host "`nBuilding project..." -ForegroundColor Cyan
@@ -33,5 +33,5 @@ if ($oldPath -split ';' -contains $installDir) {
     $newPath = "$oldPath;$installDir"
     $newPath = $newPath.Replace(";;", ";")
     Set-ItemProperty -Path $regPath -Name Path -Value $newPath
-    Write-Host "`nSUCCESS: Added to PATH. Restart terminal to use 'sonar-cli'." -ForegroundColor Green
+    Write-Host "`nSUCCESS: Added to PATH. Restart terminal to use 'sonarqube-cli'." -ForegroundColor Green
 }

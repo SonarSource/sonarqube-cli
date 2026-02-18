@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 import { loadConfig, saveConfig, newConfig } from '../../src/bootstrap/config.js';
 
 test('config: save and load', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
@@ -41,14 +41,14 @@ test('config: save and load', async () => {
 });
 
 test('config: load non-existent returns null', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-nonexistent-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-nonexistent-' + Date.now());
 
   const loaded = await loadConfig(testDir);
   assert.equal(loaded, null, 'Should return null for non-existent config');
 });
 
 test('config: multiple save/load cycles', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-cycles-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-cycles-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {

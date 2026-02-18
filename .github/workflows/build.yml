@@ -58,15 +58,15 @@ jobs:
           - os: linux
             runner: sonar-s
             target: bun-linux-x64
-            artifact: sonar-cli-linux
+            artifact: sonarqube-cli-linux
           - os: macos
             runner: macos-latest-xlarge
             target: bun-darwin-arm64
-            artifact: sonar-cli-macos
+            artifact: sonarqube-cli-macos
           - os: windows
             runner: warp-custom-windows-2022-s
             target: bun-windows-x64
-            artifact: sonar-cli-windows.exe
+            artifact: sonarqube-cli-windows.exe
     steps:
       # TODO: need access to additional secrets to run this step
       # - name: Setup Cloudflare WARP (macOS only)
@@ -135,11 +135,11 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          BUILD_NAME: sonar-cli
+          BUILD_NAME: sonarqube-cli
         run: |
           echo "Deploying ${{ matrix.artifact }} to Artifactory QA..."
           jf rt u "dist/${{ matrix.artifact }}" \
-            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonar-cli/${PROJECT_VERSION}/" \
+            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/" \
             --flat=true \
             --url="${ARTIFACTORY_URL}" \
             --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}" \
@@ -203,7 +203,7 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          BUILD_NAME: sonar-cli
+          BUILD_NAME: ${{ github.event.repository.name }}
           BUILD_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GIT_SHA: ${{ github.sha }}
           GIT_URL: https://github.com/${{ github.repository }}.git

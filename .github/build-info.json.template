@@ -8,22 +8,22 @@
   "vcsUrl": "${GIT_URL}",
   "modules": [
     {
-      "id": "org.sonarsource.cli:sonar-cli:${PROJECT_VERSION}",
+      "id": "org.sonarsource.cli:sonarqube-cli:${PROJECT_VERSION}",
       "artifacts": [
         {
           "type": "bin",
-          "name": "sonar-cli-linux",
-          "path": "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonar-cli/${PROJECT_VERSION}/sonar-cli-linux"
+          "name": "sonarqube-cli-linux",
+          "path": "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/sonarqube-cli-linux"
         },
         {
           "type": "bin",
-          "name": "sonar-cli-macos",
-          "path": "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonar-cli/${PROJECT_VERSION}/sonar-cli-macos"
+          "name": "sonarqube-cli-macos",
+          "path": "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/sonarqube-cli-macos"
         },
         {
           "type": "exe",
-          "name": "sonar-cli-windows.exe",
-          "path": "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonar-cli/${PROJECT_VERSION}/sonar-cli-windows.exe"
+          "name": "sonarqube-cli-windows.exe",
+          "path": "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/sonarqube-cli-windows.exe"
         }
       ]
     }

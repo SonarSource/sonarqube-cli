@@ -45,7 +45,7 @@ async function main() {
     // Get platform info
     const { name, suffix } = getPlatformInfo();
 
-    const binaryName = `sonar-cli-${suffix}`;
+    const binaryName = `sonarqube-cli-${suffix}`;
     const outputPath = join(DIST_DIR, binaryName);
 
     console.log(`Building for ${name} (${process.arch})...`);

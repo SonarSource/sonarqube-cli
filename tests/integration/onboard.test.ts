@@ -10,7 +10,7 @@ import { loadConfig, saveConfig, newConfig } from '../../src/bootstrap/config.js
 import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
 
 test('integration: full onboarding flow', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-integration-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-integration-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
@@ -73,7 +73,7 @@ sonar.organization=test-org
 });
 
 test('integration: onboard with existing .sonarlint config', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-sonarlint-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-sonarlint-' + Date.now());
   const sonarlintDir = join(testDir, '.sonarlint');
   mkdirSync(sonarlintDir, { recursive: true });
 
@@ -118,7 +118,7 @@ test('integration: onboard with existing .sonarlint config', async () => {
 });
 
 test('integration: config persistence across multiple operations', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-persistence-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-persistence-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
