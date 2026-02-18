@@ -210,12 +210,15 @@ jobs:
         run: npm run test:all
 
   promote:
-    runs-on: github-ubuntu-latest-s
+    runs-on: sonar-s
     name: Promote
     needs:
       - prepare
       - build-binaries
       - test-and-scan
+    env:
+      PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+      ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
       - uses: SonarSource/ci-github-actions/promote@v1
