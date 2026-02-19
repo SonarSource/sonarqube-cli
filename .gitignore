@@ -7,3 +7,5 @@ dist/
 .env.local
 .claude/
 .idea/
+plan.md
+memory/
