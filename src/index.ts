@@ -13,9 +13,10 @@ const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
 import { verifyCommand } from './commands/verify.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
-import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from './commands/auth.js';
-import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
-import { secretInstallCommand, secretStatusCommand, secretCheckCommand } from './commands/secret.js';
+import { authLoginCommand , authLogoutCommand , authPurgeCommand , authStatusCommand } from './commands/auth.js';
+import { preCommitInstallCommand , preCommitUninstallCommand } from './commands/pre-commit.js';
+import { secretInstallCommand , secretStatusCommand , secretCheckCommand } from './commands/secret.js';
+import { projectsSearchCommand } from './commands/projects.js';
 
 const program = new Command();
 
@@ -59,6 +60,19 @@ issues
   .action(async (options) => {
     await runCommand(() => issuesSearchCommand(options));
   });
+
+// Search SonarQube projects
+const projects = program
+  .command('projects')
+  .description('Manage SonarQube projects');
+
+projects
+  .command('search')
+  .description('Search for projects in SonarQube')
+  .option('-q, --query <query>', 'An optional search query to filter projects by name (partial match) or key (exact match).')
+  .option('-p, --page <page>', 'An optional page number. Defaults to 1.', '1')
+  .option('--page-size <page-size>', 'An optional page size. Must be greater than 0 and less than or equal to 500. Defaults to 500.', '500')
+  .action(async (options) => await runCommand(async () => await projectsSearchCommand(options)));
 
 // Setup SonarQube integration for AI coding agent
 program
