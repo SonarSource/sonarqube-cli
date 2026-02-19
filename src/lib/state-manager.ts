@@ -1,5 +1,5 @@
 /**
- * State manager for reading and writing ~/.sonar-cli/state.json
+ * State manager for reading and writing ~/.sonarqube-cli/state.json
  */
 
 import fs from 'node:fs';
@@ -9,7 +9,7 @@ import os from 'node:os';
 import logger from './logger.js';
 import { CliState, getDefaultState, AuthConnection, CloudRegion } from './state.js';
 
-const STATE_DIR = path.join(os.homedir(), '.sonar-cli');
+const STATE_DIR = path.join(os.homedir(), '.sonarqube-cli');
 const STATE_FILE = path.join(STATE_DIR, 'state.json');
 
 /**

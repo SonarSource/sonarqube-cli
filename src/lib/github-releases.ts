@@ -28,7 +28,7 @@ export async function fetchLatestRelease(
       const response = await fetch(url, {
         headers: {
           'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': `sonar-cli/${VERSION}`
+          'User-Agent': `sonarqube-cli/${VERSION}`
         },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
       });
@@ -87,7 +87,7 @@ export async function downloadBinary(
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent': `sonar-cli/${VERSION}`
+      'User-Agent': `sonarqube-cli/${VERSION}`
     },
     signal: AbortSignal.timeout(60000)
   });

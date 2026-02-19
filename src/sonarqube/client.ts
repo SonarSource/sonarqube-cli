@@ -33,7 +33,7 @@ export class SonarQubeClient {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${this.token}`,
-        'User-Agent': `sonar-cli/${VERSION}`,
+        'User-Agent': `sonarqube-cli/${VERSION}`,
         'Accept': 'application/json'
       },
       signal: AbortSignal.timeout(GET_REQUEST_TIMEOUT_MS)
@@ -57,7 +57,7 @@ export class SonarQubeClient {
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
-        'User-Agent': `sonar-cli/${VERSION}`,
+        'User-Agent': `sonarqube-cli/${VERSION}`,
         'Accept': 'application/json'
       },
       body: JSON.stringify(body),

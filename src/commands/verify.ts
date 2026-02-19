@@ -207,7 +207,7 @@ function validateConfiguration(
 
   if (!organizationKey) {
     logger.error('❌ Error: --organization-key is required');
-    logger.error('  Provide via: --organization flag, or login with: sonar-cli auth login');
+    logger.error('  Provide via: --organization flag, or login with: sonar auth login');
     process.exit(1);
   }
 
@@ -220,7 +220,7 @@ function validateConfiguration(
 
   if (!token) {
     logger.error('❌ Error: --token is required');
-    logger.error('  Provide via: --token flag, or login with: sonar-cli auth login');
+    logger.error('  Provide via: --token flag, or login with: sonar auth login');
     process.exit(1);
   }
 }
@@ -291,8 +291,8 @@ function handleAnalysisError(error: Error, organizationKey: string, projectKey: 
   logger.error('💡 Troubleshooting:');
   logger.error(`   - Verify organization "${organizationKey}" has access to project "${projectKey}"`);
   logger.error('   - Check that your token has the correct permissions');
-  logger.error(`   - Try running: sonar-cli auth logout --org ${organizationKey}`);
-  logger.error(`   - Then: sonar-cli auth login --org ${organizationKey}`);
+  logger.error(`   - Try running: sonar auth logout --org ${organizationKey}`);
+  logger.error(`   - Then: sonar auth login --org ${organizationKey}`);
   logger.error('');
   process.exit(1);
 }

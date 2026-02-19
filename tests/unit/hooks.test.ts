@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
 
 test('hooks: install prompt hook', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-hooks-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
@@ -54,7 +54,7 @@ test('hooks: install prompt hook', async () => {
 });
 
 test('hooks: install CLI hook', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-hooks-cli-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-cli-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
@@ -63,7 +63,7 @@ test('hooks: install CLI hook', async () => {
     const scriptPath = join(testDir, '.claude', 'hooks', 'sonar-prompt.sh');
     const content = readFileSync(scriptPath, 'utf-8');
 
-    // CLI hook should run sonar-cli automatically
+    // CLI hook should run sonarqube-cli automatically
     assert.ok(content.includes('sonar verify'), 'Should include sonar verify command');
   } finally {
     rmSync(testDir, { recursive: true, force: true });
@@ -71,7 +71,7 @@ test('hooks: install CLI hook', async () => {
 });
 
 test('hooks: areHooksInstalled check', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-hooks-check-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-check-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
@@ -91,7 +91,7 @@ test('hooks: areHooksInstalled check', async () => {
 });
 
 test('hooks: overwrite existing hooks', async () => {
-  const testDir = join(tmpdir(), 'sonar-cli-test-hooks-overwrite-' + Date.now());
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-overwrite-' + Date.now());
   const claudeDir = join(testDir, '.claude');
   mkdirSync(claudeDir, { recursive: true });
 

@@ -1,4 +1,4 @@
-// Config management - load and save sonar-cli configuration
+// Config management - load and save sonarqube-cli configuration
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';

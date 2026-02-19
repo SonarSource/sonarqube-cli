@@ -1,14 +1,13 @@
 {
-  "name": "sonar-cli",
-  "version": "0.2.109",
+  "name": "sonarqube-cli",
+  "version": "0.0.1",
   "description": "SonarQube CLI for AI coding agents",
-  "type": "module",
   "bin": {
     "sonar": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
-    "build:binary": "bun build src/index.ts --compile --outfile dist/sonar-cli",
+    "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
     "setup": "bash scripts/setup.sh",
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
@@ -16,6 +15,7 @@
     "test:integration": "bun test ./tests/integration/",
     "test:scripts": "bun test ./tests/scripts/",
     "test:all": "bun test ./tests/",
+    "test:coverage": "bun test ./tests/ --coverage --coverage-reporter=lcov",
     "typecheck": "tsc --noEmit",
     "validate": "npm run spec:validate && npm run commands:validate",
     "spec:validate": "node scripts/validate-spec.js",
@@ -46,6 +46,7 @@
     "ajv": "^8.18.0",
     "js-yaml": "^4.1.1",
     "plop": "^4.0.5",
+    "@sonar/scan": "^4.3.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   },

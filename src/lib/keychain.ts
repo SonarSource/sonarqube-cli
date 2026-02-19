@@ -1,6 +1,6 @@
 // Keychain operations wrapper for keytar
 
-const SERVICE_NAME = 'sonar-cli';
+const SERVICE_NAME = 'sonarqube-cli';
 
 interface Credential {
   account: string;

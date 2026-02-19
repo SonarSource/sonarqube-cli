@@ -21,15 +21,241 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    name: Build
+  prepare:
+    name: Prepare Build
+    runs-on: sonar-xs
+    outputs:
+      BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
+      PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
+      PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
 
-      - uses: SonarSource/ci-github-actions/build-npm@v1
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
-          sonar-platform: sqc-eu
-          deploy-pull-request: true
+          version: 2025.7.12
+
+      - uses: SonarSource/ci-github-actions/get-build-number@148774f456203f228b7bd1bd68ed0c22254d9cd1
+        id: get-build-number
+
+      - name: Get project version
+        id: project_version
+        shell: bash
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
+          echo "PROJECT_VERSION=${PACKAGE_VERSION}.${{ steps.get-build-number.outputs.BUILD_NUMBER }}" >> $GITHUB_OUTPUT
+
+  build-binaries:
+    name: Build Binary - ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            runner: sonar-m
+            target: bun-linux-x64
+            artifact: sonarqube-cli-linux
+          - os: macos
+            runner: macos-latest-xlarge
+            target: bun-darwin-arm64
+            artifact: sonarqube-cli-macos
+          - os: windows
+            runner: warp-custom-windows-2022-s
+            target: bun-windows-x64
+            artifact: sonarqube-cli-windows.exe
+    steps:
+      - name: Setup Cloudflare WARP (macOS only)
+        if: matrix.os == 'macos'
+        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
+
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
+
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
+        with:
+          version: 2.77.0
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - name: Cache NPM dependencies
+        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
+        with:
+          path: |
+            ~/.npm
+            node_modules/
+          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}
+
+      - name: Install dependencies
+        env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+          NPM_CONFIG_registry: https://repox.jfrog.io/artifactory/api/npm/npm
+          NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+        run: npm ci
+
+      - name: Build binary for ${{ matrix.os }}
+        run: |
+          echo "Building ${{ matrix.os }} binary..."
+          bun build src/index.ts --compile --outfile dist/${{ matrix.artifact }} --target ${{ matrix.target }}
+          echo "✅ Binary built successfully"
+
+      - name: List built artifacts (Unix)
+        if: matrix.os != 'windows'
+        run: ls -lh dist/
+
+      - name: List built artifacts (Windows)
+        if: matrix.os == 'windows'
+        run: dir dist\
+
+      - name: Upload binary to GitHub
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: binary-${{ matrix.os }}
+          path: dist/${{ matrix.artifact }}
+
+  test-and-scan:
+    name: Run Tests and Scan with SonarQube
+    runs-on: sonar-m
+    needs: [prepare, build-binaries]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/sonarcloud token | SONAR_TOKEN;
+            development/kv/data/sonarcloud url | SONAR_URL;
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
+
+      - name: Cache NPM dependencies
+        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
+        with:
+          path: |
+            ~/.npm
+            node_modules/
+          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}
+
+      - name: Install dependencies
+        env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+          NPM_CONFIG_registry: https://repox.jfrog.io/artifactory/api/npm/npm
+          NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+        run: npm ci
+
+      - name: Run all tests
+        run: npm run test:coverage
+
+      - name: Analyze on SonarQubeCloud
+        env:
+          SONAR_HOST_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
+          SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_TOKEN }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
+          CURRENT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PULL_REQUEST: ${{ github.event.pull_request.number || 'false' }}
+        run: |
+          .github/scripts/sonarqube-analysis.sh
+
+  publish-binaries:
+    name: Publish Binaries to Artifactory
+    runs-on: sonar-m
+    needs:
+      - prepare
+      - build-binaries
+    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
+    steps:
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
+
+      - name: Download linux binary
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binary-linux
+          path: dist/
+
+      - name: Download macos binary
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binary-macos
+          path: dist/
+
+      - name: Download windows binary
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binary-windows
+          path: dist/
+
+      - name: Upload binaries to Artifactory
+        env:
+          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
+          ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
+          PROJECT: ${{ github.event.repository.name }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
+        run: |
+          jf config add repox \
+            --artifactory-url="${ARTIFACTORY_URL}" \
+            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}"
+          jf rt upload \
+            "dist/*" \
+            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/" \
+            --server-id=repox \
+            --flat=true \
+            --build-name="${PROJECT}" \
+            --build-number="${BUILD_NUMBER}"
+          jf rt build-collect-env "${PROJECT}" "${BUILD_NUMBER}"
+          jf rt build-publish "${PROJECT}" "${BUILD_NUMBER}"
+
+  promote:
+    runs-on: sonar-s
+    name: Promote
+    needs:
+      - prepare
+      - build-binaries
+      - test-and-scan
+      - publish-binaries
+    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
+    steps:
+      - uses: SonarSource/ci-github-actions/promote@148774f456203f228b7bd1bd68ed0c22254d9cd1 # 1.3.24
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
+        with:
+            promote-pull-request: true

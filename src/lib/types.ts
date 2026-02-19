@@ -1,4 +1,4 @@
-// Core types for sonar-cli
+// Core types for sonarqube-cli
 
 export interface SonarQubeIssue {
   key: string;
