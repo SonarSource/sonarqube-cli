@@ -117,6 +117,40 @@ commands:
           - command: sonar issues search -s https://sonarcloud.io -p my-project --severity CRITICAL --all
             description: Fetch all critical issues
 
+  # Command to list user projects
+  - name: projects
+    description: Search for SonarQube projects
+    subcommands:
+      - name: search
+        description: Search for projects in SonarQube
+        handler: ./src/commands/projects.ts
+        options:
+          - name: query
+            alias: q
+            type: string
+            description: An optional search query to filter projects by name (partial match) or key (exact match).
+
+          - name: page
+            alias: p
+            type: number
+            description: An optional page number. Defaults to 1.
+            default: 1
+
+          - name: page-size
+            type: number
+            description: An optional page size. Must be greater than 0 and less than or equal to 500. Defaults to 500.
+            default: 500
+
+        examples:
+          - command: sonar projects search
+            description: List first 500 accessible projects
+
+          - command: sonar projects search -q my-project
+            description: Search projects by name or key
+
+          - command: sonar projects search --page 2 --page-size 50
+            description: Paginate through projects
+
   # Complex command with many options
   - name: onboard-agent
     description: Setup SonarQube integration for AI coding agent

@@ -77,6 +77,27 @@ export interface IssuesSearchResponse {
   }>;
 }
 
+export interface SonarQubeProject {
+  key: string;
+  name: string;
+}
+
+export interface ProjectsSearchParams {
+  q?: string;
+  ps?: number;
+  p?: number;
+  organization?: string;
+}
+
+export interface ProjectsSearchResponse {
+  paging: {
+    pageIndex: number;
+    pageSize: number;
+    total: number;
+  };
+  components: SonarQubeProject[];
+}
+
 export interface DaemonHealth {
   uptime: number;
   backendStatus: 'initializing' | 'ready' | 'error';
