@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+
+// Main CLI entry point
+// Generated from cli-spec.yaml by Plop.js
+
+import { Command } from 'commander';
+import logger from './lib/logger.js';
+
+// Constants for argument validation
+const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
+const MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT = 3;
+const AUTH_SUBCOMMAND_INDEX = 3;
+
+{{#each commands}}
+{{#if handler}}
+import { {{camelCase name}}Command } from './commands/{{name}}.js';
+{{/if}}
+{{#if subcommands}}
+{{#each subcommands}}
+{{#if handler}}
+import { {{camelCase ../name}}{{pascalCase name}}Command } from './commands/{{../name}}.js';
+{{/if}}
+{{/each}}
+{{/if}}
+{{/each}}
+
+const program = new Command();
+
+program
+  .name('{{cli.name}}')
+  .description('{{cli.description}}')
+  .version('{{cli.version}}', '-v, --version', 'display version for command');
+
+{{#each commands}}
+{{#if subcommands}}
+// {{description}}
+const {{camelCase name}} = program
+  .command('{{name}}')
+  .description('{{description}}');
+
+{{#each subcommands}}
+{{camelCase ../name}}
+  .command('{{name}}')
+  .description('{{description}}')
+{{#each options}}
+{{#if required}}
+  .requiredOption('{{#if alias}}-{{alias}}, {{/if}}--{{name}} <{{name}}>', '{{description}}')
+{{else}}
+  .option('{{#if alias}}-{{alias}}, {{/if}}--{{name}}{{#unless (eq type "boolean")}} <{{name}}>{{/unless}}', '{{description}}'{{#if default}}, '{{default}}'{{/if}})
+{{/if}}
+{{/each}}
+  .action(async ({{#if options}}options{{/if}}) => {
+    try {
+      await {{camelCase ../name}}{{pascalCase name}}Command({{#if options}}options{{/if}});
+    } catch (error) {
+      logger.error('Error: ' + (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+{{/each}}
+{{else}}
+// {{description}}
+program
+  .command('{{name}}{{#if arguments}}{{#each arguments}}{{#if required}} <{{name}}>{{else}} [{{name}}]{{/if}}{{/each}}{{/if}}')
+  .description('{{description}}')
+{{#each options}}
+{{#if required}}
+  .requiredOption('{{#if alias}}-{{alias}}, {{/if}}--{{name}} <{{name}}>', '{{description}}')
+{{else}}
+  .option('{{#if alias}}-{{alias}}, {{/if}}--{{name}}{{#unless (eq type "boolean")}} <{{name}}>{{/unless}}', '{{description}}'{{#if default}}, '{{default}}'{{/if}})
+{{/if}}
+{{/each}}
+  .action(async ({{#if arguments}}{{#each arguments}}{{name}}, {{/each}}options{{else}}{{#if options}}options{{/if}}{{/if}}) => {
+    try {
+{{#if arguments}}
+      // Validate argument choices
+{{#each arguments}}
+{{#if choices}}
+{{#if (eq name "agent")}}
+      if (!VALID_AGENTS.includes({{name}})) {
+        logger.error(`Error: Invalid {{name}}. Must be one of: ${VALID_AGENTS.join(', ')}`);
+        process.exit(1);
+      }
+{{else}}
+      const valid{{pascalCase name}} = [{{#each choices}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}];
+      if (!valid{{pascalCase name}}.includes({{name}})) {
+        logger.error(`Error: Invalid {{name}}. Must be one of: {{#each choices}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}`);
+        process.exit(1);
+      }
+{{/if}}
+{{/if}}
+{{/each}}
+
+{{/if}}
+      await {{camelCase name}}Command({{#if arguments}}{{#each arguments}}{{name}}, {{/each}}options{{else}}{{#if options}}options{{/if}}{{/if}});
+    } catch (error) {
+      logger.error('Error: ' + (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+{{/if}}
+{{/each}}
+
+// Handle `sonar auth` without subcommand (defaults to login)
+if (process.argv.length === MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT && process.argv[2] === 'auth') {
+  // User ran `sonar auth` without subcommand - inject 'login' subcommand
+  process.argv.splice(AUTH_SUBCOMMAND_INDEX, 0, 'login');
+}
+
+program.parse();

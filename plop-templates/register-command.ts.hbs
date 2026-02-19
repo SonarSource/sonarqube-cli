@@ -1,0 +1,20 @@
+
+// {{command.description}}
+program
+  .command('{{command.name}}')
+  .description('{{command.description}}')
+{{#each command.options}}
+{{#if required}}
+  .requiredOption('{{#if alias}}-{{alias}}, {{/if}}--{{name}} <{{name}}>', '{{description}}')
+{{else}}
+  .option('{{#if alias}}-{{alias}}, {{/if}}--{{name}}{{#unless (eq type "boolean")}} <{{name}}>{{/unless}}', '{{description}}'{{#if default}}, '{{default}}'{{/if}})
+{{/if}}
+{{/each}}
+  .action(async (options) => {
+    try {
+      await {{camelCase command.name}}Command(options);
+    } catch (error) {
+      console.error('Error:', (error as Error).message);
+      process.exit(1);
+    }
+  });
