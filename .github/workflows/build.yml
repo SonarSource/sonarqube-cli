@@ -68,10 +68,9 @@ jobs:
             target: bun-windows-x64
             artifact: sonarqube-cli-windows.exe
     steps:
-      # TODO: need access to additional secrets to run this step
-      # - name: Setup Cloudflare WARP (macOS only)
-      #   if: matrix.os == 'macos'
-      #   uses: SonarSource/gh-action_setup-cloudflare-warp@v1
+      - name: Setup Cloudflare WARP (macOS only)
+        if: matrix.os == 'macos'
+        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
 
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -254,7 +253,7 @@ jobs:
       - publish-binaries
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
-      - uses: SonarSource/ci-github-actions/promote@v1
+      - uses: SonarSource/ci-github-actions/promote@148774f456203f228b7bd1bd68ed0c22254d9cd1 # 1.3.24
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
