@@ -41,8 +41,6 @@ export async function secretInstallCommand(
 
   await performInstallationWithErrorHandling(options, platform, binaryPath);
 
-  // Register hooks regardless of installation status
-  await registerClaudeCodeHooks();
   logInstallationSuccess(binaryPath);
   process.exit(0);
 }
@@ -367,125 +365,9 @@ async function recordInstallationInState(
     });
 
     saveState(state);
-
-    // Register Claude Code hooks if on macOS
-    await registerClaudeCodeHooks();
   } catch (error) {
     logger.warn('Warning: Failed to update state:', (error as Error).message);
   }
-}
-
-async function registerClaudeCodeHooks(): Promise<void> {
-  try {
-    logger.info('');
-    logger.info('⚙️  Registering Claude Code hooks');
-
-    const platform = detectPlatform();
-
-    // Only register hooks on macOS for now
-    if (platform.os !== 'macos') {
-      logger.info('  Skip: Not on macOS');
-      return;
-    }
-
-    const sourceHooksDir = join(
-      homedir(),
-      '.claude',
-      'hooks',
-      'sonar-secrets'
-    );
-
-    // Verify source hooks exist
-    if (!existsSync(sourceHooksDir)) {
-      logger.warn('  Warning: Hooks template not found at', sourceHooksDir);
-      return;
-    }
-
-    logger.info(`  Found template hooks at: ${sourceHooksDir}`);
-
-    // Find project root and install hooks there
-    const projectRoot = findProjectRoot(process.cwd());
-    if (!projectRoot) {
-      logger.info('  Note: No project root found (not in a project), skipping');
-      return;
-    }
-
-    logger.info(`  Found project at: ${projectRoot}`);
-
-    const projectHooksDir = join(projectRoot, '.claude', 'hooks', 'sonar-secrets');
-    installHooksToProject(sourceHooksDir, projectHooksDir);
-
-    logger.info('✓ Claude Code hooks installed to project');
-    logger.info(`  Location: ${projectHooksDir}`);
-  } catch (error) {
-    // Non-critical - don't fail installation if hook registration fails
-    logger.debug('Debug: Hook registration error:', (error as Error).message);
-  }
-}
-
-function findProjectRoot(startDir: string): string | null {
-  let currentDir = startDir;
-
-  // Search up to 10 levels for package.json or .git
-  for (let i = 0; i < 10; i++) {
-    if (
-      existsSync(join(currentDir, 'package.json')) ||
-      existsSync(join(currentDir, '.git'))
-    ) {
-      return currentDir;
-    }
-
-    const parentDir = join(currentDir, '..');
-    if (parentDir === currentDir) {
-      // Reached filesystem root
-      break;
-    }
-    currentDir = parentDir;
-  }
-
-  return null;
-}
-
-function installHooksToProject(sourceDir: string, targetDir: string): void {
-  // Create target directory
-  mkdirSync(targetDir, { recursive: true });
-
-  // Copy hooks.json
-  const sourceHooksJson = join(sourceDir, 'hooks.json');
-  const targetHooksJson = join(targetDir, 'hooks.json');
-  if (existsSync(sourceHooksJson)) {
-    copyFileSync(sourceHooksJson, targetHooksJson);
-  }
-
-  // Create scripts directory and copy all scripts
-  const sourceScriptsDir = join(sourceDir, 'scripts');
-  const targetScriptsDir = join(targetDir, 'scripts');
-  if (!existsSync(sourceScriptsDir)) {
-    return;
-  }
-
-  mkdirSync(targetScriptsDir, { recursive: true });
-
-  const scriptFiles = [
-    'setup.sh',
-    'prompt-secrets.sh',
-    'pretool-secrets.sh'
-  ];
-
-  for (const scriptFile of scriptFiles) {
-    copyScriptIfExists(sourceScriptsDir, targetScriptsDir, scriptFile);
-  }
-}
-
-function copyScriptIfExists(sourceDir: string, targetDir: string, fileName: string): void {
-  const sourceScript = join(sourceDir, fileName);
-  if (!existsSync(sourceScript)) {
-    return;
-  }
-
-  const targetScript = join(targetDir, fileName);
-  copyFileSync(sourceScript, targetScript);
-  chmodSync(targetScript, FILE_EXECUTABLE_PERMS);
 }
 
 async function checkExistingInstallation(binaryPath: string): Promise<boolean> {

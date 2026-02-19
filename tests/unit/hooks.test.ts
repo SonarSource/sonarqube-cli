@@ -1,13 +1,12 @@
 // Hooks installation tests
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
+import { it, expect } from 'bun:test';
 import { mkdirSync, rmSync, existsSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
 
-test('hooks: install prompt hook', async () => {
+it('hooks: install prompt hook', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-hooks-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -17,43 +16,43 @@ test('hooks: install prompt hook', async () => {
 
     // Verify .claude directory exists
     const claudeDir = join(testDir, '.claude');
-    assert.ok(existsSync(claudeDir), 'Should create .claude directory');
+    expect(existsSync(claudeDir)).toBe(true);
 
     // Verify hooks directory exists
     const hooksDir = join(claudeDir, 'hooks');
-    assert.ok(existsSync(hooksDir), 'Should create hooks directory');
+    expect(existsSync(hooksDir)).toBe(true);
 
     // Verify script file exists
     const scriptPath = join(hooksDir, 'sonar-prompt.sh');
-    assert.ok(existsSync(scriptPath), 'Should create hook script');
+    expect(existsSync(scriptPath)).toBe(true);
 
     // Verify script is executable
     const stats = statSync(scriptPath);
     const isExecutable = (stats.mode & 0o111) !== 0;
-    assert.ok(isExecutable, 'Script should be executable');
+    expect(isExecutable).toBe(true);
 
     // Verify script content
     const content = readFileSync(scriptPath, 'utf-8');
-    assert.ok(content.includes('#!/bin/bash'), 'Should have bash shebang');
-    assert.ok(content.includes('SonarQube'), 'Should mention SonarQube');
+    expect(content.includes('#!/bin/bash')).toBe(true);
+    expect(content.includes('SonarQube')).toBe(true);
 
     // Verify settings.local.json exists
     const settingsPath = join(claudeDir, 'settings.local.json');
-    assert.ok(existsSync(settingsPath), 'Should create settings.local.json');
+    expect(existsSync(settingsPath)).toBe(true);
 
     // Verify settings content
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-    assert.ok(settings.hooks, 'Should have hooks section');
-    assert.ok(settings.hooks.PostToolUse, 'Should have PostToolUse hook');
-    assert.equal(settings.hooks.PostToolUse.length, 1, 'Should have one matcher');
-    assert.equal(settings.hooks.PostToolUse[0].matcher, 'Edit|Write');
-    assert.equal(settings.hooks.PostToolUse[0].hooks[0].timeout, 120);
+    expect(settings.hooks).toBeDefined();
+    expect(settings.hooks.PostToolUse).toBeDefined();
+    expect(settings.hooks.PostToolUse.length).toBe(1);
+    expect(settings.hooks.PostToolUse[0].matcher).toBe('Edit|Write');
+    expect(settings.hooks.PostToolUse[0].hooks[0].timeout).toBe(120);
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('hooks: install CLI hook', async () => {
+it('hooks: install CLI hook', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-hooks-cli-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -64,33 +63,33 @@ test('hooks: install CLI hook', async () => {
     const content = readFileSync(scriptPath, 'utf-8');
 
     // CLI hook should run sonar-cli automatically
-    assert.ok(content.includes('sonar verify'), 'Should include sonar verify command');
+    expect(content.includes('sonar verify')).toBe(true);
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('hooks: areHooksInstalled check', async () => {
+it('hooks: areHooksInstalled check', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-hooks-check-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
     // Initially not installed
     let installed = await areHooksInstalled(testDir);
-    assert.equal(installed, false, 'Should not be installed initially');
+    expect(installed).toBe(false);
 
     // Install hooks
     await installHooks(testDir, 'prompt');
 
     // Now should be installed
     installed = await areHooksInstalled(testDir);
-    assert.equal(installed, true, 'Should be installed after installation');
+    expect(installed).toBe(true);
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('hooks: overwrite existing hooks', async () => {
+it('hooks: overwrite existing hooks', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-hooks-overwrite-' + Date.now());
   const claudeDir = join(testDir, '.claude');
   mkdirSync(claudeDir, { recursive: true });
@@ -121,7 +120,7 @@ test('hooks: overwrite existing hooks', async () => {
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.local.json'), 'utf-8'));
 
     // Should have PostToolUse hook
-    assert.ok(settings.hooks.PostToolUse, 'Should have PostToolUse');
+    expect(settings.hooks.PostToolUse).toBeDefined();
 
     // PreToolUse might be overwritten (depending on implementation)
     // This tests that we don't crash on existing config

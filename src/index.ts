@@ -5,31 +5,38 @@
 
 import { Command } from 'commander';
 import logger from './lib/logger.js';
+import { verifyCommand } from './commands/verify.js';
+import { issuesSearchCommand } from './commands/issues.js';
+import { onboardAgentCommand } from './commands/onboard-agent.js';
+import {
+  authLoginCommand,
+  authLogoutCommand,
+  authPurgeCommand,
+  authListCommand,
+} from './commands/auth.js';
+import {
+  preCommitInstallCommand,
+  preCommitUninstallCommand,
+} from './commands/pre-commit.js';
+import {
+  secretInstallCommand,
+  secretStatusCommand,
+  secretCheckCommand,
+} from './commands/secret.js';
+import {VERSION} from "./version.js";
 
 // Constants for argument validation
 const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
 const MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT = 3;
 const AUTH_SUBCOMMAND_INDEX = 3;
 
-import { verifyCommand } from './commands/verify.js';
-import { issuesSearchCommand } from './commands/issues.js';
-import { onboardAgentCommand } from './commands/onboard-agent.js';
-import { authLoginCommand } from './commands/auth.js';
-import { authLogoutCommand } from './commands/auth.js';
-import { authPurgeCommand } from './commands/auth.js';
-import { authListCommand } from './commands/auth.js';
-import { preCommitInstallCommand } from './commands/pre-commit.js';
-import { preCommitUninstallCommand } from './commands/pre-commit.js';
-import { secretInstallCommand } from './commands/secret.js';
-import { secretStatusCommand } from './commands/secret.js';
-import { secretCheckCommand } from './commands/secret.js';
 
 const program = new Command();
 
 program
   .name('sonar')
   .description('SonarQube CLI for AI coding agents')
-  .version('0.2.109', '-v, --version', 'display version for command');
+  .version(VERSION, '-v, --version', 'display version for command');
 
 // Analyze a file using SonarCloud A3S API
 program

@@ -1,13 +1,13 @@
 // Discovery module tests
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
+import { it, expect } from 'bun:test';
+
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { discoverProject } from '../../src/bootstrap/discovery.js';
 
-test('discovery: sonar-project.properties parsing', async () => {
+it('discovery: sonar-project.properties parsing', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-discovery-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -27,17 +27,17 @@ sonar.tests=test
     // Discover project
     const info = await discoverProject(testDir, false);
 
-    assert.ok(info.hasSonarProps, 'Should detect sonar-project.properties');
-    assert.equal(info.sonarPropsData!.hostURL, 'https://sonarcloud.io');
-    assert.equal(info.sonarPropsData!.projectKey, 'my_project');
-    assert.equal(info.sonarPropsData!.projectName, 'My Project');
-    assert.equal(info.sonarPropsData!.organization, 'my-org');
+    expect(info.hasSonarProps).toBe(true);
+    expect(info.sonarPropsData!.hostURL).toBe('https://sonarcloud.io');
+    expect(info.sonarPropsData!.projectKey).toBe('my_project');
+    expect(info.sonarPropsData!.projectName).toBe('My Project');
+    expect(info.sonarPropsData!.organization).toBe('my-org');
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('discovery: .sonarlint/connectedMode.json parsing', async () => {
+it('discovery: .sonarlint/connectedMode.json parsing', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-sonarlint-' + Date.now());
   const sonarlintDir = join(testDir, '.sonarlint');
   mkdirSync(sonarlintDir, { recursive: true });
@@ -57,16 +57,16 @@ test('discovery: .sonarlint/connectedMode.json parsing', async () => {
     // Discover project
     const info = await discoverProject(testDir, false);
 
-    assert.ok(info.hasSonarLintConfig, 'Should detect .sonarlint config');
-    assert.equal(info.sonarLintData!.serverURL, 'https://sonarqube.example.com');
-    assert.equal(info.sonarLintData!.projectKey, 'example_project');
-    assert.equal(info.sonarLintData!.organization, 'example-org');
+    expect(info.hasSonarLintConfig).toBe(true);
+    expect(info.sonarLintData!.serverURL).toBe('https://sonarqube.example.com');
+    expect(info.sonarLintData!.projectKey).toBe('example_project');
+    expect(info.sonarLintData!.organization).toBe('example-org');
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('discovery: sonar-project.properties with comments and empty lines', async () => {
+it('discovery: sonar-project.properties with comments and empty lines', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-comments-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -86,24 +86,24 @@ sonar.organization=test-org
 
     const info = await discoverProject(testDir, false);
 
-    assert.ok(info.hasSonarProps);
-    assert.equal(info.sonarPropsData!.hostURL, 'https://test.com');
-    assert.equal(info.sonarPropsData!.projectKey, 'test_key');
-    assert.equal(info.sonarPropsData!.organization, 'test-org');
+    expect(info.hasSonarProps).toBe(true);
+    expect(info.sonarPropsData!.hostURL).toBe('https://test.com');
+    expect(info.sonarPropsData!.projectKey).toBe('test_key');
+    expect(info.sonarPropsData!.organization).toBe('test-org');
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('discovery: no configuration files', async () => {
+it('discovery: no configuration files', async () => {
   const testDir = join(tmpdir(), 'sonar-cli-test-empty-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
     const info = await discoverProject(testDir, false);
 
-    assert.equal(info.hasSonarProps, false, 'Should not have sonar props');
-    assert.equal(info.hasSonarLintConfig, false, 'Should not have sonarlint config');
+    expect(info.hasSonarProps).toBe(false);
+    expect(info.hasSonarLintConfig).toBe(false);
     // Note: hasConfig and config fields removed - we don't use .sonarqube/config.json anymore
   } finally {
     rmSync(testDir, { recursive: true, force: true });

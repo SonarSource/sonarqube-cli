@@ -1,64 +1,64 @@
 // TOON formatter tests using official @toon-format/toon library
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
+import { it, expect } from 'bun:test';
+
 import { encodeToToon } from '../../src/formatter/toon.js';
 
-test('toon: primitives', () => {
-  assert.equal(encodeToToon(null), 'null');
-  assert.equal(encodeToToon(true), 'true');
-  assert.equal(encodeToToon(false), 'false');
-  assert.equal(encodeToToon(0), '0');
-  assert.equal(encodeToToon(42), '42');
-  assert.equal(encodeToToon(-17), '-17');
-  assert.equal(encodeToToon(3.14), '3.14');
+it('toon: primitives', () => {
+  expect(encodeToToon(null)).toBe('null');
+  expect(encodeToToon(true)).toBe('true');
+  expect(encodeToToon(false)).toBe('false');
+  expect(encodeToToon(0)).toBe('0');
+  expect(encodeToToon(42)).toBe('42');
+  expect(encodeToToon(-17)).toBe('-17');
+  expect(encodeToToon(3.14)).toBe('3.14');
 });
 
-test('toon: strings', () => {
+it('toon: strings', () => {
   // Simple strings (no quotes needed)
-  assert.equal(encodeToToon('hello'), 'hello');
+  expect(encodeToToon('hello')).toBe('hello');
 
   // Empty string needs quotes
-  assert.equal(encodeToToon(''), '""');
+  expect(encodeToToon('')).toBe('""');
 
   // String with spaces - official library doesn't add quotes unless necessary
   const withSpaces = encodeToToon('hello world');
-  assert.ok(withSpaces.includes('hello'), 'Should contain hello');
-  assert.ok(withSpaces.includes('world'), 'Should contain world');
+  expect(withSpaces.includes('hello')).toBe(true);
+  expect(withSpaces.includes('world')).toBe(true);
 });
 
-test('toon: strings that look like keywords or numbers', () => {
+it('toon: strings that look like keywords or numbers', () => {
   // Strings that look like keywords need quotes
-  assert.equal(encodeToToon('true'), '"true"');
-  assert.equal(encodeToToon('false'), '"false"');
-  assert.equal(encodeToToon('null'), '"null"');
+  expect(encodeToToon('true')).toBe('"true"');
+  expect(encodeToToon('false')).toBe('"false"');
+  expect(encodeToToon('null')).toBe('"null"');
 
   // Strings that look like numbers need quotes
-  assert.equal(encodeToToon('123'), '"123"');
+  expect(encodeToToon('123')).toBe('"123"');
 });
 
-test('toon: empty object and array', () => {
+it('toon: empty object and array', () => {
   // Official library returns empty string for empty objects
   const emptyObj = encodeToToon({});
-  assert.ok(emptyObj === '' || emptyObj === '{}', 'Empty object should be empty string or {}');
+  expect(emptyObj === '' || emptyObj === '{}').toBe(true);
 
   // Official library returns '[0]:' for empty arrays (array with 0 elements)
   const emptyArr = encodeToToon([]);
-  assert.equal(emptyArr, '[0]:', 'Empty array should be [0]:');
+  expect(emptyArr).toBe('[0]:');
 });
 
-test('toon: simple object', () => {
+it('toon: simple object', () => {
   const obj = { name: 'John', age: 30 };
   const result = encodeToToon(obj);
 
   // Official format: name: John\nage: 30
-  assert.ok(result.includes('name:'), 'Should contain name field');
-  assert.ok(result.includes('John'), 'Should contain John value');
-  assert.ok(result.includes('age:'), 'Should contain age field');
-  assert.ok(result.includes('30'), 'Should contain 30 value');
+  expect(result.includes('name:')).toBe(true);
+  expect(result.includes('John')).toBe(true);
+  expect(result.includes('age:')).toBe(true);
+  expect(result.includes('30')).toBe(true);
 });
 
-test('toon: nested object', () => {
+it('toon: nested object', () => {
   const obj = {
     user: {
       name: 'Alice',
@@ -68,35 +68,35 @@ test('toon: nested object', () => {
 
   const result = encodeToToon(obj);
 
-  assert.ok(result.includes('user:'), 'Should have user field');
-  assert.ok(result.includes('name:'), 'Should have nested name');
-  assert.ok(result.includes('Alice'), 'Should have Alice value');
-  assert.ok(result.includes('email:'), 'Should have nested email');
-  assert.ok(result.includes('alice@example.com'), 'Should have email value');
+  expect(result.includes('user:')).toBe(true);
+  expect(result.includes('name:')).toBe(true);
+  expect(result.includes('Alice')).toBe(true);
+  expect(result.includes('email:')).toBe(true);
+  expect(result.includes('alice@example.com')).toBe(true);
 });
 
-test('toon: array of primitives (inline format)', () => {
+it('toon: array of primitives (inline format)', () => {
   const arr = [1, 2, 3, 4, 5];
   const result = encodeToToon(arr);
 
   // Official format: [5]: 1,2,3,4,5
-  assert.ok(result.includes('[5]'), 'Should have array length marker');
-  assert.ok(result.includes('1'), 'Should contain first element');
-  assert.ok(result.includes('5'), 'Should contain last element');
+  expect(result.includes('[5]')).toBe(true);
+  expect(result.includes('1')).toBe(true);
+  expect(result.includes('5')).toBe(true);
 });
 
-test('toon: array of strings (inline format)', () => {
+it('toon: array of strings (inline format)', () => {
   const arr = ['apple', 'banana', 'cherry'];
   const result = encodeToToon(arr);
 
   // Official format: [3]: apple,banana,cherry
-  assert.ok(result.includes('[3]'), 'Should have array length marker');
-  assert.ok(result.includes('apple'), 'Should contain apple');
-  assert.ok(result.includes('banana'), 'Should contain banana');
-  assert.ok(result.includes('cherry'), 'Should contain cherry');
+  expect(result.includes('[3]')).toBe(true);
+  expect(result.includes('apple')).toBe(true);
+  expect(result.includes('banana')).toBe(true);
+  expect(result.includes('cherry')).toBe(true);
 });
 
-test('toon: tabular array (uniform objects)', () => {
+it('toon: tabular array (uniform objects)', () => {
   const arr = [
     { name: 'Alice', age: 30 },
     { name: 'Bob', age: 25 },
@@ -110,18 +110,18 @@ test('toon: tabular array (uniform objects)', () => {
   //   Alice,30
   //   Bob,25
   //   Charlie,35
-  assert.ok(result.includes('[3]'), 'Should have array size marker');
-  assert.ok(result.includes('name'), 'Should declare name field');
-  assert.ok(result.includes('age'), 'Should declare age field');
-  assert.ok(result.includes('Alice'), 'Should have Alice data');
-  assert.ok(result.includes('30'), 'Should have Alice age');
-  assert.ok(result.includes('Bob'), 'Should have Bob data');
-  assert.ok(result.includes('25'), 'Should have Bob age');
-  assert.ok(result.includes('Charlie'), 'Should have Charlie data');
-  assert.ok(result.includes('35'), 'Should have Charlie age');
+  expect(result.includes('[3]')).toBe(true);
+  expect(result.includes('name')).toBe(true);
+  expect(result.includes('age')).toBe(true);
+  expect(result.includes('Alice')).toBe(true);
+  expect(result.includes('30')).toBe(true);
+  expect(result.includes('Bob')).toBe(true);
+  expect(result.includes('25')).toBe(true);
+  expect(result.includes('Charlie')).toBe(true);
+  expect(result.includes('35')).toBe(true);
 });
 
-test('toon: complex nested structure', () => {
+it('toon: complex nested structure', () => {
   const data = {
     project: 'my-project',
     issues: [
@@ -145,20 +145,20 @@ test('toon: complex nested structure', () => {
   const result = encodeToToon(data);
 
   // Verify all data is present
-  assert.ok(result.includes('project:'), 'Should have project field');
-  assert.ok(result.includes('my-project'), 'Should have project value');
-  assert.ok(result.includes('issues'), 'Should have issues field');
-  assert.ok(result.includes('[2]'), 'Should have issues array size');
-  assert.ok(result.includes('MAJOR'), 'Should have MAJOR severity');
-  assert.ok(result.includes('MINOR'), 'Should have MINOR severity');
-  assert.ok(result.includes('java:S1234'), 'Should have first rule');
-  assert.ok(result.includes('java:S5678'), 'Should have second rule');
-  assert.ok(result.includes('metadata:'), 'Should have metadata field');
-  assert.ok(result.includes('total:'), 'Should have total in metadata');
-  assert.ok(result.includes('timestamp:'), 'Should have timestamp in metadata');
+  expect(result.includes('project:')).toBe(true);
+  expect(result.includes('my-project')).toBe(true);
+  expect(result.includes('issues')).toBe(true);
+  expect(result.includes('[2]')).toBe(true);
+  expect(result.includes('MAJOR')).toBe(true);
+  expect(result.includes('MINOR')).toBe(true);
+  expect(result.includes('java:S1234')).toBe(true);
+  expect(result.includes('java:S5678')).toBe(true);
+  expect(result.includes('metadata:')).toBe(true);
+  expect(result.includes('total:')).toBe(true);
+  expect(result.includes('timestamp:')).toBe(true);
 });
 
-test('toon: SonarQube issues response (real-world example)', () => {
+it('toon: SonarQube issues response (real-world example)', () => {
   const response = {
     total: 2,
     issues: [
@@ -188,34 +188,34 @@ test('toon: SonarQube issues response (real-world example)', () => {
   const result = encodeToToon(response);
 
   // Verify structure and data
-  assert.ok(result.includes('total:'), 'Should have total field');
-  assert.ok(result.includes('2'), 'Should have total value');
-  assert.ok(result.includes('issues'), 'Should have issues field');
-  assert.ok(result.includes('[2]'), 'Should have array size');
+  expect(result.includes('total:')).toBe(true);
+  expect(result.includes('2')).toBe(true);
+  expect(result.includes('issues')).toBe(true);
+  expect(result.includes('[2]')).toBe(true);
 
   // Verify first issue
-  assert.ok(result.includes('AX123'), 'Should have first issue key');
-  assert.ok(result.includes('java:S1234'), 'Should have first rule');
-  assert.ok(result.includes('MAJOR'), 'Should have MAJOR severity');
-  assert.ok(result.includes('42'), 'Should have line 42');
-  assert.ok(result.includes('Remove this unused variable'), 'Should have first message');
+  expect(result.includes('AX123')).toBe(true);
+  expect(result.includes('java:S1234')).toBe(true);
+  expect(result.includes('MAJOR')).toBe(true);
+  expect(result.includes('42')).toBe(true);
+  expect(result.includes('Remove this unused variable')).toBe(true);
 
   // Verify second issue
-  assert.ok(result.includes('AX456'), 'Should have second issue key');
-  assert.ok(result.includes('java:S5678'), 'Should have second rule');
-  assert.ok(result.includes('CRITICAL'), 'Should have CRITICAL severity');
-  assert.ok(result.includes('10'), 'Should have line 10');
-  assert.ok(result.includes('Fix this security vulnerability'), 'Should have second message');
+  expect(result.includes('AX456')).toBe(true);
+  expect(result.includes('java:S5678')).toBe(true);
+  expect(result.includes('CRITICAL')).toBe(true);
+  expect(result.includes('10')).toBe(true);
+  expect(result.includes('Fix this security vulnerability')).toBe(true);
 });
 
-test('toon: numbers without trailing zeros', () => {
+it('toon: numbers without trailing zeros', () => {
   // Official library should handle this automatically
-  assert.equal(encodeToToon(1.0), '1');
-  assert.equal(encodeToToon(2.5), '2.5');
-  assert.equal(encodeToToon(100.0), '100');
+  expect(encodeToToon(1.0)).toBe('1');
+  expect(encodeToToon(2.5)).toBe('2.5');
+  expect(encodeToToon(100.0)).toBe('100');
 });
 
-test('toon: special characters in strings', () => {
+it('toon: special characters in strings', () => {
   const obj = {
     text: 'Line 1\nLine 2\tTabbed',
     quote: 'He said "hello"',
@@ -225,20 +225,19 @@ test('toon: special characters in strings', () => {
   const result = encodeToToon(obj);
 
   // The official library should handle escaping
-  assert.ok(result.length > 0, 'Should produce output');
-  assert.ok(result.includes('text:'), 'Should have text field');
-  assert.ok(result.includes('quote:'), 'Should have quote field');
-  assert.ok(result.includes('backslash:'), 'Should have backslash field');
+  expect(result.length > 0).toBe(true);
+  expect(result.includes('text:')).toBe(true);
+  expect(result.includes('quote:')).toBe(true);
+  expect(result.includes('backslash:')).toBe(true);
 });
 
-test('toon: encodes and produces valid output', () => {
+it('toon: encodes and produces valid output', () => {
   // Ensure basic encoding works
   const data = { foo: 'bar', baz: [1, 2, 3] };
   const result = encodeToToon(data);
 
-  assert.ok(typeof result === 'string', 'Should return a string');
-  assert.ok(result.length > 0, 'Should not be empty');
-  assert.ok(result.includes('foo'), 'Should contain foo field');
-  assert.ok(result.includes('bar'), 'Should contain bar value');
-  assert.ok(result.includes('baz'), 'Should contain baz field');
+  expect(result.length > 0).toBe(true);
+  expect(result.includes('foo')).toBe(true);
+  expect(result.includes('bar')).toBe(true);
+  expect(result.includes('baz')).toBe(true);
 });

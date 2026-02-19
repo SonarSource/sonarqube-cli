@@ -1,7 +1,7 @@
 // MCP configuration tests
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
+import { it, expect } from 'bun:test';
+
 import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
@@ -18,7 +18,7 @@ const getTestClaudeConfigPath = (): { path: string; rootDir: string } => {
   };
 };
 
-test('mcp: configure MCP server in ~/.config/claude/mcp_settings.json', async () => {
+it('mcp: configure MCP server in ~/.config/claude/mcp_settings.json', async () => {
   const { path: testConfigPath, rootDir } = getTestClaudeConfigPath();
 
   try {
@@ -42,11 +42,11 @@ test('mcp: configure MCP server in ~/.config/claude/mcp_settings.json', async ()
     writeFileSync(testConfigPath, JSON.stringify(testConfig, null, 2));
 
     // Verify the configuration
-    assert.ok(testConfig.mcpServers.sonarqube, 'Should have sonarqube MCP server');
-    assert.equal(testConfig.mcpServers.sonarqube.type, 'stdio');
-    assert.equal(testConfig.mcpServers.sonarqube.command, 'docker');
-    assert.equal(testConfig.mcpServers.sonarqube.env.SONARQUBE_URL, 'https://sonarcloud.io');
-    assert.equal(testConfig.mcpServers.sonarqube.env.SONARQUBE_TOKEN, 'test-token-123');
+    expect(testConfig.mcpServers.sonarqube).toBeDefined();
+    expect(testConfig.mcpServers.sonarqube.type).toBe('stdio');
+    expect(testConfig.mcpServers.sonarqube.command).toBe('docker');
+    expect(testConfig.mcpServers.sonarqube.env.SONARQUBE_URL).toBe('https://sonarcloud.io');
+    expect(testConfig.mcpServers.sonarqube.env.SONARQUBE_TOKEN).toBe('test-token-123');
   } finally {
     if (existsSync(rootDir)) {
       rmSync(rootDir, { recursive: true, force: true });
@@ -54,7 +54,7 @@ test('mcp: configure MCP server in ~/.config/claude/mcp_settings.json', async ()
   }
 });
 
-test('mcp: configure with organization parameter', async () => {
+it('mcp: configure with organization parameter', async () => {
   const { path: testConfigPath, rootDir } = getTestClaudeConfigPath();
 
   try {
@@ -82,8 +82,8 @@ test('mcp: configure with organization parameter', async () => {
 
     // Verify environment variables
     const mcpConfig = testConfig.mcpServers.sonarqube;
-    assert.equal(mcpConfig.env.SONARQUBE_ORG, 'my-org', 'Should include SONARQUBE_ORG');
-    assert.ok(mcpConfig.args.includes('SONARQUBE_ORG'), 'Args should include SONARQUBE_ORG flag');
+    expect(mcpConfig.env.SONARQUBE_ORG).toBe('my-org');
+    expect(mcpConfig.args.includes('SONARQUBE_ORG')).toBeDefined();
   } finally {
     if (existsSync(rootDir)) {
       rmSync(rootDir, { recursive: true, force: true });
@@ -91,7 +91,7 @@ test('mcp: configure with organization parameter', async () => {
   }
 });
 
-test('mcp: preserve existing config when updating', async () => {
+it('mcp: preserve existing config when updating', async () => {
   const { path: testConfigPath, rootDir } = getTestClaudeConfigPath();
 
   try {
@@ -126,9 +126,9 @@ test('mcp: preserve existing config when updating', async () => {
     writeFileSync(testConfigPath, JSON.stringify(testConfig, null, 2));
 
     // Verify both servers exist and other config preserved
-    assert.ok(testConfig.mcpServers['other-mcp'], 'Should preserve other MCP server');
-    assert.ok(testConfig.mcpServers.sonarqube, 'Should add sonarqube MCP server');
-    assert.deepEqual(testConfig.permissions.allow, ['Bash', 'Read'], 'Should preserve permissions');
+    expect(testConfig.mcpServers['other-mcp']).toBeDefined();
+    expect(testConfig.mcpServers.sonarqube).toBeDefined();
+    expect(testConfig.permissions.allow).toEqual(['Bash', 'Read']);
   } finally {
     if (existsSync(rootDir)) {
       rmSync(rootDir, { recursive: true, force: true });
@@ -136,12 +136,12 @@ test('mcp: preserve existing config when updating', async () => {
   }
 });
 
-test('mcp: handle missing ~/.claude.json', async () => {
+it('mcp: handle missing ~/.claude.json', async () => {
   const { path: testConfigPath, rootDir } = getTestClaudeConfigPath();
 
   try {
     // Start with non-existent config file
-    assert.ok(!existsSync(testConfigPath), 'Config should not exist initially');
+    expect(!existsSync(testConfigPath)).toBeDefined();
 
     // Create the config as configureMCPServer would
     const config = {
@@ -161,9 +161,9 @@ test('mcp: handle missing ~/.claude.json', async () => {
     writeFileSync(testConfigPath, JSON.stringify(config, null, 2));
 
     // Verify file was created
-    assert.ok(existsSync(testConfigPath), 'Config file should be created');
+    expect(existsSync(testConfigPath)).toBeDefined();
     const savedConfig = JSON.parse(readFileSync(testConfigPath, 'utf-8'));
-    assert.ok(savedConfig.mcpServers.sonarqube, 'Should have sonarqube config');
+    expect(savedConfig.mcpServers.sonarqube).toBeDefined();
   } finally {
     if (existsSync(rootDir)) {
       rmSync(rootDir, { recursive: true, force: true });
