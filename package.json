@@ -15,6 +15,7 @@
     "test:integration": "bun test ./tests/integration/",
     "test:scripts": "bun test ./tests/scripts/",
     "test:all": "bun test ./tests/",
+    "test:coverage": "bun test ./tests/ --coverage --coverage-reporter=lcov",
     "typecheck": "tsc --noEmit",
     "validate": "npm run spec:validate && npm run commands:validate",
     "spec:validate": "node scripts/validate-spec.js",
