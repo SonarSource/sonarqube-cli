@@ -45,13 +45,47 @@ export async function validateToken(serverURL: string, token: string): Promise<b
 }
 
 /**
+ * Extract token from POST body JSON
+ */
+export function extractTokenFromPostBody(body: string): string | undefined {
+  try {
+    const data = JSON.parse(body) as Record<string, unknown>;
+    const token = data.token;
+    // Token must be a non-empty string
+    if (typeof token === 'string' && token.length > 0) {
+      return token;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Extract token from GET query parameters
+ */
+export function extractTokenFromQuery(host: string | undefined, url: string | undefined): string | undefined {
+  if (!host || !url) return undefined;
+  try {
+    const fullUrl = new URL(`http://${host}${url}`);
+    const token = fullUrl.searchParams.get('token');
+    // Token must be a non-empty string
+    if (token && token.length > 0) {
+      return token;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Generate token via browser OAuth flow
  */
 export async function generateTokenViaBrowser(serverURL: string): Promise<string> {
   logger.debug(`=== AUTH FLOW v${VERSION} ===`);
   logger.debug('Starting token generation flow...');
 
-  let token: string | undefined;
   let resolveToken: ((token: string) => void) | null = null;
 
   const tokenPromise = new Promise<string>(resolve => {
@@ -76,15 +110,12 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
     });
     req.on('end', () => {
       logger.debug(`POST body: ${body}`);
-      try {
-        const data = JSON.parse(body) as Record<string, unknown>;
-        const extractedToken = data.token as string | undefined;
-        if (extractedToken) {
-          logger.debug(`✓ Token extracted from POST body: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
-          sendSuccessResponse(res, extractedToken);
-        }
-      } catch {
-        logger.debug('Failed to parse POST body as JSON');
+      const extractedToken = extractTokenFromPostBody(body);
+      if (extractedToken) {
+        logger.debug(`✓ Token extracted from POST body: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
+        sendSuccessResponse(res, extractedToken);
+      } else {
+        logger.debug('No token found in POST body');
       }
     });
   }
@@ -92,18 +123,14 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   // Handle GET request with token in query parameters
   function handleGetRequest(req: IncomingMessage, res: ServerResponse): void {
     logger.debug('GET request detected, checking query parameters...');
-    try {
-      const url = new URL(`http://${req.headers.host}${req.url}`);
-      const extractedToken = url.searchParams.get('token');
-      if (extractedToken) {
-        logger.debug(`✓ Token extracted from GET query: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
-        sendSuccessResponse(res, extractedToken);
-        return;
-      }
-    } catch (error) {
-      logger.debug(`Failed to parse GET URL: ${(error as Error).message}`);
+    const extractedToken = extractTokenFromQuery(req.headers.host, req.url);
+    if (extractedToken) {
+      logger.debug(`✓ Token extracted from GET query: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
+      sendSuccessResponse(res, extractedToken);
+    } else {
+      logger.debug('No token found in GET query');
+      sendSuccessResponse(res);
     }
-    sendSuccessResponse(res);
   }
 
   // 1. Start embedded HTTP server with token extraction handler
@@ -161,6 +188,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   logger.debug(`Waiting for callback on http://127.0.0.1:${server.port}`);
 
   // 5. Wait for token with timeout (50 seconds)
+  let token: string | undefined;
   try {
     token = await Promise.race([
       tokenPromise,
@@ -176,9 +204,15 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
     }
   } finally {
     // Always shutdown and ensure all resources are cleaned up
-    void server.close().catch(error => {
-      logger.debug(`Error during shutdown: ${(error as Error).message}`);
-    });
+    // Use then to properly handle the promise
+    server.close().then(
+      () => {
+        logger.debug('Server closed successfully');
+      },
+      (error: unknown) => {
+        logger.debug(`Error during shutdown: ${(error as Error).message}`);
+      }
+    );
   }
 
   return token;

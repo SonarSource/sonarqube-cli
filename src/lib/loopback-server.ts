@@ -47,6 +47,23 @@ export function isValidLoopbackOrigin(origin: string): boolean {
 }
 
 /**
+ * Merge security headers with user-provided headers
+ */
+function mergeSecurityHeadersWithUserHeaders(
+  userHeaders?: Record<string, string> | string | string[]
+): Record<string, string> {
+  const securityHeaders = getSecurityHeaders();
+
+  if (userHeaders && typeof userHeaders === 'object' && !Array.isArray(userHeaders)) {
+    Object.entries(userHeaders).forEach(([key, value]) => {
+      securityHeaders[key] = value;
+    });
+  }
+
+  return securityHeaders;
+}
+
+/**
  * Start a secure loopback HTTP server
  *
  * @param onRequest - Handler function for incoming requests
@@ -70,7 +87,7 @@ export async function startLoopbackServer(
       const testServer = createServer();
       const listening = await new Promise<boolean>((resolve) => {
         testServer.once('error', (err) => {
-          logger.debug(`Port ${p} is busy: ${(err as Error).message}`);
+          logger.debug(`Port ${p} is busy: ${err.message}`);
           resolve(false);
         });
         testServer.listen(p, '127.0.0.1', () => {
@@ -97,43 +114,54 @@ export async function startLoopbackServer(
 
   const finalServer = server;
 
-  // Set up secure request handler with security headers and origin validation
-  finalServer.on('request', (req, res) => {
-    const origin = req.headers.origin;
+  // Helper to wrap a response with security headers
+  function wrapResponseWithSecurityHeaders(
+    originalHandler: RequestHandler
+  ): RequestHandler {
+    return (req, res) => {
+      const origin = req.headers.origin;
 
-    // Handle OPTIONS preflight requests
-    if (req.method === 'OPTIONS') {
-      res.writeHead(HTTP_STATUS_OK, getSecurityHeaders());
-      res.end();
-      return;
-    }
-
-    // DNS rebinding protection: reject non-localhost origins
-    if (origin && !isValidLoopbackOrigin(origin)) {
-      logger.warn(`Rejected request from disallowed origin: ${origin}`);
-      res.writeHead(HTTP_STATUS_FORBIDDEN);
-      res.end('Forbidden');
-      return;
-    }
-
-    // Wrap res.writeHead to inject security headers
-    const originalWriteHead = res.writeHead.bind(res);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (res as any).writeHead = (statusCode: number, maybeHeaders?: any): any => {
-      const securityHeaders = getSecurityHeaders();
-      if (maybeHeaders && typeof maybeHeaders === 'object') {
-        Object.entries(maybeHeaders).forEach(([key, value]) => {
-          if (typeof value === 'string') {
-            securityHeaders[key] = value;
-          }
-        });
+      // Handle OPTIONS preflight requests
+      if (req.method === 'OPTIONS') {
+        res.writeHead(HTTP_STATUS_OK, getSecurityHeaders());
+        res.end();
+        return;
       }
-      return originalWriteHead(statusCode, securityHeaders);
-    };
 
-    // Call user-provided request handler
-    onRequest(req, res);
-  });
+      // DNS rebinding protection: reject non-localhost origins
+      if (origin && !isValidLoopbackOrigin(origin)) {
+        logger.warn(`Rejected request from disallowed origin: ${origin}`);
+        res.writeHead(HTTP_STATUS_FORBIDDEN);
+        res.end('Forbidden');
+        return;
+      }
+
+      // Store original writeHead
+      const originalWriteHead = res.writeHead;
+
+      // Define wrapper function (avoids type assertion)
+      function writeHeadWithSecurityHeaders(
+        statusCode: number,
+        headers?: Record<string, string> | string | string[]
+      ): typeof res {
+        const mergedHeaders = mergeSecurityHeadersWithUserHeaders(headers);
+        return originalWriteHead.call(res, statusCode, mergedHeaders);
+      }
+
+      // Replace writeHead on the response object using defineProperty to avoid type assertions
+      Object.defineProperty(res, 'writeHead', {
+        value: writeHeadWithSecurityHeaders,
+        writable: true,
+        configurable: true,
+      });
+
+      // Call user handler
+      originalHandler(req, res);
+    };
+  }
+
+  // Set up secure request handler
+  finalServer.on('request', wrapResponseWithSecurityHeaders(onRequest));
 
   const close = async (): Promise<void> => {
     logger.debug('Closing loopback server...');
