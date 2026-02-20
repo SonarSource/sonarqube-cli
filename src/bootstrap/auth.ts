@@ -1,16 +1,16 @@
 // Auth module - OAuth flow and token management
 
-import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { VERSION } from '../version.js';
 import { getToken as getKeystoreToken, saveToken as saveKeystoreToken, deleteToken as deleteKeystoreToken } from '../lib/keychain.js';
 import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
+import { startLoopbackServer } from '../lib/loopback-server.js';
 import logger from '../lib/logger.js';
 
-const MIN_PORT = 64130;
-const MAX_PORT = 64140;
-const HTTP_STATUS_OK = 200;
 const PORT_TIMEOUT_MS = 50000;
+const HTTP_STATUS_OK = 200;
+const TOKEN_DISPLAY_LENGTH = 20;
 /**
  * Get token from keychain
  */
@@ -51,13 +51,81 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   logger.debug(`=== AUTH FLOW v${VERSION} ===`);
   logger.debug('Starting token generation flow...');
 
-  // 1. Start embedded HTTP server
-  const { port, tokenPromise, shutdown } = await startEmbeddedServer();
-  logger.debug(`HTTP server started on port ${port}`);
+  let token: string | undefined;
+  let resolveToken: ((token: string) => void) | null = null;
+
+  const tokenPromise = new Promise<string>(resolve => {
+    resolveToken = resolve;
+  });
+
+  // Helper function to send response with success HTML
+  function sendSuccessResponse(res: ServerResponse, extractedToken?: string): void {
+    res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
+    res.end(getSuccessHTML());
+    if (extractedToken && resolveToken) {
+      resolveToken(extractedToken);
+    }
+  }
+
+  // Handle POST request with token in body
+  function handlePostRequest(req: IncomingMessage, res: ServerResponse): void {
+    logger.debug('POST request detected, reading body...');
+    let body = '';
+    req.on('data', (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      logger.debug(`POST body: ${body}`);
+      try {
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const extractedToken = data.token as string | undefined;
+        if (extractedToken) {
+          logger.debug(`✓ Token extracted from POST body: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
+          sendSuccessResponse(res, extractedToken);
+        }
+      } catch {
+        logger.debug('Failed to parse POST body as JSON');
+      }
+    });
+  }
+
+  // Handle GET request with token in query parameters
+  function handleGetRequest(req: IncomingMessage, res: ServerResponse): void {
+    logger.debug('GET request detected, checking query parameters...');
+    try {
+      const url = new URL(`http://${req.headers.host}${req.url}`);
+      const extractedToken = url.searchParams.get('token');
+      if (extractedToken) {
+        logger.debug(`✓ Token extracted from GET query: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
+        sendSuccessResponse(res, extractedToken);
+        return;
+      }
+    } catch (error) {
+      logger.debug(`Failed to parse GET URL: ${(error as Error).message}`);
+    }
+    sendSuccessResponse(res);
+  }
+
+  // 1. Start embedded HTTP server with token extraction handler
+  const server = await startLoopbackServer((req, res) => {
+    logger.debug(`*** HTTP REQUEST: ${req.method} ${req.url} ***`);
+
+    if (req.method === 'POST') {
+      handlePostRequest(req, res);
+    } else if (req.method === 'GET') {
+      handleGetRequest(req, res);
+    } else {
+      logger.debug(`Unexpected HTTP method: ${req.method}`);
+      res.writeHead(HTTP_STATUS_OK);
+      res.end('OK');
+    }
+  });
+
+  logger.debug(`HTTP server started on port ${server.port}`);
 
   // 2. Build auth URL
   const cleanServerURL = serverURL.replace(/\/$/, '');
-  const authURL = `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
+  const authURL = `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${server.port}`;
 
   // 3. Show prompt
   logger.info('\n🔑 Obtaining access token from SonarQube...');
@@ -90,10 +158,9 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   }
 
   logger.info('\n   ⏳ Waiting for authorization (50 second timeout)...');
-  logger.debug(`Waiting for callback on http://127.0.0.1:${port}`);
+  logger.debug(`Waiting for callback on http://127.0.0.1:${server.port}`);
 
   // 5. Wait for token with timeout (50 seconds)
-  let token: string | undefined;
   try {
     token = await Promise.race([
       tokenPromise,
@@ -109,159 +176,12 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
     }
   } finally {
     // Always shutdown and ensure all resources are cleaned up
-    void shutdown().catch(error => {
+    void server.close().catch(error => {
       logger.debug(`Error during shutdown: ${(error as Error).message}`);
     });
   }
 
   return token;
-}
-
-/**
- * Start embedded HTTP server to receive token callback
- */
-async function startEmbeddedServer(): Promise<{
-  port: number;
-  tokenPromise: Promise<string>;
-  shutdown: () => Promise<void>;
-}> {
-  logger.debug('Creating token promise...');
-
-  let resolveToken: (token: string) => void;
-  const tokenPromise = new Promise<string>(resolve => {
-    resolveToken = resolve;
-  });
-
-  // Try to find an available port
-  logger.debug(`Searching for available port in range ${MIN_PORT}-${MAX_PORT}...`);
-
-  let port: number | null = null;
-  let server: ReturnType<typeof createServer> | null = null;
-
-  for (let p = MIN_PORT; p <= MAX_PORT; p++) {
-    try {
-      const testServer = createServer();
-      const listening = await new Promise<boolean>((resolve) => {
-        testServer.once('error', (err) => {
-          logger.debug(`Port ${p} is busy: ${(err as Error).message}`);
-          resolve(false);
-        });
-        testServer.listen(p, '127.0.0.1', () => {
-          logger.info(`✓ Listening on port ${p}`);
-          logger.debug(`Port ${p} is available`);
-          resolve(true);
-        });
-      });
-
-      if (listening) {
-        port = p;
-        server = testServer;
-        break;
-      }
-    } catch (error) {
-      logger.debug(`Port ${p} error: ${error}`);
-    }
-  }
-
-  if (!server || !port) {
-    throw new Error(`No available ports in range ${MIN_PORT}-${MAX_PORT}`);
-  }
-
-  logger.debug(`Listener created on 127.0.0.1:${port}`);
-
-  // Set up connection handler (low-level socket events)
-  const finalServer = server;
-  finalServer.on('connection', (socket) => {
-    const remoteAddr = socket.remoteAddress;
-    const remotePort = socket.remotePort;
-    logger.debug(`NEW CONNECTION from ${remoteAddr}:${remotePort}`);
-
-    socket.on('data', (chunk) => {
-      logger.debug(`Socket received ${chunk.length} bytes`);
-    });
-
-    socket.on('error', (error) => {
-      logger.debug(`Socket error: ${(error).message}`);
-    });
-
-    socket.on('end', () => {
-      logger.debug('Socket connection ended');
-    });
-  });
-
-  // Set up request handler - catch ALL requests
-  finalServer.on('request', (req, res) => {
-    logger.debug(`*** HTTP REQUEST: ${req.method} ${req.url} ***`);
-
-    // Try to extract token from any request (POST body or GET query)
-    if (req.method === 'POST') {
-      logger.debug('POST request detected, reading body...');
-      let body = '';
-      req.on('data', chunk => {
-        body += chunk.toString();
-      });
-      req.on('end', () => {
-        logger.debug(`POST body: ${body}`);
-        try {
-          const data = JSON.parse(body) as Record<string, unknown>;
-          const token = data.token as string | undefined;
-          if (token) {
-            logger.debug(`✓ Token extracted from POST body: ${token.substring(0, 20)}...`);
-            res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-            res.end(getSuccessHTML());
-            resolveToken(token);
-          }
-        } catch {
-          logger.debug('Failed to parse POST body as JSON');
-        }
-      });
-    } else if (req.method === 'GET') {
-      logger.debug('GET request detected, checking query parameters...');
-      try {
-        const url = new URL(`http://${req.headers.host}${req.url}`);
-        const token = url.searchParams.get('token');
-        if (token) {
-          logger.debug(`✓ Token extracted from GET query: ${token.substring(0, 20)}...`);
-          res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-          res.end(getSuccessHTML());
-          resolveToken(token);
-          return;
-        }
-      } catch (error) {
-        logger.debug(`Failed to parse GET URL: ${(error as Error).message}`);
-      }
-      // No token in GET, return success anyway (might be just browser check)
-      res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-      res.end(getSuccessHTML());
-    } else {
-      logger.debug(`Unexpected HTTP method: ${req.method}`);
-      res.writeHead(HTTP_STATUS_OK);
-      res.end('OK');
-    }
-  });
-
-  const shutdown = async (): Promise<void> => {
-    logger.debug('Shutting down embedded server...');
-
-    return new Promise<void>((resolve) => {
-      // Close the server and wait for it to finish
-      finalServer.close(() => {
-        logger.debug('Server closed successfully');
-        resolve();
-      });
-
-      // Force close any remaining connections after 2 seconds with unref
-      const forceCloseTimer = setTimeout(() => {
-        logger.debug('Force closing remaining connections');
-        finalServer.closeAllConnections?.();
-      }, 2000);
-
-      // Don't let this timer keep the process alive
-      forceCloseTimer.unref();
-    });
-  };
-
-  return { port, tokenPromise, shutdown };
 }
 
 /**
