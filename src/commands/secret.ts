@@ -20,44 +20,49 @@ const VERSION_REGEX_MAX_SEGMENT = 20;
 const FIVE_SEC_TIMEOUT = 5000;
 
 /**
- * Main command: sonar secret install
+ * Core install logic (testable - no process.exit)
  */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- S3776: SonarQube cache
+export async function performSecretInstall(
+  options: { force?: boolean }
+): Promise<string> {
+  const platform = detectPlatform();
+  const binDir = ensureBinDirectory();
+  const binaryPath = join(binDir, buildLocalBinaryName(platform));
+
+  logger.info(`Platform: ${platform.os}-${platform.arch}`);
+
+  try {
+    await performInstallation(options, platform, binaryPath);
+    logger.info(`   ✓ sonar-secrets installed at ${binaryPath}`);
+    return binaryPath;
+  } catch (error) {
+    const isAlreadyUpToDate =
+      (error as Error).message === 'Installation skipped - already up to date';
+    if (isAlreadyUpToDate) {
+      return binaryPath;
+    }
+    throw error;
+  }
+}
+
+/**
+ * CLI wrapper with process exit handling
+ */
 export async function secretInstallCommand(
   options: { force?: boolean }
 ): Promise<void> {
   logger.info('\n🔐 Installing sonar-secrets binary\n');
 
-  const platform = detectPlatform();
-  logger.info(`Platform: ${platform.os}-${platform.arch}`);
-
-  const binDir = ensureBinDirectory();
-  const binaryPath = join(binDir, buildLocalBinaryName(platform));
-
-  await performInstallationWithErrorHandling(options, platform, binaryPath);
-
-  logInstallationSuccess(binaryPath);
-  process.exit(0);
-}
-
-async function performInstallationWithErrorHandling(
-  options: { force?: boolean },
-  platform: PlatformInfo,
-  binaryPath: string
-): Promise<void> {
   try {
-    await performInstallation(options, platform, binaryPath);
+    const binaryPath = await performSecretInstall(options);
+    logInstallationSuccess(binaryPath);
+    process.exit(0);
   } catch (error) {
-    // For "already up to date" error, still register hooks but skip full flow
-    const isAlreadyUpToDate =
-      (error as Error).message === 'Installation skipped - already up to date';
-    if (isAlreadyUpToDate) {
-      return;
-    }
     logInstallationError(error);
     process.exit(1);
   }
 }
+
 
 // NOSONAR: S3776 (complexity cache), S134 (nesting cache)
 // eslint-disable-next-line sonarjs/cognitive-complexity -- S3776: Function complexity unavoidable (install flow has many sequential steps)
