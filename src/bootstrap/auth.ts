@@ -175,7 +175,7 @@ export async function openBrowserWithFallback(authURL: string): Promise<void> {
 /**
  * Send success response to HTTP client
  */
-function sendSuccessResponse(res: ServerResponse, extractedToken?: string, onToken?: (token: string) => void): void {
+export function sendSuccessResponse(res: ServerResponse, extractedToken?: string, onToken?: (token: string) => void): void {
   res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
   res.end(getSuccessHTML());
   if (extractedToken && onToken) {
@@ -186,7 +186,7 @@ function sendSuccessResponse(res: ServerResponse, extractedToken?: string, onTok
 /**
  * Handle POST request - read body and extract token
  */
-function handlePostRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
+export function handlePostRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
   logger.debug('POST request detected, reading body...');
   let body = '';
   req.on('data', (chunk: Buffer) => {
@@ -200,6 +200,7 @@ function handlePostRequest(req: IncomingMessage, res: ServerResponse, onToken: (
       sendSuccessResponse(res, extractedToken, onToken);
     } else {
       logger.debug('No token found in POST body');
+      sendSuccessResponse(res);
     }
   });
 }
@@ -207,7 +208,7 @@ function handlePostRequest(req: IncomingMessage, res: ServerResponse, onToken: (
 /**
  * Handle GET request - extract token from query parameters
  */
-function handleGetRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
+export function handleGetRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
   logger.debug('GET request detected, checking query parameters...');
   const extractedToken = extractTokenFromQuery(req.headers.host, req.url);
   if (extractedToken) {
@@ -222,7 +223,7 @@ function handleGetRequest(req: IncomingMessage, res: ServerResponse, onToken: (t
 /**
  * Create request handler for loopback server
  */
-function createRequestHandler(onToken: (token: string) => void) {
+export function createRequestHandler(onToken: (token: string) => void) {
   return (req: IncomingMessage, res: ServerResponse) => {
     logger.debug(`*** HTTP REQUEST: ${req.method} ${req.url} ***`);
 

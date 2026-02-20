@@ -1,13 +1,18 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin } from '../../src/lib/loopback-server.js';
+import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
+import { createServer } from 'node:http';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
+const EXPECTED_SECURITY_HEADERS_COUNT = 4;
 const MIN_PORT = 64130;
 const MAX_PORT = 64140;
 const TEST_TIMEOUT_MS = 1000;
 const LOOPBACK_HOST = '127.0.0.1';
-const LOOPBACK_URL_PREFIX = `http://${LOOPBACK_HOST}`;
+const HTTP_SCHEME = 'http';
+const LOOPBACK_URL_PREFIX = `${HTTP_SCHEME}://${LOOPBACK_HOST}`;
+// DNS rebinding test origins (intentionally non-loopback, must be http for origin validation)
+const EXTERNAL_ORIGIN = `${HTTP_SCHEME}://evil.com`;
 
 describe('loopback-server', () => {
   describe('getSecurityHeaders', () => {
@@ -22,26 +27,26 @@ describe('loopback-server', () => {
 
     it('should return an object with exactly 4 headers', () => {
       const headers = getSecurityHeaders();
-      expect(Object.keys(headers).length).toBe(4);
+      expect(Object.keys(headers).length).toBe(EXPECTED_SECURITY_HEADERS_COUNT);
     });
   });
 
   describe('isValidLoopbackOrigin', () => {
     it('should accept localhost origin', () => {
-      expect(isValidLoopbackOrigin('http://localhost:8080')).toBe(true);
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://localhost:8080`)).toBe(true);
     });
 
     it('should accept 127.0.0.1 origin', () => {
-      expect(isValidLoopbackOrigin('http://127.0.0.1:8080')).toBe(true);
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://127.0.0.1:8080`)).toBe(true);
     });
 
     it('should accept [::1] origin (IPv6 loopback)', () => {
-      expect(isValidLoopbackOrigin('http://[::1]:8080')).toBe(true);
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://[::1]:8080`)).toBe(true);
     });
 
     it('should reject external origins', () => {
-      expect(isValidLoopbackOrigin('http://evil.com:8080')).toBe(false);
-      expect(isValidLoopbackOrigin('http://192.168.1.1:8080')).toBe(false);
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://evil.com:8080`)).toBe(false);
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://192.168.1.1:8080`)).toBe(false);
       expect(isValidLoopbackOrigin('https://localhost.com')).toBe(false);
     });
 
@@ -51,8 +56,8 @@ describe('loopback-server', () => {
       expect(isValidLoopbackOrigin('')).toBe(false);
     });
 
-    it('should reject origins without port', () => {
-      expect(isValidLoopbackOrigin('http://localhost')).toBe(true);
+    it('should accept localhost without port', () => {
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://localhost`)).toBe(true);
     });
 
     it('should be case-insensitive for scheme', () => {
@@ -62,99 +67,153 @@ describe('loopback-server', () => {
   });
 
   describe('startLoopbackServer', () => {
-    let serverPort: number;
+    let server: LoopbackServerResult | null = null;
 
     afterEach(async () => {
-      // Cleanup any existing server (if test created one)
-      if (serverPort) {
-        serverPort = 0;
+      if (server) {
+        await server.close();
+        server = null;
       }
     });
 
-    it('should start a server on an available port', async () => {
-      const server = await startLoopbackServer((req, res) => {
+    it('should start a server on an available port in default range', async () => {
+      server = await startLoopbackServer((_req, res) => {
         res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
         res.end('OK');
       });
 
       expect(server.port).toBeGreaterThanOrEqual(MIN_PORT);
       expect(server.port).toBeLessThanOrEqual(MAX_PORT);
-      serverPort = server.port;
 
-      // Test that server responds
-      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
-        method: 'GET',
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+      expect(response.status).toBe(HTTP_STATUS_OK);
+    });
+
+    it('should start a server with custom port range', async () => {
+      const customMin = 49200;
+      const customMax = 49210;
+
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        },
+        { portRange: [customMin, customMax] }
+      );
+
+      expect(server.port).toBeGreaterThanOrEqual(customMin);
+      expect(server.port).toBeLessThanOrEqual(customMax);
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+      expect(response.status).toBe(HTTP_STATUS_OK);
+    });
+
+    it('should throw when no ports are available in range', async () => {
+      // Occupy a single-port range to force the error
+      const blockingServer = createServer();
+      const blockingPort = 49300;
+
+      await new Promise<void>((resolve, reject) => {
+        blockingServer.once('error', reject);
+        blockingServer.listen(blockingPort, LOOPBACK_HOST, () => resolve());
       });
 
-      expect(response.status).toBe(HTTP_STATUS_OK);
-      await server.close();
+      try {
+        await expect(
+          startLoopbackServer(
+            (_req, res) => {
+              res.writeHead(HTTP_STATUS_OK);
+              res.end('OK');
+            },
+            { portRange: [blockingPort, blockingPort] }
+          )
+        ).rejects.toThrow('No available ports');
+      } finally {
+        blockingServer.close();
+      }
     });
 
     it('should include security headers in response', async () => {
-      const server = await startLoopbackServer((req, res) => {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
         res.end('Test');
       });
 
-      serverPort = server.port;
-
-      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
-        method: 'GET',
-      });
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
 
       expect(response.headers.get('X-Frame-Options')).toBe('DENY');
       expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
       expect(response.headers.get('Content-Security-Policy')).toBe("default-src 'none'; connect-src 'self'");
       expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
 
-      await server.close();
+    it('should merge user headers with security headers', async () => {
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK, {
+          'Content-Type': 'application/json',
+          'X-Custom-Header': 'custom-value',
+        });
+        res.end('{}');
+      });
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+
+      // User headers preserved
+      expect(response.headers.get('Content-Type')).toContain('application/json');
+      expect(response.headers.get('X-Custom-Header')).toBe('custom-value');
+      // Security headers also present
+      expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
+
+    it('should allow user headers to override security headers', async () => {
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK, {
+          'Cache-Control': 'max-age=3600',
+        });
+        res.end('OK');
+      });
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+
+      // User override takes precedence
+      expect(response.headers.get('Cache-Control')).toBe('max-age=3600');
+      // Other security headers still present
+      expect(response.headers.get('X-Frame-Options')).toBe('DENY');
     });
 
     it('should reject requests from non-localhost origins', async () => {
-      const server = await startLoopbackServer((req, res) => {
-        res.writeHead(200);
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
         res.end('OK');
       });
 
-      serverPort = server.port;
-
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
         method: 'GET',
-        headers: {
-          'Origin': 'http://evil.com',
-        },
+        headers: { Origin: EXTERNAL_ORIGIN },
       });
 
       expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
-      await server.close();
     });
 
     it('should accept requests from localhost origins', async () => {
-      const server = await startLoopbackServer((req, res) => {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
         res.end('OK');
       });
 
-      serverPort = server.port;
-
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
-        method: 'GET',
-        headers: {
-          'Origin': `http://localhost:${server.port}`,
-        },
+        headers: { Origin: `${HTTP_SCHEME}://localhost:${server.port}` },
       });
 
       expect(response.status).toBe(HTTP_STATUS_OK);
-      await server.close();
     });
 
     it('should handle OPTIONS preflight requests', async () => {
-      const server = await startLoopbackServer((req, res) => {
-        res.writeHead(200);
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
         res.end('OK');
       });
-
-      serverPort = server.port;
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
         method: 'OPTIONS',
@@ -162,31 +221,26 @@ describe('loopback-server', () => {
 
       expect(response.status).toBe(HTTP_STATUS_OK);
       expect(response.headers.get('X-Frame-Options')).toBe('DENY');
-      await server.close();
     });
 
     it('should properly close the server', async () => {
-      const server = await startLoopbackServer((req, res) => {
-        res.writeHead(200);
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
         res.end('OK');
       });
 
-      serverPort = server.port;
+      const response1 = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+      expect(response1.status).toBe(HTTP_STATUS_OK);
 
-      // Make a request
-      const response1 = await fetch(`http://127.0.0.1:${server.port}`);
-      expect(response1.status).toBe(200);
-
-      // Close the server
       await server.close();
+      server = null; // Prevent double close in afterEach
 
-      // Try to make another request - should fail
       let connectionFailed = false;
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
         try {
-          await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, { signal: controller.signal });
+          await fetch(`${LOOPBACK_URL_PREFIX}:${server?.port}`, { signal: controller.signal });
         } finally {
           clearTimeout(timeoutId);
         }
@@ -197,38 +251,78 @@ describe('loopback-server', () => {
       expect(connectionFailed).toBe(true);
     });
 
-    it('should pass requests to user handler', async () => {
+    it('should pass requests to user handler with correct method and URL', async () => {
       let handlerCalls = 0;
       const capturedRequests: { method: string; url: string }[] = [];
 
-      const server = await startLoopbackServer((req, res) => {
+      server = await startLoopbackServer((req, res) => {
         handlerCalls++;
         capturedRequests.push({
-          method: req.method || 'UNKNOWN',
-          url: req.url || '/',
+          method: req.method ?? 'UNKNOWN',
+          url: req.url ?? '/',
         });
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
         res.end(`Call ${handlerCalls}`);
       });
 
-      serverPort = server.port;
+      const response1 = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}/test`);
+      expect(response1.status).toBe(HTTP_STATUS_OK);
 
-      // Make GET request
-      const response1 = await fetch(`http://127.0.0.1:${server.port}/test`);
-      expect(response1.status).toBe(200);
-
-      // Make POST request
-      const response2 = await fetch(`http://127.0.0.1:${server.port}/api`, {
+      const response2 = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}/api`, {
         method: 'POST',
         body: 'test',
       });
-      expect(response2.status).toBe(200);
+      expect(response2.status).toBe(HTTP_STATUS_OK);
 
       expect(handlerCalls).toBe(2);
       expect(capturedRequests[0].method).toBe('GET');
+      expect(capturedRequests[0].url).toBe('/test');
       expect(capturedRequests[1].method).toBe('POST');
+      expect(capturedRequests[1].url).toBe('/api');
+    });
 
-      await server.close();
+    it('should skip busy ports and find next available', async () => {
+      const customMin = 49400;
+      const customMax = 49405;
+
+      // Block the first port
+      const blockingServer = createServer();
+      await new Promise<void>((resolve, reject) => {
+        blockingServer.once('error', reject);
+        blockingServer.listen(customMin, LOOPBACK_HOST, () => resolve());
+      });
+
+      try {
+        server = await startLoopbackServer(
+          (_req, res) => {
+            res.writeHead(HTTP_STATUS_OK);
+            res.end('OK');
+          },
+          { portRange: [customMin, customMax] }
+        );
+
+        // Should have skipped the blocked port
+        expect(server.port).toBeGreaterThan(customMin);
+        expect(server.port).toBeLessThanOrEqual(customMax);
+
+        const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+        expect(response.status).toBe(HTTP_STATUS_OK);
+      } finally {
+        blockingServer.close();
+      }
+    });
+
+    it('should handle writeHead called without headers argument', async () => {
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
+        res.end('no headers');
+      });
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+
+      expect(response.status).toBe(HTTP_STATUS_OK);
+      // Security headers should still be injected
+      expect(response.headers.get('X-Frame-Options')).toBe('DENY');
     });
   });
 });
