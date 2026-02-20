@@ -87,12 +87,6 @@ fi
 # Install binary (no sudo needed)
 echo "📦 Installing $INSTALL_NAME to $INSTALL_DIR..."
 cp "$BINARY_PATH" "$INSTALL_DIR/$INSTALL_NAME"
-
-# Remove macOS quarantine flag so Gatekeeper does not block the binary
-if [[ "$OS" == "Darwin"* ]]; then
-    xattr -d com.apple.quarantine "$INSTALL_DIR/$INSTALL_NAME" 2>/dev/null || true
-fi
-
 echo "✅ Installed successfully!"
 
 # Step 4: Auto-configure shell PATH (like Bun does)
