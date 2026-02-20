@@ -352,7 +352,7 @@ describe('loopback-server', () => {
 
       expect(response.status).toBe(HTTP_STATUS_OK);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SONARCLOUD_ORIGIN);
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
     });
 
     it('should still reject external origins not in allowedOrigins list', async () => {

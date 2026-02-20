@@ -127,7 +127,7 @@ export async function startLoopbackServer(
         // Add CORS headers for allowed external origins (e.g. SonarCloud OAuth callback)
         if (origin && (isValidLoopbackOrigin(origin) || allowedOrigins.includes(origin))) {
           preflightHeaders['Access-Control-Allow-Origin'] = origin;
-          preflightHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
+          preflightHeaders['Access-Control-Allow-Methods'] = 'GET, OPTIONS';
           preflightHeaders['Access-Control-Allow-Headers'] = 'Content-Type';
         }
         res.writeHead(HTTP_STATUS_OK, preflightHeaders);
