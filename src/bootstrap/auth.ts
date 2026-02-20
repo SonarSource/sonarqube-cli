@@ -297,12 +297,13 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
 
   // 6. Wait for token with timeout (50 seconds)
   let token: string | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     token = await Promise.race([
       tokenPromise,
-      new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), PORT_TIMEOUT_MS)
-      )
+      new Promise<string>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), PORT_TIMEOUT_MS);
+      })
     ]);
 
     logger.debug(`Token received (length: ${token.length})`);
@@ -311,6 +312,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
       throw new Error('Received empty token');
     }
   } finally {
+    clearTimeout(timeoutId);
     // Always shutdown and ensure all resources are cleaned up
     server.close().then(
       () => {
