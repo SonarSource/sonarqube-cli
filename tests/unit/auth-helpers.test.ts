@@ -50,7 +50,7 @@ describe('Auth Helper Functions', () => {
 
     it('should contain success title', () => {
       const html = getSuccessHTML();
-      expect(html).toContain('SonarLint Authentication');
+      expect(html).toContain('Sonar CLI Authentication');
     });
 
     it('should contain success message', () => {

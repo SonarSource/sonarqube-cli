@@ -1,18 +1,16 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, isValidLoopbackHost, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
-import { createServer } from 'node:http';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
 const EXPECTED_SECURITY_HEADERS_COUNT = 4;
-const MIN_PORT = 64130;
-const MAX_PORT = 64140;
 const TEST_TIMEOUT_MS = 1000;
 const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';
 const LOOPBACK_URL_PREFIX = `${HTTP_SCHEME}://${LOOPBACK_HOST}`;
 // DNS rebinding test origins (intentionally non-loopback, must be http for origin validation)
 const EXTERNAL_ORIGIN = `${HTTP_SCHEME}://evil.com`;
+const SONARCLOUD_ORIGIN = 'https://sonarcloud.io';
 
 describe('loopback-server', () => {
   describe('getSecurityHeaders', () => {
@@ -106,61 +104,16 @@ describe('loopback-server', () => {
       }
     });
 
-    it('should start a server on an available port in default range', async () => {
+    it('should start a server on an OS-assigned port', async () => {
       server = await startLoopbackServer((_req, res) => {
         res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
         res.end('OK');
       });
 
-      expect(server.port).toBeGreaterThanOrEqual(MIN_PORT);
-      expect(server.port).toBeLessThanOrEqual(MAX_PORT);
+      expect(server.port).toBeGreaterThan(0);
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
       expect(response.status).toBe(HTTP_STATUS_OK);
-    });
-
-    it('should start a server with custom port range', async () => {
-      const customMin = 49200;
-      const customMax = 49210;
-
-      server = await startLoopbackServer(
-        (_req, res) => {
-          res.writeHead(HTTP_STATUS_OK);
-          res.end('OK');
-        },
-        { portRange: [customMin, customMax] }
-      );
-
-      expect(server.port).toBeGreaterThanOrEqual(customMin);
-      expect(server.port).toBeLessThanOrEqual(customMax);
-
-      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
-      expect(response.status).toBe(HTTP_STATUS_OK);
-    });
-
-    it('should throw when no ports are available in range', async () => {
-      // Occupy a single-port range to force the error
-      const blockingServer = createServer();
-      const blockingPort = 49300;
-
-      await new Promise<void>((resolve, reject) => {
-        blockingServer.once('error', reject);
-        blockingServer.listen(blockingPort, LOOPBACK_HOST, () => resolve());
-      });
-
-      try {
-        await expect(
-          startLoopbackServer(
-            (_req, res) => {
-              res.writeHead(HTTP_STATUS_OK);
-              res.end('OK');
-            },
-            { portRange: [blockingPort, blockingPort] }
-          )
-        ).rejects.toThrow('No available ports');
-      } finally {
-        blockingServer.close();
-      }
     });
 
     it('should include security headers in response', async () => {
@@ -285,7 +238,8 @@ describe('loopback-server', () => {
         res.end('OK');
       });
 
-      const response1 = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+      const { port } = server;
+      const response1 = await fetch(`${LOOPBACK_URL_PREFIX}:${port}`);
       expect(response1.status).toBe(HTTP_STATUS_OK);
 
       await server.close();
@@ -296,7 +250,7 @@ describe('loopback-server', () => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
         try {
-          await fetch(`${LOOPBACK_URL_PREFIX}:${server?.port}`, { signal: controller.signal });
+          await fetch(`${LOOPBACK_URL_PREFIX}:${port}`, { signal: controller.signal });
         } finally {
           clearTimeout(timeoutId);
         }
@@ -337,37 +291,6 @@ describe('loopback-server', () => {
       expect(capturedRequests[1].url).toBe('/api');
     });
 
-    it('should skip busy ports and find next available', async () => {
-      const customMin = 49400;
-      const customMax = 49405;
-
-      // Block the first port
-      const blockingServer = createServer();
-      await new Promise<void>((resolve, reject) => {
-        blockingServer.once('error', reject);
-        blockingServer.listen(customMin, LOOPBACK_HOST, () => resolve());
-      });
-
-      try {
-        server = await startLoopbackServer(
-          (_req, res) => {
-            res.writeHead(HTTP_STATUS_OK);
-            res.end('OK');
-          },
-          { portRange: [customMin, customMax] }
-        );
-
-        // Should have skipped the blocked port
-        expect(server.port).toBeGreaterThan(customMin);
-        expect(server.port).toBeLessThanOrEqual(customMax);
-
-        const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
-        expect(response.status).toBe(HTTP_STATUS_OK);
-      } finally {
-        blockingServer.close();
-      }
-    });
-
     it('should handle writeHead called without headers argument', async () => {
       server = await startLoopbackServer((_req, res) => {
         res.writeHead(HTTP_STATUS_OK);
@@ -379,6 +302,73 @@ describe('loopback-server', () => {
       expect(response.status).toBe(HTTP_STATUS_OK);
       // Security headers should still be injected
       expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+    });
+
+    it('should allow requests from explicitly allowed external origins', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Origin: SONARCLOUD_ORIGIN },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_OK);
+    });
+
+    it('should set Access-Control-Allow-Origin header for allowed external origins', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Origin: SONARCLOUD_ORIGIN },
+      });
+
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SONARCLOUD_ORIGIN);
+    });
+
+    it('should handle OPTIONS preflight from allowed external origins with CORS headers', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        method: 'OPTIONS',
+        headers: { Origin: SONARCLOUD_ORIGIN },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_OK);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SONARCLOUD_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
+    });
+
+    it('should still reject external origins not in allowedOrigins list', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Origin: EXTERNAL_ORIGIN },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
     });
   });
 });

@@ -32,9 +32,6 @@ const MAX_POST_BODY_BYTES = 4096;
 const LONG_TOKEN_PADDING_LENGTH = 200;
 const EVENT_SETTLE_DELAY_MS = 50;
 const PORT_SCAN_DELAY_MS = 150;
-const PORT_SCAN_TIMEOUT_MS = 100;
-const MIN_PORT = 64130;
-const MAX_PORT = 64140;
 const TEST_PORT_A = 64130;
 const TEST_PORT_B = 64135;
 // DNS rebinding test origins (intentionally non-loopback, must be http for origin validation)
@@ -46,21 +43,12 @@ function serverUrl(port: number): string {
 }
 
 /**
- * Scan port range to find an active server (used for generateTokenViaBrowser tests)
+ * Extract port from the auth URL captured by the openBrowser mock
  */
-async function findActivePort(minPort: number, maxPort: number): Promise<number> {
-  for (let port = minPort; port <= maxPort; port++) {
-    try {
-      await fetch(serverUrl(port), {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(PORT_SCAN_TIMEOUT_MS),
-      });
-      return port;
-    } catch {
-      // Port not active, try next
-    }
-  }
-  throw new Error('No active server found in port range');
+function extractPortFromMockBrowserCall(): number {
+  const calls = mockOpenBrowser.mock.calls;
+  const lastUrl = calls[calls.length - 1][0] as string;
+  return parseInt(new URL(lastUrl).searchParams.get('port')!);
 }
 
 describe('Auth Scenarios: OAuth token flow via real HTTP', () => {
@@ -655,7 +643,7 @@ describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
     await new Promise(resolve => setTimeout(resolve, PORT_SCAN_DELAY_MS));
 
     // Find which port the server is on
-    const port = await findActivePort(MIN_PORT, MAX_PORT);
+    const port = extractPortFromMockBrowserCall();
 
     // Simulate SonarQube OAuth callback via POST
     await fetch(serverUrl(port), {
@@ -673,7 +661,7 @@ describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
 
     await new Promise(resolve => setTimeout(resolve, PORT_SCAN_DELAY_MS));
 
-    const port = await findActivePort(MIN_PORT, MAX_PORT);
+    const port = extractPortFromMockBrowserCall();
 
     // Simulate SonarQube OAuth callback via GET
     await fetch(`${serverUrl(port)}/?token=squ_get_flow_token`);

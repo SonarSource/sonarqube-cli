@@ -13,7 +13,7 @@ const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const TOKEN_DISPLAY_LENGTH = 20;
 const MAX_POST_BODY_BYTES = 4096;
-const SUCCESS_HTML_TITLE = 'SonarLint Authentication';
+const SUCCESS_HTML_TITLE = 'Sonar CLI Authentication';
 const SUCCESS_HTML_MESSAGE = 'Authentication Successful';
 const SUCCESS_HTML_DESCRIPTION = 'You can close this window and return to the terminal.';
 
@@ -267,12 +267,15 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   });
 
   // 1. Start embedded HTTP server with token extraction handler
+  // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
+  const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
     createRequestHandler((token: string) => {
       if (resolveToken) {
         resolveToken(token);
       }
-    })
+    }),
+    { allowedOrigins: [serverOrigin] }
   );
 
   logger.debug(`HTTP server started on port ${server.port}`);

@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { performSecretInstall } from '../../src/commands/secret.js';
 import { setMockLogger } from '../../src/lib/logger.js';
 
+const INTEGRATION_TEST_TIMEOUT_MS = 30000;
+
 describe('Secret Install Integration Tests', () => {
   let testDir: string;
   let logOutput: string[];
@@ -58,7 +60,7 @@ describe('Secret Install Integration Tests', () => {
       expect(errorMsg).toBeDefined();
       expect(errorMsg.length).toBeGreaterThan(0);
     }
-  });
+  }, INTEGRATION_TEST_TIMEOUT_MS);
 
   it('performSecretInstall with force: true skips version check', async () => {
     try {
@@ -73,7 +75,7 @@ describe('Secret Install Integration Tests', () => {
       // Expected: no GitHub access
       expect((error as Error).message).toBeDefined();
     }
-  });
+  }, INTEGRATION_TEST_TIMEOUT_MS);
 
   it('performSecretInstall: returns same path on already-up-to-date error', async () => {
     try {
@@ -93,7 +95,7 @@ describe('Secret Install Integration Tests', () => {
         expect(msg.length).toBeGreaterThan(0);
       }
     }
-  });
+  }, INTEGRATION_TEST_TIMEOUT_MS);
 
   it('performSecretInstall: creates binary directory if missing', async () => {
     try {
@@ -107,7 +109,7 @@ describe('Secret Install Integration Tests', () => {
       // Expected: GitHub API failure in test environment
       expect((error as Error).message).toBeDefined();
     }
-  });
+  }, INTEGRATION_TEST_TIMEOUT_MS);
 
   it('performSecretInstall: error handling propagates network errors', async () => {
     let errorThrown = false;
@@ -131,7 +133,7 @@ describe('Secret Install Integration Tests', () => {
         errorMessage.includes('Connection')
       ).toBe(true);
     }
-  });
+  }, INTEGRATION_TEST_TIMEOUT_MS);
 
   it('performSecretInstall: detects correct platform and architecture', async () => {
     try {
@@ -144,5 +146,5 @@ describe('Secret Install Integration Tests', () => {
       // Network error expected in test environment
       expect((error as Error).message).toBeDefined();
     }
-  });
+  }, INTEGRATION_TEST_TIMEOUT_MS);
 });
