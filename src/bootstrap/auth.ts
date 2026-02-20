@@ -10,7 +10,9 @@ import logger from '../lib/logger.js';
 
 const PORT_TIMEOUT_MS = 50000;
 const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const TOKEN_DISPLAY_LENGTH = 20;
+const MAX_POST_BODY_BYTES = 4096;
 const SUCCESS_HTML_TITLE = 'SonarLint Authentication';
 const SUCCESS_HTML_MESSAGE = 'Authentication Successful';
 const SUCCESS_HTML_DESCRIPTION = 'You can close this window and return to the terminal.';
@@ -189,10 +191,22 @@ export function sendSuccessResponse(res: ServerResponse, extractedToken?: string
 export function handlePostRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
   logger.debug('POST request detected, reading body...');
   let body = '';
+  let bodySize = 0;
   req.on('data', (chunk: Buffer) => {
+    bodySize += chunk.length;
+    if (bodySize > MAX_POST_BODY_BYTES) {
+      logger.warn(`POST body exceeds ${MAX_POST_BODY_BYTES} bytes limit, rejecting`);
+      res.writeHead(HTTP_STATUS_PAYLOAD_TOO_LARGE);
+      res.end('Payload Too Large');
+      req.destroy();
+      return;
+    }
     body += chunk.toString();
   });
   req.on('end', () => {
+    if (bodySize > MAX_POST_BODY_BYTES) {
+      return;
+    }
     logger.debug(`POST body: ${body}`);
     const extractedToken = extractTokenFromPostBody(body);
     if (extractedToken) {

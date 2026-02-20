@@ -27,6 +27,8 @@ const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
+const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
+const MAX_POST_BODY_BYTES = 4096;
 const LONG_TOKEN_PADDING_LENGTH = 200;
 const EVENT_SETTLE_DELAY_MS = 50;
 const PORT_SCAN_DELAY_MS = 150;
@@ -365,6 +367,97 @@ describe('Auth Scenarios: OAuth token flow via real HTTP', () => {
 
     expect(response.status).toBe(HTTP_STATUS_OK);
     expect(receivedToken).toBe('squ_no_origin');
+  });
+
+  // ─── Scenario: Host header validation (defense-in-depth) ──────
+
+  it('should reject requests with non-loopback Host header', async () => {
+    const handler = createRequestHandler(() => {});
+    server = await startLoopbackServer(handler);
+
+    const response = await fetch(serverUrl(server.port), {
+      headers: { Host: 'evil.com:8080' },
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
+  });
+
+  it('should accept requests with loopback Host header', async () => {
+    let receivedToken: string | undefined;
+
+    const handler = createRequestHandler((token: string) => {
+      receivedToken = token;
+    });
+    server = await startLoopbackServer(handler);
+
+    const response = await fetch(`${serverUrl(server.port)}/?token=squ_host_ok`, {
+      headers: { Host: `${LOOPBACK_HOST}:${server.port}` },
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_OK);
+    expect(receivedToken).toBe('squ_host_ok');
+  });
+
+  it('should reject requests with attacker subdomain Host header', async () => {
+    const handler = createRequestHandler(() => {});
+    server = await startLoopbackServer(handler);
+
+    const response = await fetch(serverUrl(server.port), {
+      headers: { Host: 'attacker.localhost:8080' },
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
+  });
+
+  // ─── Scenario: POST body size limit ─────────────────────────
+
+  it('should reject POST body exceeding 4KB limit with 413', async () => {
+    const handler = createRequestHandler(() => {});
+    server = await startLoopbackServer(handler);
+
+    const oversizedBody = JSON.stringify({ token: 'x'.repeat(MAX_POST_BODY_BYTES) });
+
+    const response = await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: oversizedBody,
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_PAYLOAD_TOO_LARGE);
+  });
+
+  it('should accept POST body within 4KB limit', async () => {
+    let receivedToken: string | undefined;
+
+    const handler = createRequestHandler((token: string) => {
+      receivedToken = token;
+    });
+    server = await startLoopbackServer(handler);
+
+    const response = await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: JSON.stringify({ token: 'squ_normal_size_token' }),
+    });
+
+    expect(response.status).toBe(HTTP_STATUS_OK);
+    expect(receivedToken).toBe('squ_normal_size_token');
+  });
+
+  it('should not invoke token callback when body exceeds limit', async () => {
+    let callbackInvoked = false;
+
+    const handler = createRequestHandler(() => {
+      callbackInvoked = true;
+    });
+    server = await startLoopbackServer(handler);
+
+    const oversizedBody = JSON.stringify({ token: 'x'.repeat(MAX_POST_BODY_BYTES) });
+
+    await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: oversizedBody,
+    });
+
+    expect(callbackInvoked).toBe(false);
   });
 
   // ─── Scenario: CORS preflight ─────────────────────────────────

@@ -47,6 +47,21 @@ export function isValidLoopbackOrigin(origin: string): boolean {
 }
 
 /**
+ * Validate if Host header points to a loopback address
+ * Defense-in-depth against DNS rebinding attacks (complements Origin check)
+ */
+export function isValidLoopbackHost(host: string): boolean {
+  try {
+    // Host header is "hostname:port" or just "hostname" — prepend scheme to parse
+    const url = new URL(`http://${host}`);
+    return ALLOWED_LOOPBACK_HOSTS.has(url.hostname);
+  } catch {
+    logger.debug(`Invalid Host header format: ${host}`);
+    return false;
+  }
+}
+
+/**
  * Merge security headers with user-provided headers
  */
 function mergeSecurityHeadersWithUserHeaders(
@@ -131,6 +146,15 @@ export async function startLoopbackServer(
       // DNS rebinding protection: reject non-localhost origins
       if (origin && !isValidLoopbackOrigin(origin)) {
         logger.warn(`Rejected request from disallowed origin: ${origin}`);
+        res.writeHead(HTTP_STATUS_FORBIDDEN);
+        res.end('Forbidden');
+        return;
+      }
+
+      // Host header validation: defense-in-depth against DNS rebinding
+      const host = req.headers.host;
+      if (host && !isValidLoopbackHost(host)) {
+        logger.warn(`Rejected request with non-loopback Host header: ${host}`);
         res.writeHead(HTTP_STATUS_FORBIDDEN);
         res.end('Forbidden');
         return;

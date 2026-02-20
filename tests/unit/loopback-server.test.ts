@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
+import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, isValidLoopbackHost, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
 import { createServer } from 'node:http';
 
 const HTTP_STATUS_OK = 200;
@@ -63,6 +63,36 @@ describe('loopback-server', () => {
     it('should be case-insensitive for scheme', () => {
       expect(isValidLoopbackOrigin('HTTP://LOCALHOST:8080')).toBe(true);
       expect(isValidLoopbackOrigin('HTTPS://127.0.0.1:8080')).toBe(true);
+    });
+  });
+
+  describe('isValidLoopbackHost', () => {
+    it('should accept localhost host header', () => {
+      expect(isValidLoopbackHost('localhost:8080')).toBe(true);
+    });
+
+    it('should accept 127.0.0.1 host header', () => {
+      expect(isValidLoopbackHost('127.0.0.1:8080')).toBe(true);
+    });
+
+    it('should accept [::1] host header (IPv6 loopback)', () => {
+      expect(isValidLoopbackHost('[::1]:8080')).toBe(true);
+    });
+
+    it('should accept host without port', () => {
+      expect(isValidLoopbackHost('localhost')).toBe(true);
+      expect(isValidLoopbackHost('127.0.0.1')).toBe(true);
+    });
+
+    it('should reject external host headers', () => {
+      expect(isValidLoopbackHost('evil.com:8080')).toBe(false);
+      expect(isValidLoopbackHost('192.168.1.1:8080')).toBe(false);
+      expect(isValidLoopbackHost('attacker.localhost:8080')).toBe(false);
+    });
+
+    it('should reject malformed host headers', () => {
+      expect(isValidLoopbackHost('::::')).toBe(false);
+      expect(isValidLoopbackHost('')).toBe(false);
     });
   });
 
@@ -194,6 +224,32 @@ describe('loopback-server', () => {
       });
 
       expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
+    });
+
+    it('should reject requests with non-loopback Host header', async () => {
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
+        res.end('OK');
+      });
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Host: 'evil.com:8080' },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
+    });
+
+    it('should accept requests with loopback Host header', async () => {
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+        res.end('OK');
+      });
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Host: `${LOOPBACK_HOST}:${server.port}` },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_OK);
     });
 
     it('should accept requests from localhost origins', async () => {
