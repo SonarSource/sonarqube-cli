@@ -1,16 +1,22 @@
 // Auth module - OAuth flow and token management
 
-import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { VERSION } from '../version.js';
 import { getToken as getKeystoreToken, saveToken as saveKeystoreToken, deleteToken as deleteKeystoreToken } from '../lib/keychain.js';
 import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
+import { startLoopbackServer } from '../lib/loopback-server.js';
 import logger from '../lib/logger.js';
 
-const MIN_PORT = 64130;
-const MAX_PORT = 64140;
-const HTTP_STATUS_OK = 200;
 const PORT_TIMEOUT_MS = 50000;
+const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
+const TOKEN_DISPLAY_LENGTH = 20;
+const MAX_POST_BODY_BYTES = 4096;
+const SUCCESS_HTML_TITLE = 'SonarLint Authentication';
+const SUCCESS_HTML_MESSAGE = 'Authentication Successful';
+const SUCCESS_HTML_DESCRIPTION = 'You can close this window and return to the terminal.';
+
 /**
  * Get token from keychain
  */
@@ -45,234 +51,57 @@ export async function validateToken(serverURL: string, token: string): Promise<b
 }
 
 /**
- * Generate token via browser OAuth flow
+ * Extract token from POST body JSON
  */
-export async function generateTokenViaBrowser(serverURL: string): Promise<string> {
-  logger.debug(`=== AUTH FLOW v${VERSION} ===`);
-  logger.debug('Starting token generation flow...');
-
-  // 1. Start embedded HTTP server
-  const { port, tokenPromise, shutdown } = await startEmbeddedServer();
-  logger.debug(`HTTP server started on port ${port}`);
-
-  // 2. Build auth URL
-  const cleanServerURL = serverURL.replace(/\/$/, '');
-  const authURL = `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
-
-  // 3. Show prompt
-  logger.info('\n🔑 Obtaining access token from SonarQube...');
-  logger.info(`\n   URL: ${authURL}`);
-  logger.info('\n   Press Enter to open browser');
-  logger.info('   ');
-
-  // Wait for user to press Enter and ensure stdin is ready
-  const userPressedEnter = new Promise<void>(resolve => {
-    const onData = () => {
-      process.stdin.removeListener('data', onData);
-      process.stdin.pause();
-      process.stdin.unref();
-      resolve();
-    };
-    process.stdin.setEncoding('utf-8');
-    process.stdin.resume();
-    process.stdin.once('data', onData);
-  });
-
-  await userPressedEnter;
-
-  // 4. Open browser
-  logger.debug('Opening browser...');
+export function extractTokenFromPostBody(body: string): string | undefined {
   try {
-    await openBrowser(authURL);
-  } catch (error) {
-    logger.info(`   ⚠️  Failed to open browser automatically: ${error}`);
-    logger.info('   Copy the URL above and open it manually');
-  }
-
-  logger.info('\n   ⏳ Waiting for authorization (50 second timeout)...');
-  logger.debug(`Waiting for callback on http://127.0.0.1:${port}`);
-
-  // 5. Wait for token with timeout (50 seconds)
-  let token: string | undefined;
-  try {
-    token = await Promise.race([
-      tokenPromise,
-      new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), PORT_TIMEOUT_MS)
-      )
-    ]);
-
-    logger.debug(`Token received (length: ${token.length})`);
-
-    if (!token) {
-      throw new Error('Received empty token');
+    const data = JSON.parse(body) as Record<string, unknown>;
+    const token = data.token;
+    // Token must be a non-empty string
+    if (typeof token === 'string' && token.length > 0) {
+      return token;
     }
-  } finally {
-    // Always shutdown and ensure all resources are cleaned up
-    void shutdown().catch(error => {
-      logger.debug(`Error during shutdown: ${(error as Error).message}`);
-    });
+    return undefined;
+  } catch {
+    return undefined;
   }
-
-  return token;
 }
 
 /**
- * Start embedded HTTP server to receive token callback
+ * Extract token from GET query parameters
  */
-async function startEmbeddedServer(): Promise<{
-  port: number;
-  tokenPromise: Promise<string>;
-  shutdown: () => Promise<void>;
-}> {
-  logger.debug('Creating token promise...');
-
-  let resolveToken: (token: string) => void;
-  const tokenPromise = new Promise<string>(resolve => {
-    resolveToken = resolve;
-  });
-
-  // Try to find an available port
-  logger.debug(`Searching for available port in range ${MIN_PORT}-${MAX_PORT}...`);
-
-  let port: number | null = null;
-  let server: ReturnType<typeof createServer> | null = null;
-
-  for (let p = MIN_PORT; p <= MAX_PORT; p++) {
-    try {
-      const testServer = createServer();
-      const listening = await new Promise<boolean>((resolve) => {
-        testServer.once('error', (err) => {
-          logger.debug(`Port ${p} is busy: ${(err as Error).message}`);
-          resolve(false);
-        });
-        testServer.listen(p, '127.0.0.1', () => {
-          logger.info(`✓ Listening on port ${p}`);
-          logger.debug(`Port ${p} is available`);
-          resolve(true);
-        });
-      });
-
-      if (listening) {
-        port = p;
-        server = testServer;
-        break;
-      }
-    } catch (error) {
-      logger.debug(`Port ${p} error: ${error}`);
+export function extractTokenFromQuery(host: string | undefined, url: string | undefined): string | undefined {
+  if (!host || !url) return undefined;
+  try {
+    const fullUrl = new URL(`http://${host}${url}`);
+    const token = fullUrl.searchParams.get('token');
+    // Token must be a non-empty string
+    if (token && token.length > 0) {
+      return token;
     }
+    return undefined;
+  } catch {
+    return undefined;
   }
+}
 
-  if (!server || !port) {
-    throw new Error(`No available ports in range ${MIN_PORT}-${MAX_PORT}`);
-  }
-
-  logger.debug(`Listener created on 127.0.0.1:${port}`);
-
-  // Set up connection handler (low-level socket events)
-  const finalServer = server;
-  finalServer.on('connection', (socket) => {
-    const remoteAddr = socket.remoteAddress;
-    const remotePort = socket.remotePort;
-    logger.debug(`NEW CONNECTION from ${remoteAddr}:${remotePort}`);
-
-    socket.on('data', (chunk) => {
-      logger.debug(`Socket received ${chunk.length} bytes`);
-    });
-
-    socket.on('error', (error) => {
-      logger.debug(`Socket error: ${(error).message}`);
-    });
-
-    socket.on('end', () => {
-      logger.debug('Socket connection ended');
-    });
-  });
-
-  // Set up request handler - catch ALL requests
-  finalServer.on('request', (req, res) => {
-    logger.debug(`*** HTTP REQUEST: ${req.method} ${req.url} ***`);
-
-    // Try to extract token from any request (POST body or GET query)
-    if (req.method === 'POST') {
-      logger.debug('POST request detected, reading body...');
-      let body = '';
-      req.on('data', chunk => {
-        body += chunk.toString();
-      });
-      req.on('end', () => {
-        logger.debug(`POST body: ${body}`);
-        try {
-          const data = JSON.parse(body) as Record<string, unknown>;
-          const token = data.token as string | undefined;
-          if (token) {
-            logger.debug(`✓ Token extracted from POST body: ${token.substring(0, 20)}...`);
-            res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-            res.end(getSuccessHTML());
-            resolveToken(token);
-          }
-        } catch {
-          logger.debug('Failed to parse POST body as JSON');
-        }
-      });
-    } else if (req.method === 'GET') {
-      logger.debug('GET request detected, checking query parameters...');
-      try {
-        const url = new URL(`http://${req.headers.host}${req.url}`);
-        const token = url.searchParams.get('token');
-        if (token) {
-          logger.debug(`✓ Token extracted from GET query: ${token.substring(0, 20)}...`);
-          res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-          res.end(getSuccessHTML());
-          resolveToken(token);
-          return;
-        }
-      } catch (error) {
-        logger.debug(`Failed to parse GET URL: ${(error as Error).message}`);
-      }
-      // No token in GET, return success anyway (might be just browser check)
-      res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-      res.end(getSuccessHTML());
-    } else {
-      logger.debug(`Unexpected HTTP method: ${req.method}`);
-      res.writeHead(HTTP_STATUS_OK);
-      res.end('OK');
-    }
-  });
-
-  const shutdown = async (): Promise<void> => {
-    logger.debug('Shutting down embedded server...');
-
-    return new Promise<void>((resolve) => {
-      // Close the server and wait for it to finish
-      finalServer.close(() => {
-        logger.debug('Server closed successfully');
-        resolve();
-      });
-
-      // Force close any remaining connections after 2 seconds with unref
-      const forceCloseTimer = setTimeout(() => {
-        logger.debug('Force closing remaining connections');
-        finalServer.closeAllConnections?.();
-      }, 2000);
-
-      // Don't let this timer keep the process alive
-      forceCloseTimer.unref();
-    });
-  };
-
-  return { port, tokenPromise, shutdown };
+/**
+ * Build authentication URL from server URL and port
+ */
+export function buildAuthURL(serverURL: string, port: number): string {
+  const cleanServerURL = serverURL.replace(/\/$/, '');
+  return `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
 }
 
 /**
  * Get success HTML page
  */
-function getSuccessHTML(): string {
+export function getSuccessHTML(): string {
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>SonarLint Authentication</title>
+  <title>${SUCCESS_HTML_TITLE}</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -307,10 +136,193 @@ function getSuccessHTML(): string {
 <body>
   <div class="container">
     <div class="success">✓</div>
-    <h1>Authentication Successful</h1>
-    <p>You can close this window and return to the terminal.</p>
+    <h1>${SUCCESS_HTML_MESSAGE}</h1>
+    <p>${SUCCESS_HTML_DESCRIPTION}</p>
   </div>
 </body>
 </html>
 `;
+}
+
+/**
+ * Wait for user to press Enter on stdin
+ */
+export async function waitForUserInput(): Promise<void> {
+  return new Promise<void>(resolve => {
+    const onData = () => {
+      process.stdin.removeListener('data', onData);
+      process.stdin.pause();
+      process.stdin.unref();
+      resolve();
+    };
+    process.stdin.setEncoding('utf-8');
+    process.stdin.resume();
+    process.stdin.once('data', onData);
+  });
+}
+
+/**
+ * Open browser, with fallback message if it fails
+ */
+export async function openBrowserWithFallback(authURL: string): Promise<void> {
+  logger.debug('Opening browser...');
+  try {
+    await openBrowser(authURL);
+  } catch (error) {
+    logger.info(`   ⚠️  Failed to open browser automatically: ${error}`);
+    logger.info('   Copy the URL above and open it manually');
+  }
+}
+
+/**
+ * Send success response to HTTP client
+ */
+export function sendSuccessResponse(res: ServerResponse, extractedToken?: string, onToken?: (token: string) => void): void {
+  res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
+  res.end(getSuccessHTML());
+  if (extractedToken && onToken) {
+    onToken(extractedToken);
+  }
+}
+
+/**
+ * Handle POST request - read body and extract token
+ */
+export function handlePostRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
+  logger.debug('POST request detected, reading body...');
+  let body = '';
+  let bodySize = 0;
+  req.on('data', (chunk: Buffer) => {
+    bodySize += chunk.length;
+    if (bodySize > MAX_POST_BODY_BYTES) {
+      logger.warn(`POST body exceeds ${MAX_POST_BODY_BYTES} bytes limit, rejecting`);
+      res.writeHead(HTTP_STATUS_PAYLOAD_TOO_LARGE);
+      res.end('Payload Too Large');
+      req.destroy();
+      return;
+    }
+    body += chunk.toString();
+  });
+  req.on('end', () => {
+    if (bodySize > MAX_POST_BODY_BYTES) {
+      return;
+    }
+    logger.debug(`POST body: ${body}`);
+    const extractedToken = extractTokenFromPostBody(body);
+    if (extractedToken) {
+      logger.debug(`✓ Token extracted from POST body: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
+      sendSuccessResponse(res, extractedToken, onToken);
+    } else {
+      logger.debug('No token found in POST body');
+      sendSuccessResponse(res);
+    }
+  });
+}
+
+/**
+ * Handle GET request - extract token from query parameters
+ */
+export function handleGetRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
+  logger.debug('GET request detected, checking query parameters...');
+  const extractedToken = extractTokenFromQuery(req.headers.host, req.url);
+  if (extractedToken) {
+    logger.debug(`✓ Token extracted from GET query: ${extractedToken.substring(0, TOKEN_DISPLAY_LENGTH)}...`);
+    sendSuccessResponse(res, extractedToken, onToken);
+  } else {
+    logger.debug('No token found in GET query');
+    sendSuccessResponse(res);
+  }
+}
+
+/**
+ * Create request handler for loopback server
+ */
+export function createRequestHandler(onToken: (token: string) => void) {
+  return (req: IncomingMessage, res: ServerResponse) => {
+    logger.debug(`*** HTTP REQUEST: ${req.method} ${req.url} ***`);
+
+    if (req.method === 'POST') {
+      handlePostRequest(req, res, onToken);
+    } else if (req.method === 'GET') {
+      handleGetRequest(req, res, onToken);
+    } else {
+      logger.debug(`Unexpected HTTP method: ${req.method}`);
+      res.writeHead(HTTP_STATUS_OK);
+      res.end('OK');
+    }
+  };
+}
+
+/**
+ * Generate token via browser OAuth flow
+ */
+export async function generateTokenViaBrowser(serverURL: string): Promise<string> {
+  logger.debug(`=== AUTH FLOW v${VERSION} ===`);
+  logger.debug('Starting token generation flow...');
+
+  let resolveToken: ((token: string) => void) | null = null;
+
+  const tokenPromise = new Promise<string>(resolve => {
+    resolveToken = resolve;
+  });
+
+  // 1. Start embedded HTTP server with token extraction handler
+  const server = await startLoopbackServer(
+    createRequestHandler((token: string) => {
+      if (resolveToken) {
+        resolveToken(token);
+      }
+    })
+  );
+
+  logger.debug(`HTTP server started on port ${server.port}`);
+
+  // 2. Build auth URL
+  const authURL = buildAuthURL(serverURL, server.port);
+
+  // 3. Show prompt
+  logger.info('\n🔑 Obtaining access token from SonarQube...');
+  logger.info(`\n   URL: ${authURL}`);
+  logger.info('\n   Press Enter to open browser');
+  logger.info('   ');
+
+  // 4. Wait for user input
+  await waitForUserInput();
+
+  // 5. Open browser
+  await openBrowserWithFallback(authURL);
+
+  logger.info('\n   ⏳ Waiting for authorization (50 second timeout)...');
+  logger.debug(`Waiting for callback on http://127.0.0.1:${server.port}`);
+
+  // 6. Wait for token with timeout (50 seconds)
+  let token: string | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    token = await Promise.race([
+      tokenPromise,
+      new Promise<string>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), PORT_TIMEOUT_MS);
+      })
+    ]);
+
+    logger.debug(`Token received (length: ${token.length})`);
+
+    if (!token) {
+      throw new Error('Received empty token');
+    }
+  } finally {
+    clearTimeout(timeoutId);
+    // Always shutdown and ensure all resources are cleaned up
+    server.close().then(
+      () => {
+        logger.debug('Server closed successfully');
+      },
+      (error: unknown) => {
+        logger.debug(`Error during shutdown: ${(error as Error).message}`);
+      }
+    );
+  }
+
+  return token;
 }
