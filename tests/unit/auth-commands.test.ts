@@ -21,7 +21,7 @@ const mockKeytar = {
   },
   deletePassword: async (service: string, account: string) => {
     const key = `${service}:${account}`;
-    mockKeytarTokens.delete(key);
+    return mockKeytarTokens.delete(key);
   },
   findCredentials: async (service: string) => {
     const credentials: Array<{ account: string; password: string }> = [];
@@ -270,7 +270,7 @@ describe('auth commands stdin interaction', () => {
     });
 
     it('scenario: login with --with-token but no --org (should error)', () => {
-      const options = { withToken: 'abc123' };
+      const options: { withToken?: string; org?: string } = { withToken: 'abc123' };
       const isNonInteractive = !!options.withToken;
 
       if (isNonInteractive && !options.org) {

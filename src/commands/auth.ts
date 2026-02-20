@@ -11,8 +11,8 @@ import {
   generateConnectionId
 } from '../lib/state-manager.js';
 import logger from '../lib/logger.js';
-
 import { VERSION as CLI_VERSION, VERSION } from '../version.js';
+
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 
 /**

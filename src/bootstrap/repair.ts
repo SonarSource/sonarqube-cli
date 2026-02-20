@@ -1,7 +1,7 @@
 // Repair orchestrator - fixes configuration issues
 
 import { generateTokenViaBrowser, saveToken, validateToken, deleteToken } from './auth.js';
-import { installHooks, type HookType } from './hooks.js';
+import { installHooks, installSecretScanningHooks, type HookType } from './hooks.js';
 import type { HealthCheckResult } from './health.js';
 import logger from '../lib/logger.js';
 
@@ -49,4 +49,9 @@ export async function runRepair(
     await installHooks(projectRoot, hookType);
     logger.info('   ✓ Hooks installed');
   }
+
+  // Install sonar-secrets hooks for secret scanning
+  logger.info('\n→ 🔐 Installing secret scanning hooks...');
+  await installSecretScanningHooks(projectRoot);
+  logger.info('   ✓ Secret scanning hooks installed');
 }

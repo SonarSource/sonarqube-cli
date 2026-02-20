@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-02-18T20:08:34.328Z",
+  "auth": {
+    "isAuthenticated": true,
+    "connections": [
+      {
+        "id": "e7fa2931cbfbc8a1",
+        "type": "cloud",
+        "serverUrl": "https://sonarcloud.io",
+        "authenticatedAt": "2026-02-18T17:03:59.325Z",
+        "keystoreKey": "e7fa2931cbfbc8a1",
+        "orgKey": "sonarsource",
+        "region": "eu"
+      }
+    ],
+    "activeConnectionId": "e7fa2931cbfbc8a1"
+  },
+  "agents": {
+    "claude-code": {
+      "configured": true,
+      "hooks": {
+        "installed": [
+          {
+            "name": "sonar-prompt",
+            "type": "PostToolUse",
+            "installedAt": "2026-02-18T11:48:57.434Z"
+          }
+        ]
+      },
+      "skills": {
+        "installed": []
+      },
+      "configuredAt": "2026-02-18T11:48:57.432Z",
+      "configuredByCliVersion": "0.2.107"
+    }
+  },
+  "config": {
+    "cliVersion": "0.2.62"
+  },
+  "tools": {
+    "installed": [
+      {
+        "name": "sonar-secrets",
+        "version": "2.38.0.10279",
+        "path": "/Users/kirill.knize/.sonar-cli/bin/sonar-secrets",
+        "installedAt": "2026-02-18T20:08:34.327Z",
+        "installedByCliVersion": "0.2.109"
+      }
+    ]
+  }
+}

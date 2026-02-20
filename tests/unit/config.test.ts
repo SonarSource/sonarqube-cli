@@ -1,13 +1,13 @@
 // Config module tests
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
+import { it, expect } from 'bun:test';
+
 import { mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { loadConfig, saveConfig, newConfig } from '../../src/bootstrap/config.js';
 
-test('config: save and load', async () => {
+it('config: save and load', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -26,28 +26,28 @@ test('config: save and load', async () => {
 
     // Verify file exists
     const configPath = join(testDir, '.sonarqube', 'config.json');
-    assert.ok(existsSync(configPath), 'Config file should exist');
+    expect(existsSync(configPath)).toBe(true);
 
     // Load config
     const loaded = await loadConfig(testDir);
-    assert.ok(loaded, 'Should load config');
-    assert.equal(loaded!.sonarqube.serverUrl, 'https://sonarcloud.io');
-    assert.equal(loaded!.sonarqube.projectKey, 'test_project_key');
-    assert.equal(loaded!.sonarqube.organization, 'test-org');
-    assert.equal(loaded!.project.name, 'test-project');
+    expect(loaded).toBeDefined();
+    expect(loaded!.sonarqube.serverUrl).toBe('https://sonarcloud.io');
+    expect(loaded!.sonarqube.projectKey).toBe('test_project_key');
+    expect(loaded!.sonarqube.organization).toBe('test-org');
+    expect(loaded!.project.name).toBe('test-project');
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-test('config: load non-existent returns null', async () => {
+it('config: load non-existent returns null', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-nonexistent-' + Date.now());
 
   const loaded = await loadConfig(testDir);
-  assert.equal(loaded, null, 'Should return null for non-existent config');
+  expect(loaded).toBe(null);
 });
 
-test('config: multiple save/load cycles', async () => {
+it('config: multiple save/load cycles', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-cycles-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -57,15 +57,15 @@ test('config: multiple save/load cycles', async () => {
     await saveConfig(testDir, config1);
 
     const loaded1 = await loadConfig(testDir);
-    assert.equal(loaded1!.sonarqube.projectKey, 'key1');
+    expect(loaded1!.sonarqube.projectKey).toBe('key1');
 
     // Second config (overwrite)
     const config2 = newConfig(testDir, 'proj2', 'https://server2.com', 'key2', 'org2');
     await saveConfig(testDir, config2);
 
     const loaded2 = await loadConfig(testDir);
-    assert.equal(loaded2!.sonarqube.projectKey, 'key2');
-    assert.equal(loaded2!.sonarqube.serverUrl, 'https://server2.com');
+    expect(loaded2!.sonarqube.projectKey).toBe('key2');
+    expect(loaded2!.sonarqube.serverUrl).toBe('https://server2.com');
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }

@@ -1,15 +1,15 @@
 // Integration test for onboarding flow
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
-import { mkdirSync, rmSync, writeFileSync, existsSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { it, expect } from 'bun:test';
+
+import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { discoverProject } from '../../src/bootstrap/discovery.js';
 import { loadConfig, saveConfig, newConfig } from '../../src/bootstrap/config.js';
 import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
 
-test('integration: full onboarding flow', async () => {
+it('integration: full onboarding flow', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-integration-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -25,9 +25,9 @@ sonar.organization=test-org
     // Step 2: Discover project
     const projectInfo = await discoverProject(testDir, false);
 
-    assert.ok(projectInfo.hasSonarProps, 'Should discover sonar properties');
-    assert.equal(projectInfo.sonarPropsData!.hostURL, 'https://sonarcloud.io');
-    assert.equal(projectInfo.sonarPropsData!.projectKey, 'test_project');
+    expect(projectInfo.hasSonarProps).toBe(true);
+    expect(projectInfo.sonarPropsData!.hostURL).toBe('https://sonarcloud.io');
+    expect(projectInfo.sonarPropsData!.projectKey).toBe('test_project');
 
     // Step 3: Create and save configuration
     const config = newConfig(
@@ -42,29 +42,29 @@ sonar.organization=test-org
 
     // Verify config was saved
     const configPath = join(projectInfo.root, '.sonarqube', 'config.json');
-    assert.ok(existsSync(configPath), 'Should create config file');
+    expect(existsSync(configPath)).toBe(true);
 
     // Step 4: Load config to verify
     const loadedConfig = await loadConfig(projectInfo.root);
-    assert.ok(loadedConfig, 'Should load config');
-    assert.equal(loadedConfig!.sonarqube.serverUrl, 'https://sonarcloud.io');
-    assert.equal(loadedConfig!.sonarqube.projectKey, 'test_project');
-    assert.equal(loadedConfig!.sonarqube.organization, 'test-org');
+    expect(loadedConfig).toBeDefined();
+    expect(loadedConfig!.sonarqube.serverUrl).toBe('https://sonarcloud.io');
+    expect(loadedConfig!.sonarqube.projectKey).toBe('test_project');
+    expect(loadedConfig!.sonarqube.organization).toBe('test-org');
 
     // Step 5: Install hooks
     await installHooks(projectInfo.root, 'prompt');
 
     // Verify hooks
     const installed = await areHooksInstalled(projectInfo.root);
-    assert.ok(installed, 'Should have hooks installed');
+    expect(installed).toBe(true);
 
     // Verify hook script exists
     const hookScript = join(projectInfo.root, '.claude', 'hooks', 'sonar-prompt.sh');
-    assert.ok(existsSync(hookScript), 'Should create hook script');
+    expect(existsSync(hookScript)).toBe(true);
 
     // Verify settings exists
-    const settingsPath = join(projectInfo.root, '.claude', 'settings.local.json');
-    assert.ok(existsSync(settingsPath), 'Should create settings.local.json');
+    const settingsPath = join(projectInfo.root, '.claude', 'settings.json');
+    expect(existsSync(settingsPath)).toBe(true);
 
     console.log('✅ Full onboarding flow completed successfully');
   } finally {
@@ -72,7 +72,7 @@ sonar.organization=test-org
   }
 });
 
-test('integration: onboard with existing .sonarlint config', async () => {
+it('integration: onboard with existing .sonarlint config', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-sonarlint-' + Date.now());
   const sonarlintDir = join(testDir, '.sonarlint');
   mkdirSync(sonarlintDir, { recursive: true });
@@ -93,8 +93,8 @@ test('integration: onboard with existing .sonarlint config', async () => {
     // Discover
     const projectInfo = await discoverProject(testDir, false);
 
-    assert.ok(projectInfo.hasSonarLintConfig);
-    assert.equal(projectInfo.sonarLintData!.serverURL, 'https://sonarqube.example.com');
+    expect(projectInfo.hasSonarLintConfig).toBe(true);
+    expect(projectInfo.sonarLintData!.serverURL).toBe('https://sonarqube.example.com');
 
     // Create config from discovered data
     const config = newConfig(
@@ -109,7 +109,7 @@ test('integration: onboard with existing .sonarlint config', async () => {
 
     // Verify
     const loaded = await loadConfig(projectInfo.root);
-    assert.equal(loaded!.sonarqube.serverUrl, 'https://sonarqube.example.com');
+    expect(loaded!.sonarqube.serverUrl).toBe('https://sonarqube.example.com');
 
     console.log('✅ Onboarding with existing .sonarlint config completed');
   } finally {
@@ -117,7 +117,7 @@ test('integration: onboard with existing .sonarlint config', async () => {
   }
 });
 
-test('integration: config persistence across multiple operations', async () => {
+it('integration: config persistence across multiple operations', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-persistence-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
@@ -128,14 +128,14 @@ test('integration: config persistence across multiple operations', async () => {
 
     // Load and verify
     let loaded = await loadConfig(testDir);
-    assert.equal(loaded!.sonarqube.projectKey, 'key1');
+    expect(loaded!.sonarqube.projectKey).toBe('key1');
 
     // Install hooks
     await installHooks(testDir, 'prompt');
 
     // Load config again (should still exist)
     loaded = await loadConfig(testDir);
-    assert.equal(loaded!.sonarqube.projectKey, 'key1');
+    expect(loaded!.sonarqube.projectKey).toBe('key1');
 
     // Update config
     const config2 = newConfig(testDir, 'proj1', 'https://server2.com', 'key2', 'org2');
@@ -143,12 +143,12 @@ test('integration: config persistence across multiple operations', async () => {
 
     // Load and verify update
     loaded = await loadConfig(testDir);
-    assert.equal(loaded!.sonarqube.projectKey, 'key2');
-    assert.equal(loaded!.sonarqube.serverUrl, 'https://server2.com');
+    expect(loaded!.sonarqube.projectKey).toBe('key2');
+    expect(loaded!.sonarqube.serverUrl).toBe('https://server2.com');
 
     // Hooks should still be installed
     const installed = await areHooksInstalled(testDir);
-    assert.ok(installed);
+    expect(installed).toBe(true);
 
     console.log('✅ Config persistence test completed');
   } finally {
@@ -156,7 +156,7 @@ test('integration: config persistence across multiple operations', async () => {
   }
 });
 
-test('integration: onboard-agent process cleanup (regression test)', async () => {
+it('integration: onboard-agent process cleanup (regression test)', async () => {
   // Regression test for: "sonar onboard-agent" hangs after completing
   //
   // Issue: The process didn't exit after onboarding completed.
@@ -175,5 +175,5 @@ test('integration: onboard-agent process cleanup (regression test)', async () =>
   // This test documents the requirement. The actual process.exit() behavior
   // is verified manually during development and CI/CD pipeline execution.
 
-  assert.ok(true, 'Process cleanup regression test documented');
+  expect(true).toBe(true);
 });
