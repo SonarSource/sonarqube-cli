@@ -93,6 +93,8 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/kv/data/sign key | GPG_SIGNING_KEY;
+            development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
 
       - name: Cache NPM dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
@@ -117,6 +119,12 @@ jobs:
           bun build src/index.ts --compile --outfile dist/${{ matrix.artifact }} --target ${{ matrix.target }}
           echo "✅ Binary built successfully"
 
+      - name: Sign binary
+        env:
+          GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
+        run: node scripts/sign.mjs dist/${{ matrix.artifact }}
+
       - name: List built artifacts (Unix)
         if: matrix.os != 'windows'
         run: ls -lh dist/
@@ -129,7 +137,9 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: binary-${{ matrix.os }}
-          path: dist/${{ matrix.artifact }}
+          path: |
+            dist/${{ matrix.artifact }}
+            dist/${{ matrix.artifact }}.asc
 
   test-and-scan:
     name: Run Tests and Scan with SonarQube
