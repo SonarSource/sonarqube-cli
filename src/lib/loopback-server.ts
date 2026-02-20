@@ -76,14 +76,21 @@ function mergeSecurityHeadersWithUserHeaders(
   return securityHeaders;
 }
 
+export interface LoopbackServerOptions {
+  /** Additional origins (beyond loopback) that are allowed to make requests */
+  allowedOrigins?: string[];
+}
+
 /**
  * Start a secure loopback HTTP server on an OS-assigned random port
  *
  * @param onRequest - Handler function for incoming requests
+ * @param options - Optional server configuration
  * @returns Promise with port and close function
  */
 export async function startLoopbackServer(
-  onRequest: RequestHandler
+  onRequest: RequestHandler,
+  options?: LoopbackServerOptions
 ): Promise<LoopbackServerResult> {
   logger.debug('Starting loopback server on OS-assigned port...');
 
@@ -104,6 +111,7 @@ export async function startLoopbackServer(
   logger.debug(`Loopback server created on 127.0.0.1:${foundPort}`);
 
   const finalServer = server;
+  const allowedOrigins = options?.allowedOrigins ?? [];
 
   // Helper to wrap a response with security headers
   function wrapResponseWithSecurityHeaders(
@@ -111,16 +119,24 @@ export async function startLoopbackServer(
   ): RequestHandler {
     return (req, res) => {
       const origin = req.headers.origin;
+      const isExternalAllowedOrigin = !!(origin && !isValidLoopbackOrigin(origin) && allowedOrigins.includes(origin));
 
       // Handle OPTIONS preflight requests
       if (req.method === 'OPTIONS') {
-        res.writeHead(HTTP_STATUS_OK, getSecurityHeaders());
+        const preflightHeaders: Record<string, string> = { ...getSecurityHeaders() };
+        // Add CORS headers for allowed external origins (e.g. SonarCloud OAuth callback)
+        if (origin && (isValidLoopbackOrigin(origin) || allowedOrigins.includes(origin))) {
+          preflightHeaders['Access-Control-Allow-Origin'] = origin;
+          preflightHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
+          preflightHeaders['Access-Control-Allow-Headers'] = 'Content-Type';
+        }
+        res.writeHead(HTTP_STATUS_OK, preflightHeaders);
         res.end();
         return;
       }
 
-      // DNS rebinding protection: reject non-localhost origins
-      if (origin && !isValidLoopbackOrigin(origin)) {
+      // DNS rebinding protection: reject origins that are neither loopback nor explicitly allowed
+      if (origin && !isValidLoopbackOrigin(origin) && !allowedOrigins.includes(origin)) {
         logger.warn(`Rejected request from disallowed origin: ${origin}`);
         res.writeHead(HTTP_STATUS_FORBIDDEN);
         res.end('Forbidden');
@@ -145,6 +161,10 @@ export async function startLoopbackServer(
         headers?: Record<string, string> | string | string[]
       ): typeof res {
         const mergedHeaders = mergeSecurityHeadersWithUserHeaders(headers);
+        // Inject CORS header for external allowed origins (e.g. SonarCloud OAuth callback)
+        if (isExternalAllowedOrigin && origin) {
+          mergedHeaders['Access-Control-Allow-Origin'] = origin;
+        }
         return originalWriteHead.call(res, statusCode, mergedHeaders);
       }
 

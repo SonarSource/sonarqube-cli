@@ -10,6 +10,7 @@ const HTTP_SCHEME = 'http';
 const LOOPBACK_URL_PREFIX = `${HTTP_SCHEME}://${LOOPBACK_HOST}`;
 // DNS rebinding test origins (intentionally non-loopback, must be http for origin validation)
 const EXTERNAL_ORIGIN = `${HTTP_SCHEME}://evil.com`;
+const SONARCLOUD_ORIGIN = 'https://sonarcloud.io';
 
 describe('loopback-server', () => {
   describe('getSecurityHeaders', () => {
@@ -301,6 +302,73 @@ describe('loopback-server', () => {
       expect(response.status).toBe(HTTP_STATUS_OK);
       // Security headers should still be injected
       expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+    });
+
+    it('should allow requests from explicitly allowed external origins', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Origin: SONARCLOUD_ORIGIN },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_OK);
+    });
+
+    it('should set Access-Control-Allow-Origin header for allowed external origins', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Origin: SONARCLOUD_ORIGIN },
+      });
+
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SONARCLOUD_ORIGIN);
+    });
+
+    it('should handle OPTIONS preflight from allowed external origins with CORS headers', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        method: 'OPTIONS',
+        headers: { Origin: SONARCLOUD_ORIGIN },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_OK);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SONARCLOUD_ORIGIN);
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+    });
+
+    it('should still reject external origins not in allowedOrigins list', async () => {
+      server = await startLoopbackServer(
+        (_req, res) => {
+          res.writeHead(HTTP_STATUS_OK);
+          res.end('OK');
+        },
+        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+      );
+
+      const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
+        headers: { Origin: EXTERNAL_ORIGIN },
+      });
+
+      expect(response.status).toBe(HTTP_STATUS_FORBIDDEN);
     });
   });
 });

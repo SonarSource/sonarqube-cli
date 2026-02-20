@@ -267,12 +267,15 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   });
 
   // 1. Start embedded HTTP server with token extraction handler
+  // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
+  const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
     createRequestHandler((token: string) => {
       if (resolveToken) {
         resolveToken(token);
       }
-    })
+    }),
+    { allowedOrigins: [serverOrigin] }
   );
 
   logger.debug(`HTTP server started on port ${server.port}`);
