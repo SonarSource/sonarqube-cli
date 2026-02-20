@@ -194,29 +194,6 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
 }
 
 /**
- * Copy directory recursively
- */
-async function copyDirRecursive(
-  fs: { readdir: Function; copyFile: Function },
-  src: string,
-  dest: string
-): Promise<void> {
-  mkdirSync(dest, { recursive: true });
-  const entries = await fs.readdir(src, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const srcPath = join(src, entry.name);
-    const destPath = join(dest, entry.name);
-
-    if (entry.isDirectory()) {
-      await copyDirRecursive(fs, srcPath, destPath);
-    } else {
-      await fs.copyFile(srcPath, destPath);
-    }
-  }
-}
-
-/**
  * Generate secret scanning hooks dynamically
  */
 async function generateSecretHooks(
@@ -244,13 +221,10 @@ async function generateSecretHooks(
 
 /**
  * Install sonar-secrets hooks to project (cross-platform)
- * Attempts to copy hooks from ~/.claude/hooks/sonar-secrets
- * Falls back to creating hooks dynamically if source doesn't exist
- * Registers hooks in .claude/settings.json
+ * Creates hook scripts dynamically and registers them in .claude/settings.json
  */
 export async function installSecretScanningHooks(projectRoot: string): Promise<void> {
   try {
-    const { homedir } = await import('node:os');
     const fs = await import('node:fs/promises');
     const claudePath = join(projectRoot, CLAUDE_DIR);
     const hooksPath = join(claudePath, HOOKS_DIR);
@@ -258,22 +232,14 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
     // Create hooks directory
     mkdirSync(hooksPath, { recursive: true });
 
-    const sourceSecretsDir = join(homedir(), '.claude', 'hooks', 'sonar-secrets');
-    const targetSecretsDir = join(hooksPath, 'sonar-secrets');
-    const targetScriptsDir = join(targetSecretsDir, 'scripts');
+    const targetScriptsDir = join(hooksPath, 'sonar-secrets', 'scripts');
 
     mkdirSync(targetScriptsDir, { recursive: true });
 
     const isWindows = getPlatform() === 'windows';
     const scriptExt = getScriptExtension();
 
-    // Try to copy existing hooks first
-    if (existsSync(sourceSecretsDir)) {
-      await copyDirRecursive(fs, sourceSecretsDir, targetSecretsDir);
-    } else {
-      // Generate hooks dynamically if source doesn't exist
-      await generateSecretHooks(fs, isWindows, scriptExt, targetScriptsDir);
-    }
+    await generateSecretHooks(fs, isWindows, scriptExt, targetScriptsDir);
 
     // Register hooks in settings.json
     const settingsPath = join(claudePath, SETTINGS_FILE);
