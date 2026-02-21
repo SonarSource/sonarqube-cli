@@ -4,7 +4,7 @@ import { validateToken } from './auth.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { areHooksInstalled } from './hooks.js';
 import logger from '../lib/logger.js';
-import { info } from '../ui';
+import { info } from '../ui/index.js';
 
 export interface HealthCheckResult {
   tokenValid: boolean;

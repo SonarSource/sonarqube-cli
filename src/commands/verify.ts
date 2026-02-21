@@ -9,7 +9,7 @@ import { loadState, getActiveConnection } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
-import { text, info, error, print } from '../ui';
+import { text, info, error, print } from '../ui/index.js';
 
 // Hardcoded SonarCloud A3S API base URL
 const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';

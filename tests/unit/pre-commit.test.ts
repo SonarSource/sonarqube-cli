@@ -1,11 +1,23 @@
 // Pre-commit command tests
 
-import { it, expect, describe, beforeEach, afterEach, spyOn } from 'bun:test';
+import { mock, it, expect, describe, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PRE_COMMIT_CONFIG_CONTENT, preCommitInstallCommand, preCommitUninstallCommand } from '../../src/commands/pre-commit.js';
 import { setMockUi } from '../../src/ui';
+
+// Mock spawnProcess so pre-commit tests don't require the real binary.
+// Git hooksPath queries return exit 1 (not configured) to avoid interactive prompts.
+// All other commands (pre-commit install/uninstall/autoupdate/clean) return exit 0.
+mock.module('../../src/lib/process.js', () => ({
+  spawnProcess: async (cmd: string, args: string[]) => {
+    if (cmd === 'git' && args.includes('--get')) {
+      return { exitCode: 1, stdout: '', stderr: '' };
+    }
+    return { exitCode: 0, stdout: 'pre-commit 3.8.0\n', stderr: '' };
+  },
+}));
 
 describe('PRE_COMMIT_CONFIG_CONTENT', () => {
   it('contains a repos block with SonarSource pre-commit hook', () => {
@@ -59,8 +71,7 @@ describe('pre-commit config file creation', () => {
 });
 
 describe('preCommitUninstallCommand', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockExit: any;
+  let mockExit: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -102,8 +113,7 @@ describe('preCommitUninstallCommand', () => {
 });
 
 describe('preCommitInstallCommand', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockExit: any;
+  let mockExit: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -123,6 +133,20 @@ describe('preCommitInstallCommand', () => {
     try {
       await preCommitInstallCommand();
       expect(mockExit).toHaveBeenCalledWith(1);
+    } finally {
+      cwdSpy.mockRestore();
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exits 0 when pre-commit installs successfully in git repository', async () => {
+    const testDir = join(tmpdir(), `test-precommit-install-success-${Date.now()}`);
+    mkdirSync(join(testDir, '.git'), { recursive: true });
+    const cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
+
+    try {
+      await preCommitInstallCommand();
+      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       cwdSpy.mockRestore();
       rmSync(testDir, { recursive: true, force: true });

@@ -4,7 +4,7 @@ import { generateTokenViaBrowser, saveToken, validateToken, deleteToken } from '
 import { installHooks, installSecretScanningHooks, type HookType } from './hooks.js';
 import type { HealthCheckResult } from './health.js';
 import logger from '../lib/logger.js';
-import { text, success } from '../ui';
+import { text, success } from '../ui/index.js';
 
 /**
  * Run repair actions based on health check results

@@ -3,7 +3,7 @@
 
 cli:
   name: sonar
-  version: 0.2.118
+  version: 0.2.121
   description: SonarQube CLI
 
 commands:

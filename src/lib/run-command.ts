@@ -1,5 +1,5 @@
 import logger from './logger.js';
-import { error } from '../ui';
+import { error } from '../ui/index.js';
 
 export async function runCommand(fn: () => Promise<void>): Promise<void> {
   try {

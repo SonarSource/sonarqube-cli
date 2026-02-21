@@ -7,7 +7,7 @@ import { spawnProcess } from '../lib/process.js';
 import { loadState, saveState, addInstalledSkill } from '../lib/state-manager.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
-import { text, blank, note, info, success, warn, confirmPrompt } from '../ui';
+import { text, blank, note, info, success, warn, confirmPrompt } from '../ui/index.js';
 import { runCommand } from '../lib/run-command.js';
 
 const PRE_COMMIT_CONFIG = '.pre-commit-config.yaml';

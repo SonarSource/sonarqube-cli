@@ -9,7 +9,7 @@ import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { getToken } from '../lib/keychain.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
-import { text, blank, success, error, print } from '../ui';
+import { text, blank, success, error, print } from '../ui/index.js';
 
 const SCAN_TIMEOUT_MS = 30000;
 const STDIN_READ_TIMEOUT_MS = 5000;

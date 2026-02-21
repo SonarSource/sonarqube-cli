@@ -6,7 +6,7 @@ import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { startLoopbackServer } from '../lib/loopback-server.js';
 import logger from '../lib/logger.js';
-import { warn, print, pressEnterPrompt } from '../ui';
+import { warn, print, pressEnterPrompt } from '../ui/index.js';
 
 const PORT_TIMEOUT_MS = 50000;
 const HTTP_STATUS_OK = 200;
@@ -144,9 +144,13 @@ export function getSuccessHTML(): string {
 }
 
 /**
- * Open browser, with fallback message if it fails
+ * Open browser, with fallback message if it fails.
+ * Skipped when CI=true — token must be delivered directly to the loopback server.
  */
 export async function openBrowserWithFallback(authURL: string): Promise<void> {
+  if (process.env['CI'] === 'true') {
+    return;
+  }
   try {
     await openBrowser(authURL);
   } catch (error) {
@@ -219,7 +223,10 @@ export function createRequestHandler(onToken: (token: string) => void) {
 /**
  * Generate token via browser OAuth flow
  */
-export async function generateTokenViaBrowser(serverURL: string): Promise<string> {
+export async function generateTokenViaBrowser(
+  serverURL: string,
+  openBrowserFn: (url: string) => Promise<void> = openBrowserWithFallback
+): Promise<string> {
 
   let resolveToken: ((token: string) => void) | null = null;
 
@@ -248,7 +255,7 @@ export async function generateTokenViaBrowser(serverURL: string): Promise<string
   await pressEnterPrompt('Press Enter to open browser');
 
   // 5. Open browser
-  await openBrowserWithFallback(authURL);
+  await openBrowserFn(authURL);
 
   print('Waiting for authorization (50 second timeout)...');
 

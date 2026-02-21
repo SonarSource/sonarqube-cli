@@ -12,7 +12,7 @@ import {
 } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
 import logger from '../lib/logger.js';
-import { warn, success, print, textPrompt, confirmPrompt } from '../ui';
+import { warn, success, print, textPrompt, confirmPrompt } from '../ui/index.js';
 import { VERSION as CLI_VERSION, VERSION } from '../version.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';

@@ -505,7 +505,6 @@ describe('IssuesClient', () => {
 });
 
 describe('issuesSearchCommand', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockExit: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
@@ -521,5 +520,26 @@ describe('issuesSearchCommand', () => {
   it('exits 1 when --project is missing', async () => {
     await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'fake-token' });
     expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 0 when issues search succeeds', async () => {
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue({
+      issues: [],
+      total: 0,
+      p: 1,
+      ps: 500,
+      paging: { pageIndex: 1, pageSize: 500, total: 0 },
+    });
+
+    try {
+      await issuesSearchCommand({
+        server: 'https://sonarcloud.io',
+        token: 'test-token',
+        project: 'my-project',
+      });
+      expect(mockExit).toHaveBeenCalledWith(0);
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 });

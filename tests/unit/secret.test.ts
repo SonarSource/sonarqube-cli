@@ -1,13 +1,14 @@
 // Unit tests for sonar secret command
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdirSync, existsSync, rmSync, readFileSync, writeFileSync, chmodSync, renameSync, unlinkSync } from 'node:fs';
+import { mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { detectPlatform, buildAssetName, buildLocalBinaryName } from '../../src/lib/platform-detector.js';
 import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
-import { secretStatusCommand } from '../../src/commands/secret.js';
+import { secretStatusCommand, secretCheckCommand } from '../../src/commands/secret.js';
 import { setMockUi } from '../../src/ui';
+import * as processLib from '../../src/lib/process.js';
 import type { PlatformInfo } from '../../src/lib/install-types.js';
 
 // =============================================================================
@@ -158,11 +159,52 @@ describe('installSecretScanningHooks', () => {
 // SECTION 3: secretStatusCommand
 // =============================================================================
 
-const FILE_EXECUTABLE_PERMS = 0o755;
-
 describe('secretStatusCommand', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockExit: any;
+  let spawnSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+    spawnSpy.mockRestore();
+    setMockUi(false);
+  });
+
+  it('exits 0 when sonar-secrets binary is not installed', async () => {
+    // Temp dir with no binary inside — existsSync returns false
+    const tempBinDir = join(tmpdir(), `sonar-status-test-${Date.now()}`);
+    await secretStatusCommand({ binDir: tempBinDir });
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+
+  it('exits 1 when sonar-secrets binary exists but fails version check', async () => {
+    const tempBinDir = join(tmpdir(), `sonar-status-test-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    const binaryPath = join(tempBinDir, buildLocalBinaryName(detectPlatform()));
+    writeFileSync(binaryPath, ''); // placeholder so existsSync returns true; spawnSpy returns exit 1
+
+    try {
+      await secretStatusCommand({ binDir: tempBinDir });
+      expect(mockExit).toHaveBeenCalledWith(1);
+    } finally {
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
+});
+
+
+// =============================================================================
+// SECTION 4: secretCheckCommand
+// =============================================================================
+
+describe('secretCheckCommand', () => {
+  let mockExit: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -174,40 +216,8 @@ describe('secretStatusCommand', () => {
     setMockUi(false);
   });
 
-  it('exits 0 when sonar-secrets binary is not installed', async () => {
-    const platform = detectPlatform();
-    const binDir = join(homedir(), '.sonarqube-cli', 'bin');
-    const binaryPath = join(binDir, buildLocalBinaryName(platform));
-    const backupPath = `${binaryPath}.test-bak`;
-    const existedBefore = existsSync(binaryPath);
-
-    try {
-      if (existedBefore) renameSync(binaryPath, backupPath);
-      await secretStatusCommand();
-      expect(mockExit).toHaveBeenCalledWith(0);
-    } finally {
-      if (existedBefore && existsSync(backupPath)) renameSync(backupPath, binaryPath);
-    }
-  });
-
-  it('exits 1 when sonar-secrets binary exists but fails version check', async () => {
-    const platform = detectPlatform();
-    const binDir = join(homedir(), '.sonarqube-cli', 'bin');
-    mkdirSync(binDir, { recursive: true });
-    const binaryPath = join(binDir, buildLocalBinaryName(platform));
-    const backupPath = `${binaryPath}.test-bak`;
-    const existedBefore = existsSync(binaryPath);
-
-    try {
-      if (existedBefore) renameSync(binaryPath, backupPath);
-      // Write a fake binary that exits non-zero (no valid version output)
-      writeFileSync(binaryPath, '#!/bin/sh\nexit 1\n');
-      chmodSync(binaryPath, FILE_EXECUTABLE_PERMS);
-      await secretStatusCommand();
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      if (existsSync(binaryPath)) unlinkSync(binaryPath);
-      if (existedBefore && existsSync(backupPath)) renameSync(backupPath, binaryPath);
-    }
+  it('exits 1 when called without --file or --stdin', async () => {
+    await secretCheckCommand({});
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

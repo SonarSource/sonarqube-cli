@@ -11,7 +11,7 @@ import { loadState, saveState, markAgentConfigured, addInstalledHook } from '../
 import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
-import { text, blank, info, success, warn, intro, outro } from '../ui';
+import { text, blank, info, success, warn, intro, outro } from '../ui/index.js';
 
 export interface OnboardAgentOptions {
   server?: string;

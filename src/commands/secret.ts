@@ -11,7 +11,7 @@ import {VERSION} from '../version.js';
 import logger from '../lib/logger.js';
 import type {GitHubRelease, PlatformInfo} from '../lib/install-types.js';
 import {BINARY_NAME, SONAR_SECRETS_REPO} from '../lib/install-types.js';
-import { text, blank, note, success, error, warn, withSpinner, print } from '../ui';
+import { text, blank, note, success, error, warn, withSpinner, print } from '../ui/index.js';
 import { runCommand } from '../lib/run-command.js';
 
 export { secretCheckCommand } from './secret-scan.js';
@@ -23,11 +23,12 @@ const VERSION_REGEX_MAX_SEGMENT = 20;
  * Core install logic for sonar-secrets binary download and setup
  */
 export async function performSecretInstall(
-  options: { force?: boolean }
+  options: { force?: boolean },
+  { binDir }: { binDir?: string } = {}
 ): Promise<string> {
   const platform = detectPlatform();
-  const binDir = ensureBinDirectory();
-  const binaryPath = join(binDir, buildLocalBinaryName(platform));
+  const resolvedBinDir = ensureBinDirectory(binDir);
+  const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
 
   text(`Platform: ${platform.os}-${platform.arch}`);
 
@@ -49,11 +50,12 @@ export async function performSecretInstall(
  * CLI wrapper with process exit handling
  */
 export async function secretInstallCommand(
-  options: { force?: boolean }
+  options: { force?: boolean },
+  { binDir }: { binDir?: string } = {}
 ): Promise<void> {
   await runCommand(async () => {
     text('\nInstalling sonar-secrets binary\n');
-    const binaryPath = await performSecretInstall(options);
+    const binaryPath = await performSecretInstall(options, { binDir });
     logInstallationSuccess(binaryPath);
   });
 }
@@ -99,11 +101,11 @@ async function performInstallation(
 /**
  * Status command: sonar secret status
  */
-export async function secretStatusCommand(): Promise<void> {
+export async function secretStatusCommand({ binDir }: { binDir?: string } = {}): Promise<void> {
   await runCommand(async () => {
     const platform = detectPlatform();
-    const binDir = join(homedir(), '.sonarqube-cli', 'bin');
-    const binaryPath = join(binDir, buildLocalBinaryName(platform));
+    const resolvedBinDir = binDir ?? join(homedir(), '.sonarqube-cli', 'bin');
+    const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
 
     text('\nChecking sonar-secrets installation status\n');
 
@@ -150,8 +152,8 @@ export async function secretStatusCommand(): Promise<void> {
   });
 }
 
-function ensureBinDirectory(): string {
-  const binDir = join(homedir(), '.sonarqube-cli', 'bin');
+function ensureBinDirectory(dir?: string): string {
+  const binDir = dir ?? join(homedir(), '.sonarqube-cli', 'bin');
   if (!existsSync(binDir)) {
     mkdirSync(binDir, { recursive: true });
   }

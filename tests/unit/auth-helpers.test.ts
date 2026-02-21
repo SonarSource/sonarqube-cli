@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, beforeEach, afterEach, expect } from 'bun:test';
 import {
   extractTokenFromPostBody,
   extractTokenFromQuery,
   buildAuthURL,
   getSuccessHTML,
+  generateTokenViaBrowser,
 } from '../../src/bootstrap/auth.js';
+import { setMockUi } from '../../src/ui/index.js';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
 const EXAMPLE_SERVER = 'https://sonar.example.com';
@@ -173,5 +175,43 @@ describe('Auth Helper Functions', () => {
       const token = extractTokenFromQuery('[::1]:8080', '/?token=squ_ipv6');
       expect(token).toBe('squ_ipv6');
     });
+  });
+});
+
+describe('generateTokenViaBrowser', () => {
+  beforeEach(() => { setMockUi(true); });
+  afterEach(() => { setMockUi(false); });
+
+  it('returns token delivered via POST to loopback server', async () => {
+    const mockOpenBrowser = async (authURL: string): Promise<void> => {
+      const url = new URL(authURL);
+      const port = url.searchParams.get('port');
+
+      // Simulate browser POST after a short delay
+      setTimeout(() => {
+        fetch(`http://127.0.0.1:${port}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: 'squ_test_browser_token' }),
+        }).catch(() => {});
+      }, 10);
+    };
+
+    const token = await generateTokenViaBrowser(SONARCLOUD_SERVER, mockOpenBrowser);
+    expect(token).toBe('squ_test_browser_token');
+  });
+
+  it('returns token delivered via GET query parameter', async () => {
+    const mockOpenBrowser = async (authURL: string): Promise<void> => {
+      const url = new URL(authURL);
+      const port = url.searchParams.get('port');
+
+      setTimeout(() => {
+        fetch(`http://127.0.0.1:${port}/?token=squ_test_get_token`).catch(() => {});
+      }, 10);
+    };
+
+    const token = await generateTokenViaBrowser(SONARCLOUD_SERVER, mockOpenBrowser);
+    expect(token).toBe('squ_test_get_token');
   });
 });

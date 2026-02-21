@@ -1,7 +1,7 @@
 // Docker checks - verify Docker installation and MCP image
 
 import { spawnProcess } from '../lib/process.js';
-import { text, success } from '../ui';
+import { text, success } from '../ui/index.js';
 
 /**
  * Check if Docker is installed

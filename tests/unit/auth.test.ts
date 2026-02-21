@@ -355,5 +355,5 @@ it('auth: purgeAllTokens with mixed credentials', async () => {
 // gracefully. Verified manually:
 //   echo "" | sonar auth login --with-token <token> -s https://sonarcloud.io -o org
 //   sonar onboard-agent claude --non-interactive --skip-hooks
-// Both must return to prompt immediately. Automated testing requires a full browser
-// flow harness which is out of scope for unit tests.
+// Both must return to prompt immediately.
+// Token delivery is tested in auth-helpers.test.ts (generateTokenViaBrowser tests).

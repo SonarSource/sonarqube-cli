@@ -4,7 +4,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform } from 'node:os';
 import logger from '../lib/logger.js';
-import { success } from '../ui';
+import { success } from '../ui/index.js';
 import {
   getHookPromptTemplateUnix,
   getHookCLITemplateUnix,

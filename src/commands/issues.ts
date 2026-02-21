@@ -10,7 +10,7 @@ import type { IssuesSearchParams } from '../lib/types.js';
 import { loadState, getActiveConnection } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
-import { print } from '../ui';
+import { print } from '../ui/index.js';
 
 const DEFAULT_PAGE_SIZE = 500;
 
