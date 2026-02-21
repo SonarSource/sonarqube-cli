@@ -228,6 +228,24 @@ describe('authLoginCommand', () => {
     }
   });
 
+  it('exits 0 when org auto-detected from project config and browser login succeeds', async () => {
+    // Simulate sonar-project.properties with organization set
+    discoverSpy.mockResolvedValue({
+      ...EMPTY_PROJECT_INFO,
+      hasSonarProps: true,
+      sonarPropsData: { hostURL: '', projectKey: 'my-project', projectName: 'My Project', organization: 'my-org' },
+    });
+    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue('browser-token');
+    try {
+      // No options — defaults to SonarCloud, org picked from config, browser flow
+      await authLoginCommand({});
+      expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('browser-token');
+      expect(mockExit).toHaveBeenCalledWith(0);
+    } finally {
+      browserSpy.mockRestore();
+    }
+  });
+
   it('exits 1 when browser authentication fails', async () => {
     const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockRejectedValue(new Error('Timeout waiting for token (50 seconds)'));
     try {

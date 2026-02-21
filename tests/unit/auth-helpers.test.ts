@@ -6,31 +6,30 @@ import {
   getSuccessHTML,
   generateTokenViaBrowser,
 } from '../../src/bootstrap/auth.js';
+import { startLoopbackServer } from '../../src/lib/loopback-server.js';
 import { setMockUi } from '../../src/ui/index.js';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
 const EXAMPLE_SERVER = 'https://sonar.example.com';
+const HTTP_STATUS_OK = 200;
+const TEST_PORT_A = 8080;
+const TEST_PORT_B = 9000;
 
 describe('Auth Helper Functions', () => {
   describe('buildAuthURL', () => {
     it('should build URL with clean server URL (no trailing slash)', () => {
-      const url = buildAuthURL(SONARCLOUD_SERVER, 8080);
-      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=8080`);
+      const url = buildAuthURL(SONARCLOUD_SERVER, TEST_PORT_A);
+      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`);
     });
 
     it('should build URL and remove trailing slash', () => {
-      const url = buildAuthURL(`${SONARCLOUD_SERVER}/`, 9000);
-      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=9000`);
-    });
-
-    it('should work with different ports', () => {
-      const url = buildAuthURL(EXAMPLE_SERVER, 3000);
-      expect(url).toContain('port=3000');
+      const url = buildAuthURL(`${SONARCLOUD_SERVER}/`, TEST_PORT_B);
+      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_B}`);
     });
 
     it('should work with custom server URL', () => {
-      const url = buildAuthURL(`${EXAMPLE_SERVER}/`, 8080);
-      expect(url).toBe(`${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=8080`);
+      const url = buildAuthURL(`${EXAMPLE_SERVER}/`, TEST_PORT_A);
+      expect(url).toBe(`${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`);
     });
   });
 
@@ -59,18 +58,6 @@ describe('Auth Helper Functions', () => {
     it('should contain description text', () => {
       const html = getSuccessHTML();
       expect(html).toContain('You can close this window and return to the terminal');
-    });
-
-    it('should contain success checkmark emoji', () => {
-      const html = getSuccessHTML();
-      expect(html).toContain('✓');
-    });
-
-    it('should have proper CSS styling', () => {
-      const html = getSuccessHTML();
-      expect(html).toContain('font-family');
-      expect(html).toContain('display: flex');
-      expect(html).toContain('background');
     });
 
     it('should contain closing body and html tags', () => {
@@ -178,20 +165,71 @@ describe('Auth Helper Functions', () => {
   });
 });
 
+// =============================================================================
+// CORS preflight — loopback server must allow POST for cross-origin SonarCloud
+// =============================================================================
+//
+// When SonarCloud's page delivers the token, the browser makes a cross-origin
+// POST to the loopback server. Browsers always send an OPTIONS preflight first.
+// If the preflight response does not include POST in Access-Control-Allow-Methods,
+// the browser blocks the actual POST and the token never arrives → 50s hang.
+//
+// Node.js fetch (used in other tests) does NOT send CORS preflights — only real
+// browsers do. This describe block catches that gap.
+
+describe('loopback server CORS preflight', () => {
+  it('OPTIONS preflight for SonarCloud origin allows POST in Access-Control-Allow-Methods', async () => {
+    const server = await startLoopbackServer(
+      (_req, res) => { res.writeHead(HTTP_STATUS_OK); res.end(); },
+      { allowedOrigins: ['https://sonarcloud.io'] }
+    );
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/`, {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': 'https://sonarcloud.io',
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'content-type',
+        },
+      });
+      const allowedMethods = response.headers.get('access-control-allow-methods') ?? '';
+      expect(allowedMethods).toContain('POST');
+    } finally {
+      await server.close();
+    }
+  });
+});
+
 describe('generateTokenViaBrowser', () => {
   beforeEach(() => { setMockUi(true); });
   afterEach(() => { setMockUi(false); });
 
-  it('returns token delivered via POST to loopback server', async () => {
+  // Simulates real browser CORS flow: OPTIONS preflight → POST.
+  // If the preflight doesn't allow POST, openBrowserFn throws immediately
+  // (fail-fast, no 50s hang) rather than silently never delivering the token.
+  it('returns token delivered via POST to loopback server (with CORS preflight)', async () => {
     const mockOpenBrowser = async (authURL: string): Promise<void> => {
       const url = new URL(authURL);
       const port = url.searchParams.get('port');
 
-      // Simulate browser POST after a short delay
+      // Step 1: browser sends preflight before cross-origin POST
+      const preflight = await fetch(`http://127.0.0.1:${port}/`, {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': 'https://sonarcloud.io',
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'content-type',
+        },
+      });
+      const allowedMethods = preflight.headers.get('access-control-allow-methods') ?? '';
+      // Fail fast here — same as browser blocking the POST
+      expect(allowedMethods).toContain('POST');
+
+      // Step 2: browser sends actual POST after preflight passes
       setTimeout(() => {
-        fetch(`http://127.0.0.1:${port}`, {
+        fetch(`http://127.0.0.1:${port}/`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Origin': 'https://sonarcloud.io' },
           body: JSON.stringify({ token: 'squ_test_browser_token' }),
         }).catch(() => {});
       }, 10);

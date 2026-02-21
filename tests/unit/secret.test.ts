@@ -9,6 +9,9 @@ import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
 import { secretStatusCommand, secretCheckCommand } from '../../src/commands/secret.js';
 import { setMockUi } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
+import * as stateManager from '../../src/lib/state-manager.js';
+import { getDefaultState } from '../../src/lib/state.js';
+import { createMockKeytar } from '../helpers/mock-keytar.js';
 import type { PlatformInfo } from '../../src/lib/install-types.js';
 
 // =============================================================================
@@ -205,14 +208,23 @@ describe('secretStatusCommand', () => {
 
 describe('secretCheckCommand', () => {
   let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
+  const keytarHandle = createMockKeytar();
 
   beforeEach(() => {
+    keytarHandle.setup();
     setMockUi(true);
     mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    keytarHandle.teardown();
     mockExit.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
     setMockUi(false);
   });
 

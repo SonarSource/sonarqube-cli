@@ -1,10 +1,11 @@
 // Integration test for onboarding flow
 
-import { it, expect } from 'bun:test';
+import { it, expect, afterAll } from 'bun:test';
 
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import keytar from 'keytar';
 
 const PROJECT_ROOT = join(import.meta.dir, '../..');
 import { discoverProject } from '../../src/bootstrap/discovery.js';
@@ -224,3 +225,13 @@ it('integration: auth login process exits after token delivered to loopback serv
 
   expect(typeof exitCode).toBe('number');
 }, { timeout: 15000 });
+
+afterAll(async () => {
+  // Remove any .invalid keychain entries accumulated by integration tests.
+  // These are created when auth login is run against a fake server during testing
+  // but never cleaned up by the spawned process itself.
+  const creds = await keytar.findCredentials('sonarqube-cli');
+  for (const cred of creds.filter(c => c.account.includes('.invalid'))) {
+    await keytar.deletePassword('sonarqube-cli', cred.account);
+  }
+});

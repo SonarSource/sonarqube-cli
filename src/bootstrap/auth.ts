@@ -1,12 +1,14 @@
 // Auth module - OAuth flow and token management
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { TextPrompt, isCancel } from '@clack/core';
 import { getToken as getKeystoreToken, saveToken as saveKeystoreToken, deleteToken as deleteKeystoreToken } from '../lib/keychain.js';
 import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { startLoopbackServer } from '../lib/loopback-server.js';
 import logger from '../lib/logger.js';
-import { warn, print, pressEnterPrompt } from '../ui/index.js';
+import { warn, print, pressEnterPrompt, isMockActive } from '../ui/index.js';
+import { green, dim } from '../ui/colors.js';
 
 const PORT_TIMEOUT_MS = 50000;
 const HTTP_STATUS_OK = 200;
@@ -221,6 +223,57 @@ export function createRequestHandler(onToken: (token: string) => void) {
 }
 
 /**
+ * Interactive wait: resolves when the loopback server delivers the token
+ * OR the user manually pastes one and presses Enter.
+ * Rejects on timeout (50s) or Ctrl+C cancellation.
+ */
+async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const promptAbort = new AbortController();
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    function settle(token?: string, err?: Error): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      promptAbort.abort();
+      if (err) reject(err);
+      else resolve(token!);
+    }
+
+    timeoutId = setTimeout(
+      () => settle(undefined, new Error('Timeout waiting for token (50 seconds)')),
+      PORT_TIMEOUT_MS
+    );
+
+    serverTokenPromise.then(token => settle(token)).catch(() => {});
+
+    const prompt = new TextPrompt({
+      signal: promptAbort.signal,
+      render() {
+        if (this.state === 'submit') return `  ${green('✓')}  Token accepted`;
+        if (this.state === 'cancel') return undefined;
+        return [
+          `  ${dim('›')}  Waiting for browser... or paste token and press Enter:`,
+          `  ${dim('›')} ${this.userInputWithCursor}`,
+        ].join('\n');
+      },
+    });
+
+    prompt.prompt().then(result => {
+      if (promptAbort.signal.aborted) return;
+      if (isCancel(result)) {
+        settle(undefined, new Error('Authentication cancelled'));
+        return;
+      }
+      const userToken = (result as string).trim();
+      if (userToken.length > 0) settle(userToken);
+    }).catch((err: unknown) => settle(undefined, err as Error));
+  });
+}
+
+/**
  * Generate token via browser OAuth flow
  */
 export async function generateTokenViaBrowser(
@@ -234,7 +287,6 @@ export async function generateTokenViaBrowser(
     resolveToken = resolve;
   });
 
-  // 1. Start embedded HTTP server with token extraction handler
   // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
   const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
@@ -246,35 +298,36 @@ export async function generateTokenViaBrowser(
     { allowedOrigins: [serverOrigin] }
   );
 
-  // 2. Build auth URL
   const authURL = buildAuthURL(serverURL, server.port);
 
-  // 3. Show prompt and wait for user input
   print('Obtaining access token from SonarQube...');
   print(`URL: ${authURL}`);
   await pressEnterPrompt('Press Enter to open browser');
-
-  // 5. Open browser
   await openBrowserFn(authURL);
 
-  print('Waiting for authorization (50 second timeout)...');
-
-  // 6. Wait for token with timeout (50 seconds)
   let token: string | undefined;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    token = await Promise.race([
-      tokenPromise,
-      new Promise<string>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Timeout waiting for token (50 seconds)')), PORT_TIMEOUT_MS);
-      })
-    ]);
-
-    if (!token) {
-      throw new Error('Received empty token');
+    if (isMockActive() || process.env['CI'] === 'true') {
+      // Non-interactive: wait for server token with timeout
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      try {
+        token = await Promise.race([
+          tokenPromise,
+          new Promise<string>((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error('Timeout waiting for token (50 seconds)')),
+              PORT_TIMEOUT_MS
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } else {
+      // Interactive: race between browser delivery and manual paste
+      token = await waitForTokenInteractive(tokenPromise);
     }
   } finally {
-    clearTimeout(timeoutId);
     server.close().then(
       () => {},
       (err: unknown) => {
