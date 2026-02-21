@@ -2,8 +2,8 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { spawnProcess } from '../lib/process.js';
+import { BIN_DIR } from '../lib/config-constants.js';
 import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { getToken } from '../lib/keychain.js';
@@ -70,8 +70,7 @@ function validateScanOptions(options: { file?: string; stdin?: boolean }): void 
 
 function setupBinaryPath(): string {
   const platform = detectPlatform();
-  const binDir = join(homedir(), '.sonarqube-cli', 'bin');
-  const binaryPath = join(binDir, buildLocalBinaryName(platform));
+  const binaryPath = join(BIN_DIR, buildLocalBinaryName(platform));
 
   validateCheckCommandEnvironment(binaryPath);
 

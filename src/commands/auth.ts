@@ -14,8 +14,7 @@ import { runCommand } from '../lib/run-command.js';
 import logger from '../lib/logger.js';
 import { warn, success, print, textPrompt, confirmPrompt } from '../ui/index.js';
 import { VERSION as CLI_VERSION, VERSION } from '../version.js';
-
-const SONARCLOUD_URL = 'https://sonarcloud.io';
+import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 
 /**
  * Check if server is SonarCloud
@@ -23,7 +22,7 @@ const SONARCLOUD_URL = 'https://sonarcloud.io';
 function isSonarCloud(serverURL: string): boolean {
   try {
     const url = new URL(serverURL);
-    return url.hostname === 'sonarcloud.io';
+    return url.hostname === SONARCLOUD_HOSTNAME;
   } catch {
     return false;
   }

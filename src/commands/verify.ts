@@ -11,9 +11,8 @@ import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
 import { text, info, error, print } from '../ui/index.js';
 
-// Hardcoded SonarCloud A3S API base URL
-const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';
-const SONARCLOUD_URL = 'https://sonarcloud.io';
+import { SONARCLOUD_API_URL, SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
+
 const TOON_FORMAT_THRESHOLD = 5; // Use TOON format for result sets larger than this
 
 /**
@@ -113,7 +112,7 @@ async function getFirstSonarCloudCredential(): Promise<
   try {
     const allCreds = await getAllCredentials();
     const sonarCloudCreds = allCreds.filter(cred =>
-      cred.account.startsWith('sonarcloud.io:')
+      cred.account.startsWith(`${SONARCLOUD_HOSTNAME}:`)
     );
 
     if (sonarCloudCreds.length === 0) {

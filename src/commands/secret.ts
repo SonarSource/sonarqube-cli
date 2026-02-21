@@ -2,8 +2,8 @@
 
 import {existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
-import {homedir} from 'node:os';
 import {spawnProcess} from '../lib/process.js';
+import { BIN_DIR } from '../lib/config-constants.js';
 import {buildAssetName, buildLocalBinaryName, detectPlatform} from '../lib/platform-detector.js';
 import {downloadBinary, fetchLatestRelease, findAssetForPlatform} from '../lib/github-releases.js';
 import {loadState, saveState} from '../lib/state-manager.js';
@@ -104,7 +104,7 @@ async function performInstallation(
 export async function secretStatusCommand({ binDir }: { binDir?: string } = {}): Promise<void> {
   await runCommand(async () => {
     const platform = detectPlatform();
-    const resolvedBinDir = binDir ?? join(homedir(), '.sonarqube-cli', 'bin');
+    const resolvedBinDir = binDir ?? BIN_DIR;
     const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
 
     text('\nChecking sonar-secrets installation status\n');
@@ -153,7 +153,7 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
 }
 
 function ensureBinDirectory(dir?: string): string {
-  const binDir = dir ?? join(homedir(), '.sonarqube-cli', 'bin');
+  const binDir = dir ?? BIN_DIR;
   if (!existsSync(binDir)) {
     mkdirSync(binDir, { recursive: true });
   }

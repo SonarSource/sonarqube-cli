@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, isValidLoopbackHost, SONARLINT_PORT_START, SONARLINT_PORT_COUNT, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
+import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, isValidLoopbackHost, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
+import { AUTH_PORT_START, AUTH_PORT_COUNT } from '../../src/lib/config-constants.js';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
@@ -105,8 +106,8 @@ describe('loopback-server', () => {
         res.end('OK');
       });
 
-      expect(server.port).toBeGreaterThanOrEqual(SONARLINT_PORT_START);
-      expect(server.port).toBeLessThan(SONARLINT_PORT_START + SONARLINT_PORT_COUNT);
+      expect(server.port).toBeGreaterThanOrEqual(AUTH_PORT_START);
+      expect(server.port).toBeLessThan(AUTH_PORT_START + AUTH_PORT_COUNT);
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
       expect(response.status).toBe(HTTP_STATUS_OK);

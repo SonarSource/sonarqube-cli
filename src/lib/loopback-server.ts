@@ -2,17 +2,12 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import logger from './logger.js';
+import { AUTH_PORT_START, AUTH_PORT_COUNT } from './config-constants.js';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
 const FORCE_CLOSE_TIMEOUT_MS = 2000;
 const ALLOWED_LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
-
-// Port range used by the SonarLint protocol. SonarQube/SonarCloud validates
-// that the port in the auth URL falls within this range before POSTing the token.
-// Must match the range defined in SonarLint Core (EmbeddedServer.java: 64120-64130).
-export const SONARLINT_PORT_START = 64120;
-export const SONARLINT_PORT_COUNT = 11;
 
 export interface LoopbackServerResult {
   port: number;
@@ -123,15 +118,15 @@ export async function startLoopbackServer(
   // SonarQube/SonarCloud validates that the callback port is within this range
   // before sending the token — a random OS-assigned port is rejected.
   let bound: { srv: ReturnType<typeof createServer>; port: number } | null = null;
-  for (let i = 0; i < SONARLINT_PORT_COUNT; i++) {
-    const candidate = SONARLINT_PORT_START + i;
+  for (let i = 0; i < AUTH_PORT_COUNT; i++) {
+    const candidate = AUTH_PORT_START + i;
     bound = await tryBindPort(candidate);
     if (bound !== null) break;
     logger.debug(`Port ${candidate} in use, trying next`);
   }
 
   if (bound === null) {
-    throw new Error(`No available port in SonarLint range ${SONARLINT_PORT_START}-${SONARLINT_PORT_START + SONARLINT_PORT_COUNT - 1}`);
+    throw new Error(`No available port in SonarLint range ${AUTH_PORT_START}-${AUTH_PORT_START + AUTH_PORT_COUNT - 1}`);
   }
 
   const { srv: finalServer, port: foundPort } = bound;

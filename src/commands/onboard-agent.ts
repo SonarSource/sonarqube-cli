@@ -11,6 +11,7 @@ import { loadState, saveState, markAgentConfigured, addInstalledHook } from '../
 import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
+import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 import { text, blank, info, success, warn, intro, outro } from '../ui/index.js';
 
 export interface OnboardAgentOptions {
@@ -93,7 +94,7 @@ async function tryGetTokenForServerOrg(serverURL: string | undefined, organizati
 async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }> {
   const credentials = await getAllCredentials();
   const sonarCloudCreds = credentials.filter(cred =>
-    cred.account.startsWith('sonarcloud.io:')
+    cred.account.startsWith(`${SONARCLOUD_HOSTNAME}:`)
   );
 
   if (sonarCloudCreds.length === 0) {
@@ -122,7 +123,7 @@ function applySonarCloudCredentials(config: ConfigurationData, scResult: { token
   config.token = config.token || scResult.token;
   config.organization = config.organization || scResult.org;
   if (scResult.org && !config.serverURL) {
-    config.serverURL = 'https://sonarcloud.io';
+    config.serverURL = SONARCLOUD_URL;
   }
 }
 
@@ -169,7 +170,7 @@ async function loadConfiguration(projectInfo: ProjectInfo, options: OnboardAgent
 
   // If organization is provided but no server URL, default to SonarCloud
   if (config.organization && !config.serverURL) {
-    config.serverURL = 'https://sonarcloud.io';
+    config.serverURL = SONARCLOUD_URL;
     info('Organization provided, defaulting to SonarCloud');
   }
 

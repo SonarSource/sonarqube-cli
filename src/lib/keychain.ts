@@ -1,6 +1,6 @@
 // Keychain operations wrapper for keytar
 
-const SERVICE_NAME = 'sonarqube-cli';
+import { APP_NAME as SERVICE_NAME } from './config-constants.js';
 
 interface Credential {
   account: string;

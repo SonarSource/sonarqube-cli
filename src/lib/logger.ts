@@ -4,8 +4,7 @@
  */
 
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { LOG_DIR, LOG_FILE } from './config-constants.js';
 
 const LOG_LEVELS = {
   DEBUG: 0,
@@ -36,8 +35,6 @@ let config: LoggerConfig = {
   level: (process.env.LOG_LEVEL as LogLevel) || 'INFO',
 };
 
-const LOG_DIR = join(homedir(), '.sonarqube-cli', 'logs');
-const LOG_FILE = join(LOG_DIR, 'sonar-cli.log');
 
 let logDirCreated = false;
 
