@@ -42,10 +42,36 @@ echo "  • cli-spec.yaml"
 echo "  • src/version.ts"
 echo "  • src/index.ts (regenerated)"
 echo ""
-echo "Files using VERSION constant:"
-echo "  • src/daemon/backend/rpc.ts"
-echo "  • src/sonarqube/client.ts"
+
+# Build TypeScript
+echo "🔨 Building TypeScript..."
+npm run build
+
+# Build binary
+echo "📦 Building binary..."
+npm run build:binary
+
+# Update Homebrew tap
+BREW_FORMULA="/opt/homebrew/Library/Taps/local/homebrew-sonar/Formula/sonar.rb"
+if [ -f "$BREW_FORMULA" ]; then
+  echo "Updating Homebrew tap..."
+
+  # Pack binary with expected name
+  cp dist/sonarqube-cli /tmp/sonar-cli
+  cd /tmp && tar -czf ~/sonar-cli.tar.gz sonar-cli
+  cd - > /dev/null
+
+  NEW_SHA256=$(shasum -a 256 ~/sonar-cli.tar.gz | awk '{print $1}')
+
+  sed -i '' "s/version \"[^\"]*\"/version \"$NEW_VERSION\"/" "$BREW_FORMULA"
+  sed -i '' "s/sha256 \"[^\"]*\"/sha256 \"$NEW_SHA256\"/" "$BREW_FORMULA"
+
+  brew reinstall local/sonar/sonar > /dev/null 2>&1 || true
+  brew link --overwrite sonar > /dev/null 2>&1 || true
+
+  echo "  • Formula: $NEW_VERSION (sha256: ${NEW_SHA256:0:16}...)"
+fi
+
 echo ""
-echo "Next steps:"
-echo "  npm run build    # Rebuild TypeScript"
-echo "  sonar --version  # Verify new version"
+echo "🎉 Done! Verifying..."
+sonar --version

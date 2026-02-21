@@ -92,8 +92,6 @@ export async function startLoopbackServer(
   onRequest: RequestHandler,
   options?: LoopbackServerOptions
 ): Promise<LoopbackServerResult> {
-  logger.debug('Starting loopback server on OS-assigned port...');
-
   const server = createServer();
 
   const foundPort = await new Promise<number>((resolve, reject) => {
@@ -107,8 +105,6 @@ export async function startLoopbackServer(
       resolve(address.port);
     });
   });
-
-  logger.debug(`Loopback server created on 127.0.0.1:${foundPort}`);
 
   const finalServer = server;
   const allowedOrigins = options?.allowedOrigins ?? [];
@@ -184,17 +180,13 @@ export async function startLoopbackServer(
   finalServer.on('request', wrapResponseWithSecurityHeaders(onRequest));
 
   const close = async (): Promise<void> => {
-    logger.debug('Closing loopback server...');
-
     return new Promise<void>((resolve) => {
       finalServer.close(() => {
-        logger.debug('Loopback server closed successfully');
         resolve();
       });
 
       // Force close any remaining connections after timeout
       const forceCloseTimer = setTimeout(() => {
-        logger.debug('Force closing remaining loopback connections');
         finalServer.closeAllConnections?.();
       }, FORCE_CLOSE_TIMEOUT_MS);
 

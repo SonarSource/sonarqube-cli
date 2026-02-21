@@ -1,10 +1,18 @@
 // Hooks installation tests
 
-import { it, expect } from 'bun:test';
-import { mkdirSync, rmSync, existsSync, readFileSync, statSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { describe, it, beforeEach, afterEach, expect } from 'bun:test';
+import { mkdirSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { setMockUi } from '../../src/ui';
+
+const HOOK_TIMEOUT_SECONDS = 120;
 import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
+
+describe('Hooks', () => {
+
+beforeEach(() => { setMockUi(true); });
+afterEach(() => { setMockUi(false); });
 
 it('hooks: install prompt hook', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-' + Date.now());
@@ -46,7 +54,7 @@ it('hooks: install prompt hook', async () => {
     expect(settings.hooks.PostToolUse).toBeDefined();
     expect(settings.hooks.PostToolUse.length).toBe(1);
     expect(settings.hooks.PostToolUse[0].matcher).toBe('Edit|Write');
-    expect(settings.hooks.PostToolUse[0].hooks[0].timeout).toBe(120);
+    expect(settings.hooks.PostToolUse[0].hooks[0].timeout).toBe(HOOK_TIMEOUT_SECONDS);
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -107,7 +115,7 @@ it('hooks: overwrite existing hooks', async () => {
       }
     };
 
-    const fs = await import('fs/promises');
+    const fs = await import('node:fs/promises');
     await fs.writeFile(
       join(claudeDir, 'settings.json'),
       JSON.stringify(existingSettings, null, 2)
@@ -122,9 +130,12 @@ it('hooks: overwrite existing hooks', async () => {
     // Should have PostToolUse hook
     expect(settings.hooks.PostToolUse).toBeDefined();
 
-    // PreToolUse might be overwritten (depending on implementation)
-    // This tests that we don't crash on existing config
+    // installHooks does not modify PreToolUse — existing hooks are preserved
+    expect(settings.hooks.PreToolUse).toBeDefined();
+    expect(settings.hooks.PreToolUse[0].matcher).toBe('.*');
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
+
+}); // describe('Hooks')

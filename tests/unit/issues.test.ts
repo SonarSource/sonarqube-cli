@@ -1,16 +1,32 @@
 /**
- * Tests for IssuesClient
+ * Tests for IssuesClient and issuesSearchCommand
  */
 
-import { describe, it, expect, mock } from 'bun:test';
+import { describe, it, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import { IssuesClient } from '../../src/sonarqube/issues.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import type { IssuesSearchResponse, SonarQubeIssue } from '../../src/lib/types.js';
+import { issuesSearchCommand } from '../../src/commands/issues.js';
+import { setMockUi } from '../../src/ui';
+
+// Test constants
+const DEFAULT_PAGE_SIZE = 500;
+const CUSTOM_PAGE_SIZE = 100;
+const MULTI_PAGE_TOTAL = 5;
+const MULTI_PAGE_COUNT = 3;
+const SMALL_TOTAL = 3;
+const LARGE_SET_TOTAL = 1000;
+const LARGE_SET_PAGES = 10;
+const LARGE_SET_LAST_INDEX = 999;
+
+type MockParamValue = string | number | boolean;
+type MockParams = Record<string, MockParamValue>;
+type MockGetFn = (endpoint: string, params?: MockParams) => Promise<unknown>;
 
 // Helper to create a mock SonarQubeClient
-function createMockClient(mockGet: any): SonarQubeClient {
+function createMockClient(mockGet: MockGetFn): SonarQubeClient {
   const client = new SonarQubeClient('https://sonarcloud.io', 'test-token');
-  client.get = mockGet;
+  client.get = mockGet as SonarQubeClient['get'];
   return client;
 }
 
@@ -48,7 +64,7 @@ describe('IssuesClient', () => {
     it('should call client.get with correct endpoint', async () => {
       const mockGet = mock(async (endpoint: string) => {
         expect(endpoint).toBe('/api/issues/search');
-        return createMockResponse([], 1, 500, 0);
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -60,9 +76,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass projects parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.projects).toBe('my-project');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.projects).toBe('my-project');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -72,9 +88,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass severities parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.severities).toBe('CRITICAL,BLOCKER');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.severities).toBe('CRITICAL,BLOCKER');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -87,9 +103,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass types parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.types).toBe('BUG,VULNERABILITY');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.types).toBe('BUG,VULNERABILITY');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -102,9 +118,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass statuses parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.statuses).toBe('OPEN,REOPENED');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.statuses).toBe('OPEN,REOPENED');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -117,9 +133,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass resolved=false parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.resolved).toBe(false);
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.resolved).toBe(false);
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -132,9 +148,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass resolved=true parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.resolved).toBe(true);
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.resolved).toBe(true);
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -147,9 +163,9 @@ describe('IssuesClient', () => {
     });
 
     it('should not pass resolved parameter when undefined', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.resolved).toBeUndefined();
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.resolved).toBeUndefined();
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -159,9 +175,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass branch parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.branch).toBe('feature/test');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.branch).toBe('feature/test');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -174,9 +190,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass pullRequest parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.pullRequest).toBe('123');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.pullRequest).toBe('123');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -189,9 +205,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass rules parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.rules).toBe('typescript:S1234');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.rules).toBe('typescript:S1234');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -204,9 +220,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass tags parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.tags).toBe('security,performance');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.tags).toBe('security,performance');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -219,9 +235,9 @@ describe('IssuesClient', () => {
     });
 
     it('should pass componentKeys parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.componentKeys).toBe('my-project:src/file.ts');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.componentKeys).toBe('my-project:src/file.ts');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -233,10 +249,12 @@ describe('IssuesClient', () => {
     });
 
     it('should pass pagination parameters', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.p).toBe(2);
-        expect(params.ps).toBe(100);
-        return createMockResponse([], 2, 100, 0);
+      const pageNum = 2;
+      const pageSize = CUSTOM_PAGE_SIZE;
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.p).toBe(pageNum);
+        expect(params?.ps).toBe(pageSize);
+        return createMockResponse([], pageNum, pageSize, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -244,15 +262,15 @@ describe('IssuesClient', () => {
 
       await issuesClient.searchIssues({
         projects: 'my-project',
-        p: 2,
-        ps: 100
+        p: pageNum,
+        ps: pageSize
       });
     });
 
     it('should pass sort parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.s).toBe('SEVERITY');
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.s).toBe('SEVERITY');
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -265,9 +283,10 @@ describe('IssuesClient', () => {
     });
 
     it('should return response with issues', async () => {
+      const twoIssues = 2;
       const mockIssues = [createMockIssue('issue-1'), createMockIssue('issue-2')];
       const mockGet = mock(async () => {
-        return createMockResponse(mockIssues, 1, 500, 2);
+        return createMockResponse(mockIssues, 1, DEFAULT_PAGE_SIZE, twoIssues);
       });
 
       const client = createMockClient(mockGet);
@@ -275,20 +294,21 @@ describe('IssuesClient', () => {
 
       const result = await issuesClient.searchIssues({ projects: 'my-project' });
 
-      expect(result.issues).toHaveLength(2);
+      expect(result.issues).toHaveLength(twoIssues);
       expect(result.issues[0].key).toBe('issue-1');
       expect(result.issues[1].key).toBe('issue-2');
-      expect(result.total).toBe(2);
+      expect(result.total).toBe(twoIssues);
     });
   });
 
   describe('searchAllIssues', () => {
     it('should fetch single page when total fits in one page', async () => {
+      const twoIssues = 2;
       const mockIssues = [createMockIssue('issue-1'), createMockIssue('issue-2')];
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.p).toBe(1);
-        expect(params.ps).toBe(500);
-        return createMockResponse(mockIssues, 1, 500, 2);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.p).toBe(1);
+        expect(params?.ps).toBe(DEFAULT_PAGE_SIZE);
+        return createMockResponse(mockIssues, 1, DEFAULT_PAGE_SIZE, twoIssues);
       });
 
       const client = createMockClient(mockGet);
@@ -297,38 +317,39 @@ describe('IssuesClient', () => {
       const result = await issuesClient.searchAllIssues({ projects: 'my-project' });
 
       expect(mockGet).toHaveBeenCalledTimes(1);
-      expect(result.issues).toHaveLength(2);
-      expect(result.total).toBe(2);
+      expect(result.issues).toHaveLength(twoIssues);
+      expect(result.total).toBe(twoIssues);
     });
 
     it('should fetch multiple pages and aggregate issues', async () => {
       let callCount = 0;
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const pageSizeSmall = 2;
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
         callCount++;
-        
-        if (params.p === 1) {
+
+        if (params?.p === 1) {
           return createMockResponse(
             [createMockIssue('issue-1'), createMockIssue('issue-2')],
             1,
-            2,
-            5 // total 5 issues across 3 pages
+            pageSizeSmall,
+            MULTI_PAGE_TOTAL // total 5 issues across 3 pages
           );
-        } else if (params.p === 2) {
+        } else if (params?.p === 2) {
           return createMockResponse(
             [createMockIssue('issue-3'), createMockIssue('issue-4')],
             2,
-            2,
-            5
+            pageSizeSmall,
+            MULTI_PAGE_TOTAL
           );
-        } else if (params.p === 3) {
+        } else if (params?.p === MULTI_PAGE_COUNT) {
           return createMockResponse(
             [createMockIssue('issue-5')],
-            3,
-            2,
-            5
+            MULTI_PAGE_COUNT,
+            pageSizeSmall,
+            MULTI_PAGE_TOTAL
           );
         }
-        
+
         throw new Error('Unexpected page number');
       });
 
@@ -337,21 +358,21 @@ describe('IssuesClient', () => {
 
       const result = await issuesClient.searchAllIssues({
         projects: 'my-project',
-        ps: 2
+        ps: pageSizeSmall
       });
 
-      expect(mockGet).toHaveBeenCalledTimes(3);
-      expect(result.issues).toHaveLength(5);
+      expect(mockGet).toHaveBeenCalledTimes(MULTI_PAGE_COUNT);
+      expect(result.issues).toHaveLength(MULTI_PAGE_TOTAL);
       expect(result.issues[0].key).toBe('issue-1');
       expect(result.issues[2].key).toBe('issue-3');
       expect(result.issues[4].key).toBe('issue-5');
-      expect(result.total).toBe(5);
+      expect(result.total).toBe(MULTI_PAGE_TOTAL);
     });
 
     it('should use default page size of 500 when not specified', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.ps).toBe(500);
-        return createMockResponse([], 1, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.ps).toBe(DEFAULT_PAGE_SIZE);
+        return createMockResponse([], 1, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -363,9 +384,9 @@ describe('IssuesClient', () => {
     });
 
     it('should respect custom page size', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.ps).toBe(100);
-        return createMockResponse([], 1, 100, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.ps).toBe(CUSTOM_PAGE_SIZE);
+        return createMockResponse([], 1, CUSTOM_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -373,7 +394,7 @@ describe('IssuesClient', () => {
 
       await issuesClient.searchAllIssues({
         projects: 'my-project',
-        ps: 100
+        ps: CUSTOM_PAGE_SIZE
       });
 
       expect(mockGet).toHaveBeenCalledTimes(1);
@@ -382,15 +403,16 @@ describe('IssuesClient', () => {
     it('should preserve metadata from last response', async () => {
       const mockComponents = [{ key: 'comp-1', name: 'Component 1', qualifier: 'FIL' }];
       const mockRules = [{ key: 'typescript:S1234', name: 'Rule 1' }];
+      const pageSizeSmall = 2;
 
       let callCount = 0;
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
         callCount++;
         const response = createMockResponse(
           [createMockIssue(`issue-${callCount}`)],
-          params.p,
-          2,
-          3
+          params?.p as number,
+          pageSizeSmall,
+          SMALL_TOTAL
         );
         response.components = mockComponents;
         response.rules = mockRules;
@@ -402,22 +424,22 @@ describe('IssuesClient', () => {
 
       const result = await issuesClient.searchAllIssues({
         projects: 'my-project',
-        ps: 2
+        ps: pageSizeSmall
       });
 
       expect(result.components).toEqual(mockComponents);
       expect(result.rules).toEqual(mockRules);
-      expect(result.issues).toHaveLength(2);
+      expect(result.issues).toHaveLength(pageSizeSmall);
     });
 
     it('should override total with aggregated count', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        if (params.p === 1) {
-          return createMockResponse([createMockIssue('issue-1')], 1, 1, 3);
-        } else if (params.p === 2) {
-          return createMockResponse([createMockIssue('issue-2')], 2, 1, 3);
-        } else if (params.p === 3) {
-          return createMockResponse([createMockIssue('issue-3')], 3, 1, 3);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        if (params?.p === 1) {
+          return createMockResponse([createMockIssue('issue-1')], 1, 1, SMALL_TOTAL);
+        } else if (params?.p === 2) {
+          return createMockResponse([createMockIssue('issue-2')], 2, 1, SMALL_TOTAL);
+        } else if (params?.p === SMALL_TOTAL) {
+          return createMockResponse([createMockIssue('issue-3')], SMALL_TOTAL, 1, SMALL_TOTAL);
         }
         throw new Error('Unexpected page');
       });
@@ -431,17 +453,17 @@ describe('IssuesClient', () => {
       });
 
       // Original total from API is 3, but we override with actual aggregated count
-      expect(result.total).toBe(3);
-      expect(result.issues).toHaveLength(3);
+      expect(result.total).toBe(SMALL_TOTAL);
+      expect(result.issues).toHaveLength(SMALL_TOTAL);
     });
 
     it('should pass all filter parameters through pagination', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
-        expect(params.projects).toBe('my-project');
-        expect(params.severities).toBe('CRITICAL');
-        expect(params.resolved).toBe(false);
-        expect(params.branch).toBe('main');
-        return createMockResponse([], params.p, 500, 0);
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
+        expect(params?.projects).toBe('my-project');
+        expect(params?.severities).toBe('CRITICAL');
+        expect(params?.resolved).toBe(false);
+        expect(params?.branch).toBe('main');
+        return createMockResponse([], params?.p as number, DEFAULT_PAGE_SIZE, 0);
       });
 
       const client = createMockClient(mockGet);
@@ -456,12 +478,13 @@ describe('IssuesClient', () => {
     });
 
     it('should handle large paginated result sets', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock(async (_endpoint: string, params?: MockParams) => {
         // Simulate 1000 issues across 10 pages
-        const issues = Array.from({ length: 100 }, (_, i) => 
-          createMockIssue(`issue-${(params.p - 1) * 100 + i + 1}`)
+        const pageNum = params?.p as number;
+        const issues = Array.from({ length: CUSTOM_PAGE_SIZE }, (_, i) =>
+          createMockIssue(`issue-${(pageNum - 1) * CUSTOM_PAGE_SIZE + i + 1}`)
         );
-        return createMockResponse(issues, params.p, 100, 1000);
+        return createMockResponse(issues, pageNum, CUSTOM_PAGE_SIZE, LARGE_SET_TOTAL);
       });
 
       const client = createMockClient(mockGet);
@@ -469,14 +492,34 @@ describe('IssuesClient', () => {
 
       const result = await issuesClient.searchAllIssues({
         projects: 'my-project',
-        ps: 100
+        ps: CUSTOM_PAGE_SIZE
       });
 
-      expect(mockGet).toHaveBeenCalledTimes(10);
-      expect(result.issues).toHaveLength(1000);
+      expect(mockGet).toHaveBeenCalledTimes(LARGE_SET_PAGES);
+      expect(result.issues).toHaveLength(LARGE_SET_TOTAL);
       expect(result.issues[0].key).toBe('issue-1');
-      expect(result.issues[999].key).toBe('issue-1000');
-      expect(result.total).toBe(1000);
+      expect(result.issues[LARGE_SET_LAST_INDEX].key).toBe('issue-1000');
+      expect(result.total).toBe(LARGE_SET_TOTAL);
     });
+  });
+});
+
+describe('issuesSearchCommand', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockExit: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+    setMockUi(false);
+  });
+
+  it('exits 1 when --project is missing', async () => {
+    await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'fake-token' });
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

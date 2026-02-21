@@ -3,11 +3,13 @@
 import { resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { SonarQubeClient } from '../sonarqube/client.js';
-import { encodeToToon } from '../formatter/toon.js';
+import { encode as encodeToToon } from '@toon-format/toon';
 import { getToken, getAllCredentials } from '../lib/keychain.js';
 import { loadState, getActiveConnection } from '../lib/state-manager.js';
+import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
+import { text, info, error, print } from '../ui';
 
 // Hardcoded SonarCloud A3S API base URL
 const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';
@@ -20,7 +22,7 @@ const TOON_FORMAT_THRESHOLD = 5; // Use TOON format for result sets larger than 
 async function findProjectKeyInConfig(): Promise<string | undefined> {
   try {
     const { discoverProject } = await import('../bootstrap/discovery.js');
-    const projectInfo = await discoverProject(process.cwd(), false);
+    const projectInfo = await discoverProject(process.cwd());
 
     if (projectInfo.sonarPropsData?.projectKey) {
       return projectInfo.sonarPropsData.projectKey;
@@ -70,8 +72,8 @@ async function getTokenFromKeychain(
   try {
     const token = await getToken(SONARCLOUD_URL, organizationKey);
     return token ?? undefined;
-  } catch (error) {
-    logger.debug(`Failed to retrieve token from keychain for org "${organizationKey}": ${(error as Error).message}`);
+  } catch (err) {
+    logger.debug(`Failed to retrieve token from keychain for org "${organizationKey}": ${(err as Error).message}`);
     return undefined;
   }
 }
@@ -96,8 +98,8 @@ async function getCredentialFromSavedState(): Promise<
     }
 
     return { org: activeConnection.orgKey, token };
-  } catch (error) {
-    logger.debug(`Failed to retrieve credential from saved state: ${(error as Error).message}`);
+  } catch (err) {
+    logger.debug(`Failed to retrieve credential from saved state: ${(err as Error).message}`);
     return undefined;
   }
 }
@@ -124,8 +126,8 @@ async function getFirstSonarCloudCredential(): Promise<
     logMultipleOrganizationsIfFound(sonarCloudCreds.length, foundOrg);
 
     return { org: foundOrg, token: cred.password };
-  } catch (error) {
-    logger.debug(`Failed to retrieve credentials from keychain: ${(error as Error).message}`);
+  } catch (err) {
+    logger.debug(`Failed to retrieve credentials from keychain: ${(err as Error).message}`);
     return undefined;
   }
 }
@@ -135,10 +137,8 @@ async function getFirstSonarCloudCredential(): Promise<
  */
 function logMultipleOrganizationsIfFound(count: number, org: string): void {
   if (count > 1) {
-    logger.info(
-      `ℹ Multiple organizations found (${count}). Using: ${org}`
-    );
-    logger.info('  To use a different organization, specify --organization');
+    info(`Multiple organizations found (${count}). Using: ${org}`);
+    info('To use a different organization, specify --organization');
   }
 }
 
@@ -201,27 +201,19 @@ function validateConfiguration(
   file: string | undefined
 ): void {
   if (!file) {
-    logger.error('Error: --file is required');
-    process.exit(1);
+    throw new Error('--file is required');
   }
 
   if (!organizationKey) {
-    logger.error('❌ Error: --organization-key is required');
-    logger.error('  Provide via: --organization flag, or login with: sonar auth login');
-    process.exit(1);
+    throw new Error('--organization-key is required. Provide via: --organization flag, or login with: sonar auth login');
   }
 
   if (!projectKey) {
-    logger.error('❌ Error: --project is required');
-    logger.error('  Provide via: --project flag, or in sonar-project.properties');
-    logger.error('  Add to sonar-project.properties: sonar.projectKey=<key>');
-    process.exit(1);
+    throw new Error('--project is required. Provide via: --project flag, or in sonar-project.properties');
   }
 
   if (!token) {
-    logger.error('❌ Error: --token is required');
-    logger.error('  Provide via: --token flag, or login with: sonar auth login');
-    process.exit(1);
+    throw new Error('--token is required. Provide via: --token flag, or login with: sonar auth login');
   }
 }
 
@@ -232,16 +224,10 @@ function readFileContent(filePath: string): string {
   const absPath = resolve(filePath);
 
   if (!existsSync(absPath)) {
-    logger.error(`Error: File not found: ${absPath}`);
-    process.exit(1);
+    throw new Error(`File not found: ${absPath}`);
   }
 
-  try {
-    return readFileSync(absPath, 'utf-8');
-  } catch (error) {
-    logger.error(`Error reading file: ${(error as Error).message}`);
-    process.exit(1);
-  }
+  return readFileSync(absPath, 'utf-8');
 }
 
 /**
@@ -275,49 +261,45 @@ function formatResults(result: AnalyzeResponse): void {
   const issuesCount = result.issues?.length ?? 0;
 
   if (issuesCount > TOON_FORMAT_THRESHOLD) {
-    logger.info(encodeToToon(result));
+    print(encodeToToon(result));
   } else {
-    logger.info(JSON.stringify(result, null, 2));
+    print(JSON.stringify(result, null, 2));
   }
 }
 
 /**
  * Handle analysis errors with helpful troubleshooting
  */
-function handleAnalysisError(error: Error, organizationKey: string, projectKey: string): never {
-  logger.error('\n❌ Analysis failed!');
-  logger.error(`   Error: ${error.message}`);
-  logger.error('');
-  logger.error('💡 Troubleshooting:');
-  logger.error(`   - Verify organization "${organizationKey}" has access to project "${projectKey}"`);
-  logger.error('   - Check that your token has the correct permissions');
-  logger.error(`   - Try running: sonar auth logout --org ${organizationKey}`);
-  logger.error(`   - Then: sonar auth login --org ${organizationKey}`);
-  logger.error('');
-  process.exit(1);
+function handleAnalysisError(analysisError: Error, organizationKey: string, projectKey: string): never {
+  logger.error(`Analysis failed: ${analysisError.message}`);
+  error([
+    'Troubleshooting:',
+    `  - Verify organization "${organizationKey}" has access to project "${projectKey}"`,
+    '  - Check that your token has the correct permissions',
+    `  - Try running: sonar auth logout --org ${organizationKey}`,
+    `  - Then: sonar auth login --org ${organizationKey}`,
+  ].join('\n'));
+  throw analysisError;
 }
 
 /**
  * Check if connected server supports file analysis (Cloud only)
  */
 function checkServerType(): void {
+  let isOnPremise = false;
+
   try {
     const state = loadState(VERSION);
     const activeConnection = getActiveConnection(state);
+    isOnPremise = activeConnection?.type === 'on-premise';
+  } catch (err) {
+    logger.debug(`Warning: Could not verify server type: ${(err as Error).message}`);
+  }
 
-    if (activeConnection && activeConnection.type === 'on-premise') {
-      logger.error('❌ File analysis is not supported on SonarQube Server (on-premise)');
-      logger.error('');
-      logger.error('File analysis via API is available only on SonarCloud.');
-      logger.error('');
-      logger.error('To analyze files:');
-      logger.error('  1. Switch to SonarCloud (https://sonarcloud.io)');
-      logger.error('  2. Run: sonar auth login');
-      logger.error('  3. Then retry: sonar verify --file <file>');
-      process.exit(1);
-    }
-  } catch (error) {
-    logger.debug(`Warning: Could not verify server type: ${(error as Error).message}`);
+  if (isOnPremise) {
+    error('File analysis is not supported on SonarQube Server (on-premise)');
+    error('File analysis via API is available only on SonarCloud.\n\nTo analyze files:\n  1. Switch to SonarCloud (https://sonarcloud.io)\n  2. Run: sonar auth login\n  3. Then retry: sonar verify --file <file>');
+    throw new Error('File analysis is not supported on SonarQube Server (on-premise)');
   }
 }
 
@@ -325,46 +307,48 @@ function checkServerType(): void {
  * Verify file command handler
  */
 export async function verifyCommand(options: VerifyOptions): Promise<void> {
-  // Check server type early
-  checkServerType();
+  await runCommand(async () => {
+    // Check server type early
+    checkServerType();
 
-  const { organizationKey: org, token } = await getCredentials(
-    options.organizationKey,
-    options.token
-  );
-
-  // Try to find projectKey from flag first, then from config
-  let projectKey = options.projectKey;
-  if (!projectKey) {
-    projectKey = await findProjectKeyInConfig();
-  }
-
-  validateConfiguration(org, projectKey, token, options.file);
-
-  // After validateConfiguration, these are guaranteed to be defined
-  if (!org || !projectKey || !token) {
-    // This will never happen due to validateConfiguration, but TypeScript needs this check
-    return;
-  }
-
-  const fileContent = readFileContent(options.file);
-  const client = new SonarQubeClient(SONARCLOUD_API_URL, token);
-  const requestBody = buildAnalyzeRequest(
-    org,
-    projectKey,
-    options.file,
-    fileContent,
-    options.branch
-  );
-
-  try {
-    logger.info('Analyzing file...');
-    const result = await client.post<AnalyzeResponse>(
-      '/a3s-analysis/analyses',
-      requestBody
+    const { organizationKey: org, token } = await getCredentials(
+      options.organizationKey,
+      options.token
     );
-    formatResults(result);
-  } catch (error) {
-    handleAnalysisError(error as Error, org, projectKey);
-  }
+
+    // Try to find projectKey from flag first, then from config
+    let projectKey = options.projectKey;
+    if (!projectKey) {
+      projectKey = await findProjectKeyInConfig();
+    }
+
+    validateConfiguration(org, projectKey, token, options.file);
+
+    // After validateConfiguration, these are guaranteed to be defined
+    if (!org || !projectKey || !token) {
+      // This will never happen due to validateConfiguration, but TypeScript needs this check
+      return;
+    }
+
+    const fileContent = readFileContent(options.file);
+    const client = new SonarQubeClient(SONARCLOUD_API_URL, token);
+    const requestBody = buildAnalyzeRequest(
+      org,
+      projectKey,
+      options.file,
+      fileContent,
+      options.branch
+    );
+
+    try {
+      text('Analyzing file...');
+      const result = await client.post<AnalyzeResponse>(
+        '/a3s-analysis/analyses',
+        requestBody
+      );
+      formatResults(result);
+    } catch (err) {
+      handleAnalysisError(err as Error, org, projectKey);
+    }
+  });
 }

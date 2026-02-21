@@ -10,7 +10,9 @@ import {
   addOrUpdateConnection,
   generateConnectionId
 } from '../lib/state-manager.js';
+import { runCommand } from '../lib/run-command.js';
 import logger from '../lib/logger.js';
+import { warn, success, print, textPrompt, confirmPrompt } from '../ui';
 import { VERSION as CLI_VERSION, VERSION } from '../version.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
@@ -32,19 +34,19 @@ function isSonarCloud(serverURL: string): boolean {
  */
 async function findServerInConfigs(): Promise<string | null> {
   try {
-    const projectInfo = await discoverProject(process.cwd(), false);
+    const projectInfo = await discoverProject(process.cwd());
 
     // Check sonar-project.properties first
     if (projectInfo.sonarPropsData?.hostURL) {
       const url = projectInfo.sonarPropsData.hostURL;
-      logger.info(`✓ Found server in sonar-project.properties: ${url}`);
+      print(`Found server in sonar-project.properties: ${url}`);
       return url;
     }
 
     // Check .sonarlint config
     if (projectInfo.sonarLintData?.serverURL) {
       const url = projectInfo.sonarLintData.serverURL;
-      logger.info(`✓ Found server in .sonarlint config: ${url}`);
+      print(`Found server in .sonarlint config: ${url}`);
       return url;
     }
 
@@ -60,17 +62,16 @@ async function findServerInConfigs(): Promise<string | null> {
  */
 async function setupOnPremiseOrganization(org: string | undefined): Promise<string | undefined> {
   if (org) {
-    logger.info(`✓ Using organization: ${org}`);
+    print(`Using organization: ${org}`);
     return org;
   }
 
   const configOrg = await findOrganizationInConfigs();
   if (configOrg) {
-    logger.info(`✓ Using organization from config: ${configOrg}`);
+    print(`Using organization from config: ${configOrg}`);
     return configOrg;
   }
 
-  logger.debug('No organization specified for on-premise server');
   return undefined;
 }
 
@@ -79,7 +80,7 @@ async function setupOnPremiseOrganization(org: string | undefined): Promise<stri
  */
 async function findOrganizationInConfigs(): Promise<string | null> {
   try {
-    const projectInfo = await discoverProject(process.cwd(), false);
+    const projectInfo = await discoverProject(process.cwd());
 
     // Check sonar-project.properties
     if (projectInfo.sonarPropsData?.organization) {
@@ -113,14 +114,14 @@ async function getOrGenerateToken(
   const existingToken = await getKeystoreToken(server, org);
   if (existingToken) {
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
-    logger.info(`✓ Token already exists for: ${displayServer}`);
-    logger.info('You are already authenticated');
+    print(`Token already exists for: ${displayServer}`);
+    print('You are already authenticated');
     return '';
   }
 
-  logger.info(`\nAuthenticating with: ${server}`);
+  print(`\nAuthenticating with: ${server}`);
   const token = await generateTokenViaBrowser(server);
-  logger.info('✓ Token received');
+  print('Token received');
   return token;
 }
 
@@ -137,31 +138,30 @@ async function validateOrSelectOrganization(
     if (!orgExists) {
       throw new Error(`Organization "${org}" not found or not accessible`);
     }
-    logger.info(`✓ Using organization: ${org}`);
+    print(`Using organization: ${org}`);
     return org;
   }
 
   // Try to find organization in project configs first (skip API call)
   const configOrg = await findOrganizationInConfigs();
   if (configOrg) {
-    logger.info(`✓ Using organization from config: ${configOrg}`);
+    print(`Using organization from config: ${configOrg}`);
     return configOrg;
   }
 
   // If not in config, prompt user
-  logger.info('Please specify your organization key or run this command in a project with sonar-project.properties or .sonarlint config.');
-  logger.info('');
+  print('Please specify your organization key or run this command in a project with sonar-project.properties or .sonarlint config.');
 
   if (isNonInteractive) {
     throw new Error('Organization must be specified with -o/--org in non-interactive mode');
   }
 
-  const selectedOrg = await getUserInput('Enter organization key: ');
-  if (!selectedOrg.trim()) {
+  const selectedOrg = await textPrompt('Enter organization key');
+  if (!selectedOrg?.trim()) {
     throw new Error('Organization key is required');
   }
 
-  logger.info(`✓ Using organization: ${selectedOrg.trim()}`);
+  print(`Using organization: ${selectedOrg.trim()}`);
   return selectedOrg.trim();
 }
 
@@ -174,8 +174,7 @@ export async function authLoginCommand(options: {
   withToken?: string;
   region?: string;
 }): Promise<void> {
-  try {
-    // Try to find server from project configs if not provided
+  await runCommand(async () => {
     let server = options.server;
     if (!server) {
       const configServer = await findServerInConfigs();
@@ -194,18 +193,14 @@ export async function authLoginCommand(options: {
       const client = new SonarQubeClient(server, token);
       org = await validateOrSelectOrganization(client, org, isNonInteractive);
 
-      logger.info('');
-      logger.info('ℹ️   Note: If the organization is incorrect, you may get 403');
-      logger.info('   Unauthorized errors in later requests. Logout and login again if needed.');
+      print('');
+      warn('If the organization is incorrect, you may get 403 Unauthorized errors in later requests. Logout and login again if needed.');
     } else {
-      // For on-premise servers, organization is optional
       org = await setupOnPremiseOrganization(org);
     }
 
-    // Save token to keychain
     await saveToken(server, token, org);
 
-    // Update state
     const state = loadState(VERSION);
     const keystoreKey = generateConnectionId(server, org);
 
@@ -218,12 +213,8 @@ export async function authLoginCommand(options: {
     saveState(state);
 
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
-    logger.success(`✅ Authentication successful for: ${displayServer}`);
-    process.exit(0);
-  } catch (error) {
-    logger.debug(`Authentication error: ${(error as Error).message}`);
-    throw error;
-  }
+    success(`Authentication successful for: ${displayServer}`);
+  });
 }
 
 /**
@@ -233,29 +224,27 @@ export async function authLogoutCommand(options: {
   server?: string;
   org?: string;
 }): Promise<void> {
-  // Try to find server from project configs if not provided
-  let server = options.server;
-  if (!server) {
-    const configServer = await findServerInConfigs();
-    server = configServer || SONARCLOUD_URL;
-  }
-  const org = options.org;
+  await runCommand(async () => {
+    let server = options.server;
+    if (!server) {
+      const configServer = await findServerInConfigs();
+      server = configServer || SONARCLOUD_URL;
+    }
+    const org = options.org;
 
-  if (isSonarCloud(server) && !org) {
-    throw new Error('Organization key is required for SonarCloud logout');
-  }
+    if (isSonarCloud(server) && !org) {
+      throw new Error('Organization key is required for SonarCloud logout');
+    }
 
-  try {
     const token = await getKeystoreToken(server, org);
     if (!token) {
       const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
-      logger.info(`ℹ No token found for: ${displayServer}`);
+      print(`No token found for: ${displayServer}`);
       return;
     }
 
     await deleteToken(server, org);
 
-    // Update state
     const state = loadState(CLI_VERSION);
     const connectionId = generateConnectionId(server, org);
     state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
@@ -271,117 +260,82 @@ export async function authLogoutCommand(options: {
     saveState(state);
 
     const displayServerLogout = isSonarCloud(server) ? `${server} (${org})` : server;
-    logger.info(`✓ Logged out from: ${displayServerLogout}`);
-  } catch (error) {
-    logger.debug(`Logout error: ${(error as Error).message}`);
-    throw error;
-  }
+    success(`Logged out from: ${displayServerLogout}`);
+  });
 }
 
 /**
  * Purge command - remove all tokens from keychain
  */
 export async function authPurgeCommand(): Promise<void> {
-  try {
+  await runCommand(async () => {
     const credentials = await getAllCredentials();
 
     if (credentials.length === 0) {
-      logger.info('ℹ No tokens found in keychain');
+      print('No tokens found in keychain');
       return;
     }
 
-    logger.info(`Found ${credentials.length} token(s):`);
+    print(`Found ${credentials.length} token(s):`);
     credentials.forEach((cred) => {
-      logger.info(`  - ${cred.account}`);
+      print(`  - ${cred.account}`);
     });
-    logger.info('');
+    print('');
 
-    const confirm = await getUserInput('Remove all tokens? (y/n): ');
-    if (confirm.toLowerCase() !== 'y') {
-      logger.info('Cancelled');
+    const confirmed = await confirmPrompt('Remove all tokens?');
+    if (!confirmed) {
+      print('Cancelled');
       return;
     }
 
     await purgeAllTokens();
 
-    // Update state
     const state = loadState(CLI_VERSION);
     state.auth.connections = [];
     state.auth.activeConnectionId = undefined;
     state.auth.isAuthenticated = false;
     saveState(state);
 
-    logger.success('✓ All tokens have been removed from keychain');
-  } catch (error) {
-    logger.debug(`Purge error: ${(error as Error).message}`);
-    throw error;
-  }
+    success('All tokens have been removed from keychain');
+  });
 }
 
 /**
  * List saved authentication connections with token verification
  */
 export async function authListCommand(): Promise<void> {
-  try {
+  await runCommand(async () => {
     const state = loadState(CLI_VERSION);
 
     if (state.auth.connections.length === 0) {
-      logger.info('ℹ No saved authentication connections');
+      print('No saved authentication connections');
       return;
     }
 
-    logger.info(`Found ${state.auth.connections.length} saved connection(s):\n`);
+    print(`Found ${state.auth.connections.length} saved connection(s):\n`);
 
     let validCount = 0;
     let missingCount = 0;
 
     for (const conn of state.auth.connections) {
-      // Check if token exists in keychain
       const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
       const isValid = token !== null;
 
-
       if (isValid) {
         validCount++;
-        const checkmark = '✓';
         const orgDisplay = conn.orgKey ? ` (org: ${conn.orgKey})` : '';
-        logger.info(`  ${checkmark} ${conn.serverUrl}${orgDisplay}`);
+        print(`  ✓ ${conn.serverUrl}${orgDisplay}`);
       } else {
         missingCount++;
-        const cross = '✗';
         const orgDisplay = conn.orgKey ? ` (org: ${conn.orgKey})` : '';
-        logger.info(`  ${cross} ${conn.serverUrl}${orgDisplay} [token missing]`);
+        print(`  ✗ ${conn.serverUrl}${orgDisplay} [token missing]`);
       }
     }
 
-    logger.info(`\nSummary: ${validCount} valid, ${missingCount} missing`);
+    print(`\nSummary: ${validCount} valid, ${missingCount} missing`);
 
     if (missingCount > 0) {
-      logger.info('Run "sonar auth login" to add missing tokens');
+      print('Run "sonar auth login" to add missing tokens');
     }
-  } catch (error) {
-    logger.debug(`List error: ${(error as Error).message}`);
-    throw error;
-  }
-}
-
-/**
- * Get user input from stdin
- */
-async function getUserInput(prompt: string): Promise<string> {
-  process.stdout.write(prompt);
-
-  return new Promise((resolve) => {
-    let input = '';
-
-    process.stdin.setEncoding('utf-8');
-    process.stdin.resume();
-    process.stdin.once('data', (data) => {
-      input = data.toString().trim();
-      process.stdin.pause();
-      process.stdin.removeAllListeners('data');
-      process.stdin.unref();
-      resolve(input);
-    });
   });
 }

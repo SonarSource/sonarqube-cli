@@ -23,7 +23,7 @@ sonar.organization=test-org
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
     // Step 2: Discover project
-    const projectInfo = await discoverProject(testDir, false);
+    const projectInfo = await discoverProject(testDir);
 
     expect(projectInfo.hasSonarProps).toBe(true);
     expect(projectInfo.sonarPropsData!.hostURL).toBe('https://sonarcloud.io');
@@ -91,7 +91,7 @@ it('integration: onboard with existing .sonarlint config', async () => {
     );
 
     // Discover
-    const projectInfo = await discoverProject(testDir, false);
+    const projectInfo = await discoverProject(testDir);
 
     expect(projectInfo.hasSonarLintConfig).toBe(true);
     expect(projectInfo.sonarLintData!.serverURL).toBe('https://sonarqube.example.com');

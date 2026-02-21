@@ -11,6 +11,26 @@
 import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 
+function toCamelCase(str) {
+  return str.replaceAll(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function toPascalCase(str) {
+  const camel = toCamelCase(str);
+  return camel.charAt(0).toUpperCase() + camel.slice(1);
+}
+
+function collectCommandExports(cmd) {
+  const result = [];
+  if (cmd.handler) {
+    result.push(`${toCamelCase(cmd.name)}Command`);
+  }
+  for (const sub of (cmd.subcommands || []).filter(s => s.handler)) {
+    result.push(`${toCamelCase(cmd.name)}${toPascalCase(sub.name)}Command`);
+  }
+  return result;
+}
+
 export default function registerPlopGenerators(plop) {
   // Load CLI specification
   const spec = yaml.load(readFileSync('./cli-spec.yaml', 'utf8'));
@@ -48,6 +68,20 @@ export default function registerPlopGenerators(plop) {
 
   // Helper: Equality comparison
   plop.setHelper('eq', (a, b) => a === b);
+
+  // Helper: Generate consolidated command imports (one import per module)
+  plop.setHelper('commandImports', (commands) => {
+    const moduleMap = new Map();
+    for (const cmd of commands) {
+      const exps = collectCommandExports(cmd);
+      if (exps.length > 0) {
+        moduleMap.set(cmd.name, exps);
+      }
+    }
+    return Array.from(moduleMap.entries())
+      .map(([moduleName, exps]) => `import { ${exps.join(', ')} } from './commands/${moduleName}.js';`)
+      .join('\n');
+  });
 
   // Helper: Get required options
   plop.setHelper('requiredOptions', (options) => {

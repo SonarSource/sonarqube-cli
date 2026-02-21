@@ -2,9 +2,9 @@
 
 import { it, expect } from 'bun:test';
 
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { discoverProject } from '../../src/bootstrap/discovery.js';
 
 it('discovery: sonar-project.properties parsing', async () => {
@@ -12,26 +12,24 @@ it('discovery: sonar-project.properties parsing', async () => {
   mkdirSync(testDir, { recursive: true });
 
   try {
-    // Create sonar-project.properties
     const propsContent = `
 # SonarQube properties
 sonar.host.url=https://sonarcloud.io
 sonar.projectKey=my_project
 sonar.projectName=My Project
 sonar.organization=my-org
-sonar.sources=src
-sonar.tests=test
 `;
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
-    // Discover project
-    const info = await discoverProject(testDir, false);
+    const info = await discoverProject(testDir);
 
     expect(info.hasSonarProps).toBe(true);
-    expect(info.sonarPropsData!.hostURL).toBe('https://sonarcloud.io');
-    expect(info.sonarPropsData!.projectKey).toBe('my_project');
-    expect(info.sonarPropsData!.projectName).toBe('My Project');
-    expect(info.sonarPropsData!.organization).toBe('my-org');
+    expect(info.sonarPropsData).toMatchObject({
+      hostURL: 'https://sonarcloud.io',
+      projectKey: 'my_project',
+      projectName: 'My Project',
+      organization: 'my-org',
+    });
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -43,7 +41,6 @@ it('discovery: .sonarlint/connectedMode.json parsing', async () => {
   mkdirSync(sonarlintDir, { recursive: true });
 
   try {
-    // Create connectedMode.json
     const configContent = {
       sonarQubeUri: 'https://sonarqube.example.com',
       projectKey: 'example_project',
@@ -54,13 +51,14 @@ it('discovery: .sonarlint/connectedMode.json parsing', async () => {
       JSON.stringify(configContent, null, 2)
     );
 
-    // Discover project
-    const info = await discoverProject(testDir, false);
+    const info = await discoverProject(testDir);
 
     expect(info.hasSonarLintConfig).toBe(true);
-    expect(info.sonarLintData!.serverURL).toBe('https://sonarqube.example.com');
-    expect(info.sonarLintData!.projectKey).toBe('example_project');
-    expect(info.sonarLintData!.organization).toBe('example-org');
+    expect(info.sonarLintData).toMatchObject({
+      serverURL: 'https://sonarqube.example.com',
+      projectKey: 'example_project',
+      organization: 'example-org',
+    });
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -71,7 +69,6 @@ it('discovery: sonar-project.properties with comments and empty lines', async ()
   mkdirSync(testDir, { recursive: true });
 
   try {
-    // Create properties with comments
     const propsContent = `
 # This is a comment
 sonar.host.url=https://test.com
@@ -84,12 +81,14 @@ sonar.organization=test-org
 `;
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
-    const info = await discoverProject(testDir, false);
+    const info = await discoverProject(testDir);
 
     expect(info.hasSonarProps).toBe(true);
-    expect(info.sonarPropsData!.hostURL).toBe('https://test.com');
-    expect(info.sonarPropsData!.projectKey).toBe('test_key');
-    expect(info.sonarPropsData!.organization).toBe('test-org');
+    expect(info.sonarPropsData).toMatchObject({
+      hostURL: 'https://test.com',
+      projectKey: 'test_key',
+      organization: 'test-org',
+    });
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -100,11 +99,10 @@ it('discovery: no configuration files', async () => {
   mkdirSync(testDir, { recursive: true });
 
   try {
-    const info = await discoverProject(testDir, false);
+    const info = await discoverProject(testDir);
 
     expect(info.hasSonarProps).toBe(false);
     expect(info.hasSonarLintConfig).toBe(false);
-    // Note: hasConfig and config fields removed - we don't use .sonarqube/config.json anymore
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }

@@ -4,6 +4,7 @@ import { generateTokenViaBrowser, saveToken, validateToken, deleteToken } from '
 import { installHooks, installSecretScanningHooks, type HookType } from './hooks.js';
 import type { HealthCheckResult } from './health.js';
 import logger from '../lib/logger.js';
+import { text, success } from '../ui';
 
 /**
  * Run repair actions based on health check results
@@ -20,7 +21,7 @@ export async function runRepair(
 
   // Fix token if invalid
   if (!healthResult.tokenValid) {
-    logger.info('\n→ 🔑 Obtaining access token...');
+    text('Obtaining access token...');
 
     // Delete old token
     try {
@@ -40,18 +41,18 @@ export async function runRepair(
 
     // Save to keychain
     await saveToken(serverURL, token, organization);
-    logger.info('   ✓ Token saved to keychain');
+    success('Token saved to keychain');
   }
 
   // Fix hooks if not installed
   if (!healthResult.hooksInstalled) {
-    logger.info('\n→ 🪝 Installing hooks...');
+    text('Installing hooks...');
     await installHooks(projectRoot, hookType);
-    logger.info('   ✓ Hooks installed');
+    success('Hooks installed');
   }
 
   // Install sonar-secrets hooks for secret scanning
-  logger.info('\n→ 🔐 Installing secret scanning hooks...');
+  text('Installing secret scanning hooks...');
   await installSecretScanningHooks(projectRoot);
-  logger.info('   ✓ Secret scanning hooks installed');
+  success('Secret scanning hooks installed');
 }

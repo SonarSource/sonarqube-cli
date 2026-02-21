@@ -3,8 +3,8 @@
 
 cli:
   name: sonar
-  version: 0.2.111
-  description: SonarQube CLI for AI coding agents
+  version: 0.2.118
+  description: SonarQube CLI
 
 commands:
   # Command to analyze file using SonarCloud A3S API
@@ -198,6 +198,7 @@ commands:
       - name: login
         description: Save authentication token to keychain
         handler: ./src/commands/auth.ts
+        managedExit: true
         options:
           - name: server
             alias: s
@@ -233,6 +234,7 @@ commands:
       - name: logout
         description: Remove authentication token from keychain
         handler: ./src/commands/auth.ts
+        managedExit: true
         options:
           - name: server
             alias: s
@@ -254,6 +256,7 @@ commands:
       - name: purge
         description: Remove all authentication tokens from keychain
         handler: ./src/commands/auth.ts
+        managedExit: true
         examples:
           - command: sonar auth purge
             description: Interactively remove all saved tokens
@@ -261,6 +264,7 @@ commands:
       - name: list
         description: List saved authentication connections with token verification
         handler: ./src/commands/auth.ts
+        managedExit: true
         examples:
           - command: sonar auth list
             description: Show all saved authentication connections
@@ -272,6 +276,7 @@ commands:
       - name: install
         description: Install Sonar secrets pre-commit hook
         handler: ./src/commands/pre-commit.ts
+        managedExit: true
         examples:
           - command: sonar pre-commit install
             description: Install pre-commit and configure SonarSource secrets hook
@@ -279,6 +284,7 @@ commands:
       - name: uninstall
         description: Uninstall Sonar secrets pre-commit hook
         handler: ./src/commands/pre-commit.ts
+        managedExit: true
         examples:
           - command: sonar pre-commit uninstall
             description: Remove pre-commit hook and configuration file
@@ -290,6 +296,7 @@ commands:
       - name: install
         description: Install sonar-secrets binary from GitHub releases
         handler: ./src/commands/secret.ts
+        managedExit: true
         options:
           - name: force
             type: boolean
@@ -306,6 +313,7 @@ commands:
       - name: status
         description: Check sonar-secrets installation status
         handler: ./src/commands/secret.ts
+        managedExit: true
         examples:
           - command: sonar secret status
             description: Check if sonar-secrets is installed and up to date

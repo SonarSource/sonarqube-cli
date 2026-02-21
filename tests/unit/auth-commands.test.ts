@@ -1,577 +1,158 @@
-/**
- * Tests for auth commands with stdin interaction
- * Tests all scenarios: interactive prompts, arguments, non-interactive mode
- */
+// Tests for src/commands/auth.ts exported functions
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { setMockKeytar } from '../../src/lib/keychain.js';
-import { setMockLogger } from '../../src/lib/logger.js';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { saveToken, getToken } from '../../src/bootstrap/auth.js';
+import { authLoginCommand, authLogoutCommand, authPurgeCommand, authListCommand } from '../../src/commands/auth.js';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
+import { createMockKeytar } from '../helpers/mock-keytar.js';
+import * as stateManager from '../../src/lib/state-manager.js';
+import { getDefaultState } from '../../src/lib/state.js';
 
-// Mock keytar for token storage
-const mockKeytarTokens = new Map<string, string>();
+const keytarHandle = createMockKeytar();
 
-const mockKeytar = {
-  getPassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    return mockKeytarTokens.get(key) || null;
-  },
-  setPassword: async (service: string, account: string, password: string) => {
-    const key = `${service}:${account}`;
-    mockKeytarTokens.set(key, password);
-  },
-  deletePassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    return mockKeytarTokens.delete(key);
-  },
-  findCredentials: async (service: string) => {
-    const credentials: Array<{ account: string; password: string }> = [];
-    for (const [key, password] of mockKeytarTokens.entries()) {
-      if (key.startsWith(`${service}:`)) {
-        const account = key.substring(`${service}:`.length);
-        credentials.push({ account, password });
-      }
-    }
-    return credentials;
-  }
-};
+describe('authLogoutCommand', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockExit: any;
 
-// Mock logger to capture output
-let logOutput: string[];
-let errorOutput: string[];
-
-const mockLogger = {
-  debug: (msg: string) => logOutput.push(`[DEBUG] ${msg}`),
-  info: (msg: string) => logOutput.push(`[INFO] ${msg}`),
-  log: (msg: string) => logOutput.push(`[LOG] ${msg}`),
-  success: (msg: string) => logOutput.push(`[SUCCESS] ${msg}`),
-  warn: (msg: string) => errorOutput.push(`[WARN] ${msg}`),
-  error: (msg: string) => errorOutput.push(`[ERROR] ${msg}`),
-};
-
-// Helper functions that simulate auth command logic
-function processUserInput(inputData: string): string {
-  return inputData.trim();
-}
-
-function validateOrganizationInput(org: string): boolean {
-  return org.length > 0;
-}
-
-function isNonInteractiveMode(withToken?: string): boolean {
-  return !!withToken;
-}
-
-// Test constants
-const LONG_INPUT_LENGTH = 500;
-
-describe('auth commands stdin interaction', () => {
   beforeEach(() => {
-    setMockKeytar(mockKeytar);
-    setMockLogger(mockLogger);
-    logOutput = [];
-    errorOutput = [];
-    mockKeytarTokens.clear();
+    keytarHandle.setup();
+    setMockUi(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
-    setMockKeytar(mockKeytar);
-    setMockLogger(null);
+    keytarHandle.teardown();
+    mockExit.mockRestore();
+    setMockUi(false);
   });
 
-  describe('user input processing', () => {
-    it('should trim whitespace from user input', () => {
-      const input = '  sonarsource  \n';
-      const processed = processUserInput(input);
-
-      expect(processed).toBe('sonarsource');
-    });
-
-    it('should handle empty input', () => {
-      const input = '\n';
-      const processed = processUserInput(input);
-
-      expect(processed).toBe('');
-    });
-
-    it('should preserve special characters', () => {
-      const input = 'org-with_special.chars-123';
-      const processed = processUserInput(input);
-
-      expect(processed).toBe('org-with_special.chars-123');
-    });
-
-    it('should handle long input', () => {
-      const longOrg = 'a'.repeat(LONG_INPUT_LENGTH);
-      const processed = processUserInput(longOrg);
-
-      expect(processed).toBe(longOrg);
-      expect(processed.length).toBe(LONG_INPUT_LENGTH);
-    });
-
-    it('should preserve unicode characters', () => {
-      const unicodeOrg = 'org-café-日本語';
-      const processed = processUserInput(unicodeOrg);
-
-      expect(processed).toBe(unicodeOrg);
-    });
+  it('exits 1 when SonarCloud server used without org', async () => {
+    await authLogoutCommand({ server: 'https://sonarcloud.io' });
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
-  describe('organization validation', () => {
-    it('should accept valid organization input', () => {
-      const org = 'sonarsource';
-      const isValid = validateOrganizationInput(org);
+  it('logs info and exits 0 when no token found for on-premise server', async () => {
+    clearMockUiCalls();
 
-      expect(isValid).toBe(true);
-    });
+    await authLogoutCommand({ server: 'https://sonar.example.com' });
 
-    it('should reject empty organization', () => {
-      const org = '';
-      const isValid = validateOrganizationInput(org);
-
-      expect(isValid).toBe(false);
-
-      if (!isValid) {
-        errorOutput.push('[ERROR] Organization key is required');
-      }
-
-      expect(errorOutput).toContain('[ERROR] Organization key is required');
-    });
-
-    it('should reject whitespace-only input', () => {
-      const input = '   ';
-      const processed = processUserInput(input);
-      const isValid = validateOrganizationInput(processed);
-
-      expect(isValid).toBe(false);
-    });
+    const calls = getMockUiCalls();
+    const printCalls = calls.filter(c => c.method === 'print').map(c => String(c.args[0]));
+    expect(printCalls.some(m => m.includes('No token found'))).toBe(true);
+    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
-  describe('interactive vs non-interactive mode', () => {
-    it('should identify interactive mode (no --with-token)', () => {
-      const options: { withToken?: string } = {};
-      const isNonInteractive = isNonInteractiveMode(options.withToken);
+  it('deletes on-premise token from keychain on logout', async () => {
+    await saveToken('https://sonar.example.com', 'test-token-xyz');
+    expect(await getToken('https://sonar.example.com')).toBe('test-token-xyz');
 
-      expect(isNonInteractive).toBe(false);
-    });
+    await authLogoutCommand({ server: 'https://sonar.example.com' });
 
-    it('should identify non-interactive mode (with --with-token)', () => {
-      const options = { withToken: 'abc123xyz' };
-      const isNonInteractive = isNonInteractiveMode(options.withToken);
-
-      expect(isNonInteractive).toBe(true);
-    });
-
-    it('should not prompt for organization in non-interactive mode', () => {
-      const isNonInteractive = true;
-      let promptedForOrg = false;
-
-      if (!isNonInteractive) {
-        promptedForOrg = true;
-      }
-
-      expect(promptedForOrg).toBe(false);
-    });
-
-    it('should require organization in non-interactive mode', () => {
-      const options = { withToken: 'token123', org: undefined };
-      const isNonInteractive = isNonInteractiveMode(options.withToken);
-
-      let errorOccurred = false;
-
-      if (isNonInteractive && !options.org) {
-        errorOccurred = true;
-        errorOutput.push('[ERROR] Organization must be specified with -o/--org in non-interactive mode');
-      }
-
-      expect(errorOccurred).toBe(true);
-      expect(errorOutput.some(e => e.includes('Organization must be specified'))).toBe(true);
-    });
+    expect(await getToken('https://sonar.example.com')).toBeNull();
+    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
-  describe('confirmation logic (auth purge)', () => {
-    it('should accept "y" as confirmation', () => {
-      const input = 'y';
-      const isConfirmed = input.toLowerCase() === 'y';
+  it('deletes SonarCloud token when org provided', async () => {
+    await saveToken('https://sonarcloud.io', 'cloud-token-abc', 'my-org');
+    expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('cloud-token-abc');
 
-      expect(isConfirmed).toBe(true);
-    });
+    await authLogoutCommand({ server: 'https://sonarcloud.io', org: 'my-org' });
 
-    it('should accept "Y" as confirmation (case insensitive)', () => {
-      const input = 'Y';
-      const isConfirmed = input.toLowerCase() === 'y';
-
-      expect(isConfirmed).toBe(true);
-    });
-
-    it('should reject "n" as confirmation', () => {
-      const input = 'n';
-      const isConfirmed = input.toLowerCase() === 'y';
-
-      expect(isConfirmed).toBe(false);
-    });
-
-    it('should reject invalid confirmation input', () => {
-      const input = 'maybe';
-      const isConfirmed = input.toLowerCase() === 'y';
-
-      expect(isConfirmed).toBe(false);
-    });
-
-    it('should handle empty confirmation response', () => {
-      const input = '';
-      const isConfirmed = input.toLowerCase() === 'y';
-
-      expect(isConfirmed).toBe(false);
-    });
-
-    it('should clear tokens only on confirmation', async () => {
-      await mockKeytar.setPassword('sonarcloud.io', 'sonarcloud.io:org1', 'token1');
-      expect(mockKeytarTokens.size).toBe(1);
-
-      // Simulate "n" response - don't clear
-      const confirmResponse = 'n';
-      if (confirmResponse.toLowerCase() === 'y') {
-        mockKeytarTokens.clear();
-      }
-
-      expect(mockKeytarTokens.size).toBe(1);
-
-      // Simulate "y" response - clear
-      const confirmResponse2 = 'y';
-      if (confirmResponse2.toLowerCase() === 'y') {
-        mockKeytarTokens.clear();
-      }
-
-      expect(mockKeytarTokens.size).toBe(0);
-    });
+    expect(await getToken('https://sonarcloud.io', 'my-org')).toBeNull();
+    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
-  describe('auth login command scenarios', () => {
-    it('scenario: login with --org flag (no stdin needed)', () => {
-      const options = { org: 'sonarsource' };
-      const needsOrgPrompt = !options.org;
+  it('does not delete other org tokens when logging out from one org', async () => {
+    await saveToken('https://sonarcloud.io', 'token-org1', 'org1');
+    await saveToken('https://sonarcloud.io', 'token-org2', 'org2');
 
-      expect(needsOrgPrompt).toBe(false);
-    });
+    await authLogoutCommand({ server: 'https://sonarcloud.io', org: 'org1' });
 
-    it('scenario: login without arguments (stdin required)', () => {
-      const options: { org?: string } = {};
-      const needsOrgPrompt = !options.org;
-
-      expect(needsOrgPrompt).toBe(true);
-    });
-
-    it('scenario: login with --with-token and --org (non-interactive)', () => {
-      const options = { withToken: 'abc123', org: 'sonarsource' };
-      const isNonInteractive = !!options.withToken;
-
-      expect(isNonInteractive).toBe(true);
-      expect(options.org).toBeDefined();
-    });
-
-    it('scenario: login with --with-token but no --org (should error)', () => {
-      const options: { withToken?: string; org?: string } = { withToken: 'abc123' };
-      const isNonInteractive = !!options.withToken;
-
-      if (isNonInteractive && !options.org) {
-        errorOutput.push('[ERROR] Organization must be specified with -o/--org');
-      }
-
-      expect(errorOutput.some(e => e.includes('Organization must be specified'))).toBe(true);
-    });
+    expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
+    expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token-org2');
+    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
-  describe('auth purge command flow', () => {
-    it('should show confirmation prompt', () => {
-      logOutput.push('[INFO] Remove all tokens? (y/n): ');
+  it('accepts on-premise server with org (org is optional for on-premise)', async () => {
+    await saveToken('https://sonar.example.com', 'onprem-token');
 
-      expect(logOutput.some(l => l.includes('Remove all tokens'))).toBe(true);
-    });
+    await authLogoutCommand({ server: 'https://sonar.example.com', org: 'some-org' });
 
-    it('should show token count before confirmation', async () => {
-      await mockKeytar.setPassword('sonarcloud.io', 'sonarcloud.io:org1', 'token1');
-      await mockKeytar.setPassword('sonarcloud.io', 'sonarcloud.io:org2', 'token2');
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+});
 
-      const credentials = await mockKeytar.findCredentials('sonarcloud.io');
-      logOutput.push(`[INFO] Found ${credentials.length} token(s):`);
+describe('authPurgeCommand', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockExit: any;
 
-      expect(logOutput.some(l => l.includes('Found 2 token(s)'))).toBe(true);
-    });
-
-    it('should require confirmation before deletion', async () => {
-      await mockKeytar.setPassword('sonarcloud.io', 'sonarcloud.io:org1', 'token1');
-
-      const beforeSize = mockKeytarTokens.size;
-
-      // Simulate user saying "n"
-      const confirmation = 'n';
-      if (confirmation.toLowerCase() === 'y') {
-        mockKeytarTokens.clear();
-      }
-
-      const afterSize = mockKeytarTokens.size;
-
-      expect(beforeSize).toBe(1);
-      expect(afterSize).toBe(1); // Should not be deleted
-    });
+  beforeEach(() => {
+    keytarHandle.setup();
+    setMockUi(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
-  describe('stdin state management concepts', () => {
-    it('documents fix: stdin requires resume() after pause()', () => {
-      // This documents the fix applied to getUserInput():
-      // - generateTokenViaBrowser pauses stdin (line 72 in bootstrap/auth.ts)
-      // - getUserInput must call resume() before reading (line 316 in commands/auth.ts)
-      // - Without resume(), stdin is not ready and input() hangs
-      // - With resume(), stdin is active and can receive data
-
-      const stdinState = { isPaused: true };
-
-      // Simulate the fix being applied
-      if (stdinState.isPaused) {
-        stdinState.isPaused = false;
-      }
-
-      expect(stdinState.isPaused).toBe(false);
-    });
-
-    it('documents fix: stdin should use pause() not destroy()', () => {
-      // This documents the fix applied to getUserInput():
-      // - Old code called stdin.destroy() which closes stdin completely
-      // - New code calls stdin.pause() and removeAllListeners('data')
-      // - pause() allows stdin to be reused for subsequent prompts
-      // - destroy() prevents any further reads, causing process to hang
-
-      const stdinHandling = { method: 'pause' };
-
-      expect(stdinHandling.method).toBe('pause');
-      expect(stdinHandling.method).not.toBe('destroy');
-    });
-
-    it('documents fix: data listeners must be cleaned up', () => {
-      // This documents the fix applied to getUserInput():
-      // - After reading input, removeAllListeners('data') is called
-      // - This prevents multiple 'data' listeners from accumulating
-      // - Multiple listeners would cause input to be processed multiple times
-
-      const listenerCleanup: Record<string, string[]> = {
-        beforeRead: ['data', 'error'],
-        afterRead: ['error']
-      };
-
-      expect(listenerCleanup.beforeRead.length).toBe(2);
-      expect(listenerCleanup.afterRead.length).toBe(1);
-      expect(listenerCleanup.afterRead).not.toContain('data');
-    });
-
-    it('documents fix: multiple stdin reads must work sequentially', () => {
-      // This documents the flow in auth login:
-      // 1. First stdin read: OAuth callback waits for user to press Enter
-      // 2. Second stdin read: Organization prompt asks for org key
-      // - Without proper state management, second read would fail
-      // - With resume/pause/cleanup, both reads succeed
-
-      const stdinReads: Array<{ prompt: string; response: string }> = [
-        { prompt: 'Press Enter to open browser', response: '' },
-        { prompt: 'Enter organization key', response: 'sonarsource' }
-      ];
-
-      expect(stdinReads.length).toBe(2);
-      expect(stdinReads[0].prompt).toContain('Press Enter');
-      expect(stdinReads[1].prompt).toContain('organization key');
-    });
+  afterEach(() => {
+    keytarHandle.teardown();
+    mockExit.mockRestore();
+    setMockUi(false);
   });
 
-  describe('token storage', () => {
-    it('should save token in keychain', async () => {
-      const server = 'https://sonarcloud.io';
-      const org = 'test-org';
-      const token = 'test-token-123';
+  it('exits 0 when keychain is empty', async () => {
+    await authPurgeCommand();
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+});
 
-      await mockKeytar.setPassword(server, `${server}:${org}`, token);
+describe('authListCommand', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockExit: any;
 
-      const retrieved = await mockKeytar.getPassword(server, `${server}:${org}`);
-      expect(retrieved).toBe(token);
-    });
-
-    it('should retrieve saved token', async () => {
-      const server = 'https://sonarcloud.io';
-      const org = 'sonarsource';
-      const token = 'squ_abc123';
-
-      await mockKeytar.setPassword(server, `${server}:${org}`, token);
-      const retrieved = await mockKeytar.getPassword(server, `${server}:${org}`);
-
-      expect(retrieved).toBe(token);
-    });
-
-    it('should return null for missing token', async () => {
-      const server = 'https://sonarcloud.io';
-      const org = 'nonexistent-org';
-
-      const retrieved = await mockKeytar.getPassword(server, `${server}:${org}`);
-
-      expect(retrieved).toBeNull();
-    });
+  beforeEach(() => {
+    keytarHandle.setup();
+    setMockUi(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
-  describe('error handling', () => {
-    it('should log organization validation error', () => {
-      const org = '';
-
-      if (!validateOrganizationInput(org)) {
-        errorOutput.push('[ERROR] Organization key is required');
-      }
-
-      expect(errorOutput).toContain('[ERROR] Organization key is required');
-    });
-
-    it('should log non-interactive mode error', () => {
-      const isNonInteractive = true;
-      const org = undefined;
-
-      if (isNonInteractive && !org) {
-        errorOutput.push('[ERROR] Organization must be specified with -o/--org in non-interactive mode');
-      }
-
-      expect(errorOutput.some(e => e.includes('Organization must be specified'))).toBe(true);
-    });
-
-    it('should show help message with errors', () => {
-      errorOutput = [
-        '[ERROR] Organization key is required',
-        '[INFO]   Provide via: --organization flag, or login with: sonar auth login'
-      ];
-
-      expect(errorOutput.some(e => e.includes('Provide via'))).toBe(true);
-    });
+  afterEach(() => {
+    keytarHandle.teardown();
+    mockExit.mockRestore();
+    setMockUi(false);
   });
 
-  describe('server detection from project configs', () => {
-    it('should detect SonarCloud server', () => {
-      const server = 'https://sonarcloud.io';
-      const isCloud = server.includes('sonarcloud.io');
+  it('exits 0 when no saved connections', async () => {
+    await authListCommand();
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+});
 
-      expect(isCloud).toBe(true);
-    });
+describe('authLoginCommand', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockExit: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let loadStateSpy: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let saveStateSpy: any;
 
-    it('should detect on-premise server', () => {
-      const server = 'https://next.sonarqube.com/sonarqube';
-      const isCloud = server.includes('sonarcloud.io');
+  beforeEach(() => {
+    keytarHandle.setup();
+    setMockUi(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+  });
 
-      expect(isCloud).toBe(false);
-    });
+  afterEach(() => {
+    keytarHandle.teardown();
+    mockExit.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    setMockUi(false);
+  });
 
-    it('should use provided --server flag over config', () => {
-      const providedServer = 'https://custom-sonar.example.com';
-      const configServer = 'https://other-server.example.com';
-
-      // Logic: if --server provided, use it; otherwise use config
-      const server = providedServer;
-
-      expect(server).toBe(providedServer);
-    });
-
-    it('should fallback to config server when --server not provided', () => {
-      const configServer = 'https://next.sonarqube.com/sonarqube';
-
-      const server = configServer;
-
-      expect(server).toBe(configServer);
-    });
-
-    it('should use default SonarCloud when no server found', () => {
-      const defaultServer = 'https://sonarcloud.io';
-
-      const server = defaultServer;
-
-      expect(server).toBe(defaultServer);
-    });
-
-    it('should not require organization for on-premise server', () => {
-      const server = 'https://next.sonarqube.com/sonarqube';
-      const isCloud = server.includes('sonarcloud.io');
-      const org: string | undefined = undefined;
-
-      const organizationRequired = isCloud && !org;
-
-      expect(organizationRequired).toBe(false);
-    });
-
-    it('should require organization for SonarCloud with non-interactive mode', () => {
-      const server = 'https://sonarcloud.io';
-      const isCloud = server.includes('sonarcloud.io');
-      const org: string | undefined = undefined;
-      const isNonInteractive = true;
-
-      const organizationRequired = isCloud && isNonInteractive && !org;
-      if (organizationRequired) {
-        errorOutput.push('[ERROR] Organization must be specified with -o/--org in non-interactive mode');
-      }
-
-      expect(organizationRequired).toBe(true);
-      expect(errorOutput.some(e => e.includes('Organization must be specified'))).toBe(true);
-    });
-
-    it('should accept organization for on-premise server if provided', () => {
-      const server = 'https://next.sonarqube.com/sonarqube';
-      const org = 'my-org';
-      const isCloud = server.includes('sonarcloud.io');
-
-      // For on-premise, org is optional but can be provided
-      expect(org).toBe('my-org');
-      expect(isCloud).toBe(false);
-
-      // Should proceed without error
-      expect(errorOutput.length).toBe(0);
-    });
-
-    it('should not prompt for organization in non-interactive mode with on-premise', () => {
-      const server = 'https://next.sonarqube.com/sonarqube';
-      const isCloud = server.includes('sonarcloud.io');
-      const isNonInteractive = true;
-      const org: string | undefined = undefined;
-
-      const shouldPrompt = !isNonInteractive && !org && !isCloud;
-
-      expect(shouldPrompt).toBe(false);
-    });
-
-    it('should handle localhost server as on-premise', () => {
-      const server = 'http://localhost:9000';
-      const isCloud = server.includes('sonarcloud.io');
-
-      expect(isCloud).toBe(false);
-    });
-
-    it('should validate server URL format', () => {
-      const validServers = [
-        'https://sonarcloud.io',
-        'https://next.sonarqube.com/sonarqube',
-        'http://localhost:9000',
-        'https://sonar.example.com'
-      ];
-
-      validServers.forEach(server => {
-        try {
-          new URL(server);
-          expect(true).toBe(true);
-        } catch {
-          expect(false).toBe(true);
-        }
-      });
-    });
-
-    it('should reject invalid server URL', () => {
-      const invalidServer = 'not a valid url';
-      let isValid = true;
-
-      try {
-        new URL(invalidServer);
-      } catch {
-        isValid = false;
-      }
-
-      expect(isValid).toBe(false);
-    });
+  it('exits 0 when token saved for on-premise server with --with-token', async () => {
+    await authLoginCommand({ server: 'https://sonar.example.com', org: 'test-org', withToken: 'test-token-xyz' });
+    expect(await getToken('https://sonar.example.com', 'test-org')).toBe('test-token-xyz');
+    expect(mockExit).toHaveBeenCalledWith(0);
   });
 });

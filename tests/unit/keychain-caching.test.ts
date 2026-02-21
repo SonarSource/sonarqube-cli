@@ -5,52 +5,17 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { setMockKeytar, clearTokenCache } from '../../src/lib/keychain.js';
+import { createMockKeytar } from '../helpers/mock-keytar.js';
 
 // Test constants
 const MULTIPLE_TOKENS_COUNT = 3;
 
-// Mock keychain implementation
-const mockKeytarTokens = new Map<string, string>();
-
-const mockKeytar = {
-  getPassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    return mockKeytarTokens.get(key) || null;
-  },
-  setPassword: async (service: string, account: string, password: string) => {
-    const key = `${service}:${account}`;
-    mockKeytarTokens.set(key, password);
-  },
-  deletePassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    mockKeytarTokens.delete(key);
-    return true;
-  },
-  findCredentials: async (service: string) => {
-    const credentials: Array<{ account: string; password: string }> = [];
-    for (const [key, password] of mockKeytarTokens.entries()) {
-      if (key.startsWith(`${service}:`)) {
-        const account = key.substring(`${service}:`.length);
-        credentials.push({ account, password });
-      }
-    }
-    return credentials;
-  }
-};
+const keytarHandle = createMockKeytar();
+const { tokens: mockKeytarTokens, mock: mockKeytar } = keytarHandle;
 
 describe('Keychain token caching', () => {
-  beforeEach(() => {
-    // Reset mock keytar and cache
-    mockKeytarTokens.clear();
-    clearTokenCache();
-    setMockKeytar(mockKeytar);
-  });
-
-  afterEach(() => {
-    setMockKeytar(null);
-    mockKeytarTokens.clear();
-    clearTokenCache();
-  });
+  beforeEach(() => keytarHandle.setup());
+  afterEach(() => keytarHandle.teardown());
 
   describe('cache key generation', () => {
     it('should generate different keys for different servers', () => {

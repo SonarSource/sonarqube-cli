@@ -1,38 +1,34 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import {
   extractTokenFromPostBody,
   extractTokenFromQuery,
   buildAuthURL,
   getSuccessHTML,
-  waitForUserInput,
 } from '../../src/bootstrap/auth.js';
 
-const PORT_MIN = 64130;
-const PORT_MID = 64135;
-const PORT_MAX = 64140;
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
 const EXAMPLE_SERVER = 'https://sonar.example.com';
 
 describe('Auth Helper Functions', () => {
   describe('buildAuthURL', () => {
     it('should build URL with clean server URL (no trailing slash)', () => {
-      const url = buildAuthURL(SONARCLOUD_SERVER, PORT_MIN);
-      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${PORT_MIN}`);
+      const url = buildAuthURL(SONARCLOUD_SERVER, 8080);
+      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=8080`);
     });
 
     it('should build URL and remove trailing slash', () => {
-      const url = buildAuthURL(`${SONARCLOUD_SERVER}/`, PORT_MID);
-      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${PORT_MID}`);
+      const url = buildAuthURL(`${SONARCLOUD_SERVER}/`, 9000);
+      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=9000`);
     });
 
     it('should work with different ports', () => {
-      const url = buildAuthURL(EXAMPLE_SERVER, PORT_MAX);
-      expect(url).toContain(`port=${PORT_MAX}`);
+      const url = buildAuthURL(EXAMPLE_SERVER, 3000);
+      expect(url).toContain('port=3000');
     });
 
     it('should work with custom server URL', () => {
-      const url = buildAuthURL(`${EXAMPLE_SERVER}/`, PORT_MIN);
-      expect(url).toBe(`${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${PORT_MIN}`);
+      const url = buildAuthURL(`${EXAMPLE_SERVER}/`, 8080);
+      expect(url).toBe(`${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=8080`);
     });
   });
 
@@ -79,54 +75,6 @@ describe('Auth Helper Functions', () => {
       const html = getSuccessHTML();
       expect(html).toContain('</body>');
       expect(html).toContain('</html>');
-    });
-  });
-
-  describe('waitForUserInput', () => {
-    let originalStdin: typeof process.stdin;
-
-    beforeEach(() => {
-      originalStdin = process.stdin;
-    });
-
-    afterEach(() => {
-      Object.defineProperty(process, 'stdin', {
-        value: originalStdin,
-        writable: true,
-      });
-    });
-
-    it('should resolve when data event is received', async () => {
-      let dataCallback: (() => void) | null = null;
-
-      const mockStdin = {
-        setEncoding: mock(() => {}),
-        resume: mock(() => {}),
-        pause: mock(() => {}),
-        removeListener: mock(() => {}),
-        unref: mock(() => {}),
-        once: mock((event: string, callback: () => void) => {
-          if (event === 'data') {
-            dataCallback = callback;
-          }
-        }),
-      };
-
-      Object.defineProperty(process, 'stdin', {
-        value: mockStdin,
-        writable: true,
-      });
-
-      const promise = waitForUserInput();
-      if (dataCallback) {
-        dataCallback();
-      }
-      await promise;
-
-      expect(mockStdin.setEncoding).toHaveBeenCalledWith('utf-8');
-      expect(mockStdin.resume).toHaveBeenCalled();
-      expect(mockStdin.pause).toHaveBeenCalled();
-      expect(mockStdin.unref).toHaveBeenCalled();
     });
   });
 

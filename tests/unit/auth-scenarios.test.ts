@@ -22,6 +22,7 @@ import {
 } from '../../src/bootstrap/auth.js';
 import { startLoopbackServer, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
 import { setMockKeytar, clearTokenCache } from '../../src/lib/keychain.js';
+import { setMockUi } from '../../src/ui/index.js';
 
 const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';
@@ -602,37 +603,14 @@ describe('Auth Scenarios: keychain token management', () => {
 // ─── Scenario: generateTokenViaBrowser integration ─────────────────
 
 describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
-  let originalStdin: typeof process.stdin;
-
   beforeEach(() => {
-    originalStdin = process.stdin;
-
-    // Mock stdin so waitForUserInput resolves immediately
-    const mockStdin = {
-      setEncoding: mock(() => {}),
-      resume: mock(() => {}),
-      pause: mock(() => {}),
-      removeListener: mock(() => {}),
-      unref: mock(() => {}),
-      once: mock((_event: string, callback: () => void) => {
-        // Immediately invoke the data callback to skip "Press Enter"
-        setTimeout(callback, 0);
-      }),
-    };
-
-    Object.defineProperty(process, 'stdin', {
-      value: mockStdin,
-      writable: true,
-      configurable: true,
-    });
+    mockOpenBrowser.mockClear();
+    // Mock UI so pressEnterPrompt resolves immediately without stdin
+    setMockUi(true);
   });
 
   afterEach(() => {
-    Object.defineProperty(process, 'stdin', {
-      value: originalStdin,
-      writable: true,
-      configurable: true,
-    });
+    setMockUi(false);
   });
 
   it('should complete full OAuth flow: start server, receive POST token, resolve', async () => {

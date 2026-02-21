@@ -6,8 +6,30 @@ import { VERSION } from '../version.js';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 const REQUEST_TIMEOUT_MS = 30000;
+const DOWNLOAD_TIMEOUT_MS = 60000;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 2000;
+const HTTP_STATUS_RATE_LIMITED = 403;
+
+/**
+ * Handle a non-ok GitHub API response — applies delay before next retry
+ */
+async function handleNonOkResponse(
+  response: Response,
+  attempt: number,
+  setError: (e: Error) => void
+): Promise<void> {
+  if (response.status === HTTP_STATUS_RATE_LIMITED) {
+    logger.warn(`GitHub API rate limited. Retrying in ${RETRY_DELAY_MS * attempt}ms...`);
+    await sleep(RETRY_DELAY_MS * attempt);
+    return;
+  }
+
+  setError(new Error(`GitHub API error: ${response.status} ${response.statusText}`));
+  if (attempt < MAX_RETRY_ATTEMPTS) {
+    await sleep(RETRY_DELAY_MS * attempt);
+  }
+}
 
 /**
  * Fetch latest release from GitHub
@@ -23,8 +45,6 @@ export async function fetchLatestRelease(
 
   for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
     try {
-      logger.debug(`Fetching release (attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...`);
-
       const response = await fetch(url, {
         headers: {
           'Accept': 'application/vnd.github.v3+json',
@@ -34,18 +54,7 @@ export async function fetchLatestRelease(
       });
 
       if (!response.ok) {
-        if (response.status === 403) {
-          // Rate limited - wait longer before retry
-          logger.warn(`GitHub API rate limited. Retrying in ${RETRY_DELAY_MS * attempt}ms...`);
-          await sleep(RETRY_DELAY_MS * attempt);
-          continue;
-        }
-
-        lastError = new Error(`GitHub API error: ${response.status} ${response.statusText}`);
-        if (attempt < MAX_RETRY_ATTEMPTS) {
-          logger.debug(`${lastError.message}. Retrying...`);
-          await sleep(RETRY_DELAY_MS * attempt);
-        }
+        await handleNonOkResponse(response, attempt, (e) => { lastError = e; });
         continue;
       }
 
@@ -54,9 +63,7 @@ export async function fetchLatestRelease(
 
     } catch (error) {
       lastError = error as Error;
-
       if (attempt < MAX_RETRY_ATTEMPTS) {
-        logger.debug(`Request failed: ${lastError.message}. Retrying...`);
         await sleep(RETRY_DELAY_MS * attempt);
       }
     }
@@ -72,7 +79,7 @@ export function findAssetForPlatform(
   release: GitHubRelease,
   assetName: string
 ): GitHubAsset | null {
-  const asset = release.assets.find(asset => asset.name === assetName);
+  const asset = release.assets.find(a => a.name === assetName);
   return asset ?? null;
 }
 
@@ -83,13 +90,11 @@ export async function downloadBinary(
   url: string,
   destinationPath: string
 ): Promise<void> {
-  logger.debug(`Downloading from: ${url}`);
-
   const response = await fetch(url, {
     headers: {
       'User-Agent': `sonarqube-cli/${VERSION}`
     },
-    signal: AbortSignal.timeout(60000)
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
   });
 
   if (!response.ok) {
@@ -97,11 +102,8 @@ export async function downloadBinary(
   }
 
   const buffer = await response.arrayBuffer();
-
   const fs = await import('node:fs/promises');
   await fs.writeFile(destinationPath, Buffer.from(buffer));
-
-  logger.debug(`Downloaded ${buffer.byteLength} bytes`);
 }
 
 function sleep(ms: number): Promise<void> {
