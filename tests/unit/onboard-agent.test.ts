@@ -24,6 +24,33 @@ describe('onboardAgentCommand', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
+  it('exits 1 when --hook-type is invalid', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
+      root: '/fake/project',
+      name: 'fake-project',
+      isGitRepo: true,
+      gitRemote: '',
+      hasSonarProps: false,
+      sonarPropsData: null,
+      hasSonarLintConfig: false,
+      sonarLintData: null,
+    });
+
+    try {
+      await onboardAgentCommand('claude', {
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        hookType: 'invalid-type',
+        skipHooks: true,
+      });
+      expect(mockExit).toHaveBeenCalledWith(1);
+    } finally {
+      discoverSpy.mockRestore();
+    }
+  });
+
   it('exits 0 when onboarding succeeds with all checks passing', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
       root: '/fake/project',

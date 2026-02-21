@@ -14,6 +14,9 @@ import { print } from '../ui/index.js';
 
 const DEFAULT_PAGE_SIZE = 500;
 
+const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
+const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
+
 export interface IssuesSearchOptions {
   server?: string;
   token?: string;
@@ -50,9 +53,35 @@ function getServerFromState(): string | undefined {
  */
 export async function issuesSearchCommand(options: IssuesSearchOptions): Promise<void> {
   await runCommand(async () => {
+    // Validate options before any auth/network operations
+    const format = options.format ?? 'json';
+    if (!VALID_FORMATS.includes(format.toLowerCase())) {
+      throw new Error(`Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`);
+    }
+
+    if (options.pageSize !== undefined) {
+      const ps = Number(options.pageSize);
+      if (!Number.isInteger(ps) || ps < 1 || ps > DEFAULT_PAGE_SIZE) {
+        throw new Error(`Invalid --page-size: '${options.pageSize}'. Must be an integer between 1 and 500`);
+      }
+    }
+
+    if (options.severity) {
+      const sev = options.severity.toUpperCase();
+      if (!VALID_SEVERITIES.includes(sev)) {
+        throw new Error(`Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`);
+      }
+    }
+
     const server = options.server ?? getServerFromState();
     if (!server) {
       throw new Error('--server is required. Provide via: --server flag, or login with: sonar auth login');
+    }
+
+    try {
+      new URL(server);
+    } catch {
+      throw new Error(`Invalid server URL: '${server}'. Provide a valid URL (e.g., https://sonarcloud.io)`);
     }
 
     if (!options.project) {
@@ -73,7 +102,7 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
 
     const params: IssuesSearchParams = {
       projects: options.project,
-      severities: options.severity,
+      severities: options.severity?.toUpperCase(),
       types: options.type,
       statuses: options.status,
       rules: options.rule,
@@ -89,7 +118,6 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
       ? await issuesClient.searchAllIssues(params)
       : await issuesClient.searchIssues(params);
 
-    const format = options.format ?? 'json';
     let output: string;
 
     switch (format.toLowerCase()) {
@@ -106,7 +134,7 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
         output = formatCSV(result.issues);
         break;
       default:
-        throw new Error(`Unknown format: ${format}`);
+        output = JSON.stringify(result, null, 2);
     }
 
     print(output);

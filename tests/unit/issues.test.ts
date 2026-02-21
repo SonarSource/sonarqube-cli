@@ -7,7 +7,7 @@ import { IssuesClient } from '../../src/sonarqube/issues.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import type { IssuesSearchResponse, SonarQubeIssue } from '../../src/lib/types.js';
 import { issuesSearchCommand } from '../../src/commands/issues.js';
-import { setMockUi } from '../../src/ui';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
@@ -520,6 +520,74 @@ describe('issuesSearchCommand', () => {
   it('exits 1 when --project is missing', async () => {
     await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'fake-token' });
     expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 when --format is invalid', async () => {
+    clearMockUiCalls();
+    await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'tok', project: 'proj', format: 'xml' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(errors.some(m => m.includes('Invalid format') && m.includes('xml'))).toBe(true);
+  });
+
+  it('exits 1 when --page-size is not a number', async () => {
+    clearMockUiCalls();
+    await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'tok', project: 'proj', pageSize: 'abc' as unknown as number });
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(errors.some(m => m.includes('page-size'))).toBe(true);
+  });
+
+  it('exits 1 when --page-size is 0', async () => {
+    clearMockUiCalls();
+    await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'tok', project: 'proj', pageSize: 0 });
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(errors.some(m => m.includes('page-size'))).toBe(true);
+  });
+
+  it('exits 1 when --page-size exceeds 500', async () => {
+    clearMockUiCalls();
+    await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'tok', project: 'proj', pageSize: 501 });
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(errors.some(m => m.includes('page-size'))).toBe(true);
+  });
+
+  it('exits 1 when --severity is invalid', async () => {
+    clearMockUiCalls();
+    await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'tok', project: 'proj', severity: 'EXTREME' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(errors.some(m => m.includes('severity') && m.includes('EXTREME'))).toBe(true);
+  });
+
+  it('exits 1 when --server is not a valid URL', async () => {
+    clearMockUiCalls();
+    await issuesSearchCommand({ server: 'not-a-url', token: 'tok', project: 'proj' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(errors.some(m => m.includes('Invalid server URL') && m.includes('not-a-url'))).toBe(true);
+  });
+
+  it('normalizes severity to uppercase before passing to API', async () => {
+    let capturedSeverities: string | undefined;
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(async (_endpoint, params) => {
+      capturedSeverities = (params as Record<string, string>)?.severities;
+      return { issues: [], total: 0, p: 1, ps: 500, paging: { pageIndex: 1, pageSize: 500, total: 0 } };
+    });
+
+    try {
+      await issuesSearchCommand({
+        server: 'https://sonarcloud.io',
+        token: 'test-token',
+        project: 'my-project',
+        severity: 'major',
+      });
+      expect(capturedSeverities).toBe('MAJOR');
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 
   it('exits 0 when issues search succeeds', async () => {

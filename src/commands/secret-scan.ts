@@ -127,6 +127,11 @@ async function performFileScan(
     process.exit(1);
   }
 
+  if (!existsSync(file)) {
+    error(`File not found: ${file}`);
+    process.exit(1);
+  }
+
   const result = await runScan(binaryPath, file, authUrl, authToken);
   const scanDurationMs = Date.now() - scanStartTime;
 

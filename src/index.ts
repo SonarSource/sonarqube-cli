@@ -36,7 +36,14 @@ program
   .option('--save-config', 'Save configuration for future use')
   .action(async (options) => {
     await runCommand(async () => {
-      await verifyCommand(options);
+      await verifyCommand({
+        file: options.file,
+        organizationKey: options.organization,
+        projectKey: options.project,
+        token: options.token,
+        branch: options.branch,
+        saveConfig: options.saveConfig,
+      });
     });
   });
 

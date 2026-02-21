@@ -255,4 +255,24 @@ describe('authLoginCommand', () => {
       browserSpy.mockRestore();
     }
   });
+
+  it('exits 1 when --org is empty string', async () => {
+    await authLoginCommand({ org: '' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 when --with-token is empty string', async () => {
+    await authLoginCommand({ withToken: '' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 when --server is empty string', async () => {
+    await authLoginCommand({ server: '' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 when --server is not a valid URL', async () => {
+    await authLoginCommand({ server: 'not-a-url', withToken: 'tok', org: 'my-org' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
 });

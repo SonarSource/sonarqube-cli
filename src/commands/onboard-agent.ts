@@ -377,6 +377,10 @@ export async function onboardAgentCommand(agent: string, options: OnboardAgentOp
   let token = await ensureToken(config.token, serverURL, config.organization);
 
   // Phase 2 & 3: Health Check and Repair
+  const VALID_HOOK_TYPES: HookType[] = ['prompt', 'cli'];
+  if (options.hookType && !VALID_HOOK_TYPES.includes(options.hookType as HookType)) {
+    throw new Error(`Invalid hook type: '${options.hookType}'. Must be one of: ${VALID_HOOK_TYPES.join(', ')}`);
+  }
   const hookType = (options.hookType || 'prompt') as HookType;
   if (token) {
     token = await runHealthCheckAndRepair(

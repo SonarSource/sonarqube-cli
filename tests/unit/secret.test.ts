@@ -2,15 +2,17 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { detectPlatform, buildAssetName, buildLocalBinaryName } from '../../src/lib/platform-detector.js';
 import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
 import { secretStatusCommand, secretCheckCommand } from '../../src/commands/secret.js';
-import { setMockUi } from '../../src/ui';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
+import { saveToken } from '../../src/lib/keychain.js';
 import { createMockKeytar } from '../helpers/mock-keytar.js';
 import type { PlatformInfo } from '../../src/lib/install-types.js';
 
@@ -231,5 +233,57 @@ describe('secretCheckCommand', () => {
   it('exits 1 when called without --file or --stdin', async () => {
     await secretCheckCommand({});
     expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 with install hint when sonar-secrets binary is missing', async () => {
+    const existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    clearMockUiCalls();
+    try {
+      await secretCheckCommand({ file: 'src/index.ts' });
+    } finally {
+      existsSyncSpy.mockRestore();
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const uiCalls = getMockUiCalls();
+    const errorMessages = uiCalls.filter(c => c.method === 'error').map(c => String(c.args[0]));
+    const textMessages = uiCalls.filter(c => c.method === 'text').map(c => String(c.args[0]));
+    expect(errorMessages.some(m => m.includes('sonar-secrets is not installed'))).toBe(true);
+    expect(textMessages.some(m => m.includes('sonar secret install'))).toBe(true);
+  });
+
+  it('exits 1 when --file and --stdin are both provided', async () => {
+    await secretCheckCommand({ file: 'some-file.ts', stdin: true });
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 with file-not-found message when --file points to nonexistent path', async () => {
+    // Set up state with an active connection
+    const state = getDefaultState('test');
+    stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'test-org',
+      keystoreKey: 'sonarcloud.io:test-org',
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    // Provide a token in the mock keychain
+    await saveToken('https://sonarcloud.io', 'mock-token', 'test-org');
+
+    // Make binary existence check pass, file existence check fail
+    const existsSyncSpy = spyOn(fs, 'existsSync').mockImplementation((p) =>
+      String(p).includes('sonar-secrets')
+    );
+
+    clearMockUiCalls();
+    try {
+      await secretCheckCommand({ file: '/nonexistent/does-not-exist.ts' });
+    } finally {
+      existsSyncSpy.mockRestore();
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(errors.some(m => m.includes('File not found'))).toBe(true);
   });
 });

@@ -175,10 +175,30 @@ export async function authLoginCommand(options: {
   region?: string;
 }): Promise<void> {
   await runCommand(async () => {
+    if (options.org !== undefined && !options.org.trim()) {
+      throw new Error('--org value cannot be empty. Provide a valid organization key (e.g., --org my-org)');
+    }
+
+    if (options.withToken !== undefined && !options.withToken.trim()) {
+      throw new Error('--with-token value cannot be empty. Provide a valid token or omit the flag for browser authentication');
+    }
+
+    if (options.server !== undefined && !options.server.trim()) {
+      throw new Error('--server value cannot be empty. Provide a valid URL (e.g., https://sonarcloud.io)');
+    }
+
     let server = options.server;
     if (!server) {
       const configServer = await findServerInConfigs();
       server = configServer || SONARCLOUD_URL;
+    }
+
+    if (options.server !== undefined) {
+      try {
+        new URL(server);
+      } catch {
+        throw new Error(`Invalid server URL: '${server}'. Provide a valid URL (e.g., https://sonarcloud.io)`);
+      }
     }
 
     const isCloud = isSonarCloud(server);

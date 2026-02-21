@@ -3,7 +3,6 @@ import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, isValid
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
-const EXPECTED_SECURITY_HEADERS_COUNT = 4;
 const TEST_TIMEOUT_MS = 1000;
 const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';
