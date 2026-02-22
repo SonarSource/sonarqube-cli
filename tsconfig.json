@@ -3,28 +3,21 @@
     "target": "ES2022",
     "module": "ES2022",
     "lib": ["ES2022"],
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "allowJs": true,
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
     "sourceMap": true,
-    "jsx": "react",
     "types": ["node", "bun"]
   },
   "include": [
     "src/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "dist",
-    "tests",
-    "**/*.test.ts"
+    "tests"
   ]
 }
