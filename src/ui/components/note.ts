@@ -24,15 +24,15 @@ function renderTTY(lines: string[], title: string | undefined, opts: NoteOptions
   const innerWidth = width - 2; // subtract border chars
 
   const top = title
-    ? borderColor(TITLE_BORDER_PREFIX) + titleColor(title) + borderColor(' ' + '─'.repeat(Math.max(0, innerWidth - title.length - TITLE_PADDING)) + '┐')
+    ? borderColor(TITLE_BORDER_PREFIX) + titleColor(title) + borderColor(' ' + '─'.repeat(Math.max(0, innerWidth - title.length - 1)) + '┐')
     : borderColor('┌' + '─'.repeat(width) + '┐');
 
   const empty = borderColor('│') + ' '.repeat(width) + borderColor('│');
   const bottom = borderColor('└' + '─'.repeat(width) + '┘');
 
   const contentLines = lines.map((line) => {
-    const truncated = line.length > innerWidth - 1 ? line.slice(0, innerWidth - 4) + '...' : line;
-    const padded = truncated + ' '.repeat(Math.max(0, innerWidth - 1 - truncated.length));
+    const truncated = line.length > width - 1 ? line.slice(0, width - 4) + '...' : line;
+    const padded = truncated + ' '.repeat(Math.max(0, width - 1 - truncated.length));
     return borderColor('│') + ' ' + contentColor(padded) + borderColor('│');
   });
 

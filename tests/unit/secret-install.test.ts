@@ -5,23 +5,23 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setMockUi } from '../../src/ui';
-import { detectPlatform, buildAssetName, buildLocalBinaryName } from '../../src/lib/platform-detector.js';
+import { detectPlatform } from '../../src/lib/platform-detector.js';
 import * as processLib from '../../src/lib/process.js';
-import type { GitHubRelease, GitHubAsset } from '../../src/lib/install-types.js';
+import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from '../../src/lib/config-constants.js';
 
 // Configurable mock implementations — changed per test as needed
-let mockFetchLatestRelease: () => Promise<GitHubRelease> = async () => {
+let mockFetchLatestVersion: () => Promise<string> = async () => {
   throw new Error('network unavailable');
 };
 let mockDownloadBinary: (url: string, path: string) => Promise<void> = async () => {};
 
-// Mock github-releases module BEFORE importing secret.ts (which depends on it).
-// findAssetForPlatform uses the real implementation to avoid contaminating github-releases.test.ts,
+// Mock sonarsource-releases module BEFORE importing secret.ts (which depends on it).
+// buildDownloadUrl uses the real implementation to avoid contaminating sonarsource-releases.test.ts,
 // since Bun shares the module registry across test files in the same process.
-mock.module('../../src/lib/github-releases.js', () => ({
-  fetchLatestRelease: () => mockFetchLatestRelease(),
-  findAssetForPlatform: (release: GitHubRelease, assetName: string): GitHubAsset | null =>
-    release.assets.find(a => a.name === assetName) ?? null,
+mock.module('../../src/lib/sonarsource-releases.js', () => ({
+  fetchLatestVersion: () => mockFetchLatestVersion(),
+  buildDownloadUrl: (version: string, platform: { os: string; arch: string }): string =>
+    `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-${version}-${platform.os}-${platform.arch}.exe`,
   downloadBinary: (url: string, path: string) => mockDownloadBinary(url, path),
 }));
 
@@ -39,7 +39,7 @@ describe('secretInstallCommand', () => {
     mockExit.mockRestore();
     setMockUi(false);
     // Reset mock implementations to default (failing)
-    mockFetchLatestRelease = async () => { throw new Error('network unavailable'); };
+    mockFetchLatestVersion = async () => { throw new Error('network unavailable'); };
     mockDownloadBinary = async () => {};
   });
 
@@ -52,17 +52,8 @@ describe('secretInstallCommand', () => {
     const tempBinDir = join(tmpdir(), `sonar-install-test-${Date.now()}`);
     const platform = detectPlatform();
     const version = '1.0.0';
-    const assetName = buildAssetName(`v${version}`, platform);
 
-    mockFetchLatestRelease = async () => ({
-      tag_name: `v${version}`,
-      assets: [{
-        name: assetName,
-        browser_download_url: 'https://fake.example.com/release',
-        size: 1024,
-        content_type: 'application/octet-stream',
-      }],
-    } as GitHubRelease);
+    mockFetchLatestVersion = async () => version;
 
     mockDownloadBinary = async (_url: string, path: string) => {
       mkdirSync(dirname(path), { recursive: true });

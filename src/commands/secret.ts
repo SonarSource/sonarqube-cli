@@ -4,14 +4,14 @@ import {existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawnProcess} from '../lib/process.js';
 import { BIN_DIR } from '../lib/config-constants.js';
-import {buildAssetName, buildLocalBinaryName, detectPlatform} from '../lib/platform-detector.js';
-import {downloadBinary, fetchLatestRelease, findAssetForPlatform} from '../lib/github-releases.js';
+import {buildLocalBinaryName, detectPlatform} from '../lib/platform-detector.js';
+import {fetchLatestVersion, buildDownloadUrl, downloadBinary} from '../lib/sonarsource-releases.js';
 import {loadState, saveState} from '../lib/state-manager.js';
 import {VERSION} from '../version.js';
 import logger from '../lib/logger.js';
-import type {GitHubRelease, PlatformInfo} from '../lib/install-types.js';
-import {BINARY_NAME, SONAR_SECRETS_REPO} from '../lib/install-types.js';
-import { text, blank, note, success, error, warn, withSpinner, print } from '../ui/index.js';
+import type {PlatformInfo} from '../lib/install-types.js';
+import {SECRETS_BINARY_NAME} from '../lib/install-types.js';
+import { text, blank, note, success, warn, withSpinner, print } from '../ui/index.js';
 import { runCommand } from '../lib/run-command.js';
 
 export { secretCheckCommand } from './secret-scan.js';
@@ -75,14 +75,14 @@ async function performInstallation(
   }
 
   // Fetch and download
-  const release = await withSpinner('Fetching latest release from GitHub', () =>
-    fetchLatestRelease(SONAR_SECRETS_REPO.owner, SONAR_SECRETS_REPO.name)
+  const version = await withSpinner('Fetching latest version', () =>
+    fetchLatestVersion()
   );
-  print(`  Latest: ${release.tag_name}`);
+  print(`  Latest: ${version}`);
 
-  const asset = findAndValidateAsset(release, platform);
-  await withSpinner(`Downloading ${asset.name} (${formatBytes(asset.size)})`, () =>
-    downloadBinary(asset.browser_download_url, binaryPath)
+  const downloadUrl = buildDownloadUrl(version, platform);
+  await withSpinner(`Downloading sonar-secrets ${version}`, () =>
+    downloadBinary(downloadUrl, binaryPath)
   );
 
   if (platform.os !== 'windows') {
@@ -123,11 +123,7 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
 
       // Check for updates
       try {
-        const release = await fetchLatestRelease(
-          SONAR_SECRETS_REPO.owner,
-          SONAR_SECRETS_REPO.name
-        );
-        const latestVersion = release.tag_name.replace(/^v/, '');
+        const latestVersion = await fetchLatestVersion();
 
         if (version === latestVersion) {
           blank();
@@ -204,11 +200,11 @@ async function recordInstallationInState(
     state.tools ??= { installed: [] };
 
     state.tools.installed = state.tools.installed.filter(
-      (t) => t.name !== BINARY_NAME
+      (t) => t.name !== SECRETS_BINARY_NAME
     );
 
     state.tools.installed.push({
-      name: BINARY_NAME,
+      name: SECRETS_BINARY_NAME,
       version,
       path,
       installedAt: new Date().toISOString(),
@@ -232,11 +228,7 @@ async function checkExistingInstallation(binaryPath: string): Promise<boolean> {
     return false;
   }
 
-  const latestRelease = await fetchLatestRelease(
-    SONAR_SECRETS_REPO.owner,
-    SONAR_SECRETS_REPO.name
-  );
-  const latestVersion = latestRelease.tag_name.replace(/^v/, '');
+  const latestVersion = await fetchLatestVersion();
 
   if (existingVersion === latestVersion) {
     text(`sonar-secrets ${existingVersion} is already installed (latest)`);
@@ -249,34 +241,12 @@ async function checkExistingInstallation(binaryPath: string): Promise<boolean> {
   return false;
 }
 
-function findAndValidateAsset(
-  release: GitHubRelease,
-  platform: PlatformInfo
-): GitHubRelease['assets'][0] {
-  const assetName = buildAssetName(release.tag_name, platform);
-  const asset = findAssetForPlatform(release, assetName);
-
-  if (!asset) {
-    const availableAssets = release.assets.map(a => a.name).join('\n  • ');
-    error(`Binary not found for ${platform.os}-${platform.arch}`);
-    error(`Expected: ${assetName}`);
-    error(`Available assets:\n  • ${availableAssets}`);
-    error(`Manual download: https://github.com/${SONAR_SECRETS_REPO.owner}/${SONAR_SECRETS_REPO.name}/releases`);
-    throw new Error('No matching binary found for your platform');
-  }
-
-  return asset;
-}
 
 function logInstallationSuccess(binaryPath: string): void {
   blank();
   success('Installation complete!');
   note([
     `Binary path: ${binaryPath}`,
-    '',
-    'Claude Code hooks:',
-    '  Location: ~/.claude/hooks/sonar-secrets/',
-    '  Hooks are automatically registered on macOS',
     '',
     'Manual usage:',
     '  sonar-secrets scan <file>',
@@ -286,22 +256,3 @@ function logInstallationSuccess(binaryPath: string): void {
   ]);
 }
 
-function logInstallationError(err: unknown): void {
-  blank();
-  error(`Error: ${(err as Error).message}`);
-  logger.error(`Installation error: ${(err as Error).message}`);
-  text([
-    '',
-    'Troubleshooting:',
-    '  • Check your internet connection',
-    '  • Verify GitHub is accessible',
-    '  • Try again later (API rate limiting)',
-    `  • Manual download: https://github.com/${SONAR_SECRETS_REPO.owner}/${SONAR_SECRETS_REPO.name}/releases`,
-  ].join('\n'));
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
