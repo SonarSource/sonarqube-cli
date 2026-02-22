@@ -4,16 +4,32 @@ import { resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { encode as encodeToToon } from '@toon-format/toon';
-import { getToken, getAllCredentials } from '../lib/keychain.js';
 import { loadState, getActiveConnection } from '../lib/state-manager.js';
+import { resolveAuth } from '../lib/auth-resolver.js';
 import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
-import { text, info, error, print } from '../ui/index.js';
+import { text, error, print } from '../ui/index.js';
 
-import { SONARCLOUD_API_URL, SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
+import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 
 const TOON_FORMAT_THRESHOLD = 5; // Use TOON format for result sets larger than this
+
+/**
+ * Map serverUrl to its A3S API base URL.
+ * SonarCloud uses a separate api subdomain; other servers use the URL as-is.
+ */
+function getA3sApiUrl(serverUrl: string): string {
+  try {
+    const { hostname } = new URL(serverUrl);
+    if (hostname === SONARCLOUD_HOSTNAME) {
+      return `https://api.${hostname}`;
+    }
+  } catch {
+    // fall through
+  }
+  return serverUrl;
+}
 
 /**
  * Try to find projectKey from sonar-project.properties
@@ -39,7 +55,6 @@ export interface VerifyOptions {
   organizationKey?: string;
   projectKey?: string;
   branch?: string;
-  saveConfig?: boolean;
 }
 
 interface AnalyzeRequest {
@@ -60,134 +75,6 @@ interface AnalyzeResponse {
   }>;
   status?: string;
   [key: string]: unknown;
-}
-
-/**
- * Try to get token from keychain for given organization
- */
-async function getTokenFromKeychain(
-  organizationKey: string
-): Promise<string | undefined> {
-  try {
-    const token = await getToken(SONARCLOUD_URL, organizationKey);
-    return token ?? undefined;
-  } catch (err) {
-    logger.debug(`Failed to retrieve token from keychain for org "${organizationKey}": ${(err as Error).message}`);
-    return undefined;
-  }
-}
-
-/**
- * Try to get SonarCloud credential from saved state
- */
-async function getCredentialFromSavedState(): Promise<
-  { org: string; token: string } | undefined
-> {
-  try {
-    const state = loadState(VERSION);
-    const activeConnection = getActiveConnection(state);
-
-    if (activeConnection?.type !== 'cloud' || !activeConnection?.orgKey) {
-      return undefined;
-    }
-
-    const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
-    if (!token) {
-      return undefined;
-    }
-
-    return { org: activeConnection.orgKey, token };
-  } catch (err) {
-    logger.debug(`Failed to retrieve credential from saved state: ${(err as Error).message}`);
-    return undefined;
-  }
-}
-
-/**
- * Try to get first SonarCloud credential from keychain
- */
-async function getFirstSonarCloudCredential(): Promise<
-  { org: string; token: string } | undefined
-> {
-  try {
-    const allCreds = await getAllCredentials();
-    const sonarCloudCreds = allCreds.filter(cred =>
-      cred.account.startsWith(`${SONARCLOUD_HOSTNAME}:`)
-    );
-
-    if (sonarCloudCreds.length === 0) {
-      return undefined;
-    }
-
-    const cred = sonarCloudCreds[0];
-    const [, foundOrg] = cred.account.split(':');
-
-    logMultipleOrganizationsIfFound(sonarCloudCreds.length, foundOrg);
-
-    return { org: foundOrg, token: cred.password };
-  } catch (err) {
-    logger.debug(`Failed to retrieve credentials from keychain: ${(err as Error).message}`);
-    return undefined;
-  }
-}
-
-/**
- * Log a message if multiple organizations are found
- */
-function logMultipleOrganizationsIfFound(count: number, org: string): void {
-  if (count > 1) {
-    info(`Multiple organizations found (${count}). Using: ${org}`);
-    info('To use a different organization, specify --organization');
-  }
-}
-
-/**
- * Try to fill missing token for given organization
- */
-async function fillMissingToken(
-  org: string,
-  credentials: string | undefined
-): Promise<string | undefined> {
-  if (credentials) {
-    return credentials;
-  }
-  return getTokenFromKeychain(org);
-}
-
-/**
- * Get credentials from keychain or environment
- */
-async function getCredentials(
-  organizationKey: string | undefined,
-  token: string | undefined
-): Promise<{ organizationKey: string | undefined; token: string | undefined }> {
-  if (token && organizationKey) {
-    return { organizationKey, token };
-  }
-
-  let org = organizationKey;
-  let credentials = token;
-
-  if (org) {
-    const filledToken = await fillMissingToken(org, credentials);
-    credentials = filledToken || credentials;
-  }
-
-  if (!credentials || !org) {
-    // Try saved state first
-    const savedState = await getCredentialFromSavedState();
-    if (savedState) {
-      org = org || savedState.org;
-      credentials = credentials || savedState.token;
-    } else {
-      // Fall back to keychain
-      const saved = await getFirstSonarCloudCredential();
-      org = org || saved?.org;
-      credentials = credentials || saved?.token;
-    }
-  }
-
-  return { organizationKey: org, token: credentials };
 }
 
 /**
@@ -310,10 +197,11 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
     // Check server type early
     checkServerType();
 
-    const { organizationKey: org, token } = await getCredentials(
-      options.organizationKey,
-      options.token
-    );
+    const resolved = await resolveAuth({
+      token: options.token,
+      server: SONARCLOUD_URL,
+      org: options.organizationKey,
+    });
 
     // Try to find projectKey from flag first, then from config
     let projectKey = options.projectKey;
@@ -321,18 +209,18 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
       projectKey = await findProjectKeyInConfig();
     }
 
-    validateConfiguration(org, projectKey, token, options.file);
+    validateConfiguration(resolved.orgKey, projectKey, resolved.token, options.file);
 
     // After validateConfiguration, these are guaranteed to be defined
-    if (!org || !projectKey || !token) {
+    if (!resolved.orgKey || !projectKey) {
       // This will never happen due to validateConfiguration, but TypeScript needs this check
       return;
     }
 
     const fileContent = readFileContent(options.file);
-    const client = new SonarQubeClient(SONARCLOUD_API_URL, token);
+    const client = new SonarQubeClient(getA3sApiUrl(resolved.serverUrl), resolved.token);
     const requestBody = buildAnalyzeRequest(
-      org,
+      resolved.orgKey,
       projectKey,
       options.file,
       fileContent,
@@ -347,7 +235,7 @@ export async function verifyCommand(options: VerifyOptions): Promise<void> {
       );
       formatResults(result);
     } catch (err) {
-      handleAnalysisError(err as Error, org, projectKey);
+      handleAnalysisError(err as Error, resolved.orgKey, projectKey);
     }
   });
 }

@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { saveToken, getToken } from '../../src/bootstrap/auth.js';
 import * as authBootstrap from '../../src/bootstrap/auth.js';
-import { authLoginCommand, authLogoutCommand, authPurgeCommand, authListCommand } from '../../src/commands/auth.js';
+import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from '../../src/commands/auth.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as discovery from '../../src/bootstrap/discovery.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
@@ -107,7 +107,7 @@ describe('authPurgeCommand', () => {
   });
 });
 
-describe('authListCommand', () => {
+describe('authStatusCommand', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockExit: any;
 
@@ -124,7 +124,7 @@ describe('authListCommand', () => {
   });
 
   it('exits 0 when no saved connections', async () => {
-    await authListCommand();
+    await authStatusCommand();
     expect(mockExit).toHaveBeenCalledWith(0);
   });
 });

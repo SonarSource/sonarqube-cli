@@ -2,14 +2,12 @@
 
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { IssuesClient } from '../sonarqube/issues.js';
-import { getToken } from '../lib/keychain.js';
 import { encode as encodeToToon } from '@toon-format/toon';
 import { formatTable } from '../formatter/table.js';
 import { formatCSV } from '../formatter/csv.js';
 import type { IssuesSearchParams } from '../lib/types.js';
-import { loadState, getActiveConnection } from '../lib/state-manager.js';
+import { resolveAuth } from '../lib/auth-resolver.js';
 import { runCommand } from '../lib/run-command.js';
-import { VERSION } from '../version.js';
 import { print } from '../ui/index.js';
 
 const DEFAULT_PAGE_SIZE = 500;
@@ -33,19 +31,6 @@ export interface IssuesSearchOptions {
   all?: boolean;
   pageSize?: number;
   page?: number;
-}
-
-/**
- * Get server URL from saved state if available
- */
-function getServerFromState(): string | undefined {
-  try {
-    const state = loadState(VERSION);
-    const activeConnection = getActiveConnection(state);
-    return activeConnection?.serverUrl;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -73,31 +58,19 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
       }
     }
 
-    const server = options.server ?? getServerFromState();
-    if (!server) {
-      throw new Error('--server is required. Provide via: --server flag, or login with: sonar auth login');
-    }
-
-    try {
-      new URL(server);
-    } catch {
-      throw new Error(`Invalid server URL: '${server}'. Provide a valid URL (e.g., https://sonarcloud.io)`);
-    }
-
     if (!options.project) {
       throw new Error('--project is required');
     }
 
-    let token = options.token;
-    if (!token) {
-      const storedToken = await getToken(server);
-      if (!storedToken) {
-        throw new Error('No token found. Use --token or run: sonar auth login');
-      }
-      token = storedToken;
+    const resolved = await resolveAuth({ token: options.token, server: options.server });
+
+    try {
+      new URL(resolved.serverUrl);
+    } catch {
+      throw new Error(`Invalid server URL: '${resolved.serverUrl}'. Provide a valid URL (e.g., https://sonarcloud.io)`);
     }
 
-    const client = new SonarQubeClient(server, token);
+    const client = new SonarQubeClient(resolved.serverUrl, resolved.token);
     const issuesClient = new IssuesClient(client);
 
     const params: IssuesSearchParams = {

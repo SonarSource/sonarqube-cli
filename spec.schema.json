@@ -61,6 +61,10 @@
             "$ref": "#/definitions/command"
           }
         },
+        "requiresAuth": {
+          "type": "boolean",
+          "description": "Whether this command requires authentication"
+        },
         "examples": {
           "type": "array",
           "description": "Usage examples for documentation",

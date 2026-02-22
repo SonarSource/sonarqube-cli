@@ -13,7 +13,7 @@ const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
 import { verifyCommand } from './commands/verify.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { onboardAgentCommand } from './commands/onboard-agent.js';
-import { authLoginCommand, authLogoutCommand, authPurgeCommand, authListCommand } from './commands/auth.js';
+import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from './commands/auth.js';
 import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
 import { secretInstallCommand, secretStatusCommand, secretCheckCommand } from './commands/secret.js';
 
@@ -33,7 +33,6 @@ program
   .option('--project <project>', 'Project key')
   .option('-t, --token <token>', 'Authentication token (or use saved config)')
   .option('-b, --branch <branch>', 'Branch name')
-  .option('--save-config', 'Save configuration for future use')
   .action(async (options) => {
     await runCommand(async () => {
       await verifyCommand(options);
@@ -48,7 +47,7 @@ const issues = program
 issues
   .command('search')
   .description('Search for issues in SonarQube')
-  .requiredOption('-s, --server <server>', 'SonarQube server URL')
+  .option('-s, --server <server>', 'SonarQube server URL')
   .option('-t, --token <token>', 'Authentication token')
   .requiredOption('-p, --project <project>', 'Project key')
   .option('--severity <severity>', 'Filter by severity')
@@ -72,7 +71,6 @@ program
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-hooks', 'Skip hooks installation')
   .option('--hook-type <hook-type>', 'Hook type to install', 'prompt')
-  .option('--verbose', 'Verbose output')
   .action(async (agent, options) => {
     await runCommand(async () => {
       if (!VALID_AGENTS.includes(agent)) {
@@ -117,7 +115,7 @@ auth
   .command('list')
   .description('List saved authentication connections with token verification')
   .action(async () => {
-    await authListCommand();
+    await authStatusCommand();
   });
 
 // Manage pre-commit hooks for secrets detection

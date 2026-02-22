@@ -12,7 +12,8 @@ import {
 } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
 import logger from '../lib/logger.js';
-import { warn, success, print, textPrompt, confirmPrompt } from '../ui/index.js';
+import { warn, success, print, note, textPrompt, confirmPrompt } from '../ui/index.js';
+import { green, red, dim } from '../ui/colors.js';
 import { VERSION as CLI_VERSION, VERSION } from '../version.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 
@@ -322,39 +323,31 @@ export async function authPurgeCommand(): Promise<void> {
 /**
  * List saved authentication connections with token verification
  */
-export async function authListCommand(): Promise<void> {
+export async function authStatusCommand(): Promise<void> {
   await runCommand(async () => {
     const state = loadState(CLI_VERSION);
 
     if (state.auth.connections.length === 0) {
-      print('No saved authentication connections');
+      print('No saved connection');
       return;
     }
 
-    print(`Found ${state.auth.connections.length} saved connection(s):\n`);
+    const conn = state.auth.connections[0];
+    const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
 
-    let validCount = 0;
-    let missingCount = 0;
+    const lines = [
+      `Server  ${conn.serverUrl}`,
+      ...(conn.orgKey ? [`Org     ${conn.orgKey}`] : []),
+    ];
 
-    for (const conn of state.auth.connections) {
-      const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
-      const isValid = token !== null;
-
-      if (isValid) {
-        validCount++;
-        const orgDisplay = conn.orgKey ? ` (org: ${conn.orgKey})` : '';
-        print(`  ✓ ${conn.serverUrl}${orgDisplay}`);
-      } else {
-        missingCount++;
-        const orgDisplay = conn.orgKey ? ` (org: ${conn.orgKey})` : '';
-        print(`  ✗ ${conn.serverUrl}${orgDisplay} [token missing]`);
-      }
-    }
-
-    print(`\nSummary: ${validCount} valid, ${missingCount} missing`);
-
-    if (missingCount > 0) {
-      print('Run "sonar auth login" to add missing tokens');
+    if (token !== null) {
+      note(lines, '✓ Connected', { borderColor: green, titleColor: green, contentColor: dim });
+    } else {
+      note(
+        [...lines, '', 'Run "sonar auth login" to restore the token'],
+        '✗ Token missing',
+        { borderColor: red, titleColor: red, contentColor: dim }
+      );
     }
   });
 }

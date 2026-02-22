@@ -10,6 +10,7 @@ commands:
   - name: verify
     description: Analyze a file using SonarCloud A3S API
     handler: ./src/commands/verify.ts
+    requiresAuth: true
     options:
       - name: file
         type: string
@@ -34,17 +35,9 @@ commands:
         type: string
         description: Branch name
 
-      - name: save-config
-        type: boolean
-        description: Save configuration for future use
-        default: false
-
     examples:
-      - command: sonar verify src/MyClass.java
+      - command: sonar verify --file src/MyClass.java
         description: Analyze a single Java file
-      - command: sonar verify --file src/MyClass.java --organization sonarsource --project my-project -t TOKEN --save-config
-        description: Analyze a file and save config for future use
-
       - command: sonar verify --file src/MyClass.java
         description: Analyze using saved configuration
 
@@ -58,12 +51,12 @@ commands:
       - name: search
         description: Search for issues in SonarQube
         handler: ./src/commands/issues.ts
+        requiresAuth: true
         options:
           - name: server
             alias: s
             type: string
-            description: SonarQube server URL
-            required: true
+            description: SonarQube server URL (or use saved connection)
 
           - name: token
             alias: t
@@ -128,6 +121,7 @@ commands:
   - name: onboard-agent
     description: Setup SonarQube integration for AI coding agent
     handler: ./src/commands/onboard-agent.ts
+    requiresAuth: true
     arguments:
       - name: agent
         description: AI coding agent to onboard
@@ -175,19 +169,11 @@ commands:
           - cli
         default: prompt
 
-      - name: verbose
-        type: boolean
-        description: Verbose output
-        default: false
-
     examples:
       - command: sonar onboard-agent claude -s https://sonarcloud.io -p my-project
         description: Onboard Claude Code with interactive setup
 
-      - command: sonar onboard-agent gemini -s https://sonarcloud.io -p my-project -t TOKEN --non-interactive
-        description: Non-interactive onboarding for Gemini (not yet supported)
-
-      - command: sonar onboard-agent claude --skip-hooks -v
+      - command: sonar onboard-agent claude --skip-hooks --verbose
         description: Onboard without installing hooks (verbose mode)
 
   # Authentication command
@@ -260,13 +246,13 @@ commands:
           - command: sonar auth purge
             description: Interactively remove all saved tokens
 
-      - name: list
-        description: List saved authentication connections with token verification
+      - name: status
+        description: Show the current authentication status
         handler: ./src/commands/auth.ts
         managedExit: true
         examples:
-          - command: sonar auth list
-            description: Show all saved authentication connections
+          - command: sonar auth status
+            description: Show current server connection and token status
 
   # Pre-commit hooks command
   - name: pre-commit

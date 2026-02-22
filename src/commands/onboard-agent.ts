@@ -12,6 +12,7 @@ import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
+import { ENV_TOKEN, ENV_SERVER } from '../lib/auth-resolver.js';
 import { text, blank, info, success, warn, intro, outro } from '../ui/index.js';
 
 export interface OnboardAgentOptions {
@@ -22,7 +23,6 @@ export interface OnboardAgentOptions {
   nonInteractive?: boolean;
   skipHooks?: boolean;
   hookType?: string;
-  verbose?: boolean;
 }
 
 interface ConfigurationData {
@@ -156,6 +156,18 @@ async function loadConfiguration(projectInfo: ProjectInfo, options: OnboardAgent
     organization: options.org,
     token: options.token
   };
+
+  // Apply env var credentials (CLI options already set above take precedence via ??=)
+  const envToken = process.env[ENV_TOKEN];
+  const envServer = process.env[ENV_SERVER];
+
+  if (envToken && envServer) {
+    config.token ??= envToken;
+    config.serverURL ??= envServer;
+  } else if (envToken || envServer) {
+    const missing = envToken ? ENV_SERVER : ENV_TOKEN;
+    warn(`${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`);
+  }
 
   // Merge with discovered configuration
   const discovered = getDiscoveredConfiguration(projectInfo);
