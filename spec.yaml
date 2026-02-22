@@ -293,7 +293,7 @@ commands:
     description: Manage sonar-secrets binary
     subcommands:
       - name: install
-        description: Install sonar-secrets binary from GitHub releases
+        description: Install sonar-secrets binary
         handler: ./src/commands/secret.ts
         managedExit: true
         options:

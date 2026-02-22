@@ -1,7 +1,7 @@
 {
   "name": "sonarqube-cli",
   "type": "module",
-  "version": "0.1.135",
+  "version": "0.1.136",
   "description": "SonarQube CLI",
   "bin": {
     "sonar": "./dist/index.js"
@@ -21,8 +21,9 @@
     "spec:validate": "node scripts/validate-spec.js",
     "commands:validate": "node scripts/validate-commands.js",
     "gen": "node scripts/generate.js",
+    "gen:docs": "node scripts/generate-docs.js",
     "gen:command": "plop command",
-    "gen:docs": "plop docs",
+    "gen:plop-docs": "plop docs",
     "gen:all": "plop all-commands",
     "gen:sync": "plop sync-index"
   },

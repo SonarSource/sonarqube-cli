@@ -7,17 +7,12 @@
   "properties": {
     "cli": {
       "type": "object",
-      "required": ["name", "version", "description"],
+      "required": ["name", "description"],
       "properties": {
         "name": {
           "type": "string",
           "description": "CLI binary name (e.g., 'sonar')",
           "pattern": "^[a-z][a-z0-9-]*$"
-        },
-        "version": {
-          "type": "string",
-          "description": "Semantic version (e.g., '0.2.0')",
-          "pattern": "^\\d+\\.\\d+\\.\\d+$"
         },
         "description": {
           "type": "string",
