@@ -4,7 +4,7 @@
 import { describe, it, expect, afterEach, beforeEach, mock } from 'bun:test';
 
 // Mock browser module BEFORE importing auth (prevents actual browser opening during tests)
-const mockOpenBrowser = mock(() => Promise.resolve());
+const mockOpenBrowser = mock((_url: string) => Promise.resolve());
 mock.module('../../src/lib/browser.js', () => ({
   openBrowser: mockOpenBrowser,
 }));
@@ -48,8 +48,8 @@ function serverUrl(port: number): string {
  */
 function extractPortFromMockBrowserCall(): number {
   const calls = mockOpenBrowser.mock.calls;
-  const lastUrl = calls[calls.length - 1][0] as string;
-  return parseInt(new URL(lastUrl).searchParams.get('port')!);
+  const lastUrl = calls[calls.length - 1][0];
+  return Number.parseInt(new URL(lastUrl).searchParams.get('port') ?? '');
 }
 
 describe('Auth Scenarios: OAuth token flow via real HTTP', () => {
@@ -614,8 +614,8 @@ describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
   });
 
   it('should complete full OAuth flow: start server, receive POST token, resolve', async () => {
-    // Start the auth flow in the background
-    const tokenPromise = generateTokenViaBrowser('https://sonarcloud.io');
+    // Start the auth flow in the background (pass mockOpenBrowser directly to bypass CI guard)
+    const tokenPromise = generateTokenViaBrowser('https://sonarcloud.io', mockOpenBrowser);
 
     // Wait for server to be ready
     await new Promise(resolve => setTimeout(resolve, PORT_SCAN_DELAY_MS));
@@ -635,7 +635,8 @@ describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
   });
 
   it('should complete full OAuth flow with GET token callback', async () => {
-    const tokenPromise = generateTokenViaBrowser('https://sonarcloud.io');
+    // Pass mockOpenBrowser directly to bypass CI guard
+    const tokenPromise = generateTokenViaBrowser('https://sonarcloud.io', mockOpenBrowser);
 
     await new Promise(resolve => setTimeout(resolve, PORT_SCAN_DELAY_MS));
 
@@ -667,8 +668,19 @@ describe('Auth Scenarios: validateToken error handling', () => {
 // ─── Scenario: openBrowserWithFallback ──────────────────────────────
 
 describe('Auth Scenarios: openBrowserWithFallback', () => {
+  let savedCI: string | undefined;
+
   beforeEach(() => {
     mockOpenBrowser.mockClear();
+    // Remove CI env var so openBrowserWithFallback doesn't short-circuit
+    savedCI = process.env['CI'];
+    delete process.env['CI'];
+  });
+
+  afterEach(() => {
+    if (savedCI !== undefined) {
+      process.env['CI'] = savedCI;
+    }
   });
 
   it('should call openBrowser with the auth URL', async () => {
@@ -679,7 +691,7 @@ describe('Auth Scenarios: openBrowserWithFallback', () => {
   it('should not throw when browser opening fails', async () => {
     mockOpenBrowser.mockImplementationOnce(() => Promise.reject(new Error('No browser found')));
 
-    await expect(
+    expect(
       openBrowserWithFallback('https://sonarcloud.io/test')
     ).resolves.toBeUndefined();
   });
