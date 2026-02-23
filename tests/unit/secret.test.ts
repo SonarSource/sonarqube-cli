@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { detectPlatform, buildAssetName, buildLocalBinaryName } from '../../src/lib/platform-detector.js';
 import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
-import { secretStatusCommand, secretCheckCommand } from '../../src/commands/secret.js';
+import { secretStatusCommand, secretCheckCommand, secretInstallCommand, performSecretInstall } from '../../src/commands/secret.js';
+import * as releases from '../../src/lib/sonarsource-releases.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
@@ -201,6 +202,100 @@ describe('secretStatusCommand', () => {
       rmSync(tempBinDir, { recursive: true, force: true });
     }
   });
+
+  it('shows "Status: Installed" and "Up to date" when binary version matches latest', async () => {
+    // Arrange
+    const tempBinDir = join(tmpdir(), `sonar-status-uptodate-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: 'sonar-secrets 1.2.3\n', stderr: '' });
+    const fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockResolvedValue('1.2.3');
+    clearMockUiCalls();
+
+    try {
+      // Act
+      await secretStatusCommand({ binDir: tempBinDir });
+
+      // Assert
+      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
+      const successes = getMockUiCalls().filter(c => c.method === 'success').map(c => String(c.args[0]));
+      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(texts.some(m => m.includes('Status: Installed (v1.2.3)'))).toBe(true);
+      expect(successes.some(m => m.includes('Up to date'))).toBe(true);
+    } finally {
+      fetchLatestSpy.mockRestore();
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
+
+  it('shows "Update available" warning when installed version is behind latest', async () => {
+    // Arrange
+    const tempBinDir = join(tmpdir(), `sonar-status-update-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: 'sonar-secrets 1.0.0\n', stderr: '' });
+    const fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockResolvedValue('1.3.0');
+    clearMockUiCalls();
+
+    try {
+      // Act
+      await secretStatusCommand({ binDir: tempBinDir });
+
+      // Assert
+      const warns = getMockUiCalls().filter(c => c.method === 'warn').map(c => String(c.args[0]));
+      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(warns.some(m => m.includes('Update available') && m.includes('1.3.0'))).toBe(true);
+    } finally {
+      fetchLatestSpy.mockRestore();
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
+
+  it('shows network error warning and still reports installed version when update check API fails', async () => {
+    // Arrange
+    const tempBinDir = join(tmpdir(), `sonar-status-noupdate-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: 'sonar-secrets 1.0.0\n', stderr: '' });
+    const fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockRejectedValue(new Error('network error'));
+    clearMockUiCalls();
+
+    try {
+      // Act
+      await secretStatusCommand({ binDir: tempBinDir });
+
+      // Assert
+      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
+      const warns = getMockUiCalls().filter(c => c.method === 'warn').map(c => String(c.args[0]));
+      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(texts.some(m => m.includes('Status: Installed (v1.0.0)'))).toBe(true);
+      expect(warns.some(m => m.includes('Could not check for updates'))).toBe(true);
+    } finally {
+      fetchLatestSpy.mockRestore();
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
+
+  it('shows reinstall hint when binary exists but process spawn throws', async () => {
+    // Arrange
+    const tempBinDir = join(tmpdir(), `sonar-status-throw-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
+    spawnSpy.mockRejectedValue(new Error('spawn ENOENT'));
+    clearMockUiCalls();
+
+    try {
+      // Act
+      await secretStatusCommand({ binDir: tempBinDir });
+
+      // Assert
+      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
+      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(texts.some(m => m.includes('sonar secret install --force'))).toBe(true);
+    } finally {
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
 });
 
 
@@ -285,5 +380,183 @@ describe('secretCheckCommand', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
     const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
     expect(errors.some(m => m.includes('File not found'))).toBe(true);
+  });
+});
+
+
+// =============================================================================
+// SECTION 5: performSecretInstall — checkExistingInstallation paths
+// =============================================================================
+
+describe('performSecretInstall: already up to date', () => {
+  let spawnSpy: ReturnType<typeof spyOn>;
+  let fetchLatestSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+
+  afterEach(() => {
+    spawnSpy?.mockRestore();
+    fetchLatestSpy?.mockRestore();
+    setMockUi(false);
+  });
+
+  it('returns the installed binary path without downloading when binary is already at latest version', async () => {
+    // Arrange
+    const tempBinDir = join(tmpdir(), `sonar-uptodate-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    const expectedBinaryPath = join(tempBinDir, buildLocalBinaryName(detectPlatform()));
+    writeFileSync(expectedBinaryPath, '');
+    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0, stdout: 'sonar-secrets 1.2.3\n', stderr: '',
+    });
+    fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockResolvedValue('1.2.3');
+
+    try {
+      // Act
+      const result = await performSecretInstall({}, { binDir: tempBinDir });
+
+      // Assert
+      expect(result).toBe(expectedBinaryPath);
+      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
+      expect(texts.some(m => m.includes('already installed (latest)'))).toBe(true);
+    } finally {
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
+
+  it('shows "Updating..." and triggers fresh download when installed version is outdated', async () => {
+    // Arrange
+    const mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const tempBinDir = join(tmpdir(), `sonar-outdated-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
+    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0, stdout: 'sonar-secrets 1.0.0\n', stderr: '',
+    });
+    let fetchLatestCallCount = 0;
+    fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockImplementation(async () => {
+      fetchLatestCallCount++;
+      if (fetchLatestCallCount === 1) return '1.3.0'; // existing check: version differs → proceed to update
+      throw new Error('abort install');               // actual install call → stop cleanly
+    });
+
+    try {
+      // Act
+      await secretInstallCommand({}, { binDir: tempBinDir });
+
+      // Assert: the "Updating..." message must have been shown before the install was triggered
+      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
+      expect(mockExit).toHaveBeenCalledWith(1); // install aborted by mock
+      expect(texts.some(m => m.includes('Updating'))).toBe(true);
+    } finally {
+      mockExit.mockRestore();
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
+
+  it('triggers fresh install when existing binary fails version check', async () => {
+    // Arrange
+    const mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const tempBinDir = join(tmpdir(), `sonar-vcheckfail-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
+    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 1, stdout: '', stderr: '',
+    });
+    // fetchLatestVersion is only reached when existing check is skipped (version null → return false)
+    fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockRejectedValue(new Error('network abort'));
+
+    try {
+      // Act
+      await secretInstallCommand({}, { binDir: tempBinDir });
+
+      // Assert: install was attempted — fetchLatestVersion was called for the download phase
+      expect(mockExit).toHaveBeenCalledWith(1); // install aborted by mock
+      expect(fetchLatestSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      mockExit.mockRestore();
+      rmSync(tempBinDir, { recursive: true, force: true });
+    }
+  });
+});
+
+
+// =============================================================================
+// SECTION 6: secretInstallCommand — installation error paths
+// =============================================================================
+
+describe('secretInstallCommand: installation error paths', () => {
+  let mockExit: ReturnType<typeof spyOn>;
+  let spawnSpy: ReturnType<typeof spyOn>;
+  let fetchLatestSpy: ReturnType<typeof spyOn>;
+  let downloadBinarySpy: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
+  let tempBinDir: string;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    tempBinDir = join(tmpdir(), `sonar-install-err-${Date.now()}`);
+    mkdirSync(tempBinDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+    spawnSpy?.mockRestore();
+    fetchLatestSpy?.mockRestore();
+    downloadBinarySpy?.mockRestore();
+    loadStateSpy?.mockRestore();
+    saveStateSpy?.mockRestore();
+    setMockUi(false);
+    if (existsSync(tempBinDir)) rmSync(tempBinDir, { recursive: true, force: true });
+  });
+
+  it('reports verification failure message when binary does not respond after download', async () => {
+    // Arrange
+    fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockResolvedValue('1.2.3');
+    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockImplementation(
+      async (_url: string, path: string) => { writeFileSync(path, ''); }
+    );
+    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 1, stdout: '', stderr: 'not working',
+    });
+
+    // Act
+    await secretInstallCommand({ force: true }, { binDir: tempBinDir });
+
+    // Assert: exits 1 and shows error about verification failure
+    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(errors.some(m => m.includes('verification') || m.includes('not responding'))).toBe(true);
+  });
+
+  it('completes install successfully and warns about state save failure when state file is unwritable', async () => {
+    // Arrange
+    fetchLatestSpy = spyOn(releases, 'fetchLatestVersion').mockResolvedValue('1.2.3');
+    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockImplementation(
+      async (_url: string, path: string) => { writeFileSync(path, ''); }
+    );
+    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0, stdout: 'sonar-secrets 1.2.3\n', stderr: '',
+    });
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    // Act
+    await secretInstallCommand({ force: true }, { binDir: tempBinDir });
+
+    // Assert: install succeeds despite state error; user is warned but not blocked
+    const successes = getMockUiCalls().filter(c => c.method === 'success').map(c => String(c.args[0]));
+    const warns = getMockUiCalls().filter(c => c.method === 'warn').map(c => String(c.args[0]));
+    expect(mockExit).toHaveBeenCalledWith(0);
+    expect(successes.some(m => m.includes('Installation complete'))).toBe(true);
+    expect(warns.some(m => m.includes('Failed to update state'))).toBe(true);
   });
 });

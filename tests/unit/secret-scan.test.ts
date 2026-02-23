@@ -303,3 +303,64 @@ describe('secretCheckCommand: scan error handling', () => {
     expect(texts.some(m => m.includes('sonar secret status'))).toBe(true);
   });
 });
+
+// ─── stdin scan paths ─────────────────────────────────────────────────────────
+
+describe('secretCheckCommand: stdin scan', () => {
+  function withMockStdin(content: string, fn: () => Promise<void>): Promise<void> {
+    const { EventEmitter } = require('node:events');
+    const mockStdin = new EventEmitter();
+    const originalStdin = process.stdin;
+    // @ts-ignore — replace stdin for test
+    process.stdin = mockStdin;
+
+    const emitData = (): void => {
+      mockStdin.emit('data', Buffer.from(content));
+      mockStdin.emit('end');
+    };
+
+    // Emit after current microtask so listeners are registered first
+    setTimeout(emitData, 0);
+
+    return fn().finally(() => {
+      // @ts-ignore
+      process.stdin = originalStdin;
+    });
+  }
+
+  it('exits 0 when stdin scan succeeds with no issues', async () => {
+    await setupAuthenticatedState();
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await withMockStdin('const x = 1;\n', () =>
+        secretCheckCommand({ stdin: true })
+      );
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+
+  it('exits with scan exit code when stdin scan fails', async () => {
+    await setupAuthenticatedState();
+    spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'secret found' });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await withMockStdin('const secret = "abc123";\n', () =>
+        secretCheckCommand({ stdin: true })
+      );
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+});

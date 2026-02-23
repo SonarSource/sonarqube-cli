@@ -166,3 +166,184 @@ describe('verifyCommand: formatResults and error handling', () => {
     expect(errors.some(m => m.includes('test-org'))).toBe(true);
   });
 });
+
+// ─── validateConfiguration paths ─────────────────────────────────────────────
+
+describe('verifyCommand: validation errors', () => {
+  let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    keytarHandle.setup();
+    setMockUi(true);
+    clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+  });
+
+  afterEach(() => {
+    keytarHandle.teardown();
+    loadStateSpy.mockRestore();
+    mockExit.mockRestore();
+    setMockUi(false);
+  });
+
+  it('exits 1 when file is empty string but token provided', async () => {
+    await verifyCommand({ file: '', token: 'tok', organizationKey: 'org', projectKey: 'proj' });
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits 1 when organization key is missing', async () => {
+    const testDir = join(tmpdir(), `test-verify-noorg-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+    const testFile = join(testDir, 'test.ts');
+    writeFileSync(testFile, 'const x = 1;\n');
+
+    try {
+      await verifyCommand({ file: testFile, token: 'tok', projectKey: 'proj' });
+      expect(mockExit).toHaveBeenCalledWith(1);
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exits 1 when project key is missing', async () => {
+    const testDir = join(tmpdir(), `test-verify-noproj-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+    const testFile = join(testDir, 'test.ts');
+    writeFileSync(testFile, 'const x = 1;\n');
+    const cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
+
+    try {
+      await verifyCommand({ file: testFile, token: 'tok', organizationKey: 'org' });
+      expect(mockExit).toHaveBeenCalledWith(1);
+    } finally {
+      cwdSpy.mockRestore();
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exits 1 when file path does not exist', async () => {
+    await verifyCommand({
+      file: '/nonexistent/path/to/file.ts',
+      token: 'tok',
+      organizationKey: 'org',
+      projectKey: 'proj',
+    });
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+});
+
+// ─── branch option + non-SonarCloud server ────────────────────────────────────
+
+describe('verifyCommand: branch and server variations', () => {
+  let testDir: string;
+  let testFile: string;
+  let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let postSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    keytarHandle.setup();
+    setMockUi(true);
+    clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    testDir = join(tmpdir(), `test-verify-branch-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+    testFile = join(testDir, 'test.ts');
+    writeFileSync(testFile, 'const x = 1;\n');
+    postSpy = spyOn(SonarQubeClient.prototype, 'post').mockResolvedValue({ issues: [] });
+  });
+
+  afterEach(() => {
+    keytarHandle.teardown();
+    loadStateSpy.mockRestore();
+    postSpy.mockRestore();
+    mockExit.mockRestore();
+    setMockUi(false);
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('includes branch in request when branch option is provided', async () => {
+    await verifyCommand({
+      file: testFile,
+      token: 'tok',
+      organizationKey: 'org',
+      projectKey: 'proj',
+      branch: 'feature/my-branch',
+    });
+    expect(mockExit).toHaveBeenCalledWith(0);
+    expect(postSpy).toHaveBeenCalled();
+    const callArgs = postSpy.mock.calls[0];
+    expect(JSON.stringify(callArgs)).toContain('feature/my-branch');
+  });
+
+  it('exits 0 and uses server URL as-is when server is not SonarCloud', async () => {
+    const savedToken = process.env['SONAR_CLI_TOKEN'];
+    const savedServer = process.env['SONAR_CLI_SERVER'];
+    process.env['SONAR_CLI_TOKEN'] = 'env-token';
+    process.env['SONAR_CLI_SERVER'] = 'https://sonarqube.example.com';
+
+    try {
+      await verifyCommand({
+        file: testFile,
+        organizationKey: 'org',
+        projectKey: 'proj',
+      });
+      expect(mockExit).toHaveBeenCalledWith(0);
+    } finally {
+      if (savedToken === undefined) delete process.env['SONAR_CLI_TOKEN'];
+      else process.env['SONAR_CLI_TOKEN'] = savedToken;
+      if (savedServer === undefined) delete process.env['SONAR_CLI_SERVER'];
+      else process.env['SONAR_CLI_SERVER'] = savedServer;
+    }
+  });
+});
+
+// ─── checkServerType: loadState throws ────────────────────────────────────────
+
+describe('verifyCommand: checkServerType loadState failure', () => {
+  let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let postSpy: ReturnType<typeof spyOn>;
+  let testDir: string;
+  let testFile: string;
+
+  beforeEach(() => {
+    keytarHandle.setup();
+    setMockUi(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    testDir = join(tmpdir(), `test-verify-statethrows-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+    testFile = join(testDir, 'test.ts');
+    writeFileSync(testFile, 'const x = 1;\n');
+  });
+
+  afterEach(() => {
+    keytarHandle.teardown();
+    loadStateSpy?.mockRestore();
+    postSpy?.mockRestore();
+    mockExit.mockRestore();
+    setMockUi(false);
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('proceeds normally when loadState throws inside checkServerType', async () => {
+    let callCount = 0;
+    loadStateSpy = spyOn(stateManager, 'loadState').mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) throw new Error('state file corrupted');
+      return getDefaultState('test');
+    });
+    postSpy = spyOn(SonarQubeClient.prototype, 'post').mockResolvedValue({ issues: [] });
+
+    await verifyCommand({
+      file: testFile,
+      token: 'tok',
+      organizationKey: 'org',
+      projectKey: 'proj',
+    });
+    expect(mockExit).toHaveBeenCalledWith(0);
+  });
+});
