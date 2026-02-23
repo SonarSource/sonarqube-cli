@@ -340,14 +340,14 @@ export async function authStatusCommand(): Promise<void> {
       ...(conn.orgKey ? [`Org     ${conn.orgKey}`] : []),
     ];
 
-    if (token !== null) {
-      note(lines, '✓ Connected', { borderColor: green, titleColor: green, contentColor: dim });
-    } else {
+    if (token === null) {
       note(
         [...lines, '', 'Run "sonar auth login" to restore the token'],
         '✗ Token missing',
         { borderColor: red, titleColor: red, contentColor: dim }
       );
+    } else {
+      note(lines, '✓ Connected', { borderColor: green, titleColor: green, contentColor: dim });
     }
   });
 }

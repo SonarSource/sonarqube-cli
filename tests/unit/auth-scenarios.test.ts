@@ -1,7 +1,7 @@
 // Scenario-based tests for auth module: keychain token management,
 // browser OAuth flow, token validation, URL building, and HTML output
 
-import { describe, it, expect, afterEach, beforeEach, mock } from 'bun:test';
+import { describe, it, expect, afterEach, beforeEach, mock, spyOn } from 'bun:test';
 
 // Mock browser module BEFORE importing auth (prevents actual browser opening during tests)
 const mockOpenBrowser = mock((_url: string) => Promise.resolve());
@@ -19,6 +19,7 @@ import {
   buildAuthURL,
   getSuccessHTML,
 } from '../../src/bootstrap/auth.js';
+import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { clearTokenCache } from '../../src/lib/keychain.js';
 import { setKeytarImpl } from '../helpers/mock-keytar.js';
 import { setMockUi } from '../../src/ui/index.js';
@@ -198,6 +199,16 @@ describe('Auth Scenarios: openBrowserWithFallback', () => {
       openBrowserWithFallback('https://sonarcloud.io/test')
     ).resolves.toBeUndefined();
   });
+
+  it('should skip browser when CI=true', async () => {
+    process.env['CI'] = 'true';
+    try {
+      await openBrowserWithFallback('https://sonarcloud.io/test');
+      expect(mockOpenBrowser).not.toHaveBeenCalled();
+    } finally {
+      delete process.env['CI'];
+    }
+  });
 });
 
 // ─── buildAuthURL correctness ─────────────────────────────────────────
@@ -217,6 +228,21 @@ describe('Auth Scenarios: buildAuthURL correctness', () => {
     const url = buildAuthURL('https://sonar.example.com/', TEST_PORT_B);
     expect(url).not.toContain('sonar.example.com//');
     expect(url).toContain('sonar.example.com/sonarlint/auth');
+  });
+});
+
+// ─── validateToken success ────────────────────────────────────────────
+
+describe('Auth Scenarios: validateToken success', () => {
+  it('should return true when server responds with valid token', async () => {
+    const validateSpy = spyOn(SonarQubeClient.prototype, 'validateToken').mockResolvedValue(true);
+
+    try {
+      const result = await validateToken('https://sonarcloud.io', 'squ_valid_token');
+      expect(result).toBe(true);
+    } finally {
+      validateSpy.mockRestore();
+    }
   });
 });
 

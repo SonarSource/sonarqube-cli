@@ -16,16 +16,24 @@ const keytarHandle = createMockKeytar();
 describe('authLogoutCommand', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockExit: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let loadStateSpy: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let saveStateSpy: any;
 
   beforeEach(() => {
     keytarHandle.setup();
     setMockUi(true);
     mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     keytarHandle.teardown();
     mockExit.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
     setMockUi(false);
   });
 

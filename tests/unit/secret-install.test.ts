@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { setMockUi } from '../../src/ui';
 import { detectPlatform } from '../../src/lib/platform-detector.js';
 import * as processLib from '../../src/lib/process.js';
+import * as stateManager from '../../src/lib/state-manager.js';
+import { getDefaultState } from '../../src/lib/state.js';
 import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from '../../src/lib/config-constants.js';
 
 // Configurable mock implementations — changed per test as needed
@@ -29,14 +31,20 @@ const { secretInstallCommand } = await import('../../src/commands/secret.js');
 
 describe('secretInstallCommand', () => {
   let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
     mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
   });
 
   afterEach(() => {
     mockExit.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
     setMockUi(false);
     // Reset mock implementations to default (failing)
     mockFetchLatestVersion = async () => { throw new Error('network unavailable'); };

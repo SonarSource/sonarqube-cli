@@ -115,18 +115,6 @@ export function suggestProjectKey(projectInfo: ProjectInfo): string {
   return projectInfo.name.replaceAll('-', '_');
 }
 
-/**
- * Check if Docker is available
- */
-export async function checkDockerAvailable(): Promise<boolean> {
-  try {
-    const result = await spawnProcess('docker', ['version']);
-    return result.exitCode === 0;
-  } catch {
-    return false;
-  }
-}
-
 function parsePropertyLine(line: string, props: Partial<SonarProperties>): void {
   const trimmed = line.trim();
 

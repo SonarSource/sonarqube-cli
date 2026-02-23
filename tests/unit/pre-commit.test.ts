@@ -1,10 +1,12 @@
 // Pre-commit command tests
 
 import { mock, it, expect, describe, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PRE_COMMIT_CONFIG_CONTENT, preCommitInstallCommand, preCommitUninstallCommand } from '../../src/commands/pre-commit.js';
+import * as stateManager from '../../src/lib/state-manager.js';
+import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi } from '../../src/ui';
 
 // Mock spawnProcess so pre-commit tests don't require the real binary.
@@ -110,18 +112,40 @@ describe('preCommitUninstallCommand', () => {
       rmSync(testDir, { recursive: true, force: true });
     }
   });
+
+  it('removes .pre-commit-config.yaml when it exists', async () => {
+    const testDir = join(tmpdir(), `test-precommit-uninstall-rm-${Date.now()}`);
+    mkdirSync(join(testDir, '.git'), { recursive: true });
+    writeFileSync(join(testDir, '.pre-commit-config.yaml'), PRE_COMMIT_CONFIG_CONTENT, 'utf-8');
+    const cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
+
+    try {
+      await preCommitUninstallCommand();
+      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(existsSync(join(testDir, '.pre-commit-config.yaml'))).toBe(false);
+    } finally {
+      cwdSpy.mockRestore();
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('preCommitInstallCommand', () => {
   let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
     mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
   });
 
   afterEach(() => {
     mockExit.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
     setMockUi(false);
   });
 

@@ -3,7 +3,8 @@
 import { isTTY, bold, green, red } from '../colors.js';
 import { isMockActive, recordCall } from '../mock.js';
 
-const DIVIDER_WIDTH = 40 + 2; // 40 base + 2 for indent alignment
+const DIVIDER_BASE_WIDTH = 40;
+const DIVIDER_WIDTH = DIVIDER_BASE_WIDTH + 2; // + 2 for indent alignment
 const DIVIDER = '━'.repeat(DIVIDER_WIDTH);
 
 export function intro(title: string, subtitle?: string): void {

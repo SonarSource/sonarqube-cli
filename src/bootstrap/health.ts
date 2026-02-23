@@ -4,7 +4,7 @@ import { validateToken } from './auth.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { areHooksInstalled } from './hooks.js';
 import logger from '../lib/logger.js';
-import { info } from '../ui/index.js';
+import { text } from '../ui/index.js';
 
 export interface HealthCheckResult {
   tokenValid: boolean;
@@ -17,7 +17,7 @@ export interface HealthCheckResult {
 }
 
 async function logAndValidate(message: string, validator: () => Promise<boolean>, errorMsg: string, errors: string[], verbose: boolean): Promise<boolean> {
-  if (verbose) info(message);
+  if (verbose) text(message);
   try {
     const result = await validator();
     if (!result) errors.push(errorMsg);
