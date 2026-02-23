@@ -1,7 +1,46 @@
 // Unit tests for phase, sections, and spinner UI components
 // Tests mock mode and non-TTY plain output paths
+// mock.module forces isTTY: false so non-TTY branches execute regardless of terminal
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+
+mock.module('../../src/ui/colors.js', () => ({
+  isTTY: false,
+  bold:  (s: string) => s,
+  dim:   (s: string) => s,
+  green: (s: string) => s,
+  red:   (s: string) => s,
+  cyan:  (s: string) => s,
+  yellow:(s: string) => s,
+  gray:  (s: string) => s,
+  white: (s: string) => s,
+  STATUS_COLORS: {
+    done:    (s: string) => s,
+    running: (s: string) => s,
+    failed:  (s: string) => s,
+    skipped: (s: string) => s,
+    warn:    (s: string) => s,
+    pending: (s: string) => s,
+    info:    (s: string) => s,
+    success: (s: string) => s,
+    error:   (s: string) => s,
+    warning: (s: string) => s,
+  },
+  STATUS_ICONS: {
+    done:    '✓',
+    running: '→',
+    failed:  '✗',
+    skipped: '⏭',
+    warn:    '⚠',
+    pending: '○',
+    info:    'ℹ',
+    success: '✓',
+    error:   '✗',
+    warning: '⚠',
+  },
+}));
+
+import { mock } from 'bun:test';
 import { phase, phaseItem } from '../../src/ui/components/phase.js';
 import { intro, outro } from '../../src/ui/components/sections.js';
 import { withSpinner } from '../../src/ui/components/spinner.js';
