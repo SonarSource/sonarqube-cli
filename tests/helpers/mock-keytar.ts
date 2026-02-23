@@ -1,6 +1,7 @@
 // Shared mock keytar for unit tests
 
-import { setMockKeytar, clearTokenCache } from '../../src/lib/keychain.js';
+import { mock } from 'bun:test';
+import { clearTokenCache } from '../../src/lib/keychain.js';
 
 export interface MockKeytarImpl {
   getPassword(service: string, account: string): Promise<string | null>;
@@ -16,6 +17,30 @@ export interface MockKeytarHandle {
   teardown(): void;
 }
 
+// Mutable implementation delegate — updated per test via setKeytarImpl()
+let currentImpl: MockKeytarImpl | null = null;
+
+// Intercept 'keytar' module for all tests that import this helper.
+// The proxy delegates to currentImpl so each test can swap implementations.
+mock.module('keytar', () => ({
+  default: {
+    getPassword: (s: string, a: string) => currentImpl?.getPassword(s, a) ?? Promise.resolve(null),
+    setPassword: (s: string, a: string, p: string) => currentImpl?.setPassword(s, a, p) ?? Promise.resolve(),
+    deletePassword: (s: string, a: string) => currentImpl?.deletePassword(s, a) ?? Promise.resolve(false),
+    findCredentials: (s: string) => currentImpl?.findCredentials(s) ?? Promise.resolve([]),
+  },
+}));
+
+/**
+ * Set the active keytar implementation for the current test.
+ * Pass null to deactivate (all operations become no-ops).
+ * Always clears the token cache to prevent cross-test contamination.
+ */
+export function setKeytarImpl(impl: MockKeytarImpl | null): void {
+  currentImpl = impl;
+  clearTokenCache();
+}
+
 /**
  * Creates a Map-backed keytar mock that simulates the OS keychain.
  * Keys are stored as "service:account" composites, matching real keytar behavior.
@@ -23,7 +48,7 @@ export interface MockKeytarHandle {
 export function createMockKeytar(): MockKeytarHandle {
   const tokens = new Map<string, string>();
 
-  const mock = {
+  const mockImpl: MockKeytarImpl = {
     getPassword: async (service: string, account: string) =>
       tokens.get(`${service}:${account}`) ?? null,
 
@@ -47,16 +72,14 @@ export function createMockKeytar(): MockKeytarHandle {
 
   return {
     tokens,
-    mock,
+    mock: mockImpl,
     setup() {
       tokens.clear();
-      clearTokenCache();
-      setMockKeytar(mock);
+      setKeytarImpl(mockImpl);
     },
     teardown() {
-      setMockKeytar(null);
       tokens.clear();
-      clearTokenCache();
+      setKeytarImpl(null);
     },
   };
 }

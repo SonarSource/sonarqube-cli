@@ -15,23 +15,29 @@ interface KeytarModule {
 }
 
 let keytar: KeytarModule | null = null;
-let mockKeytar: KeytarModule | null = null;
 const tokenCache = new Map<string, string | null>();
 
-export function setMockKeytar(mock: KeytarModule | null) {
-  mockKeytar = mock;
-}
+const noOpKeytar: KeytarModule = {
+  getPassword: async () => null,
+  setPassword: async () => {},
+  deletePassword: async () => false,
+  findCredentials: async () => [],
+};
 
 export function clearTokenCache(): void {
   tokenCache.clear();
 }
 
 async function getKeytar() {
-  if (mockKeytar !== null) {
-    return mockKeytar;
+  if (process.env['SONAR_CLI_DISABLE_KEYCHAIN'] === 'true') {
+    return noOpKeytar;
   }
-  keytar ??= (await import('keytar')).default;
-  return keytar;
+  try {
+    keytar ??= (await import('keytar')).default;
+    return keytar;
+  } catch {
+    return noOpKeytar;
+  }
 }
 
 /**

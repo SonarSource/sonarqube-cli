@@ -572,10 +572,11 @@ describe('issuesSearchCommand', () => {
 
   it('normalizes severity to uppercase before passing to API', async () => {
     let capturedSeverities: string | undefined;
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(async (_endpoint, params) => {
-      capturedSeverities = (params as Record<string, string>)?.severities;
-      return { issues: [], total: 0, p: 1, ps: 500, paging: { pageIndex: 1, pageSize: 500, total: 0 } };
-    });
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get')
+      .mockImplementation(async <T>(_endpoint: string, params?: Record<string, string | number | boolean>): Promise<T> => {
+        capturedSeverities = (params as Record<string, string>)?.severities;
+        return { issues: [], total: 0, p: 1, ps: 500, paging: { pageIndex: 1, pageSize: 500, total: 0 } } as unknown as T;
+      });
 
     try {
       await issuesSearchCommand({

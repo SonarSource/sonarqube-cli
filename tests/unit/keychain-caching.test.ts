@@ -3,9 +3,9 @@
  * Tests in-memory cache to avoid repeated keychain password prompts
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { setMockKeytar, clearTokenCache } from '../../src/lib/keychain.js';
-import { createMockKeytar } from '../helpers/mock-keytar.js';
+import {afterEach, beforeEach, describe, expect, it} from 'bun:test';
+import {clearTokenCache} from '../../src/lib/keychain.js';
+import {createMockKeytar} from '../helpers/mock-keytar.js';
 
 // Test constants
 const MULTIPLE_TOKENS_COUNT = 3;
@@ -69,8 +69,6 @@ describe('Keychain token caching', () => {
         }
       };
 
-      setMockKeytar(countingKeytar);
-
       // Simulate first call
       const result1 = await countingKeytar.getPassword('sonar-cli', 'sonarcloud.io:myorg');
       expect(result1).toBe('token123');
@@ -79,8 +77,8 @@ describe('Keychain token caching', () => {
       // Simulate second call - cache should prevent new call
       // In real implementation: getToken checks cache first
       // For this test we verify the logic would work
-      const cacheHit = result1; // Cache would return this
-      expect(cacheHit).toBe('token123');
+       // Cache would return this
+      expect(result1).toBe('token123');
       // Count stays at 1 because cache is used
       expect(getPasswordCallCount).toBe(1);
     });
