@@ -18,7 +18,7 @@ const ROOT = join(__dirname, '..');
 const spec = yaml.load(readFileSync(join(ROOT, 'spec.yaml'), 'utf8'));
 
 // Wide characters used in option tables (display as 2 columns in monospace fonts)
-const WIDE_CHARS = new Set(['✅', '❌']);
+const WIDE_CHARS = new Set(['Yes', 'No']);
 
 /**
  * Visual display width of a string in monospace fonts.
