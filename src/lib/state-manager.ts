@@ -3,21 +3,17 @@
  */
 
 import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
-import os from 'node:os';
 import logger from './logger.js';
 import { CliState, getDefaultState, AuthConnection, CloudRegion } from './state.js';
-
-const STATE_DIR = path.join(os.homedir(), '.sonarqube-cli');
-const STATE_FILE = path.join(STATE_DIR, 'state.json');
+import { CLI_DIR, STATE_FILE } from './config-constants.js';
 
 /**
  * Ensure state directory exists
  */
 function ensureStateDir(): void {
-  if (!fs.existsSync(STATE_DIR)) {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
+  if (!fs.existsSync(CLI_DIR)) {
+    fs.mkdirSync(CLI_DIR, { recursive: true });
   }
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Validate that implemented commands match cli-spec.yaml
+ * Validate that implemented commands match spec.yaml
  *
  * Checks:
  * 1. All commands from spec are registered in src/index.ts
@@ -29,7 +29,7 @@ const SHORT_FLAG_INDEX = 1;
 const LONG_FLAG_INDEX = 2;
 
 // Load spec
-const specPath = join(rootDir, 'cli-spec.yaml');
+const specPath = join(rootDir, 'spec.yaml');
 const specContent = readFileSync(specPath, 'utf8');
 const spec = yaml.load(specContent);
 
@@ -51,7 +51,7 @@ let warnings = [];
  */
 
 /**
- * Extract commands from cli-spec.yaml
+ * Extract commands from spec.yaml
  * @param {Array<CommandDef>} commands - Commands from spec
  * @param {string} [parentName] - Parent command name
  * @returns {Array} Flattened list of commands
@@ -210,9 +210,7 @@ function parseOptions(optionsBlock) {
 
     if (matches.length === 0) continue;
 
-    const flags = matches[0];
-    const description = matches[1] || '';
-    const defaultValue = matches[2];
+    const [flags, description = '', defaultValue] = matches;
 
     // Parse flags: '-n, --name <name>' or '--verbose'
     const flagRegex = /(?:-(\w),?\s*)?--([a-z-]+)/;
@@ -305,7 +303,7 @@ for (const indexCmd of indexCommands) {
   const specCmd = specCommands.find(c => c.name === indexCmd.name);
 
   if (!specCmd) {
-    errors.push(`Command "${indexCmd.name}" is registered in src/index.ts but not declared in cli-spec.yaml`);
+    errors.push(`Command "${indexCmd.name}" is registered in src/index.ts but not declared in spec.yaml`);
     continue;
   }
 

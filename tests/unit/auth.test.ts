@@ -1,38 +1,12 @@
 // Authentication command tests
 
 import { it, expect } from 'bun:test';
-import { getToken, saveToken, deleteToken, getAllCredentials, purgeAllTokens, setMockKeytar } from '../../src/lib/keychain.js';
+import { getToken, saveToken, deleteToken, getAllCredentials, purgeAllTokens } from '../../src/lib/keychain.js';
+import { createMockKeytar } from '../helpers/mock-keytar.js';
 
-// Create mock keytar store
-const mockKeytarTokens = new Map<string, string>();
+const TOKEN_COUNT = 3;
 
-const mockKeytar = {
-  getPassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    return mockKeytarTokens.get(key) || null;
-  },
-  setPassword: async (service: string, account: string, password: string) => {
-    const key = `${service}:${account}`;
-    mockKeytarTokens.set(key, password);
-  },
-  deletePassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    return mockKeytarTokens.delete(key);
-  },
-  findCredentials: async (service: string) => {
-    const credentials = [];
-    for (const [key, password] of mockKeytarTokens.entries()) {
-      if (key.startsWith(`${service}:`)) {
-        const account = key.substring(`${service}:`.length);
-        credentials.push({ account, password });
-      }
-    }
-    return credentials;
-  }
-};
-
-// Set mock before tests
-setMockKeytar(mockKeytar);
+createMockKeytar().setup();
 
 it('keychain: generate correct account key for SonarCloud', async () => {
   // This is tested indirectly through saveToken/getToken behavior
@@ -120,12 +94,12 @@ it('keychain: getAllCredentials returns all tokens', async () => {
   await saveToken('https://sonarqube.io', 'token3');
 
   const credentials = await getAllCredentials();
-  expect(credentials.length).toBe(3);
+  expect(credentials.length).toBe(TOKEN_COUNT);
 
   const accounts = credentials.map(c => c.account);
-  expect(accounts.includes('sonarcloud.io:org1')).toBe(true);
-  expect(accounts.includes('sonarcloud.io:org2')).toBe(true);
-  expect(accounts.includes('sonarqube.io')).toBe(true);
+  expect(accounts).toContain('sonarcloud.io:org1');
+  expect(accounts).toContain('sonarcloud.io:org2');
+  expect(accounts).toContain('sonarqube.io');
 
   await purgeAllTokens();
 });
@@ -141,7 +115,7 @@ it('keychain: purgeAllTokens removes all tokens', async () => {
   await saveToken('https://sonarqube.io', 'token3');
 
   let credentials = await getAllCredentials();
-  expect(credentials.length).toBe(3);
+  expect(credentials.length).toBe(TOKEN_COUNT);
 
   await purgeAllTokens();
 
@@ -280,7 +254,7 @@ it('auth: multiple organizations on SonarCloud have separate tokens', async () =
   await saveToken(server, 'token-for-org-gamma', 'org-gamma');
 
   const allCreds = await getAllCredentials();
-  expect(allCreds.length).toBe(3);
+  expect(allCreds.length).toBe(TOKEN_COUNT);
 
   expect(await getToken(server, 'org-alpha')).toBe('token-for-org-alpha');
   expect(await getToken(server, 'org-beta')).toBe('token-for-org-beta');
@@ -318,7 +292,7 @@ it('auth: can have multiple SonarQube servers with different tokens', async () =
   await saveToken(server3, 'token-server3');
 
   const allCreds = await getAllCredentials();
-  expect(allCreds.length).toBe(3);
+  expect(allCreds.length).toBe(TOKEN_COUNT);
 
   expect(await getToken(server1)).toBe('token-server1');
   expect(await getToken(server2)).toBe('token-server2');
@@ -362,7 +336,7 @@ it('auth: purgeAllTokens with mixed credentials', async () => {
   await saveToken(sonarqube, 'sq-token');
 
   let allCreds = await getAllCredentials();
-  expect(allCreds.length).toBe(3);
+  expect(allCreds.length).toBe(TOKEN_COUNT);
 
   // Purge all
   await purgeAllTokens();
@@ -376,29 +350,10 @@ it('auth: purgeAllTokens with mixed credentials', async () => {
   expect(await getToken(sonarqube)).toBe(null);
 });
 
-it('auth: embedded server cleanup does not hang process', async () => {
-  // This test verifies that after the generateTokenViaBrowser flow,
-  // there are no lingering resources (open sockets, timers) that would
-  // prevent the process from exiting gracefully.
-
-  // Fixes applied to ensure clean exit:
-  // 1. stdin.pause() and stdin.unref() after user presses Enter to release stdin stream
-  // 2. shutdown() function returns Promise and is properly awaited in finally block
-  // 3. setTimeout in shutdown() has .unref() called to prevent it keeping process alive
-  // 4. server.close() callback ensures server is fully closed before resolving
-
-  // Note: This is a regression test for the hang issue where the process
-  // wouldn't exit after onboard-agent completed. Testing the actual browser flow
-  // is complex and requires manual verification, but the code changes ensure:
-  // - No unclosed streams
-  // - No unref'd timers
-  // - No pending promises
-  // - Proper resource cleanup order
-
-  // Manual verification commands:
-  // 1. echo "" | sonar auth login --with-token <dummy-token> -s https://sonarcloud.io -o test-org
-  // 2. sonar onboard-agent claude --non-interactive --skip-hooks
-  // Both should complete and return to prompt immediately without hanging.
-
-  expect(true).toBe(true);
-});
+// Regression: embedded server cleanup does not hang process.
+// The generateTokenViaBrowser flow must release all resources so the process exits
+// gracefully. Verified manually:
+//   echo "" | sonar auth login --with-token <token> -s https://sonarcloud.io -o org
+//   sonar onboard-agent claude --non-interactive --skip-hooks
+// Both must return to prompt immediately.
+// Token delivery is tested in auth-helpers.test.ts (generateTokenViaBrowser tests).

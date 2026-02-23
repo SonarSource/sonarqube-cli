@@ -4,38 +4,24 @@
 // Generated from cli-spec.yaml by Plop.js
 
 import { Command } from 'commander';
-import logger from './lib/logger.js';
-import { verifyCommand } from './commands/verify.js';
-import { issuesSearchCommand } from './commands/issues.js';
-import { onboardAgentCommand } from './commands/onboard-agent.js';
-import {
-  authLoginCommand,
-  authLogoutCommand,
-  authPurgeCommand,
-  authListCommand,
-} from './commands/auth.js';
-import {
-  preCommitInstallCommand,
-  preCommitUninstallCommand,
-} from './commands/pre-commit.js';
-import {
-  secretInstallCommand,
-  secretStatusCommand,
-  secretCheckCommand,
-} from './commands/secret.js';
-import {VERSION} from "./version.js";
+import { VERSION } from './version.js';
+import { runCommand } from './lib/run-command.js';
 
 // Constants for argument validation
 const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
-const MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT = 3;
-const AUTH_SUBCOMMAND_INDEX = 3;
 
+import { verifyCommand } from './commands/verify.js';
+import { issuesSearchCommand } from './commands/issues.js';
+import { onboardAgentCommand } from './commands/onboard-agent.js';
+import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from './commands/auth.js';
+import { preCommitInstallCommand, preCommitUninstallCommand } from './commands/pre-commit.js';
+import { secretInstallCommand, secretStatusCommand, secretCheckCommand } from './commands/secret.js';
 
 const program = new Command();
 
 program
   .name('sonar')
-  .description('SonarQube CLI for AI coding agents')
+  .description('SonarQube CLI')
   .version(VERSION, '-v, --version', 'display version for command');
 
 // Analyze a file using SonarCloud A3S API
@@ -47,14 +33,10 @@ program
   .option('--project <project>', 'Project key')
   .option('-t, --token <token>', 'Authentication token (or use saved config)')
   .option('-b, --branch <branch>', 'Branch name')
-  .option('--save-config', 'Save configuration for future use')
   .action(async (options) => {
-    try {
+    await runCommand(async () => {
       await verifyCommand(options);
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    });
   });
 
 // Manage SonarQube issues
@@ -65,7 +47,7 @@ const issues = program
 issues
   .command('search')
   .description('Search for issues in SonarQube')
-  .requiredOption('-s, --server <server>', 'SonarQube server URL')
+  .option('-s, --server <server>', 'SonarQube server URL')
   .option('-t, --token <token>', 'Authentication token')
   .requiredOption('-p, --project <project>', 'Project key')
   .option('--severity <severity>', 'Filter by severity')
@@ -75,12 +57,7 @@ issues
   .option('--all', 'Fetch all issues with pagination', 'false')
   .option('--page-size <page-size>', 'Page size for pagination', '500')
   .action(async (options) => {
-    try {
-      await issuesSearchCommand(options);
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await runCommand(() => issuesSearchCommand(options));
   });
 
 // Setup SonarQube integration for AI coding agent
@@ -94,20 +71,13 @@ program
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-hooks', 'Skip hooks installation')
   .option('--hook-type <hook-type>', 'Hook type to install', 'prompt')
-  .option('--verbose', 'Verbose output')
   .action(async (agent, options) => {
-    try {
-      // Validate argument choices
+    await runCommand(async () => {
       if (!VALID_AGENTS.includes(agent)) {
-        logger.error(`Error: Invalid agent. Must be one of: ${VALID_AGENTS.join(', ')}`);
-        process.exit(1);
+        throw new Error(`Invalid agent. Must be one of: ${VALID_AGENTS.join(', ')}`);
       }
-
       await onboardAgentCommand(agent, options);
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    });
   });
 
 // Manage authentication tokens and credentials
@@ -122,12 +92,7 @@ auth
   .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
   .action(async (options) => {
-    try {
-      await authLoginCommand(options);
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await authLoginCommand(options);
   });
 
 auth
@@ -136,36 +101,21 @@ auth
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
   .action(async (options) => {
-    try {
-      await authLogoutCommand(options);
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await authLogoutCommand(options);
   });
 
 auth
   .command('purge')
   .description('Remove all authentication tokens from keychain')
   .action(async () => {
-    try {
-      await authPurgeCommand();
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await authPurgeCommand();
   });
 
 auth
   .command('list')
   .description('List saved authentication connections with token verification')
   .action(async () => {
-    try {
-      await authListCommand();
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await authStatusCommand();
   });
 
 // Manage pre-commit hooks for secrets detection
@@ -177,24 +127,14 @@ preCommit
   .command('install')
   .description('Install Sonar secrets pre-commit hook')
   .action(async () => {
-    try {
-      await preCommitInstallCommand();
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await preCommitInstallCommand();
   });
 
 preCommit
   .command('uninstall')
   .description('Uninstall Sonar secrets pre-commit hook')
   .action(async () => {
-    try {
-      await preCommitUninstallCommand();
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await preCommitUninstallCommand();
   });
 
 // Manage sonar-secrets binary
@@ -207,24 +147,14 @@ secret
   .description('Install sonar-secrets binary from GitHub releases')
   .option('--force', 'Force reinstall even if already installed')
   .action(async (options) => {
-    try {
-      await secretInstallCommand(options);
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await secretInstallCommand(options);
   });
 
 secret
   .command('status')
   .description('Check sonar-secrets installation status')
   .action(async () => {
-    try {
-      await secretStatusCommand();
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await secretStatusCommand();
   });
 
 secret
@@ -233,19 +163,16 @@ secret
   .option('--file <file>', 'File path to scan for secrets')
   .option('--stdin', 'Read from standard input instead of a file')
   .action(async (options) => {
-    try {
-      await secretCheckCommand(options);
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    await runCommand(() => secretCheckCommand(options));
   });
 
 
+const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
+
 // Handle `sonar auth` without subcommand (defaults to login)
-if (process.argv.length === MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT && process.argv[2] === 'auth') {
+if (process.argv.length === AUTH_ARGC_WITHOUT_SUBCOMMAND && process.argv[2] === 'auth') {
   // User ran `sonar auth` without subcommand - inject 'login' subcommand
-  process.argv.splice(AUTH_SUBCOMMAND_INDEX, 0, 'login');
+  process.argv.splice(AUTH_ARGC_WITHOUT_SUBCOMMAND, 0, 'login');
 }
 
 program.parse();

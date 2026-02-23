@@ -5,6 +5,8 @@ import { it, expect } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+const PROJECT_ROOT = join(import.meta.dir, '../..');
 import { discoverProject } from '../../src/bootstrap/discovery.js';
 import { loadConfig, saveConfig, newConfig } from '../../src/bootstrap/config.js';
 import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
@@ -23,7 +25,7 @@ sonar.organization=test-org
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
     // Step 2: Discover project
-    const projectInfo = await discoverProject(testDir, false);
+    const projectInfo = await discoverProject(testDir);
 
     expect(projectInfo.hasSonarProps).toBe(true);
     expect(projectInfo.sonarPropsData!.hostURL).toBe('https://sonarcloud.io');
@@ -91,7 +93,7 @@ it('integration: onboard with existing .sonarlint config', async () => {
     );
 
     // Discover
-    const projectInfo = await discoverProject(testDir, false);
+    const projectInfo = await discoverProject(testDir);
 
     expect(projectInfo.hasSonarLintConfig).toBe(true);
     expect(projectInfo.sonarLintData!.serverURL).toBe('https://sonarqube.example.com');
@@ -156,24 +158,70 @@ it('integration: config persistence across multiple operations', async () => {
   }
 });
 
-it('integration: onboard-agent process cleanup (regression test)', async () => {
-  // Regression test for: "sonar onboard-agent" hangs after completing
+it('integration: auth login process exits after token delivered to loopback server', async () => {
+  // Regression test: process must exit quickly after completing the browser auth flow.
+  // Previously the process would hang due to open handles (loopback server, stdin stream).
   //
-  // Issue: The process didn't exit after onboarding completed.
-  // Root causes fixed:
-  // 1. process.exit(0) was missing at end of onboardAgentCommand()
-  // 2. stdin stream was not properly released
-  // 3. Timers in HTTP server were keeping process alive
+  // Strategy:
+  //   1. Spawn `sonar auth login` against a fake server (no cached token in keychain)
+  //   2. Read stdout until the loopback URL appears — extract the port
+  //   3. Write "\n" to stdin to pass pressEnterPrompt
+  //   4. POST the token directly to the loopback server (simulates browser callback)
+  //   5. Assert the process exits within 5 seconds
   //
-  // Fix: Added process.exit(0) at the end of onboard-agent.ts
-  //
-  // Manual verification:
-  //   $ timeout 5 sonar onboard-agent claude
-  //   If command completes within 5 seconds, process cleanup is working ✓
-  //   If timeout is exceeded, process is still hanging ✗
-  //
-  // This test documents the requirement. The actual process.exit() behavior
-  // is verified manually during development and CI/CD pipeline execution.
+  // Exit code will be 1 (token validation against fake server fails with DNS error).
+  // That is expected — what matters is the process exits, not hangs for 50 seconds.
 
-  expect(true).toBe(true);
-});
+  const fakeServer = `https://sonar-exit-test-${Date.now()}.invalid`;
+
+  const proc = Bun.spawn(
+    ['bun', 'run', 'src/index.ts', 'auth', 'login', '--server', fakeServer],
+    {
+      stdout: 'pipe',
+      stdin: 'ignore',
+      stderr: 'pipe',
+      cwd: PROJECT_ROOT,
+      env: { ...process.env, CI: 'true', SONAR_CLI_DISABLE_KEYCHAIN: 'true' },
+    }
+  );
+
+  // Read stdout until the loopback URL appears
+  const reader = proc.stdout.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let port: number | undefined;
+
+  while (!port) {
+    const chunk = await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Loopback URL not found in stdout within 5s')), 5000)
+      ),
+    ]);
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true });
+    const match = buffer.match(/port=(\d+)/);
+    if (match) port = parseInt(match[1]);
+  }
+
+  expect(port).toBeDefined();
+
+  // POST the token — simulates SonarCloud redirecting to the loopback server
+  // pressEnterPrompt is skipped automatically when CI=true
+  await fetch(`http://127.0.0.1:${port}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: 'squ_integration_test_token' }),
+  });
+
+  // Process must exit within 5 seconds — not after the 50s token timeout
+  const exitCode = await Promise.race([
+    proc.exited,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Process hung — did not exit within 5s')), 5000)
+    ),
+  ]);
+
+  expect(typeof exitCode).toBe('number');
+}, { timeout: 15000 });
+

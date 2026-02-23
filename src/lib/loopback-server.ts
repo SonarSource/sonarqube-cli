@@ -2,6 +2,7 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import logger from './logger.js';
+import { AUTH_PORT_START, AUTH_PORT_COUNT } from './config-constants.js';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
@@ -82,36 +83,71 @@ export interface LoopbackServerOptions {
 }
 
 /**
- * Start a secure loopback HTTP server on an OS-assigned random port
- *
- * @param onRequest - Handler function for incoming requests
- * @param options - Optional server configuration
- * @returns Promise with port and close function
+ * Attempt to bind a fresh HTTP server to a specific port on 127.0.0.1.
+ * Returns the bound server on success; on EADDRINUSE returns null (caller tries next port).
+ * Other errors are propagated immediately.
  */
+async function tryBindPort(port: number): Promise<{ srv: ReturnType<typeof createServer>; port: number } | null> {
+  const srv = createServer();
+  return new Promise((resolve, reject) => {
+    srv.once('error', (err: NodeJS.ErrnoException) => {
+      srv.close();
+      if (err.code === 'EADDRINUSE') {
+        resolve(null);
+      } else {
+        reject(err);
+      }
+    });
+    srv.listen(port, '127.0.0.1', () => {
+      const address = srv.address();
+      if (!address || typeof address === 'string') {
+        srv.close();
+        reject(new Error('Failed to get server address'));
+        return;
+      }
+      resolve({ srv, port: address.port });
+    });
+  });
+}
+
 export async function startLoopbackServer(
   onRequest: RequestHandler,
   options?: LoopbackServerOptions
 ): Promise<LoopbackServerResult> {
-  logger.debug('Starting loopback server on OS-assigned port...');
+  // Try each port in the SonarLint protocol range (64120-64130).
+  // SonarQube/SonarCloud validates that the callback port is within this range
+  // before sending the token — a random OS-assigned port is rejected.
+  let bound: { srv: ReturnType<typeof createServer>; port: number } | null = null;
+  for (let i = 0; i < AUTH_PORT_COUNT; i++) {
+    const candidate = AUTH_PORT_START + i;
+    bound = await tryBindPort(candidate);
+    if (bound !== null) break;
+    logger.debug(`Port ${candidate} in use, trying next`);
+  }
 
-  const server = createServer();
+  if (bound === null) {
+    throw new Error(`No available port in SonarLint range ${AUTH_PORT_START}-${AUTH_PORT_START + AUTH_PORT_COUNT - 1}`);
+  }
 
-  const foundPort = await new Promise<number>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        reject(new Error('Failed to get server address'));
-        return;
-      }
-      resolve(address.port);
+  const { srv: finalServer, port: foundPort } = bound;
+  const allowedOrigins = options?.allowedOrigins ?? [];
+
+  // Also bind to IPv6 loopback on the same port.
+  // On macOS, dns.lookup('localhost') returns ::1 before 127.0.0.1, so browsers
+  // connect to [::1]:PORT first. Without this binding the OAuth callback from
+  // SonarCloud gets ECONNREFUSED and the token never arrives.
+  const serverV6 = createServer();
+  let ipv6Available = false;
+  await new Promise<void>(resolve => {
+    serverV6.once('error', () => {
+      logger.debug('IPv6 loopback [::1] not available; using IPv4 only');
+      resolve();
+    });
+    serverV6.listen(foundPort, '::1', () => {
+      ipv6Available = true;
+      resolve();
     });
   });
-
-  logger.debug(`Loopback server created on 127.0.0.1:${foundPort}`);
-
-  const finalServer = server;
-  const allowedOrigins = options?.allowedOrigins ?? [];
 
   // Helper to wrap a response with security headers
   function wrapResponseWithSecurityHeaders(
@@ -127,8 +163,12 @@ export async function startLoopbackServer(
         // Add CORS headers for allowed external origins (e.g. SonarCloud OAuth callback)
         if (origin && (isValidLoopbackOrigin(origin) || allowedOrigins.includes(origin))) {
           preflightHeaders['Access-Control-Allow-Origin'] = origin;
-          preflightHeaders['Access-Control-Allow-Methods'] = 'GET, OPTIONS';
+          preflightHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
           preflightHeaders['Access-Control-Allow-Headers'] = 'Content-Type';
+          // Required for Chrome Private Network Access (PNA) policy:
+          // public origins (e.g. https://sonarcloud.io) fetching localhost get blocked
+          // unless the preflight response includes this header.
+          preflightHeaders['Access-Control-Allow-Private-Network'] = 'true';
         }
         res.writeHead(HTTP_STATUS_OK, preflightHeaders);
         res.end();
@@ -180,26 +220,33 @@ export async function startLoopbackServer(
     };
   }
 
-  // Set up secure request handler
-  finalServer.on('request', wrapResponseWithSecurityHeaders(onRequest));
+  // Set up secure request handler on both IPv4 and IPv6 servers
+  const wrappedHandler = wrapResponseWithSecurityHeaders(onRequest);
+  finalServer.on('request', wrappedHandler);
+  if (ipv6Available) {
+    serverV6.on('request', wrappedHandler);
+  }
 
-  const close = async (): Promise<void> => {
-    logger.debug('Closing loopback server...');
-
+  function closeServer(srv: ReturnType<typeof createServer>): Promise<void> {
     return new Promise<void>((resolve) => {
-      finalServer.close(() => {
-        logger.debug('Loopback server closed successfully');
+      srv.close(() => {
         resolve();
       });
 
-      // Force close any remaining connections after timeout
       const forceCloseTimer = setTimeout(() => {
-        logger.debug('Force closing remaining loopback connections');
-        finalServer.closeAllConnections?.();
+        srv.closeAllConnections?.();
       }, FORCE_CLOSE_TIMEOUT_MS);
 
       forceCloseTimer.unref();
     });
+  }
+
+  const close = async (): Promise<void> => {
+    const pending: Promise<void>[] = [closeServer(finalServer)];
+    if (ipv6Available) {
+      pending.push(closeServer(serverV6));
+    }
+    await Promise.all(pending);
   };
 
   return { port: foundPort, close };

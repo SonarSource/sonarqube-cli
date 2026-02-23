@@ -4,32 +4,20 @@
 // Generated from cli-spec.yaml by Plop.js
 
 import { Command } from 'commander';
-import logger from './lib/logger.js';
+import { VERSION } from './version.js';
+import { runCommand } from './lib/run-command.js';
 
 // Constants for argument validation
 const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
-const MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT = 3;
-const AUTH_SUBCOMMAND_INDEX = 3;
 
-{{#each commands}}
-{{#if handler}}
-import { {{camelCase name}}Command } from './commands/{{name}}.js';
-{{/if}}
-{{#if subcommands}}
-{{#each subcommands}}
-{{#if handler}}
-import { {{camelCase ../name}}{{pascalCase name}}Command } from './commands/{{../name}}.js';
-{{/if}}
-{{/each}}
-{{/if}}
-{{/each}}
+{{{commandImports commands}}}
 
 const program = new Command();
 
 program
   .name('{{cli.name}}')
   .description('{{cli.description}}')
-  .version('{{cli.version}}', '-v, --version', 'display version for command');
+  .version(VERSION, '-v, --version', 'display version for command');
 
 {{#each commands}}
 {{#if subcommands}}
@@ -50,12 +38,11 @@ const {{camelCase name}} = program
 {{/if}}
 {{/each}}
   .action(async ({{#if options}}options{{/if}}) => {
-    try {
-      await {{camelCase ../name}}{{pascalCase name}}Command({{#if options}}options{{/if}});
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+{{#if managedExit}}
+    await {{camelCase ../name}}{{pascalCase name}}Command({{#if options}}options{{/if}});
+{{else}}
+    await runCommand(() => {{camelCase ../name}}{{pascalCase name}}Command({{#if options}}options{{/if}}));
+{{/if}}
   });
 
 {{/each}}
@@ -72,41 +59,36 @@ program
 {{/if}}
 {{/each}}
   .action(async ({{#if arguments}}{{#each arguments}}{{name}}, {{/each}}options{{else}}{{#if options}}options{{/if}}{{/if}}) => {
-    try {
+    await runCommand(async () => {
 {{#if arguments}}
-      // Validate argument choices
 {{#each arguments}}
 {{#if choices}}
 {{#if (eq name "agent")}}
       if (!VALID_AGENTS.includes({{name}})) {
-        logger.error(`Error: Invalid {{name}}. Must be one of: ${VALID_AGENTS.join(', ')}`);
-        process.exit(1);
+        throw new Error(`Invalid {{name}}. Must be one of: ${VALID_AGENTS.join(', ')}`);
       }
 {{else}}
       const valid{{pascalCase name}} = [{{#each choices}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}];
       if (!valid{{pascalCase name}}.includes({{name}})) {
-        logger.error(`Error: Invalid {{name}}. Must be one of: {{#each choices}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}`);
-        process.exit(1);
+        throw new Error(`Invalid {{name}}. Must be one of: {{#each choices}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}`);
       }
 {{/if}}
 {{/if}}
 {{/each}}
-
 {{/if}}
       await {{camelCase name}}Command({{#if arguments}}{{#each arguments}}{{name}}, {{/each}}options{{else}}{{#if options}}options{{/if}}{{/if}});
-    } catch (error) {
-      logger.error('Error: ' + (error as Error).message);
-      process.exit(1);
-    }
+    });
   });
 
 {{/if}}
 {{/each}}
 
+const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
+
 // Handle `sonar auth` without subcommand (defaults to login)
-if (process.argv.length === MIN_ARGV_LENGTH_FOR_AUTH_DEFAULT && process.argv[2] === 'auth') {
+if (process.argv.length === AUTH_ARGC_WITHOUT_SUBCOMMAND && process.argv[2] === 'auth') {
   // User ran `sonar auth` without subcommand - inject 'login' subcommand
-  process.argv.splice(AUTH_SUBCOMMAND_INDEX, 0, 'login');
+  process.argv.splice(AUTH_ARGC_WITHOUT_SUBCOMMAND, 0, 'login');
 }
 
 program.parse();

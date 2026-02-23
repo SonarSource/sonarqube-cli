@@ -23,7 +23,7 @@ describe('validate-spec.js', () => {
     });
 
     const output = result.stdout.toString();
-    expect(output).toContain('✅ cli-spec.yaml is valid');
+    expect(output).toContain('✅ spec.yaml is valid');
   });
 
   it('should show CLI information', () => {
@@ -33,7 +33,7 @@ describe('validate-spec.js', () => {
     });
 
     const output = result.stdout.toString();
-    expect(output).toMatch(/CLI:.*v[\d.]+/);
+    expect(output).toContain('CLI: sonar');
     expect(output).toContain('Commands:');
     expect(output).toContain('Total commands (including subcommands):');
   });

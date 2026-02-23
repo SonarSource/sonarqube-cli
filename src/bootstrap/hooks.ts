@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform } from 'node:os';
 import logger from '../lib/logger.js';
+import { success } from '../ui/index.js';
 import {
   getHookPromptTemplateUnix,
   getHookCLITemplateUnix,
@@ -94,12 +95,12 @@ export async function installHooks(
     await fs.writeFile(scriptPath, scriptContent);
   }
 
-  logger.info(`   ✓ Installed hook script: ${scriptPath}`);
+  success(`Installed hook script: ${scriptPath}`);
 
   // Configure hooks in settings.json
   await configureHooksSettings(claudePath, scriptName);
 
-  logger.info('   ✓ Hooks configured');
+  success('Hooks configured');
 }
 
 /**
@@ -283,8 +284,6 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
 
     // Save updated settings
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
-
-    logger.debug('Secret scanning hooks installed to project');
   } catch (error) {
     logger.debug(`Failed to install secret scanning hooks: ${(error as Error).message}`);
     // Non-critical - don't fail if hooks installation fails

@@ -1,2 +1,2 @@
-// Version management
-export const VERSION = '0.2.111';
+// Auto-generated from package.json — do not edit manually
+export const VERSION = '0.1.136';

@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, isValidLoopbackHost, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
+import { AUTH_PORT_START, AUTH_PORT_COUNT } from '../../src/lib/config-constants.js';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
-const EXPECTED_SECURITY_HEADERS_COUNT = 4;
 const TEST_TIMEOUT_MS = 1000;
 const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';
@@ -23,10 +23,6 @@ describe('loopback-server', () => {
       expect(headers['Cache-Control']).toBe('no-store');
     });
 
-    it('should return an object with exactly 4 headers', () => {
-      const headers = getSecurityHeaders();
-      expect(Object.keys(headers).length).toBe(EXPECTED_SECURITY_HEADERS_COUNT);
-    });
   });
 
   describe('isValidLoopbackOrigin', () => {
@@ -104,15 +100,30 @@ describe('loopback-server', () => {
       }
     });
 
-    it('should start a server on an OS-assigned port', async () => {
+    it('should start a server on a port in the SonarLint range', async () => {
       server = await startLoopbackServer((_req, res) => {
         res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
         res.end('OK');
       });
 
-      expect(server.port).toBeGreaterThan(0);
+      expect(server.port).toBeGreaterThanOrEqual(AUTH_PORT_START);
+      expect(server.port).toBeLessThan(AUTH_PORT_START + AUTH_PORT_COUNT);
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`);
+      expect(response.status).toBe(HTTP_STATUS_OK);
+    });
+
+    // On macOS, browsers resolve 'localhost' to ::1 (IPv6) before 127.0.0.1 (IPv4).
+    // SonarCloud sends the OAuth token via POST to http://localhost:PORT/ — if the
+    // server does not bind to ::1, the browser gets ECONNREFUSED and the token never
+    // arrives, causing a 50-second hang.
+    it('should accept requests from IPv6 loopback [::1]', async () => {
+      server = await startLoopbackServer((_req, res) => {
+        res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+        res.end('OK');
+      });
+
+      const response = await fetch(`http://[::1]:${server.port}`);
       expect(response.status).toBe(HTTP_STATUS_OK);
     });
 
@@ -352,7 +363,8 @@ describe('loopback-server', () => {
 
       expect(response.status).toBe(HTTP_STATUS_OK);
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SONARCLOUD_ORIGIN);
-      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+      expect(response.headers.get('Access-Control-Allow-Private-Network')).toBe('true');
     });
 
     it('should still reject external origins not in allowedOrigins list', async () => {

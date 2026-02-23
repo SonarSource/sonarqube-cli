@@ -3,54 +3,19 @@
  * Tests in-memory cache to avoid repeated keychain password prompts
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { setMockKeytar, clearTokenCache } from '../../src/lib/keychain.js';
+import {afterEach, beforeEach, describe, expect, it} from 'bun:test';
+import {clearTokenCache, getToken} from '../../src/lib/keychain.js';
+import {createMockKeytar} from '../helpers/mock-keytar.js';
 
 // Test constants
 const MULTIPLE_TOKENS_COUNT = 3;
 
-// Mock keychain implementation
-const mockKeytarTokens = new Map<string, string>();
-
-const mockKeytar = {
-  getPassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    return mockKeytarTokens.get(key) || null;
-  },
-  setPassword: async (service: string, account: string, password: string) => {
-    const key = `${service}:${account}`;
-    mockKeytarTokens.set(key, password);
-  },
-  deletePassword: async (service: string, account: string) => {
-    const key = `${service}:${account}`;
-    mockKeytarTokens.delete(key);
-    return true;
-  },
-  findCredentials: async (service: string) => {
-    const credentials: Array<{ account: string; password: string }> = [];
-    for (const [key, password] of mockKeytarTokens.entries()) {
-      if (key.startsWith(`${service}:`)) {
-        const account = key.substring(`${service}:`.length);
-        credentials.push({ account, password });
-      }
-    }
-    return credentials;
-  }
-};
+const keytarHandle = createMockKeytar();
+const { tokens: mockKeytarTokens, mock: mockKeytar } = keytarHandle;
 
 describe('Keychain token caching', () => {
-  beforeEach(() => {
-    // Reset mock keytar and cache
-    mockKeytarTokens.clear();
-    clearTokenCache();
-    setMockKeytar(mockKeytar);
-  });
-
-  afterEach(() => {
-    setMockKeytar(null);
-    mockKeytarTokens.clear();
-    clearTokenCache();
-  });
+  beforeEach(() => keytarHandle.setup());
+  afterEach(() => keytarHandle.teardown());
 
   describe('cache key generation', () => {
     it('should generate different keys for different servers', () => {
@@ -104,8 +69,6 @@ describe('Keychain token caching', () => {
         }
       };
 
-      setMockKeytar(countingKeytar);
-
       // Simulate first call
       const result1 = await countingKeytar.getPassword('sonar-cli', 'sonarcloud.io:myorg');
       expect(result1).toBe('token123');
@@ -114,8 +77,8 @@ describe('Keychain token caching', () => {
       // Simulate second call - cache should prevent new call
       // In real implementation: getToken checks cache first
       // For this test we verify the logic would work
-      const cacheHit = result1; // Cache would return this
-      expect(cacheHit).toBe('token123');
+       // Cache would return this
+      expect(result1).toBe('token123');
       // Count stays at 1 because cache is used
       expect(getPasswordCallCount).toBe(1);
     });
@@ -324,5 +287,24 @@ describe('Keychain token caching', () => {
         expect(result).toBe(`token${i + 1}`);
       }
     });
+  });
+});
+
+describe('SONAR_CLI_DISABLE_KEYCHAIN', () => {
+  it('returns null token when SONAR_CLI_DISABLE_KEYCHAIN is set to true', async () => {
+    const saved = process.env['SONAR_CLI_DISABLE_KEYCHAIN'];
+    process.env['SONAR_CLI_DISABLE_KEYCHAIN'] = 'true';
+    try {
+      clearTokenCache();
+      const token = await getToken('https://sonarcloud.io', 'myorg');
+      expect(token).toBeNull();
+    } finally {
+      if (saved === undefined) {
+        delete process.env['SONAR_CLI_DISABLE_KEYCHAIN'];
+      } else {
+        process.env['SONAR_CLI_DISABLE_KEYCHAIN'] = saved;
+      }
+      clearTokenCache();
+    }
   });
 });
