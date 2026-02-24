@@ -1,7 +1,7 @@
-// Unit tests for sonar onboard-agent command
+// Unit tests for sonar integrate command
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { onboardAgentCommand } from '../../src/commands/onboard-agent.js';
+import { integrateCommand } from "../../src/commands/integrate.js";
 import * as discovery from '../../src/bootstrap/discovery.js';
 import * as health from '../../src/bootstrap/health.js';
 import * as repair from '../../src/bootstrap/repair.js';
@@ -35,7 +35,7 @@ const CLEAN_HEALTH = {
 
 // ─── validateAgent ────────────────────────────────────────────────────────────
 
-describe('onboardAgentCommand: validateAgent', () => {
+describe('integrateCommand: validateAgent', () => {
   let mockExit: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
@@ -50,23 +50,23 @@ describe('onboardAgentCommand: validateAgent', () => {
   });
 
   it('exits 1 when unsupported agent is provided', async () => {
-    await onboardAgentCommand('gemini', {});
+    await integrateCommand('gemini', {});
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it('exits 1 for any unknown agent name', async () => {
-    await onboardAgentCommand('copilot', {});
+    await integrateCommand('copilot', {});
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it('error message mentions the unsupported agent name', async () => {
-    await onboardAgentCommand('gemini', {});
+    await integrateCommand('gemini', {});
     const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
     expect(errors.some(m => m.includes('gemini'))).toBe(true);
   });
 
   it('error message lists supported agents', async () => {
-    await onboardAgentCommand('codex', {});
+    await integrateCommand('codex', {});
     const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
     expect(errors.some(m => m.includes('claude'))).toBe(true);
   });
@@ -74,7 +74,7 @@ describe('onboardAgentCommand: validateAgent', () => {
 
 // ─── env var auth warning ─────────────────────────────────────────────────────
 
-describe('onboardAgentCommand: env var auth', () => {
+describe('integrateCommand: env var auth', () => {
   let mockExit: ReturnType<typeof spyOn>;
   let discoverSpy: ReturnType<typeof spyOn>;
   let healthSpy: ReturnType<typeof spyOn>;
@@ -106,7 +106,7 @@ describe('onboardAgentCommand: env var auth', () => {
 
   it('warns when only SONAR_CLI_TOKEN is set (partial env vars)', async () => {
     process.env[ENV_TOKEN] = 'squ_env_token';
-    await onboardAgentCommand('claude', {
+    await integrateCommand('claude', {
       server: 'https://sonarcloud.io',
       project: 'my-project',
       token: 'squ_cli_token',
@@ -119,7 +119,7 @@ describe('onboardAgentCommand: env var auth', () => {
 
   it('warns when only SONAR_CLI_SERVER is set (partial env vars)', async () => {
     process.env[ENV_SERVER] = 'https://sonarcloud.io';
-    await onboardAgentCommand('claude', {
+    await integrateCommand('claude', {
       server: 'https://sonarcloud.io',
       project: 'my-project',
       token: 'squ_cli_token',
@@ -133,7 +133,7 @@ describe('onboardAgentCommand: env var auth', () => {
 
 // ─── full flow ────────────────────────────────────────────────────────────────
 
-describe('onboardAgentCommand: full flow', () => {
+describe('integrateCommand: full flow', () => {
   let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
@@ -157,7 +157,7 @@ describe('onboardAgentCommand: full flow', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
 
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -176,7 +176,7 @@ describe('onboardAgentCommand: full flow', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -195,7 +195,7 @@ describe('onboardAgentCommand: full flow', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -225,7 +225,7 @@ describe('onboardAgentCommand: full flow', () => {
     const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
 
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -253,7 +253,7 @@ describe('onboardAgentCommand: full flow', () => {
     const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
 
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -273,7 +273,7 @@ describe('onboardAgentCommand: full flow', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -290,7 +290,7 @@ describe('onboardAgentCommand: full flow', () => {
 
 // ─── configuration validation errors ──────────────────────────────────────────
 
-describe('onboardAgentCommand: configuration validation', () => {
+describe('integrateCommand: configuration validation', () => {
   let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
@@ -319,7 +319,7 @@ describe('onboardAgentCommand: configuration validation', () => {
   it('exits 1 when server URL cannot be determined', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     try {
-      await onboardAgentCommand('claude', { project: 'my-project' });
+      await integrateCommand('claude', { project: 'my-project' });
       expect(mockExit).toHaveBeenCalledWith(1);
       const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
       expect(errors.some(m => m.includes('Server URL'))).toBe(true);
@@ -331,7 +331,7 @@ describe('onboardAgentCommand: configuration validation', () => {
   it('exits 1 when project key cannot be determined', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     try {
-      await onboardAgentCommand('claude', { server: 'https://sonarcloud.io' });
+      await integrateCommand('claude', { server: 'https://sonarcloud.io' });
       expect(mockExit).toHaveBeenCalledWith(1);
       const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
       expect(errors.some(m => m.includes('Project key'))).toBe(true);
@@ -345,7 +345,7 @@ describe('onboardAgentCommand: configuration validation', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithOrg);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         project: 'my-project',
         org: 'my-org',
         token: 'test-token',
@@ -362,7 +362,7 @@ describe('onboardAgentCommand: configuration validation', () => {
 
 // ─── discovered configuration ────────────────────────────────────────────────
 
-describe('onboardAgentCommand: discovered project configuration', () => {
+describe('integrateCommand: discovered project configuration', () => {
   let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
@@ -395,7 +395,7 @@ describe('onboardAgentCommand: discovered project configuration', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithProps);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await onboardAgentCommand('claude', { token: 'test-token', skipHooks: true });
+      await integrateCommand('claude', { token: 'test-token', skipHooks: true });
       const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
       expect(texts.some(m => m.includes('sonar-project.properties'))).toBe(true);
     } finally {
@@ -417,7 +417,7 @@ describe('onboardAgentCommand: discovered project configuration', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithSonarLint);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await onboardAgentCommand('claude', { token: 'test-token', skipHooks: true });
+      await integrateCommand('claude', { token: 'test-token', skipHooks: true });
       const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
       expect(texts.some(m => m.includes('connectedMode.json'))).toBe(true);
     } finally {
@@ -429,10 +429,11 @@ describe('onboardAgentCommand: discovered project configuration', () => {
 
 // ─── no token path ────────────────────────────────────────────────────────────
 
-describe('onboardAgentCommand: no token available', () => {
+describe('integrateCommand: no token available', () => {
   let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
+  let getAllCredentialsSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -440,12 +441,14 @@ describe('onboardAgentCommand: no token available', () => {
     mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+    getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
   });
 
   afterEach(() => {
     mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
+    getAllCredentialsSpy.mockRestore();
     setMockUi(false);
   });
 
@@ -455,7 +458,7 @@ describe('onboardAgentCommand: no token available', () => {
     const repairSpy = spyOn(repair, 'runRepair').mockRejectedValue(new Error('repair failed'));
 
     try {
-      await onboardAgentCommand('claude', {
+      await integrateCommand('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         skipHooks: true,

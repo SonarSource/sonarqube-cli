@@ -125,12 +125,17 @@ describe('Secret Install Integration Tests', () => {
     // Should either succeed (unlikely in test) or throw network error
     if (errorThrown) {
       expect(errorMessage.length).toBeGreaterThan(0);
-      // Network or GitHub-related error expected
+      // Network or Sonarsource-related error expected
       expect(
         errorMessage.includes('Failed') ||
-        errorMessage.includes('GitHub') ||
+        errorMessage.includes('failed') ||
         errorMessage.includes('fetch') ||
-        errorMessage.includes('Connection')
+        errorMessage.includes('Connection') ||
+        errorMessage.includes('version listing') ||
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('aborted') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('unavailable')
       ).toBe(true);
     }
   }, INTEGRATION_TEST_TIMEOUT_MS);

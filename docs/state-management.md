@@ -380,7 +380,7 @@ sonar onboard-agent claude
 sonar secret install
 
 # Check status
-sonar auth list
+sonar auth status
 ```
 
 ### Backward Compatibility
@@ -413,7 +413,7 @@ If connections are lost but tokens remain in keychain:
 
 ```bash
 # List available tokens
-sonar auth list
+sonar auth status
 
 # The tokens can be manually restored by re-authenticating
 ```
