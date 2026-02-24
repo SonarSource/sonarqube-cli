@@ -29,7 +29,7 @@ it('hooks: install secret scanning hooks creates directory structure', async () 
     expect(existsSync(hooksDir)).toBe(true);
 
     // Verify sonar-secrets scripts directory exists
-    const scriptsDir = join(hooksDir, 'sonar-secrets', 'scripts');
+    const scriptsDir = join(hooksDir, 'sonar-secrets', 'build-scripts');
     expect(existsSync(scriptsDir)).toBe(true);
 
     // Verify pretool hook script exists and is executable
@@ -65,7 +65,7 @@ it('hooks: pretool script contains sonar analyze and exit code 51', async () => 
   try {
     await installSecretScanningHooks(testDir);
 
-    const scriptPath = join(testDir, '.claude', 'hooks', 'sonar-secrets', 'scripts', 'pretool-secrets.sh');
+    const scriptPath = join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh');
     const content = readFileSync(scriptPath, 'utf-8');
 
     expect(content.includes('sonar analyze --file')).toBe(true);
