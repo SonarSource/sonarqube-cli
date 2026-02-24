@@ -76,13 +76,12 @@ describe('validate-commands.js', () => {
         expect(output).toContain('4️⃣');
     });
 
-    it('should exit with error code if issues found', () => {
+    it('should exit with code 0 when implementation matches spec', () => {
         const result = spawnSync(['node', validateScript], {
             cwd: rootDir,
             capture: true
         });
 
-        // Script may exit with 0 or 1 depending on spec/implementation state
-        expect([0, 1]).toContain(result.exitCode);
+        expect(result.exitCode).toBe(0);
     });
 });

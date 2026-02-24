@@ -37,7 +37,7 @@ const ANALYZE_SUBCOMMAND_INDEX = 3;
 import { integrateCommand } from './commands/integrate.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from './commands/auth.js';
-import { secretInstallCommand } from './commands/secret.js';
+import { secretInstallCommand, secretStatusCommand } from './commands/secret.js';
 import { analyzeSecretsCommand } from './commands/analyze.js';
 import { projectsSearchCommand } from './commands/projects.js';
 
@@ -57,8 +57,13 @@ install
   .command('secrets')
   .description('Install sonar-secrets binary from binaries.sonarsource.com')
   .option('--force', 'Force reinstall even if already installed')
+  .option('--status', 'Check installation status instead of installing')
   .action(async (options) => {
-    await secretInstallCommand(options);
+    if (options.status) {
+      await secretStatusCommand();
+    } else {
+      await secretInstallCommand(options);
+    }
   });
 
 // Setup SonarQube integration for AI coding agent

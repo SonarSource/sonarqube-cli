@@ -6,57 +6,88 @@ cli:
   description: SonarQube CLI
 
 commands:
-  # Command to analyze file using SonarCloud A3S API
-  - name: verify
-    description: Analyze a file using SonarCloud A3S API
-    handler: ./src/commands/verify.ts
-    requiresAuth: true
-    options:
-      - name: file
-        type: string
-        description: File path to analyze
-        required: true
+  # Install Sonar tools
+  - name: install
+    description: Install Sonar tools
+    subcommands:
+      - name: secrets
+        description: Install sonar-secrets binary from binaries.sonarsource.com
+        handler: ./src/commands/secret.ts
+        options:
+          - name: force
+            type: boolean
+            description: Force reinstall even if already installed
+            default: false
 
-      - name: organization
+          - name: status
+            type: boolean
+            description: Check installation status instead of installing
+            default: false
+
+        examples:
+          - command: sonar install secrets
+            description: Install latest sonar-secrets binary
+
+          - command: sonar install secrets --force
+            description: Reinstall sonar-secrets (overwrite existing)
+
+          - command: sonar install secrets --status
+            description: Check if sonar-secrets is installed and up to date
+
+  # Setup SonarQube integration for AI coding agents and other tools
+  - name: integrate
+    description: Setup SonarQube integration for various tools, like AI coding agents, git and others
+    handler: ./src/commands/integrate.ts
+    options:
+      - name: server
+        alias: s
         type: string
-        description: Organization key (or use saved config)
+        description: SonarQube server URL
 
       - name: project
+        alias: p
         type: string
         description: Project key
 
       - name: token
         alias: t
         type: string
-        description: Authentication token (or use saved config)
+        description: Existing authentication token
 
-      - name: branch
-        alias: b
+      - name: org
+        alias: o
         type: string
-        description: Branch name
+        description: Organization key (for SonarCloud)
+
+      - name: non-interactive
+        type: boolean
+        description: Non-interactive mode (no prompts)
+        default: false
+
+      - name: skip-hooks
+        type: boolean
+        description: Skip hooks installation
+        default: false
 
     examples:
-      - command: sonar verify --file src/MyClass.java
-        description: Analyze a single Java file
-      - command: sonar verify --file src/MyClass.java
-        description: Analyze using saved configuration
+      - command: sonar integrate claude -s https://sonarcloud.io -p my-project
+        description: Integrate Claude Code with interactive setup
 
-      - command: sonar verify --file src/MyClass.java --branch main
-        description: Analyze file on a specific branch
+      - command: sonar integrate claude --skip-hooks
+        description: Integrate without installing hooks
 
-  # Command with nested subcommands
-  - name: issues
-    description: Manage SonarQube issues
+  # List Sonar resources
+  - name: list
+    description: List Sonar resources
     subcommands:
-      - name: search
+      - name: issues
         description: Search for issues in SonarQube
         handler: ./src/commands/issues.ts
-        requiresAuth: true
         options:
           - name: server
             alias: s
             type: string
-            description: SonarQube server URL (or use saved connection)
+            description: SonarQube server URL
 
           - name: token
             alias: t
@@ -108,107 +139,44 @@ commands:
             default: "500"
 
         examples:
-          - command: sonar issues search -s https://sonarcloud.io -p my-project -t TOKEN
-            description: Search issues in a project
+          - command: sonar list issues -p my-project
+            description: List issues in a project
 
-          - command: sonar issues search -s https://sonarcloud.io -p my-project --format toon
+          - command: sonar list issues -p my-project --format toon
             description: Output issues in TOON format for AI agents
 
-          - command: sonar issues search -s https://sonarcloud.io -p my-project --severity CRITICAL --all
+          - command: sonar list issues -p my-project --severity CRITICAL --all
             description: Fetch all critical issues
 
-  # Command to list user projects
-  - name: projects
-    description: Search for SonarQube projects
-    subcommands:
-      - name: search
+      - name: projects
         description: Search for projects in SonarQube
         handler: ./src/commands/projects.ts
         options:
           - name: query
             alias: q
             type: string
-            description: An optional search query to filter projects by name (partial match) or key (exact match).
+            description: Search query to filter projects by name or key
 
           - name: page
             alias: p
             type: number
-            description: An optional page number. Defaults to 1.
+            description: Page number
             default: 1
 
           - name: page-size
             type: number
-            description: An optional page size. Must be greater than 0 and less than or equal to 500. Defaults to 500.
+            description: Page size (1-500)
             default: 500
 
         examples:
-          - command: sonar projects search
+          - command: sonar list projects
             description: List first 500 accessible projects
 
-          - command: sonar projects search -q my-project
+          - command: sonar list projects -q my-project
             description: Search projects by name or key
 
-          - command: sonar projects search --page 2 --page-size 50
+          - command: sonar list projects --page 2 --page-size 50
             description: Paginate through projects
-
-  # Complex command with many options
-  - name: onboard-agent
-    description: Setup SonarQube integration for AI coding agent
-    handler: ./src/commands/onboard-agent.ts
-    requiresAuth: true
-    arguments:
-      - name: agent
-        description: AI coding agent to onboard
-        required: true
-        choices:
-          - claude
-          - gemini
-          - codex
-    options:
-      - name: server
-        alias: s
-        type: string
-        description: SonarQube server URL
-
-      - name: project
-        alias: p
-        type: string
-        description: Project key
-
-      - name: token
-        alias: t
-        type: string
-        description: Existing authentication token
-
-      - name: org
-        alias: o
-        type: string
-        description: Organization key (for SonarCloud)
-
-      - name: non-interactive
-        type: boolean
-        description: Non-interactive mode (no prompts)
-        default: false
-
-      - name: skip-hooks
-        type: boolean
-        description: Skip hooks installation
-        default: false
-
-      - name: hook-type
-        type: string
-        description: Hook type to install
-        choices:
-          - prompt
-          - cli
-        default: prompt
-
-    examples:
-      - command: sonar onboard-agent claude -s https://sonarcloud.io -p my-project
-        description: Onboard Claude Code with interactive setup
-
-      - command: sonar onboard-agent claude --skip-hooks --verbose
-        description: Onboard without installing hooks (verbose mode)
 
   # Authentication command
   - name: auth
@@ -217,7 +185,6 @@ commands:
       - name: login
         description: Save authentication token to keychain
         handler: ./src/commands/auth.ts
-        managedExit: true
         options:
           - name: server
             alias: s
@@ -238,12 +205,6 @@ commands:
           - command: sonar auth login
             description: Interactive login for SonarCloud with browser
 
-          - command: sonar auth login -o my-org
-            description: Interactive login for specific SonarCloud organization
-
-          - command: sonar auth login -s https://my-sonarqube.io
-            description: Interactive login for custom SonarQube server
-
           - command: sonar auth login -o my-org -t squ_abc123
             description: Non-interactive login with direct token
 
@@ -253,7 +214,6 @@ commands:
       - name: logout
         description: Remove authentication token from keychain
         handler: ./src/commands/auth.ts
-        managedExit: true
         options:
           - name: server
             alias: s
@@ -275,71 +235,26 @@ commands:
       - name: purge
         description: Remove all authentication tokens from keychain
         handler: ./src/commands/auth.ts
-        managedExit: true
+
         examples:
           - command: sonar auth purge
             description: Interactively remove all saved tokens
 
       - name: status
-        description: Show the current authentication status
+        description: Show active authentication connection with token verification
         handler: ./src/commands/auth.ts
-        managedExit: true
+
         examples:
           - command: sonar auth status
             description: Show current server connection and token status
 
-  # Pre-commit hooks command
-  - name: pre-commit
-    description: Manage pre-commit hooks for secrets detection
+  # Analyze code for security issues
+  - name: analyze
+    description: Analyze code for security issues
     subcommands:
-      - name: install
-        description: Install Sonar secrets pre-commit hook
-        handler: ./src/commands/pre-commit.ts
-        managedExit: true
-        examples:
-          - command: sonar pre-commit install
-            description: Install pre-commit and configure SonarSource secrets hook
-
-      - name: uninstall
-        description: Uninstall Sonar secrets pre-commit hook
-        handler: ./src/commands/pre-commit.ts
-        managedExit: true
-        examples:
-          - command: sonar pre-commit uninstall
-            description: Remove pre-commit hook and configuration file
-
-  # Manage sonar-secrets binary
-  - name: secret
-    description: Manage sonar-secrets binary
-    subcommands:
-      - name: install
-        description: Install sonar-secrets binary
-        handler: ./src/commands/secret.ts
-        managedExit: true
-        options:
-          - name: force
-            type: boolean
-            description: Force reinstall even if already installed
-            default: false
-
-        examples:
-          - command: sonar secret install
-            description: Install latest sonar-secrets binary
-
-          - command: sonar secret install --force
-            description: Reinstall sonar-secrets (overwrite existing)
-
-      - name: status
-        description: Check sonar-secrets installation status
-        handler: ./src/commands/secret.ts
-        managedExit: true
-        examples:
-          - command: sonar secret status
-            description: Check if sonar-secrets is installed and up to date
-
-      - name: check
+      - name: secrets
         description: Scan a file or stdin for hardcoded secrets
-        handler: ./src/commands/secret.ts
+        handler: ./src/commands/analyze.ts
         options:
           - name: file
             type: string
@@ -350,12 +265,8 @@ commands:
             description: Read from standard input instead of a file
 
         examples:
-          - command: sonar secret check --file src/config.ts
+          - command: sonar analyze secrets --file src/config.ts
             description: Scan a file for hardcoded secrets
 
-          - command: sonar secret check --file .env
-            description: Scan environment file for exposed secrets
-
-          - command: cat .env | sonar secret check --stdin
+          - command: cat .env | sonar analyze secrets --stdin
             description: Scan stdin for hardcoded secrets
-
