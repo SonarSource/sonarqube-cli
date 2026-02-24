@@ -17,7 +17,7 @@ npm run test:all      # Unit + integration + script tests
 - Always fix TypeScript errors before considering a task done.
 - Never attempt to fix linting issues until the implementation is correct.
 - Use `import type` for type-only imports.
-- **MANDATORY**: After editing any `.ts` file, run `npx prettier --write <file>` to ensure consistent formatting.
+- **MANDATORY**: After editing any `.ts` file, run `npx prettier --write <file>` to ensure consistent formatting. Or run `npm run format` to format all source files at once.
 
 ## Commands
 
