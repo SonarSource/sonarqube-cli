@@ -58,15 +58,15 @@ jobs:
           - os: linux
             runner: sonar-m
             target: bun-linux-x64
-            artifact: sonarqube-cli-linux
+            platform: linux-x86-64
           - os: macos
             runner: macos-latest-xlarge
             target: bun-darwin-arm64
-            artifact: sonarqube-cli-macos
+            platform: macos-arm64
           - os: windows
             runner: warp-custom-windows-2022-s
             target: bun-windows-x64
-            artifact: sonarqube-cli-windows.exe
+            platform: windows-x86-64
     steps:
       - name: Setup Cloudflare WARP (macOS only)
         if: matrix.os == 'macos'
@@ -113,17 +113,24 @@ jobs:
           NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: npm ci
 
+      - name: Compute artifact name
+        id: artifact
+        shell: bash
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+        run: echo "name=sonarqube-cli-${PROJECT_VERSION}-${{ matrix.platform }}.exe" >> $GITHUB_OUTPUT
+
       - name: Build binary for ${{ matrix.os }}
         run: |
           echo "Building ${{ matrix.os }} binary..."
-          bun build src/index.ts --compile --outfile dist/${{ matrix.artifact }} --target ${{ matrix.target }}
+          bun build src/index.ts --compile --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
           echo "✅ Binary built successfully"
 
       - name: Sign binary
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-        run: node build-scripts/sign.mjs dist/${{ matrix.artifact }}
+        run: node build-scripts/sign.mjs dist/${{ steps.artifact.outputs.name }}
 
       - name: List built artifacts (Unix)
         if: matrix.os != 'windows'
@@ -138,8 +145,8 @@ jobs:
         with:
           name: binary-${{ matrix.os }}
           path: |
-            dist/${{ matrix.artifact }}
-            dist/${{ matrix.artifact }}.asc
+            dist/${{ steps.artifact.outputs.name }}
+            dist/${{ steps.artifact.outputs.name }}.asc
 
   test-and-scan:
     name: Run Tests and Scan with SonarQube
