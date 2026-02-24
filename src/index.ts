@@ -8,14 +8,16 @@ import { VERSION } from './version.js';
 import { runCommand } from './lib/run-command.js';
 
 // Constants for argument validation
-const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
+const VALID_TOOLS = ['claude', 'gemini', 'codex'] as const;
+const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
+const ANALYZE_ARG_INDEX = 2;
+const ANALYZE_SUBCOMMAND_INDEX = 3;
 
-import { verifyCommand } from './commands/verify.js';
+import { integrateCommand } from './commands/integrate.js';
 import { issuesSearchCommand } from './commands/issues.js';
-import { onboardAgentCommand } from './commands/onboard-agent.js';
-import { authLoginCommand , authLogoutCommand , authPurgeCommand , authStatusCommand } from './commands/auth.js';
-import { preCommitInstallCommand , preCommitUninstallCommand } from './commands/pre-commit.js';
-import { secretInstallCommand , secretStatusCommand , secretCheckCommand } from './commands/secret.js';
+import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from './commands/auth.js';
+import { secretInstallCommand } from './commands/secret.js';
+import { analyzeSecretsCommand } from './commands/analyze.js';
 import { projectsSearchCommand } from './commands/projects.js';
 
 const program = new Command();
@@ -25,28 +27,45 @@ program
   .description('SonarQube CLI')
   .version(VERSION, '-v, --version', 'display version for command');
 
-// Analyze a file using SonarCloud A3S API
-program
-  .command('verify')
-  .description('Analyze a file using SonarCloud A3S API')
-  .requiredOption('--file <file>', 'File path to analyze')
-  .option('--organization <organization>', 'Organization key (or use saved config)')
-  .option('--project <project>', 'Project key')
-  .option('-t, --token <token>', 'Authentication token (or use saved config)')
-  .option('-b, --branch <branch>', 'Branch name')
+// Install Sonar tools
+const install = program
+  .command('install')
+  .description('Install Sonar tools');
+
+install
+  .command('secrets')
+  .description('Install sonar-secrets binary from binaries.sonarsource.com')
+  .option('--force', 'Force reinstall even if already installed')
   .action(async (options) => {
+    await secretInstallCommand(options);
+  });
+
+// Setup SonarQube integration for AI coding agent
+program
+  .command('integrate <tool>')
+  .description('Setup SonarQube integration for various tools, like AI coding agents, git and others')
+  .option('-s, --server <server>', 'SonarQube server URL')
+  .option('-p, --project <project>', 'Project key')
+  .option('-t, --token <token>', 'Existing authentication token')
+  .option('-o, --org <org>', 'Organization key (for SonarCloud)')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option('--skip-hooks', 'Skip hooks installation')
+  .action(async (agent, options) => {
     await runCommand(async () => {
-      await verifyCommand(options);
+      if (!VALID_TOOLS.includes(agent)) {
+        throw new Error(`Invalid tool. Must be one of: ${VALID_TOOLS.join(', ')}`);
+      }
+      await integrateCommand(agent, options);
     });
   });
 
-// Manage SonarQube issues
-const issues = program
-  .command('issues')
-  .description('Manage SonarQube issues');
+// List Sonar resources
+const list = program
+  .command('list')
+  .description('List Sonar resources');
 
-issues
-  .command('search')
+list
+  .command('issues')
   .description('Search for issues in SonarQube')
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-t, --token <token>', 'Authentication token')
@@ -61,37 +80,14 @@ issues
     await runCommand(() => issuesSearchCommand(options));
   });
 
-// Search SonarQube projects
-const projects = program
+list
   .command('projects')
-  .description('Manage SonarQube projects');
-
-projects
-  .command('search')
   .description('Search for projects in SonarQube')
-  .option('-q, --query <query>', 'An optional search query to filter projects by name (partial match) or key (exact match).')
-  .option('-p, --page <page>', 'An optional page number. Defaults to 1.', '1')
-  .option('--page-size <page-size>', 'An optional page size. Must be greater than 0 and less than or equal to 500. Defaults to 500.', '500')
-  .action(async (options) => await runCommand(async () => await projectsSearchCommand(options)));
-
-// Setup SonarQube integration for AI coding agent
-program
-  .command('onboard-agent <agent>')
-  .description('Setup SonarQube integration for AI coding agent')
-  .option('-s, --server <server>', 'SonarQube server URL')
-  .option('-p, --project <project>', 'Project key')
-  .option('-t, --token <token>', 'Existing authentication token')
-  .option('-o, --org <org>', 'Organization key (for SonarCloud)')
-  .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option('--skip-hooks', 'Skip hooks installation')
-  .option('--hook-type <hook-type>', 'Hook type to install', 'prompt')
-  .action(async (agent, options) => {
-    await runCommand(async () => {
-      if (!VALID_AGENTS.includes(agent)) {
-        throw new Error(`Invalid agent. Must be one of: ${VALID_AGENTS.join(', ')}`);
-      }
-      await onboardAgentCommand(agent, options);
-    });
+  .option('-q, --query <query>', 'Search query to filter projects by name or key')
+  .option('-p, --page <page>', 'Page number', '1')
+  .option('--page-size <page-size>', 'Page size (1-500)', '500')
+  .action(async (options) => {
+    await runCommand(async () => await projectsSearchCommand(options));
   });
 
 // Manage authentication tokens and credentials
@@ -126,67 +122,39 @@ auth
   });
 
 auth
-  .command('list')
-  .description('List saved authentication connections with token verification')
+  .command('status')
+  .description('Show active authentication connection with token verification')
   .action(async () => {
     await authStatusCommand();
   });
 
-// Manage pre-commit hooks for secrets detection
-const preCommit = program
-  .command('pre-commit')
-  .description('Manage pre-commit hooks for secrets detection');
+// Analyze code for security issues
+const analyze = program
+  .command('analyze')
+  .description('Analyze code for security issues');
 
-preCommit
-  .command('install')
-  .description('Install Sonar secrets pre-commit hook')
-  .action(async () => {
-    await preCommitInstallCommand();
-  });
-
-preCommit
-  .command('uninstall')
-  .description('Uninstall Sonar secrets pre-commit hook')
-  .action(async () => {
-    await preCommitUninstallCommand();
-  });
-
-// Manage sonar-secrets binary
-const secret = program
-  .command('secret')
-  .description('Manage sonar-secrets binary');
-
-secret
-  .command('install')
-  .description('Install sonar-secrets binary from GitHub releases')
-  .option('--force', 'Force reinstall even if already installed')
-  .action(async (options) => {
-    await secretInstallCommand(options);
-  });
-
-secret
-  .command('status')
-  .description('Check sonar-secrets installation status')
-  .action(async () => {
-    await secretStatusCommand();
-  });
-
-secret
-  .command('check')
+analyze
+  .command('secrets')
   .description('Scan a file or stdin for hardcoded secrets')
   .option('--file <file>', 'File path to scan for secrets')
   .option('--stdin', 'Read from standard input instead of a file')
   .action(async (options) => {
-    await runCommand(() => secretCheckCommand(options));
+    await runCommand(() => analyzeSecretsCommand(options));
   });
 
-
-const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
 
 // Handle `sonar auth` without subcommand (defaults to login)
 if (process.argv.length === AUTH_ARGC_WITHOUT_SUBCOMMAND && process.argv[2] === 'auth') {
   // User ran `sonar auth` without subcommand - inject 'login' subcommand
   process.argv.splice(AUTH_ARGC_WITHOUT_SUBCOMMAND, 0, 'login');
+}
+
+// Handle `sonar analyze` without subcommand (defaults to secrets)
+if (process.argv[ANALYZE_ARG_INDEX] === 'analyze') {
+  const nextArg = process.argv[ANALYZE_SUBCOMMAND_INDEX];
+  if (!nextArg || nextArg.startsWith('-')) {
+    process.argv.splice(ANALYZE_SUBCOMMAND_INDEX, 0, 'secrets');
+  }
 }
 
 program.parse();

@@ -1,4 +1,4 @@
-// Onboard-agent command - setup SonarQube integration for Claude Code
+// Integrate command - setup SonarQube integration for Claude Code
 
 import { discoverProject, type ProjectInfo } from '../bootstrap/discovery.js';
 import { runHealthChecks } from '../bootstrap/health.js';
@@ -361,7 +361,7 @@ async function updateStateAfterConfiguration(
 /**
  * Onboard-agent command handler
  */
-export async function onboardAgentCommand(agent: string, options: OnboardAgentOptions): Promise<void> {
+export async function integrateCommand(agent: string, options: OnboardAgentOptions): Promise<void> {
   await runCommand(async () => {
 
   // Validate agent

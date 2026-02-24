@@ -321,7 +321,7 @@ export async function authPurgeCommand(): Promise<void> {
 }
 
 /**
- * List saved authentication connections with token verification
+ * Show active authentication connection with token verification
  */
 export async function authStatusCommand(): Promise<void> {
   await runCommand(async () => {
