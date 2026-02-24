@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $InstallDir = Join-Path $env:LOCALAPPDATA 'sonarqube-cli\bin'
 $BinaryName = 'sonar.exe'
-$BaseUrl    = 'https://binaries.sonarsource.com/CommercialDistribution/sonarqube-cli'
+$BaseUrl    = 'https://binaries.sonarsource.com/Distribution/sonarqube-cli'
 $Platform   = 'windows-x86-64'
 
 function Resolve-LatestVersion {
@@ -87,17 +87,7 @@ try {
     Move-Item -Path $TmpBin -Destination $Dest -Force
     Write-Host "Installed sonar to: $Dest"
 
-    Write-Host ''
-    Write-Host "To run 'sonar' from anywhere, $InstallDir needs to be on your PATH."
-    Write-Host 'The installer can add it to your user PATH automatically (no admin rights required).'
-    $Answer = Read-Host 'Would you like to do that now? [y/N]'
-
-    if ($Answer.Trim().ToLower() -eq 'y') {
-        Add-ToUserPath -Dir $InstallDir
-    } else {
-        Write-Host "Skipped. To add it manually, run:"
-        Write-Host "  [Environment]::SetEnvironmentVariable('PATH', `"$InstallDir;`$env:PATH`", 'User')"
-    }
+    Add-ToUserPath -Dir $InstallDir
 
     Write-Host ''
     Write-Host 'Installation complete.'

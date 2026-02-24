@@ -3,8 +3,14 @@ set -euo pipefail
 
 INSTALL_DIR="$HOME/.local/share/sonarqube-cli/bin"
 BINARY_NAME="sonar"
+TMP_DIR=""
 
-BASE_URL="https://binaries.sonarsource.com/CommercialDistribution/sonarqube-cli"
+cleanup() {
+  [[ -n "$TMP_DIR" ]] && rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+BASE_URL="https://binaries.sonarsource.com/Distribution/sonarqube-cli"
 
 detect_platform() {
   local os
@@ -96,9 +102,7 @@ main() {
   local url="$BASE_URL/$filename"
   local checksum_url="${url}.sha256"
   local dest="$INSTALL_DIR/$BINARY_NAME"
-  local tmp_dir
-  tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' EXIT
+  TMP_DIR="$(mktemp -d)"
 
   echo "Detected platform: $platform"
   echo "Downloading sonarqube-cli from:"
@@ -106,8 +110,8 @@ main() {
 
   mkdir -p "$INSTALL_DIR"
 
-  local tmp_bin="$tmp_dir/$filename"
-  local tmp_checksum="$tmp_dir/$filename.sha256"
+  local tmp_bin="$TMP_DIR/$filename"
+  local tmp_checksum="$TMP_DIR/$filename.sha256"
 
   download "$url" "$tmp_bin"
   echo "Downloading SHA256 checksum from:"
@@ -121,35 +125,22 @@ main() {
   echo "Installed sonar to: $dest"
 
   local path_line='export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"'
+  local shell_profiles=()
+  [[ -f "$HOME/.bashrc" ]] && shell_profiles+=("$HOME/.bashrc")
+  [[ -f "$HOME/.zshrc" ]]  && shell_profiles+=("$HOME/.zshrc")
 
-  echo ""
-  echo "To run 'sonar' from anywhere, $INSTALL_DIR needs to be on your PATH."
-  echo "The installer can add it automatically to your shell profile (.bashrc / .zshrc)."
-  printf "Would you like to do that now? [y/N] "
-  local answer
-  read -r answer
-
-  if [[ "${answer,,}" == "y" ]]; then
-    local shell_profiles=()
-    [[ -f "$HOME/.bashrc" ]] && shell_profiles+=("$HOME/.bashrc")
-    [[ -f "$HOME/.zshrc" ]]  && shell_profiles+=("$HOME/.zshrc")
-
-    if [[ ${#shell_profiles[@]} -eq 0 ]]; then
-      echo "No shell profile files found. Add the following line manually:"
-      echo "  $path_line"
-    else
-      for profile in "${shell_profiles[@]}"; do
-        if grep -qF 'sonarqube-cli/bin' "$profile" 2>/dev/null; then
-          echo "Already present in $profile, skipping."
-        else
-          printf '\n# Added by sonarqube-cli installer\n%s\n' "$path_line" >> "$profile"
-          echo "Updated PATH in: $profile"
-        fi
-      done
-    fi
-  else
-    echo "Skipped. To add it manually, append the following to your shell profile:"
+  if [[ ${#shell_profiles[@]} -eq 0 ]]; then
+    echo "No shell profile files found. Add the following line to your shell profile manually:"
     echo "  $path_line"
+  else
+    for profile in "${shell_profiles[@]}"; do
+      if grep -qF 'sonarqube-cli/bin' "$profile" 2>/dev/null; then
+        echo "Already present in $profile, skipping."
+      else
+        printf '\n# Added by sonarqube-cli installer\n%s\n' "$path_line" >> "$profile"
+        echo "Updated PATH in: $profile"
+      fi
+    done
   fi
 
   echo ""
