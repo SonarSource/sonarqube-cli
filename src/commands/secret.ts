@@ -111,7 +111,7 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
 
     if (!existsSync(binaryPath)) {
       text('Status: Not installed');
-      text('  Install with: sonar secret install');
+      text('  Install with: sonar install secrets');
       return;
     }
 
@@ -131,7 +131,7 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
         } else {
           blank();
           warn(`Update available: v${latestVersion}`);
-          text('  Run: sonar secret install');
+          text('  Run: sonar install secrets');
         }
       } catch (err) {
         logger.debug(`Failed to check for updates: ${(err as Error).message}`);
@@ -143,8 +143,8 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
 
     warn('Binary exists but not working');
     text(`Path: ${binaryPath}`);
-    text('  Reinstall with: sonar secret install --force');
-    throw new Error('Binary not working. Reinstall with: sonar secret install --force');
+    text('  Reinstall with: sonar install secrets --force');
+    throw new Error('Binary not working. Reinstall with: sonar install secrets --force');
   });
 }
 
@@ -251,8 +251,8 @@ function logInstallationSuccess(binaryPath: string): void {
     'Manual usage:',
     '  sonar-secrets scan <file>',
     '',
-    'Check installation status:',
-    '  sonar secret status',
+    'Manage installation:',
+    '  sonar install secrets --force',
   ]);
 }
 

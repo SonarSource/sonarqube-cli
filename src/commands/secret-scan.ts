@@ -146,7 +146,7 @@ async function performFileScan(
 function validateCheckCommandEnvironment(binaryPath: string): void {
   if (!existsSync(binaryPath)) {
     error('sonar-secrets is not installed');
-    text('  Install with: sonar secret install');
+    text('  Install with: sonar install secrets');
     process.exit(1);
   }
 }
@@ -339,9 +339,9 @@ function handleScanError(err: unknown): void {
   if (errorMessage.includes('timed out')) {
     text('\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.');
   } else if (errorMessage.includes('ENOENT')) {
-    text('\nThe binary file was not found or is not executable.\nReinstall with: sonar secret install --force');
+    text('\nThe binary file was not found or is not executable.\nReinstall with: sonar install secrets --force');
   } else {
-    text('\nCheck installation with: sonar secret status');
+    text('\nReinstall with: sonar install secrets --force');
   }
 
   blank();
