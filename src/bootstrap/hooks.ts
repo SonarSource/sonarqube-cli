@@ -222,7 +222,7 @@ async function generateSecretHooks(
 
 /**
  * Install sonar-secrets hooks to project (cross-platform)
- * Creates hook scripts dynamically and registers them in .claude/settings.json
+ * Creates hook build-scripts dynamically and registers them in .claude/settings.json
  */
 export async function installSecretScanningHooks(projectRoot: string): Promise<void> {
   try {
@@ -233,7 +233,7 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
     // Create hooks directory
     mkdirSync(hooksPath, { recursive: true });
 
-    const targetScriptsDir = join(hooksPath, 'sonar-secrets', 'scripts');
+    const targetScriptsDir = join(hooksPath, 'sonar-secrets', 'build-scripts');
 
     mkdirSync(targetScriptsDir, { recursive: true });
 
@@ -261,7 +261,7 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
         hooks: [
           {
             type: 'command',
-            command: join('.claude', 'hooks', 'sonar-secrets', 'scripts', `pretool-secrets${scriptExt}`),
+            command: join('.claude', 'hooks', 'sonar-secrets', 'build-scripts', `pretool-secrets${scriptExt}`),
             timeout: 60
           }
         ]
@@ -275,7 +275,7 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
         hooks: [
           {
             type: 'command',
-            command: join('.claude', 'hooks', 'sonar-secrets', 'scripts', `prompt-secrets${scriptExt}`),
+            command: join('.claude', 'hooks', 'sonar-secrets', 'build-scripts', `prompt-secrets${scriptExt}`),
             timeout: 60
           }
         ]

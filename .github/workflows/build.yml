@@ -123,7 +123,7 @@ jobs:
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-        run: node scripts/sign.mjs dist/${{ matrix.artifact }}
+        run: node build-scripts/sign.mjs dist/${{ matrix.artifact }}
 
       - name: List built artifacts (Unix)
         if: matrix.os != 'windows'

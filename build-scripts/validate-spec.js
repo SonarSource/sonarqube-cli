@@ -4,7 +4,7 @@
  * Validate spec.yaml against spec.schema.json
  *
  * Usage:
- *   node scripts/validate-spec.js
+ *   node build-scripts/validate-spec.js
  */
 
 import { readFileSync } from 'node:fs';
