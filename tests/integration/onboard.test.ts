@@ -61,7 +61,7 @@ sonar.organization=test-org
     expect(installed).toBe(true);
 
     // Verify hook script exists
-    const hookScript = join(projectInfo.root, '.claude', 'hooks', 'sonar-secrets', 'scripts', 'pretool-secrets.sh');
+    const hookScript = join(projectInfo.root, '.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh');
     expect(existsSync(hookScript)).toBe(true);
 
     // Verify settings exists
