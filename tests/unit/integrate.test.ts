@@ -153,24 +153,6 @@ describe('integrateCommand: full flow', () => {
     setMockUi(false);
   });
 
-  it('exits 1 when --hook-type is invalid', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-
-    try {
-      await integrateCommand('claude', {
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-        hookType: 'invalid-type',
-        skipHooks: true,
-      });
-      expect(mockExit).toHaveBeenCalledWith(1);
-    } finally {
-      discoverSpy.mockRestore();
-    }
-  });
-
   it('exits 0 when onboarding succeeds with all checks passing', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);

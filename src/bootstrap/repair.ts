@@ -1,7 +1,7 @@
 // Repair orchestrator - fixes configuration issues
 
 import { generateTokenViaBrowser, saveToken, validateToken, deleteToken } from './auth.js';
-import { installHooks, installSecretScanningHooks, type HookType } from './hooks.js';
+import { installSecretScanningHooks } from './hooks.js';
 import type { HealthCheckResult } from './health.js';
 import logger from '../lib/logger.js';
 import { text, success } from '../ui/index.js';
@@ -15,7 +15,6 @@ export async function runRepair(
   healthResult: HealthCheckResult,
   projectKey?: string,
   organization?: string,
-  hookType: HookType = 'prompt'
 ): Promise<void> {
   let token = '';
 
@@ -42,13 +41,6 @@ export async function runRepair(
     // Save to keychain
     await saveToken(serverURL, token, organization);
     success('Token saved to keychain');
-  }
-
-  // Fix hooks if not installed
-  if (!healthResult.hooksInstalled) {
-    text('Installing hooks...');
-    await installHooks(projectRoot, hookType);
-    success('Hooks installed');
   }
 
   // Install sonar-secrets hooks for secret scanning

@@ -201,7 +201,7 @@ describe('secretCheckCommand: successful scan', () => {
 // ─── Failed scan paths ────────────────────────────────────────────────────────
 
 describe('secretCheckCommand: scan failures', () => {
-  it('exits with scan exit code when scan fails', async () => {
+  it('exits 51 when binary exits 1 (secrets found)', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
 
@@ -212,7 +212,7 @@ describe('secretCheckCommand: scan failures', () => {
       existsSpy.mockRestore();
     }
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockExit).toHaveBeenCalledWith(51);
     const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
     expect(errors.some(m => m.includes('Scan failed'))).toBe(true);
   });
@@ -348,7 +348,7 @@ describe('secretCheckCommand: stdin scan', () => {
     expect(mockExit).toHaveBeenCalledWith(0);
   });
 
-  it('exits with scan exit code when stdin scan fails', async () => {
+  it('exits 51 when binary exits 1 during stdin scan (secrets found)', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'secret found' });
 
@@ -361,6 +361,6 @@ describe('secretCheckCommand: stdin scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockExit).toHaveBeenCalledWith(51);
   });
 });

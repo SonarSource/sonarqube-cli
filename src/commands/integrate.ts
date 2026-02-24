@@ -6,7 +6,7 @@ import { runRepair } from '../bootstrap/repair.js';
 // Config is read from sonar-project.properties, no need to save separate file
 import { getToken } from '../bootstrap/auth.js';
 import { getAllCredentials } from '../lib/keychain.js';
-import type { HookType } from '../bootstrap/hooks.js';
+import { installSecretScanningHooks } from '../bootstrap/hooks.js';
 import { loadState, saveState, markAgentConfigured, addInstalledHook } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
@@ -22,7 +22,6 @@ export interface OnboardAgentOptions {
   org?: string;
   nonInteractive?: boolean;
   skipHooks?: boolean;
-  hookType?: string;
 }
 
 interface ConfigurationData {
@@ -236,7 +235,6 @@ async function runHealthCheckAndRepair(
   token: string | undefined,
   organization: string | undefined,
   skipHooks: boolean | undefined,
-  hookType: HookType
 ): Promise<string | undefined> {
   text('\nPhase 2/3: Health Check & Repair');
   blank();
@@ -250,6 +248,9 @@ async function runHealthCheckAndRepair(
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
+    if (!skipHooks) {
+      await installSecretScanningHooks(projectInfo.root);
+    }
     return token;
   }
 
@@ -267,7 +268,6 @@ async function runHealthCheckAndRepair(
     healthResult,
     projectKey,
     organization,
-    skipHooks ? undefined : hookType
   );
 
   return token;
@@ -281,8 +281,6 @@ async function runRepairWithoutToken(
   projectKey: string,
   projectInfo: ProjectInfo,
   organization: string | undefined,
-  skipHooks: boolean | undefined,
-  hookType: HookType
 ): Promise<string> {
   text('\n  Running repair...');
 
@@ -300,7 +298,6 @@ async function runRepairWithoutToken(
     },
     projectKey,
     organization,
-    skipHooks ? undefined : hookType
   );
 
   const repairedToken = await getToken(serverURL, organization);
@@ -337,7 +334,6 @@ function printFinalVerificationResults(finalHealth: Awaited<ReturnType<typeof ru
  */
 async function updateStateAfterConfiguration(
   hooksInstalled: boolean,
-  hookType: HookType
 ): Promise<void> {
   try {
     const state = loadState(VERSION);
@@ -347,7 +343,7 @@ async function updateStateAfterConfiguration(
 
     // Track installed hooks
     if (hooksInstalled) {
-      addInstalledHook(state, 'claude-code', 'sonar-prompt', hookType === 'cli' ? 'PreToolUse' : 'PostToolUse');
+      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
     }
 
     saveState(state);
@@ -390,11 +386,6 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
   let token = await ensureToken(config.token, serverURL, config.organization);
 
   // Phase 2 & 3: Health Check and Repair
-  const VALID_HOOK_TYPES: HookType[] = ['prompt', 'cli'];
-  if (options.hookType && !VALID_HOOK_TYPES.includes(options.hookType as HookType)) {
-    throw new Error(`Invalid hook type: '${options.hookType}'. Must be one of: ${VALID_HOOK_TYPES.join(', ')}`);
-  }
-  const hookType = (options.hookType || 'prompt') as HookType;
   if (token) {
     token = await runHealthCheckAndRepair(
       serverURL,
@@ -403,7 +394,6 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
       token,
       config.organization,
       options.skipHooks,
-      hookType
     );
 
     if (token) {
@@ -415,7 +405,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
       printFinalVerificationResults(finalHealth);
 
       // Update state with configuration
-      await updateStateAfterConfiguration(!options.skipHooks, hookType);
+      await updateStateAfterConfiguration(!options.skipHooks);
 
       return;
     }
@@ -428,8 +418,6 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
       projectKey,
       projectInfo,
       config.organization,
-      options.skipHooks,
-      hookType
     );
   }
 
@@ -441,6 +429,6 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
   printFinalVerificationResults(finalHealth);
 
   // Update state with configuration
-  await updateStateAfterConfiguration(!options.skipHooks, hookType);
+  await updateStateAfterConfiguration(!options.skipHooks);
   });
 }

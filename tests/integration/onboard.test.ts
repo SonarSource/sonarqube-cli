@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 const PROJECT_ROOT = join(import.meta.dir, '../..');
 import { discoverProject } from '../../src/bootstrap/discovery.js';
 import { loadConfig, saveConfig, newConfig } from '../../src/bootstrap/config.js';
-import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
+import { installSecretScanningHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
 
 it('integration: full onboarding flow', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-integration-' + Date.now());
@@ -54,14 +54,14 @@ sonar.organization=test-org
     expect(loadedConfig!.sonarqube.organization).toBe('test-org');
 
     // Step 5: Install hooks
-    await installHooks(projectInfo.root, 'prompt');
+    await installSecretScanningHooks(projectInfo.root);
 
     // Verify hooks
     const installed = await areHooksInstalled(projectInfo.root);
     expect(installed).toBe(true);
 
     // Verify hook script exists
-    const hookScript = join(projectInfo.root, '.claude', 'hooks', 'sonar-prompt.sh');
+    const hookScript = join(projectInfo.root, '.claude', 'hooks', 'sonar-secrets', 'scripts', 'pretool-secrets.sh');
     expect(existsSync(hookScript)).toBe(true);
 
     // Verify settings exists
@@ -133,7 +133,7 @@ it('integration: config persistence across multiple operations', async () => {
     expect(loaded!.sonarqube.projectKey).toBe('key1');
 
     // Install hooks
-    await installHooks(testDir, 'prompt');
+    await installSecretScanningHooks(testDir);
 
     // Load config again (should still exist)
     loaded = await loadConfig(testDir);
@@ -173,6 +173,8 @@ it('integration: auth login process exits after token delivered to loopback serv
   // That is expected — what matters is the process exits.
 
   const fakeServer = `https://sonar-exit-test-${Date.now()}.invalid`;
+  // Use isolated CLI dir to avoid corrupting the real ~/.sonarqube-cli/state.json
+  const isolatedCliDir = join(tmpdir(), `sonar-cli-test-auth-${Date.now()}`);
 
   const proc = Bun.spawn(
     ['bun', 'run', 'src/index.ts', 'auth', 'login', '--server', fakeServer],
@@ -181,7 +183,7 @@ it('integration: auth login process exits after token delivered to loopback serv
       stdin: 'ignore',
       stderr: 'pipe',
       cwd: PROJECT_ROOT,
-      env: { ...process.env, CI: 'true', SONAR_CLI_DISABLE_KEYCHAIN: 'true' },
+      env: { ...process.env, CI: 'true', SONAR_CLI_DISABLE_KEYCHAIN: 'true', SONAR_CLI_DIR: isolatedCliDir },
     }
   );
 
@@ -223,5 +225,8 @@ it('integration: auth login process exits after token delivered to loopback serv
   ]);
 
   expect(typeof exitCode).toBe('number');
+
+  // Cleanup isolated CLI dir
+  rmSync(isolatedCliDir, { recursive: true, force: true });
 }, { timeout: 15000 });
 
