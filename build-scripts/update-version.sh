@@ -3,8 +3,8 @@
 # Increment build number and rebuild the project.
 #
 # Usage:
-#   ./scripts/update-version.sh           # increment build:  0.1.132 → 0.1.133
-#   ./scripts/update-version.sh 1.0       # change major.minor, keep build: 0.1.132 → 1.0.132
+#   ./build-scripts/update-version.sh           # increment build:  0.1.132 → 0.1.133
+#   ./build-scripts/update-version.sh 1.0       # change major.minor, keep build: 0.1.132 → 1.0.132
 
 set -e
 

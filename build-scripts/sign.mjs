@@ -24,7 +24,7 @@ if (!privateKeyArmored || !passphrase) {
 }
 
 if (!filePath) {
-  console.error('Usage: node scripts/sign.mjs <file-path>');
+  console.error('Usage: node build-scripts/sign.mjs <file-path>');
   process.exit(1);
 }
 

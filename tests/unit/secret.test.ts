@@ -119,10 +119,10 @@ describe('installSecretScanningHooks', () => {
     expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toContain('prompt-secrets');
   });
 
-  it('creates hook scripts on disk', async () => {
+  it('creates hook build-scripts on disk', async () => {
     await installSecretScanningHooks(testProjectRoot);
 
-    const scriptsDir = join(claudeDir, 'hooks', 'sonar-secrets', 'scripts');
+    const scriptsDir = join(claudeDir, 'hooks', 'sonar-secrets', 'build-scripts');
     expect(existsSync(scriptsDir)).toBe(true);
 
     const ext = process.platform === 'win32' ? '.ps1' : '.sh';

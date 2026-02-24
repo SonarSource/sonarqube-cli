@@ -4,7 +4,7 @@
  * Generate README.md from spec.yaml
  *
  * Usage:
- *   node scripts/generate-docs.js
+ *   node build-scripts/generate-docs.js
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';

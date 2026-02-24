@@ -55,13 +55,13 @@ describe('Repair Orchestrator', () => {
   it('creates sonar-secrets hooks directory', async () => {
     await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org', 'prompt');
 
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'scripts'))).toBe(true);
+    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(true);
   });
 
   it('installs secret scanning hooks even when hooksInstalled is true', async () => {
     await runRepair('https://sonarcloud.io', testDir, healthAllGood, 'test_key', 'test-org', 'prompt');
 
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'scripts'))).toBe(true);
+    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(true);
   });
 
   it('installs prompt hook script when hookType is prompt', async () => {

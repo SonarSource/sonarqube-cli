@@ -3,7 +3,7 @@ import { spawnSync } from 'bun';
 import { join } from 'node:path';
 
 const rootDir = join(import.meta.dir, '../../');
-const validateScript = join(rootDir, 'scripts/validate-commands.js');
+const validateScript = join(rootDir, 'build-scripts/validate-commands.js');
 
 describe('validate-commands.js', () => {
   it('should run without crashing', () => {
