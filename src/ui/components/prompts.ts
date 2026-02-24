@@ -55,12 +55,12 @@ export async function confirmPrompt(message: string): Promise<boolean | null> {
 }
 
 /**
- * Press-Enter-to-continue prompt.
+ * Press-any-key-to-continue prompt.
  * Skipped automatically in mock mode or when CI=true (non-interactive environments).
  */
-export async function pressEnterPrompt(message: string): Promise<void> {
+export async function pressAnyKeyPrompt(message: string): Promise<void> {
   if (isMockActive() || process.env['CI'] === 'true') {
-    if (isMockActive()) recordCall('pressEnterPrompt', message);
+    if (isMockActive()) recordCall('pressAnyKeyPrompt', message);
     return;
   }
 

@@ -165,7 +165,7 @@ it('integration: auth login process exits after token delivered to loopback serv
   // Strategy:
   //   1. Spawn `sonar auth login` against a fake server (no cached token in keychain)
   //   2. Read stdout until the loopback URL appears — extract the port
-  //   3. Write "\n" to stdin to pass pressEnterPrompt
+  //   3. Write "\n" to stdin to pass pressAnyKeyPrompt
   //   4. POST the token directly to the loopback server (simulates browser callback)
   //   5. Assert the process exits within 5 seconds
   //
@@ -207,7 +207,7 @@ it('integration: auth login process exits after token delivered to loopback serv
   expect(port).toBeDefined();
 
   // POST the token — simulates SonarCloud redirecting to the loopback server
-  // pressEnterPrompt is skipped automatically when CI=true
+  // pressAnyKeyPrompt is skipped automatically when CI=true
   await fetch(`http://127.0.0.1:${port}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

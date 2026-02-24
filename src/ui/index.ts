@@ -9,4 +9,4 @@ export { setMockUi, isMockActive, getMockUiCalls, clearMockUiCalls, queueMockRes
 export type { UiCall } from './mock.js';
 export type { NoteOptions, PhaseOptions, LogOptions, ColorFn } from './types.js';
 export { withSpinner } from './components/spinner.js';
-export { textPrompt, confirmPrompt, pressEnterPrompt } from './components/prompts.js';
+export { textPrompt, confirmPrompt, pressAnyKeyPrompt } from './components/prompts.js';

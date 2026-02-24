@@ -7,7 +7,7 @@ import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { startLoopbackServer } from '../lib/loopback-server.js';
 import logger from '../lib/logger.js';
-import { warn, print, pressEnterPrompt, isMockActive } from '../ui/index.js';
+import { warn, print, pressAnyKeyPrompt, isMockActive } from '../ui/index.js';
 import { green, dim } from '../ui/colors.js';
 
 const HTTP_STATUS_OK = 200;
@@ -298,7 +298,7 @@ export async function generateTokenViaBrowser(
 
   print('Obtaining access token from SonarQube...');
   print(`URL: ${authURL}`);
-  await pressEnterPrompt('Press Enter to open browser');
+  await pressAnyKeyPrompt('Press any key to open the browser');
   await openBrowserFn(authURL);
 
   let token: string | undefined;

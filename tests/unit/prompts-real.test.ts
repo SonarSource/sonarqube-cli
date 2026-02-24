@@ -1,4 +1,4 @@
-// Tests for prompts non-mock paths: textPrompt, confirmPrompt, pressEnterPrompt
+// Tests for prompts non-mock paths: textPrompt, confirmPrompt, pressAnyKeyPrompt
 // mock.module replaces @clack/core so no real TTY is needed.
 // The mock invokes the render() callback with different states to cover all render branches.
 
@@ -60,7 +60,7 @@ mock.module('@clack/core', () => {
 });
 
 import { mock } from 'bun:test';
-import { textPrompt, confirmPrompt, pressEnterPrompt } from '../../src/ui/components/prompts.js';
+import { textPrompt, confirmPrompt, pressAnyKeyPrompt } from '../../src/ui/components/prompts.js';
 
 // ─── textPrompt non-mock ──────────────────────────────────────────────────────
 
@@ -110,12 +110,12 @@ describe('confirmPrompt: real prompt path', () => {
   });
 });
 
-// ─── pressEnterPrompt non-mock ────────────────────────────────────────────────
+// ─── pressAnyKeyPrompt non-mock ────────────────────────────────────────────────
 
-describe('pressEnterPrompt: real prompt path', () => {
+describe('pressAnyKeyPrompt: real prompt path', () => {
   beforeEach(() => { mockTextResult = ''; });
 
   it('completes without throwing', async () => {
-    await expect(pressEnterPrompt('Press Enter to continue')).resolves.toBeUndefined();
+    await expect(pressAnyKeyPrompt('Press any key to continue')).resolves.toBeUndefined();
   });
 });

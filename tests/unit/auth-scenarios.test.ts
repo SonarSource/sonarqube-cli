@@ -111,7 +111,7 @@ describe('Auth Scenarios: keychain token management', () => {
 describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
   beforeEach(() => {
     mockOpenBrowser.mockClear();
-    // Mock UI so pressEnterPrompt resolves immediately without stdin
+    // Mock UI so pressAnyKeyPrompt resolves immediately without stdin
     setMockUi(true);
   });
 
