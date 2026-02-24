@@ -10,142 +10,138 @@ brew install local/sonar/sonar
 
 ## Commands
 
-### `sonar verify`
+### `sonar install`
 
-Analyze a file using SonarCloud A3S API
+Install Sonar tools
+
+#### `sonar install secrets`
+
+Install sonar-secrets binary from binaries.sonarsource.com
 
 **Options:**
 
-| Option           | Type   | Required | Description                                | Default |
-| ---------------- | ------ | -------- | ------------------------------------------ | ------- |
-| `--file`         | string | ✅        | File path to analyze                       | -       |
-| `--organization` | string | ❌        | Organization key (or use saved config)     | -       |
-| `--project`      | string | ❌        | Project key                                | -       |
-| `--token`, `-t`  | string | ❌        | Authentication token (or use saved config) | -       |
-| `--branch`, `-b` | string | ❌        | Branch name                                | -       |
+| Option     | Type    | Required | Description                                     | Default |
+| ---------- | ------- | -------- | ----------------------------------------------- | ------- |
+| `--force`  | boolean | ❌        | Force reinstall even if already installed       | `false` |
+| `--status` | boolean | ❌        | Check installation status instead of installing | `false` |
 
 **Examples:**
 
 ```bash
-sonar verify --file src/MyClass.java
+sonar install secrets
 ```
-Analyze a single Java file
+Install latest sonar-secrets binary
 
 ```bash
-sonar verify --file src/MyClass.java
+sonar install secrets --force
 ```
-Analyze using saved configuration
+Reinstall sonar-secrets (overwrite existing)
 
 ```bash
-sonar verify --file src/MyClass.java --branch main
+sonar install secrets --status
 ```
-Analyze file on a specific branch
+Check if sonar-secrets is installed and up to date
 
 ---
 
-### `sonar issues`
+### `sonar integrate`
 
-Manage SonarQube issues
+Setup SonarQube integration for various tools, like AI coding agents, git and others
 
-#### `sonar issues search`
+**Options:**
+
+| Option              | Type    | Required | Description                       | Default |
+| ------------------- | ------- | -------- | --------------------------------- | ------- |
+| `--server`, `-s`    | string  | ❌        | SonarQube server URL              | -       |
+| `--project`, `-p`   | string  | ❌        | Project key                       | -       |
+| `--token`, `-t`     | string  | ❌        | Existing authentication token     | -       |
+| `--org`, `-o`       | string  | ❌        | Organization key (for SonarCloud) | -       |
+| `--non-interactive` | boolean | ❌        | Non-interactive mode (no prompts) | `false` |
+| `--skip-hooks`      | boolean | ❌        | Skip hooks installation           | `false` |
+
+**Examples:**
+
+```bash
+sonar integrate claude -s https://sonarcloud.io -p my-project
+```
+Integrate Claude Code with interactive setup
+
+```bash
+sonar integrate claude --skip-hooks
+```
+Integrate without installing hooks
+
+---
+
+### `sonar list`
+
+List Sonar resources
+
+#### `sonar list issues`
 
 Search for issues in SonarQube
 
 **Options:**
 
-| Option            | Type    | Required | Description                                    | Default |
-| ----------------- | ------- | -------- | ---------------------------------------------- | ------- |
-| `--server`, `-s`  | string  | ❌        | SonarQube server URL (or use saved connection) | -       |
-| `--token`, `-t`   | string  | ❌        | Authentication token                           | -       |
-| `--project`, `-p` | string  | ✅        | Project key                                    | -       |
-| `--severity`      | string  | ❌        | Filter by severity                             | -       |
-| `--format`        | string  | ❌        | Output format                                  | `json`  |
-| `--branch`        | string  | ❌        | Branch name                                    | -       |
-| `--pull-request`  | string  | ❌        | Pull request ID                                | -       |
-| `--all`           | boolean | ❌        | Fetch all issues with pagination               | `false` |
-| `--page-size`     | number  | ❌        | Page size for pagination                       | `500`   |
+| Option            | Type    | Required | Description                      | Default |
+| ----------------- | ------- | -------- | -------------------------------- | ------- |
+| `--server`, `-s`  | string  | ❌        | SonarQube server URL             | -       |
+| `--token`, `-t`   | string  | ❌        | Authentication token             | -       |
+| `--project`, `-p` | string  | ✅        | Project key                      | -       |
+| `--severity`      | string  | ❌        | Filter by severity               | -       |
+| `--format`        | string  | ❌        | Output format                    | `json`  |
+| `--branch`        | string  | ❌        | Branch name                      | -       |
+| `--pull-request`  | string  | ❌        | Pull request ID                  | -       |
+| `--all`           | boolean | ❌        | Fetch all issues with pagination | `false` |
+| `--page-size`     | number  | ❌        | Page size for pagination         | `500`   |
 
 **Examples:**
 
 ```bash
-sonar issues search -s https://sonarcloud.io -p my-project -t TOKEN
+sonar list issues -p my-project
 ```
-Search issues in a project
+List issues in a project
 
 ```bash
-sonar issues search -s https://sonarcloud.io -p my-project --format toon
+sonar list issues -p my-project --format toon
 ```
 Output issues in TOON format for AI agents
 
 ```bash
-sonar issues search -s https://sonarcloud.io -p my-project --severity CRITICAL --all
+sonar list issues -p my-project --severity CRITICAL --all
 ```
 Fetch all critical issues
 
 ---
 
-### `sonar projects`
-
-Search for SonarQube projects
-
-#### `sonar projects search`
+#### `sonar list projects`
 
 Search for projects in SonarQube
 
 **Options:**
 
-| Option          | Type   | Required | Description                                                                                   | Default |
-| --------------- | ------ | -------- | --------------------------------------------------------------------------------------------- | ------- |
-| `--query`, `-q` | string | ❌        | An optional search query to filter projects by name (partial match) or key (exact match).     | -       |
-| `--page`, `-p`  | number | ❌        | An optional page number. Defaults to 1.                                                       | `1`     |
-| `--page-size`   | number | ❌        | An optional page size. Must be greater than 0 and less than or equal to 500. Defaults to 500. | `500`   |
+| Option          | Type   | Required | Description                                    | Default |
+| --------------- | ------ | -------- | ---------------------------------------------- | ------- |
+| `--query`, `-q` | string | ❌        | Search query to filter projects by name or key | -       |
+| `--page`, `-p`  | number | ❌        | Page number                                    | `1`     |
+| `--page-size`   | number | ❌        | Page size (1-500)                              | `500`   |
 
 **Examples:**
 
 ```bash
-sonar projects search
+sonar list projects
 ```
 List first 500 accessible projects
 
 ```bash
-sonar projects search -q my-project
+sonar list projects -q my-project
 ```
 Search projects by name or key
 
 ```bash
-sonar projects search --page 2 --page-size 50
+sonar list projects --page 2 --page-size 50
 ```
 Paginate through projects
-
----
-
-### `sonar onboard-agent`
-
-Setup SonarQube integration for AI coding agent
-
-**Options:**
-
-| Option              | Type    | Required | Description                       | Default  |
-| ------------------- | ------- | -------- | --------------------------------- | -------- |
-| `--server`, `-s`    | string  | ❌        | SonarQube server URL              | -        |
-| `--project`, `-p`   | string  | ❌        | Project key                       | -        |
-| `--token`, `-t`     | string  | ❌        | Existing authentication token     | -        |
-| `--org`, `-o`       | string  | ❌        | Organization key (for SonarCloud) | -        |
-| `--non-interactive` | boolean | ❌        | Non-interactive mode (no prompts) | `false`  |
-| `--skip-hooks`      | boolean | ❌        | Skip hooks installation           | `false`  |
-| `--hook-type`       | string  | ❌        | Hook type to install              | `prompt` |
-
-**Examples:**
-
-```bash
-sonar onboard-agent claude -s https://sonarcloud.io -p my-project
-```
-Onboard Claude Code with interactive setup
-
-```bash
-sonar onboard-agent claude --skip-hooks --verbose
-```
-Onboard without installing hooks (verbose mode)
 
 ---
 
@@ -171,16 +167,6 @@ Save authentication token to keychain
 sonar auth login
 ```
 Interactive login for SonarCloud with browser
-
-```bash
-sonar auth login -o my-org
-```
-Interactive login for specific SonarCloud organization
-
-```bash
-sonar auth login -s https://my-sonarqube.io
-```
-Interactive login for custom SonarQube server
 
 ```bash
 sonar auth login -o my-org -t squ_abc123
@@ -234,7 +220,7 @@ Interactively remove all saved tokens
 
 #### `sonar auth status`
 
-Show the current authentication status
+Show active authentication connection with token verification
 
 **Examples:**
 
@@ -245,78 +231,11 @@ Show current server connection and token status
 
 ---
 
-### `sonar pre-commit`
+### `sonar analyze`
 
-Manage pre-commit hooks for secrets detection
+Analyze code for security issues
 
-#### `sonar pre-commit install`
-
-Install Sonar secrets pre-commit hook
-
-**Examples:**
-
-```bash
-sonar pre-commit install
-```
-Install pre-commit and configure SonarSource secrets hook
-
----
-
-#### `sonar pre-commit uninstall`
-
-Uninstall Sonar secrets pre-commit hook
-
-**Examples:**
-
-```bash
-sonar pre-commit uninstall
-```
-Remove pre-commit hook and configuration file
-
----
-
-### `sonar secret`
-
-Manage sonar-secrets binary
-
-#### `sonar secret install`
-
-Install sonar-secrets binary
-
-**Options:**
-
-| Option    | Type    | Required | Description                               | Default |
-| --------- | ------- | -------- | ----------------------------------------- | ------- |
-| `--force` | boolean | ❌        | Force reinstall even if already installed | `false` |
-
-**Examples:**
-
-```bash
-sonar secret install
-```
-Install latest sonar-secrets binary
-
-```bash
-sonar secret install --force
-```
-Reinstall sonar-secrets (overwrite existing)
-
----
-
-#### `sonar secret status`
-
-Check sonar-secrets installation status
-
-**Examples:**
-
-```bash
-sonar secret status
-```
-Check if sonar-secrets is installed and up to date
-
----
-
-#### `sonar secret check`
+#### `sonar analyze secrets`
 
 Scan a file or stdin for hardcoded secrets
 
@@ -330,17 +249,12 @@ Scan a file or stdin for hardcoded secrets
 **Examples:**
 
 ```bash
-sonar secret check --file src/config.ts
+sonar analyze secrets --file src/config.ts
 ```
 Scan a file for hardcoded secrets
 
 ```bash
-sonar secret check --file .env
-```
-Scan environment file for exposed secrets
-
-```bash
-cat .env | sonar secret check --stdin
+cat .env | sonar analyze secrets --stdin
 ```
 Scan stdin for hardcoded secrets
 
@@ -361,6 +275,7 @@ Scan stdin for hardcoded secrets
 | 1    | Error (validation, execution, etc.) |
 
 ---
+
 ## License
 
 Copyright 2026 SonarSource Sàrl.

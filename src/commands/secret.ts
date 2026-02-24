@@ -272,7 +272,7 @@ function logInstallationSuccess(binaryPath: string): void {
     '  sonar-secrets scan <file>',
     '',
     'Check installation status:',
-    '  sonar secret status',
+    '  sonar install secrets --status',
   ]);
 }
 
