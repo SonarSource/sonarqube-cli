@@ -60,6 +60,7 @@ export interface SonarQubeIssue {
 export interface IssuesSearchParams {
   componentKeys?: string;
   projects?: string;
+  organization?: string;
   severities?: string;
   types?: string;
   statuses?: string;
