@@ -8,7 +8,7 @@ import { VERSION } from './version.js';
 import { runCommand } from './lib/run-command.js';
 
 // Constants for argument validation
-const VALID_AGENTS = ['claude', 'gemini', 'codex'] as const;
+const VALID_TOOLS = ['claude', 'gemini', 'codex'] as const;
 const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
 const ANALYZE_ARG_INDEX = 2;
 const ANALYZE_SUBCOMMAND_INDEX = 3;
@@ -42,19 +42,18 @@ install
 
 // Setup SonarQube integration for AI coding agent
 program
-  .command('integrate <agent>')
-  .description('Setup SonarQube integration for AI coding agent')
+  .command('integrate <tool>')
+  .description('Setup SonarQube integration for various tools, like AI coding agents, git and others')
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-p, --project <project>', 'Project key')
   .option('-t, --token <token>', 'Existing authentication token')
   .option('-o, --org <org>', 'Organization key (for SonarCloud)')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-hooks', 'Skip hooks installation')
-  .option('--hook-type <hook-type>', 'Hook type to install', 'prompt')
   .action(async (agent, options) => {
     await runCommand(async () => {
-      if (!VALID_AGENTS.includes(agent)) {
-        throw new Error(`Invalid agent. Must be one of: ${VALID_AGENTS.join(', ')}`);
+      if (!VALID_TOOLS.includes(agent)) {
+        throw new Error(`Invalid tool. Must be one of: ${VALID_TOOLS.join(', ')}`);
       }
       await integrateCommand(agent, options);
     });
