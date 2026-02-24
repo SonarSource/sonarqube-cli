@@ -40,6 +40,7 @@ export class IssuesClient {
 
     if (params.componentKeys) queryParams.componentKeys = params.componentKeys;
     if (params.projects) queryParams.projects = params.projects;
+    if (params.organization) queryParams.organization = params.organization;
     if (params.severities) queryParams.severities = params.severities;
     if (params.types) queryParams.types = params.types;
     if (params.statuses) queryParams.statuses = params.statuses;

@@ -95,6 +95,7 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
 
     const params: IssuesSearchParams = {
       projects: options.project,
+      organization: resolved.orgKey,
       severities: options.severity?.toUpperCase(),
       types: options.type,
       statuses: options.status,
