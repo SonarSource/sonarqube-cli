@@ -17,6 +17,8 @@
     "test:coverage": "bun test ./tests/ --coverage --coverage-reporter=lcov",
     "lint": "eslint src/ tests/",
     "lint:fix": "eslint src/ tests/ --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "validate": "npm run spec:validate && npm run commands:validate",
     "spec:validate": "node build-scripts/validate-spec.js",
