@@ -41,13 +41,11 @@ const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 
 // Regex match group indices
-const REGEX_CMDNAME = 1;
-const REGEX_DESCRIPTION = 2;
-const REGEX_OPTIONS = 3;
-const REGEX_SUBNAME = 1;
-const REGEX_SUBOPTIONS = 3;
 const SHORT_FLAG_INDEX = 1;
 const LONG_FLAG_INDEX = 2;
+
+// How many characters to look back when searching for a variable name before .command(
+const LOOKBACK_WINDOW = 40;
 
 // Load spec
 const specPath = join(rootDir, 'spec.yaml');
@@ -136,69 +134,101 @@ function stripPositionalArgs(name) {
 }
 
 /**
- * Extract command registrations from src/index.ts
+ * Build a map from variable name to full command path.
+ *
+ * Scans for patterns like: const installSecrets = install.command('secrets')
+ * Then resolves the full path by following the chain:
+ *   installSecrets → "install secrets"
+ *   install → "install"
+ *   program → "" (root)
+ */
+function buildVariablePaths(content) {
+  const varPaths = new Map([['program', '']]);
+
+  // Handles both single-line and multiline assignments, e.g.:
+  //   const x = program.command('name')
+  //   const x = program\n  .command('name')
+  const pattern = /const\s+(\w+)\s*=\s*(\w+)\s*\.command\(['"]([^'"]+)['"]\)/g;
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    const [, varName, parentVar, cmdName] = match;
+    const parentPath = varPaths.get(parentVar);
+    if (parentPath !== undefined) {
+      varPaths.set(varName, parentPath ? `${parentPath} ${cmdName}` : cmdName);
+    }
+  }
+
+  return varPaths;
+}
+
+/**
+ * Slice the file at every VAR.command( occurrence.
+ * Each slice contains exactly one command definition.
+ *
+ * Example: for auth.command('login')...auth.command('logout')...
+ *   slice 0: "auth.command('login').description(...).option(...).action(...)"
+ *   slice 1: "auth.command('logout').description(...).action(...)"
+ */
+function sliceAtCommandBoundaries(content) {
+  const slices = [];
+  const positions = [];
+
+  // Scan for .command( occurrences, then look backwards (bounded) for the variable name.
+  // This avoids combining \w+ with \s* in a single regex (S5852).
+  const cmdPattern = /\.command\(/g;
+  let match;
+  while ((match = cmdPattern.exec(content)) !== null) {
+    const lookback = content.slice(Math.max(0, match.index - LOOKBACK_WINDOW), match.index);
+    // Split on non-word chars and take the last non-empty token — avoids regex backtracking (S5852)
+    const tokens = lookback.trimEnd().split(/\W+/);
+    const varName = tokens[tokens.length - 1];
+    if (varName) {
+      const varStart = match.index - varName.length - (lookback.length - lookback.trimEnd().length);
+      positions.push({ index: varStart, varName });
+    }
+  }
+
+  for (let i = 0; i < positions.length; i++) {
+    const start = positions[i].index;
+    const end = i + 1 < positions.length ? positions[i + 1].index : content.length;
+    slices.push({
+      varName: positions[i].varName,
+      text: content.slice(start, end),
+    });
+  }
+
+  return slices;
+}
+
+/**
+ * Extract command registrations from src/index.ts.
+ * Handles arbitrary nesting depth (2-level, 3-level, etc.).
+ *
+ * Strategy:
+ * 1. Build a map: variable name → full command path
+ * 2. Slice the file at every .command( boundary
+ * 3. Slices with .action() are leaf commands; slices without are groups — skip them
  */
 function parseIndexCommands(content) {
   const commands = [];
+  const varPaths = buildVariablePaths(content);
 
-  // Match simple commands: program.command('name')
-  // Pattern limits content length to prevent backtracking vulnerability
-  const simplePattern = /program\s*\.command\(['"]([^'"]+)['"]\)\s*\.description\(['"]([^'"]+)['"]\)([\s\S]{0,10000}?)\.action\(/g;
+  for (const { varName, text } of sliceAtCommandBoundaries(content)) {
+    const parentPath = varPaths.get(varName);
+    if (parentPath === undefined) continue; // unknown variable, skip
 
-  let match;
-  while ((match = simplePattern.exec(content)) !== null) {
-    let name = match[REGEX_CMDNAME];
-    const description = match[REGEX_DESCRIPTION];
-    const optionsBlock = match[REGEX_OPTIONS];
+    // Group commands have no .action() — only leaf commands do
+    if (!text.includes('.action(')) continue;
 
-    // Remove positional arguments from command name
-    name = stripPositionalArgs(name);
+    const nameMatch = /\.command\(['"]([^'"]+)['"]\)/.exec(text);
+    const descMatch = /\.description\(['"]([^'"]+)['"]\)/.exec(text);
+    if (!nameMatch || !descMatch) continue;
 
-    const options = parseOptions(optionsBlock);
+    const cleanName = stripPositionalArgs(nameMatch[1]);
+    const fullName = parentPath ? `${parentPath} ${cleanName}` : cleanName;
+    const options = parseOptions(text);
 
-    commands.push({ name, description, options });
-  }
-
-  // Match subcommands: const daemon = program.command('daemon')
-  // daemon.command('start')
-  const subcommandGroupPattern = /const\s+(\w+)\s*=\s*program\s*\.command\(['"]([^'"]+)['"]\)/g;
-
-  while ((match = subcommandGroupPattern.exec(content)) !== null) {
-    const varName = match[REGEX_CMDNAME];
-    const groupName = match[REGEX_DESCRIPTION];
-
-    // Find subcommands for this group
-    // Escape special regex characters (excluding brackets which are already handled)
-    const specialChars = '.*+?^${}()|\\';
-    let escapedVarName = '';
-    for (const char of varName) {
-      if (specialChars.includes(char)) {
-        escapedVarName += '\\' + char;
-      } else {
-        escapedVarName += char;
-      }
-    }
-
-    const subPattern = new RegExp(
-      escapedVarName +
-      String.raw`\s*\.command\(['"]([^'"]+)['"]\)\s*\.description\(['"]([^'"]+)['"]\)([\s\S]{0,10000}?)\.action\(`,
-      'g'
-    );
-
-    let subMatch;
-    while ((subMatch = subPattern.exec(content)) !== null) {
-      const subName = subMatch[REGEX_SUBNAME];
-      const description = subMatch[REGEX_DESCRIPTION];
-      const optionsBlock = subMatch[REGEX_SUBOPTIONS];
-
-      const options = parseOptions(optionsBlock);
-
-      commands.push({
-        name: `${groupName} ${subName}`,
-        description,
-        options
-      });
-    }
+    commands.push({ name: fullName.trim(), description: descMatch[1], options });
   }
 
   return commands;
@@ -284,15 +314,15 @@ console.log('🔍 Validating commands...\n');
 // Check 1: All spec commands are registered in index.ts
 console.log('1️⃣  Checking spec commands are registered...');
 for (const specCmd of specCommands) {
+  // Group commands are structural only — they don't need a registered action
+  if (specCmd.isGroup) continue;
+
   const indexCmd = indexCommands.find(c => c.name === specCmd.name);
 
   if (!indexCmd) {
     errors.push(`Command "${specCmd.name}" is defined in spec but not registered in src/index.ts`);
     continue;
   }
-
-  // Skip option checks for group commands
-  if (specCmd.isGroup) continue;
 
   // Check options match
   for (const specOpt of specCmd.options) {
@@ -357,25 +387,27 @@ for (const specCmd of specCommands) {
   }
 }
 
-// Check 4: Verify imports in index.ts
+// Check 4: Verify handler modules are imported in index.ts
 console.log('4️⃣  Checking imports...');
-for (const specCmd of specCommands) {
-  // Skip group commands without handlers
-  if (!specCmd.handler) continue;
+// Collect unique handler paths (multiple commands can share a handler, e.g. auth.ts)
+const handlerPaths = new Set(
+  specCommands
+    .filter(cmd => cmd.handler)
+    .map(cmd => cmd.handler)
+);
 
-  // Extract function name from command name
-  // For subcommands like "daemon start", use full name: daemonStartCommand
-  // For simple commands like "status", use: statusCommand
-  const nameParts = specCmd.name.split(' ');
-  const functionName = nameParts
-    .map((part, i) => {
-      const camelPart = toCamelCase(part);
-      return i === 0 ? camelPart : camelPart.charAt(0).toUpperCase() + camelPart.slice(1);
-    })
-    .join('') + 'Command';
+for (const handlerPath of handlerPaths) {
+  // Convert spec handler path (./src/commands/foo.ts) to import path (./commands/foo.js)
+  const importPath = handlerPath
+    .replace(/^\.\/src\//, './')
+    .replace(/\.ts$/, '.js');
 
-  if (!indexContent.includes(`import { ${functionName} }`)) {
-    errors.push(`Missing import for ${functionName} in src/index.ts`);
+  // Check that the handler module is imported in index.ts
+  // Use regex to handle both single and multi-named imports
+  const escapedPath = importPath.replaceAll('.', String.raw`\.`);
+  const importPattern = new RegExp(String.raw`from ['"]${escapedPath}['"]`);
+  if (!importPattern.test(indexContent)) {
+    errors.push(`Handler module not imported in src/index.ts: ${importPath}`);
   }
 }
 

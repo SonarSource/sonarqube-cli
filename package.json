@@ -1,14 +1,14 @@
 {
   "name": "sonarqube-cli",
   "type": "module",
-  "version": "0.1.136",
+  "version": "0.1.142",
   "description": "SonarQube CLI",
 
   "bin": {
     "sonar": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npm run validate && tsc",
     "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
     "setup": "bash build-scripts/setup.sh",
     "dev": "bun run src/index.ts",
