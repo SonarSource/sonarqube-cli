@@ -44,6 +44,9 @@ const rootDir = join(__dirname, '..');
 const SHORT_FLAG_INDEX = 1;
 const LONG_FLAG_INDEX = 2;
 
+// How many characters to look back when searching for a variable name before .command(
+const LOOKBACK_WINDOW = 40;
+
 // Load spec
 const specPath = join(rootDir, 'spec.yaml');
 const specContent = readFileSync(specPath, 'utf8');
@@ -168,12 +171,21 @@ function buildVariablePaths(content) {
  */
 function sliceAtCommandBoundaries(content) {
   const slices = [];
-  const pattern = /(\w+)\.command\(/g;
   const positions = [];
-  let match;
 
-  while ((match = pattern.exec(content)) !== null) {
-    positions.push({ index: match.index, varName: match[1] });
+  // Scan for .command( occurrences, then look backwards (bounded) for the variable name.
+  // This avoids combining \w+ with \s* in a single regex (S5852).
+  const cmdPattern = /\.command\(/g;
+  let match;
+  while ((match = cmdPattern.exec(content)) !== null) {
+    const lookback = content.slice(Math.max(0, match.index - LOOKBACK_WINDOW), match.index);
+    // Split on non-word chars and take the last non-empty token — avoids regex backtracking (S5852)
+    const tokens = lookback.trimEnd().split(/\W+/);
+    const varName = tokens[tokens.length - 1];
+    if (varName) {
+      const varStart = match.index - varName.length - (lookback.length - lookback.trimEnd().length);
+      positions.push({ index: varStart, varName });
+    }
   }
 
   for (let i = 0; i < positions.length; i++) {
@@ -392,7 +404,8 @@ for (const handlerPath of handlerPaths) {
 
   // Check that the handler module is imported in index.ts
   // Use regex to handle both single and multi-named imports
-  const importPattern = new RegExp(String.raw`from ['"]${importPath.replaceAll('.', String.raw`\.`)}['"]`);
+  const escapedPath = importPath.replaceAll('.', String.raw`\.`);
+  const importPattern = new RegExp(String.raw`from ['"]${escapedPath}['"]`);
   if (!importPattern.test(indexContent)) {
     errors.push(`Handler module not imported in src/index.ts: ${importPath}`);
   }
