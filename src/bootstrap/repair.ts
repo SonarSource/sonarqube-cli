@@ -33,7 +33,7 @@ export async function runRepair(
   serverURL: string,
   projectRoot: string,
   healthResult: HealthCheckResult,
-  projectKey?: string,
+  _projectKey?: string,
   organization?: string,
 ): Promise<void> {
   let token = '';

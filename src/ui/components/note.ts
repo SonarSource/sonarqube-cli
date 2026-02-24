@@ -28,7 +28,6 @@ import type { NoteOptions, ColorFn } from '../types.js';
 const MIN_WIDTH = 40;
 const MAX_WIDTH = 80;
 const TITLE_BORDER_PREFIX = '┌─ ';
-const TITLE_PADDING = TITLE_BORDER_PREFIX.length; // '┌─ ' = 3 chars
 
 function getWidth(): number {
   const cols = isTTY ? getColumns(process.stdout) : MIN_WIDTH;
