@@ -18,8 +18,8 @@ export const APP_NAME = 'sonarqube-cli';
 // CLI data directory
 // ---------------------------------------------------------------------------
 
-/** Root directory for all CLI data: ~/.sonarqube-cli */
-export const CLI_DIR = join(homedir(), `.${APP_NAME}`);
+/** Root directory for all CLI data: ~/.sonarqube-cli (override via SONAR_CLI_DIR env var in test environment) */
+export const CLI_DIR = process.env.SONAR_CLI_DIR ?? join(homedir(), `.${APP_NAME}`);
 
 // ---------------------------------------------------------------------------
 // State

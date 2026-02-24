@@ -4,12 +4,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform } from 'node:os';
 import logger from '../lib/logger.js';
-import { success } from '../ui/index.js';
 import {
-  getHookPromptTemplateUnix,
-  getHookCLITemplateUnix,
-  getHookPromptTemplateWindows,
-  getHookCLITemplateWindows,
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
@@ -20,8 +15,6 @@ const CLAUDE_DIR = '.claude';
 const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
 
-export type HookType = 'prompt' | 'cli';
-
 interface HookConfig {
   matcher: string;
   hooks: Array<{
@@ -31,17 +24,10 @@ interface HookConfig {
   }>;
 }
 
-interface PermissionsConfig {
-  allow: string[];
-  [key: string]: unknown;
-}
-
 interface ClaudeSettings {
   hooks?: {
     [eventType: string]: HookConfig[];
   };
-  permissions?: PermissionsConfig;
-  mcpServers?: unknown;
   [key: string]: unknown;
 }
 
@@ -60,119 +46,6 @@ function getScriptExtension(): string {
 }
 
 /**
- * Install hooks for SonarQube analysis (cross-platform)
- */
-export async function installHooks(
-  projectRoot: string,
-  hookType: HookType = 'prompt'
-): Promise<void> {
-  const claudePath = join(projectRoot, CLAUDE_DIR);
-
-  // Create .claude directory
-  if (!existsSync(claudePath)) {
-    mkdirSync(claudePath, { recursive: true });
-  }
-
-  // Create hooks subdirectory
-  const hooksPath = join(claudePath, HOOKS_DIR);
-  if (!existsSync(hooksPath)) {
-    mkdirSync(hooksPath, { recursive: true });
-  }
-
-  // Install hook script with platform-specific extension
-  const extension = getScriptExtension();
-  const scriptName = `sonar-prompt${extension}`;
-  const scriptPath = join(hooksPath, scriptName);
-  const scriptContent = getHookScriptContent(hookType);
-
-  const fs = await import('node:fs/promises');
-
-  if (getPlatform() === 'unix') {
-    // Unix: set executable permissions
-    await fs.writeFile(scriptPath, scriptContent, { mode: 0o755 });
-  } else {
-    // Windows: no special permissions
-    await fs.writeFile(scriptPath, scriptContent);
-  }
-
-  success(`Installed hook script: ${scriptPath}`);
-
-  // Configure hooks in settings.json
-  await configureHooksSettings(claudePath, scriptName);
-
-  success('Hooks configured');
-}
-
-/**
- * Get hook script content based on type and platform
- */
-function getHookScriptContent(hookType: HookType): string {
-  const isWindows = getPlatform() === 'windows';
-
-  if (hookType === 'cli') {
-    return isWindows ? getHookCLITemplateWindows() : getHookCLITemplateUnix();
-  }
-  return isWindows ? getHookPromptTemplateWindows() : getHookPromptTemplateUnix();
-}
-
-/**
- * Configure hooks in settings.json (cross-platform paths)
- */
-async function configureHooksSettings(
-  claudePath: string,
-  scriptName: string
-): Promise<void> {
-  const settingsPath = join(claudePath, SETTINGS_FILE);
-
-  let settings: ClaudeSettings;
-
-  // Load existing settings or create new
-  if (existsSync(settingsPath)) {
-    const fs = await import('node:fs/promises');
-    const data = await fs.readFile(settingsPath, 'utf-8');
-    settings = JSON.parse(data);
-  } else {
-    settings = { hooks: {} };
-  }
-
-  // Remove old project-specific MCP configuration (moved to global config)
-  if (settings.mcpServers) {
-    delete settings.mcpServers;
-  }
-
-  // Ensure hooks exist
-  settings.hooks ??= {};
-
-  // Build cross-platform command path using path.join normalization
-  const commandPath = join('.claude', 'hooks', scriptName);
-
-  // Add PostToolUse hook with normalized path
-  settings.hooks.PostToolUse = [
-    {
-      matcher: 'Edit|Write',
-      hooks: [
-        {
-          type: 'command',
-          command: commandPath,
-          timeout: 120
-        }
-      ]
-    }
-  ];
-
-  // Ensure permissions section exists
-  settings.permissions ??= {allow: []};
-  if (!Array.isArray(settings.permissions.allow)) {
-    settings.permissions.allow = [];
-  }
-
-  // Save settings
-  const fs = await import('node:fs/promises');
-  const data = JSON.stringify(settings, null, 2);
-  await fs.writeFile(settingsPath, data, 'utf-8');
-}
-
-/**
  * Check if hooks are installed
  */
 export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
@@ -187,8 +60,8 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
     const data = await fs.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(data);
 
-    // Check if PostToolUse hook is actually configured
-    return !!(settings.hooks?.PostToolUse && Array.isArray(settings.hooks.PostToolUse) && settings.hooks.PostToolUse.length > 0);
+    // Check if PreToolUse hook is configured (secret scanning hooks)
+    return !!(settings.hooks?.PreToolUse && Array.isArray(settings.hooks.PreToolUse) && settings.hooks.PreToolUse.length > 0);
   } catch {
     return false;
   }
@@ -289,4 +162,3 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
     // Non-critical - don't fail if hooks installation fails
   }
 }
-

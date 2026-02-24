@@ -13,6 +13,7 @@ import { text, blank, success, error, print } from '../ui/index.js';
 
 const SCAN_TIMEOUT_MS = 30000;
 const STDIN_READ_TIMEOUT_MS = 5000;
+const SECRET_SCAN_POSITIVE_EXIT_CODE = 51;
 
 /**
  * Check command: sonar secret check [--file <path>] [--stdin]
@@ -324,7 +325,8 @@ function handleScanFailure(
     print(result.stdout);
   }
   blank();
-  process.exit(exitCode);
+  // Binary exit 1 = secrets found — remap to 51 so hooks can distinguish from generic errors
+  process.exit(exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode);
 }
 
 function handleScanError(err: unknown): void {

@@ -6,21 +6,19 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setMockUi } from '../../src/ui';
 
-const HOOK_TIMEOUT_SECONDS = 120;
-import { installHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
+import { installSecretScanningHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
 
 describe('Hooks', () => {
 
 beforeEach(() => { setMockUi(true); });
 afterEach(() => { setMockUi(false); });
 
-it('hooks: install prompt hook', async () => {
+it('hooks: install secret scanning hooks creates directory structure', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
-    // Install hooks
-    await installHooks(testDir, 'prompt');
+    await installSecretScanningHooks(testDir);
 
     // Verify .claude directory exists
     const claudeDir = join(testDir, '.claude');
@@ -30,48 +28,48 @@ it('hooks: install prompt hook', async () => {
     const hooksDir = join(claudeDir, 'hooks');
     expect(existsSync(hooksDir)).toBe(true);
 
-    // Verify script file exists
-    const scriptPath = join(hooksDir, 'sonar-prompt.sh');
-    expect(existsSync(scriptPath)).toBe(true);
+    // Verify sonar-secrets scripts directory exists
+    const scriptsDir = join(hooksDir, 'sonar-secrets', 'scripts');
+    expect(existsSync(scriptsDir)).toBe(true);
 
-    // Verify script is executable
-    const stats = statSync(scriptPath);
+    // Verify pretool hook script exists and is executable
+    const preToolScript = join(scriptsDir, 'pretool-secrets.sh');
+    expect(existsSync(preToolScript)).toBe(true);
+    const stats = statSync(preToolScript);
     const isExecutable = (stats.mode & 0o111) !== 0;
     expect(isExecutable).toBe(true);
 
-    // Verify script content
-    const content = readFileSync(scriptPath, 'utf-8');
-    expect(content.includes('#!/bin/bash')).toBe(true);
-    expect(content.includes('SonarQube')).toBe(true);
+    // Verify prompt hook script exists
+    const promptScript = join(scriptsDir, 'prompt-secrets.sh');
+    expect(existsSync(promptScript)).toBe(true);
 
-    // Verify settings.json exists
+    // Verify settings.json exists with PreToolUse hook
     const settingsPath = join(claudeDir, 'settings.json');
     expect(existsSync(settingsPath)).toBe(true);
 
-    // Verify settings content
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
     expect(settings.hooks).toBeDefined();
-    expect(settings.hooks.PostToolUse).toBeDefined();
-    expect(settings.hooks.PostToolUse.length).toBe(1);
-    expect(settings.hooks.PostToolUse[0].matcher).toBe('Edit|Write');
-    expect(settings.hooks.PostToolUse[0].hooks[0].timeout).toBe(HOOK_TIMEOUT_SECONDS);
+    expect(settings.hooks.PreToolUse).toBeDefined();
+    expect(settings.hooks.PreToolUse.length).toBe(1);
+    expect(settings.hooks.PreToolUse[0].matcher).toBe('Read');
+    expect(settings.hooks.UserPromptSubmit).toBeDefined();
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
 });
 
-it('hooks: install CLI hook', async () => {
-  const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-cli-' + Date.now());
+it('hooks: pretool script contains sonar analyze and exit code 51', async () => {
+  const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-content-' + Date.now());
   mkdirSync(testDir, { recursive: true });
 
   try {
-    await installHooks(testDir, 'cli');
+    await installSecretScanningHooks(testDir);
 
-    const scriptPath = join(testDir, '.claude', 'hooks', 'sonar-prompt.sh');
+    const scriptPath = join(testDir, '.claude', 'hooks', 'sonar-secrets', 'scripts', 'pretool-secrets.sh');
     const content = readFileSync(scriptPath, 'utf-8');
 
-    // CLI hook should run sonarqube-cli automatically
-    expect(content.includes('sonar verify')).toBe(true);
+    expect(content.includes('sonar analyze --file')).toBe(true);
+    expect(content.includes('exit_code -eq 51')).toBe(true);
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -87,7 +85,7 @@ it('hooks: areHooksInstalled check', async () => {
     expect(installed).toBe(false);
 
     // Install hooks
-    await installHooks(testDir, 'prompt');
+    await installSecretScanningHooks(testDir);
 
     // Now should be installed
     installed = await areHooksInstalled(testDir);
@@ -97,22 +95,16 @@ it('hooks: areHooksInstalled check', async () => {
   }
 });
 
-it('hooks: overwrite existing hooks', async () => {
+it('hooks: overwrite existing hooks preserves unrelated settings', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-overwrite-' + Date.now());
   const claudeDir = join(testDir, '.claude');
   mkdirSync(claudeDir, { recursive: true });
 
   try {
-    // Create existing settings.json with other hooks
+    // Create existing settings.json with other data
     const existingSettings = {
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: '.*',
-            hooks: [{ type: 'command', command: 'echo test', timeout: 10 }]
-          }
-        ]
-      }
+      permissions: { allow: ['Bash'] },
+      someOtherSetting: true
     };
 
     const fs = await import('node:fs/promises');
@@ -122,17 +114,17 @@ it('hooks: overwrite existing hooks', async () => {
     );
 
     // Install hooks
-    await installHooks(testDir, 'prompt');
+    await installSecretScanningHooks(testDir);
 
     // Read updated settings
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf-8'));
 
-    // Should have PostToolUse hook
-    expect(settings.hooks.PostToolUse).toBeDefined();
-
-    // installHooks does not modify PreToolUse — existing hooks are preserved
+    // Should have PreToolUse and UserPromptSubmit hooks
     expect(settings.hooks.PreToolUse).toBeDefined();
-    expect(settings.hooks.PreToolUse[0].matcher).toBe('.*');
+    expect(settings.hooks.UserPromptSubmit).toBeDefined();
+
+    // Existing data should be preserved
+    expect(settings.someOtherSetting).toBe(true);
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }

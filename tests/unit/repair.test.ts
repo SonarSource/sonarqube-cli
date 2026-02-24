@@ -40,48 +40,33 @@ describe('Repair Orchestrator', () => {
     }
   });
 
-  it('creates .claude directory when hooks need installing', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org', 'prompt');
+  it('creates .claude directory when repair runs', async () => {
+    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org');
 
     expect(existsSync(join(testDir, '.claude'))).toBe(true);
   });
 
-  it('creates hooks directory structure when hooksInstalled is false', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org', 'prompt');
+  it('creates hooks directory structure', async () => {
+    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org');
 
     expect(existsSync(join(testDir, '.claude', 'hooks'))).toBe(true);
   });
 
   it('creates sonar-secrets hooks directory', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org', 'prompt');
+    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org');
 
     expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'scripts'))).toBe(true);
   });
 
   it('installs secret scanning hooks even when hooksInstalled is true', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthAllGood, 'test_key', 'test-org', 'prompt');
+    await runRepair('https://sonarcloud.io', testDir, healthAllGood, 'test_key', 'test-org');
 
     expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'scripts'))).toBe(true);
   });
 
-  it('installs prompt hook script when hookType is prompt', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'key', 'org', 'prompt');
+  it('does not create old sonar-prompt.sh verify hook', async () => {
+    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'key', 'org');
 
-    const scriptPath = join(testDir, '.claude', 'hooks', 'sonar-prompt.sh');
-    expect(existsSync(scriptPath)).toBe(true);
-  });
-
-  it('installs cli hook script when hookType is cli', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'key', 'org', 'cli');
-
-    const scriptPath = join(testDir, '.claude', 'hooks', 'sonar-prompt.sh');
-    expect(existsSync(scriptPath)).toBe(true);
-  });
-
-  it('skips hook installation when hooksInstalled is true', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthAllGood, 'test_key', 'test-org');
-
-    // sonar-prompt.sh should NOT be created since hooks are already installed
     expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-prompt.sh'))).toBe(false);
   });
 });
