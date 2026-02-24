@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.1.136",
   "description": "SonarQube CLI",
+
   "bin": {
     "sonar": "./dist/index.js"
   },

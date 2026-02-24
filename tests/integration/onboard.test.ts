@@ -170,7 +170,7 @@ it('integration: auth login process exits after token delivered to loopback serv
   //   5. Assert the process exits within 5 seconds
   //
   // Exit code will be 1 (token validation against fake server fails with DNS error).
-  // That is expected — what matters is the process exits, not hangs for 50 seconds.
+  // That is expected — what matters is the process exits.
 
   const fakeServer = `https://sonar-exit-test-${Date.now()}.invalid`;
 
@@ -214,7 +214,7 @@ it('integration: auth login process exits after token delivered to loopback serv
     body: JSON.stringify({ token: 'squ_integration_test_token' }),
   });
 
-  // Process must exit within 5 seconds — not after the 50s token timeout
+  // Process must exit within 5 seconds
   const exitCode = await Promise.race([
     proc.exited,
     new Promise<never>((_, reject) =>

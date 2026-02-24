@@ -10,7 +10,6 @@ import logger from '../lib/logger.js';
 import { warn, print, pressEnterPrompt, isMockActive } from '../ui/index.js';
 import { green, dim } from '../ui/colors.js';
 
-const PORT_TIMEOUT_MS = 50000;
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const MAX_POST_BODY_BYTES = 4096;
@@ -229,27 +228,20 @@ export function createRequestHandler(onToken: (token: string) => void) {
 /**
  * Interactive wait: resolves when the loopback server delivers the token
  * OR the user manually pastes one and presses Enter.
- * Rejects on timeout (50s) or Ctrl+C cancellation.
+ * Rejects on Ctrl+C cancellation.
  */
 async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const promptAbort = new AbortController();
     let settled = false;
-    let timeoutId: ReturnType<typeof setTimeout>;
 
     function settle(token?: string, err?: Error): void {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutId);
       promptAbort.abort();
       if (err) reject(err);
       else resolve(token!);
     }
-
-    timeoutId = setTimeout(
-      () => settle(undefined, new Error('Timeout waiting for token (50 seconds)')),
-      PORT_TIMEOUT_MS
-    );
 
     serverTokenPromise.then(token => settle(token)).catch(() => {});
 
@@ -312,21 +304,8 @@ export async function generateTokenViaBrowser(
   let token: string | undefined;
   try {
     if (isMockActive() || process.env['CI'] === 'true') {
-      // Non-interactive: wait for server token with timeout
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      try {
-        token = await Promise.race([
-          tokenPromise,
-          new Promise<string>((_, reject) => {
-            timeoutId = setTimeout(
-              () => reject(new Error('Timeout waiting for token (50 seconds)')),
-              PORT_TIMEOUT_MS
-            );
-          }),
-        ]);
-      } finally {
-        clearTimeout(timeoutId);
-      }
+      // Non-interactive: wait for server token
+      token = await tokenPromise;
     } else {
       // Interactive: race between browser delivery and manual paste
       token = await waitForTokenInteractive(tokenPromise);

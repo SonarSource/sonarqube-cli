@@ -178,7 +178,7 @@ describe('Auth Helper Functions', () => {
 // When SonarCloud's page delivers the token, the browser makes a cross-origin
 // POST to the loopback server. Browsers always send an OPTIONS preflight first.
 // If the preflight response does not include POST in Access-Control-Allow-Methods,
-// the browser blocks the actual POST and the token never arrives → 50s hang.
+// the browser blocks the actual POST and the token never arrives.
 //
 // Node.js fetch (used in other tests) does NOT send CORS preflights — only real
 // browsers do. This describe block catches that gap.
@@ -212,7 +212,7 @@ describe('generateTokenViaBrowser', () => {
 
   // Simulates real browser CORS flow: OPTIONS preflight → POST.
   // If the preflight doesn't allow POST, openBrowserFn throws immediately
-  // (fail-fast, no 50s hang) rather than silently never delivering the token.
+  // (fail-fast) rather than silently never delivering the token.
   it('returns token delivered via POST to loopback server (with CORS preflight)', async () => {
     const mockOpenBrowser = async (authURL: string): Promise<void> => {
       const url = new URL(authURL);

@@ -255,7 +255,7 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 1 when browser authentication fails', async () => {
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockRejectedValue(new Error('Timeout waiting for token (50 seconds)'));
+    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockRejectedValue(new Error('Authentication cancelled'));
     try {
       await authLoginCommand({ server: 'https://sonar.example.com' });
       expect(mockExit).toHaveBeenCalledWith(1);
