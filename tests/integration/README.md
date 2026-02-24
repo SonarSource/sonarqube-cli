@@ -48,7 +48,7 @@ npm run test:all
 ### Automatic Binary Download
 
 Before running sonar-secrets integration tests:
-- Checks for binary in `~/.sonar-cli/bin/sonar-secrets`
+- Checks for binary in `~/.sonar/sonarqube-cli/bin/sonar-secrets`
 - If missing - automatically downloads and installs from GitHub releases
 - Uses real binary from official releases
 

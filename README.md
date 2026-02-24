@@ -1,12 +1,14 @@
-# sonar
+# sonar - CLI Documentation
 
 SonarQube CLI
 
-## Installation
+**Generated:** 2026-02-24T13:48:31.472Z
 
-```bash
-brew install local/sonar/sonar
-```
+---
+
+## State Management
+
+See [State Management](./docs/state-management.md) for more information.
 
 ## Commands
 
@@ -41,6 +43,7 @@ Reinstall sonar-secrets (overwrite existing)
 sonar install secrets --status
 ```
 Check if sonar-secrets is installed and up to date
+
 
 ---
 
@@ -112,6 +115,46 @@ sonar list issues -p my-project --severity CRITICAL --all
 ```
 Fetch all critical issues
 
+
+---
+
+### `sonar projects`
+
+Search for SonarQube projects
+
+
+#### Subcommands:
+
+##### `sonar projects search`
+
+Search for projects in SonarQube
+
+**Options:**
+
+| Option | Type | Required | Description | Default |
+|--------|------|----------|-------------|---------|
+| `--query`, `-q` | string | ❌ | An optional search query to filter projects by name (partial match) or key (exact match). | - |
+| `--page`, `-p` | number | ❌ | An optional page number. Defaults to 1. | `1` |
+| `--page-size` | number | ❌ | An optional page size. Must be greater than 0 and less than or equal to 500. Defaults to 500. | `500` |
+
+**Examples:**
+
+```bash
+sonar projects search
+```
+List first 500 accessible projects
+
+```bash
+sonar projects search -q my-project
+```
+Search projects by name or key
+
+```bash
+sonar projects search --page 2 --page-size 50
+```
+Paginate through projects
+
+
 ---
 
 #### `sonar list projects`
@@ -143,13 +186,17 @@ sonar list projects --page 2 --page-size 50
 ```
 Paginate through projects
 
+
 ---
 
 ### `sonar auth`
 
 Manage authentication tokens and credentials
 
-#### `sonar auth login`
+
+#### Subcommands:
+
+##### `sonar auth login`
 
 Save authentication token to keychain
 
@@ -178,9 +225,7 @@ sonar auth login -s https://my-sonarqube.io --with-token squ_def456
 ```
 Non-interactive login for custom server with token
 
----
-
-#### `sonar auth logout`
+##### `sonar auth logout`
 
 Remove authentication token from keychain
 
@@ -203,9 +248,7 @@ sonar auth logout -s https://my-sonarqube.io
 ```
 Remove token for custom SonarQube server
 
----
-
-#### `sonar auth purge`
+##### `sonar auth purge`
 
 Remove all authentication tokens from keychain
 
@@ -216,9 +259,7 @@ sonar auth purge
 ```
 Interactively remove all saved tokens
 
----
-
-#### `sonar auth status`
+##### `sonar auth status`
 
 Show active authentication connection with token verification
 
@@ -228,6 +269,7 @@ Show active authentication connection with token verification
 sonar auth status
 ```
 Show current server connection and token status
+
 
 ---
 
@@ -258,21 +300,23 @@ cat .env | sonar analyze secrets --stdin
 ```
 Scan stdin for hardcoded secrets
 
+
 ---
+
 
 ## Option Types
 
-- `string` — text value (e.g. `--server https://sonarcloud.io`)
-- `boolean` — flag (e.g. `--verbose`)
-- `number` — numeric value (e.g. `--page-size 100`)
-- `array` — multiple values (e.g. `--tags tag1 tag2`)
+- `string` - Text value (e.g., `--server https://sonarcloud.io`)
+- `boolean` - Flag (e.g., `--verbose`)
+- `number` - Numeric value (e.g., `--page-size 100`)
+- `array` - Multiple values (e.g., `--tags tag1 tag2`)
 
 ## Exit Codes
 
-| Code | Meaning                           |
-|------|-----------------------------------|
-| 0    | Success                           |
-| 1    | Error (validation, execution, etc.) |
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Error (validation, execution, etc.) |
 
 ---
 

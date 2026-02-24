@@ -20,7 +20,7 @@
 
 /**
  * State management types for sonarqube-cli
- * Manages persistent state in ~/.sonarqube-cli/state.json
+ * Manages persistent state in ~/.sonar/sonarqube-cli/state.json
  */
 
 /**
@@ -44,7 +44,7 @@ export type HookType = 'PreToolUse' | 'PostToolUse' | 'SessionStart';
 export interface AuthConnection {
   /** Unique identifier hash based on serverUrl and orgKey */
   id: string;
-  /** Server type: SonarCloud or on-premise instance */
+  /** Server type: SonarQube Cloud or Server instance */
   type: ServerType;
   /** Server URL */
   serverUrl: string;
@@ -167,7 +167,7 @@ export interface ToolsState {
 }
 
 /**
- * Complete state structure for ~/.sonarqube-cli/state.json
+ * Complete state structure for ~/.sonar/sonarqube-cli/state.json
  */
 export interface CliState {
   /** State format version */

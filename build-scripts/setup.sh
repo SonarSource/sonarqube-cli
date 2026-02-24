@@ -10,7 +10,7 @@ BINARY_NAME="sonarqube-cli"
 INSTALL_NAME="sonar"
 
 # Install to user directory (no sudo needed)
-INSTALL_DIR="$HOME/.sonarqube-cli/bin"
+INSTALL_DIR="$HOME/.sonar/sonarqube-cli/bin"
 
 echo "🚀 Installing Sonar CLI..."
 echo ""
@@ -96,7 +96,7 @@ echo "🔧 Configuring shell..."
 # Detect shell and config file
 SHELL_NAME="$(basename "$SHELL")"
 SHELL_CONFIG=""
-PATH_EXPORT="export PATH=\"\$HOME/.sonarqube-cli/bin:\$PATH\""
+PATH_EXPORT="export PATH=\"\$HOME/.sonar/sonarqube-cli/bin:\$PATH\""
 
 case "$SHELL_NAME" in
     zsh)
@@ -112,7 +112,7 @@ case "$SHELL_NAME" in
         ;;
     fish)
         SHELL_CONFIG="$HOME/.config/fish/config.fish"
-        PATH_EXPORT="fish_add_path \$HOME/.sonarqube-cli/bin"
+        PATH_EXPORT="fish_add_path \$HOME/.sonar/sonarqube-cli/bin"
         ;;
     *)
         echo "⚠️  Shell '$SHELL_NAME' not automatically supported."
@@ -123,7 +123,7 @@ esac
 # Check if PATH already configured
 PATH_CONFIGURED=false
 if [[ -n "$SHELL_CONFIG" ]] && [[ -f "$SHELL_CONFIG" ]] \
-    && grep -q ".sonarqube-cli/bin" "$SHELL_CONFIG" 2>/dev/null; then
+    && grep -q ".sonar/sonarqube-cli/bin" "$SHELL_CONFIG" 2>/dev/null; then
     PATH_CONFIGURED=true
     echo "✅ Shell already configured ($SHELL_CONFIG)"
 fi
@@ -161,5 +161,5 @@ fi
 
 echo ""
 echo "To uninstall, run:"
-echo "  rm -rf ~/.sonarqube-cli"
+echo "  rm -rf ~/.sonar/sonarqube-cli"
 echo "  (and remove the PATH line from $SHELL_CONFIG)"

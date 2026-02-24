@@ -181,7 +181,7 @@ export default function registerPlopGenerators(plop) {
     actions: [
       {
         type: 'add',
-        path: 'docs/CLI.md',
+        path: 'README.md',
         templateFile: 'plop-templates/docs.md.hbs',
         data: { spec, generatedAt: new Date().toISOString() },
         force: true

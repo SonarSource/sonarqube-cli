@@ -43,7 +43,7 @@
       {
         "name": "sonar-secrets",
         "version": "2.38.0.10279",
-        "path": "/Users/kirill.knize/.sonar-cli/bin/sonar-secrets",
+        "path": "/Users/john.doe/.sonar/sonarqube-cli/bin/sonar-secrets",
         "installedAt": "2026-02-18T20:08:34.327Z",
         "installedByCliVersion": "0.2.109"
       }
