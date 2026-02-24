@@ -4,11 +4,19 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$SonarVersion = '2.40.1.10655'
-$InstallDir   = Join-Path $env:LOCALAPPDATA 'sonarqube-cli\bin'
-$BinaryName   = 'sonar.exe'
-$BaseUrl      = 'https://binaries.sonarsource.com/CommercialDistribution/sonar-secrets'
-$Platform     = 'windows-x86-64'
+$InstallDir = Join-Path $env:LOCALAPPDATA 'sonarqube-cli\bin'
+$BinaryName = 'sonar.exe'
+$BaseUrl    = 'https://binaries.sonarsource.com/CommercialDistribution/sonar-secrets'
+$Platform   = 'windows-x86-64'
+
+function Resolve-LatestVersion {
+    $Version = (Invoke-WebRequest -Uri "$BaseUrl/latest-version.txt" -UseBasicParsing).Content.Trim()
+    if (-not $Version) {
+        Write-Error 'Could not determine the latest version.'
+        exit 1
+    }
+    $Version
+}
 
 function Get-RemoteFile {
     param(
@@ -47,6 +55,10 @@ function Add-ToUserPath {
 }
 
 # --- Main ---
+
+Write-Host 'Fetching latest version...'
+$SonarVersion = Resolve-LatestVersion -Platform $Platform
+Write-Host "Latest version: $SonarVersion"
 
 $Filename     = "sonar-secrets-$SonarVersion-$Platform.exe"
 $Url          = "$BaseUrl/$Filename"

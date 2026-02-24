@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SONAR_VERSION="2.40.1.10655"
 INSTALL_DIR="$HOME/.local/share/sonarqube-cli/bin"
 BINARY_NAME="sonar"
 
@@ -22,6 +21,26 @@ detect_platform() {
       exit 1
       ;;
   esac
+}
+
+resolve_latest_version() {
+  local version
+  if command -v curl &>/dev/null; then
+    version="$(curl -fsSL "$BASE_URL/latest-version.txt")"
+  elif command -v wget &>/dev/null; then
+    version="$(wget -qO- "$BASE_URL/latest-version.txt")"
+  else
+    echo "Error: neither curl nor wget is available. Please install one and retry." >&2
+    exit 1
+  fi
+
+  version="$(printf '%s' "$version" | tr -d '[:space:]')"
+  if [[ -z "$version" ]]; then
+    echo "Error: could not determine the latest version." >&2
+    exit 1
+  fi
+
+  echo "$version"
 }
 
 download() {
@@ -68,7 +87,12 @@ main() {
   local platform
   platform="$(detect_platform)"
 
-  local filename="sonar-secrets-${SONAR_VERSION}-${platform}.exe"
+  local version
+  echo "Fetching latest version..."
+  version="$(resolve_latest_version)"
+  echo "Latest version: $version"
+
+  local filename="sonar-secrets-${version}-${platform}.exe"
   local url="$BASE_URL/$filename"
   local checksum_url="${url}.sha256"
   local dest="$INSTALL_DIR/$BINARY_NAME"

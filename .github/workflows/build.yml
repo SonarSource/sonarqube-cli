@@ -235,6 +235,11 @@ jobs:
           name: binary-windows
           path: dist/
 
+      - name: Generate latest-version.txt
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+        run: echo "${PROJECT_VERSION}" > dist/latest-version.txt
+
       - name: Upload binaries to Artifactory
         env:
           ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
