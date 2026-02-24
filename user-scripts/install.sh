@@ -122,6 +122,11 @@ main() {
 
   mv "$tmp_bin" "$dest"
   chmod +x "$dest"
+
+  if [[ "$platform" == macos-* ]]; then
+    xattr -d com.apple.quarantine "$dest" 2>/dev/null || true
+  fi
+
   echo "Installed sonar to: $dest"
 
   local path_line='export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"'
