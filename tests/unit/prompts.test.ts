@@ -1,11 +1,11 @@
 /**
- * Tests for textPrompt, confirmPrompt, pressEnterPrompt:
+ * Tests for textPrompt, confirmPrompt, pressAnyKeyPrompt:
  * - mock mode: dequeues responses in order, records calls
- * - CI=true: pressEnterPrompt skips without recording
+ * - CI=true: pressAnyKeyPrompt skips without recording
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { textPrompt, confirmPrompt, pressEnterPrompt } from '../../src/ui/components/prompts.js';
+import { textPrompt, confirmPrompt, pressAnyKeyPrompt } from '../../src/ui/components/prompts.js';
 import {
   setMockUi,
   getMockUiCalls,
@@ -112,17 +112,17 @@ describe('clearMockResponses', () => {
   });
 });
 
-// ─── pressEnterPrompt ─────────────────────────────────────────────────────────
+// ─── pressAnyKeyPrompt ─────────────────────────────────────────────────────────
 
-describe('pressEnterPrompt', () => {
+describe('pressAnyKeyPrompt', () => {
   it('records call in mock mode', async () => {
     setMockUi(true);
     clearMockUiCalls();
     try {
-      await pressEnterPrompt('Press Enter to continue');
+      await pressAnyKeyPrompt('Press Enter to continue');
       const calls = getMockUiCalls();
       expect(
-        calls.some(c => c.method === 'pressEnterPrompt' && c.args[0] === 'Press Enter to continue')
+        calls.some(c => c.method === 'pressAnyKeyPrompt' && c.args[0] === 'Press Enter to continue')
       ).toBe(true);
     } finally {
       setMockUi(false);
@@ -134,8 +134,8 @@ describe('pressEnterPrompt', () => {
     process.env['CI'] = 'true';
     clearMockUiCalls();
     try {
-      await pressEnterPrompt('Press Enter');
-      const calls = getMockUiCalls().filter(c => c.method === 'pressEnterPrompt');
+      await pressAnyKeyPrompt('Press Enter');
+      const calls = getMockUiCalls().filter(c => c.method === 'pressAnyKeyPrompt');
       expect(calls).toHaveLength(0);
     } finally {
       if (savedCI !== undefined) {
