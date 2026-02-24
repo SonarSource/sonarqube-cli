@@ -4,7 +4,7 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.local/share/sonarqube-cli/bin"
 BINARY_NAME="sonar"
 
-BASE_URL="https://binaries.sonarsource.com/CommercialDistribution/sonar-secrets"
+BASE_URL="https://binaries.sonarsource.com/CommercialDistribution/sonarqube-cli"
 
 detect_platform() {
   local os
@@ -92,7 +92,7 @@ main() {
   version="$(resolve_latest_version)"
   echo "Latest version: $version"
 
-  local filename="sonar-secrets-${version}-${platform}.exe"
+  local filename="sonarqube-cli-${version}-${platform}.exe"
   local url="$BASE_URL/$filename"
   local checksum_url="${url}.sha256"
   local dest="$INSTALL_DIR/$BINARY_NAME"
@@ -101,7 +101,7 @@ main() {
   trap 'rm -rf "$tmp_dir"' EXIT
 
   echo "Detected platform: $platform"
-  echo "Downloading sonar-secrets from:"
+  echo "Downloading sonarqube-cli from:"
   echo "  $url"
 
   mkdir -p "$INSTALL_DIR"

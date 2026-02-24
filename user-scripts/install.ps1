@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $InstallDir = Join-Path $env:LOCALAPPDATA 'sonarqube-cli\bin'
 $BinaryName = 'sonar.exe'
-$BaseUrl    = 'https://binaries.sonarsource.com/CommercialDistribution/sonar-secrets'
+$BaseUrl    = 'https://binaries.sonarsource.com/CommercialDistribution/sonarqube-cli'
 $Platform   = 'windows-x86-64'
 
 function Resolve-LatestVersion {
@@ -57,10 +57,10 @@ function Add-ToUserPath {
 # --- Main ---
 
 Write-Host 'Fetching latest version...'
-$SonarVersion = Resolve-LatestVersion -Platform $Platform
+$SonarVersion = Resolve-LatestVersion
 Write-Host "Latest version: $SonarVersion"
 
-$Filename     = "sonar-secrets-$SonarVersion-$Platform.exe"
+$Filename     = "sonarqube-cli-$SonarVersion-$Platform.exe"
 $Url          = "$BaseUrl/$Filename"
 $ChecksumUrl  = "$Url.sha256"
 $Dest         = Join-Path $InstallDir $BinaryName
@@ -72,7 +72,7 @@ try {
     $TmpBin      = Join-Path $TmpDir $Filename
     $TmpChecksum = Join-Path $TmpDir "$Filename.sha256"
 
-    Write-Host "Downloading sonar-secrets from:"
+    Write-Host "Downloading sonarqube-cli from:"
     Get-RemoteFile -Url $Url -Dest $TmpBin
 
     Write-Host "Downloading SHA256 checksum from:"
