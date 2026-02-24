@@ -19,7 +19,7 @@
  */
 
 /**
- * State manager for reading and writing ~/.sonarqube-cli/state.json
+ * State manager for reading and writing ~/.sonar/sonarqube-cli/state.json
  */
 
 import fs from 'node:fs';

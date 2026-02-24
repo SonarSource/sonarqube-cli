@@ -65,7 +65,7 @@ describe('Secret Install Integration Tests', () => {
       expect(result.length).toBeGreaterThan(0);
 
       // Path should contain expected segments
-      expect(result.includes('.sonar-cli')).toBe(true);
+      expect(result.includes('.sonar/sonarqube-cli')).toBe(true);
       expect(result.includes('bin')).toBe(true);
       expect(result.includes('sonar-secrets')).toBe(true);
 
@@ -87,7 +87,7 @@ describe('Secret Install Integration Tests', () => {
       const result = await performSecretInstall({ force: true });
 
       expect(typeof result).toBe('string');
-      expect(result.includes('.sonar-cli')).toBe(true);
+      expect(result.includes('.sonar/sonarqube-cli')).toBe(true);
 
       // With force=true, should attempt fresh install regardless of existing version
       // Force option should affect the flow (skips version check)
@@ -102,7 +102,7 @@ describe('Secret Install Integration Tests', () => {
       // First call (will fail due to network, but that's OK)
       const firstResult = await performSecretInstall({ force: false });
       expect(typeof firstResult).toBe('string');
-      expect(firstResult.includes('.sonar-cli')).toBe(true);
+      expect(firstResult.includes('.sonar/sonarqube-cli')).toBe(true);
     } catch (error) {
       // Expected behavior: network error or already-up-to-date error both return path
       if ((error as Error).message === 'Installation skipped - already up to date') {

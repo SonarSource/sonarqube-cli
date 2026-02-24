@@ -39,7 +39,7 @@ import { join } from 'node:path';
 import { tmpdir, homedir, platform as osPlatform, arch as osArch } from 'node:os';
 
 let BINARY_PATH: string;
-const BINARY_DIR = join(homedir(), '.sonar-cli', 'bin');
+const BINARY_DIR = join(homedir(), '.sonar', 'sonarqube-cli', 'bin');
 
 // Test data with real secrets
 const GITHUB_TOKEN = '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';

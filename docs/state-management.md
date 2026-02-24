@@ -1,11 +1,11 @@
 # State Management
 
-The SonarQube CLI maintains persistent state in `~/.sonar-cli/state.json`. This document explains the state file structure, its fields, and provides examples for different scenarios.
+The SonarQube CLI maintains persistent state in `~/.sonar/sonarqube-cli/state.json`. This document explains the state file structure, its fields, and provides examples for different scenarios.
 
 ## Overview
 
 The state file persists configuration across CLI invocations and stores:
-- **Authentication**: Server connections with tokens stored securely in system keychain
+- **Authentication**: Server connections details. Tokens are stored securely in system keychain, NOT in the state file
 - **Agent Configuration**: Integration status with Claude Code and other agents
 - **Installed Hooks**: Pre/Post tool use and session start hooks for agent interactions
 - **Installed Skills**: Custom Claude Code skills
@@ -14,7 +14,7 @@ The state file persists configuration across CLI invocations and stores:
 ## Location
 
 ```
-~/.sonar-cli/state.json
+~/.sonar/sonarqube-cli/state.json
 ```
 
 ## State Structure
@@ -45,12 +45,12 @@ The state file persists configuration across CLI invocations and stores:
 | `id` | string | ✅ | Hash identifier (from serverUrl + orgKey) |
 | `type` | 'cloud' \| 'on-premise' | ✅ | Server type classification |
 | `serverUrl` | string | ✅ | Server URL (e.g., `https://sonarcloud.io`) |
-| `orgKey` | string | ❌* | Organization key (for SonarCloud only) |
-| `region` | 'eu' \| 'us' | ❌* | Cloud region (for SonarCloud only) |
+| `orgKey` | string | ❌* | Organization key (for SonarQube Cloud only) |
+| `region` | 'eu' \| 'us' | ❌* | Cloud region (for SonarQube Cloud only) |
 | `authenticatedAt` | ISO 8601 timestamp | ✅ | When connection was established |
 | `keystoreKey` | string | ✅ | Key for token retrieval from system keychain |
 
-*Required only for SonarCloud connections
+*Required only for SonarQube Cloud connections
 
 ### Agents Section
 
@@ -101,9 +101,9 @@ The state file persists configuration across CLI invocations and stores:
 
 ## Examples
 
-### Example 1: SonarCloud with Claude Code Integration
+### Example 1: SonarQube Cloud with Claude Code Integration
 
-A user authenticated with SonarCloud and configured Claude Code with a PreToolUse hook.
+A user authenticated with SonarQube Cloud and configured Claude Code with a PreToolUse hook.
 
 ```json
 {
@@ -257,69 +257,11 @@ A complete setup with SonarCloud, multiple hooks, skills, and installed tools.
       {
         "name": "sonar-secrets",
         "version": "2.38.0.10279",
-        "path": "/Users/user/.sonar-cli/bin/sonar-secrets",
+        "path": "/Users/john.doe/.sonar/sonarqube-cli/bin/sonar-secrets",
         "installedAt": "2026-02-16T11:48:27.000Z",
         "installedByCliVersion": "0.2.95"
       }
     ]
-  }
-}
-```
-
-### Example 4: Multiple Server Connections (Future)
-
-*Note: Currently, the CLI supports only one active connection. Logging in to a different server overwrites the previous connection. This example shows the planned multi-connection support.*
-
-```json
-{
-  "version": "1.0",
-  "lastUpdated": "2026-02-18T16:00:00.000Z",
-  "auth": {
-    "isAuthenticated": true,
-    "connections": [
-      {
-        "id": "cloud-sonarsource",
-        "type": "cloud",
-        "serverUrl": "https://sonarcloud.io",
-        "orgKey": "sonarsource",
-        "region": "eu",
-        "authenticatedAt": "2026-02-15T14:22:10.000Z",
-        "keystoreKey": "cloud-sonarsource"
-      },
-      {
-        "id": "onprem-company",
-        "type": "on-premise",
-        "serverUrl": "https://sonar.company.com:9000",
-        "authenticatedAt": "2026-02-18T10:00:00.000Z",
-        "keystoreKey": "onprem-company"
-      }
-    ],
-    "activeConnectionId": "cloud-sonarsource"
-  },
-  "agents": {
-    "claude-code": {
-      "configured": true,
-      "configuredAt": "2026-02-18T14:10:00.000Z",
-      "configuredByCliVersion": "0.2.102",
-      "hooks": {
-        "installed": [
-          {
-            "name": "sonar-verify-hook",
-            "type": "PreToolUse",
-            "installedAt": "2026-02-18T14:10:00.000Z"
-          }
-        ]
-      },
-      "skills": {
-        "installed": []
-      }
-    }
-  },
-  "config": {
-    "cliVersion": "0.2.102"
-  },
-  "tools": {
-    "installed": []
   }
 }
 ```
@@ -331,25 +273,25 @@ A complete setup with SonarCloud, multiple hooks, skills, and installed tools.
 ### View Current State
 
 ```bash
-cat ~/.sonar-cli/state.json | jq .
+cat ~/.sonar/sonarqube-cli/state.json | jq .
 ```
 
 ### Check Authentication Status
 
 ```bash
-cat ~/.sonar-cli/state.json | jq '.auth'
+cat ~/.sonar/sonarqube-cli/state.json | jq '.auth'
 ```
 
 ### View Installed Hooks
 
 ```bash
-cat ~/.sonar-cli/state.json | jq '.agents."claude-code".hooks.installed'
+cat ~/.sonar/sonarqube-cli/state.json | jq '.agents."claude-code".hooks.installed'
 ```
 
 ### View Installed Tools
 
 ```bash
-cat ~/.sonar-cli/state.json | jq '.tools.installed'
+cat ~/.sonar/sonarqube-cli/state.json | jq '.tools.installed'
 ```
 
 ---
@@ -393,7 +335,7 @@ When the CLI is upgraded, it automatically migrates the state to the new format 
 
 ### State File Not Found
 
-If `~/.sonar-cli/state.json` doesn't exist, it will be created automatically on first use.
+If `~/.sonar/sonarqube-cli/state.json` doesn't exist, it will be created automatically on first use.
 
 ### Invalid JSON
 
@@ -401,10 +343,10 @@ If the state file becomes corrupted:
 
 ```bash
 # Backup the corrupted file
-cp ~/.sonar-cli/state.json ~/.sonar-cli/state.json.backup
+cp ~/.sonar/sonarqube-cli/state.json ~/.sonar/sonarqube-cli/state.json.backup
 
 # Reset to default state (requires re-authentication)
-rm ~/.sonar-cli/state.json
+rm ~/.sonar/sonarqube-cli/state.json
 ```
 
 ### Lost Authentication
