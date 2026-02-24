@@ -284,7 +284,7 @@ describe('secretCheckCommand: scan error handling', () => {
 
     expect(mockExit).toHaveBeenCalledWith(1);
     const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
-    expect(texts.some(m => m.includes('sonar install secrets --force'))).toBe(true);
+    expect(texts.some(m => m.includes('sonar secret install --force'))).toBe(true);
   });
 
   it('shows generic status check hint and exits 1 for unexpected errors', async () => {
@@ -300,7 +300,7 @@ describe('secretCheckCommand: scan error handling', () => {
 
     expect(mockExit).toHaveBeenCalledWith(1);
     const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
-    expect(texts.some(m => m.includes('sonar install secrets --force'))).toBe(true);
+    expect(texts.some(m => m.includes('sonar secret status'))).toBe(true);
   });
 });
 

@@ -291,7 +291,7 @@ describe('secretStatusCommand', () => {
       // Assert
       const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
       expect(mockExit).toHaveBeenCalledWith(1);
-      expect(texts.some(m => m.includes('sonar install secrets --force'))).toBe(true);
+      expect(texts.some(m => m.includes('sonar secret install --force'))).toBe(true);
     } finally {
       rmSync(tempBinDir, { recursive: true, force: true });
     }
@@ -345,7 +345,7 @@ describe('secretCheckCommand', () => {
     const errorMessages = uiCalls.filter(c => c.method === 'error').map(c => String(c.args[0]));
     const textMessages = uiCalls.filter(c => c.method === 'text').map(c => String(c.args[0]));
     expect(errorMessages.some(m => m.includes('sonar-secrets is not installed'))).toBe(true);
-    expect(textMessages.some(m => m.includes('sonar install secrets'))).toBe(true);
+    expect(textMessages.some(m => m.includes('sonar secret install'))).toBe(true);
   });
 
   it('exits 1 when --file and --stdin are both provided', async () => {
