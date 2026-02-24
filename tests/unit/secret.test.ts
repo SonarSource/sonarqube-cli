@@ -20,26 +20,27 @@
 
 // Unit tests for sonar secret command
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { CommandFailedError, InvalidOptionError } from '../../src/commands/common/error.js';
 import * as fs from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  detectPlatform,
   buildAssetName,
   buildLocalBinaryName,
+  detectPlatform,
 } from '../../src/lib/platform-detector.js';
 import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
 import {
+  performSecretInstall,
   secretCheckCommand,
   secretInstallCommand,
   secretStatusCommand,
-  performSecretInstall,
 } from '../../src/commands/secret.js';
 import * as releases from '../../src/lib/sonarsource-releases.js';
 import { SONAR_SECRETS_VERSION } from '../../src/lib/signatures.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
@@ -201,47 +202,46 @@ describe('installSecretScanningHooks', () => {
 });
 
 // =============================================================================
+// SECTION 3: secretStatusCommand
+// =============================================================================
 // SECTION 4: secretCheckCommand
 // =============================================================================
 
 describe('secretCheckCommand', () => {
-  let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
   const keytarHandle = createMockKeytar();
 
   beforeEach(() => {
+    process.exitCode = 0;
     keytarHandle.setup();
     setMockUi(true);
-    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    process.exitCode = 0;
     keytarHandle.teardown();
-    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
   });
 
-  it('exits 1 when called without --file or --stdin', async () => {
-    await secretCheckCommand({});
-    expect(mockExit).toHaveBeenCalledWith(1);
+  it('throws InvalidOptionError when called without --file or --stdin', () => {
+    expect(secretCheckCommand({})).rejects.toThrow(InvalidOptionError);
   });
 
-  it('exits 1 with install hint when sonar-secrets binary is missing', async () => {
+  it('throws CommandFailedError with install hint when sonar-secrets binary is missing', () => {
     const existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
 
     clearMockUiCalls();
     try {
-      await secretCheckCommand({ file: 'src/index.ts' });
+      expect(secretCheckCommand({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
     } finally {
       existsSyncSpy.mockRestore();
     }
 
-    expect(mockExit).toHaveBeenCalledWith(1);
     const uiCalls = getMockUiCalls();
     const errorMessages = uiCalls.filter((c) => c.method === 'error').map((c) => String(c.args[0]));
     const textMessages = uiCalls.filter((c) => c.method === 'text').map((c) => String(c.args[0]));
@@ -249,12 +249,13 @@ describe('secretCheckCommand', () => {
     expect(textMessages.some((m) => m.includes('sonar install secrets'))).toBe(true);
   });
 
-  it('exits 1 when --file and --stdin are both provided', async () => {
-    await secretCheckCommand({ file: 'some-file.ts', stdin: true });
-    expect(mockExit).toHaveBeenCalledWith(1);
+  it('throws InvalidOptionError when --file and --stdin are both provided', () => {
+    expect(secretCheckCommand({ file: 'some-file.ts', stdin: true })).rejects.toThrow(
+      InvalidOptionError,
+    );
   });
 
-  it('exits 1 with file-not-found message when --file points to nonexistent path', async () => {
+  it('throws InvalidOptionError with file-not-found message when --file points to nonexistent path', async () => {
     // Set up state with an active connection
     const state = getDefaultState('test');
     stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
@@ -271,18 +272,13 @@ describe('secretCheckCommand', () => {
       String(p).includes('sonar-secrets'),
     );
 
-    clearMockUiCalls();
     try {
-      await secretCheckCommand({ file: '/nonexistent/does-not-exist.ts' });
+      expect(secretCheckCommand({ file: '/nonexistent/does-not-exist.ts' })).rejects.toThrow(
+        'File not found',
+      );
     } finally {
       existsSyncSpy.mockRestore();
     }
-
-    expect(mockExit).toHaveBeenCalledWith(1);
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('File not found'))).toBe(true);
   });
 });
 
@@ -334,8 +330,8 @@ describe('performSecretInstall: already up to date', () => {
   });
 
   it('shows "Updating..." and triggers fresh download when installed version differs from pinned', async () => {
+    process.exitCode = 0;
     // Arrange
-    const mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const tempBinDir = join(tmpdir(), `sonar-outdated-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
     writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
@@ -357,17 +353,17 @@ describe('performSecretInstall: already up to date', () => {
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
-      expect(mockExit).toHaveBeenCalledWith(1); // install aborted by mock
+      expect(process.exitCode).toBe(1); // install aborted by mock
       expect(texts.some((m) => m.includes('Updating'))).toBe(true);
     } finally {
-      mockExit.mockRestore();
+      process.exitCode = 0;
       rmSync(tempBinDir, { recursive: true, force: true });
     }
   });
 
   it('triggers fresh install when existing binary fails version check', async () => {
+    process.exitCode = 0;
     // Arrange
-    const mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     const tempBinDir = join(tmpdir(), `sonar-vcheckfail-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
     writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
@@ -386,10 +382,10 @@ describe('performSecretInstall: already up to date', () => {
       await secretInstallCommand({}, { binDir: tempBinDir });
 
       // Assert: install was attempted — downloadBinary was called
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1); // install aborted by mock
       expect(downloadBinarySpy).toHaveBeenCalledTimes(1);
     } finally {
-      mockExit.mockRestore();
+      process.exitCode = 0;
       rmSync(tempBinDir, { recursive: true, force: true });
     }
   });
@@ -400,7 +396,6 @@ describe('performSecretInstall: already up to date', () => {
 // =============================================================================
 
 describe('secretInstallCommand: installation error paths', () => {
-  let mockExit: ReturnType<typeof spyOn>;
   let spawnSpy: ReturnType<typeof spyOn>;
   let downloadBinarySpy: ReturnType<typeof spyOn>;
   let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
@@ -409,15 +404,15 @@ describe('secretInstallCommand: installation error paths', () => {
   let tempBinDir: string;
 
   beforeEach(() => {
+    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
-    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     tempBinDir = join(tmpdir(), `sonar-install-err-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
   });
 
   afterEach(() => {
-    mockExit.mockRestore();
+    process.exitCode = 0;
     spawnSpy?.mockRestore();
     downloadBinarySpy?.mockRestore();
     verifyBinarySignatureSpy?.mockRestore();
@@ -451,7 +446,7 @@ describe('secretInstallCommand: installation error paths', () => {
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
     expect(errors.some((m) => m.includes('verification') || m.includes('not responding'))).toBe(
       true,
     );
@@ -495,7 +490,6 @@ describe('secretInstallCommand: installation error paths', () => {
     const warns = getMockUiCalls()
       .filter((c) => c.method === 'warn')
       .map((c) => String(c.args[0]));
-    expect(mockExit).toHaveBeenCalledWith(0);
     expect(successes.some((m) => m.includes('Installation complete'))).toBe(true);
     expect(warns.some((m) => m.includes('Failed to update state'))).toBe(true);
   });
@@ -554,7 +548,6 @@ describe('secretStatusCommand', () => {
       spawnSpy.mockRestore();
     }
 
-    expect(mockExit).toHaveBeenCalledWith(1);
     const texts = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));

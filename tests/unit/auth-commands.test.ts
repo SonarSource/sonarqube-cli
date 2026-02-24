@@ -39,23 +39,21 @@ import { getDefaultState } from '../../src/lib/state.js';
 const keytarHandle = createMockKeytar();
 
 describe('authLogoutCommand', () => {
-  let mockExit: any;
-
   let loadStateSpy: any;
 
   let saveStateSpy: any;
 
   beforeEach(() => {
+    process.exitCode = 0;
     keytarHandle.setup();
     setMockUi(true);
-    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
+    process.exitCode = 0;
     keytarHandle.teardown();
-    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -63,7 +61,7 @@ describe('authLogoutCommand', () => {
 
   it('exits 1 when SonarCloud server used without org', async () => {
     await authLogoutCommand({ server: 'https://sonarcloud.io' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('logs info and exits 0 when no token found for on-premise server', async () => {
@@ -74,7 +72,7 @@ describe('authLogoutCommand', () => {
     const calls = getMockUiCalls();
     const printCalls = calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(printCalls.some((m) => m.includes('No token found'))).toBe(true);
-    expect(mockExit).toHaveBeenCalledWith(0);
+    expect(process.exitCode).toBe(0);
   });
 
   it('deletes on-premise token from keychain on logout', async () => {
@@ -84,7 +82,6 @@ describe('authLogoutCommand', () => {
     await authLogoutCommand({ server: 'https://sonar.example.com' });
 
     expect(await getToken('https://sonar.example.com')).toBeNull();
-    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
   it('deletes SonarCloud token when org provided', async () => {
@@ -94,7 +91,6 @@ describe('authLogoutCommand', () => {
     await authLogoutCommand({ server: 'https://sonarcloud.io', org: 'my-org' });
 
     expect(await getToken('https://sonarcloud.io', 'my-org')).toBeNull();
-    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
   it('does not delete other org tokens when logging out from one org', async () => {
@@ -105,7 +101,6 @@ describe('authLogoutCommand', () => {
 
     expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
     expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token-org2');
-    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
   it('accepts on-premise server with org (org is optional for on-premise)', async () => {
@@ -113,49 +108,45 @@ describe('authLogoutCommand', () => {
 
     await authLogoutCommand({ server: 'https://sonar.example.com', org: 'some-org' });
 
-    expect(mockExit).toHaveBeenCalledWith(0);
+    expect(process.exitCode).toBe(0);
   });
 });
 
 describe('authPurgeCommand', () => {
-  let mockExit: any;
-
   beforeEach(() => {
+    process.exitCode = 0;
     keytarHandle.setup();
     setMockUi(true);
-    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
+    process.exitCode = 0;
     keytarHandle.teardown();
-    mockExit.mockRestore();
     setMockUi(false);
   });
 
   it('exits 0 when keychain is empty', async () => {
     await authPurgeCommand();
-    expect(mockExit).toHaveBeenCalledWith(0);
+    expect(process.exitCode).toBe(0);
   });
 });
 
 describe('authStatusCommand', () => {
-  let mockExit: any;
-
   beforeEach(() => {
+    process.exitCode = 0;
     keytarHandle.setup();
     setMockUi(true);
-    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
+    process.exitCode = 0;
     keytarHandle.teardown();
-    mockExit.mockRestore();
     setMockUi(false);
   });
 
   it('exits 0 when no saved connections', async () => {
     await authStatusCommand();
-    expect(mockExit).toHaveBeenCalledWith(0);
+    expect(process.exitCode).toBe(0);
   });
 });
 
@@ -171,25 +162,23 @@ const EMPTY_PROJECT_INFO = {
 };
 
 describe('authLoginCommand', () => {
-  let mockExit: any;
-
   let loadStateSpy: any;
 
   let saveStateSpy: any;
   let discoverSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
+    process.exitCode = 0;
     keytarHandle.setup();
     setMockUi(true);
-    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
     discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(EMPTY_PROJECT_INFO);
   });
 
   afterEach(() => {
+    process.exitCode = 0;
     keytarHandle.teardown();
-    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     discoverSpy.mockRestore();
@@ -203,7 +192,6 @@ describe('authLoginCommand', () => {
       withToken: 'test-token-xyz',
     });
     expect(await getToken('https://sonar.example.com', 'test-org')).toBe('test-token-xyz');
-    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
   it('exits 0 when token saved for SonarCloud with --with-token and valid org', async () => {
@@ -213,7 +201,6 @@ describe('authLoginCommand', () => {
     try {
       await authLoginCommand({ withToken: 'cloud-token', org: 'my-org' });
       expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('cloud-token');
-      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       checkOrgSpy.mockRestore();
     }
@@ -221,7 +208,7 @@ describe('authLoginCommand', () => {
 
   it('exits 1 when SonarCloud --with-token used without org', async () => {
     await authLoginCommand({ withToken: 'cloud-token' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('exits 1 when SonarCloud org not found', async () => {
@@ -230,7 +217,7 @@ describe('authLoginCommand', () => {
     );
     try {
       await authLoginCommand({ withToken: 'cloud-token', org: 'nonexistent-org' });
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     } finally {
       checkOrgSpy.mockRestore();
     }
@@ -242,7 +229,7 @@ describe('authLoginCommand', () => {
     );
     try {
       await authLoginCommand({ server: 'https://sonar.example.com', withToken: 'test-token' });
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     } finally {
       saveTokenSpy.mockRestore();
     }
@@ -255,7 +242,6 @@ describe('authLoginCommand', () => {
     try {
       await authLoginCommand({ server: 'https://sonar.example.com' });
       expect(await getToken('https://sonar.example.com')).toBe('browser-token');
-      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       browserSpy.mockRestore();
     }
@@ -271,7 +257,6 @@ describe('authLoginCommand', () => {
     try {
       await authLoginCommand({ org: 'my-org' });
       expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('browser-token');
-      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       browserSpy.mockRestore();
       checkOrgSpy.mockRestore();
@@ -297,7 +282,6 @@ describe('authLoginCommand', () => {
       // No options — defaults to SonarCloud, org picked from config, browser flow
       await authLoginCommand({});
       expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('browser-token');
-      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       browserSpy.mockRestore();
     }
@@ -309,7 +293,7 @@ describe('authLoginCommand', () => {
     );
     try {
       await authLoginCommand({ server: 'https://sonar.example.com' });
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     } finally {
       browserSpy.mockRestore();
     }
@@ -317,21 +301,21 @@ describe('authLoginCommand', () => {
 
   it('exits 1 when --org is empty string', async () => {
     await authLoginCommand({ org: '' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('exits 1 when --with-token is empty string', async () => {
     await authLoginCommand({ withToken: '' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('exits 1 when --server is empty string', async () => {
     await authLoginCommand({ server: '' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('exits 1 when --server is not a valid URL', async () => {
     await authLoginCommand({ server: 'not-a-url', withToken: 'tok', org: 'my-org' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 });

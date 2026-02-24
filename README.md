@@ -268,6 +268,35 @@ Scan stdin for hardcoded secrets
 
 ---
 
+### `sonar config`
+
+Configure CLI settings
+
+#### `sonar config telemetry`
+
+Configure telemetry settings
+
+**Options:**
+
+| Option       | Type    | Required | Description                                      | Default |
+| ------------ | ------- | -------- | ------------------------------------------------ | ------- |
+| `--enabled`  | boolean | No       | Enable collection of anonymous usage statistics  | -       |
+| `--disabled` | boolean | No       | Disable collection of anonymous usage statistics | -       |
+
+**Examples:**
+
+```bash
+sonar config telemetry --enabled
+```
+Enable collection of anonymous usage statistics
+
+```bash
+sonar config telemetry --disabled
+```
+Disable collection of anonymous usage statistics
+
+---
+
 ## Option Types
 
 - `string` — text value (e.g. `--server https://sonarcloud.io`)

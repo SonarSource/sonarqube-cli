@@ -10,6 +10,7 @@ The state file persists configuration across CLI invocations and stores:
 - **Installed Hooks**: Pre/Post tool use and session start hooks for agent interactions
 - **Installed Skills**: Custom Claude Code skills
 - **Tool Metadata**: Installed external tools like sonar-secrets binary
+- **Telemetry data**: Anonymous usage statistics
 
 ## Location
 
