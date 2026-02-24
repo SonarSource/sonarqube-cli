@@ -91,6 +91,10 @@ export function extractTokenFromQuery(host: string | undefined, url: string | un
  */
 export function buildAuthURL(serverURL: string, port: number): string {
   const cleanServerURL = serverURL.replace(/\/$/, '');
+  if (serverURL.includes("sonarcloud") || serverURL.includes("sonarqube.us")) {
+    return `${cleanServerURL}/auth?product=cli&port=${port}`;
+  }
+  // temporarily fallback to SQS and IDE auth page, should be fixed soon
   return `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
 }
 

@@ -219,8 +219,8 @@ describe('Auth Scenarios: buildAuthURL correctness', () => {
     const parsed = new URL(url);
 
     expect(parsed.hostname).toBe('sonarcloud.io');
-    expect(parsed.pathname).toBe('/sonarlint/auth');
-    expect(parsed.searchParams.get('ideName')).toBe('sonarqube-cli');
+    expect(parsed.pathname).toBe('/auth');
+    expect(parsed.searchParams.get('product')).toBe('cli');
     expect(parsed.searchParams.get('port')).toBe(String(TEST_PORT_A));
   });
 
