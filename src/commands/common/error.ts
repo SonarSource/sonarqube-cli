@@ -18,19 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import logger from './logger.js';
-import { error } from '../ui';
-import { CommandFailedError } from '../commands/common/error.js';
+/**
+ * Thrown when the user provides invalid or conflicting command options.
+ */
+export class InvalidOptionError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'InvalidOptionError';
+  }
+}
 
-export async function runCommand(fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn();
-  } catch (err) {
-    // CommandFailedError already displayed its message before throwing
-    if (!(err instanceof CommandFailedError)) {
-      error((err as Error).message);
-    }
-    logger.error((err as Error).message);
-    process.exitCode = 1;
+/**
+ * Thrown when the command (and options if any defined) are valid, but it failed to execute.
+ */
+export class CommandFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CommandFailedError';
   }
 }

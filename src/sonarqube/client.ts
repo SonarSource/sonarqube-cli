@@ -21,6 +21,7 @@
 // SonarQube API HTTP client
 
 import { version as VERSION } from '../../package.json';
+import { SONARCLOUD_API_URL } from '../lib/config-constants.js';
 import logger from '../lib/logger.js';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
@@ -40,8 +41,12 @@ export class SonarQubeClient {
   /**
    * Make GET request to SonarQube API
    */
-  async get<T>(endpoint: string, params?: Record<string, string | number | boolean>): Promise<T> {
-    const url = new URL(`${this.serverURL}${endpoint}`);
+  async get<T>(
+    endpoint: string,
+    params?: Record<string, string | number | boolean>,
+    baseUrl?: string,
+  ): Promise<T> {
+    const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
 
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -114,8 +119,36 @@ export class SonarQubeClient {
   /**
    * Get server system status
    */
-  async getSystemStatus(): Promise<{ status: string; version: string }> {
+  async getSystemStatus(): Promise<{ status: string; version: string; id?: string }> {
     return await this.get('/api/system/status');
+  }
+
+  /**
+   * Get the current authenticated user
+   */
+  async getCurrentUser(): Promise<{ id: string } | null> {
+    try {
+      return await this.get<{ id: string }>('/api/users/current');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get an organization by key and return its server-side UUID.
+   * Uses the api.sonarcloud.io/organizations endpoint (SonarQube Cloud only).
+   */
+  async getOrganizationId(organizationKey: string): Promise<string | null> {
+    try {
+      const result = await this.get<{ id: string }>(
+        '/organizations',
+        { organizationKey },
+        SONARCLOUD_API_URL,
+      );
+      return result.id;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -135,10 +168,10 @@ export class SonarQubeClient {
    */
   async getOrganizations(): Promise<Array<{ key: string; name: string }>> {
     try {
-      const result = await this.get<{ organizations: Array<{ key: string; name: string }> }>(
+      const result = await this.get<{ organizations?: Array<{ key: string; name: string }> }>(
         '/api/organizations',
       );
-      return result.organizations;
+      return result.organizations ?? [];
     } catch (error) {
       logger.debug(
         '[DEBUG] Failed to get organizations:',

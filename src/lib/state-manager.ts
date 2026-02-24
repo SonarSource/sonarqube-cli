@@ -26,12 +26,12 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import logger from './logger.js';
 import {
-  type CliState,
-  getDefaultState,
-  type AuthConnection,
-  type CloudRegion,
   type AgentConfig,
   type HookType,
+  type AuthConnection,
+  type CliState,
+  type CloudRegion,
+  getDefaultState,
 } from './state.js';
 import { CLI_DIR, STATE_FILE } from './config-constants.js';
 import { version as VERSION } from '../../package.json';
@@ -220,11 +220,4 @@ export function addInstalledSkill(state: CliState, agentName: string, skillName:
     name: skillName,
     installedAt: new Date().toISOString(),
   });
-}
-
-/**
- * Get state file path (for testing/debugging)
- */
-export function getStateFilePath(): string {
-  return STATE_FILE;
 }

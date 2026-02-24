@@ -28,7 +28,8 @@ import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.j
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { getToken } from '../lib/keychain.js';
 import logger from '../lib/logger.js';
-import { text, blank, success, error, print } from '../ui/index.js';
+import { text, blank, success, error, print } from '../ui';
+import { CommandFailedError, InvalidOptionError } from './common/error.js';
 
 const SCAN_TIMEOUT_MS = 30000;
 const STDIN_READ_TIMEOUT_MS = 5000;
@@ -75,13 +76,11 @@ async function setupScanEnvironment(options: {
 
 function validateScanOptions(options: { file?: string; stdin?: boolean }): void {
   if (!options.file && !options.stdin) {
-    error('Either --file or --stdin is required');
-    process.exit(1);
+    throw new InvalidOptionError('Either --file or --stdin is required');
   }
 
   if (options.file && options.stdin) {
-    error('Cannot use both --file and --stdin');
-    process.exit(1);
+    throw new InvalidOptionError('Cannot use both --file and --stdin');
   }
 }
 
@@ -100,7 +99,7 @@ async function setupAuth(): Promise<{ authUrl: string; authToken: string }> {
 
   if (!activeConnection) {
     logAuthConfigError();
-    process.exit(1);
+    throw new CommandFailedError('sonar-secrets authentication is not configured');
   }
 
   const authUrl = activeConnection.serverUrl;
@@ -108,7 +107,7 @@ async function setupAuth(): Promise<{ authUrl: string; authToken: string }> {
 
   if (!authUrl || !authToken) {
     logAuthConfigError();
-    process.exit(1);
+    throw new CommandFailedError('sonar-secrets authentication is not configured');
   }
 
   return { authUrl, authToken };
@@ -139,13 +138,11 @@ async function performFileScan(
   scanStartTime: number,
 ): Promise<void> {
   if (!file) {
-    error('File path is required');
-    process.exit(1);
+    throw new InvalidOptionError('File path is required');
   }
 
   if (!existsSync(file)) {
-    error(`File not found: ${file}`);
-    process.exit(1);
+    throw new InvalidOptionError(`File not found: ${file}`);
   }
 
   const result = await runScan(binaryPath, file, authUrl, authToken);
@@ -163,7 +160,7 @@ function validateCheckCommandEnvironment(binaryPath: string): void {
   if (!existsSync(binaryPath)) {
     error('sonar-secrets is not installed');
     text('  Install with: sonar install secrets');
-    process.exit(1);
+    throw new CommandFailedError('sonar-secrets is not installed');
   }
 }
 
@@ -271,7 +268,6 @@ function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): 
     text(`  Duration: ${scanDurationMs}ms`);
     displayScanResults(scanResult);
     blank();
-    process.exit(0);
   } catch (parseError) {
     logger.debug(`Failed to parse JSON output: ${(parseError as Error).message}`);
     blank();
@@ -279,7 +275,6 @@ function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): 
     blank();
     print(result.stdout);
     blank();
-    process.exit(0);
   }
 }
 
@@ -332,10 +327,18 @@ function handleScanFailure(
   }
   blank();
   // Binary exit 1 = secrets found — remap to 51 so hooks can distinguish from generic errors
-  process.exit(exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode);
+  process.exitCode = exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode;
 }
 
 function handleScanError(err: unknown): void {
+  if (err instanceof InvalidOptionError) {
+    throw err;
+  }
+
+  if (err instanceof CommandFailedError) {
+    throw err;
+  }
+
   const errorMessage = (err as Error).message;
 
   blank();
@@ -355,5 +358,5 @@ function handleScanError(err: unknown): void {
   }
 
   blank();
-  process.exit(1);
+  throw new CommandFailedError(errorMessage);
 }
