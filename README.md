@@ -18,11 +18,11 @@ Analyze a file using SonarCloud A3S API
 
 | Option           | Type   | Required | Description                                | Default |
 | ---------------- | ------ | -------- | ------------------------------------------ | ------- |
-| `--file`         | string | ✅       | File path to analyze                       | -       |
-| `--organization` | string | ❌       | Organization key (or use saved config)     | -       |
-| `--project`      | string | ❌       | Project key                                | -       |
-| `--token`, `-t`  | string | ❌       | Authentication token (or use saved config) | -       |
-| `--branch`, `-b` | string | ❌       | Branch name                                | -       |
+| `--file`         | string | ✅        | File path to analyze                       | -       |
+| `--organization` | string | ❌        | Organization key (or use saved config)     | -       |
+| `--project`      | string | ❌        | Project key                                | -       |
+| `--token`, `-t`  | string | ❌        | Authentication token (or use saved config) | -       |
+| `--branch`, `-b` | string | ❌        | Branch name                                | -       |
 
 **Examples:**
 
@@ -55,15 +55,15 @@ Search for issues in SonarQube
 
 | Option            | Type    | Required | Description                                    | Default |
 | ----------------- | ------- | -------- | ---------------------------------------------- | ------- |
-| `--server`, `-s`  | string  | ❌       | SonarQube server URL (or use saved connection) | -       |
-| `--token`, `-t`   | string  | ❌       | Authentication token                           | -       |
-| `--project`, `-p` | string  | ✅       | Project key                                    | -       |
-| `--severity`      | string  | ❌       | Filter by severity                             | -       |
-| `--format`        | string  | ❌       | Output format                                  | `json`  |
-| `--branch`        | string  | ❌       | Branch name                                    | -       |
-| `--pull-request`  | string  | ❌       | Pull request ID                                | -       |
-| `--all`           | boolean | ❌       | Fetch all issues with pagination               | `false` |
-| `--page-size`     | number  | ❌       | Page size for pagination                       | `500`   |
+| `--server`, `-s`  | string  | ❌        | SonarQube server URL (or use saved connection) | -       |
+| `--token`, `-t`   | string  | ❌        | Authentication token                           | -       |
+| `--project`, `-p` | string  | ✅        | Project key                                    | -       |
+| `--severity`      | string  | ❌        | Filter by severity                             | -       |
+| `--format`        | string  | ❌        | Output format                                  | `json`  |
+| `--branch`        | string  | ❌        | Branch name                                    | -       |
+| `--pull-request`  | string  | ❌        | Pull request ID                                | -       |
+| `--all`           | boolean | ❌        | Fetch all issues with pagination               | `false` |
+| `--page-size`     | number  | ❌        | Page size for pagination                       | `500`   |
 
 **Examples:**
 
@@ -84,6 +84,41 @@ Fetch all critical issues
 
 ---
 
+### `sonar projects`
+
+Search for SonarQube projects
+
+#### `sonar projects search`
+
+Search for projects in SonarQube
+
+**Options:**
+
+| Option          | Type   | Required | Description                                                                                   | Default |
+| --------------- | ------ | -------- | --------------------------------------------------------------------------------------------- | ------- |
+| `--query`, `-q` | string | ❌        | An optional search query to filter projects by name (partial match) or key (exact match).     | -       |
+| `--page`, `-p`  | number | ❌        | An optional page number. Defaults to 1.                                                       | `1`     |
+| `--page-size`   | number | ❌        | An optional page size. Must be greater than 0 and less than or equal to 500. Defaults to 500. | `500`   |
+
+**Examples:**
+
+```bash
+sonar projects search
+```
+List first 500 accessible projects
+
+```bash
+sonar projects search -q my-project
+```
+Search projects by name or key
+
+```bash
+sonar projects search --page 2 --page-size 50
+```
+Paginate through projects
+
+---
+
 ### `sonar onboard-agent`
 
 Setup SonarQube integration for AI coding agent
@@ -92,13 +127,13 @@ Setup SonarQube integration for AI coding agent
 
 | Option              | Type    | Required | Description                       | Default  |
 | ------------------- | ------- | -------- | --------------------------------- | -------- |
-| `--server`, `-s`    | string  | ❌       | SonarQube server URL              | -        |
-| `--project`, `-p`   | string  | ❌       | Project key                       | -        |
-| `--token`, `-t`     | string  | ❌       | Existing authentication token     | -        |
-| `--org`, `-o`       | string  | ❌       | Organization key (for SonarCloud) | -        |
-| `--non-interactive` | boolean | ❌       | Non-interactive mode (no prompts) | `false`  |
-| `--skip-hooks`      | boolean | ❌       | Skip hooks installation           | `false`  |
-| `--hook-type`       | string  | ❌       | Hook type to install              | `prompt` |
+| `--server`, `-s`    | string  | ❌        | SonarQube server URL              | -        |
+| `--project`, `-p`   | string  | ❌        | Project key                       | -        |
+| `--token`, `-t`     | string  | ❌        | Existing authentication token     | -        |
+| `--org`, `-o`       | string  | ❌        | Organization key (for SonarCloud) | -        |
+| `--non-interactive` | boolean | ❌        | Non-interactive mode (no prompts) | `false`  |
+| `--skip-hooks`      | boolean | ❌        | Skip hooks installation           | `false`  |
+| `--hook-type`       | string  | ❌        | Hook type to install              | `prompt` |
 
 **Examples:**
 
@@ -126,9 +161,9 @@ Save authentication token to keychain
 
 | Option               | Type   | Required | Description                                           | Default |
 | -------------------- | ------ | -------- | ----------------------------------------------------- | ------- |
-| `--server`, `-s`     | string | ❌       | SonarQube server URL (default is SonarCloud)          | -       |
-| `--org`, `-o`        | string | ❌       | SonarCloud organization key (required for SonarCloud) | -       |
-| `--with-token`, `-t` | string | ❌       | Token value (skips browser, non-interactive mode)     | -       |
+| `--server`, `-s`     | string | ❌        | SonarQube server URL (default is SonarCloud)          | -       |
+| `--org`, `-o`        | string | ❌        | SonarCloud organization key (required for SonarCloud) | -       |
+| `--with-token`, `-t` | string | ❌        | Token value (skips browser, non-interactive mode)     | -       |
 
 **Examples:**
 
@@ -167,8 +202,8 @@ Remove authentication token from keychain
 
 | Option           | Type   | Required | Description                                           | Default |
 | ---------------- | ------ | -------- | ----------------------------------------------------- | ------- |
-| `--server`, `-s` | string | ❌       | SonarQube server URL                                  | -       |
-| `--org`, `-o`    | string | ❌       | SonarCloud organization key (required for SonarCloud) | -       |
+| `--server`, `-s` | string | ❌        | SonarQube server URL                                  | -       |
+| `--org`, `-o`    | string | ❌        | SonarCloud organization key (required for SonarCloud) | -       |
 
 **Examples:**
 
@@ -252,7 +287,7 @@ Install sonar-secrets binary
 
 | Option    | Type    | Required | Description                               | Default |
 | --------- | ------- | -------- | ----------------------------------------- | ------- |
-| `--force` | boolean | ❌       | Force reinstall even if already installed | `false` |
+| `--force` | boolean | ❌        | Force reinstall even if already installed | `false` |
 
 **Examples:**
 
@@ -289,8 +324,8 @@ Scan a file or stdin for hardcoded secrets
 
 | Option    | Type    | Required | Description                                | Default |
 | --------- | ------- | -------- | ------------------------------------------ | ------- |
-| `--file`  | string  | ❌       | File path to scan for secrets              | -       |
-| `--stdin` | boolean | ❌       | Read from standard input instead of a file | -       |
+| `--file`  | string  | ❌        | File path to scan for secrets              | -       |
+| `--stdin` | boolean | ❌        | Read from standard input instead of a file | -       |
 
 **Examples:**
 
@@ -326,5 +361,10 @@ Scan stdin for hardcoded secrets
 | 1    | Error (validation, execution, etc.) |
 
 ---
+## License
+
+Copyright 2026 SonarSource Sàrl.
+
+SonarQube CLI is released under the [GNU Lesser General Public License, Version 3.0⁠,](http://www.gnu.org/licenses/lgpl.txt).
 
 *Generated from `spec.yaml` — do not edit manually*
