@@ -10,6 +10,7 @@ import { startLoopbackServer } from '../../src/lib/loopback-server.js';
 import { setMockUi } from '../../src/ui/index.js';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
+const SONARQUBE_CLOUD_US_SERVER = 'https://sonarqube.us';
 const EXAMPLE_SERVER = 'https://sonar.example.com';
 const HTTP_STATUS_OK = 200;
 const TEST_PORT_A = 8080;
@@ -19,12 +20,17 @@ describe('Auth Helper Functions', () => {
   describe('buildAuthURL', () => {
     it('should build URL with clean server URL (no trailing slash)', () => {
       const url = buildAuthURL(SONARCLOUD_SERVER, TEST_PORT_A);
-      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`);
+      expect(url).toBe(`${SONARCLOUD_SERVER}/auth?product=cli&port=${TEST_PORT_A}`);
     });
 
     it('should build URL and remove trailing slash', () => {
       const url = buildAuthURL(`${SONARCLOUD_SERVER}/`, TEST_PORT_B);
-      expect(url).toBe(`${SONARCLOUD_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_B}`);
+      expect(url).toBe(`${SONARCLOUD_SERVER}/auth?product=cli&port=${TEST_PORT_B}`);
+    });
+
+    it('should build URL for SQC US', () => {
+      const url = buildAuthURL(`${SONARQUBE_CLOUD_US_SERVER}`, TEST_PORT_B);
+      expect(url).toBe(`${SONARQUBE_CLOUD_US_SERVER}/auth?product=cli&port=${TEST_PORT_B}`);
     });
 
     it('should work with custom server URL', () => {
