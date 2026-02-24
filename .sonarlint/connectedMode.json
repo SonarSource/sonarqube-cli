@@ -1,0 +1,5 @@
+{
+    "sonarCloudOrganization": "sonarsource",
+    "projectKey": "SonarSource_sonarqube-cli",
+    "region": "EU"
+}
