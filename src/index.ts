@@ -40,6 +40,7 @@ import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusComman
 import { secretInstallCommand, secretStatusCommand } from './commands/secret.js';
 import { analyzeSecretsCommand } from './commands/analyze.js';
 import { projectsSearchCommand } from './commands/projects.js';
+import { selfUpdateCommand } from './commands/self-update.js';
 
 const program = new Command();
 
@@ -152,6 +153,16 @@ auth
   .description('Show active authentication connection with token verification')
   .action(async () => {
     await authStatusCommand();
+  });
+
+// Check for and install CLI updates
+program
+  .command('self-update')
+  .description('Check for and install latest SonarQube CLI')
+  .option('--check', 'Check for updates without installing')
+  .option('--force', 'Force update even if already on the latest version')
+  .action(async (options) => {
+    await runCommand(() => selfUpdateCommand(options));
   });
 
 // Analyze code for security issues
