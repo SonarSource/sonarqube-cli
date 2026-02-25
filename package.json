@@ -10,7 +10,6 @@
   "scripts": {
     "build": "npm run validate && tsc",
     "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
-    "setup": "bash build-scripts/setup.sh",
     "dev": "bun run src/index.ts",
     "test": "bun test ./tests/unit/",
     "test:integration": "bun test ./tests/integration/",
