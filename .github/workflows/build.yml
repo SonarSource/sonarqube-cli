@@ -271,7 +271,8 @@ jobs:
             --server-id=repox \
             --flat=true \
             --build-name="${PROJECT}" \
-            --build-number="${BUILD_NUMBER}"
+            --build-number="${BUILD_NUMBER}" \
+            --module="org.sonarsource.cli:${PROJECT}:${PROJECT_VERSION}"
           jf rt build-collect-env "${PROJECT}" "${BUILD_NUMBER}"
           jf rt build-publish "${PROJECT}" "${BUILD_NUMBER}"
 
