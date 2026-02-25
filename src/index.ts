@@ -25,7 +25,7 @@
 // Generated from cli-spec.yaml by Plop.js
 
 import { Command } from 'commander';
-import { VERSION } from './version.js';
+import { version as VERSION } from '../package.json';
 import { runCommand } from './lib/run-command.js';
 
 // Constants for argument validation

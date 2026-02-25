@@ -34,7 +34,7 @@ import { runCommand } from '../lib/run-command.js';
 import logger from '../lib/logger.js';
 import { warn, success, print, note, textPrompt, confirmPrompt } from '../ui/index.js';
 import { green, red, dim } from '../ui/colors.js';
-import { VERSION as CLI_VERSION, VERSION } from '../version.js';
+import { version as CLI_VERSION } from '../../package.json';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 
 /**
@@ -241,7 +241,7 @@ export async function authLoginCommand(options: {
 
     await saveToken(server, token, org);
 
-    const state = loadState(VERSION);
+    const state = loadState(CLI_VERSION);
     const keystoreKey = generateConnectionId(server, org);
 
     addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {

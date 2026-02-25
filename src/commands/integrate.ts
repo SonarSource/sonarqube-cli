@@ -29,7 +29,7 @@ import { getAllCredentials } from '../lib/keychain.js';
 import { installSecretScanningHooks } from '../bootstrap/hooks.js';
 import { loadState, saveState, markAgentConfigured, addInstalledHook } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
-import { VERSION } from '../version.js';
+import { version as VERSION } from '../../package.json';
 import logger from '../lib/logger.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 import { ENV_TOKEN, ENV_SERVER } from '../lib/auth-resolver.js';

@@ -40,13 +40,24 @@ jobs:
       - uses: SonarSource/ci-github-actions/get-build-number@148774f456203f228b7bd1bd68ed0c22254d9cd1
         id: get-build-number
 
+      - name: Update package.json version with build number
+        env:
+          BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.version += `.${process.env.BUILD_NUMBER}`;
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          EOF
+
       - name: Get project version
         id: project_version
         shell: bash
         run: |
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_VERSION=$(npm pkg get version --workspaces=false | tr -d '"')
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
-          echo "PROJECT_VERSION=${PACKAGE_VERSION}.${{ steps.get-build-number.outputs.BUILD_NUMBER }}" >> $GITHUB_OUTPUT
+          echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
 
   build-binaries:
     name: Build Binary - ${{ matrix.os }}

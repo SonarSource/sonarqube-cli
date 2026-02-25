@@ -22,7 +22,7 @@
 
 import { getToken } from './keychain.js';
 import { loadState, getActiveConnection } from './state-manager.js';
-import { VERSION } from '../version.js';
+import { version as VERSION } from '../../package.json';
 import { warn } from '../ui/index.js';
 import logger from './logger.js';
 
