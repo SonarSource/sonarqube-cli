@@ -20,78 +20,13 @@
 
 // Sonarsource binaries client for downloading sonar-secrets
 
+import { readFileSync } from 'node:fs';
 import type { PlatformInfo } from './install-types.js';
 import logger from './logger.js';
 import { version as VERSION } from '../../package.json';
 import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from './config-constants.js';
 
-const REQUEST_TIMEOUT_MS = 30000;
 const DOWNLOAD_TIMEOUT_MS = 60000;
-
-/**
- * Parse S3 XML listing and extract all <Key> values
- */
-function parseXmlKeys(xml: string): string[] {
-  const matches = [...xml.matchAll(/<Key[^>]*>([^<]+)<\/Key>/g)];
-  return matches.map(m => m[1]);
-}
-
-/**
- * Extract version from sonar-secrets filename key
- * e.g. "CommercialDistribution/sonar-secrets/sonar-secrets-1.0.0-linux-x86-64.exe" → "1.0.0"
- */
-function extractVersion(key: string): string | null {
-  const filename = key.split('/').pop() ?? '';
-  const match = /^sonar-secrets-(\d+\.\d+(?:\.\d+)*)-/.exec(filename);
-  return match ? match[1] : null;
-}
-
-/**
- * Compare two dot-separated version strings numerically
- */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number);
-  const partsB = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const diff = (partsA[i] ?? 0) - (partsB[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
-
-/**
- * Fetch latest available version from the Sonarsource binaries S3 listing
- */
-export async function fetchLatestVersion(): Promise<string> {
-  const url = `${SONARSOURCE_BINARIES_URL}/s3api?prefix=${SONAR_SECRETS_DIST_PREFIX}/&delimiter=/`;
-
-  const response = await fetch(url, {
-    headers: { 'User-Agent': `sonarqube-cli/${VERSION}` },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch version listing: ${response.status} ${response.statusText}`);
-  }
-
-  const xml = await response.text();
-
-  if (xml.includes('<IsTruncated>true</IsTruncated>')) {
-    logger.warn('Binary listing is truncated — version discovery may be incomplete');
-  }
-
-  const keys = parseXmlKeys(xml);
-  const versions = [...new Set(
-    keys.map(extractVersion).filter((v): v is string => v !== null)
-  )];
-
-  if (versions.length === 0) {
-    throw new Error('No versions found in Sonarsource binaries listing');
-  }
-
-  versions.sort(compareVersions);
-  return versions.at(-1)!;
-}
 
 /**
  * Build the download filename — Sonarsource always uses .exe regardless of platform
@@ -127,4 +62,62 @@ export async function downloadBinary(url: string, destinationPath: string): Prom
   const buffer = await response.arrayBuffer();
   const fs = await import('node:fs/promises');
   await fs.writeFile(destinationPath, Buffer.from(buffer));
+}
+
+/**
+ * Verify a binary buffer against a detached armored PGP signature and public key.
+ * Throws if the signature is invalid or was not made by the given key.
+ */
+export async function verifyPgpSignature(
+  binary: Buffer,
+  armoredSignature: string,
+  armoredPublicKey: string,
+): Promise<void> {
+  const { readKey, readSignature, createMessage, verify } = await import('openpgp');
+
+  const verificationKey = await readKey({ armoredKey: armoredPublicKey });
+  const signature = await readSignature({ armoredSignature });
+  const message = await createMessage({ binary });
+
+  const verificationResult = await verify({
+    message,
+    verificationKeys: [verificationKey],
+    signature,
+  });
+
+  const sig = verificationResult.signatures[0];
+  if (!sig) {
+    throw new Error('Binary signature verification failed: no signatures returned');
+  }
+  try {
+    const valid = await sig.verified;
+    if (!valid) {
+      throw new Error('signature did not verify against the trusted key');
+    }
+  } catch (e) {
+    throw new Error(`Binary signature verification failed: ${(e as Error).message}`);
+  }
+}
+
+/**
+ * Verify the PGP signature of a downloaded binary.
+ *
+ * Looks up the per-platform .asc signature from the provided signatures map,
+ * then verifies the binary against it using the provided public key.
+ * Throws if the platform signature is missing or does not match the binary.
+ */
+export async function verifyBinarySignature(
+  binaryPath: string,
+  platformInfo: PlatformInfo,
+  signatures: Record<string, string>,
+  armoredPublicKey: string,
+): Promise<void> {
+  const platformKey = `${platformInfo.os}-${platformInfo.arch}`;
+  const armoredSignature = signatures[platformKey];
+  if (!armoredSignature) {
+    throw new Error(`Signature not found for ${platformKey}. Run: npm run fetch:signatures`);
+  }
+
+  const binary = readFileSync(binaryPath);
+  await verifyPgpSignature(binary, armoredSignature, armoredPublicKey);
 }

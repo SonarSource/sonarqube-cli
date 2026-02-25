@@ -131,6 +131,9 @@ jobs:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
         run: echo "name=sonarqube-cli-${PROJECT_VERSION}-${{ matrix.platform }}.exe" >> $GITHUB_OUTPUT
 
+      - name: Fetch binary signatures
+        run: bun run fetch:signatures
+
       - name: Build binary for ${{ matrix.os }}
         run: |
           echo "Building ${{ matrix.os }} binary..."

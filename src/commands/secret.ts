@@ -18,14 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Install sonar-secrets binary from GitHub releases
+// Install sonar-secrets binary from binaries.sonarsource.com
 
 import {existsSync, mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawnProcess} from '../lib/process.js';
 import { BIN_DIR } from '../lib/config-constants.js';
 import {buildLocalBinaryName, detectPlatform} from '../lib/platform-detector.js';
-import {fetchLatestVersion, buildDownloadUrl, downloadBinary} from '../lib/sonarsource-releases.js';
+import {buildDownloadUrl, downloadBinary, verifyBinarySignature} from '../lib/sonarsource-releases.js';
+import { SONAR_SECRETS_VERSION, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY } from '../lib/signatures.js';
 import {loadState, saveState} from '../lib/state-manager.js';
 import { version as VERSION } from '../../package.json';
 import logger from '../lib/logger.js';
@@ -94,16 +95,24 @@ async function performInstallation(
     }
   }
 
-  // Fetch and download
-  const version = await withSpinner('Fetching latest version', () =>
-    fetchLatestVersion()
-  );
-  print(`  Latest: ${version}`);
+  // Download pinned version
+  const version = SONAR_SECRETS_VERSION;
+  print(`  Version: ${version}`);
 
   const downloadUrl = buildDownloadUrl(version, platform);
   await withSpinner(`Downloading sonar-secrets ${version}`, () =>
     downloadBinary(downloadUrl, binaryPath)
   );
+
+  try {
+    await withSpinner('Verifying signature', () =>
+      verifyBinarySignature(binaryPath, platform, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY)
+    );
+  } catch (err) {
+    const { rmSync } = await import('node:fs');
+    rmSync(binaryPath, { force: true });
+    throw err;
+  }
 
   if (platform.os !== 'windows') {
     await makeExecutable(binaryPath);
@@ -143,7 +152,7 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
 
       // Check for updates
       try {
-        const latestVersion = await fetchLatestVersion();
+        const latestVersion = SONAR_SECRETS_VERSION;
 
         if (version === latestVersion) {
           blank();
@@ -248,15 +257,15 @@ async function checkExistingInstallation(binaryPath: string): Promise<boolean> {
     return false;
   }
 
-  const latestVersion = await fetchLatestVersion();
+  const pinnedVersion = SONAR_SECRETS_VERSION;
 
-  if (existingVersion === latestVersion) {
+  if (existingVersion === pinnedVersion) {
     text(`sonar-secrets ${existingVersion} is already installed (latest)`);
     text('  Use --force to reinstall');
     return true;
   }
 
-  warn(`Update available: ${existingVersion} → ${latestVersion}`);
+  warn(`Version mismatch: ${existingVersion} ≠ ${pinnedVersion}`);
   text('  Updating...\n');
   return false;
 }
@@ -269,7 +278,7 @@ function logInstallationSuccess(binaryPath: string): void {
     `Binary path: ${binaryPath}`,
     '',
     'Manual usage:',
-    '  sonar-secrets scan <file>',
+    '  sonar analyze secrets --file <file>',
     '',
     'Check installation status:',
     '  sonar install secrets --status',

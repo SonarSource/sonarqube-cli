@@ -25,26 +25,22 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setMockUi } from '../../src/ui';
-import { detectPlatform } from '../../src/lib/platform-detector.js';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from '../../src/lib/config-constants.js';
 
-// Configurable mock implementations — changed per test as needed
-let mockFetchLatestVersion: () => Promise<string> = async () => {
-  throw new Error('network unavailable');
-};
-let mockDownloadBinary: (url: string, path: string) => Promise<void> = async () => {};
-
-// Mock sonarsource-releases module BEFORE importing secret.ts (which depends on it).
-// buildDownloadUrl uses the real implementation to avoid contaminating sonarsource-releases.test.ts,
-// since Bun shares the module registry across test files in the same process.
+// Import the real module first, then register it as a mock with the same object.
+// Because mock.module returns a plain mutable object (not a frozen ES namespace),
+// spyOn can patch individual exports per-test and restore them in afterEach —
+// without permanently replacing any function for other test files in this process.
+const releases = await import('../../src/lib/sonarsource-releases.js');
 mock.module('../../src/lib/sonarsource-releases.js', () => ({
-  fetchLatestVersion: () => mockFetchLatestVersion(),
+  ...releases,
+  // Override buildDownloadUrl with a deterministic version so tests don't depend
+  // on config-constants and sonarsource-releases.test.ts is not contaminated.
   buildDownloadUrl: (version: string, platform: { os: string; arch: string }): string =>
     `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-${version}-${platform.os}-${platform.arch}.exe`,
-  downloadBinary: (url: string, path: string) => mockDownloadBinary(url, path),
 }));
 
 const { secretInstallCommand } = await import('../../src/commands/secret.js');
@@ -53,44 +49,48 @@ describe('secretInstallCommand', () => {
   let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
+  let downloadBinarySpy: ReturnType<typeof spyOn>;
+  let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
     mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+    // Default: download succeeds silently, signature verification fails
+    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockResolvedValue(undefined);
+    verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockRejectedValue(
+      new Error('signature unavailable')
+    );
   });
 
   afterEach(() => {
     mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
+    downloadBinarySpy.mockRestore();
+    verifyBinarySignatureSpy.mockRestore();
     setMockUi(false);
-    // Reset mock implementations to default (failing)
-    mockFetchLatestVersion = async () => { throw new Error('network unavailable'); };
-    mockDownloadBinary = async () => {};
   });
 
   it('exits 1 when binary installation fails', async () => {
+    // Default verifyBinarySignatureSpy rejects → install fails
     await secretInstallCommand({ force: true });
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it('exits 0 when installation succeeds', async () => {
     const tempBinDir = join(tmpdir(), `sonar-install-test-${Date.now()}`);
-    const platform = detectPlatform();
-    const version = '1.0.0';
+    const { SONAR_SECRETS_VERSION } = await import('../../src/lib/signatures.js');
 
-    mockFetchLatestVersion = async () => version;
-
-    mockDownloadBinary = async (_url: string, path: string) => {
+    downloadBinarySpy.mockImplementation(async (_url: string, path: string) => {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, ''); // empty placeholder so chmod in makeExecutable succeeds
-    };
+    });
+    verifyBinarySignatureSpy.mockResolvedValue(undefined);
 
-    // spyOn so verifyInstallation returns a version without executing the binary
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0, stdout: `sonar-secrets version ${version}\n`, stderr: '',
+      exitCode: 0, stdout: `sonar-secrets version ${SONAR_SECRETS_VERSION}\n`, stderr: '',
     });
 
     try {
