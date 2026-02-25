@@ -27,7 +27,6 @@ import { BIN_DIR } from '../lib/config-constants.js';
 import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { getToken } from '../lib/keychain.js';
-import { version as VERSION } from '../../package.json';
 import logger from '../lib/logger.js';
 import { text, blank, success, error, print } from '../ui/index.js';
 
@@ -99,7 +98,7 @@ function setupBinaryPath(): string {
 }
 
 async function setupAuth(): Promise<{ authUrl: string; authToken: string }> {
-  const state = loadState(VERSION);
+  const state = loadState();
   const activeConnection = getActiveConnection(state);
 
   if (!activeConnection) {

@@ -34,7 +34,6 @@ import { runCommand } from '../lib/run-command.js';
 import logger from '../lib/logger.js';
 import { warn, success, print, note, textPrompt, confirmPrompt } from '../ui/index.js';
 import { green, red, dim } from '../ui/colors.js';
-import { version as CLI_VERSION } from '../../package.json';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 
 /**
@@ -241,7 +240,7 @@ export async function authLoginCommand(options: {
 
     await saveToken(server, token, org);
 
-    const state = loadState(CLI_VERSION);
+    const state = loadState();
     const keystoreKey = generateConnectionId(server, org);
 
     addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
@@ -285,7 +284,7 @@ export async function authLogoutCommand(options: {
 
     await deleteToken(server, org);
 
-    const state = loadState(CLI_VERSION);
+    const state = loadState();
     const connectionId = generateConnectionId(server, org);
     state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
 
@@ -330,7 +329,7 @@ export async function authPurgeCommand(): Promise<void> {
 
     await purgeAllTokens();
 
-    const state = loadState(CLI_VERSION);
+    const state = loadState();
     state.auth.connections = [];
     state.auth.activeConnectionId = undefined;
     state.auth.isAuthenticated = false;
@@ -345,7 +344,7 @@ export async function authPurgeCommand(): Promise<void> {
  */
 export async function authStatusCommand(): Promise<void> {
   await runCommand(async () => {
-    const state = loadState(CLI_VERSION);
+    const state = loadState();
 
     if (state.auth.connections.length === 0) {
       print('No saved connection');

@@ -27,6 +27,7 @@ import crypto from 'node:crypto';
 import logger from './logger.js';
 import { CliState, getDefaultState, AuthConnection, CloudRegion } from './state.js';
 import { CLI_DIR, STATE_FILE } from './config-constants.js';
+import { version as VERSION } from '../../package.json';
 
 /**
  * Ensure state directory exists
@@ -40,11 +41,11 @@ function ensureStateDir(): void {
 /**
  * Load state from file, or return default if not exists
  */
-export function loadState(cliVersion: string): CliState {
+export function loadState(cliVersion?: string): CliState {
   ensureStateDir();
 
   if (!fs.existsSync(STATE_FILE)) {
-    return getDefaultState(cliVersion);
+    return getDefaultState(cliVersion ?? VERSION);
   }
 
   try {
@@ -52,7 +53,7 @@ export function loadState(cliVersion: string): CliState {
     return JSON.parse(content) as CliState;
   } catch (error) {
     logger.debug(`Failed to load state from ${STATE_FILE}: ${(error as Error).message}`);
-    return getDefaultState(cliVersion);
+    return getDefaultState(cliVersion ?? VERSION);
   }
 }
 

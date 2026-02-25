@@ -356,7 +356,7 @@ async function updateStateAfterConfiguration(
   hooksInstalled: boolean,
 ): Promise<void> {
   try {
-    const state = loadState(VERSION);
+    const state = loadState();
 
     // Mark agent as configured
     markAgentConfigured(state, 'claude-code', VERSION);
