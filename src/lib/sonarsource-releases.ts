@@ -22,7 +22,7 @@
 
 import type { PlatformInfo } from './install-types.js';
 import logger from './logger.js';
-import { VERSION } from '../version.js';
+import { version as VERSION } from '../../package.json';
 import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from './config-constants.js';
 
 const REQUEST_TIMEOUT_MS = 30000;

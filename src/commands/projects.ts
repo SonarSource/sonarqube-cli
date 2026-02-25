@@ -4,7 +4,7 @@ import { SonarQubeClient } from '../sonarqube/client.js';
 import { ProjectsClient, MAX_PAGE_SIZE } from '../sonarqube/projects.js';
 import { getToken } from '../lib/keychain.js';
 import { loadState, getActiveConnection } from '../lib/state-manager.js';
-import { VERSION } from '../version.js';
+import { version as VERSION } from '../../package.json';
 import { print } from '../ui/index.js';
 
 export interface ProjectsSearchOptions {
