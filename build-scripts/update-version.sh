@@ -29,7 +29,13 @@ MAJOR_MINOR=$(echo "$CURRENT" | sed 's/\.[0-9]*$//')
 BUILD=$(echo "$CURRENT" | sed 's/.*\.//')
 
 if [ -n "$1" ]; then
-  NEW_VERSION="$1.$BUILD"
+  # If the argument already contains at least two dots (e.g. 1.2.3), use it as-is
+  DOT_COUNT=$(echo "$1" | tr -cd '.' | wc -c | tr -d ' ')
+  if [ "$DOT_COUNT" -ge 2 ]; then
+    NEW_VERSION="$1"
+  else
+    NEW_VERSION="$1.$BUILD"
+  fi
 else
   NEW_VERSION="$MAJOR_MINOR.$((BUILD + 1))"
 fi
