@@ -68,8 +68,9 @@ main() {
   platform="$(detect_platform)"
 
   local version
-  echo "Fetching latest version..."
-  version="$(resolve_latest_version)"
+  #echo "Fetching latest version..."
+  #version="$(resolve_latest_version)"
+  version="0.3.0.243"
   echo "Latest version: $version"
 
   local filename="sonarqube-cli-${version}-${platform}.exe"
