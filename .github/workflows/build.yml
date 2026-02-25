@@ -260,6 +260,13 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT: ${{ github.event.repository.name }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
+          ARTIFACTS_TO_PUBLISH: >-
+            org.sonarsource.cli:sonarqube-cli:exe:linux-x86-64,
+            org.sonarsource.cli:sonarqube-cli:exe.asc:linux-x86-64,
+            org.sonarsource.cli:sonarqube-cli:exe:macos-arm64,
+            org.sonarsource.cli:sonarqube-cli:exe.asc:macos-arm64,
+            org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64,
+            org.sonarsource.cli:sonarqube-cli:exe.asc:windows-x86-64
         run: |
           jf config add repox \
             --artifactory-url="${ARTIFACTORY_URL}" \
