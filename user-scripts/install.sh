@@ -62,32 +62,6 @@ download() {
   fi
 }
 
-verify_sha256() {
-  local file="$1"
-  local checksum_file="$2"
-  # The .sha256 file typically contains just the hex digest, or "hash  filename"
-  local expected
-  expected="$(awk '{print $1}' "$checksum_file")"
-
-  local actual
-  if command -v sha256sum &>/dev/null; then
-    actual="$(sha256sum "$file" | awk '{print $1}')"
-  elif command -v shasum &>/dev/null; then
-    actual="$(shasum -a 256 "$file" | awk '{print $1}')"
-  else
-    echo "Warning: no SHA256 tool found (sha256sum or shasum). Skipping checksum verification." >&2
-    return 0
-  fi
-
-  if [[ "$actual" != "$expected" ]]; then
-    echo "Error: SHA256 checksum mismatch!" >&2
-    echo "  Expected: $expected" >&2
-    echo "  Actual:   $actual" >&2
-    return 1
-  fi
-
-  echo "SHA256 checksum verified."
-}
 
 main() {
   local platform
@@ -100,7 +74,6 @@ main() {
 
   local filename="sonarqube-cli-${version}-${platform}.exe"
   local url="$BASE_URL/$filename"
-  local checksum_url="${url}.sha256"
   local dest="$INSTALL_DIR/$BINARY_NAME"
   TMP_DIR="$(mktemp -d)"
 
@@ -111,14 +84,8 @@ main() {
   mkdir -p "$INSTALL_DIR"
 
   local tmp_bin="$TMP_DIR/$filename"
-  local tmp_checksum="$TMP_DIR/$filename.sha256"
 
   download "$url" "$tmp_bin"
-  echo "Downloading SHA256 checksum from:"
-  echo "  $checksum_url"
-  download "$checksum_url" "$tmp_checksum"
-
-  verify_sha256 "$tmp_bin" "$tmp_checksum"
 
   mv "$tmp_bin" "$dest"
   chmod +x "$dest"

@@ -27,20 +27,6 @@ function Get-RemoteFile {
     Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
 }
 
-function Test-Sha256 {
-    param(
-        [string]$File,
-        [string]$ChecksumFile
-    )
-    $Expected = (Get-Content $ChecksumFile -Raw).Trim().Split()[0].ToLower()
-    $Actual   = (Get-FileHash -Algorithm SHA256 -Path $File).Hash.ToLower()
-
-    if ($Actual -ne $Expected) {
-        Write-Error "SHA256 checksum mismatch!`n  Expected: $Expected`n  Actual:   $Actual"
-        exit 1
-    }
-    Write-Host 'SHA256 checksum verified.'
-}
 
 function Add-ToUserPath {
     param([string]$Dir)
@@ -62,23 +48,16 @@ Write-Host "Latest version: $SonarVersion"
 
 $Filename     = "sonarqube-cli-$SonarVersion-$Platform.exe"
 $Url          = "$BaseUrl/$Filename"
-$ChecksumUrl  = "$Url.sha256"
 $Dest         = Join-Path $InstallDir $BinaryName
 
 $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $TmpDir | Out-Null
 
 try {
-    $TmpBin      = Join-Path $TmpDir $Filename
-    $TmpChecksum = Join-Path $TmpDir "$Filename.sha256"
+    $TmpBin = Join-Path $TmpDir $Filename
 
     Write-Host "Downloading sonarqube-cli from:"
     Get-RemoteFile -Url $Url -Dest $TmpBin
-
-    Write-Host "Downloading SHA256 checksum from:"
-    Get-RemoteFile -Url $ChecksumUrl -Dest $TmpChecksum
-
-    Test-Sha256 -File $TmpBin -ChecksumFile $TmpChecksum
 
     if (-not (Test-Path $InstallDir)) {
         New-Item -ItemType Directory -Path $InstallDir | Out-Null
