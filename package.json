@@ -24,13 +24,27 @@
     "gen:command": "plop command",
     "gen:plop-docs": "plop docs",
     "gen:all": "plop all-commands",
-    "gen:sync": "plop sync-index"
+    "gen:sync": "plop sync-index",
+    "fetch:signatures": "bun build-scripts/fetch-signatures.js"
+  },
+  "externalBinaries": {
+    "sonar-secrets": { 
+      "version": "2.40.1.10655",
+      "binaryPath": "CommercialDistribution/sonar-secrets",
+      "platforms": [
+        { "os": "linux",   "arch": "x86-64" },
+        { "os": "linux",   "arch": "arm64"  },
+        { "os": "macos",   "arch": "arm64"  },
+        { "os": "windows", "arch": "x86-64" }
+      ]
+    }
   },
   "dependencies": {
     "@clack/core": "^1.0.1",
     "@toon-format/toon": "^2.1.0",
     "commander": "^12.1.0",
     "keytar": "^7.9.0",
+    "openpgp": "^5.11.2",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
@@ -39,7 +53,6 @@
     "@types/node": "^22.0.0",
     "ajv": "^8.18.0",
     "js-yaml": "^4.1.1",
-    "openpgp": "^5.11.2",
     "plop": "^4.0.5",
     "typescript": "^5.3.3"
   },
