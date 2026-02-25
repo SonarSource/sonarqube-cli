@@ -215,7 +215,7 @@ async function recordInstallationInState(
   path: string
 ): Promise<void> {
   try {
-    const state = loadState(VERSION);
+    const state = loadState();
 
     state.tools ??= { installed: [] };
 

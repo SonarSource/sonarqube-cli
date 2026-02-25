@@ -22,7 +22,6 @@
 
 import { getToken } from './keychain.js';
 import { loadState, getActiveConnection } from './state-manager.js';
-import { version as VERSION } from '../../package.json';
 import { warn } from '../ui/index.js';
 import logger from './logger.js';
 
@@ -75,7 +74,7 @@ export async function resolveAuth(options: {
   // Resolve active connection from state
   let connection: { serverUrl: string; orgKey?: string } | undefined;
   try {
-    const state = loadState(VERSION);
+    const state = loadState();
     const active = getActiveConnection(state);
     if (active) {
       connection = { serverUrl: active.serverUrl, orgKey: active.orgKey };
