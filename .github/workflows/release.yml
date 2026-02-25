@@ -29,3 +29,4 @@ jobs:
       dryRun: ${{ inputs.dryRun }}
       publishToBinaries: true
       slackChannel: squad-ide-private
+      skipJavascriptReleasabilityChecks: true
