@@ -46,12 +46,9 @@ echo "🔄 Updating version to $NEW_VERSION..."
 echo "  📝 Updating package.json..."
 sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" package.json
 
-# Regenerate src/version.ts from package.json
-echo "  📝 Regenerating src/version.ts..."
-cat > src/version.ts << EOF
-// Auto-generated from package.json — do not edit manually
-export const VERSION = '$NEW_VERSION';
-EOF
+# Update VERSION in src/version.ts (preserve license header)
+echo "  📝 Updating src/version.ts..."
+sed -i '' "s/export const VERSION = '[^']*';/export const VERSION = '$NEW_VERSION';/" src/version.ts
 
 echo ""
 echo "✅ Version updated to $NEW_VERSION"
