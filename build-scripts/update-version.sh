@@ -29,7 +29,13 @@ MAJOR_MINOR=$(echo "$CURRENT" | sed 's/\.[0-9]*$//')
 BUILD=$(echo "$CURRENT" | sed 's/.*\.//')
 
 if [ -n "$1" ]; then
-  NEW_VERSION="$1.$BUILD"
+  # If the argument already contains at least two dots (e.g. 1.2.3), use it as-is
+  DOT_COUNT=$(echo "$1" | tr -cd '.' | wc -c | tr -d ' ')
+  if [ "$DOT_COUNT" -ge 2 ]; then
+    NEW_VERSION="$1"
+  else
+    NEW_VERSION="$1.$BUILD"
+  fi
 else
   NEW_VERSION="$MAJOR_MINOR.$((BUILD + 1))"
 fi
@@ -40,12 +46,9 @@ echo "🔄 Updating version to $NEW_VERSION..."
 echo "  📝 Updating package.json..."
 sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" package.json
 
-# Regenerate src/version.ts from package.json
-echo "  📝 Regenerating src/version.ts..."
-cat > src/version.ts << EOF
-// Auto-generated from package.json — do not edit manually
-export const VERSION = '$NEW_VERSION';
-EOF
+# Update VERSION in src/version.ts (preserve license header)
+echo "  📝 Updating src/version.ts..."
+sed -i '' "s/export const VERSION = '[^']*';/export const VERSION = '$NEW_VERSION';/" src/version.ts
 
 echo ""
 echo "✅ Version updated to $NEW_VERSION"
