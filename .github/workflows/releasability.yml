@@ -19,6 +19,6 @@ jobs:
     steps:
       - uses: SonarSource/gh-action_releasability/releasability-status@v3
         with:
-          optional_checks: "Jira,CheckDependencies,SonarCloudAnalysis"
+          optional_checks: "Jira,CheckDependencies,CheckManifestValues"
         env:
           GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
