@@ -38,7 +38,7 @@ stdin_data=$(cat)
 # Extract tool_name and file_path using sed (no jq dependency)
 tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name":"\([^"]*\)".*/\1/p' | head -1)
 
-if [ "$tool_name" != "Read" ]; then
+if [[ "$tool_name" != "Read" ]]; then
   exit 0
 fi
 
@@ -46,7 +46,7 @@ fi
 file_path=$(echo "$stdin_data" | sed -n 's/.*"tool_input":\s*{\([^}]*\)}.*/\1/p' | \
   sed -n 's/.*"file_path":"\([^"]*\)".*/\1/p' | head -1)
 
-if [ -z "$file_path" ] || [ ! -f "$file_path" ]; then
+if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
 fi
 
@@ -54,7 +54,7 @@ fi
 sonar analyze --file "$file_path" > /dev/null 2>&1
 exit_code=$?
 
-if [ $exit_code -eq 51 ]; then
+if [[ $exit_code -eq 51 ]]; then
   # Secrets found - deny file read
   reason="Sonar detected secrets in file: $file_path"
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"$reason\"}}"
@@ -131,7 +131,7 @@ stdin_data=$(cat)
 # Extract prompt field using sed
 prompt=$(echo "$stdin_data" | sed -n 's/.*"prompt":"\([^"]*\)".*/\1/p' | head -1)
 
-if [ -z "$prompt" ]; then
+if [[ -z "$prompt" ]]; then
   exit 0
 fi
 
@@ -145,7 +145,7 @@ echo -n "$prompt" > "$temp_file"
 sonar analyze --file "$temp_file" > /dev/null 2>&1
 exit_code=$?
 
-if [ $exit_code -eq 51 ]; then
+if [[ $exit_code -eq 51 ]]; then
   # Secrets found - block prompt
   reason="Sonar detected secrets in prompt"
   echo "{\"decision\":\"block\",\"reason\":\"$reason\"}"
