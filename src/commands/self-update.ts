@@ -87,12 +87,11 @@ export async function selfUpdateCommand(options: { check?: boolean; force?: bool
   }
 
   blank();
-  const installedVersion = await withSpinner(
-    `Downloading and installing v${latest}`,
-    () => performSelfUpdate(latest)
+  await withSpinner(
+    `Installing v${latest}`,
+    performSelfUpdate
   );
 
   blank();
-  success(`Updated to v${installedVersion}`);
-  text(`  Path: ${process.execPath}`);
+  success(`Updated to v${latest}`);
 }

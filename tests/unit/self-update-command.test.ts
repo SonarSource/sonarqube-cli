@@ -116,7 +116,7 @@ describe('selfUpdateCommand', () => {
 
   it('does not call performSelfUpdate when already on the latest version', async () => {
     fetchLatestSpy = spyOn(selfUpdate, 'fetchLatestCliVersion').mockResolvedValue(VERSION);
-    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockResolvedValue(VERSION);
+    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockResolvedValue(undefined);
 
     await selfUpdateCommand({});
 
@@ -125,11 +125,11 @@ describe('selfUpdateCommand', () => {
 
   it('calls performSelfUpdate and shows success when update is available', async () => {
     fetchLatestSpy = spyOn(selfUpdate, 'fetchLatestCliVersion').mockResolvedValue('99.99.99');
-    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockResolvedValue('99.99.99');
+    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockResolvedValue(undefined);
 
     await selfUpdateCommand({});
 
-    expect(performUpdateSpy).toHaveBeenCalledWith('99.99.99');
+    expect(performUpdateSpy).toHaveBeenCalled();
     const calls = getMockUiCalls();
     const successes = calls.filter(c => c.method === 'success').map(c => String(c.args[0]));
     expect(successes.some(m => m.includes('Updated to v99.99.99'))).toBe(true);
@@ -137,11 +137,11 @@ describe('selfUpdateCommand', () => {
 
   it('with --force, calls performSelfUpdate even when already on the latest version', async () => {
     fetchLatestSpy = spyOn(selfUpdate, 'fetchLatestCliVersion').mockResolvedValue(VERSION);
-    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockResolvedValue(VERSION);
+    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockResolvedValue(undefined);
 
     await selfUpdateCommand({ force: true });
 
-    expect(performUpdateSpy).toHaveBeenCalledWith(VERSION);
+    expect(performUpdateSpy).toHaveBeenCalled();
     const calls = getMockUiCalls();
     const infos = calls.filter(c => c.method === 'info').map(c => String(c.args[0]));
     expect(infos.some(m => m.includes('Forcing reinstall'))).toBe(true);
@@ -149,9 +149,9 @@ describe('selfUpdateCommand', () => {
 
   it('propagates error from performSelfUpdate', async () => {
     fetchLatestSpy = spyOn(selfUpdate, 'fetchLatestCliVersion').mockResolvedValue('99.99.99');
-    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockRejectedValue(new Error('download failed'));
+    performUpdateSpy = spyOn(selfUpdate, 'performSelfUpdate').mockRejectedValue(new Error('install script failed'));
 
-    expect(selfUpdateCommand({})).rejects.toThrow('download failed');
+    expect(selfUpdateCommand({})).rejects.toThrow('install script failed');
   });
 
   it('propagates error when version fetch fails', async () => {
