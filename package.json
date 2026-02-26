@@ -28,7 +28,8 @@
     "gen:command": "plop command",
     "gen:all": "plop all-commands",
     "gen:sync": "plop sync-index",
-    "fetch:signatures": "bun build-scripts/fetch-signatures.js"
+    "fetch:signatures": "bun build-scripts/fetch-signatures.js",
+    "prepare": "husky"
   },
   "externalBinaries": {
     "sonar-secrets": { 
@@ -62,6 +63,8 @@
     "eslint-plugin-headers": "^1.3.4",
     "husky": "9.1.7",
     "js-yaml": "^4.1.1",
+    "lint-staged": "16.2.7",
+    "openpgp": "^5.11.2",
     "plop": "^4.0.5",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
@@ -69,5 +72,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "lint-staged": {
+    "*.ts": ["prettier --write", "eslint --fix"]
   }
 }

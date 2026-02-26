@@ -52,9 +52,8 @@ interface LoggerConfig {
 }
 
 let config: LoggerConfig = {
-  level: (process.env.LOG_LEVEL as LogLevel) || 'INFO',
+  level: (process.env.LOG_LEVEL || 'INFO') as LogLevel,
 };
-
 
 let logDirCreated = false;
 
@@ -92,18 +91,32 @@ function writeToFile(level: LogLevel, message: string, args: unknown[]): void {
 }
 
 class DefaultLogger implements LoggerInterface {
-  debug(message: string, ...args: unknown[]): void { writeToFile('DEBUG', message, args); }
-  info(message: string, ...args: unknown[]): void  { writeToFile('INFO',  message, args); }
-  log(message: string, ...args: unknown[]): void   { writeToFile('INFO',  message, args); }
-  success(message: string, ...args: unknown[]): void { writeToFile('INFO', message, args); }
-  warn(message: string, ...args: unknown[]): void  { writeToFile('WARN',  message, args); }
-  error(message: string, ...args: unknown[]): void { writeToFile('ERROR', message, args); }
+  debug(message: string, ...args: unknown[]): void {
+    writeToFile('DEBUG', message, args);
+  }
+  info(message: string, ...args: unknown[]): void {
+    writeToFile('INFO', message, args);
+  }
+  log(message: string, ...args: unknown[]): void {
+    writeToFile('INFO', message, args);
+  }
+  success(message: string, ...args: unknown[]): void {
+    writeToFile('INFO', message, args);
+  }
+  warn(message: string, ...args: unknown[]): void {
+    writeToFile('WARN', message, args);
+  }
+  error(message: string, ...args: unknown[]): void {
+    writeToFile('ERROR', message, args);
+  }
 }
 
 class Logger {
   private impl: LoggerInterface = new DefaultLogger();
 
-  setImplementation(impl: LoggerInterface): void { this.impl = impl; }
+  setImplementation(impl: LoggerInterface): void {
+    this.impl = impl;
+  }
 
   debug(message: string, ...args: unknown[]): void {
     if (shouldLog('DEBUG')) this.impl.debug(message, ...args);
