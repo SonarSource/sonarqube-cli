@@ -250,6 +250,31 @@ commands:
           - command: sonar list projects --page 2 --page-size 50
             description: Paginate through projects
 
+  # Self-update the CLI
+  - name: self-update
+    description: Update the sonar CLI to the latest version
+    handler: ./src/commands/self-update.ts
+    options:
+      - name: check
+        type: boolean
+        description: Check for updates without installing
+        default: false
+
+      - name: force
+        type: boolean
+        description: Force reinstall even if already on the latest version
+        default: false
+
+    examples:
+      - command: sonar self-update
+        description: Update the CLI to the latest version
+
+      - command: sonar self-update --check
+        description: Check if an update is available without installing
+
+      - command: sonar self-update --force
+        description: Reinstall the latest version even if already up to date
+
   # Analyze code for security issues
   - name: analyze
     description: Analyze code for security issues

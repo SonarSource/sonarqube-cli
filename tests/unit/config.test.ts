@@ -22,9 +22,9 @@
 
 import { it, expect } from 'bun:test';
 
-import { mkdirSync, rmSync, existsSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { mkdirSync, rmSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { loadConfig, saveConfig, newConfig } from '../../src/bootstrap/config.js';
 
 it('config: save and load', async () => {
