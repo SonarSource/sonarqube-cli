@@ -190,7 +190,7 @@ async function runScan(
   authToken: string | undefined
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   return Promise.race([
-    spawnProcess(binaryPath, [file], {
+    spawnProcess(binaryPath, ['--non-interactive', file], {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -342,8 +342,7 @@ function handleScanFailure(
     print(result.stdout);
   }
   blank();
-  // Binary exit 1 = secrets found — remap to 51 so hooks can distinguish from generic errors
-  process.exit(exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode);
+  process.exit(exitCode);
 }
 
 function handleScanError(err: unknown): void {
