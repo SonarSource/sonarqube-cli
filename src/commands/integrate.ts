@@ -376,7 +376,7 @@ function printFinalVerificationResults(
 /**
  * Update state after successful configuration
  */
-function updateStateAfterConfiguration(hooksInstalled: boolean): void {
+async function updateStateAfterConfiguration(hooksInstalled: boolean): Promise<void> {
   try {
     const state = loadState();
 
@@ -421,7 +421,19 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
     // Load configuration from all sources
     const config = await loadConfiguration(projectInfo, options);
 
-    // Validate and extract required values
+    // Secrets-only mode: no project key configured — install hooks and exit
+    if (!config.projectKey) {
+      text('\nNo project key configured.');
+      text('Installing secret scanning hooks only.');
+      if (!options.skipHooks) {
+        await installSecretScanningHooks(projectInfo.root);
+        await updateStateAfterConfiguration(true);
+      }
+      outro('Setup complete!', 'success');
+      return;
+    }
+
+    // Full SonarQube integration path
     const { serverURL, projectKey } = validateAndPrintConfiguration(config);
 
     // Ensure token is available
@@ -457,7 +469,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
         printFinalVerificationResults(finalHealth);
 
         // Update state with configuration
-        updateStateAfterConfiguration(!options.skipHooks);
+        await updateStateAfterConfiguration(!options.skipHooks);
 
         return;
       }
@@ -483,6 +495,6 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
     printFinalVerificationResults(finalHealth);
 
     // Update state with configuration
-    updateStateAfterConfiguration(!options.skipHooks);
+    await updateStateAfterConfiguration(!options.skipHooks);
   });
 }
