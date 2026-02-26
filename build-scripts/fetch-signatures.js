@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /*
  * SonarQube CLI
  * Copyright (C) 2026 SonarSource Sàrl
@@ -46,39 +44,22 @@ const SIGNATURES_TS_PATH = new URL('../src/lib/signatures.ts', import.meta.url);
 async function fetchSignatures() {
   const verificationKey = await openpgp.readKey({ armoredKey: SONARSOURCE_PUBLIC_KEY });
 
-  let totalFailures = 0;
-
   for (const [binaryName, { version, binaryPath, platforms }] of Object.entries(pkg.externalBinaries)) {
-    console.log(`Fetching signatures for ${binaryName} ${version}\n`);
+    console.log(`Fetching signatures for ${binaryName} v${version}\n`);
 
-    const results = await Promise.allSettled(
+    const results = await Promise.all(
       platforms.map(platform => fetchAndVerifySignature(platform, version, binaryPath, verificationKey))
     );
 
-    let failures = 0;
     const signatures = {};
     for (const result of results) {
-      if (result.status === 'rejected') {
-        console.error(`  ERROR: ${result.reason}`);
-        failures++;
-      } else if (result.value) {
-        const { platform, armoredSignature } = result.value;
-        signatures[platform] = armoredSignature;
+      if (result) {
+        signatures[result.platform] = result.armoredSignature;
       }
     }
 
-    if (failures > 0) {
-      console.error(`\n${failures} platform(s) failed for ${binaryName}.`);
-      totalFailures += failures;
-    } else {
-      patchSignaturesTs(binaryName, version, signatures, SIGNATURES_TS_PATH);
-    }
-
+    patchSignaturesTs(binaryName, version, signatures, SIGNATURES_TS_PATH);
     console.log('');
-  }
-
-  if (totalFailures > 0) {
-    process.exit(1);
   }
 }
 
@@ -105,11 +86,11 @@ function patchSignaturesTs(binaryName, version, signatures, outputPath) {
 
 /** Returns { platform, armoredSignature } if distributed, null if skipped. */
 async function fetchAndVerifySignature(platform, version, distPrefix, verificationKey) {
+  const platformKey = `${platform.os}-${platform.arch}`;
   const binaryName = distPrefix.split('/').at(-1);
-  const filename = `${binaryName}-${version}-${platform.os}-${platform.arch}.exe`;
-  const ascUrl = `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${filename}.asc`;
+  const ascUrl = `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${binaryName}-${version}-${platformKey}.exe.asc`;
 
-  process.stdout.write(`  ${platform.os}-${platform.arch} … `);
+  console.log(`  ${platformKey} … `);
 
   const ascResponse = await fetch(ascUrl);
   if (!ascResponse.ok) {
@@ -117,7 +98,7 @@ async function fetchAndVerifySignature(platform, version, distPrefix, verificati
       console.log(`Skipped: ${ascResponse.status}`);
       return null;
     }
-    throw new Error(`${platform.os}-${platform.arch}: ASC download failed: ${ascResponse.status} ${ascResponse.statusText}`);
+    throw new Error(`${platformKey}: ASC download failed: ${ascResponse.status} ${ascResponse.statusText}`);
   }
   const armoredSignature = await ascResponse.text();
 
@@ -129,15 +110,14 @@ async function fetchAndVerifySignature(platform, version, distPrefix, verificati
     ...verificationKey.getSubkeys().map(sub => sub.getKeyID().toHex()),
   ]);
   const signatureKeyIDs = signature.packets.map(p => p.issuerKeyID.toHex());
-  const isTrusted = signatureKeyIDs.some(id => trustedKeyIDs.has(id));
-  if (!isTrusted) {
+  if (!signatureKeyIDs.some(id => trustedKeyIDs.has(id))) {
     throw new Error(
-      `${platform.os}-${platform.arch}: signature not issued by the trusted SonarSource key ` +
+      `${platformKey}: signature not issued by the trusted SonarSource key ` +
       `(got key IDs: ${signatureKeyIDs.join(', ')})`
     );
   }
 
-  return { platform: `${platform.os}-${platform.arch}`, armoredSignature };
+  return { platform: platformKey, armoredSignature };
 }
 
 try {
