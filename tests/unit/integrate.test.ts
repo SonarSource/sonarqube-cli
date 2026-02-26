@@ -27,6 +27,7 @@ import * as health from '../../src/bootstrap/health.js';
 import * as repair from '../../src/bootstrap/repair.js';
 import * as auth from '../../src/bootstrap/auth.js';
 import * as keychain from '../../src/lib/keychain.js';
+import * as hooks from '../../src/bootstrap/hooks.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
@@ -56,25 +57,27 @@ const CLEAN_HEALTH = {
 // ─── validateAgent ────────────────────────────────────────────────────────────
 
 describe('integrateCommand: validateAgent', () => {
+  let mockExit: ReturnType<typeof spyOn>;
+
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
-    process.exitCode = 0;
+    mockExit.mockRestore();
     setMockUi(false);
   });
 
   it('exits 1 when unsupported agent is provided', async () => {
     await integrateCommand('gemini', {});
-    expect(process.exitCode).toBe(1);
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it('exits 1 for any unknown agent name', async () => {
     await integrateCommand('copilot', {});
-    expect(process.exitCode).toBe(1);
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it('error message mentions the unsupported agent name', async () => {
@@ -97,15 +100,16 @@ describe('integrateCommand: validateAgent', () => {
 // ─── env var auth warning ─────────────────────────────────────────────────────
 
 describe('integrateCommand: env var auth', () => {
+  let mockExit: ReturnType<typeof spyOn>;
   let discoverSpy: ReturnType<typeof spyOn>;
   let healthSpy: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -115,7 +119,7 @@ describe('integrateCommand: env var auth', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
+    mockExit.mockRestore();
     discoverSpy.mockRestore();
     healthSpy.mockRestore();
     loadStateSpy.mockRestore();
@@ -159,19 +163,20 @@ describe('integrateCommand: env var auth', () => {
 // ─── full flow ────────────────────────────────────────────────────────────────
 
 describe('integrateCommand: full flow', () => {
+  let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    process.exitCode = 0;
+    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -189,6 +194,7 @@ describe('integrateCommand: full flow', () => {
         org: 'test-org',
         skipHooks: true,
       });
+      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -290,6 +296,7 @@ describe('integrateCommand: full flow', () => {
         org: 'test-org',
         skipHooks: false,
       });
+      expect(mockExit).toHaveBeenCalledWith(0);
       expect(addInstalledHookSpy).toHaveBeenCalledWith(
         expect.anything(),
         'claude-code',
@@ -313,15 +320,16 @@ describe('integrateCommand: full flow', () => {
 // ─── configuration validation errors ──────────────────────────────────────────
 
 describe('integrateCommand: configuration validation', () => {
+  let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
   let getAllCredentialsSpy: ReturnType<typeof spyOn>;
   let getTokenSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
     getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
@@ -329,7 +337,7 @@ describe('integrateCommand: configuration validation', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
+    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     getAllCredentialsSpy.mockRestore();
@@ -337,31 +345,44 @@ describe('integrateCommand: configuration validation', () => {
     setMockUi(false);
   });
 
-  it('exits 1 when server URL cannot be determined', async () => {
+  it('exits 0 and installs hooks when no project key is configured (secrets-only mode)', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrateCommand('claude', { project: 'my-project' });
-      expect(process.exitCode).toBe(1);
-      const errors = getMockUiCalls()
-        .filter((c) => c.method === 'error')
-        .map((c) => String(c.args[0]));
-      expect(errors.some((m) => m.includes('Server URL'))).toBe(true);
+      await integrateCommand('claude', {});
+      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(hooksSpy).toHaveBeenCalled();
     } finally {
       discoverSpy.mockRestore();
+      hooksSpy.mockRestore();
     }
   });
 
-  it('exits 1 when project key cannot be determined', async () => {
+  it('shows secrets-only message when no project key is configured', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrateCommand('claude', { server: 'https://sonarcloud.io' });
-      expect(process.exitCode).toBe(1);
-      const errors = getMockUiCalls()
-        .filter((c) => c.method === 'error')
+      await integrateCommand('claude', {});
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
-      expect(errors.some((m) => m.includes('Project key'))).toBe(true);
+      expect(texts.some((m) => m.includes('No project key'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
+      hooksSpy.mockRestore();
+    }
+  });
+
+  it('exits 0 and installs hooks when server is set but no project key (secrets-only mode)', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    try {
+      await integrateCommand('claude', { server: 'https://sonarcloud.io' });
+      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(hooksSpy).toHaveBeenCalled();
+    } finally {
+      discoverSpy.mockRestore();
+      hooksSpy.mockRestore();
     }
   });
 
@@ -390,19 +411,20 @@ describe('integrateCommand: configuration validation', () => {
 // ─── discovered configuration ────────────────────────────────────────────────
 
 describe('integrateCommand: discovered project configuration', () => {
+  let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    process.exitCode = 0;
+    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -462,17 +484,20 @@ describe('integrateCommand: discovered project configuration', () => {
 // ─── global flag ──────────────────────────────────────────────────────────────
 
 describe('integrateCommand: --global flag', () => {
+  let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
     clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -491,6 +516,7 @@ describe('integrateCommand: --global flag', () => {
         skipHooks: true,
         global: true,
       });
+      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -510,6 +536,7 @@ describe('integrateCommand: --global flag', () => {
         skipHooks: false,
         global: true,
       });
+      expect(mockExit).toHaveBeenCalledWith(0);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -520,21 +547,22 @@ describe('integrateCommand: --global flag', () => {
 // ─── no token path ────────────────────────────────────────────────────────────
 
 describe('integrateCommand: no token available', () => {
+  let mockExit: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
   let getAllCredentialsSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
     getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
   });
 
   afterEach(() => {
-    process.exitCode = 0;
+    mockExit.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     getAllCredentialsSpy.mockRestore();
