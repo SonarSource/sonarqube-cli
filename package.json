@@ -59,6 +59,8 @@
     "ajv": "^8.18.0",
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-headers": "^1.3.4",
+    "husky": "9.1.7",
     "js-yaml": "^4.1.1",
     "plop": "^4.0.5",
     "prettier": "^3.8.1",
