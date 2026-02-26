@@ -22,7 +22,6 @@
     "gen": "node build-scripts/generate.js",
     "gen:docs": "node build-scripts/generate-docs.js",
     "gen:command": "plop command",
-    "gen:plop-docs": "plop docs",
     "gen:all": "plop all-commands",
     "gen:sync": "plop sync-index",
     "fetch:signatures": "bun build-scripts/fetch-signatures.js"

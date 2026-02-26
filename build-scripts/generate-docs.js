@@ -62,7 +62,7 @@ function renderOptionsTable(options) {
     const headers = ['Option', 'Type', 'Required', 'Description', 'Default'];
     const cells = options.map(opt => {
       const flag = opt.alias ? `\`--${opt.name}\`, \`-${opt.alias}\`` : `\`--${opt.name}\``;
-      const required = opt.required ? '✅' : '❌';
+      const required = opt.required ? 'Yes' : 'No';
       const def = 'default' in opt ? `\`${opt.default}\`` : '-';
       return [flag, opt.type, required, opt.description, def];
     });
@@ -116,45 +116,12 @@ function renderCommand(name, cmd, depth = 3) {
   return lines.join('\n');
 }
 
-const sections = [
-  `# ${spec.cli.name}`,
-  '',
-  spec.cli.description,
-  '',
-  '## Installation',
-  '',
-  '```bash',
-  'brew install local/sonar/sonar',
-  '```',
-  '',
-  '## Commands',
-  '',
-  ...spec.commands.map(cmd => renderCommand(`${spec.cli.name} ${cmd.name}`, cmd)),
-  '## Option Types',
-  '',
-  '- `string` — text value (e.g. `--server https://sonarcloud.io`)',
-  '- `boolean` — flag (e.g. `--verbose`)',
-  '- `number` — numeric value (e.g. `--page-size 100`)',
-  '- `array` — multiple values (e.g. `--tags tag1 tag2`)',
-  '',
-  '## Exit Codes',
-  '',
-  '| Code | Meaning                           |',
-  '|------|-----------------------------------|',
-  '| 0    | Success                           |',
-  '| 1    | Error (validation, execution, etc.) |',
-  '',
-  '---',
-  '',
-  '## License',
-  '',
-  'Copyright 2026 SonarSource Sàrl.',
-  '',
-  'SonarQube CLI is released under the [GNU Lesser General Public License, Version 3.0⁠,](http://www.gnu.org/licenses/lgpl.txt).',
-  '',
-  `*Generated from \`spec.yaml\` — do not edit manually*`,
-  ''
-];
+const commands = spec.commands
+  .map(cmd => renderCommand(`${spec.cli.command} ${cmd.name}`, cmd))
+  .join('\n');
 
-writeFileSync(join(ROOT, 'README.md'), sections.join('\n'));
+const template = readFileSync(join(ROOT, 'build-scripts/README.template.md'), 'utf8');
+const output = template.replace('<!-- COMMANDS -->', commands.trimEnd());
+
+writeFileSync(join(ROOT, 'README.md'), output);
 console.log('✅ README.md generated from spec.yaml');

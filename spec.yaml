@@ -2,16 +2,87 @@
 # This declarative spec defines all CLI commands, options, and structure
 
 cli:
-  name: sonar
-  description: SonarQube CLI
+  name: sonarqube-cli
+  command: sonar
+  description: A CLI application for interacting with SonarQube products
 
 commands:
+  # Authentication command
+  - name: auth
+    description: Manage authentication tokens and credentials
+    subcommands:
+      - name: login
+        description: Save authentication token to keychain
+        handler: ./src/commands/auth.ts
+        options:
+          - name: server
+            alias: s
+            type: string
+            description: SonarQube server URL (default is SonarCloud)
+
+          - name: org
+            alias: o
+            type: string
+            description: SonarCloud organization key (required for SonarCloud)
+
+          - name: with-token
+            alias: t
+            type: string
+            description: Token value (skips browser, non-interactive mode)
+
+        examples:
+          - command: sonar auth login
+            description: Interactive login for SonarCloud with browser
+
+          - command: sonar auth login -o my-org -t squ_abc123
+            description: Non-interactive login with direct token
+
+          - command: sonar auth login -s https://my-sonarqube.io --with-token squ_def456
+            description: Non-interactive login for custom server with token
+
+      - name: logout
+        description: Remove authentication token from keychain
+        handler: ./src/commands/auth.ts
+        options:
+          - name: server
+            alias: s
+            type: string
+            description: SonarQube server URL
+
+          - name: org
+            alias: o
+            type: string
+            description: SonarCloud organization key (required for SonarCloud)
+
+        examples:
+          - command: sonar auth logout -o my-org
+            description: Remove token for SonarCloud organization
+
+          - command: sonar auth logout -s https://my-sonarqube.io
+            description: Remove token for custom SonarQube server
+
+      - name: purge
+        description: Remove all authentication tokens from keychain
+        handler: ./src/commands/auth.ts
+
+        examples:
+          - command: sonar auth purge
+            description: Interactively remove all saved tokens
+
+      - name: status
+        description: Show active authentication connection with token verification
+        handler: ./src/commands/auth.ts
+
+        examples:
+          - command: sonar auth status
+            description: Show current server connection and token status
+
   # Install Sonar tools
   - name: install
     description: Install Sonar tools
     subcommands:
       - name: secrets
-        description: Install sonar-secrets binary from binaries.sonarsource.com
+        description: Install sonar-secrets binary from https://binaries.sonarsource.com
         handler: ./src/commands/secret.ts
         options:
           - name: force
@@ -43,6 +114,7 @@ commands:
         alias: s
         type: string
         description: SonarQube server URL
+        default: https://sonarcloud.io
 
       - name: project
         alias: p
@@ -177,76 +249,6 @@ commands:
 
           - command: sonar list projects --page 2 --page-size 50
             description: Paginate through projects
-
-  # Authentication command
-  - name: auth
-    description: Manage authentication tokens and credentials
-    subcommands:
-      - name: login
-        description: Save authentication token to keychain
-        handler: ./src/commands/auth.ts
-        options:
-          - name: server
-            alias: s
-            type: string
-            description: SonarQube server URL (default is SonarCloud)
-
-          - name: org
-            alias: o
-            type: string
-            description: SonarCloud organization key (required for SonarCloud)
-
-          - name: with-token
-            alias: t
-            type: string
-            description: Token value (skips browser, non-interactive mode)
-
-        examples:
-          - command: sonar auth login
-            description: Interactive login for SonarCloud with browser
-
-          - command: sonar auth login -o my-org -t squ_abc123
-            description: Non-interactive login with direct token
-
-          - command: sonar auth login -s https://my-sonarqube.io --with-token squ_def456
-            description: Non-interactive login for custom server with token
-
-      - name: logout
-        description: Remove authentication token from keychain
-        handler: ./src/commands/auth.ts
-        options:
-          - name: server
-            alias: s
-            type: string
-            description: SonarQube server URL
-
-          - name: org
-            alias: o
-            type: string
-            description: SonarCloud organization key (required for SonarCloud)
-
-        examples:
-          - command: sonar auth logout -o my-org
-            description: Remove token for SonarCloud organization
-
-          - command: sonar auth logout -s https://my-sonarqube.io
-            description: Remove token for custom SonarQube server
-
-      - name: purge
-        description: Remove all authentication tokens from keychain
-        handler: ./src/commands/auth.ts
-
-        examples:
-          - command: sonar auth purge
-            description: Interactively remove all saved tokens
-
-      - name: status
-        description: Show active authentication connection with token verification
-        handler: ./src/commands/auth.ts
-
-        examples:
-          - command: sonar auth status
-            description: Show current server connection and token status
 
   # Analyze code for security issues
   - name: analyze
