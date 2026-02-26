@@ -55,7 +55,9 @@ function getBinaryName(): string {
   } else if (plt === 'linux') {
     return arch === 'arm64' ? 'sonar-secrets-linux-arm64' : 'sonar-secrets-linux-x86-64';
   } else if (plt === 'win32') {
-    return arch === 'arm64' ? 'sonar-secrets-windows-arm64.exe' : 'sonar-secrets-windows-x86-64.exe';
+    return arch === 'arm64'
+      ? 'sonar-secrets-windows-arm64.exe'
+      : 'sonar-secrets-windows-x86-64.exe';
   }
 
   throw new Error(`Unsupported platform: ${plt}`);
@@ -69,7 +71,6 @@ function skipIfNoToken(): boolean {
   return !hasToken;
 }
 
- 
 /* sonar-cli: safe for integration tests with hardcoded test data */
 describe('sonar secret check - integration tests', () => {
   beforeAll(() => {
@@ -95,8 +96,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
       } catch (error) {
         console.error('Failed to install sonar-secrets:', error);
@@ -118,18 +119,15 @@ describe('sonar secret check - integration tests', () => {
       }
 
       try {
-        const result = execSync(
-          `echo "${GITHUB_TOKEN}" | dist/sonar-cli secret check --stdin`,
-          {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: {
-              ...process.env,
-              SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-              SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-            }
-          }
-        );
+        const result = execSync(`echo "${GITHUB_TOKEN}" | dist/sonar-cli secret check --stdin`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
+        });
         // If we get here, exit code was 0 (no error)
         expect(result).toBeDefined();
       } catch (error) {
@@ -145,18 +143,15 @@ describe('sonar secret check - integration tests', () => {
       }
 
       try {
-        const result = execSync(
-          `echo "${CLEAN_TEXT}" | dist/sonar-cli secret check --stdin`,
-          {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: {
-              ...process.env,
-              SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-              SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-            }
-          }
-        );
+        const result = execSync(`echo "${CLEAN_TEXT}" | dist/sonar-cli secret check --stdin`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
+        });
 
         // Clean content should succeed (exit 0)
         expect(result).toBeDefined();
@@ -178,8 +173,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
         // Empty input should succeed
       } catch (error) {
@@ -202,8 +197,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
       } catch (error) {
         // Multiple secrets should be detected (exit 1)
@@ -218,12 +213,9 @@ describe('sonar secret check - integration tests', () => {
       }
 
       try {
-        execSync(
-          `echo "test" | dist/sonar-cli secret check --stdin --file /tmp/test.txt`,
-          {
-            stdio: 'pipe'
-          }
-        );
+        execSync(`echo "test" | dist/sonar-cli secret check --stdin --file /tmp/test.txt`, {
+          stdio: 'pipe',
+        });
         expect.unreachable();
       } catch (error) {
         const err = error as { status?: number; stderr?: string };
@@ -238,7 +230,7 @@ describe('sonar secret check - integration tests', () => {
 
       try {
         execSync('dist/sonar-cli secret check', {
-          stdio: 'pipe'
+          stdio: 'pipe',
         });
         expect.unreachable();
       } catch (error) {
@@ -274,8 +266,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
       } catch (error) {
         // Should find secret (exit 1)
@@ -297,8 +289,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
         // Clean file should succeed
       } catch (error) {
@@ -320,8 +312,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
       } catch (error) {
         // Should find secret
@@ -339,7 +331,7 @@ describe('sonar secret check - integration tests', () => {
 
       try {
         execSync(`dist/sonar-cli secret check --file "${nonExistent}"`, {
-          stdio: 'pipe'
+          stdio: 'pipe',
         });
         expect.unreachable();
       } catch (error) {
@@ -361,8 +353,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
         // Empty file is clean
       } catch (error) {
@@ -403,8 +395,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
         stdinExitCode = 0;
       } catch (error) {
@@ -419,8 +411,8 @@ describe('sonar secret check - integration tests', () => {
           env: {
             ...process.env,
             SONAR_SECRETS_TOKEN: process.env.SONAR_SECRETS_TOKEN,
-            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL
-          }
+            SONAR_SECRETS_AUTH_URL: process.env.SONAR_SECRETS_AUTH_URL,
+          },
         });
         fileExitCode = 0;
       } catch (error) {

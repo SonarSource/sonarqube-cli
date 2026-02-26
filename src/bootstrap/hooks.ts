@@ -28,7 +28,7 @@ import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
-  getSecretPromptTemplateWindows
+  getSecretPromptTemplateWindows,
 } from './hook-templates.js';
 
 const CLAUDE_DIR = '.claude';
@@ -79,7 +79,11 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
     const settings = JSON.parse(data);
 
     // Check if PreToolUse hook is configured (secret scanning hooks)
-    return !!(settings.hooks?.PreToolUse && Array.isArray(settings.hooks.PreToolUse) && settings.hooks.PreToolUse.length > 0);
+    return !!(
+      settings.hooks?.PreToolUse &&
+      Array.isArray(settings.hooks.PreToolUse) &&
+      settings.hooks.PreToolUse.length > 0
+    );
   } catch {
     return false;
   }
@@ -89,10 +93,10 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
  * Generate secret scanning hooks dynamically
  */
 async function generateSecretHooks(
-  fs: { writeFile: Function },
+  fs: { writeFile: (path: string, data: string, options?: { mode?: number }) => Promise<void> },
   isWindows: boolean,
   scriptExt: string,
-  targetScriptsDir: string
+  targetScriptsDir: string,
 ): Promise<void> {
   const preTool = isWindows ? getSecretPreToolTemplateWindows() : getSecretPreToolTemplateUnix();
   const prompt = isWindows ? getSecretPromptTemplateWindows() : getSecretPromptTemplateUnix();
@@ -152,11 +156,17 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
         hooks: [
           {
             type: 'command',
-            command: join('.claude', 'hooks', 'sonar-secrets', 'build-scripts', `pretool-secrets${scriptExt}`),
-            timeout: 60
-          }
-        ]
-      }
+            command: join(
+              '.claude',
+              'hooks',
+              'sonar-secrets',
+              'build-scripts',
+              `pretool-secrets${scriptExt}`,
+            ),
+            timeout: 60,
+          },
+        ],
+      },
     ];
 
     // UserPromptSubmit for prompt scanning
@@ -166,11 +176,17 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
         hooks: [
           {
             type: 'command',
-            command: join('.claude', 'hooks', 'sonar-secrets', 'build-scripts', `prompt-secrets${scriptExt}`),
-            timeout: 60
-          }
-        ]
-      }
+            command: join(
+              '.claude',
+              'hooks',
+              'sonar-secrets',
+              'build-scripts',
+              `prompt-secrets${scriptExt}`,
+            ),
+            timeout: 60,
+          },
+        ],
+      },
     ];
 
     // Save updated settings

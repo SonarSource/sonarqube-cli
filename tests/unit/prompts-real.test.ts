@@ -28,7 +28,7 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 let mockTextResult: string | symbol = 'default';
 let mockConfirmResult: boolean | symbol = true;
 
-mock.module('@clack/core', () => {
+void mock.module('@clack/core', () => {
   class TextPromptMock {
     state: string = 'initial';
     value: string = '';
@@ -39,11 +39,14 @@ mock.module('@clack/core', () => {
       this._render = opts.render;
     }
 
-    async prompt() {
+    prompt() {
       // Exercise all render states to cover render() branches in prompts.ts
-      this.state = 'initial'; this._render.call(this);
-      this.state = 'submit';  this._render.call(this);
-      this.state = 'cancel';  this._render.call(this);
+      this.state = 'initial';
+      this._render.call(this);
+      this.state = 'submit';
+      this._render.call(this);
+      this.state = 'cancel';
+      this._render.call(this);
       return mockTextResult;
     }
   }
@@ -62,12 +65,19 @@ mock.module('@clack/core', () => {
       this._render = opts.render;
     }
 
-    async prompt() {
+    prompt() {
       // Exercise all render states + both cursor positions
-      this.state = 'initial'; this.cursor = 0; this._render.call(this);
-      this.state = 'initial'; this.cursor = 1; this._render.call(this);
-      this.state = 'submit';  this.value = true;  this._render.call(this);
-      this.state = 'cancel';  this._render.call(this);
+      this.state = 'initial';
+      this.cursor = 0;
+      this._render.call(this);
+      this.state = 'initial';
+      this.cursor = 1;
+      this._render.call(this);
+      this.state = 'submit';
+      this.value = true;
+      this._render.call(this);
+      this.state = 'cancel';
+      this._render.call(this);
       return mockConfirmResult;
     }
   }
@@ -85,7 +95,9 @@ import { textPrompt, confirmPrompt, pressAnyKeyPrompt } from '../../src/ui/compo
 // ─── textPrompt non-mock ──────────────────────────────────────────────────────
 
 describe('textPrompt: real prompt path', () => {
-  beforeEach(() => { mockTextResult = 'default'; });
+  beforeEach(() => {
+    mockTextResult = 'default';
+  });
 
   it('returns the string value from prompt', async () => {
     mockTextResult = 'entered-value';
@@ -109,7 +121,9 @@ describe('textPrompt: real prompt path', () => {
 // ─── confirmPrompt non-mock ───────────────────────────────────────────────────
 
 describe('confirmPrompt: real prompt path', () => {
-  beforeEach(() => { mockConfirmResult = true; });
+  beforeEach(() => {
+    mockConfirmResult = true;
+  });
 
   it('returns true when prompt confirms', async () => {
     mockConfirmResult = true;
@@ -133,9 +147,11 @@ describe('confirmPrompt: real prompt path', () => {
 // ─── pressAnyKeyPrompt non-mock ────────────────────────────────────────────────
 
 describe('pressAnyKeyPrompt: real prompt path', () => {
-  beforeEach(() => { mockTextResult = ''; });
+  beforeEach(() => {
+    mockTextResult = '';
+  });
 
   it('completes without throwing', async () => {
-    await expect(pressAnyKeyPrompt('Press any key to continue')).resolves.toBeUndefined();
+    await pressAnyKeyPrompt('Press any key to continue');
   });
 });

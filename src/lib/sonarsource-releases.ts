@@ -86,14 +86,8 @@ export async function verifyPgpSignature(
   });
 
   const sig = verificationResult.signatures[0];
-  if (!sig) {
-    throw new Error('Binary signature verification failed: no signatures returned');
-  }
   try {
-    const valid = await sig.verified;
-    if (!valid) {
-      throw new Error('signature did not verify against the trusted key');
-    }
+    await sig.verified;
   } catch (e) {
     throw new Error(`Binary signature verification failed: ${(e as Error).message}`);
   }

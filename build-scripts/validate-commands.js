@@ -221,7 +221,7 @@ function parseIndexCommands(content) {
     if (!text.includes('.action(')) continue;
 
     const nameMatch = /\.command\(['"]([^'"]+)['"]\)/.exec(text);
-    const descMatch = /\.description\(['"]([^'"]+)['"]\)/.exec(text);
+    const descMatch = /\.description\(\s*['"]([^'"]+)['"]\s*,?\s*\)/.exec(text);
     if (!nameMatch || !descMatch) continue;
 
     const cleanName = stripPositionalArgs(nameMatch[1]);

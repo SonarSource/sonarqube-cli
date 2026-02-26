@@ -20,18 +20,26 @@
 
 // Install sonar-secrets binary from binaries.sonarsource.com
 
-import {existsSync, mkdirSync} from 'node:fs';
-import {join} from 'node:path';
-import {spawnProcess} from '../lib/process.js';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnProcess } from '../lib/process.js';
 import { BIN_DIR } from '../lib/config-constants.js';
-import {buildLocalBinaryName, detectPlatform} from '../lib/platform-detector.js';
-import {buildDownloadUrl, downloadBinary, verifyBinarySignature} from '../lib/sonarsource-releases.js';
-import { SONAR_SECRETS_VERSION, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY } from '../lib/signatures.js';
-import {loadState, saveState} from '../lib/state-manager.js';
+import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.js';
+import {
+  buildDownloadUrl,
+  downloadBinary,
+  verifyBinarySignature,
+} from '../lib/sonarsource-releases.js';
+import {
+  SONAR_SECRETS_VERSION,
+  SONAR_SECRETS_SIGNATURES,
+  SONARSOURCE_PUBLIC_KEY,
+} from '../lib/signatures.js';
+import { loadState, saveState } from '../lib/state-manager.js';
 import { version as VERSION } from '../../package.json';
 import logger from '../lib/logger.js';
-import type {PlatformInfo} from '../lib/install-types.js';
-import {SECRETS_BINARY_NAME} from '../lib/install-types.js';
+import type { PlatformInfo } from '../lib/install-types.js';
+import { SECRETS_BINARY_NAME } from '../lib/install-types.js';
 import { text, blank, note, success, warn, withSpinner, print } from '../ui/index.js';
 import { runCommand } from '../lib/run-command.js';
 
@@ -45,7 +53,7 @@ const VERSION_REGEX_MAX_SEGMENT = 20;
  */
 export async function performSecretInstall(
   options: { force?: boolean },
-  { binDir }: { binDir?: string } = {}
+  { binDir }: { binDir?: string } = {},
 ): Promise<string> {
   const platform = detectPlatform();
   const resolvedBinDir = ensureBinDirectory(binDir);
@@ -72,7 +80,7 @@ export async function performSecretInstall(
  */
 export async function secretInstallCommand(
   options: { force?: boolean },
-  { binDir }: { binDir?: string } = {}
+  { binDir }: { binDir?: string } = {},
 ): Promise<void> {
   await runCommand(async () => {
     text('\nInstalling sonar-secrets binary\n');
@@ -81,11 +89,10 @@ export async function secretInstallCommand(
   });
 }
 
-// eslint-disable-next-line sonarjs/cognitive-complexity -- installation flow has unavoidable sequential steps
 async function performInstallation(
   options: { force?: boolean },
   platform: PlatformInfo,
-  binaryPath: string
+  binaryPath: string,
 ): Promise<void> {
   // Check existing installation
   if (!options.force) {
@@ -101,12 +108,12 @@ async function performInstallation(
 
   const downloadUrl = buildDownloadUrl(version, platform);
   await withSpinner(`Downloading sonar-secrets ${version}`, () =>
-    downloadBinary(downloadUrl, binaryPath)
+    downloadBinary(downloadUrl, binaryPath),
   );
 
   try {
     await withSpinner('Verifying signature', () =>
-      verifyBinarySignature(binaryPath, platform, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY)
+      verifyBinarySignature(binaryPath, platform, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY),
     );
   } catch (err) {
     const { rmSync } = await import('node:fs');
@@ -120,11 +127,11 @@ async function performInstallation(
 
   // Verify and finalize
   const installedVersion = await withSpinner('Verifying installation', () =>
-    verifyInstallation(binaryPath)
+    verifyInstallation(binaryPath),
   );
   print(`  sonar-secrets ${installedVersion}`);
 
-  await recordInstallationInState(installedVersion, binaryPath);
+  recordInstallationInState(installedVersion, binaryPath);
 }
 
 /**
@@ -194,12 +201,11 @@ async function checkInstalledVersion(path: string): Promise<string | null> {
   try {
     const result = await spawnProcess(path, ['--version'], {
       stdout: 'pipe',
-      stderr: 'pipe'
+      stderr: 'pipe',
     });
 
     if (result.exitCode === 0) {
       // Parse version from output — limit backtracking with fixed max segment length
-      // eslint-disable-next-line sonarjs/regex-complexity -- bounded quantifiers prevent catastrophic backtracking
       const pattern = String.raw`(\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\.\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
       const versionRegex = new RegExp(pattern);
       const match = versionRegex.exec(result.stdout);
@@ -219,25 +225,20 @@ async function verifyInstallation(path: string): Promise<string> {
   return version;
 }
 
-async function recordInstallationInState(
-  version: string,
-  path: string
-): Promise<void> {
+function recordInstallationInState(version: string, path: string): void {
   try {
     const state = loadState();
 
     state.tools ??= { installed: [] };
 
-    state.tools.installed = state.tools.installed.filter(
-      (t) => t.name !== SECRETS_BINARY_NAME
-    );
+    state.tools.installed = state.tools.installed.filter((t) => t.name !== SECRETS_BINARY_NAME);
 
     state.tools.installed.push({
       name: SECRETS_BINARY_NAME,
       version,
       path,
       installedAt: new Date().toISOString(),
-      installedByCliVersion: VERSION
+      installedByCliVersion: VERSION,
     });
 
     saveState(state);
@@ -270,7 +271,6 @@ async function checkExistingInstallation(binaryPath: string): Promise<boolean> {
   return false;
 }
 
-
 function logInstallationSuccess(binaryPath: string): void {
   blank();
   success('Installation complete!');
@@ -284,4 +284,3 @@ function logInstallationSuccess(binaryPath: string): void {
     '  sonar install secrets --status',
   ]);
 }
-

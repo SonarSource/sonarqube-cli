@@ -23,33 +23,33 @@
 
 import { describe, it, expect, spyOn } from 'bun:test';
 
-mock.module('../../src/ui/colors.js', () => ({
+void mock.module('../../src/ui/colors.js', () => ({
   isTTY: true,
-  bold:  (s: string) => s,
-  dim:   (s: string) => s,
+  bold: (s: string) => s,
+  dim: (s: string) => s,
   green: (s: string) => s,
-  red:   (s: string) => s,
-  cyan:  (s: string) => s,
-  yellow:(s: string) => s,
-  gray:  (s: string) => s,
+  red: (s: string) => s,
+  cyan: (s: string) => s,
+  yellow: (s: string) => s,
+  gray: (s: string) => s,
   white: (s: string) => s,
   STATUS_COLORS: {
-    done:    (s: string) => s,
+    done: (s: string) => s,
     running: (s: string) => s,
-    failed:  (s: string) => s,
+    failed: (s: string) => s,
     skipped: (s: string) => s,
-    warn:    (s: string) => s,
+    warn: (s: string) => s,
     pending: (s: string) => s,
-    info:    (s: string) => s,
+    info: (s: string) => s,
   },
   STATUS_ICONS: {
-    done:    '✓',
+    done: '✓',
     running: '→',
-    failed:  '✗',
+    failed: '✗',
     skipped: '⏭',
-    warn:    '⚠',
+    warn: '⚠',
     pending: '○',
-    info:    'ℹ',
+    info: 'ℹ',
   },
 }));
 
@@ -82,10 +82,7 @@ describe('phase: TTY rendering', () => {
       return true;
     });
     try {
-      phase('Phase', [
-        phaseItem('Token valid', 'done'),
-        phaseItem('Server down', 'failed'),
-      ]);
+      phase('Phase', [phaseItem('Token valid', 'done'), phaseItem('Server down', 'failed')]);
       const combined = output.join('');
       expect(combined).toContain('Token valid');
       expect(combined).toContain('Server down');

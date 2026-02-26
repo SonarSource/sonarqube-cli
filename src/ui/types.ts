@@ -23,13 +23,13 @@
 export type ColorFn = (text: string) => string;
 
 export type StepStatus =
-  | 'done'     // ✓  green
-  | 'running'  // →  cyan
-  | 'failed'   // ✗  red
-  | 'skipped'  // ⏭  dim
-  | 'warn'     // ⚠  yellow
-  | 'pending'  // ○  dim
-  | 'info';    // ℹ  cyan
+  | 'done' // ✓  green
+  | 'running' // →  cyan
+  | 'failed' // ✗  red
+  | 'skipped' // ⏭  dim
+  | 'warn' // ⚠  yellow
+  | 'pending' // ○  dim
+  | 'info'; // ℹ  cyan
 
 export interface PhaseItem {
   text: string;

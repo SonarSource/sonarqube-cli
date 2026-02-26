@@ -51,7 +51,9 @@ describe('textPrompt: mock mode', () => {
     const result = await textPrompt('Enter organization');
     expect(result).toBe('my-org');
     const calls = getMockUiCalls();
-    expect(calls.some(c => c.method === 'textPrompt' && c.args[0] === 'Enter organization')).toBe(true);
+    expect(calls.some((c) => c.method === 'textPrompt' && c.args[0] === 'Enter organization')).toBe(
+      true,
+    );
   });
 
   it('returns empty string fallback when queue is empty', async () => {
@@ -71,8 +73,8 @@ describe('textPrompt: mock mode', () => {
   it('records each call with its message', async () => {
     await textPrompt('Message A');
     await textPrompt('Message B');
-    const calls = getMockUiCalls().filter(c => c.method === 'textPrompt');
-    expect(calls.map(c => c.args[0])).toEqual(['Message A', 'Message B']);
+    const calls = getMockUiCalls().filter((c) => c.method === 'textPrompt');
+    expect(calls.map((c) => c.args[0])).toEqual(['Message A', 'Message B']);
   });
 });
 
@@ -93,7 +95,9 @@ describe('confirmPrompt: mock mode', () => {
     const result = await confirmPrompt('Are you sure?');
     expect(result).toBe(true);
     const calls = getMockUiCalls();
-    expect(calls.some(c => c.method === 'confirmPrompt' && c.args[0] === 'Are you sure?')).toBe(true);
+    expect(calls.some((c) => c.method === 'confirmPrompt' && c.args[0] === 'Are you sure?')).toBe(
+      true,
+    );
   });
 
   it('returns queued false response', async () => {
@@ -142,7 +146,9 @@ describe('pressAnyKeyPrompt', () => {
       await pressAnyKeyPrompt('Press Enter to continue');
       const calls = getMockUiCalls();
       expect(
-        calls.some(c => c.method === 'pressAnyKeyPrompt' && c.args[0] === 'Press Enter to continue')
+        calls.some(
+          (c) => c.method === 'pressAnyKeyPrompt' && c.args[0] === 'Press Enter to continue',
+        ),
       ).toBe(true);
     } finally {
       setMockUi(false);
@@ -155,7 +161,7 @@ describe('pressAnyKeyPrompt', () => {
     clearMockUiCalls();
     try {
       await pressAnyKeyPrompt('Press Enter');
-      const calls = getMockUiCalls().filter(c => c.method === 'pressAnyKeyPrompt');
+      const calls = getMockUiCalls().filter((c) => c.method === 'pressAnyKeyPrompt');
       expect(calls).toHaveLength(0);
     } finally {
       if (savedCI !== undefined) {

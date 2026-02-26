@@ -32,26 +32,23 @@ export async function openBrowser(url: string): Promise<void> {
   let command: string;
   let args: string[];
 
-  switch (os) {
-    case 'darwin':
-      command = 'open';
-      args = [url];
-      break;
-    case 'win32':
-      command = 'rundll32';
-      args = ['url.dll,FileProtocolHandler', url];
-      break;
-    default: // linux and others
-      command = 'xdg-open';
-      args = [url];
-      break;
+  if (os === 'darwin') {
+    command = 'open';
+    args = [url];
+  } else if (os === 'win32') {
+    command = 'rundll32';
+    args = ['url.dll,FileProtocolHandler', url];
+  } else {
+    // linux and others
+    command = 'xdg-open';
+    args = [url];
   }
 
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       stdio: 'ignore',
       detached: true,
-      shell: false
+      shell: false,
     });
 
     proc.on('error', (error: NodeJS.ErrnoException) => {

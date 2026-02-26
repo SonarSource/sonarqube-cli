@@ -74,14 +74,14 @@ export async function discoverProject(startDir: string): Promise<ProjectInfo> {
     hasSonarProps: sonarProps !== null,
     sonarPropsData: sonarProps,
     hasSonarLintConfig: sonarLintConfig !== null,
-    sonarLintData: sonarLintConfig
+    sonarLintData: sonarLintConfig,
   };
 }
 
 function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {
   let dir = startDir;
 
-  while (true) {
+  for (;;) {
     const gitDir = join(dir, '.git');
 
     if (existsSync(gitDir)) {
@@ -210,7 +210,7 @@ async function loadSonarLintConfig(projectRoot: string): Promise<SonarLintConfig
   const possiblePaths = [
     join(projectRoot, '.sonarlint', 'connectedMode.json'),
     join(projectRoot, '.sonarlint', 'connected-mode.json'),
-    join(projectRoot, '.sonarlint', 'settings.json')
+    join(projectRoot, '.sonarlint', 'settings.json'),
   ];
 
   for (const configPath of possiblePaths) {
@@ -232,7 +232,7 @@ function parseSonarLintConfig(data: string): SonarLintConfig | null {
       return {
         serverURL: generic.sonarQubeUri || '',
         projectKey: generic.projectKey || '',
-        organization: generic.organization || ''
+        organization: generic.organization || '',
       };
     }
 
@@ -241,7 +241,7 @@ function parseSonarLintConfig(data: string): SonarLintConfig | null {
       return {
         serverURL: generic.serverId || '',
         projectKey: generic.projectKey || '',
-        organization: generic.organization || ''
+        organization: generic.organization || '',
       };
     }
 
@@ -250,7 +250,7 @@ function parseSonarLintConfig(data: string): SonarLintConfig | null {
       return {
         serverURL: generic.connectionId || '',
         projectKey: generic.projectKey || '',
-        organization: generic.organization || ''
+        organization: generic.organization || '',
       };
     }
 

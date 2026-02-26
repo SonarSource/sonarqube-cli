@@ -43,27 +43,25 @@ export class SonarQubeClient {
 
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          url.searchParams.append(key, String(value));
-        }
+        url.searchParams.append(key, String(value));
       });
     }
 
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${this.token}`,
+        Authorization: `Bearer ${this.token}`,
         'User-Agent': `sonarqube-cli/${VERSION}`,
-        'Accept': 'application/json'
+        Accept: 'application/json',
       },
-      signal: AbortSignal.timeout(GET_REQUEST_TIMEOUT_MS)
+      signal: AbortSignal.timeout(GET_REQUEST_TIMEOUT_MS),
     });
 
     if (!response.ok) {
       throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
     }
 
-    return await response.json() as T;
+    return (await response.json()) as T;
   }
 
   /**
@@ -75,21 +73,23 @@ export class SonarQubeClient {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.token}`,
+        Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
         'User-Agent': `sonarqube-cli/${VERSION}`,
-        'Accept': 'application/json'
+        Accept: 'application/json',
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS)
+      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(
+        `SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`,
+      );
     }
 
-    return await response.json() as T;
+    return (await response.json()) as T;
   }
 
   /**
@@ -128,10 +128,15 @@ export class SonarQubeClient {
    */
   async getOrganizations(): Promise<Array<{ key: string; name: string }>> {
     try {
-      const result = await this.get<{ organizations: Array<{ key: string; name: string }> }>('/api/organizations');
-      return result.organizations || [];
+      const result = await this.get<{ organizations: Array<{ key: string; name: string }> }>(
+        '/api/organizations',
+      );
+      return result.organizations;
     } catch (error) {
-      logger.debug('[DEBUG] Failed to get organizations:', error instanceof Error ? error.message : String(error));
+      logger.debug(
+        '[DEBUG] Failed to get organizations:',
+        error instanceof Error ? error.message : String(error),
+      );
       return [];
     }
   }
@@ -141,10 +146,13 @@ export class SonarQubeClient {
    */
   async checkOrganization(organizationKey: string): Promise<boolean> {
     try {
-      const result = await this.get<{ organizations: Array<{ key: string }> }>('/api/organizations/search', {
-        organizations: organizationKey
-      });
-      return result.organizations.some(org => org.key === organizationKey);
+      const result = await this.get<{ organizations: Array<{ key: string }> }>(
+        '/api/organizations/search',
+        {
+          organizations: organizationKey,
+        },
+      );
+      return result.organizations.some((org) => org.key === organizationKey);
     } catch {
       return false;
     }

@@ -38,10 +38,10 @@ let keytar: KeytarModule | null = null;
 const tokenCache = new Map<string, string | null>();
 
 const noOpKeytar: KeytarModule = {
-  getPassword: async () => null,
-  setPassword: async () => {},
-  deletePassword: async () => false,
-  findCredentials: async () => [],
+  getPassword: () => Promise.resolve(null),
+  setPassword: () => Promise.resolve(),
+  deletePassword: () => Promise.resolve(false),
+  findCredentials: () => Promise.resolve([]),
 };
 
 export function clearTokenCache(): void {

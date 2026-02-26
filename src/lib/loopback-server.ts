@@ -34,10 +34,7 @@ export interface LoopbackServerResult {
   close: () => Promise<void>;
 }
 
-export type RequestHandler = (
-  req: IncomingMessage,
-  res: ServerResponse
-) => void;
+export type RequestHandler = (req: IncomingMessage, res: ServerResponse) => void;
 
 /**
  * Get security headers for loopback server response
@@ -84,7 +81,7 @@ export function isValidLoopbackHost(host: string): boolean {
  * Merge security headers with user-provided headers
  */
 function mergeSecurityHeadersWithUserHeaders(
-  userHeaders?: Record<string, string> | string | string[]
+  userHeaders?: Record<string, string> | string | string[],
 ): Record<string, string> {
   const securityHeaders = getSecurityHeaders();
 
@@ -107,7 +104,9 @@ export interface LoopbackServerOptions {
  * Returns the bound server on success; on EADDRINUSE returns null (caller tries next port).
  * Other errors are propagated immediately.
  */
-async function tryBindPort(port: number): Promise<{ srv: ReturnType<typeof createServer>; port: number } | null> {
+async function tryBindPort(
+  port: number,
+): Promise<{ srv: ReturnType<typeof createServer>; port: number } | null> {
   const srv = createServer();
   return new Promise((resolve, reject) => {
     srv.once('error', (err: NodeJS.ErrnoException) => {
@@ -132,7 +131,7 @@ async function tryBindPort(port: number): Promise<{ srv: ReturnType<typeof creat
 
 export async function startLoopbackServer(
   onRequest: RequestHandler,
-  options?: LoopbackServerOptions
+  options?: LoopbackServerOptions,
 ): Promise<LoopbackServerResult> {
   // Try each port in the SonarLint protocol range (64120-64130).
   // SonarQube/SonarCloud validates that the callback port is within this range
@@ -146,7 +145,9 @@ export async function startLoopbackServer(
   }
 
   if (bound === null) {
-    throw new Error(`No available port in SonarLint range ${AUTH_PORT_START}-${AUTH_PORT_START + AUTH_PORT_COUNT - 1}`);
+    throw new Error(
+      `No available port in SonarLint range ${AUTH_PORT_START}-${AUTH_PORT_START + AUTH_PORT_COUNT - 1}`,
+    );
   }
 
   const { srv: finalServer, port: foundPort } = bound;
@@ -157,25 +158,28 @@ export async function startLoopbackServer(
   // connect to [::1]:PORT first. Without this binding the OAuth callback from
   // SonarCloud gets ECONNREFUSED and the token never arrives.
   const serverV6 = createServer();
-  let ipv6Available = false;
-  await new Promise<void>(resolve => {
+  // Use an object to prevent TypeScript CFA from narrowing to false
+  const ipv6Status = { available: false };
+  await new Promise<void>((resolve) => {
     serverV6.once('error', () => {
       logger.debug('IPv6 loopback [::1] not available; using IPv4 only');
       resolve();
     });
     serverV6.listen(foundPort, '::1', () => {
-      ipv6Available = true;
+      ipv6Status.available = true;
       resolve();
     });
   });
 
   // Helper to wrap a response with security headers
-  function wrapResponseWithSecurityHeaders(
-    originalHandler: RequestHandler
-  ): RequestHandler {
+  function wrapResponseWithSecurityHeaders(originalHandler: RequestHandler): RequestHandler {
     return (req, res) => {
       const origin = req.headers.origin;
-      const isExternalAllowedOrigin = !!(origin && !isValidLoopbackOrigin(origin) && allowedOrigins.includes(origin));
+      const isExternalAllowedOrigin = !!(
+        origin &&
+        !isValidLoopbackOrigin(origin) &&
+        allowedOrigins.includes(origin)
+      );
 
       // Handle OPTIONS preflight requests
       if (req.method === 'OPTIONS') {
@@ -212,20 +216,20 @@ export async function startLoopbackServer(
         return;
       }
 
-      // Store original writeHead
-      const originalWriteHead = res.writeHead;
+      // Store original writeHead (bound to preserve context)
+      const originalWriteHead = res.writeHead.bind(res);
 
       // Define wrapper function (avoids type assertion)
       function writeHeadWithSecurityHeaders(
         statusCode: number,
-        headers?: Record<string, string> | string | string[]
+        headers?: Record<string, string> | string | string[],
       ): typeof res {
         const mergedHeaders = mergeSecurityHeadersWithUserHeaders(headers);
         // Inject CORS header for external allowed origins (e.g. SonarCloud OAuth callback)
         if (isExternalAllowedOrigin && origin) {
           mergedHeaders['Access-Control-Allow-Origin'] = origin;
         }
-        return originalWriteHead.call(res, statusCode, mergedHeaders);
+        return originalWriteHead(statusCode, mergedHeaders);
       }
 
       // Replace writeHead on the response object using defineProperty to avoid type assertions
@@ -243,7 +247,7 @@ export async function startLoopbackServer(
   // Set up secure request handler on both IPv4 and IPv6 servers
   const wrappedHandler = wrapResponseWithSecurityHeaders(onRequest);
   finalServer.on('request', wrappedHandler);
-  if (ipv6Available) {
+  if (ipv6Status.available) {
     serverV6.on('request', wrappedHandler);
   }
 
@@ -254,7 +258,7 @@ export async function startLoopbackServer(
       });
 
       const forceCloseTimer = setTimeout(() => {
-        srv.closeAllConnections?.();
+        srv.closeAllConnections();
       }, FORCE_CLOSE_TIMEOUT_MS);
 
       forceCloseTimer.unref();
@@ -263,7 +267,7 @@ export async function startLoopbackServer(
 
   const close = async (): Promise<void> => {
     const pending: Promise<void>[] = [closeServer(finalServer)];
-    if (ipv6Available) {
+    if (ipv6Status.available) {
       pending.push(closeServer(serverV6));
     }
     await Promise.all(pending);

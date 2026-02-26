@@ -89,15 +89,15 @@ describe('resolveAuth', () => {
   // ─── Env var: partial ──────────────────────────────────────────────────
 
   describe('when only one env var is set', () => {
-    it('warns when only ENV_TOKEN is set and falls back', async () => {
+    it('warns when only ENV_TOKEN is set and falls back', () => {
       process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
 
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
-        getDefaultState('test')
+        getDefaultState('test'),
       );
 
       try {
-        await expect(resolveAuth({ token: FAKE_TOKEN, server: SONARCLOUD_URL })).resolves.toMatchObject({
+        expect(resolveAuth({ token: FAKE_TOKEN, server: SONARCLOUD_URL })).resolves.toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
         });
@@ -106,15 +106,15 @@ describe('resolveAuth', () => {
       }
     });
 
-    it('warns when only ENV_SERVER is set and falls back', async () => {
+    it('warns when only ENV_SERVER is set and falls back', () => {
       process.env[ENV_SERVER] = SONARCLOUD_URL;
 
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
-        getDefaultState('test')
+        getDefaultState('test'),
       );
 
       try {
-        await expect(resolveAuth({ token: FAKE_TOKEN, server: SONARCLOUD_URL })).resolves.toMatchObject({
+        expect(resolveAuth({ token: FAKE_TOKEN, server: SONARCLOUD_URL })).resolves.toMatchObject({
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
         });
@@ -129,7 +129,7 @@ describe('resolveAuth', () => {
   describe('when options.token is provided (no env vars)', () => {
     it('uses CLI token with explicit server', async () => {
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
-        getDefaultState('test')
+        getDefaultState('test'),
       );
 
       try {
@@ -143,14 +143,16 @@ describe('resolveAuth', () => {
 
     it('uses CLI token with server from active connection', async () => {
       const state = getDefaultState('test');
-      state.auth.connections = [{
-        id: 'conn-1',
-        type: 'cloud',
-        serverUrl: SONARCLOUD_URL,
-        orgKey: 'my-org',
-        authenticatedAt: new Date().toISOString(),
-        keystoreKey: 'sonarcloud.io:my-org',
-      }];
+      state.auth.connections = [
+        {
+          id: 'conn-1',
+          type: 'cloud',
+          serverUrl: SONARCLOUD_URL,
+          orgKey: 'my-org',
+          authenticatedAt: new Date().toISOString(),
+          keystoreKey: 'sonarcloud.io:my-org',
+        },
+      ];
       state.auth.activeConnectionId = 'conn-1';
       state.auth.isAuthenticated = true;
 
@@ -172,14 +174,16 @@ describe('resolveAuth', () => {
   describe('when active connection exists in state', () => {
     it('resolves server + token from state + keychain', async () => {
       const state = getDefaultState('test');
-      state.auth.connections = [{
-        id: 'conn-1',
-        type: 'cloud',
-        serverUrl: SONARCLOUD_URL,
-        orgKey: 'my-org',
-        authenticatedAt: new Date().toISOString(),
-        keystoreKey: 'sonarcloud.io:my-org',
-      }];
+      state.auth.connections = [
+        {
+          id: 'conn-1',
+          type: 'cloud',
+          serverUrl: SONARCLOUD_URL,
+          orgKey: 'my-org',
+          authenticatedAt: new Date().toISOString(),
+          keystoreKey: 'sonarcloud.io:my-org',
+        },
+      ];
       state.auth.activeConnectionId = 'conn-1';
       state.auth.isAuthenticated = true;
 
@@ -202,25 +206,25 @@ describe('resolveAuth', () => {
   // ─── No auth found ─────────────────────────────────────────────────────
 
   describe('when no auth is available', () => {
-    it('throws with helpful error when no server can be resolved', async () => {
+    it('throws with helpful error when no server can be resolved', () => {
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
-        getDefaultState('test')
+        getDefaultState('test'),
       );
 
       try {
-        await expect(resolveAuth({})).rejects.toThrow('sonar auth login');
+        expect(resolveAuth({})).rejects.toThrow('sonar auth login');
       } finally {
         loadStateSpy.mockRestore();
       }
     });
 
-    it('throws with helpful error when server is known but no token', async () => {
+    it('throws with helpful error when server is known but no token', () => {
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
-        getDefaultState('test')
+        getDefaultState('test'),
       );
 
       try {
-        await expect(resolveAuth({ server: SONARCLOUD_URL })).rejects.toThrow('sonar auth login');
+        expect(resolveAuth({ server: SONARCLOUD_URL })).rejects.toThrow('sonar auth login');
       } finally {
         loadStateSpy.mockRestore();
       }

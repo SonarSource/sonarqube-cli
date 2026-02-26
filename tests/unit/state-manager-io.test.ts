@@ -28,7 +28,7 @@ import { join } from 'node:path';
 const testCliDir = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
 const testStateFile = join(testCliDir, 'state.json');
 
-mock.module('../../src/lib/config-constants.js', () => ({
+void mock.module('../../src/lib/config-constants.js', () => ({
   APP_NAME: 'sonarqube-cli',
   CLI_DIR: testCliDir,
   STATE_FILE: testStateFile,

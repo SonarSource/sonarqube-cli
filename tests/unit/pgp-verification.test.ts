@@ -59,22 +59,25 @@ describe('verifyPgpSignature', () => {
 
   it('resolves when binary matches the signature and key', async () => {
     const armoredSignature = await sign(binaryContent, armoredPrivateKey);
-    expect(verifyPgpSignature(binaryContent, armoredSignature, armoredPublicKey))
-      .resolves.toBeUndefined();
+    expect(
+      verifyPgpSignature(binaryContent, armoredSignature, armoredPublicKey),
+    ).resolves.toBeUndefined();
   });
 
   it('throws when the binary content does not match the signature', async () => {
     const armoredSignature = await sign(binaryContent, armoredPrivateKey);
     const tamperedContent = Buffer.from('tampered binary content');
-    expect(verifyPgpSignature(tamperedContent, armoredSignature, armoredPublicKey))
-      .rejects.toThrow('Binary signature verification failed');
+    expect(verifyPgpSignature(tamperedContent, armoredSignature, armoredPublicKey)).rejects.toThrow(
+      'Binary signature verification failed',
+    );
   });
 
   it('throws when the signature was made by a different key', async () => {
     const { privateKey: otherPrivateKey } = await generateKeyPair();
     const signatureFromOtherKey = await sign(binaryContent, otherPrivateKey);
-    expect(verifyPgpSignature(binaryContent, signatureFromOtherKey, armoredPublicKey))
-      .rejects.toThrow('Binary signature verification failed');
+    expect(
+      verifyPgpSignature(binaryContent, signatureFromOtherKey, armoredPublicKey),
+    ).rejects.toThrow('Binary signature verification failed');
   });
 });
 
@@ -97,22 +100,29 @@ describe('verifyBinarySignature', () => {
     rmSync(binaryPath, { force: true });
   });
 
-  it('resolves when binary matches the signature and key', async () => {
+  it('resolves when binary matches the signature and key', () => {
     const signatures = { 'linux-x86-64': armoredSignature };
-    expect(verifyBinarySignature(binaryPath, PLATFORM, signatures, armoredPublicKey))
-      .resolves.toBeUndefined();
+    expect(
+      verifyBinarySignature(binaryPath, PLATFORM, signatures, armoredPublicKey),
+    ).resolves.toBeUndefined();
   });
 
-  it('throws when no signature is registered for the platform', async () => {
-    const unknownPlatform: PlatformInfo = { os: 'linux', arch: 'arm' as PlatformInfo['arch'], extension: '' };
-    expect(verifyBinarySignature(binaryPath, unknownPlatform, {}, armoredPublicKey))
-      .rejects.toThrow('Signature not found for linux-arm');
+  it('throws when no signature is registered for the platform', () => {
+    const unknownPlatform: PlatformInfo = {
+      os: 'linux',
+      arch: 'arm' as PlatformInfo['arch'],
+      extension: '',
+    };
+    expect(
+      verifyBinarySignature(binaryPath, unknownPlatform, {}, armoredPublicKey),
+    ).rejects.toThrow('Signature not found for linux-arm');
   });
 
-  it('throws when the binary content does not match the signature', async () => {
+  it('throws when the binary content does not match the signature', () => {
     writeFileSync(binaryPath, Buffer.from('tampered binary content'));
     const signatures = { 'linux-x86-64': armoredSignature };
-    expect(verifyBinarySignature(binaryPath, PLATFORM, signatures, armoredPublicKey))
-      .rejects.toThrow('Binary signature verification failed');
+    expect(
+      verifyBinarySignature(binaryPath, PLATFORM, signatures, armoredPublicKey),
+    ).rejects.toThrow('Binary signature verification failed');
   });
 });

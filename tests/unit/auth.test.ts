@@ -21,7 +21,13 @@
 // Authentication command tests
 
 import { it, expect } from 'bun:test';
-import { getToken, saveToken, deleteToken, getAllCredentials, purgeAllTokens } from '../../src/lib/keychain.js';
+import {
+  getToken,
+  saveToken,
+  deleteToken,
+  getAllCredentials,
+  purgeAllTokens,
+} from '../../src/lib/keychain.js';
 import { createMockKeytar } from '../helpers/mock-keytar.js';
 
 const TOKEN_COUNT = 3;
@@ -116,7 +122,7 @@ it('keychain: getAllCredentials returns all tokens', async () => {
   const credentials = await getAllCredentials();
   expect(credentials.length).toBe(TOKEN_COUNT);
 
-  const accounts = credentials.map(c => c.account);
+  const accounts = credentials.map((c) => c.account);
   expect(accounts).toContain('sonarcloud.io:org1');
   expect(accounts).toContain('sonarcloud.io:org2');
   expect(accounts).toContain('sonarqube.io');
@@ -244,9 +250,9 @@ it('auth: keychain account key format for SonarCloud is "hostname:org"', async (
   await saveToken(server, token, org);
 
   const credentials = await getAllCredentials();
-  const sonarCloudCreds = credentials.filter(c => c.account.includes('sonarcloud.io'));
+  const sonarCloudCreds = credentials.filter((c) => c.account.includes('sonarcloud.io'));
 
-  expect(sonarCloudCreds.some(c => c.account === 'sonarcloud.io:my-org')).toBe(true);
+  expect(sonarCloudCreds.some((c) => c.account === 'sonarcloud.io:my-org')).toBe(true);
 
   await purgeAllTokens();
 });
@@ -258,7 +264,7 @@ it('auth: keychain account key format for SonarQube is "hostname" only', async (
   await saveToken(server, token);
 
   const credentials = await getAllCredentials();
-  const sonarQubeCreds = credentials.filter(c => c.account === 'my-sonarqube.io');
+  const sonarQubeCreds = credentials.filter((c) => c.account === 'my-sonarqube.io');
 
   expect(sonarQubeCreds.length).toBe(1);
   expect(sonarQubeCreds[0].account === 'my-sonarqube.io').toBe(true);

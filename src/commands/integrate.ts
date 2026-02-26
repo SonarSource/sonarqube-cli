@@ -27,7 +27,12 @@ import { runRepair } from '../bootstrap/repair.js';
 import { getToken } from '../bootstrap/auth.js';
 import { getAllCredentials } from '../lib/keychain.js';
 import { installSecretScanningHooks } from '../bootstrap/hooks.js';
-import { loadState, saveState, markAgentConfigured, addInstalledHook } from '../lib/state-manager.js';
+import {
+  loadState,
+  saveState,
+  markAgentConfigured,
+  addInstalledHook,
+} from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
 import { version as VERSION } from '../../package.json';
 import logger from '../lib/logger.js';
@@ -57,14 +62,14 @@ interface ConfigurationData {
 function validateAgent(agent: string): string {
   if (agent !== 'claude') {
     throw new Error(
-      `Agent "${agent}" is not yet supported.\nCurrently supported agents: claude\nComing soon: gemini, codex`
+      `Agent "${agent}" is not yet supported.\nCurrently supported agents: claude\nComing soon: gemini, codex`,
     );
   }
 
   const agentNames: Record<string, string> = {
-    'claude': 'Claude Code',
-    'gemini': 'Gemini',
-    'codex': 'Codex'
+    claude: 'Claude Code',
+    gemini: 'Gemini',
+    codex: 'Codex',
   };
 
   return agentNames[agent] ?? 'Unknown Agent';
@@ -96,7 +101,10 @@ function getDiscoveredConfiguration(projectInfo: ProjectInfo): Partial<Configura
 /**
  * Try to get token from specific server/org combination
  */
-async function tryGetTokenForServerOrg(serverURL: string | undefined, organization: string | undefined): Promise<string | undefined> {
+async function tryGetTokenForServerOrg(
+  serverURL: string | undefined,
+  organization: string | undefined,
+): Promise<string | undefined> {
   if ((organization || serverURL) && serverURL) {
     const keychainToken = await getToken(serverURL, organization);
     if (keychainToken) {
@@ -112,8 +120,8 @@ async function tryGetTokenForServerOrg(serverURL: string | undefined, organizati
  */
 async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }> {
   const credentials = await getAllCredentials();
-  const sonarCloudCreds = credentials.filter(cred =>
-    cred.account.startsWith(`${SONARCLOUD_HOSTNAME}:`)
+  const sonarCloudCreds = credentials.filter((cred) =>
+    cred.account.startsWith(`${SONARCLOUD_HOSTNAME}:`),
   );
 
   if (sonarCloudCreds.length === 0) {
@@ -138,7 +146,10 @@ async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }
 /**
  * Apply SonarCloud credentials from keychain result
  */
-function applySonarCloudCredentials(config: ConfigurationData, scResult: { token?: string; org?: string }): void {
+function applySonarCloudCredentials(
+  config: ConfigurationData,
+  scResult: { token?: string; org?: string },
+): void {
   config.token = config.token || scResult.token;
   config.organization = config.organization || scResult.org;
   if (scResult.org && !config.serverURL) {
@@ -168,12 +179,15 @@ async function fetchKeychainCredentials(config: ConfigurationData): Promise<void
 /**
  * Load configuration from all available sources
  */
-async function loadConfiguration(projectInfo: ProjectInfo, options: OnboardAgentOptions): Promise<ConfigurationData> {
+async function loadConfiguration(
+  projectInfo: ProjectInfo,
+  options: OnboardAgentOptions,
+): Promise<ConfigurationData> {
   const config: ConfigurationData = {
     serverURL: options.server,
     projectKey: options.project,
     organization: options.org,
-    token: options.token
+    token: options.token,
   };
 
   // Apply env var credentials (CLI options already set above take precedence via ??=)
@@ -185,7 +199,9 @@ async function loadConfiguration(projectInfo: ProjectInfo, options: OnboardAgent
     config.serverURL ??= envServer;
   } else if (envToken || envServer) {
     const missing = envToken ? ENV_SERVER : ENV_TOKEN;
-    warn(`${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`);
+    warn(
+      `${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`,
+    );
   }
 
   // Merge with discovered configuration
@@ -211,7 +227,10 @@ async function loadConfiguration(projectInfo: ProjectInfo, options: OnboardAgent
 /**
  * Validate and print configuration
  */
-function validateAndPrintConfiguration(config: ConfigurationData): { serverURL: string; projectKey: string } {
+function validateAndPrintConfiguration(config: ConfigurationData): {
+  serverURL: string;
+  projectKey: string;
+} {
   if (!config.serverURL) {
     throw new Error('Server URL is required. Use --server flag or --org flag for SonarCloud');
   }
@@ -232,7 +251,11 @@ function validateAndPrintConfiguration(config: ConfigurationData): { serverURL: 
 /**
  * Ensure token is available, get from keychain or print warning
  */
-async function ensureToken(token: string | undefined, serverURL: string, organization: string | undefined): Promise<string | undefined> {
+async function ensureToken(
+  token: string | undefined,
+  serverURL: string,
+  organization: string | undefined,
+): Promise<string | undefined> {
   if (!token) {
     const storedToken = await getToken(serverURL, organization);
     token = storedToken ?? undefined;
@@ -264,7 +287,13 @@ async function runHealthCheckAndRepair(
     return undefined;
   }
 
-  const healthResult = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, organization);
+  const healthResult = await runHealthChecks(
+    serverURL,
+    token,
+    projectKey,
+    projectInfo.root,
+    organization,
+  );
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
@@ -282,13 +311,7 @@ async function runHealthCheckAndRepair(
   // Repair (part of Phase 2)
   text('\n  Running repair...');
 
-  await runRepair(
-    serverURL,
-    projectInfo.root,
-    healthResult,
-    projectKey,
-    organization,
-  );
+  await runRepair(serverURL, projectInfo.root, healthResult, projectKey, organization);
 
   return token;
 }
@@ -314,7 +337,7 @@ async function runRepairWithoutToken(
       organizationAccessible: false,
       qualityProfilesAccessible: false,
       hooksInstalled: false,
-      errors: []
+      errors: [],
     },
     projectKey,
     organization,
@@ -331,7 +354,9 @@ async function runRepairWithoutToken(
 /**
  * Print final verification results
  */
-function printFinalVerificationResults(finalHealth: Awaited<ReturnType<typeof runHealthChecks>>): void {
+function printFinalVerificationResults(
+  finalHealth: Awaited<ReturnType<typeof runHealthChecks>>,
+): void {
   if (finalHealth.tokenValid) text('Token valid');
   if (finalHealth.serverAvailable) text('Server available');
   if (finalHealth.projectAccessible) text('Project accessible');
@@ -352,9 +377,7 @@ function printFinalVerificationResults(finalHealth: Awaited<ReturnType<typeof ru
 /**
  * Update state after successful configuration
  */
-async function updateStateAfterConfiguration(
-  hooksInstalled: boolean,
-): Promise<void> {
+function updateStateAfterConfiguration(hooksInstalled: boolean): void {
   try {
     const state = loadState();
 
@@ -379,76 +402,84 @@ async function updateStateAfterConfiguration(
  */
 export async function integrateCommand(agent: string, options: OnboardAgentOptions): Promise<void> {
   await runCommand(async () => {
+    // Validate agent
+    const agentName = validateAgent(agent);
 
-  // Validate agent
-  const agentName = validateAgent(agent);
+    intro(`SonarQube Integration Setup for ${agentName}`);
 
-  intro(`SonarQube Integration Setup for ${agentName}`);
+    // Phase 1: Discovery & Validation
+    text('\nPhase 1/3: Discovery & Validation');
+    blank();
 
-  // Phase 1: Discovery & Validation
-  text('\nPhase 1/3: Discovery & Validation');
-  blank();
+    const projectInfo = await discoverProject(process.cwd());
 
-  const projectInfo = await discoverProject(process.cwd());
-
-  text(`Project root: ${projectInfo.root}`);
-  if (projectInfo.isGitRepo) {
-    text('Git repository detected');
-  }
-
-  // Load configuration from all sources
-  const config = await loadConfiguration(projectInfo, options);
-
-  // Validate and extract required values
-  const { serverURL, projectKey } = validateAndPrintConfiguration(config);
-
-  // Ensure token is available
-  let token = await ensureToken(config.token, serverURL, config.organization);
-
-  // Phase 2 & 3: Health Check and Repair
-  if (token) {
-    token = await runHealthCheckAndRepair(
-      serverURL,
-      projectKey,
-      projectInfo,
-      token,
-      config.organization,
-      options.skipHooks,
-    );
-
-    if (token) {
-      // Health check passed, skip to final verification
-      text('\nPhase 3/3: Final Verification');
-      blank();
-
-      const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization, false);
-      printFinalVerificationResults(finalHealth);
-
-      // Update state with configuration
-      await updateStateAfterConfiguration(!options.skipHooks);
-
-      return;
+    text(`Project root: ${projectInfo.root}`);
+    if (projectInfo.isGitRepo) {
+      text('Git repository detected');
     }
-  }
 
-  // If no token, run repair to generate one
-  if (!token) {
-    token = await runRepairWithoutToken(
+    // Load configuration from all sources
+    const config = await loadConfiguration(projectInfo, options);
+
+    // Validate and extract required values
+    const { serverURL, projectKey } = validateAndPrintConfiguration(config);
+
+    // Ensure token is available
+    let token = await ensureToken(config.token, serverURL, config.organization);
+
+    // Phase 2 & 3: Health Check and Repair
+    if (token) {
+      token = await runHealthCheckAndRepair(
+        serverURL,
+        projectKey,
+        projectInfo,
+        token,
+        config.organization,
+        options.skipHooks,
+      );
+
+      if (token) {
+        // Health check passed, skip to final verification
+        text('\nPhase 3/3: Final Verification');
+        blank();
+
+        const finalHealth = await runHealthChecks(
+          serverURL,
+          token,
+          projectKey,
+          projectInfo.root,
+          config.organization,
+          false,
+        );
+        printFinalVerificationResults(finalHealth);
+
+        // Update state with configuration
+        updateStateAfterConfiguration(!options.skipHooks);
+
+        return;
+      }
+    }
+
+    // If no token, run repair to generate one
+    if (!token) {
+      token = await runRepairWithoutToken(serverURL, projectKey, projectInfo, config.organization);
+    }
+
+    // Phase 3: Final Verification
+    text('\nPhase 3/3: Final Verification');
+    blank();
+
+    const finalHealth = await runHealthChecks(
       serverURL,
+      token,
       projectKey,
-      projectInfo,
+      projectInfo.root,
       config.organization,
+      false,
     );
-  }
+    printFinalVerificationResults(finalHealth);
 
-  // Phase 3: Final Verification
-  text('\nPhase 3/3: Final Verification');
-  blank();
-
-  const finalHealth = await runHealthChecks(serverURL, token, projectKey, projectInfo.root, config.organization, false);
-  printFinalVerificationResults(finalHealth);
-
-  // Update state with configuration
-  await updateStateAfterConfiguration(!options.skipHooks);
+    // Update state with configuration
+    updateStateAfterConfiguration(!options.skipHooks);
   });
 }

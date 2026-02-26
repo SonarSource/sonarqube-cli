@@ -22,7 +22,11 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { TextPrompt, isCancel } from '@clack/core';
-import { getToken as getKeystoreToken, saveToken as saveKeystoreToken, deleteToken as deleteKeystoreToken } from '../lib/keychain.js';
+import {
+  getToken as getKeystoreToken,
+  saveToken as saveKeystoreToken,
+  deleteToken as deleteKeystoreToken,
+} from '../lib/keychain.js';
 import { openBrowser } from '../lib/browser.js';
 import { SonarQubeClient } from '../sonarqube/client.js';
 import { startLoopbackServer } from '../lib/loopback-server.js';
@@ -90,7 +94,10 @@ export function extractTokenFromPostBody(body: string): string | undefined {
 /**
  * Extract token from GET query parameters
  */
-export function extractTokenFromQuery(host: string | undefined, url: string | undefined): string | undefined {
+export function extractTokenFromQuery(
+  host: string | undefined,
+  url: string | undefined,
+): string | undefined {
   if (!host || !url) return undefined;
   try {
     const fullUrl = new URL(`http://${host}${url}`);
@@ -110,7 +117,7 @@ export function extractTokenFromQuery(host: string | undefined, url: string | un
  */
 export function buildAuthURL(serverURL: string, port: number): string {
   const cleanServerURL = serverURL.replace(/\/$/, '');
-  if (serverURL.includes("sonarcloud") || serverURL.includes("sonarqube.us")) {
+  if (serverURL.includes('sonarcloud') || serverURL.includes('sonarqube.us')) {
     return `${cleanServerURL}/auth?product=cli&port=${port}`;
   }
   // temporarily fallback to SQS and IDE auth page, should be fixed soon
@@ -179,7 +186,7 @@ export async function openBrowserWithFallback(authURL: string): Promise<void> {
   try {
     await openBrowser(authURL);
   } catch (error) {
-    warn(`Failed to open browser automatically: ${error}`);
+    warn(`Failed to open browser automatically: ${String(error)}`);
     print('Copy the URL above and open it manually');
   }
 }
@@ -187,7 +194,11 @@ export async function openBrowserWithFallback(authURL: string): Promise<void> {
 /**
  * Send success response to HTTP client
  */
-export function sendSuccessResponse(res: ServerResponse, extractedToken?: string, onToken?: (token: string) => void): void {
+export function sendSuccessResponse(
+  res: ServerResponse,
+  extractedToken?: string,
+  onToken?: (token: string) => void,
+): void {
   res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
   res.end(getSuccessHTML());
   if (extractedToken && onToken) {
@@ -198,7 +209,11 @@ export function sendSuccessResponse(res: ServerResponse, extractedToken?: string
 /**
  * Handle POST request - read body and extract token
  */
-export function handlePostRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
+export function handlePostRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  onToken: (token: string) => void,
+): void {
   let body = '';
   let bodySize = 0;
   req.on('data', (chunk: Buffer) => {
@@ -224,7 +239,11 @@ export function handlePostRequest(req: IncomingMessage, res: ServerResponse, onT
 /**
  * Handle GET request - extract token from query parameters
  */
-export function handleGetRequest(req: IncomingMessage, res: ServerResponse, onToken: (token: string) => void): void {
+export function handleGetRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  onToken: (token: string) => void,
+): void {
   const extractedToken = extractTokenFromQuery(req.headers.host, req.url);
   sendSuccessResponse(res, extractedToken ?? undefined, onToken);
 }
@@ -263,7 +282,11 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
       else resolve(token!);
     }
 
-    serverTokenPromise.then(token => { settle(token); }).catch(() => {});
+    serverTokenPromise
+      .then((token) => {
+        settle(token);
+      })
+      .catch(() => undefined);
 
     const prompt = new TextPrompt({
       signal: promptAbort.signal,
@@ -277,15 +300,20 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
       },
     });
 
-    prompt.prompt().then(result => {
-      if (promptAbort.signal.aborted) return;
-      if (isCancel(result)) {
-        settle(undefined, new Error('Authentication cancelled'));
-        return;
-      }
-      const userToken = (result!).trim();
-      if (userToken.length > 0) settle(userToken);
-    }).catch((err: unknown) => { settle(undefined, err as Error); });
+    prompt
+      .prompt()
+      .then((result) => {
+        if (promptAbort.signal.aborted) return;
+        if (isCancel(result)) {
+          settle(undefined, new Error('Authentication cancelled'));
+          return;
+        }
+        const userToken = result!.trim();
+        if (userToken.length > 0) settle(userToken);
+      })
+      .catch((err: unknown) => {
+        settle(undefined, err as Error);
+      });
   });
 }
 
@@ -294,12 +322,11 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
  */
 export async function generateTokenViaBrowser(
   serverURL: string,
-  openBrowserFn: (url: string) => Promise<void> = openBrowserWithFallback
+  openBrowserFn: (url: string) => Promise<void> = openBrowserWithFallback,
 ): Promise<string> {
-
   let resolveToken: ((token: string) => void) | null = null;
 
-  const tokenPromise = new Promise<string>(resolve => {
+  const tokenPromise = new Promise<string>((resolve) => {
     resolveToken = resolve;
   });
 
@@ -311,7 +338,7 @@ export async function generateTokenViaBrowser(
         resolveToken(token);
       }
     }),
-    { allowedOrigins: [serverOrigin] }
+    { allowedOrigins: [serverOrigin] },
   );
 
   const authURL = buildAuthURL(serverURL, server.port);
@@ -332,10 +359,10 @@ export async function generateTokenViaBrowser(
     }
   } finally {
     server.close().then(
-      () => {},
+      () => undefined,
       (err: unknown) => {
         logger.warn(`Auth server shutdown error: ${(err as Error).message}`);
-      }
+      },
     );
   }
 

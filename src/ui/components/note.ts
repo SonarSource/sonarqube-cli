@@ -36,14 +36,16 @@ function getWidth(): number {
 
 function renderTTY(lines: string[], title: string | undefined, opts: NoteOptions): string {
   const borderColor: ColorFn = opts.borderColor ?? dim;
-  const titleColor: ColorFn  = opts.titleColor  ?? bold;
+  const titleColor: ColorFn = opts.titleColor ?? bold;
   const contentColor: ColorFn = opts.contentColor ?? ((s) => s);
 
   const width = getWidth();
   const innerWidth = width - 2; // subtract border chars
 
   const top = title
-    ? borderColor(TITLE_BORDER_PREFIX) + titleColor(title) + borderColor(' ' + '─'.repeat(Math.max(0, innerWidth - title.length - 1)) + '┐')
+    ? borderColor(TITLE_BORDER_PREFIX) +
+      titleColor(title) +
+      borderColor(' ' + '─'.repeat(Math.max(0, innerWidth - title.length - 1)) + '┐')
     : borderColor('┌' + '─'.repeat(width) + '┐');
 
   const empty = borderColor('│') + ' '.repeat(width) + borderColor('│');
@@ -64,7 +66,10 @@ function renderPlain(lines: string[], title: string | undefined): string {
 }
 
 export function note(content: string | string[], title?: string, opts: NoteOptions = {}): void {
-  if (isMockActive()) { recordCall('note', content, title); return; }
+  if (isMockActive()) {
+    recordCall('note', content, title);
+    return;
+  }
 
   const lines = Array.isArray(content) ? content : content.split('\n');
   const output = isTTY ? renderTTY(lines, title, opts) : renderPlain(lines, title);

@@ -27,7 +27,7 @@
 import { mock, describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 
 // Override colors to simulate TTY environment — must be before any imports
-mock.module('../../src/ui/colors.js', () => ({
+void mock.module('../../src/ui/colors.js', () => ({
   isTTY: true,
   bold: (s: string) => s,
   dim: (s: string) => s,
@@ -59,7 +59,7 @@ describe('note(): mock mode', () => {
     try {
       note('some content', 'My Title');
       const calls = getMockUiCalls();
-      expect(calls.some(c => c.method === 'note')).toBe(true);
+      expect(calls.some((c) => c.method === 'note')).toBe(true);
       expect(writeSpy).not.toHaveBeenCalled();
     } finally {
       writeSpy.mockRestore();
@@ -69,7 +69,7 @@ describe('note(): mock mode', () => {
   it('records content and title arguments', () => {
     note(['line1', 'line2'], 'Section Title');
     const calls = getMockUiCalls();
-    const noteCall = calls.find(c => c.method === 'note');
+    const noteCall = calls.find((c) => c.method === 'note');
     expect(noteCall).toBeDefined();
     expect(noteCall!.args[0]).toEqual(['line1', 'line2']);
     expect(noteCall!.args[1]).toBe('Section Title');
@@ -78,7 +78,7 @@ describe('note(): mock mode', () => {
   it('records call without title when title is omitted', () => {
     note('plain content');
     const calls = getMockUiCalls();
-    expect(calls.some(c => c.method === 'note')).toBe(true);
+    expect(calls.some((c) => c.method === 'note')).toBe(true);
   });
 });
 

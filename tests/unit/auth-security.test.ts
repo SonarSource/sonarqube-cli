@@ -62,7 +62,7 @@ describe('Auth: security features via real HTTP', () => {
     });
 
     expect(response.headers.get('Content-Security-Policy')).toBe(
-      "default-src 'none'; connect-src 'self'"
+      "default-src 'none'; connect-src 'self'",
     );
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(response.headers.get('X-Frame-Options')).toBe('DENY');
@@ -257,7 +257,7 @@ describe('Auth: security features via real HTTP', () => {
     expect(response.status).toBe(HTTP_STATUS_OK);
     expect(response.headers.get('X-Frame-Options')).toBe('DENY');
     expect(response.headers.get('Content-Security-Policy')).toBe(
-      "default-src 'none'; connect-src 'self'"
+      "default-src 'none'; connect-src 'self'",
     );
   });
 });

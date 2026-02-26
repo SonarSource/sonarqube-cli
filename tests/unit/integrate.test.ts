@@ -21,7 +21,7 @@
 // Unit tests for sonar integrate command
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { integrateCommand } from "../../src/commands/integrate.js";
+import { integrateCommand } from '../../src/commands/integrate.js';
 import * as discovery from '../../src/bootstrap/discovery.js';
 import * as health from '../../src/bootstrap/health.js';
 import * as repair from '../../src/bootstrap/repair.js';
@@ -81,14 +81,18 @@ describe('integrateCommand: validateAgent', () => {
 
   it('error message mentions the unsupported agent name', async () => {
     await integrateCommand('gemini', {});
-    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
-    expect(errors.some(m => m.includes('gemini'))).toBe(true);
+    const errors = getMockUiCalls()
+      .filter((c) => c.method === 'error')
+      .map((c) => String(c.args[0]));
+    expect(errors.some((m) => m.includes('gemini'))).toBe(true);
   });
 
   it('error message lists supported agents', async () => {
     await integrateCommand('codex', {});
-    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
-    expect(errors.some(m => m.includes('claude'))).toBe(true);
+    const errors = getMockUiCalls()
+      .filter((c) => c.method === 'error')
+      .map((c) => String(c.args[0]));
+    expect(errors.some((m) => m.includes('claude'))).toBe(true);
   });
 });
 
@@ -133,8 +137,10 @@ describe('integrateCommand: env var auth', () => {
       org: 'my-org',
       skipHooks: true,
     });
-    const warns = getMockUiCalls().filter(c => c.method === 'warn').map(c => String(c.args[0]));
-    expect(warns.some(m => m.includes(ENV_SERVER))).toBe(true);
+    const warns = getMockUiCalls()
+      .filter((c) => c.method === 'warn')
+      .map((c) => String(c.args[0]));
+    expect(warns.some((m) => m.includes(ENV_SERVER))).toBe(true);
   });
 
   it('warns when only SONAR_CLI_SERVER is set (partial env vars)', async () => {
@@ -146,8 +152,10 @@ describe('integrateCommand: env var auth', () => {
       org: 'my-org',
       skipHooks: true,
     });
-    const warns = getMockUiCalls().filter(c => c.method === 'warn').map(c => String(c.args[0]));
-    expect(warns.some(m => m.includes(ENV_TOKEN))).toBe(true);
+    const warns = getMockUiCalls()
+      .filter((c) => c.method === 'warn')
+      .map((c) => String(c.args[0]));
+    expect(warns.some((m) => m.includes(ENV_TOKEN))).toBe(true);
   });
 });
 
@@ -204,9 +212,11 @@ describe('integrateCommand: full flow', () => {
         org: 'test-org',
         skipHooks: true,
       });
-      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
-      expect(texts.some(m => m.includes('Token valid'))).toBe(true);
-      expect(texts.some(m => m.includes('Server available'))).toBe(true);
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
+        .map((c) => String(c.args[0]));
+      expect(texts.some((m) => m.includes('Token valid'))).toBe(true);
+      expect(texts.some((m) => m.includes('Server available'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -234,9 +244,11 @@ describe('integrateCommand: full flow', () => {
         org: 'test-org',
         skipHooks: true,
       });
-      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
-      expect(texts.some(m => m.includes('Token valid'))).toBe(true);
-      expect(texts.some(m => m.includes('Project not accessible'))).toBe(true);
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
+        .map((c) => String(c.args[0]));
+      expect(texts.some((m) => m.includes('Token valid'))).toBe(true);
+      expect(texts.some((m) => m.includes('Project not accessible'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -323,8 +335,10 @@ describe('integrateCommand: configuration validation', () => {
     try {
       await integrateCommand('claude', { project: 'my-project' });
       expect(mockExit).toHaveBeenCalledWith(1);
-      const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
-      expect(errors.some(m => m.includes('Server URL'))).toBe(true);
+      const errors = getMockUiCalls()
+        .filter((c) => c.method === 'error')
+        .map((c) => String(c.args[0]));
+      expect(errors.some((m) => m.includes('Server URL'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
     }
@@ -335,8 +349,10 @@ describe('integrateCommand: configuration validation', () => {
     try {
       await integrateCommand('claude', { server: 'https://sonarcloud.io' });
       expect(mockExit).toHaveBeenCalledWith(1);
-      const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
-      expect(errors.some(m => m.includes('Project key'))).toBe(true);
+      const errors = getMockUiCalls()
+        .filter((c) => c.method === 'error')
+        .map((c) => String(c.args[0]));
+      expect(errors.some((m) => m.includes('Project key'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
     }
@@ -353,8 +369,10 @@ describe('integrateCommand: configuration validation', () => {
         token: 'test-token',
         skipHooks: true,
       });
-      const infos = getMockUiCalls().filter(c => c.method === 'info').map(c => String(c.args[0]));
-      expect(infos.some(m => m.toLowerCase().includes('sonarcloud'))).toBe(true);
+      const infos = getMockUiCalls()
+        .filter((c) => c.method === 'info')
+        .map((c) => String(c.args[0]));
+      expect(infos.some((m) => m.toLowerCase().includes('sonarcloud'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -398,8 +416,10 @@ describe('integrateCommand: discovered project configuration', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
       await integrateCommand('claude', { token: 'test-token', skipHooks: true });
-      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
-      expect(texts.some(m => m.includes('sonar-project.properties'))).toBe(true);
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
+        .map((c) => String(c.args[0]));
+      expect(texts.some((m) => m.includes('sonar-project.properties'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -416,12 +436,16 @@ describe('integrateCommand: discovered project configuration', () => {
         organization: 'sonarlint-org',
       },
     };
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithSonarLint);
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(
+      projectInfoWithSonarLint,
+    );
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
       await integrateCommand('claude', { token: 'test-token', skipHooks: true });
-      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
-      expect(texts.some(m => m.includes('connectedMode.json'))).toBe(true);
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
+        .map((c) => String(c.args[0]));
+      expect(texts.some((m) => m.includes('connectedMode.json'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -465,8 +489,10 @@ describe('integrateCommand: no token available', () => {
         project: 'my-project',
         skipHooks: true,
       });
-      const warns = getMockUiCalls().filter(c => c.method === 'warn').map(c => String(c.args[0]));
-      expect(warns.some(m => m.toLowerCase().includes('token'))).toBe(true);
+      const warns = getMockUiCalls()
+        .filter((c) => c.method === 'warn')
+        .map((c) => String(c.args[0]));
+      expect(warns.some((m) => m.toLowerCase().includes('token'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
       getTokenSpy.mockRestore();

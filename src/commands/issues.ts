@@ -65,16 +65,20 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
     }
 
     if (options.pageSize !== undefined) {
-      const ps = Number(options.pageSize);
+      const ps = options.pageSize;
       if (!Number.isInteger(ps) || ps < 1 || ps > DEFAULT_PAGE_SIZE) {
-        throw new Error(`Invalid --page-size: '${options.pageSize}'. Must be an integer between 1 and 500`);
+        throw new Error(
+          `Invalid --page-size: '${options.pageSize}'. Must be an integer between 1 and 500`,
+        );
       }
     }
 
     if (options.severity) {
       const sev = options.severity.toUpperCase();
       if (!VALID_SEVERITIES.includes(sev)) {
-        throw new Error(`Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`);
+        throw new Error(
+          `Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`,
+        );
       }
     }
 
@@ -87,7 +91,9 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
     try {
       new URL(resolved.serverUrl);
     } catch {
-      throw new Error(`Invalid server URL: '${resolved.serverUrl}'. Provide a valid URL (e.g., https://sonarcloud.io)`);
+      throw new Error(
+        `Invalid server URL: '${resolved.serverUrl}'. Provide a valid URL (e.g., https://sonarcloud.io)`,
+      );
     }
 
     const client = new SonarQubeClient(resolved.serverUrl, resolved.token);
@@ -105,7 +111,7 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
       pullRequest: options.pullRequest,
       resolved: options.resolved,
       ps: options.pageSize ?? DEFAULT_PAGE_SIZE,
-      p: options.page ?? 1
+      p: options.page ?? 1,
     };
 
     const result = options.all

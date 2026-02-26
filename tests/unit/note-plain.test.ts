@@ -23,15 +23,15 @@
 
 import { describe, it, expect, spyOn } from 'bun:test';
 
-mock.module('../../src/ui/colors.js', () => ({
+void mock.module('../../src/ui/colors.js', () => ({
   isTTY: false,
-  bold:  (s: string) => s,
-  dim:   (s: string) => s,
+  bold: (s: string) => s,
+  dim: (s: string) => s,
   green: (s: string) => s,
-  red:   (s: string) => s,
-  cyan:  (s: string) => s,
-  yellow:(s: string) => s,
-  gray:  (s: string) => s,
+  red: (s: string) => s,
+  cyan: (s: string) => s,
+  yellow: (s: string) => s,
+  gray: (s: string) => s,
   white: (s: string) => s,
 }));
 

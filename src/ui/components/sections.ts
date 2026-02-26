@@ -28,7 +28,10 @@ const DIVIDER_WIDTH = DIVIDER_BASE_WIDTH + 2; // + 2 for indent alignment
 const DIVIDER = '━'.repeat(DIVIDER_WIDTH);
 
 export function intro(title: string, subtitle?: string): void {
-  if (isMockActive()) { recordCall('intro', title, subtitle); return; }
+  if (isMockActive()) {
+    recordCall('intro', title, subtitle);
+    return;
+  }
 
   if (isTTY) {
     process.stdout.write(`\n  ${DIVIDER}\n`);
@@ -42,7 +45,10 @@ export function intro(title: string, subtitle?: string): void {
 }
 
 export function outro(message: string, status: 'success' | 'error' = 'success'): void {
-  if (isMockActive()) { recordCall('outro', message, status); return; }
+  if (isMockActive()) {
+    recordCall('outro', message, status);
+    return;
+  }
 
   const icon = status === 'success' ? '✅' : '❌';
   const colorFn = status === 'success' ? green : red;

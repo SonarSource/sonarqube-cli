@@ -25,9 +25,17 @@ import { mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node
 import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { detectPlatform, buildAssetName, buildLocalBinaryName } from '../../src/lib/platform-detector.js';
+import {
+  detectPlatform,
+  buildAssetName,
+  buildLocalBinaryName,
+} from '../../src/lib/platform-detector.js';
 import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
-import { secretCheckCommand, secretInstallCommand, performSecretInstall } from '../../src/commands/secret.js';
+import {
+  secretCheckCommand,
+  secretInstallCommand,
+  performSecretInstall,
+} from '../../src/commands/secret.js';
 import * as releases from '../../src/lib/sonarsource-releases.js';
 import { SONAR_SECRETS_VERSION } from '../../src/lib/signatures.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
@@ -58,7 +66,11 @@ describe('Platform Detection and Binary Naming', () => {
     const linuxX64 = buildAssetName('1.0.0', { os: 'linux', arch: 'x86-64', extension: '' });
     expect(linuxX64).toBe('sonar-secrets-1.0.0-linux-x86-64');
 
-    const windowsExe = buildAssetName('1.0.0', { os: 'windows', arch: 'x86-64', extension: '.exe' });
+    const windowsExe = buildAssetName('1.0.0', {
+      os: 'windows',
+      arch: 'x86-64',
+      extension: '.exe',
+    });
     expect(windowsExe).toBe('sonar-secrets-1.0.0-windows-x86-64.exe');
 
     const versionWithV = buildAssetName('v2.1.0', { os: 'linux', arch: 'x86-64', extension: '' });
@@ -70,7 +82,11 @@ describe('Platform Detection and Binary Naming', () => {
     const unixBinary = buildLocalBinaryName({ os: 'linux', arch: 'x86-64', extension: '' });
     expect(unixBinary).toBe('sonar-secrets');
 
-    const windowsBinary = buildLocalBinaryName({ os: 'windows', arch: 'x86-64', extension: '.exe' });
+    const windowsBinary = buildLocalBinaryName({
+      os: 'windows',
+      arch: 'x86-64',
+      extension: '.exe',
+    });
     expect(windowsBinary).toBe('sonar-secrets.exe');
   });
 
@@ -83,7 +99,7 @@ describe('Platform Detection and Binary Naming', () => {
         const platform: PlatformInfo = {
           os: os as unknown as PlatformInfo['os'],
           arch: arch as unknown as PlatformInfo['arch'],
-          extension: os === 'windows' ? '.exe' : ''
+          extension: os === 'windows' ? '.exe' : '',
         };
 
         const assetName = buildAssetName('1.0.0', platform);
@@ -97,7 +113,6 @@ describe('Platform Detection and Binary Naming', () => {
     });
   });
 });
-
 
 // =============================================================================
 // SECTION 2: Secret Scanning Hooks Installation
@@ -155,9 +170,12 @@ describe('installSecretScanningHooks', () => {
     const existingSettings = {
       hooks: {
         PostToolUse: [
-          { matcher: 'Edit|Write', hooks: [{ type: 'command', command: '.claude/hooks/sonar-prompt.sh', timeout: 120 }] }
-        ]
-      }
+          {
+            matcher: 'Edit|Write',
+            hooks: [{ type: 'command', command: '.claude/hooks/sonar-prompt.sh', timeout: 120 }],
+          },
+        ],
+      },
     };
 
     const fs = await import('node:fs/promises');
@@ -180,7 +198,6 @@ describe('installSecretScanningHooks', () => {
     expect(settings.hooks.UserPromptSubmit[0].hooks[0].timeout).toBe(EXPECTED_TIMEOUT);
   });
 });
-
 
 // =============================================================================
 // SECTION 4: secretCheckCommand
@@ -225,10 +242,10 @@ describe('secretCheckCommand', () => {
 
     expect(mockExit).toHaveBeenCalledWith(1);
     const uiCalls = getMockUiCalls();
-    const errorMessages = uiCalls.filter(c => c.method === 'error').map(c => String(c.args[0]));
-    const textMessages = uiCalls.filter(c => c.method === 'text').map(c => String(c.args[0]));
-    expect(errorMessages.some(m => m.includes('sonar-secrets is not installed'))).toBe(true);
-    expect(textMessages.some(m => m.includes('sonar secret install'))).toBe(true);
+    const errorMessages = uiCalls.filter((c) => c.method === 'error').map((c) => String(c.args[0]));
+    const textMessages = uiCalls.filter((c) => c.method === 'text').map((c) => String(c.args[0]));
+    expect(errorMessages.some((m) => m.includes('sonar-secrets is not installed'))).toBe(true);
+    expect(textMessages.some((m) => m.includes('sonar secret install'))).toBe(true);
   });
 
   it('exits 1 when --file and --stdin are both provided', async () => {
@@ -250,7 +267,7 @@ describe('secretCheckCommand', () => {
 
     // Make binary existence check pass, file existence check fail
     const existsSyncSpy = spyOn(fs, 'existsSync').mockImplementation((p) =>
-      String(p).includes('sonar-secrets')
+      String(p).includes('sonar-secrets'),
     );
 
     clearMockUiCalls();
@@ -261,11 +278,12 @@ describe('secretCheckCommand', () => {
     }
 
     expect(mockExit).toHaveBeenCalledWith(1);
-    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
-    expect(errors.some(m => m.includes('File not found'))).toBe(true);
+    const errors = getMockUiCalls()
+      .filter((c) => c.method === 'error')
+      .map((c) => String(c.args[0]));
+    expect(errors.some((m) => m.includes('File not found'))).toBe(true);
   });
 });
-
 
 // =============================================================================
 // SECTION 5: performSecretInstall — checkExistingInstallation paths
@@ -294,7 +312,9 @@ describe('performSecretInstall: already up to date', () => {
     const expectedBinaryPath = join(tempBinDir, buildLocalBinaryName(detectPlatform()));
     writeFileSync(expectedBinaryPath, '');
     spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0, stdout: `sonar-secrets ${pinnedVersion}\n`, stderr: '',
+      exitCode: 0,
+      stdout: `sonar-secrets ${pinnedVersion}\n`,
+      stderr: '',
     });
 
     try {
@@ -303,8 +323,10 @@ describe('performSecretInstall: already up to date', () => {
 
       // Assert
       expect(result).toBe(expectedBinaryPath);
-      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
-      expect(texts.some(m => m.includes('already installed (latest)'))).toBe(true);
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
+        .map((c) => String(c.args[0]));
+      expect(texts.some((m) => m.includes('already installed (latest)'))).toBe(true);
     } finally {
       rmSync(tempBinDir, { recursive: true, force: true });
     }
@@ -317,19 +339,25 @@ describe('performSecretInstall: already up to date', () => {
     mkdirSync(tempBinDir, { recursive: true });
     writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
     spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0, stdout: 'sonar-secrets 1.0.0\n', stderr: '',
+      exitCode: 0,
+      stdout: 'sonar-secrets 1.0.0\n',
+      stderr: '',
     });
     // Installed version differs from pinned → update triggered; abort at download to keep test fast
-    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockRejectedValue(new Error('abort install'));
+    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockRejectedValue(
+      new Error('abort install'),
+    );
 
     try {
       // Act
       await secretInstallCommand({}, { binDir: tempBinDir });
 
       // Assert: the "Updating..." message must have been shown before the download was triggered
-      const texts = getMockUiCalls().filter(c => c.method === 'text').map(c => String(c.args[0]));
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
+        .map((c) => String(c.args[0]));
       expect(mockExit).toHaveBeenCalledWith(1); // install aborted by mock
-      expect(texts.some(m => m.includes('Updating'))).toBe(true);
+      expect(texts.some((m) => m.includes('Updating'))).toBe(true);
     } finally {
       mockExit.mockRestore();
       rmSync(tempBinDir, { recursive: true, force: true });
@@ -343,10 +371,14 @@ describe('performSecretInstall: already up to date', () => {
     mkdirSync(tempBinDir, { recursive: true });
     writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
     spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 1, stdout: '', stderr: '',
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
     });
     // Binary broken → existing check skipped → download attempted; abort to keep test fast
-    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockRejectedValue(new Error('abort install'));
+    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockRejectedValue(
+      new Error('abort install'),
+    );
 
     try {
       // Act
@@ -361,7 +393,6 @@ describe('performSecretInstall: already up to date', () => {
     }
   });
 });
-
 
 // =============================================================================
 // SECTION 6: secretInstallCommand — installation error paths
@@ -398,20 +429,31 @@ describe('secretInstallCommand: installation error paths', () => {
   it('reports verification failure message when binary does not respond after download', async () => {
     // Arrange
     downloadBinarySpy = spyOn(releases, 'downloadBinary').mockImplementation(
-      async (_url: string, path: string) => { writeFileSync(path, ''); }
+      (_url: string, path: string) => {
+        writeFileSync(path, '');
+        return Promise.resolve();
+      },
     );
-    verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockResolvedValue(undefined);
+    verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockResolvedValue(
+      undefined,
+    );
     spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 1, stdout: '', stderr: 'not working',
+      exitCode: 1,
+      stdout: '',
+      stderr: 'not working',
     });
 
     // Act
     await secretInstallCommand({ force: true }, { binDir: tempBinDir });
 
     // Assert: signature passes but --version fails → exits 1 with verification error
-    const errors = getMockUiCalls().filter(c => c.method === 'error').map(c => String(c.args[0]));
+    const errors = getMockUiCalls()
+      .filter((c) => c.method === 'error')
+      .map((c) => String(c.args[0]));
     expect(mockExit).toHaveBeenCalledWith(1);
-    expect(errors.some(m => m.includes('verification') || m.includes('not responding'))).toBe(true);
+    expect(errors.some((m) => m.includes('verification') || m.includes('not responding'))).toBe(
+      true,
+    );
     expect(verifyBinarySignatureSpy).toHaveBeenCalledWith(
       expect.stringContaining('sonar-secrets'),
       expect.objectContaining({ os: expect.any(String) }),
@@ -424,11 +466,18 @@ describe('secretInstallCommand: installation error paths', () => {
     // Arrange
     const pinnedVersion = SONAR_SECRETS_VERSION;
     downloadBinarySpy = spyOn(releases, 'downloadBinary').mockImplementation(
-      async (_url: string, path: string) => { writeFileSync(path, ''); }
+      (_url: string, path: string) => {
+        writeFileSync(path, '');
+        return Promise.resolve();
+      },
     );
-    verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockResolvedValue(undefined);
+    verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockResolvedValue(
+      undefined,
+    );
     spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0, stdout: `sonar-secrets ${pinnedVersion}\n`, stderr: '',
+      exitCode: 0,
+      stdout: `sonar-secrets ${pinnedVersion}\n`,
+      stderr: '',
     });
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {
@@ -439,10 +488,14 @@ describe('secretInstallCommand: installation error paths', () => {
     await secretInstallCommand({ force: true }, { binDir: tempBinDir });
 
     // Assert: install succeeds despite state error; user is warned but not blocked
-    const successes = getMockUiCalls().filter(c => c.method === 'success').map(c => String(c.args[0]));
-    const warns = getMockUiCalls().filter(c => c.method === 'warn').map(c => String(c.args[0]));
+    const successes = getMockUiCalls()
+      .filter((c) => c.method === 'success')
+      .map((c) => String(c.args[0]));
+    const warns = getMockUiCalls()
+      .filter((c) => c.method === 'warn')
+      .map((c) => String(c.args[0]));
     expect(mockExit).toHaveBeenCalledWith(0);
-    expect(successes.some(m => m.includes('Installation complete'))).toBe(true);
-    expect(warns.some(m => m.includes('Failed to update state'))).toBe(true);
+    expect(successes.some((m) => m.includes('Installation complete'))).toBe(true);
+    expect(warns.some((m) => m.includes('Failed to update state'))).toBe(true);
   });
 });

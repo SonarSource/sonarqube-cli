@@ -28,14 +28,17 @@ import { setMockUi } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from '../../src/lib/config-constants.js';
+import {
+  SONARSOURCE_BINARIES_URL,
+  SONAR_SECRETS_DIST_PREFIX,
+} from '../../src/lib/config-constants.js';
 
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),
 // spyOn can patch individual exports per-test and restore them in afterEach —
 // without permanently replacing any function for other test files in this process.
 const releases = await import('../../src/lib/sonarsource-releases.js');
-mock.module('../../src/lib/sonarsource-releases.js', () => ({
+void mock.module('../../src/lib/sonarsource-releases.js', () => ({
   ...releases,
   // Override buildDownloadUrl with a deterministic version so tests don't depend
   // on config-constants and sonarsource-releases.test.ts is not contaminated.
@@ -60,7 +63,7 @@ describe('secretInstallCommand', () => {
     // Default: download succeeds silently, signature verification fails
     downloadBinarySpy = spyOn(releases, 'downloadBinary').mockResolvedValue(undefined);
     verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockRejectedValue(
-      new Error('signature unavailable')
+      new Error('signature unavailable'),
     );
   });
 
@@ -83,14 +86,17 @@ describe('secretInstallCommand', () => {
     const tempBinDir = join(tmpdir(), `sonar-install-test-${Date.now()}`);
     const { SONAR_SECRETS_VERSION } = await import('../../src/lib/signatures.js');
 
-    downloadBinarySpy.mockImplementation(async (_url: string, path: string) => {
+    downloadBinarySpy.mockImplementation((_url: string, path: string) => {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, ''); // empty placeholder so chmod in makeExecutable succeeds
+      return Promise.resolve();
     });
     verifyBinarySignatureSpy.mockResolvedValue(undefined);
 
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0, stdout: `sonar-secrets version ${SONAR_SECRETS_VERSION}\n`, stderr: '',
+      exitCode: 0,
+      stdout: `sonar-secrets version ${SONAR_SECRETS_VERSION}\n`,
+      stderr: '',
     });
 
     try {

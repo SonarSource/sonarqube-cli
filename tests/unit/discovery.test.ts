@@ -65,12 +65,9 @@ it('discovery: .sonarlint/connectedMode.json parsing', async () => {
     const configContent = {
       sonarQubeUri: 'https://sonarqube.example.com',
       projectKey: 'example_project',
-      organization: 'example-org'
+      organization: 'example-org',
     };
-    writeFileSync(
-      join(sonarlintDir, 'connectedMode.json'),
-      JSON.stringify(configContent, null, 2)
-    );
+    writeFileSync(join(sonarlintDir, 'connectedMode.json'), JSON.stringify(configContent, null, 2));
 
     const info = await discoverProject(testDir);
 
@@ -235,10 +232,7 @@ it('discovery: .sonarlint/settings.json with serverId schema', async () => {
       projectKey: 'my_project',
       organization: '',
     };
-    writeFileSync(
-      join(testDir, '.sonarlint', 'settings.json'),
-      JSON.stringify(configContent),
-    );
+    writeFileSync(join(testDir, '.sonarlint', 'settings.json'), JSON.stringify(configContent));
 
     const info = await discoverProject(testDir);
     expect(info.hasSonarLintConfig).toBe(true);

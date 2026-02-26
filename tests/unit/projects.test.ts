@@ -24,18 +24,18 @@ function createMockResponse(
   components: { key: string; name: string }[],
   pageIndex: number,
   pageSize: number,
-  total: number
+  total: number,
 ): ProjectsSearchResponse {
   return {
     paging: { pageIndex, pageSize, total },
-    components
+    components,
   };
 }
 
 describe('ProjectsClient', () => {
   describe('searchProjects', () => {
     it('should call client.get with correct endpoint', async () => {
-      const mockGet = mock(async (endpoint: string) => {
+      const mockGet = mock((endpoint: string) => {
         expect(endpoint).toBe('/api/components/search');
         return createMockResponse([], 1, 500, 0);
       });
@@ -49,7 +49,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should send qualifiers=TRK when no organization is provided', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.qualifiers).toBe('TRK');
         expect(params.organization).toBeUndefined();
         return createMockResponse([], 1, 500, 0);
@@ -62,7 +62,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should send qualifiers=TRK when organization is undefined', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.qualifiers).toBe('TRK');
         expect(params.organization).toBeUndefined();
         return createMockResponse([], 1, 500, 0);
@@ -75,7 +75,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should send organization param and omit qualifiers for SonarCloud', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.organization).toBe('my-org');
         expect(params.qualifiers).toBeUndefined();
         return createMockResponse([], 1, 500, 0);
@@ -88,7 +88,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass search query parameter', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.q).toBe('my-project');
         return createMockResponse([], 1, 500, 0);
       });
@@ -100,7 +100,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should not send query param when not specified', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.q).toBeUndefined();
         return createMockResponse([], 1, 500, 0);
       });
@@ -112,7 +112,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass page number', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.p).toBe(3);
         return createMockResponse([], 3, 500, 0);
       });
@@ -124,7 +124,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass page size', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.ps).toBe(50);
         return createMockResponse([], 1, 50, 0);
       });
@@ -136,7 +136,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should not send page params when not specified', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.p).toBeUndefined();
         expect(params.ps).toBeUndefined();
         return createMockResponse([], 1, 500, 0);
@@ -151,9 +151,9 @@ describe('ProjectsClient', () => {
     it('should return response with projects', async () => {
       const mockProjects = [
         createMockProject('proj-1', 'Project One'),
-        createMockProject('proj-2', 'Project Two')
+        createMockProject('proj-2', 'Project Two'),
       ];
-      const mockGet = mock(async () => createMockResponse(mockProjects, 1, 500, 2));
+      const mockGet = mock(() => createMockResponse(mockProjects, 1, 500, 2));
 
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
@@ -168,7 +168,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should return paging metadata', async () => {
-      const mockGet = mock(async () => createMockResponse([], 2, 50, 200));
+      const mockGet = mock(() => createMockResponse([], 2, 50, 200));
 
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
@@ -181,7 +181,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should return empty list when no projects found', async () => {
-      const mockGet = mock(async () => createMockResponse([], 1, 500, 0));
+      const mockGet = mock(() => createMockResponse([], 1, 500, 0));
 
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
@@ -193,7 +193,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should propagate API errors', async () => {
-      const mockGet = mock(async () => {
+      const mockGet = mock(() => {
         throw new Error('SonarQube API error: 401 Unauthorized');
       });
 
@@ -209,7 +209,7 @@ describe('ProjectsClient', () => {
     });
 
     it('should pass all params together', async () => {
-      const mockGet = mock(async (_endpoint: string, params: any) => {
+      const mockGet = mock((_endpoint: string, params: any) => {
         expect(params.organization).toBe('my-org');
         expect(params.q).toBe('frontend');
         expect(params.p).toBe(2);
@@ -225,7 +225,7 @@ describe('ProjectsClient', () => {
         organization: 'my-org',
         q: 'frontend',
         p: 2,
-        ps: 25
+        ps: 25,
       });
     });
   });

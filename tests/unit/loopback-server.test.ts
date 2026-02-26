@@ -19,7 +19,13 @@
  */
 
 import { describe, it, expect, afterEach } from 'bun:test';
-import { startLoopbackServer, getSecurityHeaders, isValidLoopbackOrigin, isValidLoopbackHost, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
+import {
+  startLoopbackServer,
+  getSecurityHeaders,
+  isValidLoopbackOrigin,
+  isValidLoopbackHost,
+  type LoopbackServerResult,
+} from '../../src/lib/loopback-server.js';
 import { AUTH_PORT_START, AUTH_PORT_COUNT } from '../../src/lib/config-constants.js';
 
 const HTTP_STATUS_OK = 200;
@@ -42,7 +48,6 @@ describe('loopback-server', () => {
       expect(headers['X-Frame-Options']).toBe('DENY');
       expect(headers['Cache-Control']).toBe('no-store');
     });
-
   });
 
   describe('isValidLoopbackOrigin', () => {
@@ -157,7 +162,9 @@ describe('loopback-server', () => {
 
       expect(response.headers.get('X-Frame-Options')).toBe('DENY');
       expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
-      expect(response.headers.get('Content-Security-Policy')).toBe("default-src 'none'; connect-src 'self'");
+      expect(response.headers.get('Content-Security-Policy')).toBe(
+        "default-src 'none'; connect-src 'self'",
+      );
       expect(response.headers.get('Cache-Control')).toBe('no-store');
     });
 
@@ -341,7 +348,7 @@ describe('loopback-server', () => {
           res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
           res.end('OK');
         },
-        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+        { allowedOrigins: [SONARCLOUD_ORIGIN] },
       );
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
@@ -357,7 +364,7 @@ describe('loopback-server', () => {
           res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
           res.end('OK');
         },
-        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+        { allowedOrigins: [SONARCLOUD_ORIGIN] },
       );
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
@@ -373,7 +380,7 @@ describe('loopback-server', () => {
           res.writeHead(HTTP_STATUS_OK);
           res.end('OK');
         },
-        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+        { allowedOrigins: [SONARCLOUD_ORIGIN] },
       );
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {
@@ -393,7 +400,7 @@ describe('loopback-server', () => {
           res.writeHead(HTTP_STATUS_OK);
           res.end('OK');
         },
-        { allowedOrigins: [SONARCLOUD_ORIGIN] }
+        { allowedOrigins: [SONARCLOUD_ORIGIN] },
       );
 
       const response = await fetch(`${LOOPBACK_URL_PREFIX}:${server.port}`, {

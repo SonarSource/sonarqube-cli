@@ -23,9 +23,9 @@
  * Tests in-memory cache to avoid repeated keychain password prompts
  */
 
-import {afterEach, beforeEach, describe, expect, it} from 'bun:test';
-import {clearTokenCache, getToken} from '../../src/lib/keychain.js';
-import {createMockKeytar} from '../helpers/mock-keytar.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { clearTokenCache, getToken } from '../../src/lib/keychain.js';
+import { createMockKeytar } from '../helpers/mock-keytar.js';
 
 // Test constants
 const MULTIPLE_TOKENS_COUNT = 3;
@@ -82,11 +82,11 @@ describe('Keychain token caching', () => {
       let getPasswordCallCount = 0;
       const countingKeytar = {
         ...mockKeytar,
-        getPassword: async (service: string, account: string) => {
+        getPassword: (service: string, account: string): Promise<string | null> => {
           getPasswordCallCount++;
           const key = `${service}:${account}`;
-          return mockKeytarTokens.get(key) || null;
-        }
+          return Promise.resolve(mockKeytarTokens.get(key) ?? null);
+        },
       };
 
       // Simulate first call
@@ -97,7 +97,7 @@ describe('Keychain token caching', () => {
       // Simulate second call - cache should prevent new call
       // In real implementation: getToken checks cache first
       // For this test we verify the logic would work
-       // Cache would return this
+      // Cache would return this
       expect(result1).toBe('token123');
       // Count stays at 1 because cache is used
       expect(getPasswordCallCount).toBe(1);
@@ -108,11 +108,11 @@ describe('Keychain token caching', () => {
       let getPasswordCallCount = 0;
       const countingKeytar = {
         ...mockKeytar,
-        getPassword: async (service: string, account: string) => {
+        getPassword: (service: string, account: string): Promise<string | null> => {
           getPasswordCallCount++;
           const key = `${service}:${account}`;
-          return mockKeytarTokens.get(key) || null; // Returns null
-        }
+          return Promise.resolve(mockKeytarTokens.get(key) ?? null); // Returns null
+        },
       };
 
       const result1 = await countingKeytar.getPassword('sonar-cli', 'nonexistent');
@@ -265,11 +265,11 @@ describe('Keychain token caching', () => {
       let callCount = 0;
       const countingKeytar = {
         ...mockKeytar,
-        getPassword: async (service: string, account: string) => {
+        getPassword: (service: string, account: string): Promise<string | null> => {
           callCount++;
           const key = `${service}:${account}`;
-          return mockKeytarTokens.get(key) || null;
-        }
+          return Promise.resolve(mockKeytarTokens.get(key) ?? null);
+        },
       };
 
       // Setup
@@ -290,11 +290,7 @@ describe('Keychain token caching', () => {
       const service = 'sonar-cli';
 
       // Three different accounts
-      const accounts = [
-        'sonarcloud.io:org1',
-        'sonarcloud.io:org2',
-        'sonarqube.example.com'
-      ];
+      const accounts = ['sonarcloud.io:org1', 'sonarcloud.io:org2', 'sonarqube.example.com'];
 
       // Save tokens
       for (let i = 0; i < accounts.length; i++) {

@@ -25,7 +25,7 @@ import { describe, it, expect, afterEach, beforeEach, mock, spyOn } from 'bun:te
 
 // Mock browser module BEFORE importing auth (prevents actual browser opening during tests)
 const mockOpenBrowser = mock((_url: string) => Promise.resolve());
-mock.module('../../src/lib/browser.js', () => ({
+void mock.module('../../src/lib/browser.js', () => ({
   openBrowser: mockOpenBrowser,
 }));
 
@@ -74,14 +74,15 @@ describe('Auth Scenarios: keychain token management', () => {
     mockStore.clear();
     clearTokenCache();
     setKeytarImpl({
-      getPassword: async (_service: string, account: string) => mockStore.get(account) ?? null,
-      setPassword: async (_service: string, account: string, password: string) => {
+      getPassword: (_service: string, account: string) =>
+        Promise.resolve(mockStore.get(account) ?? null),
+      setPassword: (_service: string, account: string, password: string) => {
         mockStore.set(account, password);
+        return Promise.resolve();
       },
-      deletePassword: async (_service: string, account: string) => {
-        return mockStore.delete(account);
-      },
-      findCredentials: async () => [],
+      deletePassword: (_service: string, account: string) =>
+        Promise.resolve(mockStore.delete(account)),
+      findCredentials: () => Promise.resolve([]),
     });
   });
 
@@ -144,7 +145,7 @@ describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
     const tokenPromise = generateTokenViaBrowser('https://sonarcloud.io', mockOpenBrowser);
 
     // Wait for server to be ready
-    await new Promise(resolve => setTimeout(resolve, PORT_SCAN_DELAY_MS));
+    await new Promise((resolve) => setTimeout(resolve, PORT_SCAN_DELAY_MS));
 
     const port = extractPortFromMockBrowserCall();
 
@@ -162,7 +163,7 @@ describe('Auth Scenarios: generateTokenViaBrowser full flow', () => {
   it('should complete full OAuth flow with GET token callback', async () => {
     const tokenPromise = generateTokenViaBrowser('https://sonarcloud.io', mockOpenBrowser);
 
-    await new Promise(resolve => setTimeout(resolve, PORT_SCAN_DELAY_MS));
+    await new Promise((resolve) => setTimeout(resolve, PORT_SCAN_DELAY_MS));
 
     const port = extractPortFromMockBrowserCall();
 
@@ -212,12 +213,10 @@ describe('Auth Scenarios: openBrowserWithFallback', () => {
     expect(mockOpenBrowser).toHaveBeenCalledWith('https://sonarcloud.io/test');
   });
 
-  it('should not throw when browser opening fails', async () => {
+  it('should not throw when browser opening fails', () => {
     mockOpenBrowser.mockImplementationOnce(() => Promise.reject(new Error('No browser found')));
 
-    expect(
-      openBrowserWithFallback('https://sonarcloud.io/test')
-    ).resolves.toBeUndefined();
+    expect(openBrowserWithFallback('https://sonarcloud.io/test')).resolves.toBeUndefined();
   });
 
   it('should skip browser when CI=true', async () => {
