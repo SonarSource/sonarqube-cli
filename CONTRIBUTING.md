@@ -8,7 +8,7 @@
 ## Setup
 
 ```bash
-npm install
+bun install
 ```
 
 ## Building
@@ -16,7 +16,7 @@ npm install
 ### TypeScript build (for npm distribution)
 
 ```bash
-npm run build
+bun run build
 ```
 
 Output goes to `dist/`.
@@ -24,13 +24,13 @@ Output goes to `dist/`.
 ### Self-contained binary (for releases)
 
 ```bash
-npm run build:binary
+bun run build:binary
 ```
 
 Produces `dist/sonarqube-cli` using Bun's single-file compiler. To install it locally:
 
 ```bash
-npm run setup
+bun run setup
 ```
 
 ## Checks
@@ -39,35 +39,35 @@ Run these before opening a pull request:
 
 ```bash
 # Lint (ESLint + TypeScript-aware rules)
-npm run lint
+bun run lint
 
 # Auto-fix safe lint issues
-npm run lint:fix
+bun run lint:fix
 
 # TypeScript type checking
-npm run typecheck
+bun run typecheck
 
 # Validate spec.yaml and command registration
-npm run validate
+bun run validate
 ```
 
 ## Testing
 
 ```bash
 # Unit tests
-npm test
+bun test
 
 # Unit tests with coverage
-npm run test:coverage
+bun run test:coverage
 
 # Script tests (validates spec.yaml / command sync)
-npm run test:scripts
+bun run test:scripts
 
 # Integration tests (require env vars — see below)
-npm run test:integration
+bun run test:integration
 
 # All tests
-npm run test:all
+bun run test:all
 ```
 
 ### Integration tests
@@ -89,16 +89,16 @@ Commands are generated from `spec.yaml` using Plop:
 
 ```bash
 # Add a new command interactively
-npm run gen:command
+bun run gen:command
 
 # Regenerate docs from spec.yaml
-npm run gen:docs
+bun run gen:docs
 
 # Sync index.ts command registrations
-npm run gen:sync
+bun run gen:sync
 
 # Run full generation pipeline
-npm run gen:all
+bun run gen:all
 ```
 
-After editing `spec.yaml` directly, run `npm run validate` to check consistency.
+After editing `spec.yaml` directly, run `bun run validate` to check consistency.
