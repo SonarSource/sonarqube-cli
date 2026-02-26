@@ -25,35 +25,27 @@ import { join } from 'node:path';
 import { spawnProcess } from '../lib/process.js';
 import { BIN_DIR } from '../lib/config-constants.js';
 import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.js';
-import { getActiveConnection, loadState } from '../lib/state-manager.js';
-import { getToken } from '../lib/keychain.js';
+import { resolveAuth } from '../lib/auth-resolver.js';
 import logger from '../lib/logger.js';
-import { text, blank, success, error, print } from '../ui';
-import { CommandFailedError, InvalidOptionError } from './common/error.js';
+import { text, blank, success, error, print } from '../ui/index.js';
 
-const ENV_SECRETS_AUTH_URL = 'SONAR_SECRETS_AUTH_URL';
-const ENV_SECRETS_TOKEN = 'SONAR_SECRETS_TOKEN';
+// Env var names expected by the sonar-secrets binary
+const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
+const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
 const SCAN_TIMEOUT_MS = 30000;
 const STDIN_READ_TIMEOUT_MS = 5000;
-const SECRET_SCAN_POSITIVE_EXIT_CODE = 51;
 
 /**
  * Check command: sonar secret check [--file <path>] [--stdin]
  */
 export const secretCheckCommand = performCheckCommand;
 
-async function performCheckCommand(options: {
-  file?: string;
-  stdin?: boolean;
-}): Promise<void> {
+async function performCheckCommand(options: { file?: string; stdin?: boolean }): Promise<void> {
   return handleCheckCommand(options).catch(handleScanError);
 }
 
-async function handleCheckCommand(options: {
-  file?: string;
-  stdin?: boolean;
-}): Promise<void> {
+async function handleCheckCommand(options: { file?: string; stdin?: boolean }): Promise<void> {
   const scanEnv = await setupScanEnvironment(options);
   const scanStartTime = Date.now();
   const { binaryPath, authUrl, authToken } = scanEnv;
@@ -76,7 +68,10 @@ interface AuthConfig {
   authToken?: string;
 }
 
-async function setupScanEnvironment(options: { file?: string; stdin?: boolean }): Promise<ScanEnvironment> {
+async function setupScanEnvironment(options: {
+  file?: string;
+  stdin?: boolean;
+}): Promise<ScanEnvironment> {
   validateScanOptions(options);
 
   const binaryPath = setupBinaryPath();
@@ -87,11 +82,13 @@ async function setupScanEnvironment(options: { file?: string; stdin?: boolean })
 
 function validateScanOptions(options: { file?: string; stdin?: boolean }): void {
   if (!options.file && !options.stdin) {
-    throw new InvalidOptionError('Either --file or --stdin is required');
+    error('Either --file or --stdin is required');
+    process.exit(1);
   }
 
   if (options.file && options.stdin) {
-    throw new InvalidOptionError('Cannot use both --file and --stdin');
+    error('Cannot use both --file and --stdin');
+    process.exit(1);
   }
 }
 
@@ -105,35 +102,20 @@ function setupBinaryPath(): string {
 }
 
 async function resolveSecretsAuth(): Promise<AuthConfig> {
-  // Env vars take priority — already set for CI or manual configuration
-  const envUrl = process.env[ENV_SECRETS_AUTH_URL];
-  const envToken = process.env[ENV_SECRETS_TOKEN];
-  if (envUrl && envToken) {
-    return { authUrl: envUrl, authToken: envToken };
-  }
-
-  // Try active CLI connection from state + keychain
   try {
-    const state = loadState();
-    const activeConnection = getActiveConnection(state);
-    if (activeConnection) {
-      const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
-      if (token) {
-        return { authUrl: activeConnection.serverUrl, authToken: token };
-      }
-    }
+    const auth = await resolveAuth({});
+    return { authUrl: auth.serverUrl, authToken: auth.token };
   } catch {
     // Auth resolution failure is non-fatal — binary works without auth
+    return {};
   }
-
-  return {};
 }
 
 async function performStdinScan(
   binaryPath: string,
   authUrl: string | undefined,
   authToken: string | undefined,
-  scanStartTime: number
+  scanStartTime: number,
 ): Promise<void> {
   const result = await runScanFromStdin(binaryPath, authUrl, authToken);
   const scanDurationMs = Date.now() - scanStartTime;
@@ -151,14 +133,16 @@ async function performFileScan(
   file: string | undefined,
   authUrl: string | undefined,
   authToken: string | undefined,
-  scanStartTime: number
+  scanStartTime: number,
 ): Promise<void> {
   if (!file) {
-    throw new InvalidOptionError('File path is required');
+    error('File path is required');
+    process.exit(1);
   }
 
   if (!existsSync(file)) {
-    throw new InvalidOptionError(`File not found: ${file}`);
+    error(`File not found: ${file}`);
+    process.exit(1);
   }
 
   const result = await runScan(binaryPath, file, authUrl, authToken);
@@ -176,7 +160,7 @@ function validateCheckCommandEnvironment(binaryPath: string): void {
   if (!existsSync(binaryPath)) {
     error('sonar-secrets is not installed');
     text('  Install with: sonar install secrets');
-    throw new CommandFailedError('sonar-secrets is not installed');
+    process.exit(1);
   }
 }
 
@@ -184,30 +168,32 @@ async function runScan(
   binaryPath: string,
   file: string,
   authUrl: string | undefined,
-  authToken: string | undefined
+  authToken: string | undefined,
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   return Promise.race([
-    spawnProcess(binaryPath, [file], {
+    spawnProcess(binaryPath, ['--non-interactive', file], {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
-        ...(authUrl && authToken ? { [ENV_SECRETS_AUTH_URL]: authUrl, [ENV_SECRETS_TOKEN]: authToken } : {}),
-      }
+        ...(authUrl && authToken
+          ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
+          : {}),
+      },
     }),
     new Promise<never>((_resolve, reject) =>
       setTimeout(
         () => reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`)),
-        SCAN_TIMEOUT_MS
-      )
-    )
+        SCAN_TIMEOUT_MS,
+      ),
+    ),
   ]);
 }
 
 async function runScanFromStdin(
   binaryPath: string,
   authUrl: string | undefined,
-  authToken: string | undefined
+  authToken: string | undefined,
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   const { writeFileSync, unlinkSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
@@ -225,15 +211,17 @@ async function runScanFromStdin(
         stdout: 'pipe',
         stderr: 'pipe',
         env: {
-          ...(authUrl && authToken ? { [ENV_SECRETS_AUTH_URL]: authUrl, [ENV_SECRETS_TOKEN]: authToken } : {}),
-        }
+          ...(authUrl && authToken
+            ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
+            : {}),
+        },
       }),
       new Promise<never>((_resolve, reject) =>
         setTimeout(
           () => reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`)),
-          SCAN_TIMEOUT_MS
-        )
-      )
+          SCAN_TIMEOUT_MS,
+        ),
+      ),
     ]);
   } finally {
     try {
@@ -265,9 +253,9 @@ async function readStdin(): Promise<string> {
     new Promise<never>((_resolve, reject) =>
       setTimeout(
         () => reject(new Error(`stdin read timeout after ${STDIN_READ_TIMEOUT_MS}ms`)),
-        STDIN_READ_TIMEOUT_MS
-      )
-    )
+        STDIN_READ_TIMEOUT_MS,
+      ),
+    ),
   ]);
 }
 
@@ -279,6 +267,7 @@ function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): 
     text(`  Duration: ${scanDurationMs}ms`);
     displayScanResults(scanResult);
     blank();
+    process.exit(0);
   } catch (parseError) {
     logger.debug(`Failed to parse JSON output: ${(parseError as Error).message}`);
     blank();
@@ -286,6 +275,7 @@ function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): 
     blank();
     print(result.stdout);
     blank();
+    process.exit(0);
   }
 }
 
@@ -317,10 +307,10 @@ function displayScanResults(scanResult: {
 function handleScanFailure(
   result: { exitCode: number | null; stderr: string; stdout: string },
   scanDurationMs: number,
-  exitCode: number
+  exitCode: number,
 ): void {
   blank();
-  error('Scan failed');
+  error('Scan found secrets');
   logger.error(`Scan failed with exit code: ${exitCode}`);
   text(`  Exit code: ${exitCode}`);
   text(`  Duration: ${scanDurationMs}ms`);
@@ -337,22 +327,10 @@ function handleScanFailure(
     print(result.stdout);
   }
   blank();
-  // Binary exit 1 = secrets found — remap to 51 so hooks can distinguish from generic errors
-  throw new CommandFailedError(
-    `Scan failed with exit code: ${exitCode}`,
-    exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode,
-  );
+  process.exit(exitCode);
 }
 
 function handleScanError(err: unknown): void {
-  if (err instanceof InvalidOptionError) {
-    throw err;
-  }
-
-  if (err instanceof CommandFailedError) {
-    throw err;
-  }
-
   const errorMessage = (err as Error).message;
 
   blank();
@@ -360,7 +338,9 @@ function handleScanError(err: unknown): void {
   logger.error(`Scan error: ${errorMessage}`);
 
   if (errorMessage.includes('timed out')) {
-    text('\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.');
+    text(
+      '\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.',
+    );
   } else if (errorMessage.includes('ENOENT')) {
     text(
       '\nThe binary file was not found or is not executable.\nReinstall with: sonar install secrets --force',
@@ -370,5 +350,5 @@ function handleScanError(err: unknown): void {
   }
 
   blank();
-  throw new CommandFailedError(errorMessage);
+  process.exit(1);
 }
