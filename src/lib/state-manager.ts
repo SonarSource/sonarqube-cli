@@ -25,7 +25,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import logger from './logger.js';
-import { CliState, getDefaultState, AuthConnection, CloudRegion } from './state.js';
+import { type CliState, getDefaultState, type AuthConnection, type CloudRegion } from './state.js';
 import { CLI_DIR, STATE_FILE } from './config-constants.js';
 import { version as VERSION } from '../../package.json';
 

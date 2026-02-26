@@ -69,7 +69,7 @@ function skipIfNoToken(): boolean {
   return !hasToken;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- sonarjs/nosonar
+ 
 /* sonar-cli: safe for integration tests with hardcoded test data */
 describe('sonar secret check - integration tests', () => {
   beforeAll(() => {

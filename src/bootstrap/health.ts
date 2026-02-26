@@ -58,7 +58,7 @@ export async function runHealthChecks(
   projectKey: string,
   projectRoot: string,
   organization?: string,
-  verbose: boolean = true
+  verbose = true
 ): Promise<HealthCheckResult> {
   const client = new SonarQubeClient(serverURL, token);
   const errors: string[] = [];

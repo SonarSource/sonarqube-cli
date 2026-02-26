@@ -113,7 +113,7 @@ list
   .option('-p, --page <page>', 'Page number', '1')
   .option('--page-size <page-size>', 'Page size (1-500)', '500')
   .action(async (options) => {
-    await runCommand(async () => await projectsSearchCommand(options));
+    await runCommand(async () => { await projectsSearchCommand(options); });
   });
 
 // Manage authentication tokens and credentials
