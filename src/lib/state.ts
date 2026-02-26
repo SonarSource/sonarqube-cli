@@ -36,7 +36,7 @@ export type ServerType = 'cloud' | 'on-premise';
 /**
  * Hook type for agent integration
  */
-export type HookType = 'PreToolUse' | 'PostToolUse' | 'SessionStart';
+export type HookType = 'PreToolUse' | 'PostToolUse' | 'SessionStart' | 'UserPromptSubmit';
 
 /**
  * Single authentication connection

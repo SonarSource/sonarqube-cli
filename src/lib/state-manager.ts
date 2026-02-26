@@ -31,6 +31,7 @@ import {
   type AuthConnection,
   type CloudRegion,
   type AgentConfig,
+  type HookType,
 } from './state.js';
 import { CLI_DIR, STATE_FILE } from './config-constants.js';
 import { version as VERSION } from '../../package.json';
@@ -176,7 +177,7 @@ export function addInstalledHook(
   state: CliState,
   agentName: string,
   hookName: string,
-  hookType: 'PreToolUse' | 'PostToolUse' | 'SessionStart',
+  hookType: HookType,
 ): void {
   if (!Object.hasOwn(state.agents, agentName)) {
     state.agents[agentName] = {
