@@ -1,6 +1,7 @@
 // @ts-check
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
+import headersPlugin from 'eslint-plugin-headers';
 
 export default tseslint.config(
   // Global ignores
@@ -8,6 +9,18 @@ export default tseslint.config(
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'scripts/**', 'plop-templates/**'],
   },
 
+  // License header enforcement
+  {
+    files: ['src/**/*.ts'],
+    plugins: { headers: headersPlugin },
+    rules: {
+      'headers/header-format': ['error', {
+        source: 'file',
+        path: 'LICENSE',
+        blockPrefix: '\n'
+      }],
+    },
+  },
   // Base TypeScript config for source files
   {
     files: ['src/**/*.ts'],
