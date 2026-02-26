@@ -25,14 +25,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui/index.js';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { saveToken } from '../../src/lib/keychain.js';
 import { secretCheckCommand } from '../../src/commands/secret.js';
 import { createMockKeytar } from '../helpers/mock-keytar.js';
-import { CommandFailedError } from '../../src/commands/common/error.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -60,14 +59,15 @@ function mockBinaryExists(fileAlsoExists = true) {
   });
 }
 
+let mockExit: ReturnType<typeof spyOn>;
 let loadStateSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  process.exitCode = 0;
   keytarHandle.setup();
   setMockUi(true);
   clearMockUiCalls();
+  mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
   spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
@@ -78,63 +78,76 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.exitCode = 0;
   keytarHandle.teardown();
+  mockExit.mockRestore();
   loadStateSpy.mockRestore();
   spawnSpy.mockRestore();
   setMockUi(false);
 });
 
-// ─── Auth failure paths ───────────────────────────────────────────────────────
+// ─── Auth-optional paths ──────────────────────────────────────────────────────
 
-describe('secretCheckCommand: auth failures', () => {
-  it('throws CommandFailedError and shows config instructions when no active connection exists', () => {
-    // Default state has no connections
+describe('secretCheckCommand: runs without authentication', () => {
+  it('runs scan without auth when no connection is configured', async () => {
+    // Default state has no connections — scan should still proceed
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
     const existsSpy = mockBinaryExists();
     try {
-      expect(secretCheckCommand({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
-
-      const errors = getMockUiCalls()
-        .filter((c) => c.method === 'error')
-        .map((c) => String(c.args[0]));
-      expect(errors.some((m) => m.includes('authentication is not configured'))).toBe(true);
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('sonar auth login'))).toBe(true);
+      await secretCheckCommand({ file: 'src/index.ts' });
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(mockExit).toHaveBeenCalledWith(0);
+    // Binary should be called without auth env vars (no assertion needed — just no crash)
   });
 
-  it('throws CommandFailedError when connection exists but no token is stored in keychain', () => {
-    // Active connection but keychain has no token for it
-    const state = getDefaultState('test');
-    stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
-      orgKey: TEST_ORG,
-      keystoreKey: `sonarcloud.io:${TEST_ORG}`,
+  it('passes auth env vars to binary when active connection is configured', async () => {
+    await setupAuthenticatedState();
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
     });
-    loadStateSpy.mockReturnValue(state);
-    // No saveToken call → keychain returns null
-
     const existsSpy = mockBinaryExists();
     try {
-      expect(secretCheckCommand({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
-
-      const errors = getMockUiCalls()
-        .filter((c) => c.method === 'error')
-        .map((c) => String(c.args[0]));
-      expect(errors.some((m) => m.includes('authentication is not configured'))).toBe(true);
+      await secretCheckCommand({ file: 'src/index.ts' });
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(mockExit).toHaveBeenCalledWith(0);
+    const spawnCall = spawnSpy.mock.calls[0];
+    expect(spawnCall[2].env['SONAR_SECRETS_AUTH_URL']).toBe(SONARCLOUD_URL);
+    expect(spawnCall[2].env['SONAR_SECRETS_TOKEN']).toBe(TEST_TOKEN);
+  });
+
+  it('passes --non-interactive as first arg to binary for file scan', async () => {
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
+    const existsSpy = mockBinaryExists();
+    try {
+      await secretCheckCommand({ file: 'src/index.ts' });
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    const spawnCall = spawnSpy.mock.calls[0];
+    expect(spawnCall[1][0]).toBe('--non-interactive');
   });
 });
 
 // ─── Successful scan paths ────────────────────────────────────────────────────
 
 describe('secretCheckCommand: successful scan', () => {
-  it('completes with exit code 0 when scan returns exit code 0 with empty issues list', async () => {
+  it('exits 0 when scan returns exit code 0 with empty issues list', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
@@ -149,14 +162,14 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(process.exitCode).toBe(0);
+    expect(mockExit).toHaveBeenCalledWith(0);
     const texts = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));
     expect(texts.some((m) => m.includes('Issues found: 0'))).toBe(true);
   });
 
-  it('completes with exit code 0 and displays issue details when scan returns issues with line and severity', async () => {
+  it('exits 0 and displays issue details when scan returns issues with line and severity', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
@@ -176,7 +189,7 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(process.exitCode).toBe(0);
+    expect(mockExit).toHaveBeenCalledWith(0);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
@@ -190,7 +203,7 @@ describe('secretCheckCommand: successful scan', () => {
     expect(texts.some((m) => m.includes('Issues found: 2'))).toBe(true);
   });
 
-  it('completes with exit code 0 and prints raw stdout when scan output is not valid JSON', async () => {
+  it('exits 0 and prints raw stdout when scan output is not valid JSON', async () => {
     await setupAuthenticatedState();
     const rawOutput = 'No issues found (plain text output)';
     spawnSpy.mockResolvedValue({
@@ -206,14 +219,14 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(process.exitCode).toBe(0);
+    expect(mockExit).toHaveBeenCalledWith(0);
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
       .map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes(rawOutput))).toBe(true);
   });
 
-  it('completes with exit code 0 and shows "No issues detected" when JSON has no issues field', async () => {
+  it('exits 0 and shows "No issues detected" when JSON has no issues field', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
@@ -228,7 +241,7 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(process.exitCode).toBe(0);
+    expect(mockExit).toHaveBeenCalledWith(0);
     const texts = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));
@@ -239,65 +252,70 @@ describe('secretCheckCommand: successful scan', () => {
 // ─── Failed scan paths ────────────────────────────────────────────────────────
 
 describe('secretCheckCommand: scan failures', () => {
-  it('throws CommandFailedError and shows scan failed message when binary exits 1 (secrets found)', async () => {
+  it('exits 51 when binary exits 51 (secrets found)', async () => {
     await setupAuthenticatedState();
-    spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
+    spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
-    let caughtError: unknown;
     try {
       await secretCheckCommand({ file: 'src/index.ts' });
-    } catch (err) {
-      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
 
-    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect(mockExit).toHaveBeenCalledWith(51);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('Scan failed'))).toBe(true);
+    expect(errors.some((m) => m.includes('Scan found secrets'))).toBe(true);
   });
 
-  it('throws CommandFailedError and displays stderr when scan fails with error output', async () => {
+  it('exits 1 when binary exits 1 (error, not secrets found)', async () => {
+    await setupAuthenticatedState();
+    spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'unexpected error' });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await secretCheckCommand({ file: 'src/index.ts' });
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it('displays stderr when scan fails with error output', async () => {
     await setupAuthenticatedState();
     const stderrMsg = 'Connection refused to auth server';
     spawnSpy.mockResolvedValue({ exitCode: 2, stdout: '', stderr: stderrMsg });
 
     const existsSpy = mockBinaryExists(true);
-    let caughtError: unknown;
     try {
       await secretCheckCommand({ file: 'src/index.ts' });
-    } catch (err) {
-      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
 
-    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect(mockExit).toHaveBeenCalledWith(2);
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
       .map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes(stderrMsg))).toBe(true);
   });
 
-  it('throws CommandFailedError and displays stdout when scan fails without stderr', async () => {
+  it('displays stdout when scan fails without stderr', async () => {
     await setupAuthenticatedState();
     const stdoutMsg = '{"error":"auth_failed"}';
     spawnSpy.mockResolvedValue({ exitCode: 2, stdout: stdoutMsg, stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
-    let caughtError: unknown;
     try {
       await secretCheckCommand({ file: 'src/index.ts' });
-    } catch (err) {
-      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
 
-    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect(mockExit).toHaveBeenCalledWith(2);
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
       .map((c) => String(c.args[0]));
@@ -308,66 +326,69 @@ describe('secretCheckCommand: scan failures', () => {
 // ─── Error handling paths (handleScanError) ───────────────────────────────────
 
 describe('secretCheckCommand: scan error handling', () => {
-  it('shows timeout hint and throws CommandFailedError when scan times out', async () => {
+  it('shows timeout hint and exits 1 when scan times out', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockRejectedValue(new Error('Scan timed out after 30000ms'));
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(secretCheckCommand({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
-
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('30 seconds'))).toBe(true);
+      await secretCheckCommand({ file: 'src/index.ts' });
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const texts = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(texts.some((m) => m.includes('30 seconds'))).toBe(true);
   });
 
-  it('shows reinstall hint and throws CommandFailedError when binary is not executable (ENOENT)', async () => {
+  it('shows reinstall hint and exits 1 when binary is not executable (ENOENT)', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockRejectedValue(new Error('spawn ENOENT: no such file or directory'));
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(secretCheckCommand({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
-
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('sonar install secrets --force'))).toBe(true);
+      await secretCheckCommand({ file: 'src/index.ts' });
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const texts = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(texts.some((m) => m.includes('sonar install secrets --force'))).toBe(true);
   });
 
-  it('shows generic status check hint and throws CommandFailedError for unexpected errors', async () => {
+  it('shows generic status check hint and exits 1 for unexpected errors', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockRejectedValue(new Error('Something unexpected went wrong'));
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(secretCheckCommand({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
-
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('sonar install secrets --status'))).toBe(true);
+      await secretCheckCommand({ file: 'src/index.ts' });
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const texts = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(texts.some((m) => m.includes('sonar install secrets --status'))).toBe(true);
   });
 });
 
 // ─── stdin scan paths ─────────────────────────────────────────────────────────
 
 describe('secretCheckCommand: stdin scan', () => {
-  async function withMockStdin(content: string, fn: () => Promise<void>): Promise<void> {
-    const { EventEmitter } = await import('node:events');
+  function withMockStdin(content: string, fn: () => Promise<void>): Promise<void> {
+    const { EventEmitter } = require('node:events');
     const mockStdin = new EventEmitter();
     const originalStdin = process.stdin;
-    // @ts-expect-error — replace stdin for test
+    // @ts-ignore — replace stdin for test
     process.stdin = mockStdin;
 
     const emitData = (): void => {
@@ -379,11 +400,12 @@ describe('secretCheckCommand: stdin scan', () => {
     setTimeout(emitData, 0);
 
     return fn().finally(() => {
+      // @ts-ignore
       process.stdin = originalStdin;
     });
   }
 
-  it('completes with exit code 0 when stdin scan succeeds with no issues', async () => {
+  it('exits 0 when stdin scan succeeds with no issues', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
@@ -398,23 +420,20 @@ describe('secretCheckCommand: stdin scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(process.exitCode).toBe(0);
+    expect(mockExit).toHaveBeenCalledWith(0);
   });
 
-  it('throws CommandFailedError when binary exits 1 during stdin scan (secrets found)', async () => {
+  it('exits 51 when binary exits 51 during stdin scan (secrets found)', async () => {
     await setupAuthenticatedState();
-    spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'secret found' });
+    spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: 'secret found' });
 
     const existsSpy = mockBinaryExists(true);
-    let caughtError: unknown;
     try {
       await withMockStdin('const secret = "abc123";\n', () => secretCheckCommand({ stdin: true }));
-    } catch (err) {
-      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
 
-    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect(mockExit).toHaveBeenCalledWith(51);
   });
 });
