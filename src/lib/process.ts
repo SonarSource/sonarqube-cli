@@ -45,31 +45,27 @@ export interface SpawnResult {
 export async function spawnProcess(
   command: string,
   args: string[],
-  options: SpawnOptions = {}
+  options: SpawnOptions = {},
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
-      stdio: [
-        options.stdin || 'ignore',
-        options.stdout || 'pipe',
-        options.stderr || 'pipe'
-      ],
-      detached: options.detached || false
+      stdio: [options.stdin || 'ignore', options.stdout || 'pipe', options.stderr || 'pipe'],
+      detached: options.detached || false,
     });
 
     let stdout = '';
     let stderr = '';
 
     if (proc.stdout) {
-      proc.stdout.on('data', (data) => {
+      proc.stdout.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
     }
 
     if (proc.stderr) {
-      proc.stderr.on('data', (data) => {
+      proc.stderr.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
     }
@@ -80,7 +76,7 @@ export async function spawnProcess(
       resolve({
         exitCode: code,
         stdout: stdout.trim(),
-        stderr: stderr.trim()
+        stderr: stderr.trim(),
       });
     });
   });

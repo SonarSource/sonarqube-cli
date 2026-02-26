@@ -43,7 +43,7 @@ function makeProjectsResponse(
   components: { key: string; name: string }[],
   pageIndex = 1,
   pageSize = 500,
-  total = components.length
+  total = components.length,
 ): ProjectsSearchResponse {
   return { paging: { pageIndex, pageSize, total }, components };
 }
@@ -63,11 +63,11 @@ describe('projectsSearchCommand', () => {
 
   beforeEach(() => {
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
-      makeStateWithConnection(MOCK_CONNECTION)
+      makeStateWithConnection(MOCK_CONNECTION),
     );
     getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue('test-token');
     getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(
-      makeProjectsResponse([]) as unknown as never
+      makeProjectsResponse([]) as unknown as never,
     );
   });
 
@@ -82,36 +82,32 @@ describe('projectsSearchCommand', () => {
       loadStateSpy.mockReturnValue(getDefaultState('test'));
 
       expect(projectsSearchCommand({})).rejects.toThrow(
-        'No active connection found. Run: sonar auth login'
+        'No active connection found. Run: sonar auth login',
       );
     });
 
     it('throws when no token is found in the keychain', () => {
       getTokenSpy.mockResolvedValue(null);
 
-      expect(projectsSearchCommand({})).rejects.toThrow(
-        'No token found. Run: sonar auth login'
-      );
+      expect(projectsSearchCommand({})).rejects.toThrow('No token found. Run: sonar auth login');
     });
 
     it('throws when page size is not positive', () => {
       expect(projectsSearchCommand({ pageSize: 0 })).rejects.toThrow(
-        `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`
+        `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
       );
     });
 
     it('throws when page size exceeds the maximum', () => {
       expect(projectsSearchCommand({ pageSize: MAX_PAGE_SIZE + 1 })).rejects.toThrow(
-        `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`
+        `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
       );
     });
 
     it('propagates API errors', () => {
       getSpy.mockRejectedValue(new Error('SonarQube API error: 401 Unauthorized'));
 
-      expect(projectsSearchCommand({})).rejects.toThrow(
-        'SonarQube API error: 401 Unauthorized'
-      );
+      expect(projectsSearchCommand({})).rejects.toThrow('SonarQube API error: 401 Unauthorized');
     });
   });
 
@@ -122,7 +118,9 @@ describe('projectsSearchCommand', () => {
 
       await projectsSearchCommand({});
 
-      const prints = getMockUiCalls().filter(c => c.method === 'print').map(c => JSON.parse(String(c.args[0])));
+      const prints = getMockUiCalls()
+        .filter((c) => c.method === 'print')
+        .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect(prints).toHaveLength(1);
       expect(prints[0].projects).toEqual([]);
       expect(prints[0].paging.total).toBe(0);
@@ -131,14 +129,18 @@ describe('projectsSearchCommand', () => {
 
     it('prints JSON with mapped projects (key and name only)', async () => {
       clearMockUiCalls();
-      getSpy.mockResolvedValue(makeProjectsResponse([
-        { key: 'proj-1', name: 'Project One' },
-        { key: 'proj-2', name: 'Project Two' },
-      ]) as unknown as never);
+      getSpy.mockResolvedValue(
+        makeProjectsResponse([
+          { key: 'proj-1', name: 'Project One' },
+          { key: 'proj-2', name: 'Project Two' },
+        ]) as unknown as never,
+      );
 
       await projectsSearchCommand({});
 
-      const prints = getMockUiCalls().filter(c => c.method === 'print').map(c => JSON.parse(String(c.args[0])));
+      const prints = getMockUiCalls()
+        .filter((c) => c.method === 'print')
+        .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect(prints[0].projects).toEqual([
         { key: 'proj-1', name: 'Project One' },
         { key: 'proj-2', name: 'Project Two' },
@@ -147,27 +149,29 @@ describe('projectsSearchCommand', () => {
 
     it('includes correct paging metadata with hasNextPage=true when more pages exist', async () => {
       clearMockUiCalls();
-      getSpy.mockResolvedValue(makeProjectsResponse(
-        [{ key: 'proj-1', name: 'Project One' }],
-        1, 1, 5
-      ) as unknown as never);
+      getSpy.mockResolvedValue(
+        makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5) as unknown as never,
+      );
 
       await projectsSearchCommand({ pageSize: 1, page: 1 });
 
-      const prints = getMockUiCalls().filter(c => c.method === 'print').map(c => JSON.parse(String(c.args[0])));
+      const prints = getMockUiCalls()
+        .filter((c) => c.method === 'print')
+        .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect(prints[0].paging).toEqual({ pageIndex: 1, pageSize: 1, total: 5, hasNextPage: true });
     });
 
     it('includes correct paging metadata with hasNextPage=false on the last page', async () => {
       clearMockUiCalls();
-      getSpy.mockResolvedValue(makeProjectsResponse(
-        [{ key: 'proj-1', name: 'Project One' }],
-        2, 1, 2
-      ) as unknown as never);
+      getSpy.mockResolvedValue(
+        makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2) as unknown as never,
+      );
 
       await projectsSearchCommand({ pageSize: 1, page: 2 });
 
-      const prints = getMockUiCalls().filter(c => c.method === 'print').map(c => JSON.parse(String(c.args[0])));
+      const prints = getMockUiCalls()
+        .filter((c) => c.method === 'print')
+        .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect(prints[0].paging.hasNextPage).toBe(false);
     });
 
@@ -179,7 +183,7 @@ describe('projectsSearchCommand', () => {
 
     it('passes query option to the API', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(async (_endpoint: string, params?: Record<string, unknown>) => {
+      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });
@@ -191,7 +195,7 @@ describe('projectsSearchCommand', () => {
 
     it('passes page option to the API', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(async (_endpoint: string, params?: Record<string, unknown>) => {
+      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });
@@ -203,7 +207,7 @@ describe('projectsSearchCommand', () => {
 
     it('passes page size option to the API', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(async (_endpoint: string, params?: Record<string, unknown>) => {
+      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });
@@ -215,7 +219,7 @@ describe('projectsSearchCommand', () => {
 
     it('defaults to page 1 when page option is not provided', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(async (_endpoint: string, params?: Record<string, unknown>) => {
+      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });
@@ -227,7 +231,7 @@ describe('projectsSearchCommand', () => {
 
     it('defaults to MAX_PAGE_SIZE when page size is not provided', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(async (_endpoint: string, params?: Record<string, unknown>) => {
+      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });
@@ -242,7 +246,7 @@ describe('projectsSearchCommand', () => {
       getTokenSpy.mockResolvedValue('cloud-token');
 
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(async (_endpoint: string, params?: Record<string, unknown>) => {
+      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });
@@ -254,7 +258,7 @@ describe('projectsSearchCommand', () => {
 
     it('does not pass organization key for on-premise connections', async () => {
       let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation(async (_endpoint: string, params?: Record<string, unknown>) => {
+      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });

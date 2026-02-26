@@ -25,7 +25,7 @@ import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
-  getSecretPromptTemplateWindows
+  getSecretPromptTemplateWindows,
 } from '../../src/bootstrap/hook-templates.js';
 
 describe('Secret Scanning Hook Templates', () => {
@@ -69,7 +69,7 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateUnix(),
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
-      getSecretPromptTemplateWindows()
+      getSecretPromptTemplateWindows(),
     ];
 
     const uniqueContents = new Set(templates);
@@ -87,7 +87,7 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateUnix(),
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
-      getSecretPromptTemplateWindows()
+      getSecretPromptTemplateWindows(),
     ];
 
     templates.forEach((template) => {

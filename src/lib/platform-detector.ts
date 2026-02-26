@@ -24,16 +24,16 @@ import { platform, arch } from 'node:os';
 import type { PlatformInfo } from './install-types.js';
 
 const OS_MAP: Record<string, string> = {
-  'darwin': 'macos',
-  'linux': 'linux',
-  'win32': 'windows'
+  darwin: 'macos',
+  linux: 'linux',
+  win32: 'windows',
 };
 
 const ARCH_MAP: Record<string, string> = {
-  'x64': 'x86-64',
-  'arm64': 'arm64',
-  'arm': 'arm',
-  'ia32': '386'
+  x64: 'x86-64',
+  arm64: 'arm64',
+  arm: 'arm',
+  ia32: '386',
 };
 
 /**
@@ -50,7 +50,7 @@ export function detectPlatform(): PlatformInfo {
   return {
     os: mappedOs,
     arch: mappedArch,
-    extension
+    extension,
   };
 }
 
@@ -58,10 +58,7 @@ export function detectPlatform(): PlatformInfo {
  * Build binary name for GitHub release asset
  * Format: sonar-secrets-<version>-<os>-<arch>[.exe]
  */
-export function buildAssetName(
-  version: string,
-  platformInfo: PlatformInfo
-): string {
+export function buildAssetName(version: string, platformInfo: PlatformInfo): string {
   // Strip leading 'v' from version if present
   const cleanVersion = version.startsWith('v') ? version.slice(1) : version;
 

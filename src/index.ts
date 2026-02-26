@@ -20,7 +20,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-
 // Main CLI entry point
 // Generated from cli-spec.yaml by Plop.js
 
@@ -36,7 +35,12 @@ const ANALYZE_SUBCOMMAND_INDEX = 3;
 
 import { integrateCommand } from './commands/integrate.js';
 import { issuesSearchCommand } from './commands/issues.js';
-import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from './commands/auth.js';
+import {
+  authLoginCommand,
+  authLogoutCommand,
+  authPurgeCommand,
+  authStatusCommand,
+} from './commands/auth.js';
 import { secretInstallCommand, secretStatusCommand } from './commands/secret.js';
 import { analyzeSecretsCommand } from './commands/analyze.js';
 import { projectsSearchCommand } from './commands/projects.js';
@@ -49,9 +53,7 @@ program
   .version(VERSION, '-v, --version', 'display version for command');
 
 // Install Sonar tools
-const install = program
-  .command('install')
-  .description('Install Sonar tools');
+const install = program.command('install').description('Install Sonar tools');
 
 install
   .command('secrets')
@@ -69,7 +71,9 @@ install
 // Setup SonarQube integration for AI coding agent
 program
   .command('integrate <tool>')
-  .description('Setup SonarQube integration for various tools, like AI coding agents, git and others')
+  .description(
+    'Setup SonarQube integration for various tools, like AI coding agents, git and others',
+  )
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-p, --project <project>', 'Project key')
   .option('-t, --token <token>', 'Existing authentication token')
@@ -86,9 +90,7 @@ program
   });
 
 // List Sonar resources
-const list = program
-  .command('list')
-  .description('List Sonar resources');
+const list = program.command('list').description('List Sonar resources');
 
 list
   .command('issues')
@@ -113,13 +115,13 @@ list
   .option('-p, --page <page>', 'Page number', '1')
   .option('--page-size <page-size>', 'Page size (1-500)', '500')
   .action(async (options) => {
-    await runCommand(async () => { await projectsSearchCommand(options); });
+    await runCommand(async () => {
+      await projectsSearchCommand(options);
+    });
   });
 
 // Manage authentication tokens and credentials
-const auth = program
-  .command('auth')
-  .description('Manage authentication tokens and credentials');
+const auth = program.command('auth').description('Manage authentication tokens and credentials');
 
 auth
   .command('login')
@@ -155,9 +157,7 @@ auth
   });
 
 // Analyze code for security issues
-const analyze = program
-  .command('analyze')
-  .description('Analyze code for security issues');
+const analyze = program.command('analyze').description('Analyze code for security issues');
 
 analyze
   .command('secrets')
@@ -167,7 +167,6 @@ analyze
   .action(async (options) => {
     await runCommand(() => analyzeSecretsCommand(options));
   });
-
 
 // Handle `sonar auth` without subcommand (defaults to login)
 if (process.argv.length === AUTH_ARGC_WITHOUT_SUBCOMMAND && process.argv[2] === 'auth') {

@@ -64,7 +64,9 @@ describe('formatTable: structure', () => {
   });
 
   it('data row contains issue severity, rule, and message', () => {
-    const result = formatTable([makeIssue({ severity: 'CRITICAL', rule: 'java:S001', message: 'Fix me' })]);
+    const result = formatTable([
+      makeIssue({ severity: 'CRITICAL', rule: 'java:S001', message: 'Fix me' }),
+    ]);
     const dataRow = result.split('\n')[2];
     expect(dataRow).toContain('CRITICAL');
     expect(dataRow).toContain('java:S001');
@@ -129,7 +131,14 @@ describe('formatCSV: data rows', () => {
   });
 
   it('row contains all fields in correct order', () => {
-    const issue = makeIssue({ severity: 'HIGH', rule: 'r1', message: 'msg', type: 'BUG', status: 'OPEN', line: 5 });
+    const issue = makeIssue({
+      severity: 'HIGH',
+      rule: 'r1',
+      message: 'msg',
+      type: 'BUG',
+      status: 'OPEN',
+      line: 5,
+    });
     const row = formatCSV([issue]).split('\n')[1];
     const parts = row.split(',');
     expect(parts[0]).toBe('HIGH');

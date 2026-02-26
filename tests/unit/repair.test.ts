@@ -36,7 +36,7 @@ const healthAllGood: HealthCheckResult = {
   organizationAccessible: true,
   qualityProfilesAccessible: true,
   hooksInstalled: true,
-  errors: []
+  errors: [],
 };
 
 const healthNeedsHooks: HealthCheckResult = {
@@ -75,13 +75,17 @@ describe('Repair Orchestrator', () => {
   it('creates sonar-secrets hooks directory', async () => {
     await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org');
 
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(true);
+    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(
+      true,
+    );
   });
 
   it('installs secret scanning hooks even when hooksInstalled is true', async () => {
     await runRepair('https://sonarcloud.io', testDir, healthAllGood, 'test_key', 'test-org');
 
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(true);
+    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(
+      true,
+    );
   });
 
   it('does not create old sonar-prompt.sh verify hook', async () => {
@@ -147,11 +151,11 @@ describe('Repair Orchestrator: token repair', () => {
     expect(saveTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'new-token', 'my-org');
   });
 
-  it('throws when generated token fails validation', async () => {
+  it('throws when generated token fails validation', () => {
     validateTokenSpy.mockResolvedValue(false);
-    await expect(
-      runRepair('https://sonarcloud.io', testDir, healthTokenInvalid)
-    ).rejects.toThrow('Generated token is invalid');
+    expect(runRepair('https://sonarcloud.io', testDir, healthTokenInvalid)).rejects.toThrow(
+      'Generated token is invalid',
+    );
   });
 
   it('continues if deleteToken throws (non-fatal)', async () => {

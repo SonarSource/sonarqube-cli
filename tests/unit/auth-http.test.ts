@@ -128,7 +128,7 @@ describe('Auth: OAuth token flow via real HTTP', () => {
     server = await startLoopbackServer(handler);
 
     const response = await fetch(
-      `${serverUrl(server.port)}/?user=john&token=squ_multi_param&org=acme`
+      `${serverUrl(server.port)}/?user=john&token=squ_multi_param&org=acme`,
     );
 
     expect(response.status).toBe(HTTP_STATUS_OK);
@@ -151,7 +151,7 @@ describe('Auth: OAuth token flow via real HTTP', () => {
     });
 
     expect(response.status).toBe(HTTP_STATUS_OK);
-    await new Promise(resolve => setTimeout(resolve, EVENT_SETTLE_DELAY_MS));
+    await new Promise((resolve) => setTimeout(resolve, EVENT_SETTLE_DELAY_MS));
     expect(callbackCalled).toBe(false);
   });
 
@@ -169,7 +169,7 @@ describe('Auth: OAuth token flow via real HTTP', () => {
     });
 
     expect(response.status).toBe(HTTP_STATUS_OK);
-    await new Promise(resolve => setTimeout(resolve, EVENT_SETTLE_DELAY_MS));
+    await new Promise((resolve) => setTimeout(resolve, EVENT_SETTLE_DELAY_MS));
     expect(callbackCalled).toBe(false);
   });
 
@@ -242,7 +242,7 @@ describe('Auth: OAuth token flow via real HTTP', () => {
 
   it('should resolve token promise when POST delivers valid token', async () => {
     let resolveToken: ((token: string) => void) | null = null;
-    const tokenPromise = new Promise<string>(resolve => {
+    const tokenPromise = new Promise<string>((resolve) => {
       resolveToken = resolve;
     });
 
@@ -262,7 +262,7 @@ describe('Auth: OAuth token flow via real HTTP', () => {
 
   it('should resolve token promise when GET delivers valid token', async () => {
     let resolveToken: ((token: string) => void) | null = null;
-    const tokenPromise = new Promise<string>(resolve => {
+    const tokenPromise = new Promise<string>((resolve) => {
       resolveToken = resolve;
     });
 

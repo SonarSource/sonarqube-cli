@@ -55,7 +55,9 @@ describe('Auth Helper Functions', () => {
 
     it('should work with custom server URL', () => {
       const url = buildAuthURL(`${EXAMPLE_SERVER}/`, TEST_PORT_A);
-      expect(url).toBe(`${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`);
+      expect(url).toBe(
+        `${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`,
+      );
     });
   });
 
@@ -206,14 +208,17 @@ describe('Auth Helper Functions', () => {
 describe('loopback server CORS preflight', () => {
   it('OPTIONS preflight for SonarCloud origin allows POST in Access-Control-Allow-Methods', async () => {
     const server = await startLoopbackServer(
-      (_req, res) => { res.writeHead(HTTP_STATUS_OK); res.end(); },
-      { allowedOrigins: ['https://sonarcloud.io'] }
+      (_req, res) => {
+        res.writeHead(HTTP_STATUS_OK);
+        res.end();
+      },
+      { allowedOrigins: ['https://sonarcloud.io'] },
     );
     try {
       const response = await fetch(`http://127.0.0.1:${server.port}/`, {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://sonarcloud.io',
+          Origin: 'https://sonarcloud.io',
           'Access-Control-Request-Method': 'POST',
           'Access-Control-Request-Headers': 'content-type',
         },
@@ -227,8 +232,12 @@ describe('loopback server CORS preflight', () => {
 });
 
 describe('generateTokenViaBrowser', () => {
-  beforeEach(() => { setMockUi(true); });
-  afterEach(() => { setMockUi(false); });
+  beforeEach(() => {
+    setMockUi(true);
+  });
+  afterEach(() => {
+    setMockUi(false);
+  });
 
   // Simulates real browser CORS flow: OPTIONS preflight → POST.
   // If the preflight doesn't allow POST, openBrowserFn throws immediately
@@ -242,7 +251,7 @@ describe('generateTokenViaBrowser', () => {
       const preflight = await fetch(`http://127.0.0.1:${port}/`, {
         method: 'OPTIONS',
         headers: {
-          'Origin': 'https://sonarcloud.io',
+          Origin: 'https://sonarcloud.io',
           'Access-Control-Request-Method': 'POST',
           'Access-Control-Request-Headers': 'content-type',
         },
@@ -255,7 +264,7 @@ describe('generateTokenViaBrowser', () => {
       setTimeout(() => {
         fetch(`http://127.0.0.1:${port}/`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Origin': 'https://sonarcloud.io' },
+          headers: { 'Content-Type': 'application/json', Origin: 'https://sonarcloud.io' },
           body: JSON.stringify({ token: 'squ_test_browser_token' }),
         }).catch(() => {});
       }, 10);
@@ -266,7 +275,7 @@ describe('generateTokenViaBrowser', () => {
   });
 
   it('returns token delivered via GET query parameter', async () => {
-    const mockOpenBrowser = async (authURL: string): Promise<void> => {
+    const mockOpenBrowser = (authURL: string): Promise<void> => {
       const url = new URL(authURL);
       const port = url.searchParams.get('port');
 

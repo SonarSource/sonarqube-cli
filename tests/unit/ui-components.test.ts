@@ -24,38 +24,38 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 
-mock.module('../../src/ui/colors.js', () => ({
+void mock.module('../../src/ui/colors.js', () => ({
   isTTY: false,
-  bold:  (s: string) => s,
-  dim:   (s: string) => s,
+  bold: (s: string) => s,
+  dim: (s: string) => s,
   green: (s: string) => s,
-  red:   (s: string) => s,
-  cyan:  (s: string) => s,
-  yellow:(s: string) => s,
-  gray:  (s: string) => s,
+  red: (s: string) => s,
+  cyan: (s: string) => s,
+  yellow: (s: string) => s,
+  gray: (s: string) => s,
   white: (s: string) => s,
   STATUS_COLORS: {
-    done:    (s: string) => s,
+    done: (s: string) => s,
     running: (s: string) => s,
-    failed:  (s: string) => s,
+    failed: (s: string) => s,
     skipped: (s: string) => s,
-    warn:    (s: string) => s,
+    warn: (s: string) => s,
     pending: (s: string) => s,
-    info:    (s: string) => s,
+    info: (s: string) => s,
     success: (s: string) => s,
-    error:   (s: string) => s,
+    error: (s: string) => s,
     warning: (s: string) => s,
   },
   STATUS_ICONS: {
-    done:    '✓',
+    done: '✓',
     running: '→',
-    failed:  '✗',
+    failed: '✗',
     skipped: '⏭',
-    warn:    '⚠',
+    warn: '⚠',
     pending: '○',
-    info:    'ℹ',
+    info: 'ℹ',
     success: '✓',
-    error:   '✗',
+    error: '✗',
     warning: '⚠',
   },
 }));
@@ -92,14 +92,19 @@ describe('phaseItem', () => {
 // ─── phase: mock mode ─────────────────────────────────────────────────────────
 
 describe('phase: mock mode', () => {
-  beforeEach(() => { setMockUi(true); clearMockUiCalls(); });
-  afterEach(() => { setMockUi(false); });
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+  afterEach(() => {
+    setMockUi(false);
+  });
 
   it('records call with title and items', () => {
     const items = [phaseItem('Step 1', 'success')];
     phase('Setup', items);
     const calls = getMockUiCalls();
-    expect(calls.some(c => c.method === 'phase' && c.args[0] === 'Setup')).toBe(true);
+    expect(calls.some((c) => c.method === 'phase' && c.args[0] === 'Setup')).toBe(true);
   });
 
   it('does not write to stdout in mock mode', () => {
@@ -137,10 +142,7 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Phase', [
-        phaseItem('Step one', 'success'),
-        phaseItem('Step two', 'error'),
-      ]);
+      phase('Phase', [phaseItem('Step one', 'success'), phaseItem('Step two', 'error')]);
       const combined = output.join('');
       expect(combined).toContain('Step one');
       expect(combined).toContain('Step two');
@@ -167,12 +169,19 @@ describe('phase: non-TTY output', () => {
 // ─── intro: mock mode ─────────────────────────────────────────────────────────
 
 describe('intro: mock mode', () => {
-  beforeEach(() => { setMockUi(true); clearMockUiCalls(); });
-  afterEach(() => { setMockUi(false); });
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+  afterEach(() => {
+    setMockUi(false);
+  });
 
   it('records call with title', () => {
     intro('Welcome');
-    expect(getMockUiCalls().some(c => c.method === 'intro' && c.args[0] === 'Welcome')).toBe(true);
+    expect(getMockUiCalls().some((c) => c.method === 'intro' && c.args[0] === 'Welcome')).toBe(
+      true,
+    );
   });
 
   it('does not write to stdout in mock mode', () => {
@@ -223,12 +232,17 @@ describe('intro: non-TTY output', () => {
 // ─── outro: mock mode ─────────────────────────────────────────────────────────
 
 describe('outro: mock mode', () => {
-  beforeEach(() => { setMockUi(true); clearMockUiCalls(); });
-  afterEach(() => { setMockUi(false); });
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+  afterEach(() => {
+    setMockUi(false);
+  });
 
   it('records call with message and status', () => {
     outro('Done!', 'success');
-    expect(getMockUiCalls().some(c => c.method === 'outro' && c.args[0] === 'Done!')).toBe(true);
+    expect(getMockUiCalls().some((c) => c.method === 'outro' && c.args[0] === 'Done!')).toBe(true);
   });
 });
 
@@ -267,22 +281,31 @@ describe('outro: non-TTY output', () => {
 // ─── withSpinner: mock mode ───────────────────────────────────────────────────
 
 describe('withSpinner: mock mode', () => {
-  beforeEach(() => { setMockUi(true); clearMockUiCalls(); });
-  afterEach(() => { setMockUi(false); });
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+  afterEach(() => {
+    setMockUi(false);
+  });
 
   it('records call with message', async () => {
-    await withSpinner('Loading', async () => 42);
-    expect(getMockUiCalls().some(c => c.method === 'spinner' && c.args[0] === 'Loading')).toBe(true);
+    await withSpinner('Loading', () => 42);
+    expect(getMockUiCalls().some((c) => c.method === 'spinner' && c.args[0] === 'Loading')).toBe(
+      true,
+    );
   });
 
   it('returns task result in mock mode', async () => {
-    const result = await withSpinner('Fetching', async () => 'data');
+    const result = await withSpinner('Fetching', () => 'data');
     expect(result).toBe('data');
   });
 
-  it('propagates error thrown by task in mock mode', async () => {
-    await expect(
-      withSpinner('Failing', async () => { throw new Error('task error'); })
+  it('propagates error thrown by task in mock mode', () => {
+    expect(
+      withSpinner('Failing', () => {
+        throw new Error('task error');
+      }),
     ).rejects.toThrow('task error');
   });
 });
@@ -297,8 +320,8 @@ describe('withSpinner: non-TTY output', () => {
       return true;
     });
     try {
-      await withSpinner('Processing', async () => 'done');
-      expect(output.some(s => s.includes('Processing'))).toBe(true);
+      await withSpinner('Processing', () => 'done');
+      expect(output.some((s) => s.includes('Processing'))).toBe(true);
     } finally {
       writeSpy.mockRestore();
     }
@@ -307,18 +330,20 @@ describe('withSpinner: non-TTY output', () => {
   it('returns task result in non-TTY mode', async () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      const result = await withSpinner('Computing', async () => 99);
+      const result = await withSpinner('Computing', () => 99);
       expect(result).toBe(99);
     } finally {
       writeSpy.mockRestore();
     }
   });
 
-  it('propagates error thrown by task in non-TTY mode', async () => {
+  it('propagates error thrown by task in non-TTY mode', () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      await expect(
-        withSpinner('Failing', async () => { throw new Error('non-tty error'); })
+      expect(
+        withSpinner('Failing', () => {
+          throw new Error('non-tty error');
+        }),
       ).rejects.toThrow('non-tty error');
     } finally {
       writeSpy.mockRestore();

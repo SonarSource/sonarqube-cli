@@ -36,7 +36,13 @@ export interface HealthCheckResult {
   errors: string[];
 }
 
-async function logAndValidate(message: string, validator: () => Promise<boolean>, errorMsg: string, errors: string[], verbose: boolean): Promise<boolean> {
+async function logAndValidate(
+  message: string,
+  validator: () => Promise<boolean>,
+  errorMsg: string,
+  errors: string[],
+  verbose: boolean,
+): Promise<boolean> {
   if (verbose) text(message);
   try {
     const result = await validator();
@@ -58,7 +64,7 @@ export async function runHealthChecks(
   projectKey: string,
   projectRoot: string,
   organization?: string,
-  verbose = true
+  verbose = true,
 ): Promise<HealthCheckResult> {
   const client = new SonarQubeClient(serverURL, token);
   const errors: string[] = [];
@@ -68,7 +74,7 @@ export async function runHealthChecks(
     () => validateToken(serverURL, token),
     'Token is invalid',
     errors,
-    verbose
+    verbose,
   );
 
   const serverAvailable = await logAndValidate(
@@ -79,7 +85,7 @@ export async function runHealthChecks(
     },
     'Server unavailable',
     errors,
-    verbose
+    verbose,
   );
 
   const projectAccessible = await logAndValidate(
@@ -87,7 +93,7 @@ export async function runHealthChecks(
     () => client.checkComponent(projectKey),
     `Project not accessible: ${projectKey}`,
     errors,
-    verbose
+    verbose,
   );
 
   let organizationAccessible = true;
@@ -97,7 +103,7 @@ export async function runHealthChecks(
       () => client.checkOrganization(organization),
       `Organization not accessible: ${organization}`,
       errors,
-      verbose
+      verbose,
     );
   }
 
@@ -106,7 +112,7 @@ export async function runHealthChecks(
     () => client.checkQualityProfiles(projectKey, organization),
     `Quality profiles not accessible for project: ${projectKey}`,
     errors,
-    verbose
+    verbose,
   );
 
   const hooksInstalled = await logAndValidate(
@@ -114,7 +120,7 @@ export async function runHealthChecks(
     () => areHooksInstalled(projectRoot),
     'Hooks not installed',
     errors,
-    verbose
+    verbose,
   );
 
   return {
@@ -124,6 +130,6 @@ export async function runHealthChecks(
     organizationAccessible,
     qualityProfilesAccessible,
     hooksInstalled,
-    errors
+    errors,
   };
 }

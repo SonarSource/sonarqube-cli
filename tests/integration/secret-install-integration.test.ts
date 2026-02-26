@@ -39,7 +39,7 @@ describe('Secret Install Integration Tests', () => {
     log: (msg: string) => logOutput.push(`[LOG] ${msg}`),
     success: (msg: string) => logOutput.push(`[SUCCESS] ${msg}`),
     warn: (msg: string) => logOutput.push(`[WARN] ${msg}`),
-    error: (msg: string) => logOutput.push(`[ERROR] ${msg}`)
+    error: (msg: string) => logOutput.push(`[ERROR] ${msg}`),
   };
 
   beforeEach(() => {
@@ -56,120 +56,144 @@ describe('Secret Install Integration Tests', () => {
     setMockLogger(null);
   });
 
-  it('performSecretInstall: returns binary path string when successful', async () => {
-    try {
-      const result = await performSecretInstall({ force: false });
-
-      // Should return a string path
-      expect(typeof result).toBe('string');
-      expect(result.length).toBeGreaterThan(0);
-
-      // Path should contain expected segments
-      expect(result.includes('.sonar/sonarqube-cli')).toBe(true);
-      expect(result.includes('bin')).toBe(true);
-      expect(result.includes('sonar-secrets')).toBe(true);
-
-      // On non-Windows platforms, should not have .exe extension
-      const platform = process.platform;
-      if (platform !== 'win32') {
-        expect(result.endsWith('.exe')).toBe(false);
-      }
-    } catch (error) {
-      // Network errors acceptable (no GitHub access in test environment)
-      const errorMsg = (error as Error).message;
-      expect(errorMsg).toBeDefined();
-      expect(errorMsg.length).toBeGreaterThan(0);
-    }
-  }, INTEGRATION_TEST_TIMEOUT_MS);
-
-  it('performSecretInstall with force: true skips version check', async () => {
-    try {
-      const result = await performSecretInstall({ force: true });
-
-      expect(typeof result).toBe('string');
-      expect(result.includes('.sonar/sonarqube-cli')).toBe(true);
-
-      // With force=true, should attempt fresh install regardless of existing version
-      // Force option should affect the flow (skips version check)
-    } catch (error) {
-      // Expected: no GitHub access
-      expect((error as Error).message).toBeDefined();
-    }
-  }, INTEGRATION_TEST_TIMEOUT_MS);
-
-  it('performSecretInstall: returns same path on already-up-to-date error', async () => {
-    try {
-      // First call (will fail due to network, but that's OK)
-      const firstResult = await performSecretInstall({ force: false });
-      expect(typeof firstResult).toBe('string');
-      expect(firstResult.includes('.sonar/sonarqube-cli')).toBe(true);
-    } catch (error) {
-      // Expected behavior: network error or already-up-to-date error both return path
-      if ((error as Error).message === 'Installation skipped - already up to date') {
-        // This is handled: returns binary path even on already-up-to-date error
+  it(
+    'performSecretInstall: returns binary path string when successful',
+    async () => {
+      try {
         const result = await performSecretInstall({ force: false });
+
+        // Should return a string path
         expect(typeof result).toBe('string');
-      } else {
-        // Network error expected
-        const msg = (error as Error).message;
-        expect(msg.length).toBeGreaterThan(0);
+        expect(result.length).toBeGreaterThan(0);
+
+        // Path should contain expected segments
+        expect(result.includes('.sonar/sonarqube-cli')).toBe(true);
+        expect(result.includes('bin')).toBe(true);
+        expect(result.includes('sonar-secrets')).toBe(true);
+
+        // On non-Windows platforms, should not have .exe extension
+        const platform = process.platform;
+        if (platform !== 'win32') {
+          expect(result.endsWith('.exe')).toBe(false);
+        }
+      } catch (error) {
+        // Network errors acceptable (no GitHub access in test environment)
+        const errorMsg = (error as Error).message;
+        expect(errorMsg).toBeDefined();
+        expect(errorMsg.length).toBeGreaterThan(0);
       }
-    }
-  }, INTEGRATION_TEST_TIMEOUT_MS);
+    },
+    INTEGRATION_TEST_TIMEOUT_MS,
+  );
 
-  it('performSecretInstall: creates binary directory if missing', async () => {
-    try {
-      const result = await performSecretInstall({ force: false });
+  it(
+    'performSecretInstall with force: true skips version check',
+    async () => {
+      try {
+        const result = await performSecretInstall({ force: true });
 
-      // Even on network error, directory creation attempt was made
-      // Check that we got a path back
-      expect(result).toBeDefined();
-      expect(typeof result).toBe('string');
-    } catch (error) {
-      // Expected: GitHub API failure in test environment
-      expect((error as Error).message).toBeDefined();
-    }
-  }, INTEGRATION_TEST_TIMEOUT_MS);
+        expect(typeof result).toBe('string');
+        expect(result.includes('.sonar/sonarqube-cli')).toBe(true);
 
-  it('performSecretInstall: error handling propagates network errors', async () => {
-    let errorThrown = false;
-    let errorMessage = '';
+        // With force=true, should attempt fresh install regardless of existing version
+        // Force option should affect the flow (skips version check)
+      } catch (error) {
+        // Expected: no GitHub access
+        expect((error as Error).message).toBeDefined();
+      }
+    },
+    INTEGRATION_TEST_TIMEOUT_MS,
+  );
 
-    try {
-      await performSecretInstall({ force: false });
-    } catch (error) {
-      errorThrown = true;
-      errorMessage = (error as Error).message;
-    }
+  it(
+    'performSecretInstall: returns same path on already-up-to-date error',
+    async () => {
+      try {
+        // First call (will fail due to network, but that's OK)
+        const firstResult = await performSecretInstall({ force: false });
+        expect(typeof firstResult).toBe('string');
+        expect(firstResult.includes('.sonar/sonarqube-cli')).toBe(true);
+      } catch (error) {
+        // Expected behavior: network error or already-up-to-date error both return path
+        if ((error as Error).message === 'Installation skipped - already up to date') {
+          // This is handled: returns binary path even on already-up-to-date error
+          const result = await performSecretInstall({ force: false });
+          expect(typeof result).toBe('string');
+        } else {
+          // Network error expected
+          const msg = (error as Error).message;
+          expect(msg.length).toBeGreaterThan(0);
+        }
+      }
+    },
+    INTEGRATION_TEST_TIMEOUT_MS,
+  );
 
-    // Should either succeed (unlikely in test) or throw network error
-    if (errorThrown) {
-      expect(errorMessage.length).toBeGreaterThan(0);
-      // Network or Sonarsource-related error expected
-      expect(
-        errorMessage.includes('Failed') ||
-        errorMessage.includes('failed') ||
-        errorMessage.includes('fetch') ||
-        errorMessage.includes('Connection') ||
-        errorMessage.includes('version listing') ||
-        errorMessage.includes('timeout') ||
-        errorMessage.includes('aborted') ||
-        errorMessage.includes('network') ||
-        errorMessage.includes('unavailable')
-      ).toBe(true);
-    }
-  }, INTEGRATION_TEST_TIMEOUT_MS);
+  it(
+    'performSecretInstall: creates binary directory if missing',
+    async () => {
+      try {
+        const result = await performSecretInstall({ force: false });
 
-  it('performSecretInstall: detects correct platform and architecture', async () => {
-    try {
-      const result = await performSecretInstall({ force: false });
+        // Even on network error, directory creation attempt was made
+        // Check that we got a path back
+        expect(result).toBeDefined();
+        expect(typeof result).toBe('string');
+      } catch (error) {
+        // Expected: GitHub API failure in test environment
+        expect((error as Error).message).toBeDefined();
+      }
+    },
+    INTEGRATION_TEST_TIMEOUT_MS,
+  );
 
-      // Result should be a valid string path for the platform
-      expect(typeof result).toBe('string');
-      expect(result.length).toBeGreaterThan(0);
-    } catch (error) {
-      // Network error expected in test environment
-      expect((error as Error).message).toBeDefined();
-    }
-  }, INTEGRATION_TEST_TIMEOUT_MS);
+  it(
+    'performSecretInstall: error handling propagates network errors',
+    async () => {
+      let errorThrown = false;
+      let errorMessage = '';
+
+      try {
+        await performSecretInstall({ force: false });
+      } catch (error) {
+        errorThrown = true;
+        errorMessage = (error as Error).message;
+      }
+
+      // Should either succeed (unlikely in test) or throw network error
+      if (errorThrown) {
+        expect(errorMessage.length).toBeGreaterThan(0);
+        // Network or Sonarsource-related error expected
+        expect(
+          errorMessage.includes('Failed') ||
+            errorMessage.includes('failed') ||
+            errorMessage.includes('fetch') ||
+            errorMessage.includes('Connection') ||
+            errorMessage.includes('version listing') ||
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('aborted') ||
+            errorMessage.includes('network') ||
+            errorMessage.includes('unavailable'),
+        ).toBe(true);
+      }
+    },
+    INTEGRATION_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'performSecretInstall: detects correct platform and architecture',
+    async () => {
+      try {
+        const result = await performSecretInstall({ force: false });
+
+        // Result should be a valid string path for the platform
+        expect(typeof result).toBe('string');
+        expect(result.length).toBeGreaterThan(0);
+      } catch (error) {
+        // Network error expected in test environment
+        expect((error as Error).message).toBeDefined();
+      }
+    },
+    INTEGRATION_TEST_TIMEOUT_MS,
+  );
 });

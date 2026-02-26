@@ -44,7 +44,10 @@ describe('runHealthChecks: all checks pass', () => {
   beforeEach(() => {
     setMockUi(true);
     validateSpy = spyOn(auth, 'validateToken').mockResolvedValue(true);
-    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockResolvedValue({ status: 'UP', version: '1.0' });
+    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockResolvedValue({
+      status: 'UP',
+      version: '1.0',
+    });
     componentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     orgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(true);
     profilesSpy = spyOn(SonarQubeClient.prototype, 'checkQualityProfiles').mockResolvedValue(true);
@@ -94,7 +97,10 @@ describe('runHealthChecks: individual failures', () => {
   beforeEach(() => {
     setMockUi(true);
     validateSpy = spyOn(auth, 'validateToken').mockResolvedValue(true);
-    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockResolvedValue({ status: 'UP', version: '1.0' });
+    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockResolvedValue({
+      status: 'UP',
+      version: '1.0',
+    });
     componentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     orgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(true);
     profilesSpy = spyOn(SonarQubeClient.prototype, 'checkQualityProfiles').mockResolvedValue(true);
@@ -115,42 +121,42 @@ describe('runHealthChecks: individual failures', () => {
     validateSpy.mockResolvedValue(false);
     const result = await runHealthChecks(SERVER, TOKEN, PROJECT, ROOT);
     expect(result.tokenValid).toBe(false);
-    expect(result.errors.some(e => e.includes('Token'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Token'))).toBe(true);
   });
 
   it('serverAvailable=false when getSystemStatus throws', async () => {
     statusSpy.mockRejectedValue(new Error('connection refused'));
     const result = await runHealthChecks(SERVER, TOKEN, PROJECT, ROOT);
     expect(result.serverAvailable).toBe(false);
-    expect(result.errors.some(e => e.includes('Server'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Server'))).toBe(true);
   });
 
   it('projectAccessible=false when checkComponent returns false', async () => {
     componentSpy.mockResolvedValue(false);
     const result = await runHealthChecks(SERVER, TOKEN, PROJECT, ROOT);
     expect(result.projectAccessible).toBe(false);
-    expect(result.errors.some(e => e.includes(PROJECT))).toBe(true);
+    expect(result.errors.some((e) => e.includes(PROJECT))).toBe(true);
   });
 
   it('organizationAccessible=false when checkOrganization returns false', async () => {
     orgSpy.mockResolvedValue(false);
     const result = await runHealthChecks(SERVER, TOKEN, PROJECT, ROOT, ORG);
     expect(result.organizationAccessible).toBe(false);
-    expect(result.errors.some(e => e.includes(ORG))).toBe(true);
+    expect(result.errors.some((e) => e.includes(ORG))).toBe(true);
   });
 
   it('qualityProfilesAccessible=false when checkQualityProfiles returns false', async () => {
     profilesSpy.mockResolvedValue(false);
     const result = await runHealthChecks(SERVER, TOKEN, PROJECT, ROOT);
     expect(result.qualityProfilesAccessible).toBe(false);
-    expect(result.errors.some(e => e.toLowerCase().includes('quality'))).toBe(true);
+    expect(result.errors.some((e) => e.toLowerCase().includes('quality'))).toBe(true);
   });
 
   it('hooksInstalled=false when areHooksInstalled returns false', async () => {
     hooksSpy.mockResolvedValue(false);
     const result = await runHealthChecks(SERVER, TOKEN, PROJECT, ROOT);
     expect(result.hooksInstalled).toBe(false);
-    expect(result.errors.some(e => e.includes('Hooks'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Hooks'))).toBe(true);
   });
 });
 
@@ -164,7 +170,9 @@ describe('runHealthChecks: multiple failures collect all errors', () => {
   beforeEach(() => {
     setMockUi(true);
     validateSpy = spyOn(auth, 'validateToken').mockResolvedValue(false);
-    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockRejectedValue(new Error('down'));
+    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockRejectedValue(
+      new Error('down'),
+    );
     componentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(false);
     profilesSpy = spyOn(SonarQubeClient.prototype, 'checkQualityProfiles').mockResolvedValue(false);
     hooksSpy = spyOn(hooks, 'areHooksInstalled').mockResolvedValue(false);
@@ -203,7 +211,10 @@ describe('runHealthChecks: verbose=false', () => {
   beforeEach(() => {
     setMockUi(true);
     validateSpy = spyOn(auth, 'validateToken').mockResolvedValue(true);
-    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockResolvedValue({ status: 'UP', version: '1.0' });
+    statusSpy = spyOn(SonarQubeClient.prototype, 'getSystemStatus').mockResolvedValue({
+      status: 'UP',
+      version: '1.0',
+    });
     componentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     profilesSpy = spyOn(SonarQubeClient.prototype, 'checkQualityProfiles').mockResolvedValue(true);
     hooksSpy = spyOn(hooks, 'areHooksInstalled').mockResolvedValue(true);

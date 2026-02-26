@@ -67,7 +67,7 @@ export async function resolveAuth(options: {
   if (envToken || envServer) {
     const missing = envToken ? ENV_SERVER : ENV_TOKEN;
     warn(
-      `${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`
+      `${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`,
     );
   }
 
@@ -87,7 +87,7 @@ export async function resolveAuth(options: {
   const serverUrl = options.server ?? connection?.serverUrl;
   if (!serverUrl) {
     throw new Error(
-      `No server URL found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`
+      `No server URL found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`,
     );
   }
 
@@ -106,6 +106,6 @@ export async function resolveAuth(options: {
   }
 
   throw new Error(
-    `No authentication token found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`
+    `No authentication token found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`,
   );
 }

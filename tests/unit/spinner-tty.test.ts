@@ -22,14 +22,16 @@
 // Temporarily sets process.stdout.isTTY = true to exercise the animated branch
 
 import { describe, it, expect, spyOn } from 'bun:test';
-import { withSpinner } from '../../src/ui/components/spinner.js';
+import { withSpinner } from '../../src/ui';
 
-function withTTY(fn: () => Promise<void>): Promise<void> {
+async function withTTY(fn: () => Promise<void>): Promise<void> {
   const original = process.stdout.isTTY;
   Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
-  return fn().finally(() => {
+  try {
+    return await fn();
+  } finally {
     Object.defineProperty(process.stdout, 'isTTY', { value: original, configurable: true });
-  });
+  }
 }
 
 describe('withSpinner: TTY success path', () => {
@@ -41,9 +43,9 @@ describe('withSpinner: TTY success path', () => {
     });
     try {
       await withTTY(async () => {
-        await withSpinner('Loading', async () => 'done');
+        await withSpinner('Loading', () => Promise.resolve('done'));
       });
-      expect(output.some(s => s.includes('✓') && s.includes('Loading'))).toBe(true);
+      expect(output.some((s) => s.includes('✓') && s.includes('Loading'))).toBe(true);
     } finally {
       writeSpy.mockRestore();
     }
@@ -54,7 +56,7 @@ describe('withSpinner: TTY success path', () => {
     try {
       let result: string | undefined;
       await withTTY(async () => {
-        result = await withSpinner('Task', async () => 'value');
+        result = await withSpinner('Task', async () => Promise.resolve('value'));
       });
       expect(result).toBe('value');
     } finally {
@@ -77,7 +79,7 @@ describe('withSpinner: TTY animation frame', () => {
           return 'done';
         });
       });
-      expect(output.some(s => s.startsWith('\r') && s.includes('Animating'))).toBe(true);
+      expect(output.some((s) => s.startsWith('\r') && s.includes('Animating'))).toBe(true);
     } finally {
       writeSpy.mockRestore();
     }
@@ -93,11 +95,11 @@ describe('withSpinner: TTY error path', () => {
     });
     try {
       await withTTY(async () => {
-        await withSpinner('Failing', async () => {
+        await withSpinner('Failing', () => {
           throw new Error('tty task error');
         }).catch(() => {});
       });
-      expect(output.some(s => s.includes('✗') && s.includes('Failing'))).toBe(true);
+      expect(output.some((s) => s.includes('✗') && s.includes('Failing'))).toBe(true);
     } finally {
       writeSpy.mockRestore();
     }
@@ -106,10 +108,13 @@ describe('withSpinner: TTY error path', () => {
   it('propagates error from task in TTY mode', async () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      await withTTY(async () => {
-        await expect(
-          withSpinner('Failing', async () => { throw new Error('propagated'); })
+      await withTTY(() => {
+        expect(
+          withSpinner('Failing', () => {
+            throw new Error('propagated');
+          }),
         ).rejects.toThrow('propagated');
+        return Promise.resolve();
       });
     } finally {
       writeSpy.mockRestore();

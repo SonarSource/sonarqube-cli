@@ -31,16 +31,16 @@ export function formatTable(issues: SonarQubeIssue[]): string {
   }
 
   // Calculate column widths
-  const severityWidth = Math.max(8, ...issues.map(i => i.severity.length));
-  const ruleWidth = Math.max(MIN_RULE_WIDTH, ...issues.map(i => i.rule.length));
-  const messageWidth = Math.max(MIN_MESSAGE_WIDTH, ...issues.map(i => i.message.length));
+  const severityWidth = Math.max(8, ...issues.map((i) => i.severity.length));
+  const ruleWidth = Math.max(MIN_RULE_WIDTH, ...issues.map((i) => i.rule.length));
+  const messageWidth = Math.max(MIN_MESSAGE_WIDTH, ...issues.map((i) => i.message.length));
 
   // Header
   const header = [
     'SEVERITY'.padEnd(severityWidth),
     'RULE'.padEnd(ruleWidth),
     'MESSAGE'.padEnd(messageWidth),
-    'FILE'
+    'FILE',
   ].join(' | ');
 
   const separator = '-'.repeat(header.length);
@@ -54,7 +54,7 @@ export function formatTable(issues: SonarQubeIssue[]): string {
       issue.severity.padEnd(severityWidth),
       issue.rule.padEnd(ruleWidth),
       issue.message.substring(0, messageWidth).padEnd(messageWidth),
-      `${file}:${issue.line || '?'}`
+      `${file}:${issue.line || '?'}`,
     ].join(' | ');
     lines.push(line);
   }

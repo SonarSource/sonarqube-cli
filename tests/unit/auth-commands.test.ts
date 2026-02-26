@@ -23,7 +23,12 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { saveToken, getToken } from '../../src/bootstrap/auth.js';
 import * as authBootstrap from '../../src/bootstrap/auth.js';
-import { authLoginCommand, authLogoutCommand, authPurgeCommand, authStatusCommand } from '../../src/commands/auth.js';
+import {
+  authLoginCommand,
+  authLogoutCommand,
+  authPurgeCommand,
+  authStatusCommand,
+} from '../../src/commands/auth.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as discovery from '../../src/bootstrap/discovery.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
@@ -34,11 +39,10 @@ import { getDefaultState } from '../../src/lib/state.js';
 const keytarHandle = createMockKeytar();
 
 describe('authLogoutCommand', () => {
-   
   let mockExit: any;
-   
+
   let loadStateSpy: any;
-   
+
   let saveStateSpy: any;
 
   beforeEach(() => {
@@ -68,8 +72,8 @@ describe('authLogoutCommand', () => {
     await authLogoutCommand({ server: 'https://sonar.example.com' });
 
     const calls = getMockUiCalls();
-    const printCalls = calls.filter(c => c.method === 'print').map(c => String(c.args[0]));
-    expect(printCalls.some(m => m.includes('No token found'))).toBe(true);
+    const printCalls = calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printCalls.some((m) => m.includes('No token found'))).toBe(true);
     expect(mockExit).toHaveBeenCalledWith(0);
   });
 
@@ -114,7 +118,6 @@ describe('authLogoutCommand', () => {
 });
 
 describe('authPurgeCommand', () => {
-   
   let mockExit: any;
 
   beforeEach(() => {
@@ -136,7 +139,6 @@ describe('authPurgeCommand', () => {
 });
 
 describe('authStatusCommand', () => {
-   
   let mockExit: any;
 
   beforeEach(() => {
@@ -158,17 +160,21 @@ describe('authStatusCommand', () => {
 });
 
 const EMPTY_PROJECT_INFO = {
-  root: '', name: '', isGitRepo: false, gitRemote: '',
-  hasSonarProps: false, sonarPropsData: null,
-  hasSonarLintConfig: false, sonarLintData: null,
+  root: '',
+  name: '',
+  isGitRepo: false,
+  gitRemote: '',
+  hasSonarProps: false,
+  sonarPropsData: null,
+  hasSonarLintConfig: false,
+  sonarLintData: null,
 };
 
 describe('authLoginCommand', () => {
-   
   let mockExit: any;
-   
+
   let loadStateSpy: any;
-   
+
   let saveStateSpy: any;
   let discoverSpy: ReturnType<typeof spyOn>;
 
@@ -191,13 +197,19 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 0 when token saved for on-premise server with --with-token', async () => {
-    await authLoginCommand({ server: 'https://sonar.example.com', org: 'test-org', withToken: 'test-token-xyz' });
+    await authLoginCommand({
+      server: 'https://sonar.example.com',
+      org: 'test-org',
+      withToken: 'test-token-xyz',
+    });
     expect(await getToken('https://sonar.example.com', 'test-org')).toBe('test-token-xyz');
     expect(mockExit).toHaveBeenCalledWith(0);
   });
 
   it('exits 0 when token saved for SonarCloud with --with-token and valid org', async () => {
-    const checkOrgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(true);
+    const checkOrgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
+      true,
+    );
     try {
       await authLoginCommand({ withToken: 'cloud-token', org: 'my-org' });
       expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('cloud-token');
@@ -213,7 +225,9 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 1 when SonarCloud org not found', async () => {
-    const checkOrgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(false);
+    const checkOrgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
+      false,
+    );
     try {
       await authLoginCommand({ withToken: 'cloud-token', org: 'nonexistent-org' });
       expect(mockExit).toHaveBeenCalledWith(1);
@@ -223,7 +237,9 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 1 when saving token to keychain fails', async () => {
-    const saveTokenSpy = spyOn(authBootstrap, 'saveToken').mockRejectedValue(new Error('Keychain access denied'));
+    const saveTokenSpy = spyOn(authBootstrap, 'saveToken').mockRejectedValue(
+      new Error('Keychain access denied'),
+    );
     try {
       await authLoginCommand({ server: 'https://sonar.example.com', withToken: 'test-token' });
       expect(mockExit).toHaveBeenCalledWith(1);
@@ -233,7 +249,9 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 0 when browser login succeeds for on-premise server', async () => {
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue('browser-token');
+    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
+      'browser-token',
+    );
     try {
       await authLoginCommand({ server: 'https://sonar.example.com' });
       expect(await getToken('https://sonar.example.com')).toBe('browser-token');
@@ -244,8 +262,12 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 0 when browser login succeeds for SonarCloud with org', async () => {
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue('browser-token');
-    const checkOrgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(true);
+    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
+      'browser-token',
+    );
+    const checkOrgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
+      true,
+    );
     try {
       await authLoginCommand({ org: 'my-org' });
       expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('browser-token');
@@ -261,9 +283,16 @@ describe('authLoginCommand', () => {
     discoverSpy.mockResolvedValue({
       ...EMPTY_PROJECT_INFO,
       hasSonarProps: true,
-      sonarPropsData: { hostURL: '', projectKey: 'my-project', projectName: 'My Project', organization: 'my-org' },
+      sonarPropsData: {
+        hostURL: '',
+        projectKey: 'my-project',
+        projectName: 'My Project',
+        organization: 'my-org',
+      },
     });
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue('browser-token');
+    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
+      'browser-token',
+    );
     try {
       // No options — defaults to SonarCloud, org picked from config, browser flow
       await authLoginCommand({});
@@ -275,7 +304,9 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 1 when browser authentication fails', async () => {
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockRejectedValue(new Error('Authentication cancelled'));
+    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockRejectedValue(
+      new Error('Authentication cancelled'),
+    );
     try {
       await authLoginCommand({ server: 'https://sonar.example.com' });
       expect(mockExit).toHaveBeenCalledWith(1);

@@ -69,7 +69,7 @@ export class IssuesClient {
       lastResponse = await this.searchIssues({
         ...params,
         p: page,
-        ps: params.ps || DEFAULT_PAGE_SIZE_ISSUES
+        ps: params.ps || DEFAULT_PAGE_SIZE_ISSUES,
       });
 
       allIssues = allIssues.concat(lastResponse.issues);
@@ -81,7 +81,7 @@ export class IssuesClient {
     return {
       ...lastResponse,
       issues: allIssues,
-      total: allIssues.length
+      total: allIssues.length,
     };
   }
 }

@@ -25,7 +25,13 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import logger from './logger.js';
-import { type CliState, getDefaultState, type AuthConnection, type CloudRegion } from './state.js';
+import {
+  type CliState,
+  getDefaultState,
+  type AuthConnection,
+  type CloudRegion,
+  type AgentConfig,
+} from './state.js';
 import { CLI_DIR, STATE_FILE } from './config-constants.js';
 import { version as VERSION } from '../../package.json';
 
@@ -68,7 +74,7 @@ export function saveState(state: CliState): void {
   try {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
   } catch (error) {
-    throw new Error(`Failed to save state to ${STATE_FILE}: ${error}`);
+    throw new Error(`Failed to save state to ${STATE_FILE}: ${String(error)}`);
   }
 }
 
@@ -93,7 +99,7 @@ export function addOrUpdateConnection(
     orgKey?: string;
     region?: CloudRegion;
     keystoreKey: string;
-  }
+  },
 ): AuthConnection {
   const connectionId = generateConnectionId(serverUrl, options.orgKey);
 
@@ -140,7 +146,7 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
 export function findConnection(
   state: CliState,
   serverUrl: string,
-  orgKey?: string
+  orgKey?: string,
 ): AuthConnection | undefined {
   const connectionId = generateConnectionId(serverUrl, orgKey);
   return state.auth.connections.find((c) => c.id === connectionId);
@@ -149,12 +155,8 @@ export function findConnection(
 /**
  * Mark agent as configured
  */
-export function markAgentConfigured(
-  state: CliState,
-  agentName: string,
-  cliVersion: string
-): void {
-  if (!state.agents[agentName]) {
+export function markAgentConfigured(state: CliState, agentName: string, cliVersion: string): void {
+  if (!(state.agents[agentName] as AgentConfig | undefined)) {
     state.agents[agentName] = {
       configured: false,
       hooks: { installed: [] },
@@ -174,9 +176,9 @@ export function addInstalledHook(
   state: CliState,
   agentName: string,
   hookName: string,
-  hookType: 'PreToolUse' | 'PostToolUse' | 'SessionStart'
+  hookType: 'PreToolUse' | 'PostToolUse' | 'SessionStart',
 ): void {
-  if (!state.agents[agentName]) {
+  if (!Object.hasOwn(state.agents, agentName)) {
     state.agents[agentName] = {
       configured: false,
       hooks: { installed: [] },
@@ -186,7 +188,7 @@ export function addInstalledHook(
 
   // Remove duplicate if exists
   state.agents[agentName].hooks.installed = state.agents[agentName].hooks.installed.filter(
-    (h) => h.name !== hookName
+    (h) => h.name !== hookName,
   );
 
   state.agents[agentName].hooks.installed.push({
@@ -199,12 +201,8 @@ export function addInstalledHook(
 /**
  * Add installed skill for agent
  */
-export function addInstalledSkill(
-  state: CliState,
-  agentName: string,
-  skillName: string
-): void {
-  if (!state.agents[agentName]) {
+export function addInstalledSkill(state: CliState, agentName: string, skillName: string): void {
+  if (!Object.hasOwn(state.agents, agentName)) {
     state.agents[agentName] = {
       configured: false,
       hooks: { installed: [] },
@@ -214,7 +212,7 @@ export function addInstalledSkill(
 
   // Remove duplicate if exists
   state.agents[agentName].skills.installed = state.agents[agentName].skills.installed.filter(
-    (s) => s.name !== skillName
+    (s) => s.name !== skillName,
   );
 
   state.agents[agentName].skills.installed.push({

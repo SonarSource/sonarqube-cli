@@ -42,11 +42,13 @@ let currentImpl: MockKeytarImpl | null = null;
 
 // Intercept 'keytar' module for all tests that import this helper.
 // The proxy delegates to currentImpl so each test can swap implementations.
-mock.module('keytar', () => ({
+void mock.module('keytar', () => ({
   default: {
     getPassword: (s: string, a: string) => currentImpl?.getPassword(s, a) ?? Promise.resolve(null),
-    setPassword: (s: string, a: string, p: string) => currentImpl?.setPassword(s, a, p) ?? Promise.resolve(),
-    deletePassword: (s: string, a: string) => currentImpl?.deletePassword(s, a) ?? Promise.resolve(false),
+    setPassword: (s: string, a: string, p: string) =>
+      currentImpl?.setPassword(s, a, p) ?? Promise.resolve(),
+    deletePassword: (s: string, a: string) =>
+      currentImpl?.deletePassword(s, a) ?? Promise.resolve(false),
     findCredentials: (s: string) => currentImpl?.findCredentials(s) ?? Promise.resolve([]),
   },
 }));
@@ -69,24 +71,25 @@ export function createMockKeytar(): MockKeytarHandle {
   const tokens = new Map<string, string>();
 
   const mockImpl: MockKeytarImpl = {
-    getPassword: async (service: string, account: string) =>
-      tokens.get(`${service}:${account}`) ?? null,
+    getPassword: (service: string, account: string) =>
+      Promise.resolve(tokens.get(`${service}:${account}`) ?? null),
 
-    setPassword: async (service: string, account: string, password: string) => {
+    setPassword: (service: string, account: string, password: string) => {
       tokens.set(`${service}:${account}`, password);
+      return Promise.resolve();
     },
 
-    deletePassword: async (service: string, account: string) =>
-      tokens.delete(`${service}:${account}`),
+    deletePassword: (service: string, account: string) =>
+      Promise.resolve(tokens.delete(`${service}:${account}`)),
 
-    findCredentials: async (service: string) => {
+    findCredentials: (service: string) => {
       const credentials: Array<{ account: string; password: string }> = [];
       for (const [key, password] of tokens.entries()) {
         if (key.startsWith(`${service}:`)) {
           credentials.push({ account: key.slice(`${service}:`.length), password });
         }
       }
-      return credentials;
+      return Promise.resolve(credentials);
     },
   };
 

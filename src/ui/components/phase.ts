@@ -38,7 +38,10 @@ function renderItem(item: PhaseItem, iconColors: Partial<Record<StepStatus, Colo
 }
 
 export function phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}): void {
-  if (isMockActive()) { recordCall('phase', title, items); return; }
+  if (isMockActive()) {
+    recordCall('phase', title, items);
+    return;
+  }
 
   const titleColor: ColorFn = opts.titleColor ?? bold;
   const iconColors = opts.iconColors ?? {};

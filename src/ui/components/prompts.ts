@@ -61,10 +61,11 @@ export async function confirmPrompt(message: string): Promise<boolean | null> {
     active: 'Yes',
     inactive: 'No',
     render() {
-      if (this.state === 'submit') return `  ${green('✓')}  ${message} ${dim(this.value ? 'Yes' : 'No')}`;
+      if (this.state === 'submit')
+        return `  ${green('✓')}  ${message} ${dim(this.value ? 'Yes' : 'No')}`;
       if (this.state === 'cancel') return `  ${red('✗')}  ${message}`;
       const yes = this.cursor === 0 ? cyan('[Yes]') : ' Yes ';
-      const no  = this.cursor === 1 ? cyan('[No] ') : ' No  ';
+      const no = this.cursor === 1 ? cyan('[No] ') : ' No  ';
       return `  ${cyan('?')}  ${message}  ${yes} / ${no}`;
     },
   });
