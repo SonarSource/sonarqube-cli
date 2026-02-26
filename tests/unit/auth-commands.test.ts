@@ -34,11 +34,11 @@ import { getDefaultState } from '../../src/lib/state.js';
 const keytarHandle = createMockKeytar();
 
 describe('authLogoutCommand', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let mockExit: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let loadStateSpy: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let saveStateSpy: any;
 
   beforeEach(() => {
@@ -114,7 +114,7 @@ describe('authLogoutCommand', () => {
 });
 
 describe('authPurgeCommand', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let mockExit: any;
 
   beforeEach(() => {
@@ -136,7 +136,7 @@ describe('authPurgeCommand', () => {
 });
 
 describe('authStatusCommand', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let mockExit: any;
 
   beforeEach(() => {
@@ -164,11 +164,11 @@ const EMPTY_PROJECT_INFO = {
 };
 
 describe('authLoginCommand', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let mockExit: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let loadStateSpy: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let saveStateSpy: any;
   let discoverSpy: ReturnType<typeof spyOn>;
 

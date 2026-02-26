@@ -45,9 +45,7 @@ interface HookConfig {
 }
 
 interface ClaudeSettings {
-  hooks?: {
-    [eventType: string]: HookConfig[];
-  };
+  hooks?: Record<string, HookConfig[]>;
   [key: string]: unknown;
 }
 

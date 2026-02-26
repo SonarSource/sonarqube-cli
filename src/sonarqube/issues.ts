@@ -20,7 +20,7 @@
 
 // SonarQube Issues API wrapper
 
-import { SonarQubeClient } from './client.js';
+import { type SonarQubeClient } from './client.js';
 import type { IssuesSearchParams, IssuesSearchResponse } from '../lib/types.js';
 
 const DEFAULT_PAGE_SIZE_ISSUES = 500;

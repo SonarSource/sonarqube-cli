@@ -201,7 +201,7 @@ async function runScan(
     }),
     new Promise<never>((_resolve, reject) =>
       setTimeout(
-        () => reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`)),
+        () => { reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`)); },
         SCAN_TIMEOUT_MS
       )
     )
@@ -235,7 +235,7 @@ async function runScanFromStdin(
       }),
       new Promise<never>((_resolve, reject) =>
         setTimeout(
-          () => reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`)),
+          () => { reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`)); },
           SCAN_TIMEOUT_MS
         )
       )
@@ -269,7 +269,7 @@ async function readStdin(): Promise<string> {
     }),
     new Promise<never>((_resolve, reject) =>
       setTimeout(
-        () => reject(new Error(`stdin read timeout after ${STDIN_READ_TIMEOUT_MS}ms`)),
+        () => { reject(new Error(`stdin read timeout after ${STDIN_READ_TIMEOUT_MS}ms`)); },
         STDIN_READ_TIMEOUT_MS
       )
     )

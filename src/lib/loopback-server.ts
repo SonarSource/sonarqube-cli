@@ -20,7 +20,7 @@
 
 // Loopback HTTP server with security headers and DNS rebinding protection
 
-import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import logger from './logger.js';
 import { AUTH_PORT_START, AUTH_PORT_COUNT } from './config-constants.js';
 

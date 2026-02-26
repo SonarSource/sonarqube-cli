@@ -49,7 +49,7 @@ export function clearTokenCache(): void {
 }
 
 async function getKeytar() {
-  if (process.env['SONAR_CLI_DISABLE_KEYCHAIN'] === 'true') {
+  if (process.env.SONAR_CLI_DISABLE_KEYCHAIN === 'true') {
     return noOpKeytar;
   }
   try {

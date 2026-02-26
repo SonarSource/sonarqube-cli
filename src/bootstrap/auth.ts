@@ -173,7 +173,7 @@ export function getSuccessHTML(): string {
  * Skipped when CI=true — token must be delivered directly to the loopback server.
  */
 export async function openBrowserWithFallback(authURL: string): Promise<void> {
-  if (process.env['CI'] === 'true') {
+  if (process.env.CI === 'true') {
     return;
   }
   try {
@@ -263,7 +263,7 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
       else resolve(token!);
     }
 
-    serverTokenPromise.then(token => settle(token)).catch(() => {});
+    serverTokenPromise.then(token => { settle(token); }).catch(() => {});
 
     const prompt = new TextPrompt({
       signal: promptAbort.signal,
@@ -283,9 +283,9 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
         settle(undefined, new Error('Authentication cancelled'));
         return;
       }
-      const userToken = (result as string).trim();
+      const userToken = (result!).trim();
       if (userToken.length > 0) settle(userToken);
-    }).catch((err: unknown) => settle(undefined, err as Error));
+    }).catch((err: unknown) => { settle(undefined, err as Error); });
   });
 }
 
@@ -323,7 +323,7 @@ export async function generateTokenViaBrowser(
 
   let token: string | undefined;
   try {
-    if (isMockActive() || process.env['CI'] === 'true') {
+    if (isMockActive() || process.env.CI === 'true') {
       // Non-interactive: wait for server token
       token = await tokenPromise;
     } else {
