@@ -156,13 +156,10 @@ export async function installSecretScanningHooks(
     settings.hooks ??= {};
 
     // Global hooks use absolute paths; project hooks use paths relative to project root
-    const preToolCommand = isGlobal
-      ? join(baseDir, CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `pretool-secrets${scriptExt}`)
-      : join(CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `pretool-secrets${scriptExt}`);
-
-    const promptCommand = isGlobal
-      ? join(baseDir, CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `prompt-secrets${scriptExt}`)
-      : join(CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `prompt-secrets${scriptExt}`);
+    const hooksRelativeDir = join(CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts');
+    const hooksScriptsDir = isGlobal ? join(baseDir, hooksRelativeDir) : hooksRelativeDir;
+    const preToolCommand = join(hooksScriptsDir, `pretool-secrets${scriptExt}`);
+    const promptCommand = join(hooksScriptsDir, `prompt-secrets${scriptExt}`);
 
     // Add sonar-secrets hooks to settings
     settings.hooks.PreToolUse = [

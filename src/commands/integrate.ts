@@ -292,13 +292,7 @@ async function runHealthCheckAndRepair(
 
   const hooksRoot = hooksGlobal ? homedir() : projectInfo.root;
 
-  const healthResult = await runHealthChecks(
-    serverURL,
-    token,
-    projectKey,
-    hooksRoot,
-    organization,
-  );
+  const healthResult = await runHealthChecks(serverURL, token, projectKey, hooksRoot, organization);
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
