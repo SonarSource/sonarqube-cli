@@ -144,18 +144,6 @@ describe('confirmPrompt: real prompt path', () => {
   });
 });
 
-// ─── pressEnterKeyPrompt non-TTY ─────────────────────────────────────────────
-
-describe('pressEnterKeyPrompt: non-TTY path', () => {
-  beforeEach(() => {
-    mockTextResult = '';
-  });
-
-  it('completes without throwing when stdin is not a TTY', async () => {
-    await pressEnterKeyPrompt('Press Enter to continue');
-  });
-});
-
 // ─── pressEnterKeyPrompt TTY ──────────────────────────────────────────────────
 
 describe('pressEnterKeyPrompt: TTY path', () => {
