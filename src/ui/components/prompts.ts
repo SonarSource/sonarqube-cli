@@ -24,6 +24,11 @@ import { TextPrompt, ConfirmPrompt, isCancel } from '@clack/core';
 import { cyan, green, red, dim } from '../colors.js';
 import { isMockActive, recordCall, dequeueMockResponse } from '../mock.js';
 
+const CTRL_C = 0x03;
+const ENTER_CR = 0x0d;
+const ENTER_LF = 0x0a;
+const EXIT_CODE_SIGINT = 130;
+
 /**
  * Text input prompt. Returns null if cancelled (Ctrl+C).
  */
@@ -76,21 +81,48 @@ export async function confirmPrompt(message: string): Promise<boolean | null> {
 }
 
 /**
- * Press-any-key-to-continue prompt.
- * Skipped automatically in mock mode or when CI=true (non-interactive environments).
+ * Press-Enter-to-continue prompt using raw stdin.
+ * Only Enter advances the prompt; all other keys are silently consumed.
+ * Skipped automatically in mock mode, CI=true, or non-TTY environments.
  */
-export async function pressAnyKeyPrompt(message: string): Promise<void> {
+export async function pressEnterKeyPrompt(message: string): Promise<void> {
   if (isMockActive() || process.env.CI === 'true') {
     if (isMockActive()) recordCall('pressAnyKeyPrompt', message);
     return;
   }
 
-  const prompt = new TextPrompt({
-    render() {
-      if (this.state === 'submit' || this.state === 'cancel') return undefined;
-      return `  ${dim('›')}  ${message}`;
-    },
-  });
+  if (!process.stdin.isTTY) return;
 
-  await prompt.prompt();
+  process.stdout.write(`  ${dim('›')}  ${message}`);
+
+  return new Promise<void>((resolve) => {
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+
+    const onData = (chunk: Buffer): void => {
+      const byte = chunk[0];
+      if (byte === CTRL_C) {
+        // Ctrl+C
+        cleanup();
+        process.stdout.write('\n');
+        process.exit(EXIT_CODE_SIGINT);
+        return;
+      }
+      if (byte === ENTER_CR || byte === ENTER_LF) {
+        // Enter (CR or LF)
+        cleanup();
+        process.stdout.write('\n');
+        resolve();
+      }
+      // All other keys: silently consumed
+    };
+
+    function cleanup(): void {
+      process.stdin.removeListener('data', onData);
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+    }
+
+    process.stdin.on('data', onData);
+  });
 }

@@ -25,6 +25,8 @@ import logger from '../lib/logger.js';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
+const HTTP_STATUS_FORBIDDEN = 403;
+const HTTP_STATUS_NOT_FOUND = 404;
 
 export class SonarQubeClient {
   private readonly serverURL: string;
@@ -58,6 +60,11 @@ export class SonarQubeClient {
     });
 
     if (!response.ok) {
+      if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
+        throw new Error(
+          `Access denied (HTTP ${response.status}). Check that the supplied token and organization are valid.`,
+        );
+      }
       throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
     }
 

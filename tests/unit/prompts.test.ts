@@ -25,7 +25,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { textPrompt, confirmPrompt, pressAnyKeyPrompt } from '../../src/ui/components/prompts.js';
+import { textPrompt, confirmPrompt, pressEnterKeyPrompt } from '../../src/ui/components/prompts.js';
 import {
   setMockUi,
   getMockUiCalls,
@@ -143,7 +143,7 @@ describe('pressAnyKeyPrompt', () => {
     setMockUi(true);
     clearMockUiCalls();
     try {
-      await pressAnyKeyPrompt('Press Enter to continue');
+      await pressEnterKeyPrompt('Press Enter to continue');
       const calls = getMockUiCalls();
       expect(
         calls.some(
@@ -160,7 +160,7 @@ describe('pressAnyKeyPrompt', () => {
     process.env['CI'] = 'true';
     clearMockUiCalls();
     try {
-      await pressAnyKeyPrompt('Press Enter');
+      await pressEnterKeyPrompt('Press Enter');
       const calls = getMockUiCalls().filter((c) => c.method === 'pressAnyKeyPrompt');
       expect(calls).toHaveLength(0);
     } finally {

@@ -22,7 +22,7 @@
 // mock.module replaces @clack/core so no real TTY is needed.
 // The mock invokes the render() callback with different states to cover all render branches.
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';
@@ -90,7 +90,7 @@ void mock.module('@clack/core', () => {
 });
 
 import { mock } from 'bun:test';
-import { textPrompt, confirmPrompt, pressAnyKeyPrompt } from '../../src/ui/components/prompts.js';
+import { textPrompt, confirmPrompt, pressEnterKeyPrompt } from '../../src/ui/components/prompts.js';
 
 // ─── textPrompt non-mock ──────────────────────────────────────────────────────
 
@@ -144,14 +144,89 @@ describe('confirmPrompt: real prompt path', () => {
   });
 });
 
-// ─── pressAnyKeyPrompt non-mock ────────────────────────────────────────────────
+// ─── pressEnterKeyPrompt non-TTY ─────────────────────────────────────────────
 
-describe('pressAnyKeyPrompt: real prompt path', () => {
+describe('pressEnterKeyPrompt: non-TTY path', () => {
   beforeEach(() => {
     mockTextResult = '';
   });
 
-  it('completes without throwing', async () => {
-    await pressAnyKeyPrompt('Press any key to continue');
+  it('completes without throwing when stdin is not a TTY', async () => {
+    await pressEnterKeyPrompt('Press Enter to continue');
+  });
+});
+
+// ─── pressEnterKeyPrompt TTY ──────────────────────────────────────────────────
+
+describe('pressEnterKeyPrompt: TTY path', () => {
+  let mockExit: ReturnType<typeof spyOn>;
+  let setRawModeSpy: ReturnType<typeof spyOn>;
+  let resumeSpy: ReturnType<typeof spyOn>;
+  let pauseSpy: ReturnType<typeof spyOn>;
+  let writeSpy: ReturnType<typeof spyOn>;
+  let originalCI: string | undefined;
+
+  beforeEach(() => {
+    originalCI = process.env.CI;
+    delete process.env.CI;
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    if (!(process.stdin as NodeJS.ReadStream).setRawMode) {
+      (process.stdin as NodeJS.ReadStream).setRawMode = () => process.stdin as NodeJS.ReadStream;
+    }
+    setRawModeSpy = spyOn(process.stdin as NodeJS.ReadStream, 'setRawMode').mockReturnValue(
+      process.stdin as NodeJS.ReadStream,
+    );
+    resumeSpy = spyOn(process.stdin, 'resume').mockReturnValue(process.stdin);
+    pauseSpy = spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
+    writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+  });
+
+  afterEach(() => {
+    if (originalCI === undefined) delete process.env.CI;
+    else process.env.CI = originalCI;
+    Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true });
+    setRawModeSpy.mockRestore();
+    resumeSpy.mockRestore();
+    pauseSpy.mockRestore();
+    writeSpy.mockRestore();
+    mockExit.mockRestore();
+  });
+
+  it('writes prompt message and enables raw mode', async () => {
+    setTimeout(() => process.stdin.emit('data', Buffer.from([0x0d])), 0);
+    await pressEnterKeyPrompt('Press Enter');
+    expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining('Press Enter'));
+    expect(setRawModeSpy).toHaveBeenCalledWith(true);
+    expect(setRawModeSpy).toHaveBeenCalledWith(false);
+  });
+
+  it('resolves when Enter (CR 0x0d) is pressed', async () => {
+    setTimeout(() => process.stdin.emit('data', Buffer.from([0x0d])), 0);
+    await pressEnterKeyPrompt('Press Enter');
+  });
+
+  it('resolves when Enter (LF 0x0a) is pressed', async () => {
+    setTimeout(() => process.stdin.emit('data', Buffer.from([0x0a])), 0);
+    await pressEnterKeyPrompt('Press Enter');
+  });
+
+  it('ignores non-Enter keys and resolves only on Enter', async () => {
+    setTimeout(() => {
+      process.stdin.emit('data', Buffer.from([0x41])); // 'a' — ignored
+      process.stdin.emit('data', Buffer.from([0x1b])); // Escape — ignored
+      process.stdin.emit('data', Buffer.from([0x0d])); // Enter — resolves
+    }, 0);
+    await pressEnterKeyPrompt('Press Enter');
+  });
+
+  it('calls process.exit(130) on Ctrl+C', async () => {
+    // Start the prompt (don't await — it won't resolve when exit is mocked as no-op)
+    const promptPromise = pressEnterKeyPrompt('Press Enter');
+    setTimeout(() => process.stdin.emit('data', Buffer.from([0x03])), 0);
+    await new Promise<void>((r) => setTimeout(r, 20));
+    expect(mockExit).toHaveBeenCalledWith(130);
+    // Prevent unhandled rejection warnings for the dangling promise
+    promptPromise.catch(() => undefined);
   });
 });

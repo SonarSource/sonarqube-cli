@@ -34,6 +34,7 @@ import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
 import {
   secretCheckCommand,
   secretInstallCommand,
+  secretStatusCommand,
   performSecretInstall,
 } from '../../src/commands/secret.js';
 import * as releases from '../../src/lib/sonarsource-releases.js';
@@ -245,7 +246,7 @@ describe('secretCheckCommand', () => {
     const errorMessages = uiCalls.filter((c) => c.method === 'error').map((c) => String(c.args[0]));
     const textMessages = uiCalls.filter((c) => c.method === 'text').map((c) => String(c.args[0]));
     expect(errorMessages.some((m) => m.includes('sonar-secrets is not installed'))).toBe(true);
-    expect(textMessages.some((m) => m.includes('sonar secret install'))).toBe(true);
+    expect(textMessages.some((m) => m.includes('sonar install secrets'))).toBe(true);
   });
 
   it('exits 1 when --file and --stdin are both provided', async () => {
@@ -497,5 +498,66 @@ describe('secretInstallCommand: installation error paths', () => {
     expect(mockExit).toHaveBeenCalledWith(0);
     expect(successes.some((m) => m.includes('Installation complete'))).toBe(true);
     expect(warns.some((m) => m.includes('Failed to update state'))).toBe(true);
+  });
+});
+
+// =============================================================================
+// SECTION 6: secretStatusCommand
+// =============================================================================
+
+describe('secretStatusCommand', () => {
+  let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    setMockUi(false);
+  });
+
+  it('shows not-installed message and install hint when binary is missing', async () => {
+    const existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
+    try {
+      await secretStatusCommand();
+    } finally {
+      existsSyncSpy.mockRestore();
+    }
+
+    const texts = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(texts.some((m) => m.includes('Not installed'))).toBe(true);
+    expect(texts.some((m) => m.includes('sonar install secrets'))).toBe(true);
+  });
+
+  it('shows binary-not-working message and exits 1 when version check fails', async () => {
+    const existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
+    });
+    try {
+      await secretStatusCommand();
+    } finally {
+      existsSyncSpy.mockRestore();
+      spawnSpy.mockRestore();
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    const texts = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(texts.some((m) => m.includes('sonar install secrets --force'))).toBe(true);
   });
 });
