@@ -204,6 +204,12 @@ jobs:
           NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: npm ci
 
+      - name: Check style
+        run: bun format:check
+
+      - name: Check linting
+        run: bun lint
+
       - name: Run all tests
         run: npm run test:coverage
 
