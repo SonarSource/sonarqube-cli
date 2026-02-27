@@ -527,21 +527,19 @@ describe('IssuesClient', () => {
 });
 
 describe('issuesSearchCommand', () => {
-  let mockExit: ReturnType<typeof spyOn>;
-
   beforeEach(() => {
+    process.exitCode = 0;
     setMockUi(true);
-    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
-    mockExit.mockRestore();
+    process.exitCode = 0;
     setMockUi(false);
   });
 
   it('exits 1 when --project is missing', async () => {
     await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'fake-token' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('exits 1 when --format is invalid', async () => {
@@ -552,7 +550,7 @@ describe('issuesSearchCommand', () => {
       project: 'proj',
       format: 'xml',
     });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
@@ -567,7 +565,7 @@ describe('issuesSearchCommand', () => {
       project: 'proj',
       pageSize: 'abc' as unknown as number,
     });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
@@ -582,7 +580,7 @@ describe('issuesSearchCommand', () => {
       project: 'proj',
       pageSize: 0,
     });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
@@ -597,7 +595,7 @@ describe('issuesSearchCommand', () => {
       project: 'proj',
       pageSize: 501,
     });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
@@ -612,7 +610,7 @@ describe('issuesSearchCommand', () => {
       project: 'proj',
       severity: 'EXTREME',
     });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
@@ -622,7 +620,7 @@ describe('issuesSearchCommand', () => {
   it('exits 1 when --server is not a valid URL', async () => {
     clearMockUiCalls();
     await issuesSearchCommand({ server: 'not-a-url', token: 'tok', project: 'proj' });
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
@@ -674,7 +672,7 @@ describe('issuesSearchCommand', () => {
         token: 'test-token',
         project: 'my-project',
       });
-      expect(mockExit).toHaveBeenCalledWith(0);
+      expect(process.exitCode).toBe(0);
     } finally {
       getSpy.mockRestore();
     }

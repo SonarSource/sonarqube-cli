@@ -23,6 +23,8 @@
  * Manages persistent state in ~/.sonar/sonarqube-cli/state.json
  */
 
+import { randomUUID } from 'node:crypto';
+
 /**
  * Region for SonarCloud instances
  */
@@ -56,6 +58,12 @@ export interface AuthConnection {
   authenticatedAt: string;
   /** Key for storing token in keychain */
   keystoreKey: string;
+  /** UUID of the user on the server side (fetched at auth time) */
+  userUuid?: string | null;
+  /** UUID of the SonarQube Cloud organization (fetched at auth time, SQC only) */
+  organizationUuidV4?: string | null;
+  /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
+  sqsInstallationId?: string | null;
 }
 
 /**
@@ -167,6 +175,65 @@ export interface ToolsState {
 }
 
 /**
+ * Metadata envelope for a telemetry event.
+ */
+export interface TelemetryEventMetadata {
+  event_id: string;
+  source: {
+    domain: 'CLI';
+  };
+  event_type: 'Analytics.Cli.CliCommandExecuted';
+  /** Epoch milliseconds as a string */
+  event_timestamp: string;
+}
+
+/**
+ * The payload describing the specific CLI command invocation.
+ */
+export interface TelemetryEventPayload {
+  cli_installation_id: string;
+  machine_id: string;
+  cli_version: string;
+  /** First-level command name (e.g. "auth" for `sonar auth login`) */
+  command: string;
+  /** Remainder of the command path, null when there is no subcommand */
+  subcommand: string | null;
+  invocation_id: string;
+  result: 'success' | 'failure';
+  os: string;
+  /** "sqc" for SonarQube Cloud, "sqs" for SonarQube Server, null when not authenticated */
+  connection_type: 'sqc' | 'sqs' | null;
+  /** UUID of the user on SonarQube Cloud or Server, null when not authenticated or on older SQS versions */
+  user_uuid: string | null;
+  /** UUID of the SonarQube Cloud organization, null when not authenticated or SQS */
+  organization_uuid_v4: string | null;
+  /** Installation ID of the SonarQube Server, null when not authenticated or SQC */
+  sqs_installation_id: string | null;
+}
+
+/**
+ * Full telemetry event stored in state and sent to the backend.
+ */
+export interface StoredTelemetryEvent {
+  metadata: TelemetryEventMetadata;
+  event_payload: TelemetryEventPayload;
+}
+
+/**
+ * Telemetry configuration and pending event batch
+ */
+export interface TelemetryState {
+  /** Whether telemetry collection is enabled */
+  enabled: boolean;
+  /** ISO timestamp of first CLI use */
+  firstUseDate: string;
+  /** Stable installation ID created once when state is first initialized */
+  installationId?: string;
+  /** Pending events not yet sent to the backend */
+  events: StoredTelemetryEvent[];
+}
+
+/**
  * Complete state structure for ~/.sonar/sonarqube-cli/state.json
  */
 export interface CliState {
@@ -182,6 +249,8 @@ export interface CliState {
   config: CliConfig;
   /** Installed tools */
   tools?: ToolsState;
+  /** Telemetry configuration and pending event batch */
+  telemetry: TelemetryState;
 }
 
 /**
@@ -214,6 +283,12 @@ export function getDefaultState(cliVersion: string): CliState {
     },
     tools: {
       installed: [],
+    },
+    telemetry: {
+      enabled: true,
+      installationId: randomUUID(),
+      firstUseDate: new Date().toISOString(),
+      events: [],
     },
   };
 }

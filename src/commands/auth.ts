@@ -40,6 +40,7 @@ import logger from '../lib/logger.js';
 import { warn, success, print, note, textPrompt, confirmPrompt } from '../ui/index.js';
 import { green, red, dim } from '../ui/colors.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
+import { InvalidOptionError } from './common/error';
 
 /**
  * Check if server is SonarCloud
@@ -191,6 +192,48 @@ async function validateOrSelectOrganization(
   return selectedOrg.trim();
 }
 
+async function validateLoginOptions(options: {
+  server?: string;
+  org?: string;
+  withToken?: string;
+  region?: string;
+}) {
+  if (options.org !== undefined && !options.org.trim()) {
+    throw new InvalidOptionError(
+      '--org value cannot be empty. Provide a valid organization key (e.g., --org my-org)',
+    );
+  }
+
+  if (options.withToken !== undefined && !options.withToken.trim()) {
+    throw new InvalidOptionError(
+      '--with-token value cannot be empty. Provide a valid token or omit the flag for browser authentication',
+    );
+  }
+
+  if (options.server !== undefined && !options.server.trim()) {
+    throw new InvalidOptionError(
+      '--server value cannot be empty. Provide a valid URL (e.g., https://sonarcloud.io)',
+    );
+  }
+
+  let server = options.server;
+  if (!server) {
+    const configServer = await findServerInConfigs();
+    server = configServer || SONARCLOUD_URL;
+  }
+
+  if (options.server !== undefined) {
+    try {
+      new URL(server);
+    } catch {
+      throw new InvalidOptionError(
+        `Invalid server URL: '${server}'. Provide a valid URL (e.g., https://sonarcloud.io)`,
+      );
+    }
+  }
+  return server;
+}
+
 /**
  * Login command - authenticate and save token with organization
  */
@@ -201,39 +244,7 @@ export async function authLoginCommand(options: {
   region?: string;
 }): Promise<void> {
   await runCommand(async () => {
-    if (options.org !== undefined && !options.org.trim()) {
-      throw new Error(
-        '--org value cannot be empty. Provide a valid organization key (e.g., --org my-org)',
-      );
-    }
-
-    if (options.withToken !== undefined && !options.withToken.trim()) {
-      throw new Error(
-        '--with-token value cannot be empty. Provide a valid token or omit the flag for browser authentication',
-      );
-    }
-
-    if (options.server !== undefined && !options.server.trim()) {
-      throw new Error(
-        '--server value cannot be empty. Provide a valid URL (e.g., https://sonarcloud.io)',
-      );
-    }
-
-    let server = options.server;
-    if (!server) {
-      const configServer = await findServerInConfigs();
-      server = configServer || SONARCLOUD_URL;
-    }
-
-    if (options.server !== undefined) {
-      try {
-        new URL(server);
-      } catch {
-        throw new Error(
-          `Invalid server URL: '${server}'. Provide a valid URL (e.g., https://sonarcloud.io)`,
-        );
-      }
-    }
+    const server = await validateLoginOptions(options);
 
     const isCloud = isSonarCloud(server);
     const region = (options.region || 'eu') as 'eu' | 'us';
@@ -265,11 +276,24 @@ export async function authLoginCommand(options: {
     const state = loadState();
     const keystoreKey = generateConnectionId(server, org);
 
-    addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
+    const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
       orgKey: org,
       region: isCloud ? region : undefined,
       keystoreKey,
     });
+
+    // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
+    const actualToken = token || (await getKeystoreToken(server, org));
+    if (actualToken) {
+      const apiClient = new SonarQubeClient(server, actualToken);
+      connection.userUuid = (await apiClient.getCurrentUser())?.id ?? null;
+      if (isCloud && org) {
+        connection.organizationUuidV4 = await apiClient.getOrganizationId(org);
+      } else if (!isCloud) {
+        const status = await apiClient.getSystemStatus();
+        connection.sqsInstallationId = status.id ?? null;
+      }
+    }
 
     saveState(state);
 

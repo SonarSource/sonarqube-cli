@@ -281,3 +281,26 @@ commands:
 
           - command: cat .env | sonar analyze secrets --stdin
             description: Scan stdin for hardcoded secrets
+
+  # Configure CLI
+  - name: config
+    description: Configure CLI settings
+    subcommands:
+      - name: telemetry
+        description: Configure telemetry settings
+        handler: ./src/commands/config.ts
+        options:
+          - name: enabled
+            type: boolean
+            description: Enable collection of anonymous usage statistics
+
+          - name: disabled
+            type: boolean
+            description: Disable collection of anonymous usage statistics
+
+        examples:
+          - command: sonar config telemetry --enabled
+            description: Enable collection of anonymous usage statistics
+
+          - command: sonar config telemetry --disabled
+            description: Disable collection of anonymous usage statistics

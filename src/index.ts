@@ -23,17 +23,10 @@
 // Main CLI entry point
 // Generated from cli-spec.yaml by Plop.js
 
-import { Command } from 'commander';
 import { version as VERSION } from '../package.json';
+import { Command } from 'commander';
 import { runCommand } from './lib/run-command.js';
-
-// Constants for argument validation
-const VALID_TOOLS = ['claude', 'gemini', 'codex'] as const;
-const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
-const ANALYZE_ARG_INDEX = 2;
-const ANALYZE_SUBCOMMAND_INDEX = 3;
-
-import { integrateCommand } from './commands/integrate.js';
+import logger from './lib/logger.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import {
   authLoginCommand,
@@ -42,8 +35,17 @@ import {
   authStatusCommand,
 } from './commands/auth.js';
 import { secretInstallCommand, secretStatusCommand } from './commands/secret.js';
+import { integrateCommand } from './commands/integrate.js';
 import { analyzeSecretsCommand } from './commands/analyze.js';
 import { projectsSearchCommand } from './commands/projects.js';
+import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from './telemetry';
+import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config.js';
+
+// Constants for argument validation
+const VALID_TOOLS = ['claude', 'gemini', 'codex'] as const;
+const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
+const ANALYZE_ARG_INDEX = 2;
+const ANALYZE_SUBCOMMAND_INDEX = 3;
 
 const program = new Command();
 
@@ -172,6 +174,26 @@ analyze
     await runCommand(() => analyzeSecretsCommand(options));
   });
 
+// Configure things related to the CLI
+const configure = program.command('config').description('Configure CLI settings');
+
+configure
+  .command('telemetry')
+  .description('Configure telemetry settings')
+  .option('--enabled', 'Enable collection of anonymous usage statistics')
+  .option('--disabled', 'Disable collection of anonymous usage statistics')
+  .action((options: ConfigureTelemetryOptions) => runCommand(() => configureTelemetry(options)));
+
+// Hidden flush command — only registered when running as a telemetry worker.
+if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
+  program.command('flush-telemetry', { hidden: true }).action(flushTelemetry);
+}
+
+// Collect a telemetry event after every command action.
+program.hook('postAction', async (_thisCommand, actionCommand) => {
+  await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
+});
+
 // Handle `sonar auth` without subcommand (defaults to login)
 if (process.argv.length === AUTH_ARGC_WITHOUT_SUBCOMMAND && process.argv[2] === 'auth') {
   // User ran `sonar auth` without subcommand - inject 'login' subcommand
@@ -186,4 +208,8 @@ if (process.argv[ANALYZE_ARG_INDEX] === 'analyze') {
   }
 }
 
+program.exitOverride((err) => {
+  logger.error('Error: ' + err.message);
+  process.exit(1);
+});
 program.parse();
