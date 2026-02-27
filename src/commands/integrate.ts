@@ -20,6 +20,7 @@
 
 // Integrate command - setup SonarQube integration for Claude Code
 
+import { homedir } from 'node:os';
 import { discoverProject, type ProjectInfo } from '../bootstrap/discovery.js';
 import { runHealthChecks } from '../bootstrap/health.js';
 import { runRepair } from '../bootstrap/repair.js';
@@ -47,6 +48,7 @@ export interface OnboardAgentOptions {
   org?: string;
   nonInteractive?: boolean;
   skipHooks?: boolean;
+  global?: boolean;
 }
 
 interface ConfigurationData {
@@ -278,6 +280,7 @@ async function runHealthCheckAndRepair(
   token: string | undefined,
   organization: string | undefined,
   skipHooks: boolean | undefined,
+  hooksGlobal?: boolean,
 ): Promise<string | undefined> {
   text('\nPhase 2/3: Health Check & Repair');
   blank();
@@ -287,18 +290,14 @@ async function runHealthCheckAndRepair(
     return undefined;
   }
 
-  const healthResult = await runHealthChecks(
-    serverURL,
-    token,
-    projectKey,
-    projectInfo.root,
-    organization,
-  );
+  const hooksRoot = hooksGlobal ? homedir() : projectInfo.root;
+
+  const healthResult = await runHealthChecks(serverURL, token, projectKey, hooksRoot, organization);
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
     if (!skipHooks) {
-      await installSecretScanningHooks(projectInfo.root);
+      await installSecretScanningHooks(projectInfo.root, hooksGlobal ? homedir() : undefined);
     }
     return token;
   }
@@ -428,6 +427,8 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
     // Ensure token is available
     let token = await ensureToken(config.token, serverURL, config.organization);
 
+    const hooksRoot = options.global ? homedir() : projectInfo.root;
+
     // Phase 2 & 3: Health Check and Repair
     if (token) {
       token = await runHealthCheckAndRepair(
@@ -437,6 +438,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
         token,
         config.organization,
         options.skipHooks,
+        options.global,
       );
 
       if (token) {
@@ -448,7 +450,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
           serverURL,
           token,
           projectKey,
-          projectInfo.root,
+          hooksRoot,
           config.organization,
           false,
         );
@@ -474,7 +476,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
       serverURL,
       token,
       projectKey,
-      projectInfo.root,
+      hooksRoot,
       config.organization,
       false,
     );

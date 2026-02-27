@@ -141,12 +141,21 @@ commands:
         description: Skip hooks installation
         default: false
 
+      - name: global
+        alias: g
+        type: boolean
+        description: Install hooks and config globally to ~/.claude instead of project directory
+        default: false
+
     examples:
       - command: sonar integrate claude -s https://sonarcloud.io -p my-project
         description: Integrate Claude Code with interactive setup
 
       - command: sonar integrate claude --skip-hooks
         description: Integrate without installing hooks
+
+      - command: sonar integrate claude -g -s https://sonarcloud.io -p my-project
+        description: Integrate globally and install hooks to ~/.claude for all projects
 
   # List Sonar resources
   - name: list

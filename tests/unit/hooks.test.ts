@@ -159,4 +159,48 @@ describe('Hooks', () => {
       rmSync(testDir, { recursive: true, force: true });
     }
   });
+
+  it('hooks: global install puts hooks in globalDir/.claude with absolute command paths', async () => {
+    const fakeGlobalDir = join(tmpdir(), 'sonarqube-cli-test-global-home-' + Date.now());
+    mkdirSync(fakeGlobalDir, { recursive: true });
+
+    try {
+      await installSecretScanningHooks('/some/project', fakeGlobalDir);
+
+      const claudeDir = join(fakeGlobalDir, '.claude');
+      const settingsPath = join(claudeDir, 'settings.json');
+      expect(existsSync(settingsPath)).toBe(true);
+
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+      expect(settings.hooks.PreToolUse).toBeDefined();
+      expect(settings.hooks.UserPromptSubmit).toBeDefined();
+
+      // Commands should be absolute paths (contain fakeGlobalDir)
+      const preToolCommand = settings.hooks.PreToolUse[0].hooks[0].command as string;
+      expect(preToolCommand.startsWith(fakeGlobalDir)).toBe(true);
+
+      const promptCommand = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
+      expect(promptCommand.startsWith(fakeGlobalDir)).toBe(true);
+    } finally {
+      rmSync(fakeGlobalDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: project install uses relative command paths', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-relative-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installSecretScanningHooks(testDir);
+
+      const settingsPath = join(testDir, '.claude', 'settings.json');
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+
+      const preToolCommand = settings.hooks.PreToolUse[0].hooks[0].command as string;
+      // Relative path starts with '.claude', not an absolute path
+      expect(preToolCommand.startsWith('.claude')).toBe(true);
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
 }); // describe('Hooks')

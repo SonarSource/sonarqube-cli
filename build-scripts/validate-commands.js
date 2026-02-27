@@ -235,28 +235,27 @@ function parseIndexCommands(content) {
 }
 
 /**
- * Parse options from command registration block
+ * Parse options from command registration block.
+ * Handles both single-line and multi-line .option() / .requiredOption() calls.
  */
 function parseOptions(optionsBlock) {
   const options = [];
 
   if (!optionsBlock) return options;
 
-  // Match .option() and .requiredOption() - simplified with split approach
-  const lines = optionsBlock.split('\n');
-
-  for (const line of lines) {
-    const isOption = line.includes('.option(') || line.includes('.requiredOption(');
-    if (!isOption) continue;
-
-    const isRequired = line.includes('requiredOption');
+  // Match full .option(...) and .requiredOption(...) calls, including multi-line ones
+  const optionPattern = /\.(option|requiredOption)\(([\s\S]*?)\)/g;
+  let match;
+  while ((match = optionPattern.exec(optionsBlock)) !== null) {
+    const isRequired = match[1] === 'requiredOption';
+    const argsBlock = match[2];
 
     // Extract quoted strings (flags, description, default)
     const quoted = /['"]([^'"]{0,100})['"]/g;
     const matches = [];
-    let match;
-    while ((match = quoted.exec(line)) !== null) {
-      matches.push(match[1]);
+    let qMatch;
+    while ((qMatch = quoted.exec(argsBlock)) !== null) {
+      matches.push(qMatch[1]);
     }
 
     if (matches.length === 0) continue;
