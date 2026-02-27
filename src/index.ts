@@ -80,6 +80,7 @@ program
   .option('-o, --org <org>', 'Organization key (for SonarCloud)')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-hooks', 'Skip hooks installation')
+  .option('-g, --global', 'Install hooks and config globally to ~/.claude instead of project directory')
   .action(async (agent, options) => {
     await runCommand(async () => {
       if (!VALID_TOOLS.includes(agent)) {

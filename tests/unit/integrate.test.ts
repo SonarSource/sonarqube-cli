@@ -467,6 +467,69 @@ describe('integrateCommand: discovered project configuration', () => {
   });
 });
 
+// ─── global flag ──────────────────────────────────────────────────────────────
+
+describe('integrateCommand: --global flag', () => {
+  let mockExit: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    mockExit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    setMockUi(false);
+  });
+
+  it('exits 0 when global onboarding succeeds', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+
+    try {
+      await integrateCommand('claude', {
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        skipHooks: true,
+        global: true,
+      });
+      expect(mockExit).toHaveBeenCalledWith(0);
+    } finally {
+      discoverSpy.mockRestore();
+      healthSpy.mockRestore();
+    }
+  });
+
+  it('completes successfully with --global and skipHooks=false', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+
+    try {
+      await integrateCommand('claude', {
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        skipHooks: false,
+        global: true,
+      });
+      expect(mockExit).toHaveBeenCalledWith(0);
+    } finally {
+      discoverSpy.mockRestore();
+      healthSpy.mockRestore();
+    }
+  });
+});
+
 // ─── no token path ────────────────────────────────────────────────────────────
 
 describe('integrateCommand: no token available', () => {

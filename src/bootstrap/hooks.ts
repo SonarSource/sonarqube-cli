@@ -116,13 +116,19 @@ async function generateSecretHooks(
 }
 
 /**
- * Install sonar-secrets hooks to project (cross-platform)
- * Creates hook build-scripts dynamically and registers them in .claude/settings.json
+ * Install sonar-secrets hooks (cross-platform).
+ * When globalDir is provided, installs to globalDir/.claude/ with absolute command paths.
+ * When globalDir is undefined (default), installs to projectRoot/.claude/ with relative paths.
  */
-export async function installSecretScanningHooks(projectRoot: string): Promise<void> {
+export async function installSecretScanningHooks(
+  projectRoot: string,
+  globalDir?: string,
+): Promise<void> {
   try {
     const fs = await import('node:fs/promises');
-    const claudePath = join(projectRoot, CLAUDE_DIR);
+    const isGlobal = globalDir !== undefined;
+    const baseDir = isGlobal ? globalDir : projectRoot;
+    const claudePath = join(baseDir, CLAUDE_DIR);
     const hooksPath = join(claudePath, HOOKS_DIR);
 
     // Create hooks directory
@@ -149,6 +155,15 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
     // Ensure hooks section exists
     settings.hooks ??= {};
 
+    // Global hooks use absolute paths; project hooks use paths relative to project root
+    const preToolCommand = isGlobal
+      ? join(baseDir, CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `pretool-secrets${scriptExt}`)
+      : join(CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `pretool-secrets${scriptExt}`);
+
+    const promptCommand = isGlobal
+      ? join(baseDir, CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `prompt-secrets${scriptExt}`)
+      : join(CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts', `prompt-secrets${scriptExt}`);
+
     // Add sonar-secrets hooks to settings
     settings.hooks.PreToolUse = [
       {
@@ -156,13 +171,7 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
         hooks: [
           {
             type: 'command',
-            command: join(
-              '.claude',
-              'hooks',
-              'sonar-secrets',
-              'build-scripts',
-              `pretool-secrets${scriptExt}`,
-            ),
+            command: preToolCommand,
             timeout: 60,
           },
         ],
@@ -176,13 +185,7 @@ export async function installSecretScanningHooks(projectRoot: string): Promise<v
         hooks: [
           {
             type: 'command',
-            command: join(
-              '.claude',
-              'hooks',
-              'sonar-secrets',
-              'build-scripts',
-              `prompt-secrets${scriptExt}`,
-            ),
+            command: promptCommand,
             timeout: 60,
           },
         ],
