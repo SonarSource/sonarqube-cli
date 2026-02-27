@@ -285,6 +285,7 @@ describe('integrateCommand: full flow', () => {
   it('tracks hooks in state when skipHooks is false', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+    const addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook');
 
     try {
       await integrateCommand('claude', {
@@ -295,9 +296,22 @@ describe('integrateCommand: full flow', () => {
         skipHooks: false,
       });
       expect(mockExit).toHaveBeenCalledWith(0);
+      expect(addInstalledHookSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        'claude-code',
+        'sonar-secrets',
+        'PreToolUse',
+      );
+      expect(addInstalledHookSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        'claude-code',
+        'sonar-secrets',
+        'UserPromptSubmit',
+      );
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
+      addInstalledHookSpy.mockRestore();
     }
   });
 });

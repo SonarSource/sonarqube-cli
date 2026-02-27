@@ -387,6 +387,7 @@ function updateStateAfterConfiguration(hooksInstalled: boolean): void {
     // Track installed hooks
     if (hooksInstalled) {
       addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
+      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
     }
 
     saveState(state);
