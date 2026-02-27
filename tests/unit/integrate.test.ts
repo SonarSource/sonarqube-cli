@@ -296,8 +296,18 @@ describe('integrateCommand: full flow', () => {
         skipHooks: false,
       });
       expect(mockExit).toHaveBeenCalledWith(0);
-      expect(addInstalledHookSpy).toHaveBeenCalledWith(expect.anything(), 'claude-code', 'sonar-secrets', 'PreToolUse');
-      expect(addInstalledHookSpy).toHaveBeenCalledWith(expect.anything(), 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
+      expect(addInstalledHookSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        'claude-code',
+        'sonar-secrets',
+        'PreToolUse',
+      );
+      expect(addInstalledHookSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        'claude-code',
+        'sonar-secrets',
+        'UserPromptSubmit',
+      );
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
