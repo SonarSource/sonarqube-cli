@@ -64,7 +64,6 @@
     "husky": "9.1.7",
     "js-yaml": "^4.1.1",
     "lint-staged": "16.2.7",
-    "openpgp": "^5.11.2",
     "plop": "^4.0.5",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
