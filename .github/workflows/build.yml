@@ -113,16 +113,14 @@ jobs:
           path: |
             ~/.npm
             node_modules/
-          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
           restore-keys: npm-${{ runner.os }}
 
       - name: Install dependencies
         env:
           ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-          NPM_CONFIG_registry: https://repox.jfrog.io/artifactory/api/npm/npm
-          NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: npm ci
+        run: bun ci
 
       - name: Compute artifact name
         id: artifact
@@ -193,16 +191,14 @@ jobs:
           path: |
             ~/.npm
             node_modules/
-          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
           restore-keys: npm-${{ runner.os }}
 
       - name: Install dependencies
         env:
           ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-          NPM_CONFIG_registry: https://repox.jfrog.io/artifactory/api/npm/npm
-          NPM_CONFIG_//repox.jfrog.io/artifactory/api/npm/:_authToken: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: npm ci
+        run: bun ci
 
       - name: Check style
         run: bun format:check
@@ -211,7 +207,7 @@ jobs:
         run: bun lint
 
       - name: Run all tests
-        run: npm run test:coverage
+        run: bun test:coverage
 
       - name: Analyze on SonarQubeCloud
         env:

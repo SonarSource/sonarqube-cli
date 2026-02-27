@@ -1,0 +1,2 @@
+[install]
+registry = { url = "https://repox.jfrog.io/artifactory/api/npm/npm/", token = "$ARTIFACTORY_PRIVATE_READER_PASSWORD" }
