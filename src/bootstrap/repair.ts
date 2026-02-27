@@ -35,8 +35,8 @@ export async function runRepair(
   healthResult: HealthCheckResult,
   _projectKey?: string,
   organization?: string,
-): Promise<void> {
-  let token = '';
+): Promise<string | undefined> {
+  let newToken: string | undefined;
 
   // Fix token if invalid
   if (!healthResult.tokenValid) {
@@ -50,16 +50,16 @@ export async function runRepair(
     }
 
     // Generate new token
-    token = await generateTokenViaBrowser(serverURL);
+    newToken = await generateTokenViaBrowser(serverURL);
 
     // Validate new token
-    const valid = await validateToken(serverURL, token);
+    const valid = await validateToken(serverURL, newToken);
     if (!valid) {
       throw new Error('Generated token is invalid');
     }
 
     // Save to keychain
-    await saveToken(serverURL, token, organization);
+    await saveToken(serverURL, newToken, organization);
     success('Token saved to keychain');
   }
 
@@ -67,4 +67,6 @@ export async function runRepair(
   text('Installing secret scanning hooks...');
   await installSecretScanningHooks(projectRoot);
   success('Secret scanning hooks installed');
+
+  return newToken;
 }
