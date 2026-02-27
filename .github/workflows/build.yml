@@ -23,7 +23,7 @@ permissions:
 jobs:
   prepare:
     name: Prepare Build
-    runs-on: sonar-xs
+    runs-on: sonar-xs-public
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
@@ -67,7 +67,7 @@ jobs:
       matrix:
         include:
           - os: linux
-            runner: sonar-m
+            runner: sonar-m-public
             target: bun-linux-x64
             platform: linux-x86-64
           - os: macos
@@ -164,7 +164,7 @@ jobs:
 
   test-and-scan:
     name: Run Tests and Scan with SonarQube
-    runs-on: sonar-m
+    runs-on: sonar-m-public
     needs: [prepare, build-binaries]
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -224,7 +224,7 @@ jobs:
 
   publish-binaries:
     name: Publish Binaries to Artifactory
-    runs-on: sonar-m
+    runs-on: sonar-m-public
     needs:
       - prepare
       - build-binaries
@@ -291,7 +291,7 @@ jobs:
           jf rt build-publish "${PROJECT}" "${BUILD_NUMBER}"
 
   promote:
-    runs-on: sonar-s
+    runs-on: sonar-s-public
     name: Promote
     needs:
       - prepare
