@@ -35,7 +35,7 @@ import {
   addInstalledHook,
 } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
-import { version as VERSION } from '../../package.json';
+import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 import { ENV_TOKEN, ENV_SERVER } from '../lib/auth-resolver.js';
@@ -281,6 +281,7 @@ async function runHealthCheckAndRepair(
   organization: string | undefined,
   skipHooks: boolean | undefined,
   hooksGlobal?: boolean,
+  nonInteractive?: boolean,
 ): Promise<string | undefined> {
   text('\nPhase 2/3: Health Check & Repair');
   blank();
@@ -307,12 +308,26 @@ async function runHealthCheckAndRepair(
     text(`  - ${msg}`);
   }
 
+  if (nonInteractive && !healthResult.tokenValid) {
+    // Can't repair token without browser interaction — install hooks and continue
+    if (!skipHooks) {
+      await installSecretScanningHooks(projectInfo.root);
+    }
+    return token;
+  }
+
   // Repair (part of Phase 2)
   text('\n  Running repair...');
 
-  await runRepair(serverURL, projectInfo.root, healthResult, projectKey, organization);
+  const repairedToken = await runRepair(
+    serverURL,
+    projectInfo.root,
+    healthResult,
+    projectKey,
+    organization,
+  );
 
-  return token;
+  return repairedToken ?? token;
 }
 
 /**
@@ -425,8 +440,10 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
     if (!config.projectKey) {
       text('\nNo project key configured.');
       text('Installing secret scanning hooks only.');
+      text('\nPhase 2/3: Health Check & Repair — skipped (no project key)');
+      text('Phase 3/3: Final Verification — skipped (no project key)');
       if (!options.skipHooks) {
-        await installSecretScanningHooks(projectInfo.root);
+        await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
         await updateStateAfterConfiguration(true);
       }
       outro('Setup complete!', 'success');
@@ -438,6 +455,11 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
 
     // Ensure token is available
     let token = await ensureToken(config.token, serverURL, config.organization);
+
+    // When both env vars are set the caller is in a CI/automated context — treat as
+    // non-interactive so that a bad token never triggers browser-based repair.
+    const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
+    const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
 
     const hooksRoot = options.global ? homedir() : projectInfo.root;
 
@@ -451,6 +473,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
         config.organization,
         options.skipHooks,
         options.global,
+        effectiveNonInteractive,
       );
 
       if (token) {
@@ -477,6 +500,16 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
 
     // If no token, run repair to generate one
     if (!token) {
+      if (effectiveNonInteractive) {
+        // Can't generate token without browser — install hooks only
+        if (!options.skipHooks) {
+          await installSecretScanningHooks(projectInfo.root);
+        }
+        await updateStateAfterConfiguration(!options.skipHooks);
+        outro('Setup complete!', 'success');
+        return;
+      }
+
       token = await runRepairWithoutToken(serverURL, projectKey, projectInfo, config.organization);
     }
 
