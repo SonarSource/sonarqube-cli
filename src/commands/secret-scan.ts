@@ -162,24 +162,14 @@ async function performFileScan(
 function validateCheckCommandEnvironment(binaryPath: string): void {
   if (!existsSync(binaryPath)) {
     error('sonar-secrets is not installed');
-    text('  Install with: sonar secret install');
+    text('  Install with: sonar install secrets');
     process.exit(1);
   }
 }
 
 function logAuthConfigError(): void {
   error('sonar-secrets authentication is not configured');
-  text(
-    [
-      '',
-      'Configure authentication by setting environment variables:',
-      '  export SONAR_SECRETS_AUTH_URL=<url>',
-      '  export SONAR_SECRETS_TOKEN=<token>',
-      '',
-      'For SonarQube Cloud: SONAR_SECRETS_AUTH_URL=https://sonarcloud.io',
-      'For on-premise: SONAR_SECRETS_AUTH_URL=https://your-sonarqube-server',
-    ].join('\n'),
-  );
+  text('  Run: sonar auth login');
 }
 
 async function runScan(
@@ -358,10 +348,10 @@ function handleScanError(err: unknown): void {
     );
   } else if (errorMessage.includes('ENOENT')) {
     text(
-      '\nThe binary file was not found or is not executable.\nReinstall with: sonar secret install --force',
+      '\nThe binary file was not found or is not executable.\nReinstall with: sonar install secrets --force',
     );
   } else {
-    text('\nCheck installation with: sonar secret status');
+    text('\nCheck installation with: sonar install secrets --status');
   }
 
   blank();

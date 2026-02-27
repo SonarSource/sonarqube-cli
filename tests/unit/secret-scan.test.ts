@@ -105,7 +105,7 @@ describe('secretCheckCommand: auth failures', () => {
     const texts = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('SONAR_SECRETS_AUTH_URL'))).toBe(true);
+    expect(texts.some((m) => m.includes('sonar auth login'))).toBe(true);
   });
 
   it('exits 1 when connection exists but no token is stored in keychain', async () => {
@@ -334,7 +334,7 @@ describe('secretCheckCommand: scan error handling', () => {
     const texts = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('sonar secret install --force'))).toBe(true);
+    expect(texts.some((m) => m.includes('sonar install secrets --force'))).toBe(true);
   });
 
   it('shows generic status check hint and exits 1 for unexpected errors', async () => {
@@ -352,7 +352,7 @@ describe('secretCheckCommand: scan error handling', () => {
     const texts = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('sonar secret status'))).toBe(true);
+    expect(texts.some((m) => m.includes('sonar install secrets --status'))).toBe(true);
   });
 });
 

@@ -147,7 +147,7 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
 
     if (!existsSync(binaryPath)) {
       text('Status: Not installed');
-      text('  Install with: sonar secret install');
+      text('  Install with: sonar install secrets');
       return;
     }
 
@@ -179,8 +179,8 @@ export async function secretStatusCommand({ binDir }: { binDir?: string } = {}):
 
     warn('Binary exists but not working');
     text(`Path: ${binaryPath}`);
-    text('  Reinstall with: sonar secret install --force');
-    throw new Error('Binary not working. Reinstall with: sonar secret install --force');
+    text('  Reinstall with: sonar install secrets --force');
+    throw new Error('Binary not working. Reinstall with: sonar install secrets --force');
   });
 }
 
