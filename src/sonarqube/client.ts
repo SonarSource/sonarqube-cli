@@ -62,7 +62,7 @@ export class SonarQubeClient {
     if (!response.ok) {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
         throw new Error(
-          `Access denied (HTTP ${response.status}). Check your token and organization permissions.`,
+          `Access denied (HTTP ${response.status}). Check that the supplied token and organization are valid.`,
         );
       }
       throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
