@@ -40,6 +40,13 @@ irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/maste
 
 See [State Management](./docs/state-management.md) for more information.
 
+## Contributing
+
+Please be aware that we are not actively looking for feature contributions. The truth is that it's extremely difficult for someone outside
+SonarSource to comply with our roadmap and expectations. Therefore, we typically only accept minor cosmetic changes and typo fixes.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, coding guidelines, and how to run tests.
+
 ## License
 
 Copyright 2026 SonarSource Sàrl.
