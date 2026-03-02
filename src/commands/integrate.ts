@@ -53,6 +53,12 @@ export interface OnboardAgentOptions {
   global?: boolean;
 }
 
+interface RepairOptions {
+  skipHooks: boolean | undefined;
+  hooksGlobal: boolean | undefined;
+  nonInteractive: boolean | undefined;
+}
+
 interface ConfigurationData {
   serverURL: string | undefined;
   projectKey: string | undefined;
@@ -281,9 +287,7 @@ async function runHealthCheckAndRepair(
   projectInfo: ProjectInfo,
   token: string | undefined,
   organization: string | undefined,
-  skipHooks: boolean | undefined,
-  hooksGlobal?: boolean,
-  nonInteractive?: boolean,
+  repairOptions: RepairOptions,
 ): Promise<string | undefined> {
   text('\nPhase 2/3: Health Check & Repair');
   blank();
@@ -293,14 +297,16 @@ async function runHealthCheckAndRepair(
     return undefined;
   }
 
-  const hooksRoot = hooksGlobal ? homedir() : projectInfo.root;
+  const { skipHooks, hooksGlobal, nonInteractive } = repairOptions;
+  const globalDir = hooksGlobal ? homedir() : undefined;
+  const hooksRoot = globalDir ?? projectInfo.root;
 
   const healthResult = await runHealthChecks(serverURL, token, projectKey, hooksRoot, organization);
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
     if (!skipHooks) {
-      await installSecretScanningHooks(projectInfo.root, hooksGlobal ? homedir() : undefined);
+      await installSecretScanningHooks(projectInfo.root, globalDir);
     }
     return token;
   }
@@ -313,7 +319,7 @@ async function runHealthCheckAndRepair(
   if (nonInteractive && !healthResult.tokenValid) {
     // Can't repair token without browser interaction — install hooks and continue
     if (!skipHooks) {
-      await installSecretScanningHooks(projectInfo.root, hooksGlobal ? homedir() : undefined);
+      await installSecretScanningHooks(projectInfo.root, globalDir);
     }
     return token;
   }
@@ -327,7 +333,7 @@ async function runHealthCheckAndRepair(
     healthResult,
     projectKey,
     organization,
-    hooksGlobal ? homedir() : undefined,
+    globalDir,
   );
 
   return repairedToken ?? token;
@@ -394,6 +400,110 @@ function printFinalVerificationResults(
 }
 
 /**
+ * Run Phase 3 final verification and update state
+ */
+async function runFinalVerification(
+  serverURL: string,
+  token: string,
+  projectKey: string,
+  hooksRoot: string,
+  config: ConfigurationData,
+  options: OnboardAgentOptions,
+): Promise<void> {
+  text('\nPhase 3/3: Final Verification');
+  blank();
+
+  const finalHealth = await runHealthChecks(
+    serverURL,
+    token,
+    projectKey,
+    hooksRoot,
+    config.organization,
+    false,
+  );
+  printFinalVerificationResults(finalHealth);
+
+  updateStateAfterConfiguration(!options.skipHooks, {
+    serverURL,
+    organization: config.organization,
+  });
+}
+
+/**
+ * Handle secrets-only mode: no project key configured — install hooks and exit
+ */
+async function runSecretsOnlyMode(
+  projectInfo: ProjectInfo,
+  options: OnboardAgentOptions,
+): Promise<void> {
+  text('\nNo project key configured.');
+  text('Installing secret scanning hooks only.');
+  text('\nPhase 2/3: Health Check & Repair — skipped (no project key)');
+  text('Phase 3/3: Final Verification — skipped (no project key)');
+  if (!options.skipHooks) {
+    await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
+    updateStateAfterConfiguration(true);
+  }
+  outro('Setup complete!', 'success');
+}
+
+/**
+ * Run full SonarQube integration (phases 2 and 3)
+ */
+async function runFullSonarIntegration(
+  serverURL: string,
+  projectKey: string,
+  projectInfo: ProjectInfo,
+  config: ConfigurationData,
+  options: OnboardAgentOptions,
+  effectiveNonInteractive: boolean,
+): Promise<void> {
+  const hooksRoot = options.global ? homedir() : projectInfo.root;
+  let token = await ensureToken(config.token, serverURL, config.organization);
+
+  const repairOptions: RepairOptions = {
+    skipHooks: options.skipHooks,
+    hooksGlobal: options.global,
+    nonInteractive: effectiveNonInteractive,
+  };
+
+  if (token) {
+    token = await runHealthCheckAndRepair(
+      serverURL,
+      projectKey,
+      projectInfo,
+      token,
+      config.organization,
+      repairOptions,
+    );
+
+    if (token) {
+      await runFinalVerification(serverURL, token, projectKey, hooksRoot, config, options);
+      return;
+    }
+  }
+
+  if (effectiveNonInteractive) {
+    if (!options.skipHooks) {
+      await installSecretScanningHooks(projectInfo.root);
+    }
+    updateStateAfterConfiguration(!options.skipHooks);
+    outro('Setup complete!', 'success');
+    return;
+  }
+
+  token = await runRepairWithoutToken(
+    serverURL,
+    projectKey,
+    projectInfo,
+    config.organization,
+    options.global ? homedir() : undefined,
+  );
+
+  await runFinalVerification(serverURL, token, projectKey, hooksRoot, config, options);
+}
+
+/**
  * Update state after successful configuration
  */
 function updateStateAfterConfiguration(
@@ -433,12 +543,10 @@ function updateStateAfterConfiguration(
  */
 export async function integrateCommand(agent: string, options: OnboardAgentOptions): Promise<void> {
   await runCommand(async () => {
-    // Validate agent
     const agentName = validateAgent(agent);
 
     intro(`SonarQube Integration Setup for ${agentName}`);
 
-    // Phase 1: Discovery & Validation
     text('\nPhase 1/3: Discovery & Validation');
     blank();
 
@@ -449,113 +557,26 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
       text('Git repository detected');
     }
 
-    // Load configuration from all sources
     const config = await loadConfiguration(projectInfo, options);
 
-    // Secrets-only mode: no project key configured — install hooks and exit
     if (!config.projectKey) {
-      text('\nNo project key configured.');
-      text('Installing secret scanning hooks only.');
-      text('\nPhase 2/3: Health Check & Repair — skipped (no project key)');
-      text('Phase 3/3: Final Verification — skipped (no project key)');
-      if (!options.skipHooks) {
-        await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
-        updateStateAfterConfiguration(true);
-      }
-      outro('Setup complete!', 'success');
+      await runSecretsOnlyMode(projectInfo, options);
       return;
     }
 
-    // Full SonarQube integration path
     const { serverURL, projectKey } = validateAndPrintConfiguration(config);
 
-    // Ensure token is available
-    let token = await ensureToken(config.token, serverURL, config.organization);
-
-    // When both env vars are set, the caller is in a CI/automated context — treat as
-    // non-interactive so that a bad token never triggers browser-based repair.
+    // When both env vars are set, treat as non-interactive (CI context)
     const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
     const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
 
-    const hooksRoot = options.global ? homedir() : projectInfo.root;
-
-    // Phase 2 & 3: Health Check and Repair
-    if (token) {
-      token = await runHealthCheckAndRepair(
-        serverURL,
-        projectKey,
-        projectInfo,
-        token,
-        config.organization,
-        options.skipHooks,
-        options.global,
-        effectiveNonInteractive,
-      );
-
-      if (token) {
-        // Health check passed, skip to final verification
-        text('\nPhase 3/3: Final Verification');
-        blank();
-
-        const finalHealth = await runHealthChecks(
-          serverURL,
-          token,
-          projectKey,
-          hooksRoot,
-          config.organization,
-          false,
-        );
-        printFinalVerificationResults(finalHealth);
-
-        // Update state with configuration
-        updateStateAfterConfiguration(!options.skipHooks, {
-          serverURL,
-          organization: config.organization,
-        });
-
-        return;
-      }
-    }
-
-    // If no token, run repair to generate one
-    if (!token) {
-      if (effectiveNonInteractive) {
-        // Can't generate token without browser — install hooks only
-        if (!options.skipHooks) {
-          await installSecretScanningHooks(projectInfo.root);
-        }
-        updateStateAfterConfiguration(!options.skipHooks);
-        outro('Setup complete!', 'success');
-        return;
-      }
-
-      token = await runRepairWithoutToken(
-        serverURL,
-        projectKey,
-        projectInfo,
-        config.organization,
-        options.global ? homedir() : undefined,
-      );
-    }
-
-    // Phase 3: Final Verification
-    text('\nPhase 3/3: Final Verification');
-    blank();
-
-    const finalHealth = await runHealthChecks(
+    await runFullSonarIntegration(
       serverURL,
-      token,
       projectKey,
-      hooksRoot,
-      config.organization,
-      false,
+      projectInfo,
+      config,
+      options,
+      effectiveNonInteractive,
     );
-    printFinalVerificationResults(finalHealth);
-
-    // Update state with configuration
-    updateStateAfterConfiguration(!options.skipHooks, {
-      serverURL,
-      organization: config.organization,
-    });
   });
 }
