@@ -23,7 +23,7 @@
  */
 
 import fs from 'node:fs';
-import crypto from 'node:crypto';
+import crypto, { randomUUID } from 'node:crypto';
 import logger from './logger.js';
 import {
   type AgentConfig,
@@ -57,10 +57,25 @@ export function loadState(cliVersion?: string): CliState {
 
   try {
     const content = fs.readFileSync(STATE_FILE, 'utf-8');
-    return JSON.parse(content) as CliState;
+    const state = JSON.parse(content) as CliState;
+    migrateState(state);
+    return state;
   } catch (error) {
     logger.debug(`Failed to load state from ${STATE_FILE}: ${(error as Error).message}`);
     return getDefaultState(cliVersion ?? VERSION);
+  }
+}
+
+function migrateState(state: CliState) {
+  // users might have a state file without telemetry
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (!state.telemetry) {
+    state.telemetry = {
+      enabled: true,
+      installationId: randomUUID(),
+      firstUseDate: new Date().toISOString(),
+      events: [],
+    };
   }
 }
 
