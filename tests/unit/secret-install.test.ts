@@ -46,7 +46,7 @@ void mock.module('../../src/lib/sonarsource-releases.js', () => ({
     `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-${version}-${platform.os}-${platform.arch}.exe`,
 }));
 
-const { secretInstallCommand } = await import('../../src/commands/secret.js');
+const { installSecrets } = await import('../../src/cli/commands/install');
 
 describe('secretInstallCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
@@ -55,7 +55,6 @@ describe('secretInstallCommand', () => {
   let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
@@ -67,7 +66,6 @@ describe('secretInstallCommand', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     downloadBinarySpy.mockRestore();
@@ -77,7 +75,7 @@ describe('secretInstallCommand', () => {
 
   it('throws when binary installation fails', () => {
     // Default verifyBinarySignatureSpy rejects → install fails
-    expect(secretInstallCommand({ force: true })).rejects.toThrow();
+    expect(installSecrets({ force: true })).rejects.toThrow();
   });
 
   it('exits 0 when installation succeeds', async () => {
@@ -98,8 +96,7 @@ describe('secretInstallCommand', () => {
     });
 
     try {
-      await secretInstallCommand({ force: true }, { binDir: tempBinDir });
-      expect(process.exitCode).toBe(0);
+      await installSecrets({ force: true }, { binDir: tempBinDir });
     } finally {
       spawnSpy.mockRestore();
       rmSync(tempBinDir, { recursive: true, force: true });

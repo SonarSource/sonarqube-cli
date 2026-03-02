@@ -25,20 +25,20 @@ import {
   getToken as getKeystoreToken,
   saveToken,
   deleteToken,
-} from '../bootstrap/auth.js';
-import { getAllCredentials, purgeAllTokens } from '../lib/keychain.js';
-import { discoverProject } from '../bootstrap/discovery.js';
-import { SonarQubeClient } from '../sonarqube/client.js';
+} from '../../bootstrap/auth';
+import { getAllCredentials, purgeAllTokens } from '../../lib/keychain';
+import { discoverProject } from '../../bootstrap/discovery';
+import { SonarQubeClient } from '../../sonarqube/client';
 import {
   loadState,
   saveState,
   addOrUpdateConnection,
   generateConnectionId,
-} from '../lib/state-manager.js';
-import logger from '../lib/logger.js';
-import { warn, success, print, note, textPrompt, confirmPrompt } from '../ui/index.js';
-import { green, red, dim } from '../ui/colors.js';
-import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
+} from '../../lib/state-manager';
+import logger from '../../lib/logger';
+import { warn, success, print, note, textPrompt, confirmPrompt } from '../../ui';
+import { green, red, dim } from '../../ui/colors';
+import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../../lib/config-constants';
 import { InvalidOptionError } from './common/error';
 
 /**
@@ -233,15 +233,17 @@ async function validateLoginOptions(options: {
   return server;
 }
 
-/**
- * Login command - authenticate and save token with organization
- */
-export async function authLoginCommand(options: {
+export interface AuthLoginOptions {
   server?: string;
   org?: string;
   withToken?: string;
   region?: string;
-}): Promise<void> {
+}
+
+/**
+ * Login command - authenticate and save token with organization
+ */
+export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const server = await validateLoginOptions(options);
 
   const isCloud = isSonarCloud(server);
@@ -294,10 +296,15 @@ export async function authLoginCommand(options: {
   success(`Authentication successful for: ${displayServer}`);
 }
 
+export interface AuthLogoutOptions {
+  server?: string;
+  org?: string;
+}
+
 /**
  * Logout command - remove token from keychain
  */
-export async function authLogoutCommand(options: { server?: string; org?: string }): Promise<void> {
+export async function authLogout(options: AuthLogoutOptions): Promise<void> {
   let server = options.server;
   if (!server) {
     const configServer = await findServerInConfigs();
@@ -339,7 +346,7 @@ export async function authLogoutCommand(options: { server?: string; org?: string
 /**
  * Purge command - remove all tokens from keychain
  */
-export async function authPurgeCommand(): Promise<void> {
+export async function authPurge(): Promise<void> {
   const credentials = await getAllCredentials();
 
   if (credentials.length === 0) {
@@ -373,7 +380,7 @@ export async function authPurgeCommand(): Promise<void> {
 /**
  * Show active authentication connection with token verification
  */
-export async function authStatusCommand(): Promise<void> {
+export async function authStatus(): Promise<void> {
   const state = loadState();
 
   if (state.auth.connections.length === 0) {

@@ -21,7 +21,7 @@
 // Unit tests for sonar secret command
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { CommandFailedError, InvalidOptionError } from '../../src/commands/common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/common/error.js';
 import * as fs from 'node:fs';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,12 +32,7 @@ import {
   detectPlatform,
 } from '../../src/lib/platform-detector.js';
 import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
-import {
-  performSecretInstall,
-  secretCheckCommand,
-  secretInstallCommand,
-  secretStatusCommand,
-} from '../../src/commands/secret.js';
+import { installSecrets, performSecretInstall } from '../../src/cli/commands/install.js';
 import * as releases from '../../src/lib/sonarsource-releases.js';
 import { SONAR_SECRETS_VERSION } from '../../src/lib/signatures.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
@@ -47,6 +42,7 @@ import { getDefaultState } from '../../src/lib/state.js';
 import { saveToken } from '../../src/lib/keychain.js';
 import { createMockKeytar } from '../helpers/mock-keytar.js';
 import type { PlatformInfo } from '../../src/lib/install-types.js';
+import { analyzeSecrets } from '../../src/cli/commands/analyze';
 
 // =============================================================================
 // SECTION 1: Platform Detection and Binary Naming (no setup)
@@ -213,7 +209,6 @@ describe('secretCheckCommand', () => {
   const keytarHandle = createMockKeytar();
 
   beforeEach(() => {
-    process.exitCode = 0;
     keytarHandle.setup();
     setMockUi(true);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -221,7 +216,6 @@ describe('secretCheckCommand', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     keytarHandle.teardown();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
@@ -229,7 +223,7 @@ describe('secretCheckCommand', () => {
   });
 
   it('throws InvalidOptionError when called without --file or --stdin', () => {
-    expect(secretCheckCommand({})).rejects.toThrow(InvalidOptionError);
+    expect(analyzeSecrets({})).rejects.toThrow(InvalidOptionError);
   });
 
   it('throws CommandFailedError with install hint when sonar-secrets binary is missing', () => {
@@ -237,7 +231,7 @@ describe('secretCheckCommand', () => {
 
     clearMockUiCalls();
     try {
-      expect(secretCheckCommand({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
+      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
     } finally {
       existsSyncSpy.mockRestore();
     }
@@ -250,7 +244,7 @@ describe('secretCheckCommand', () => {
   });
 
   it('throws InvalidOptionError when --file and --stdin are both provided', () => {
-    expect(secretCheckCommand({ file: 'some-file.ts', stdin: true })).rejects.toThrow(
+    expect(analyzeSecrets({ file: 'some-file.ts', stdin: true })).rejects.toThrow(
       InvalidOptionError,
     );
   });
@@ -273,7 +267,7 @@ describe('secretCheckCommand', () => {
     );
 
     try {
-      expect(secretCheckCommand({ file: '/nonexistent/does-not-exist.ts' })).rejects.toThrow(
+      expect(analyzeSecrets({ file: '/nonexistent/does-not-exist.ts' })).rejects.toThrow(
         'File not found',
       );
     } finally {
@@ -330,7 +324,6 @@ describe('performSecretInstall: already up to date', () => {
   });
 
   it('shows "Updating..." and triggers fresh download when installed version differs from pinned', async () => {
-    process.exitCode = 0;
     // Arrange
     const tempBinDir = join(tmpdir(), `sonar-outdated-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
@@ -348,7 +341,7 @@ describe('performSecretInstall: already up to date', () => {
     let caughtError: unknown;
     try {
       // Act
-      await secretInstallCommand({}, { binDir: tempBinDir });
+      await installSecrets({}, { binDir: tempBinDir });
     } catch (err) {
       caughtError = err;
     } finally {
@@ -364,7 +357,6 @@ describe('performSecretInstall: already up to date', () => {
   });
 
   it('triggers fresh install when existing binary fails version check', async () => {
-    process.exitCode = 0;
     // Arrange
     const tempBinDir = join(tmpdir(), `sonar-vcheckfail-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
@@ -382,7 +374,7 @@ describe('performSecretInstall: already up to date', () => {
     let caughtError: unknown;
     try {
       // Act
-      await secretInstallCommand({}, { binDir: tempBinDir });
+      await installSecrets({}, { binDir: tempBinDir });
     } catch (err) {
       caughtError = err;
     } finally {
@@ -408,7 +400,6 @@ describe('secretInstallCommand: installation error paths', () => {
   let tempBinDir: string;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
     tempBinDir = join(tmpdir(), `sonar-install-err-${Date.now()}`);
@@ -416,7 +407,6 @@ describe('secretInstallCommand: installation error paths', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     spawnSpy?.mockRestore();
     downloadBinarySpy?.mockRestore();
     verifyBinarySignatureSpy?.mockRestore();
@@ -446,7 +436,7 @@ describe('secretInstallCommand: installation error paths', () => {
     // Act
     let caughtError: unknown;
     try {
-      await secretInstallCommand({ force: true }, { binDir: tempBinDir });
+      await installSecrets({ force: true }, { binDir: tempBinDir });
     } catch (err) {
       caughtError = err;
     }
@@ -485,7 +475,7 @@ describe('secretInstallCommand: installation error paths', () => {
     });
 
     // Act
-    await secretInstallCommand({ force: true }, { binDir: tempBinDir });
+    await installSecrets({ force: true }, { binDir: tempBinDir });
 
     // Assert: install succeeds despite state error; user is warned but not blocked
     const successes = getMockUiCalls()
@@ -526,7 +516,7 @@ describe('secretStatusCommand', () => {
   it('shows not-installed message and install hint when binary is missing', async () => {
     const existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
     try {
-      await secretStatusCommand();
+      await installSecrets({ status: true });
     } finally {
       existsSyncSpy.mockRestore();
     }
@@ -547,7 +537,7 @@ describe('secretStatusCommand', () => {
     });
     let caughtError: unknown;
     try {
-      await secretStatusCommand();
+      await installSecrets({ status: true });
     } catch (err) {
       caughtError = err;
     } finally {

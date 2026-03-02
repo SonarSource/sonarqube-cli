@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { MAX_PAGE_SIZE } from '../../src/sonarqube/projects.js';
-import { projectsSearchCommand } from '../../src/commands/projects.js';
+import { listProjects } from '../../src/cli/commands/list';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import * as keychain from '../../src/lib/keychain.js';
@@ -81,25 +81,23 @@ describe('projectsSearchCommand', () => {
     it('throws when there is no active connection', () => {
       loadStateSpy.mockReturnValue(getDefaultState('test'));
 
-      expect(projectsSearchCommand({})).rejects.toThrow(
-        'No active connection found. Run: sonar auth login',
-      );
+      expect(listProjects({})).rejects.toThrow('No active connection found. Run: sonar auth login');
     });
 
     it('throws when no token is found in the keychain', () => {
       getTokenSpy.mockResolvedValue(null);
 
-      expect(projectsSearchCommand({})).rejects.toThrow('No token found. Run: sonar auth login');
+      expect(listProjects({})).rejects.toThrow('No token found. Run: sonar auth login');
     });
 
     it('throws when page size is not positive', () => {
-      expect(projectsSearchCommand({ pageSize: 0 })).rejects.toThrow(
+      expect(listProjects({ pageSize: 0 })).rejects.toThrow(
         `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
       );
     });
 
     it('throws when page size exceeds the maximum', () => {
-      expect(projectsSearchCommand({ pageSize: MAX_PAGE_SIZE + 1 })).rejects.toThrow(
+      expect(listProjects({ pageSize: MAX_PAGE_SIZE + 1 })).rejects.toThrow(
         `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
       );
     });
@@ -107,7 +105,7 @@ describe('projectsSearchCommand', () => {
     it('propagates API errors', () => {
       getSpy.mockRejectedValue(new Error('SonarQube API error: 401 Unauthorized'));
 
-      expect(projectsSearchCommand({})).rejects.toThrow('SonarQube API error: 401 Unauthorized');
+      expect(listProjects({})).rejects.toThrow('SonarQube API error: 401 Unauthorized');
     });
   });
 
@@ -116,7 +114,7 @@ describe('projectsSearchCommand', () => {
       clearMockUiCalls();
       getSpy.mockResolvedValue(makeProjectsResponse([]) as unknown as never);
 
-      await projectsSearchCommand({});
+      await listProjects({});
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -136,7 +134,7 @@ describe('projectsSearchCommand', () => {
         ]) as unknown as never,
       );
 
-      await projectsSearchCommand({});
+      await listProjects({});
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -153,7 +151,7 @@ describe('projectsSearchCommand', () => {
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5) as unknown as never,
       );
 
-      await projectsSearchCommand({ pageSize: 1, page: 1 });
+      await listProjects({ pageSize: 1, page: 1 });
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -167,7 +165,7 @@ describe('projectsSearchCommand', () => {
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2) as unknown as never,
       );
 
-      await projectsSearchCommand({ pageSize: 1, page: 2 });
+      await listProjects({ pageSize: 1, page: 2 });
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -176,7 +174,7 @@ describe('projectsSearchCommand', () => {
     });
 
     it('uses the active connection server URL to create the client', async () => {
-      await projectsSearchCommand({});
+      await listProjects({});
 
       expect(getTokenSpy).toHaveBeenCalledWith(MOCK_CONNECTION.serverUrl, MOCK_CONNECTION.orgKey);
     });
@@ -188,7 +186,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await projectsSearchCommand({ query: 'my-project' });
+      await listProjects({ query: 'my-project' });
 
       expect(capturedParams?.q).toBe('my-project');
     });
@@ -200,7 +198,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await projectsSearchCommand({ page: 3 });
+      await listProjects({ page: 3 });
 
       expect(capturedParams?.p).toBe(3);
     });
@@ -212,7 +210,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await projectsSearchCommand({ pageSize: 50 });
+      await listProjects({ pageSize: 50 });
 
       expect(capturedParams?.ps).toBe(50);
     });
@@ -224,7 +222,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await projectsSearchCommand({});
+      await listProjects({});
 
       expect(capturedParams?.p).toBe(1);
     });
@@ -236,7 +234,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await projectsSearchCommand({});
+      await listProjects({});
 
       expect(capturedParams?.ps).toBe(MAX_PAGE_SIZE);
     });
@@ -251,7 +249,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await projectsSearchCommand({});
+      await listProjects({});
 
       expect(capturedParams?.organization).toBe('my-org');
     });
@@ -263,7 +261,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await projectsSearchCommand({});
+      await listProjects({});
 
       expect(capturedParams?.organization).toBeUndefined();
     });

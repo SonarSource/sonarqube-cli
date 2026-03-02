@@ -116,8 +116,8 @@ Install sonar-secrets binary from https://binaries.sonarsource.com
 
 | Option     | Type    | Required | Description                                     | Default |
 | ---------- | ------- | -------- | ----------------------------------------------- | ------- |
-| `--force`  | boolean | No       | Force reinstall even if already installed       | `false` |
-| `--status` | boolean | No       | Check installation status instead of installing | `false` |
+| `--force`  | boolean | No       | Force reinstall even if already installed       | -       |
+| `--status` | boolean | No       | Check installation status instead of installing | -       |
 
 **Examples:**
 
@@ -140,19 +140,19 @@ Check if sonar-secrets is installed and up to date
 
 ### `sonar integrate`
 
-Setup SonarQube integration for various tools, like AI coding agents, git and others
+Setup SonarQube integration (hooks, config...) for various tools, like AI coding agents, git and others
 
 **Options:**
 
-| Option              | Type    | Required | Description                                                                 | Default                 |
-| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ----------------------- |
-| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | `https://sonarcloud.io` |
-| `--project`, `-p`   | string  | No       | Project key                                                                 | -                       |
-| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -                       |
-| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -                       |
-| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | `false`                 |
-| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | `false`                 |
-| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | `false`                 |
+| Option              | Type    | Required | Description                                                                 | Default |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ------- |
+| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | -       |
+| `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
+| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -       |
+| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -       |
+| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
+| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | -       |
+| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
 
 **Examples:**
 
@@ -192,7 +192,7 @@ Search for issues in SonarQube
 | `--format`        | string  | No       | Output format                    | `json`  |
 | `--branch`        | string  | No       | Branch name                      | -       |
 | `--pull-request`  | string  | No       | Pull request ID                  | -       |
-| `--all`           | boolean | No       | Fetch all issues with pagination | `false` |
+| `--all`           | boolean | No       | Fetch all issues with pagination | -       |
 | `--page-size`     | number  | No       | Page size for pagination         | `500`   |
 
 **Examples:**
@@ -329,4 +329,4 @@ Copyright 2026 SonarSource Sàrl.
 
 SonarQube CLI is released under the [GNU Lesser General Public License, Version 3.0⁠,](http://www.gnu.org/licenses/lgpl.txt).
 
-*Generated from `spec.yaml` — do not edit manually*
+*Generated from `src/cli/command-tree.ts` — do not edit manually*

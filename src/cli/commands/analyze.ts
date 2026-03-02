@@ -17,18 +17,24 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-
-// Scan logic for sonar secret check command
-
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnProcess } from '../lib/process.js';
-import { BIN_DIR } from '../lib/config-constants.js';
-import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.js';
-import { resolveAuth } from '../lib/auth-resolver.js';
-import logger from '../lib/logger.js';
-import { text, blank, success, error, print } from '../ui';
+import { spawnProcess } from '../../lib/process.js';
+import { buildLocalBinaryName, detectPlatform } from '../../lib/platform-detector.js';
+import { resolveAuth } from '../../lib/auth-resolver.js';
+import logger from '../../lib/logger.js';
+import { blank, error, print, success, text } from '../../ui';
 import { CommandFailedError, InvalidOptionError } from './common/error.js';
+import { BIN_DIR } from '../../lib/config-constants';
+
+export interface AnalyzeSecretsOptions {
+  file?: string;
+  stdin?: boolean;
+}
+
+export async function analyzeSecrets(options: AnalyzeSecretsOptions): Promise<void> {
+  return handleCheckCommand(options).catch(handleScanError);
+}
 
 // Env var names expected by the sonar-secrets binary
 const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
@@ -37,16 +43,7 @@ const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 const SCAN_TIMEOUT_MS = 30000;
 const STDIN_READ_TIMEOUT_MS = 5000;
 
-/**
- * Check command: sonar secret check [--file <path>] [--stdin]
- */
-export const secretCheckCommand = performCheckCommand;
-
-async function performCheckCommand(options: { file?: string; stdin?: boolean }): Promise<void> {
-  return handleCheckCommand(options).catch(handleScanError);
-}
-
-async function handleCheckCommand(options: { file?: string; stdin?: boolean }): Promise<void> {
+async function handleCheckCommand(options: AnalyzeSecretsOptions): Promise<void> {
   const scanEnv = await setupScanEnvironment(options);
   const scanStartTime = Date.now();
   const { binaryPath, authUrl, authToken } = scanEnv;

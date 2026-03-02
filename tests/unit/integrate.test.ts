@@ -21,7 +21,7 @@
 // Unit tests for sonar integrate command
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { integrateCommand } from '../../src/commands/integrate.js';
+import { integrate } from '../../src/cli/commands/integrate.js';
 import * as discovery from '../../src/bootstrap/discovery.js';
 import * as health from '../../src/bootstrap/health.js';
 import * as repair from '../../src/bootstrap/repair.js';
@@ -32,6 +32,7 @@ import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import { ENV_TOKEN, ENV_SERVER } from '../../src/lib/auth-resolver.js';
+import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/common/error';
 
 const FAKE_PROJECT_INFO = {
   root: '/fake/project',
@@ -58,40 +59,20 @@ const CLEAN_HEALTH = {
 
 describe('integrateCommand: validateAgent', () => {
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     setMockUi(false);
   });
 
-  it('exits 1 when unsupported agent is provided', async () => {
-    await integrateCommand('gemini', {});
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('exits 1 for any unknown agent name', async () => {
-    await integrateCommand('copilot', {});
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('error message mentions the unsupported agent name', async () => {
-    await integrateCommand('gemini', {});
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('gemini'))).toBe(true);
-  });
-
-  it('error message lists supported agents', async () => {
-    await integrateCommand('codex', {});
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('claude'))).toBe(true);
+  it('throws when unsupported agent is provided', () => {
+    expect(integrate('gemini', {})).rejects.toThrow(
+      new InvalidOptionError(
+        'Agent \"gemini\" is not yet supported.\nCurrently supported agents: claude\nComing soon: gemini, codex',
+      ),
+    );
   });
 });
 
@@ -104,7 +85,6 @@ describe('integrateCommand: env var auth', () => {
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
     discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
@@ -116,7 +96,6 @@ describe('integrateCommand: env var auth', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     discoverSpy.mockRestore();
     healthSpy.mockRestore();
     loadStateSpy.mockRestore();
@@ -128,7 +107,7 @@ describe('integrateCommand: env var auth', () => {
 
   it('warns when only SONAR_CLI_TOKEN is set (partial env vars)', async () => {
     process.env[ENV_TOKEN] = 'squ_env_token';
-    await integrateCommand('claude', {
+    await integrate('claude', {
       server: 'https://sonarcloud.io',
       project: 'my-project',
       token: 'squ_cli_token',
@@ -143,7 +122,7 @@ describe('integrateCommand: env var auth', () => {
 
   it('warns when only SONAR_CLI_SERVER is set (partial env vars)', async () => {
     process.env[ENV_SERVER] = 'https://sonarcloud.io';
-    await integrateCommand('claude', {
+    await integrate('claude', {
       server: 'https://sonarcloud.io',
       project: 'my-project',
       token: 'squ_cli_token',
@@ -164,7 +143,6 @@ describe('integrateCommand: full flow', () => {
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -172,7 +150,6 @@ describe('integrateCommand: full flow', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -183,7 +160,7 @@ describe('integrateCommand: full flow', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -201,7 +178,7 @@ describe('integrateCommand: full flow', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -233,7 +210,7 @@ describe('integrateCommand: full flow', () => {
     const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -263,7 +240,7 @@ describe('integrateCommand: full flow', () => {
     const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -284,7 +261,7 @@ describe('integrateCommand: full flow', () => {
     const addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook');
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -320,7 +297,6 @@ describe('integrateCommand: configuration validation', () => {
   let getTokenSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -330,7 +306,6 @@ describe('integrateCommand: configuration validation', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     getAllCredentialsSpy.mockRestore();
@@ -338,26 +313,24 @@ describe('integrateCommand: configuration validation', () => {
     setMockUi(false);
   });
 
-  it('exits 1 when server URL cannot be determined', async () => {
+  it('throws when server URL cannot be determined', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     try {
-      await integrateCommand('claude', { project: 'my-project' });
-      expect(process.exitCode).toBe(1);
-      const errors = getMockUiCalls()
-        .filter((c) => c.method === 'error')
-        .map((c) => String(c.args[0]));
-      expect(errors.some((m) => m.includes('Server URL'))).toBe(true);
+      expect(integrate('claude', { project: 'my-project' })).rejects.toThrow(
+        new CommandFailedError(
+          'Server URL is required. Use --server flag or --org flag for SonarCloud',
+        ),
+      );
     } finally {
       discoverSpy.mockRestore();
     }
   });
 
-  it('exits 0 and installs hooks when no project key is configured (secrets-only mode)', async () => {
+  it('installs hooks when no project key is configured (secrets-only mode)', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrateCommand('claude', {});
-      expect(process.exitCode).toBe(0);
+      await integrate('claude', {});
       expect(hooksSpy).toHaveBeenCalled();
     } finally {
       discoverSpy.mockRestore();
@@ -369,7 +342,7 @@ describe('integrateCommand: configuration validation', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrateCommand('claude', {});
+      await integrate('claude', {});
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
@@ -384,8 +357,7 @@ describe('integrateCommand: configuration validation', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrateCommand('claude', { server: 'https://sonarcloud.io' });
-      expect(process.exitCode).toBe(0);
+      await integrate('claude', { server: 'https://sonarcloud.io' });
       expect(hooksSpy).toHaveBeenCalled();
     } finally {
       discoverSpy.mockRestore();
@@ -398,7 +370,7 @@ describe('integrateCommand: configuration validation', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithOrg);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         project: 'my-project',
         org: 'my-org',
         token: 'test-token',
@@ -422,7 +394,6 @@ describe('integrateCommand: discovered project configuration', () => {
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -430,7 +401,6 @@ describe('integrateCommand: discovered project configuration', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -449,7 +419,7 @@ describe('integrateCommand: discovered project configuration', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithProps);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrateCommand('claude', { token: 'test-token', skipHooks: true });
+      await integrate('claude', { token: 'test-token', skipHooks: true });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
@@ -475,7 +445,7 @@ describe('integrateCommand: discovered project configuration', () => {
     );
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrateCommand('claude', { token: 'test-token', skipHooks: true });
+      await integrate('claude', { token: 'test-token', skipHooks: true });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
@@ -511,7 +481,7 @@ describe('integrateCommand: --global flag', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -530,7 +500,7 @@ describe('integrateCommand: --global flag', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -553,7 +523,6 @@ describe('integrateCommand: no token available', () => {
   let getAllCredentialsSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    process.exitCode = 0;
     setMockUi(true);
     clearMockUiCalls();
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -562,24 +531,25 @@ describe('integrateCommand: no token available', () => {
   });
 
   afterEach(() => {
-    process.exitCode = 0;
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     getAllCredentialsSpy.mockRestore();
     setMockUi(false);
   });
 
-  it('warns when no token found and triggers repair', async () => {
+  it('warns when no token found and triggers repair', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const getTokenSpy = spyOn(auth, 'getToken').mockResolvedValue(null);
     const repairSpy = spyOn(repair, 'runRepair').mockRejectedValue(new Error('repair failed'));
 
     try {
-      await integrateCommand('claude', {
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        skipHooks: true,
-      });
+      expect(
+        integrate('claude', {
+          server: 'https://sonarcloud.io',
+          project: 'my-project',
+          skipHooks: true,
+        }),
+      ).rejects.toThrow(new Error('repair failed'));
       const warns = getMockUiCalls()
         .filter((c) => c.method === 'warn')
         .map((c) => String(c.args[0]));
