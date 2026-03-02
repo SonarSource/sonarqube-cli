@@ -20,7 +20,6 @@
 
 // Integrate command - setup SonarQube integration for Claude Code
 
-import { homedir } from 'node:os';
 import { discoverProject, type ProjectInfo } from '../bootstrap/discovery.js';
 import { runHealthChecks } from '../bootstrap/health.js';
 import { runRepair } from '../bootstrap/repair.js';
@@ -33,11 +32,14 @@ import {
   saveState,
   markAgentConfigured,
   addInstalledHook,
+  addOrUpdateConnection,
+  generateConnectionId,
 } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
 import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
+import { homedir } from 'node:os';
 import { ENV_TOKEN, ENV_SERVER } from '../lib/auth-resolver.js';
 import { text, blank, info, success, warn, intro, outro } from '../ui/index.js';
 
@@ -311,7 +313,7 @@ async function runHealthCheckAndRepair(
   if (nonInteractive && !healthResult.tokenValid) {
     // Can't repair token without browser interaction — install hooks and continue
     if (!skipHooks) {
-      await installSecretScanningHooks(projectInfo.root);
+      await installSecretScanningHooks(projectInfo.root, hooksGlobal ? homedir() : undefined);
     }
     return token;
   }
@@ -325,6 +327,7 @@ async function runHealthCheckAndRepair(
     healthResult,
     projectKey,
     organization,
+    hooksGlobal ? homedir() : undefined,
   );
 
   return repairedToken ?? token;
@@ -338,6 +341,7 @@ async function runRepairWithoutToken(
   projectKey: string,
   projectInfo: ProjectInfo,
   organization: string | undefined,
+  globalDir?: string,
 ): Promise<string> {
   text('\n  Running repair...');
 
@@ -355,6 +359,7 @@ async function runRepairWithoutToken(
     },
     projectKey,
     organization,
+    globalDir,
   );
 
   const repairedToken = await getToken(serverURL, organization);
@@ -391,7 +396,10 @@ function printFinalVerificationResults(
 /**
  * Update state after successful configuration
  */
-async function updateStateAfterConfiguration(hooksInstalled: boolean): Promise<void> {
+function updateStateAfterConfiguration(
+  hooksInstalled: boolean,
+  connection?: { serverURL: string; organization?: string },
+): void {
   try {
     const state = loadState();
 
@@ -402,6 +410,14 @@ async function updateStateAfterConfiguration(hooksInstalled: boolean): Promise<v
     if (hooksInstalled) {
       addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
       addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
+    }
+
+    // Save connection so `sonar auth status` reports the active connection
+    if (connection) {
+      const { serverURL, organization } = connection;
+      const type = serverURL.includes(SONARCLOUD_HOSTNAME) ? 'cloud' : 'on-premise';
+      const keystoreKey = generateConnectionId(serverURL, organization);
+      addOrUpdateConnection(state, serverURL, type, { orgKey: organization, keystoreKey });
     }
 
     saveState(state);
@@ -444,7 +460,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
       text('Phase 3/3: Final Verification — skipped (no project key)');
       if (!options.skipHooks) {
         await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
-        await updateStateAfterConfiguration(true);
+        updateStateAfterConfiguration(true);
       }
       outro('Setup complete!', 'success');
       return;
@@ -456,7 +472,7 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
     // Ensure token is available
     let token = await ensureToken(config.token, serverURL, config.organization);
 
-    // When both env vars are set the caller is in a CI/automated context — treat as
+    // When both env vars are set, the caller is in a CI/automated context — treat as
     // non-interactive so that a bad token never triggers browser-based repair.
     const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
     const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
@@ -492,7 +508,10 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
         printFinalVerificationResults(finalHealth);
 
         // Update state with configuration
-        await updateStateAfterConfiguration(!options.skipHooks);
+        updateStateAfterConfiguration(!options.skipHooks, {
+          serverURL,
+          organization: config.organization,
+        });
 
         return;
       }
@@ -505,12 +524,18 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
         if (!options.skipHooks) {
           await installSecretScanningHooks(projectInfo.root);
         }
-        await updateStateAfterConfiguration(!options.skipHooks);
+        updateStateAfterConfiguration(!options.skipHooks);
         outro('Setup complete!', 'success');
         return;
       }
 
-      token = await runRepairWithoutToken(serverURL, projectKey, projectInfo, config.organization);
+      token = await runRepairWithoutToken(
+        serverURL,
+        projectKey,
+        projectInfo,
+        config.organization,
+        options.global ? homedir() : undefined,
+      );
     }
 
     // Phase 3: Final Verification
@@ -528,6 +553,9 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
     printFinalVerificationResults(finalHealth);
 
     // Update state with configuration
-    await updateStateAfterConfiguration(!options.skipHooks);
+    updateStateAfterConfiguration(!options.skipHooks, {
+      serverURL,
+      organization: config.organization,
+    });
   });
 }

@@ -35,6 +35,7 @@ export async function runRepair(
   healthResult: HealthCheckResult,
   _projectKey?: string,
   organization?: string,
+  globalDir?: string,
 ): Promise<string | undefined> {
   let newToken: string | undefined;
 
@@ -65,7 +66,7 @@ export async function runRepair(
 
   // Install sonar-secrets hooks for secret scanning
   text('Installing secret scanning hooks...');
-  await installSecretScanningHooks(projectRoot);
+  await installSecretScanningHooks(projectRoot, globalDir);
   success('Secret scanning hooks installed');
 
   return newToken;
