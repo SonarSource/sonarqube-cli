@@ -46,9 +46,6 @@ bun run lint:fix
 
 # TypeScript type checking
 bun run typecheck
-
-# Validate spec.yaml and command registration
-bun run validate
 ```
 
 ## Testing
@@ -60,7 +57,7 @@ bun test
 # Unit tests with coverage
 bun run test:coverage
 
-# Script tests (validates spec.yaml / command sync)
+# Script tests
 bun run test:scripts
 
 # Integration tests (require env vars — see below)
@@ -83,22 +80,10 @@ Obtain a token from **sonarcloud.io → Account → Security → Generate token*
 
 If the variables are not set, the relevant tests are skipped automatically — this is expected for local development.
 
-## Code generation
+## Doc generation
 
-Commands are generated from `spec.yaml` using Plop:
+The README.md file is generated from the source code. When adding or modifying a command, please call:
 
 ```bash
-# Add a new command interactively
-bun run gen:command
-
-# Regenerate docs from spec.yaml
 bun run gen:docs
-
-# Sync index.ts command registrations
-bun run gen:sync
-
-# Run full generation pipeline
-bun run gen:all
 ```
-
-After editing `spec.yaml` directly, run `bun run validate` to check consistency.

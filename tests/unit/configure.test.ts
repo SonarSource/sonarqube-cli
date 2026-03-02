@@ -19,11 +19,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { configureTelemetry } from '../../src/commands/config';
+import { configureTelemetry } from '../../src/cli/commands/config';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
-import { InvalidOptionError } from '../../src/commands/common/error.js';
+import { InvalidOptionError } from '../../src/cli/commands/common/error.js';
 
 describe('configureTelemetry', () => {
   let loadStateSpy: any;

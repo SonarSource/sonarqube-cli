@@ -22,30 +22,49 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnProcess } from '../lib/process.js';
-import { BIN_DIR } from '../lib/config-constants.js';
-import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.js';
+import { spawnProcess } from '../../lib/process';
+import { BIN_DIR } from '../../lib/config-constants';
+import { buildLocalBinaryName, detectPlatform } from '../../lib/platform-detector';
 import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
-} from '../lib/sonarsource-releases.js';
+} from '../../lib/sonarsource-releases';
 import {
   SONAR_SECRETS_VERSION,
   SONAR_SECRETS_SIGNATURES,
   SONARSOURCE_PUBLIC_KEY,
-} from '../lib/signatures.js';
-import { loadState, saveState } from '../lib/state-manager.js';
-import { version as VERSION } from '../../package.json';
-import logger from '../lib/logger.js';
-import type { PlatformInfo } from '../lib/install-types.js';
-import { SECRETS_BINARY_NAME } from '../lib/install-types.js';
-import { text, blank, note, success, warn, withSpinner, print } from '../ui/index.js';
-
-export { secretCheckCommand } from './secret-scan.js';
+} from '../../lib/signatures';
+import { loadState, saveState } from '../../lib/state-manager';
+import { version as VERSION } from '../../../package.json';
+import logger from '../../lib/logger';
+import type { PlatformInfo } from '../../lib/install-types';
+import { SECRETS_BINARY_NAME } from '../../lib/install-types';
+import { text, blank, note, success, warn, withSpinner, print } from '../../ui';
 
 const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
 const VERSION_REGEX_MAX_SEGMENT = 20;
+
+export interface InstallSecretsOptions {
+  force?: boolean;
+  status?: boolean;
+}
+
+/**
+ * CLI wrapper with process exit handling
+ */
+export async function installSecrets(
+  options: InstallSecretsOptions,
+  { binDir }: { binDir?: string } = {},
+): Promise<void> {
+  if (options.status) {
+    await installSecretsStatus();
+  } else {
+    text('\nInstalling sonar-secrets binary\n');
+    const binaryPath = await performSecretInstall(options, { binDir });
+    logInstallationSuccess(binaryPath);
+  }
+}
 
 /**
  * Core install logic for sonar-secrets binary download and setup
@@ -72,18 +91,6 @@ export async function performSecretInstall(
     }
     throw err;
   }
-}
-
-/**
- * CLI wrapper with process exit handling
- */
-export async function secretInstallCommand(
-  options: { force?: boolean },
-  { binDir }: { binDir?: string } = {},
-): Promise<void> {
-  text('\nInstalling sonar-secrets binary\n');
-  const binaryPath = await performSecretInstall(options, { binDir });
-  logInstallationSuccess(binaryPath);
 }
 
 async function performInstallation(
@@ -134,7 +141,7 @@ async function performInstallation(
 /**
  * Status command: sonar secret status
  */
-export async function secretStatusCommand({ binDir }: { binDir?: string } = {}): Promise<void> {
+async function installSecretsStatus({ binDir }: { binDir?: string } = {}): Promise<void> {
   const platform = detectPlatform();
   const resolvedBinDir = binDir ?? BIN_DIR;
   const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));

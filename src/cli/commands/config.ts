@@ -19,9 +19,9 @@
  */
 // Configure CLI settings
 
-import { loadState, saveState } from '../lib/state-manager.js';
-import { info, success } from '../ui';
-import { InvalidOptionError } from './common/error.js';
+import { loadState, saveState } from '../../lib/state-manager';
+import { info, success } from '../../ui';
+import { InvalidOptionError } from './common/error';
 
 export interface ConfigureTelemetryOptions {
   enabled?: boolean;

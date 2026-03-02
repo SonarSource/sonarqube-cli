@@ -24,8 +24,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { performSecretInstall } from '../../src/commands/secret.js';
 import { setMockLogger } from '../../src/lib/logger.js';
+import { performSecretInstall } from '../../src/cli/commands/install';
 
 const INTEGRATION_TEST_TIMEOUT_MS = 30000;
 

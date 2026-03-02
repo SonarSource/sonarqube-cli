@@ -20,30 +20,32 @@
 
 // Integrate command - setup SonarQube integration for Claude Code
 
-import { discoverProject, type ProjectInfo } from '../bootstrap/discovery.js';
-import { runHealthChecks } from '../bootstrap/health.js';
-import { runRepair } from '../bootstrap/repair.js';
 // Config is read from sonar-project.properties, no need to save separate file
-import { getToken } from '../bootstrap/auth.js';
-import { getAllCredentials } from '../lib/keychain.js';
-import { installSecretScanningHooks } from '../bootstrap/hooks.js';
+import { homedir } from 'node:os';
+import { discoverProject, type ProjectInfo } from '../../bootstrap/discovery';
+import { runHealthChecks } from '../../bootstrap/health';
+import { runRepair } from '../../bootstrap/repair';
+import { getToken } from '../../bootstrap/auth';
+import { getAllCredentials } from '../../lib/keychain';
+import { installSecretScanningHooks } from '../../bootstrap/hooks';
 import {
-  loadState,
-  saveState,
-  markAgentConfigured,
   addInstalledHook,
   addOrUpdateConnection,
   generateConnectionId,
-} from '../lib/state-manager.js';
-import { runCommand } from '../lib/run-command.js';
-import { VERSION } from '../version.js';
-import logger from '../lib/logger.js';
-import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
-import { homedir } from 'node:os';
-import { ENV_TOKEN, ENV_SERVER } from '../lib/auth-resolver.js';
-import { text, blank, info, success, warn, intro, outro, note } from '../ui/index.js';
+  loadState,
+  markAgentConfigured,
+  saveState,
+} from '../../lib/state-manager.js';
+import { version as VERSION } from '../../../package.json';
+import logger from '../../lib/logger';
+import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../lib/config-constants';
+import { ENV_SERVER, ENV_TOKEN } from '../../lib/auth-resolver';
+import { blank, info, intro, note, outro, success, text, warn } from '../../ui';
+import { CommandFailedError, InvalidOptionError } from './common/error';
 
-export interface OnboardAgentOptions {
+export const VALID_TOOLS: string[] = ['claude'] as const;
+
+export interface IntegrateOptions {
   server?: string;
   project?: string;
   token?: string;
@@ -67,12 +69,53 @@ interface ConfigurationData {
 }
 
 /**
- * Validate that agent is supported
+ * Integrate command handler
  */
-function validateAgent(agent: string): string {
-  if (agent !== 'claude') {
-    throw new Error(
-      `Agent "${agent}" is not yet supported.\nCurrently supported agents: claude\nComing soon: gemini, codex`,
+export async function integrate(tool: string, options: IntegrateOptions): Promise<void> {
+  const toolName = validateTool(tool);
+
+  intro(`SonarQube Integration Setup for ${toolName}`);
+
+  text('\nPhase 1/3: Discovery & Validation');
+  blank();
+
+  const projectInfo = await discoverProject(process.cwd());
+
+  text(`Project root: ${projectInfo.root}`);
+  if (projectInfo.isGitRepo) {
+    text('Git repository detected');
+  }
+
+  const config = await loadConfiguration(projectInfo, options);
+
+  if (!config.projectKey) {
+    await runSecretsOnlyMode(projectInfo, options);
+    return;
+  }
+
+  const { serverURL, projectKey } = validateAndPrintConfiguration(config);
+
+  // When both env vars are set, treat as non-interactive (CI context)
+  const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
+  const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
+
+  await runFullSonarIntegration(
+    serverURL,
+    projectKey,
+    projectInfo,
+    config,
+    options,
+    effectiveNonInteractive,
+  );
+}
+
+/**
+ * Validate that tool is supported
+ */
+function validateTool(tool: string): string {
+  if (!VALID_TOOLS.includes(tool)) {
+    throw new InvalidOptionError(
+      `Agent "${tool}" is not yet supported.\nCurrently supported agents: claude\nComing soon: gemini, codex`,
     );
   }
 
@@ -82,7 +125,7 @@ function validateAgent(agent: string): string {
     codex: 'Codex',
   };
 
-  return agentNames[agent] ?? 'Unknown Agent';
+  return agentNames[tool] ?? 'Unknown Agent';
 }
 
 /**
@@ -191,7 +234,7 @@ async function fetchKeychainCredentials(config: ConfigurationData): Promise<void
  */
 async function loadConfiguration(
   projectInfo: ProjectInfo,
-  options: OnboardAgentOptions,
+  options: IntegrateOptions,
 ): Promise<ConfigurationData> {
   const config: ConfigurationData = {
     serverURL: options.server,
@@ -242,11 +285,13 @@ function validateAndPrintConfiguration(config: ConfigurationData): {
   projectKey: string;
 } {
   if (!config.serverURL) {
-    throw new Error('Server URL is required. Use --server flag or --org flag for SonarCloud');
+    throw new CommandFailedError(
+      'Server URL is required. Use --server flag or --org flag for SonarCloud',
+    );
   }
 
   if (!config.projectKey) {
-    throw new Error('Project key is required. Use --project flag');
+    throw new CommandFailedError('Project key is required. Use --project flag');
   }
 
   text(`\nServer: ${config.serverURL}`);
@@ -415,7 +460,7 @@ async function runFinalVerification(
   projectKey: string,
   hooksRoot: string,
   config: ConfigurationData,
-  options: OnboardAgentOptions,
+  options: IntegrateOptions,
 ): Promise<void> {
   text('\nPhase 3/3: Final Verification');
   blank();
@@ -441,7 +486,7 @@ async function runFinalVerification(
  */
 async function runSecretsOnlyMode(
   projectInfo: ProjectInfo,
-  options: OnboardAgentOptions,
+  options: IntegrateOptions,
 ): Promise<void> {
   text('\nNo project key configured.');
   text('Installing secret scanning hooks only.');
@@ -462,7 +507,7 @@ async function runFullSonarIntegration(
   projectKey: string,
   projectInfo: ProjectInfo,
   config: ConfigurationData,
-  options: OnboardAgentOptions,
+  options: IntegrateOptions,
   effectiveNonInteractive: boolean,
 ): Promise<void> {
   const hooksRoot = options.global ? homedir() : projectInfo.root;
@@ -543,47 +588,4 @@ function updateStateAfterConfiguration(
     logger.warn(`Failed to update configuration state: ${(err as Error).message}`);
     // Don't fail the whole setup if state update fails
   }
-}
-
-/**
- * Onboard-agent command handler
- */
-export async function integrateCommand(agent: string, options: OnboardAgentOptions): Promise<void> {
-  await runCommand(async () => {
-    const agentName = validateAgent(agent);
-
-    intro(`SonarQube Integration Setup for ${agentName}`);
-
-    text('\nPhase 1/3: Discovery & Validation');
-    blank();
-
-    const projectInfo = await discoverProject(process.cwd());
-
-    text(`Project root: ${projectInfo.root}`);
-    if (projectInfo.isGitRepo) {
-      text('Git repository detected');
-    }
-
-    const config = await loadConfiguration(projectInfo, options);
-
-    if (!config.projectKey) {
-      await runSecretsOnlyMode(projectInfo, options);
-      return;
-    }
-
-    const { serverURL, projectKey } = validateAndPrintConfiguration(config);
-
-    // When both env vars are set, treat as non-interactive (CI context)
-    const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
-    const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
-
-    await runFullSonarIntegration(
-      serverURL,
-      projectKey,
-      projectInfo,
-      config,
-      options,
-      effectiveNonInteractive,
-    );
-  });
 }

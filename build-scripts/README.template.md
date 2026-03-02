@@ -46,4 +46,4 @@ Copyright 2026 SonarSource Sàrl.
 
 SonarQube CLI is released under the [GNU Lesser General Public License, Version 3.0⁠,](http://www.gnu.org/licenses/lgpl.txt).
 
-*Generated from `spec.yaml` — do not edit manually*
+*Generated from `src/cli/command-tree.ts` — do not edit manually*

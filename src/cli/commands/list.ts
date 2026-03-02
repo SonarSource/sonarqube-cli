@@ -20,21 +20,24 @@
 
 // Issues command - search for SonarQube issues
 
-import { SonarQubeClient } from '../sonarqube/client.js';
-import { IssuesClient } from '../sonarqube/issues.js';
+import { SonarQubeClient } from '../../sonarqube/client';
+import { IssuesClient } from '../../sonarqube/issues';
 import { encode as encodeToToon } from '@toon-format/toon';
-import { formatTable } from '../formatter/table.js';
-import { formatCSV } from '../formatter/csv.js';
-import type { IssuesSearchParams } from '../lib/types.js';
-import { resolveAuth } from '../lib/auth-resolver.js';
-import { print } from '../ui/index.js';
+import { formatTable } from '../../formatter/table';
+import { formatCSV } from '../../formatter/csv';
+import type { IssuesSearchParams } from '../../lib/types';
+import { resolveAuth } from '../../lib/auth-resolver';
+import { print } from '../../ui';
+import { getActiveConnection, loadState } from '../../lib/state-manager';
+import { getToken } from '../../lib/keychain';
+import { MAX_PAGE_SIZE, ProjectsClient } from '../../sonarqube/projects';
 
-const DEFAULT_PAGE_SIZE = 500;
+export const DEFAULT_PAGE_SIZE = 500;
 
 const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 
-export interface IssuesSearchOptions {
+export interface ListIssuesOptions {
   server?: string;
   token?: string;
   project?: string;
@@ -55,7 +58,7 @@ export interface IssuesSearchOptions {
 /**
  * Issues search command handler
  */
-export async function issuesSearchCommand(options: IssuesSearchOptions): Promise<void> {
+export async function listIssues(options: ListIssuesOptions): Promise<void> {
   // Validate options before any auth/network operations
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
@@ -136,4 +139,58 @@ export async function issuesSearchCommand(options: IssuesSearchOptions): Promise
   }
 
   print(output);
+}
+
+export interface ListProjectsOptions {
+  query?: string;
+  pageSize?: number;
+  page?: number;
+}
+
+/**
+ * Projects search command handler
+ */
+export async function listProjects(options: ListProjectsOptions): Promise<void> {
+  const state = loadState();
+  const activeConnection = getActiveConnection(state);
+
+  if (!activeConnection) {
+    throw new Error('No active connection found. Run: sonar auth login');
+  }
+
+  const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
+  if (!token) {
+    throw new Error('No token found. Run: sonar auth login');
+  }
+
+  const pageSize = options.pageSize ?? MAX_PAGE_SIZE;
+  if (pageSize <= 0 || pageSize > MAX_PAGE_SIZE) {
+    throw new Error(
+      `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
+    );
+  }
+
+  const client = new SonarQubeClient(activeConnection.serverUrl, token);
+  const projectsClient = new ProjectsClient(client);
+
+  const result = await projectsClient.searchProjects({
+    q: options.query,
+    ps: pageSize,
+    p: options.page ?? 1,
+    organization: activeConnection.orgKey,
+  });
+
+  const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
+
+  print(
+    JSON.stringify({
+      projects: result.components.map((c) => ({ key: c.key, name: c.name })),
+      paging: {
+        pageIndex: result.paging.pageIndex,
+        pageSize: result.paging.pageSize,
+        total: result.paging.total,
+        hasNextPage,
+      },
+    }),
+  );
 }

@@ -20,17 +20,18 @@
 
 // Integration test for onboarding flow
 
-import { it, expect } from 'bun:test';
+import { expect, it } from 'bun:test';
 
-import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const PROJECT_ROOT = join(import.meta.dir, '../..');
 import { discoverProject } from '../../src/bootstrap/discovery.js';
-import { installSecretScanningHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
+import { areHooksInstalled, installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
 import { loadState, saveState } from '../../src/lib/state-manager';
 import { CliState, getDefaultState } from '../../src/lib/state';
+
+const PROJECT_ROOT = join(import.meta.dir, '../..');
 
 it('integration: full onboarding flow', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-integration-' + Date.now());
