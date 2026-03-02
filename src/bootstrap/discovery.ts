@@ -114,27 +114,6 @@ async function getGitRemote(gitRoot: string): Promise<string> {
   return '';
 }
 
-/**
- * Suggest a project key based on git remote or directory name
- */
-export function suggestProjectKey(projectInfo: ProjectInfo): string {
-  if (projectInfo.gitRemote) {
-    let remote = projectInfo.gitRemote;
-
-    remote = remote.replace(/^https?:\/\//, '');
-    remote = remote.replace(/^git@/, '');
-    remote = remote.replace(/\.git$/, '');
-    remote = remote.replaceAll(':', '/');
-    remote = remote.replaceAll('/', '_');
-
-    if (remote) {
-      return remote;
-    }
-  }
-
-  return projectInfo.name.replaceAll('-', '_');
-}
-
 function parsePropertyLine(line: string, props: Partial<SonarProperties>): void {
   const trimmed = line.trim();
 

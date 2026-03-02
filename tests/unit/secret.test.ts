@@ -26,11 +26,7 @@ import * as fs from 'node:fs';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import {
-  buildAssetName,
-  buildLocalBinaryName,
-  detectPlatform,
-} from '../../src/lib/platform-detector.js';
+import { buildLocalBinaryName, detectPlatform } from '../../src/lib/platform-detector.js';
 import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
 import { installSecrets, performSecretInstall } from '../../src/cli/commands/install.js';
 import * as releases from '../../src/lib/sonarsource-releases.js';
@@ -60,22 +56,6 @@ describe('Platform Detection and Binary Naming', () => {
     expect(typeof platform.extension).toBe('string');
   });
 
-  it('buildAssetName: generates correct GitHub release asset names for all platforms/architectures', () => {
-    const linuxX64 = buildAssetName('1.0.0', { os: 'linux', arch: 'x86-64', extension: '' });
-    expect(linuxX64).toBe('sonar-secrets-1.0.0-linux-x86-64');
-
-    const windowsExe = buildAssetName('1.0.0', {
-      os: 'windows',
-      arch: 'x86-64',
-      extension: '.exe',
-    });
-    expect(windowsExe).toBe('sonar-secrets-1.0.0-windows-x86-64.exe');
-
-    const versionWithV = buildAssetName('v2.1.0', { os: 'linux', arch: 'x86-64', extension: '' });
-    expect(versionWithV).toContain('2.1.0');
-    expect(versionWithV).not.toContain('v2.1.0');
-  });
-
   it('buildLocalBinaryName: generates local filenames without version or path separators', () => {
     const unixBinary = buildLocalBinaryName({ os: 'linux', arch: 'x86-64', extension: '' });
     expect(unixBinary).toBe('sonar-secrets');
@@ -88,7 +68,7 @@ describe('Platform Detection and Binary Naming', () => {
     expect(windowsBinary).toBe('sonar-secrets.exe');
   });
 
-  it('All OS and architecture combinations produce valid asset names', () => {
+  it('All OS and architecture combinations produce valid local binary names', () => {
     const osList = ['linux', 'darwin', 'windows'];
     const archList = ['x86-64', 'arm64'];
 
@@ -100,12 +80,7 @@ describe('Platform Detection and Binary Naming', () => {
           extension: os === 'windows' ? '.exe' : '',
         };
 
-        const assetName = buildAssetName('1.0.0', platform);
         const localName = buildLocalBinaryName(platform);
-
-        expect(assetName).toContain('sonar-secrets');
-        expect(assetName).toContain(os);
-        expect(assetName).toContain(arch);
         expect(localName).toBe('sonar-secrets' + platform.extension);
       });
     });

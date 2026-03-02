@@ -27,10 +27,8 @@ import {
   generateConnectionId,
   addOrUpdateConnection,
   getActiveConnection,
-  findConnection,
   markAgentConfigured,
   addInstalledHook,
-  addInstalledSkill,
 } from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 
@@ -124,27 +122,6 @@ describe('State Manager', () => {
     });
   });
 
-  describe('findConnection', () => {
-    it('should find connection by serverUrl and orgKey', () => {
-      const state = getDefaultState('0.2.61');
-      addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
-        orgKey: 'my-org',
-        region: 'eu',
-        keystoreKey: 'test-key',
-      });
-
-      const found = findConnection(state, 'https://sonarcloud.io', 'my-org');
-      expect(found).toBeDefined();
-      expect(found?.orgKey).toBe('my-org');
-    });
-
-    it('should return undefined for non-existent connection', () => {
-      const state = getDefaultState('0.2.61');
-      const found = findConnection(state, 'https://sonarcloud.io', 'non-existent');
-      expect(found).toBeUndefined();
-    });
-  });
-
   describe('markAgentConfigured', () => {
     it('should mark agent as configured', () => {
       const state = getDefaultState('0.2.61');
@@ -172,24 +149,6 @@ describe('State Manager', () => {
       addInstalledHook(state, 'claude-code', 'my-hook', 'PostToolUse');
 
       expect(state.agents['claude-code'].hooks.installed).toHaveLength(1);
-    });
-  });
-
-  describe('addInstalledSkill', () => {
-    it('should add skill to agent', () => {
-      const state = getDefaultState('0.2.61');
-      addInstalledSkill(state, 'claude-code', 'my-skill');
-
-      expect(state.agents['claude-code'].skills.installed).toHaveLength(1);
-      expect(state.agents['claude-code'].skills.installed[0].name).toBe('my-skill');
-    });
-
-    it('should not create duplicates', () => {
-      const state = getDefaultState('0.2.61');
-      addInstalledSkill(state, 'claude-code', 'my-skill');
-      addInstalledSkill(state, 'claude-code', 'my-skill');
-
-      expect(state.agents['claude-code'].skills.installed).toHaveLength(1);
     });
   });
 

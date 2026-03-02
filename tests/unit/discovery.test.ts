@@ -20,14 +20,12 @@
 
 // Discovery module tests
 
-import { it, describe, expect } from 'bun:test';
+import { it, expect } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { discoverProject, suggestProjectKey } from '../../src/bootstrap/discovery.js';
-import type { ProjectInfo } from '../../src/bootstrap/discovery.js';
-
+import { discoverProject } from '../../src/bootstrap/discovery.js';
 it('discovery: sonar-project.properties parsing', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-discovery-' + Date.now());
   mkdirSync(testDir, { recursive: true });
@@ -156,38 +154,6 @@ it('discovery: reads git remote when git repository has origin', async () => {
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
-});
-
-describe('suggestProjectKey', () => {
-  const base: ProjectInfo = {
-    root: '/some/dir',
-    name: 'my-project',
-    isGitRepo: false,
-    gitRemote: '',
-    hasSonarProps: false,
-    sonarPropsData: null,
-    hasSonarLintConfig: false,
-    sonarLintData: null,
-  };
-
-  it('suggests key from HTTPS git remote', () => {
-    const info = { ...base, gitRemote: 'https://github.com/example/my_repo' };
-    expect(suggestProjectKey(info)).toBe('github.com_example_my_repo');
-  });
-
-  it('suggests key from SSH git remote', () => {
-    const info = { ...base, gitRemote: 'git@github.com:example/my_repo.git' };
-    expect(suggestProjectKey(info)).toBe('github.com_example_my_repo');
-  });
-
-  it('falls back to directory name when no git remote', () => {
-    expect(suggestProjectKey(base)).toBe('my_project');
-  });
-
-  it('converts dashes to underscores in directory name', () => {
-    const info = { ...base, name: 'my-cool-project' };
-    expect(suggestProjectKey(info)).toBe('my_cool_project');
-  });
 });
 
 it('discovery: sonar-project.properties with line missing equals sign', async () => {

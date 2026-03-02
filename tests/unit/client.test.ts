@@ -273,31 +273,6 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // getOrganizations
-  // -------------------------------------------------------------------------
-
-  describe('getOrganizations', () => {
-    it('returns the organizations list on success', async () => {
-      const orgs = [
-        { key: 'org-a', name: 'Org A' },
-        { key: 'org-b', name: 'Org B' },
-      ];
-      fetchSpy = mockFetch({ organizations: orgs });
-      expect(await client.getOrganizations()).toEqual(orgs);
-    });
-
-    it('returns an empty array when the organizations field is missing', async () => {
-      fetchSpy = mockFetch({});
-      expect(await client.getOrganizations()).toEqual([]);
-    });
-
-    it('returns an empty array on error', async () => {
-      fetchSpy = mockFetch({}, false, 500);
-      expect(await client.getOrganizations()).toEqual([]);
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // checkOrganization
   // -------------------------------------------------------------------------
 

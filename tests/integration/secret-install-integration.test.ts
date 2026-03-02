@@ -24,36 +24,22 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { setMockLogger } from '../../src/lib/logger.js';
-import { performSecretInstall } from '../../src/cli/commands/install';
+import { performSecretInstall } from '../../src/commands/secret.js';
 
 const INTEGRATION_TEST_TIMEOUT_MS = 30000;
 
 describe('Secret Install Integration Tests', () => {
   let testDir: string;
-  let logOutput: string[];
-
-  const mockLogger = {
-    debug: (msg: string) => logOutput.push(`[DEBUG] ${msg}`),
-    info: (msg: string) => logOutput.push(`[INFO] ${msg}`),
-    log: (msg: string) => logOutput.push(`[LOG] ${msg}`),
-    success: (msg: string) => logOutput.push(`[SUCCESS] ${msg}`),
-    warn: (msg: string) => logOutput.push(`[WARN] ${msg}`),
-    error: (msg: string) => logOutput.push(`[ERROR] ${msg}`),
-  };
 
   beforeEach(() => {
     testDir = join(tmpdir(), `test-secret-install-${Date.now()}`);
     mkdirSync(testDir, { recursive: true });
-    logOutput = [];
-    setMockLogger(mockLogger);
   });
 
   afterEach(() => {
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
-    setMockLogger(null);
   });
 
   it(

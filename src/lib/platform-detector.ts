@@ -55,17 +55,6 @@ export function detectPlatform(): PlatformInfo {
 }
 
 /**
- * Build binary name for GitHub release asset
- * Format: sonar-secrets-<version>-<os>-<arch>[.exe]
- */
-export function buildAssetName(version: string, platformInfo: PlatformInfo): string {
-  // Strip leading 'v' from version if present
-  const cleanVersion = version.startsWith('v') ? version.slice(1) : version;
-
-  return `sonar-secrets-${cleanVersion}-${platformInfo.os}-${platformInfo.arch}${platformInfo.extension}`;
-}
-
-/**
  * Build local binary filename (without version)
  * Format: sonar-secrets[.exe]
  */

@@ -157,18 +157,6 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
 }
 
 /**
- * Find connection by serverUrl and optional orgKey
- */
-export function findConnection(
-  state: CliState,
-  serverUrl: string,
-  orgKey?: string,
-): AuthConnection | undefined {
-  const connectionId = generateConnectionId(serverUrl, orgKey);
-  return state.auth.connections.find((c) => c.id === connectionId);
-}
-
-/**
  * Mark agent as configured
  */
 export function markAgentConfigured(state: CliState, agentName: string, cliVersion: string): void {
@@ -210,29 +198,6 @@ export function addInstalledHook(
   state.agents[agentName].hooks.installed.push({
     name: hookName,
     type: hookType,
-    installedAt: new Date().toISOString(),
-  });
-}
-
-/**
- * Add installed skill for agent
- */
-export function addInstalledSkill(state: CliState, agentName: string, skillName: string): void {
-  if (!Object.hasOwn(state.agents, agentName)) {
-    state.agents[agentName] = {
-      configured: false,
-      hooks: { installed: [] },
-      skills: { installed: [] },
-    };
-  }
-
-  // Remove duplicate if exists
-  state.agents[agentName].skills.installed = state.agents[agentName].skills.installed.filter(
-    (s) => s.name !== skillName,
-  );
-
-  state.agents[agentName].skills.installed.push({
-    name: skillName,
     installedAt: new Date().toISOString(),
   });
 }
