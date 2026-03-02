@@ -52,7 +52,7 @@ export const STATE_FILE = join(CLI_DIR, 'state.json');
 // ---------------------------------------------------------------------------
 
 export const LOG_DIR = join(CLI_DIR, 'logs');
-export const LOG_FILE = join(LOG_DIR, '${APP_NAME}.log');
+export const LOG_FILE = join(LOG_DIR, `${APP_NAME}.log`);
 
 // ---------------------------------------------------------------------------
 // sonar-secrets binary
@@ -72,7 +72,7 @@ export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
 // ---------------------------------------------------------------------------
 
 export const SONARCLOUD_HOSTNAME = 'sonarcloud.io';
-export const SONARCLOUD_URL = `https://sonarcloud.io`;
+export const SONARCLOUD_URL = 'https://sonarcloud.io';
 export const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';
 
 // ---------------------------------------------------------------------------
