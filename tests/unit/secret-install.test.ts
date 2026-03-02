@@ -75,10 +75,9 @@ describe('secretInstallCommand', () => {
     setMockUi(false);
   });
 
-  it('exits 1 when binary installation fails', async () => {
+  it('throws when binary installation fails', () => {
     // Default verifyBinarySignatureSpy rejects → install fails
-    await secretInstallCommand({ force: true });
-    expect(process.exitCode).toBe(1);
+    expect(secretInstallCommand({ force: true })).rejects.toThrow();
   });
 
   it('exits 0 when installation succeeds', async () => {

@@ -345,20 +345,22 @@ describe('performSecretInstall: already up to date', () => {
       new Error('abort install'),
     );
 
+    let caughtError: unknown;
     try {
       // Act
       await secretInstallCommand({}, { binDir: tempBinDir });
-
-      // Assert: the "Updating..." message must have been shown before the download was triggered
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(process.exitCode).toBe(1); // install aborted by mock
-      expect(texts.some((m) => m.includes('Updating'))).toBe(true);
+    } catch (err) {
+      caughtError = err;
     } finally {
-      process.exitCode = 0;
       rmSync(tempBinDir, { recursive: true, force: true });
     }
+
+    // Assert: the "Updating..." message must have been shown before the download was triggered
+    const texts = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(caughtError).toBeDefined(); // install aborted by mock
+    expect(texts.some((m) => m.includes('Updating'))).toBe(true);
   });
 
   it('triggers fresh install when existing binary fails version check', async () => {
@@ -377,17 +379,19 @@ describe('performSecretInstall: already up to date', () => {
       new Error('abort install'),
     );
 
+    let caughtError: unknown;
     try {
       // Act
       await secretInstallCommand({}, { binDir: tempBinDir });
-
-      // Assert: install was attempted — downloadBinary was called
-      expect(process.exitCode).toBe(1); // install aborted by mock
-      expect(downloadBinarySpy).toHaveBeenCalledTimes(1);
+    } catch (err) {
+      caughtError = err;
     } finally {
-      process.exitCode = 0;
       rmSync(tempBinDir, { recursive: true, force: true });
     }
+
+    // Assert: install was attempted — downloadBinary was called
+    expect(caughtError).toBeDefined(); // install aborted by mock
+    expect(downloadBinarySpy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -440,16 +444,16 @@ describe('secretInstallCommand: installation error paths', () => {
     });
 
     // Act
-    await secretInstallCommand({ force: true }, { binDir: tempBinDir });
+    let caughtError: unknown;
+    try {
+      await secretInstallCommand({ force: true }, { binDir: tempBinDir });
+    } catch (err) {
+      caughtError = err;
+    }
 
-    // Assert: signature passes but --version fails → exits 1 with verification error
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(process.exitCode).toBe(1);
-    expect(errors.some((m) => m.includes('verification') || m.includes('not responding'))).toBe(
-      true,
-    );
+    // Assert: signature passes but --version fails → throws with verification error
+    expect(caughtError).toBeDefined();
+    expect((caughtError as Error).message).toMatch(/verification|not responding/i);
     expect(verifyBinarySignatureSpy).toHaveBeenCalledWith(
       expect.stringContaining('sonar-secrets'),
       expect.objectContaining({ os: expect.any(String) }),
@@ -534,20 +538,24 @@ describe('secretStatusCommand', () => {
     expect(texts.some((m) => m.includes('sonar install secrets'))).toBe(true);
   });
 
-  it('shows binary-not-working message and exits 1 when version check fails', async () => {
+  it('shows binary-not-working message and throws when version check fails', async () => {
     const existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 1,
       stdout: '',
       stderr: '',
     });
+    let caughtError: unknown;
     try {
       await secretStatusCommand();
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSyncSpy.mockRestore();
       spawnSpy.mockRestore();
     }
 
+    expect(caughtError).toBeDefined();
     const texts = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));

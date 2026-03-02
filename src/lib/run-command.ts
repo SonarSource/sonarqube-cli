@@ -31,6 +31,6 @@ export async function runCommand(fn: () => Promise<void>): Promise<void> {
       error((err as Error).message);
     }
     logger.error((err as Error).message);
-    process.exitCode = 1;
+    process.exitCode = err instanceof CommandFailedError ? err.exitCode : 1;
   }
 }

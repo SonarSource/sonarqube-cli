@@ -26,7 +26,6 @@
 import { version as VERSION } from '../package.json';
 import { Command } from 'commander';
 import { runCommand } from './lib/run-command.js';
-import logger from './lib/logger.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import {
   authLoginCommand,
@@ -62,13 +61,15 @@ install
   .description('Install sonar-secrets binary from binaries.sonarsource.com')
   .option('--force', 'Force reinstall even if already installed')
   .option('--status', 'Check installation status instead of installing')
-  .action(async (options) => {
-    if (options.status) {
-      await secretStatusCommand();
-    } else {
-      await secretInstallCommand(options);
-    }
-  });
+  .action((options) =>
+    runCommand(async () => {
+      if (options.status) {
+        await secretStatusCommand();
+      } else {
+        await secretInstallCommand(options);
+      }
+    }),
+  );
 
 // Setup SonarQube integration for AI coding agent
 program
@@ -86,14 +87,14 @@ program
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .action(async (agent, options) => {
-    await runCommand(async () => {
+  .action((agent, options) =>
+    runCommand(async () => {
       if (!VALID_TOOLS.includes(agent)) {
         throw new Error(`Invalid tool. Must be one of: ${VALID_TOOLS.join(', ')}`);
       }
       await integrateCommand(agent, options);
-    });
-  });
+    }),
+  );
 
 // List Sonar resources
 const list = program.command('list').description('List Sonar resources');
@@ -110,9 +111,7 @@ list
   .option('--pull-request <pull-request>', 'Pull request ID')
   .option('--all', 'Fetch all issues with pagination', 'false')
   .option('--page-size <page-size>', 'Page size for pagination', '500')
-  .action(async (options) => {
-    await runCommand(() => issuesSearchCommand(options));
-  });
+  .action((options) => runCommand(() => issuesSearchCommand(options)));
 
 list
   .command('projects')
@@ -120,11 +119,7 @@ list
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
   .option('-p, --page <page>', 'Page number', '1')
   .option('--page-size <page-size>', 'Page size (1-500)', '500')
-  .action(async (options) => {
-    await runCommand(async () => {
-      await projectsSearchCommand(options);
-    });
-  });
+  .action((options) => runCommand(() => projectsSearchCommand(options)));
 
 // Manage authentication tokens and credentials
 const auth = program.command('auth').description('Manage authentication tokens and credentials');
@@ -135,32 +130,24 @@ auth
   .option('-s, --server <server>', 'SonarQube server URL (default is SonarCloud)')
   .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
-  .action(async (options) => {
-    await authLoginCommand(options);
-  });
+  .action((options) => runCommand(() => authLoginCommand(options)));
 
 auth
   .command('logout')
   .description('Remove authentication token from keychain')
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
-  .action(async (options) => {
-    await authLogoutCommand(options);
-  });
+  .action((options) => runCommand(() => authLogoutCommand(options)));
 
 auth
   .command('purge')
   .description('Remove all authentication tokens from keychain')
-  .action(async () => {
-    await authPurgeCommand();
-  });
+  .action(() => runCommand(() => authPurgeCommand()));
 
 auth
   .command('status')
   .description('Show active authentication connection with token verification')
-  .action(async () => {
-    await authStatusCommand();
-  });
+  .action(() => runCommand(() => authStatusCommand()));
 
 // Analyze code for security issues
 const analyze = program.command('analyze').description('Analyze code for security issues');
@@ -170,9 +157,7 @@ analyze
   .description('Scan a file or stdin for hardcoded secrets')
   .option('--file <file>', 'File path to scan for secrets')
   .option('--stdin', 'Read from standard input instead of a file')
-  .action(async (options) => {
-    await runCommand(() => analyzeSecretsCommand(options));
-  });
+  .action((options) => runCommand(() => analyzeSecretsCommand(options)));
 
 // Configure things related to the CLI
 const configure = program.command('config').description('Configure CLI settings');
@@ -208,8 +193,4 @@ if (process.argv[ANALYZE_ARG_INDEX] === 'analyze') {
   }
 }
 
-program.exitOverride((err) => {
-  logger.error('Error: ' + err.message);
-  process.exit(1);
-});
 program.parse();

@@ -30,10 +30,13 @@ export class InvalidOptionError extends Error {
 
 /**
  * Thrown when the command (and options if any defined) are valid, but it failed to execute.
+ * An optional exitCode overrides the default exit code of 1 set by runCommand.
  */
 export class CommandFailedError extends Error {
-  constructor(message: string) {
+  readonly exitCode: number;
+  constructor(message: string, exitCode = 1) {
     super(message);
     this.name = 'CommandFailedError';
+    this.exitCode = exitCode;
   }
 }
