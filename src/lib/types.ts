@@ -118,26 +118,3 @@ export interface ProjectsSearchResponse {
   };
   components: SonarQubeProject[];
 }
-
-export interface DaemonHealth {
-  uptime: number;
-  backendStatus: 'initializing' | 'ready' | 'error';
-  lastError?: string;
-}
-
-export interface DiscoveryResult {
-  projectRoot: string;
-  gitRoot?: string;
-  serverURL?: string;
-  projectKey?: string;
-  organization?: string;
-  configFiles: string[];
-}
-
-export interface HealthCheckResult {
-  tokenValid: boolean;
-  serverAvailable: boolean;
-  projectAccessible: boolean;
-  hooksInstalled: boolean;
-  errors: string[];
-}

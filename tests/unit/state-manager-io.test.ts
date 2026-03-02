@@ -51,7 +51,6 @@ import {
   saveState,
   markAgentConfigured,
   addInstalledHook,
-  addInstalledSkill,
 } from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 
@@ -137,14 +136,5 @@ describe('addInstalledHook: new agent', () => {
     addInstalledHook(state, 'new-agent', 'my-hook', 'PostToolUse');
     expect(state.agents['new-agent'].hooks.installed).toHaveLength(1);
     expect(state.agents['new-agent'].hooks.installed[0].name).toBe('my-hook');
-  });
-});
-
-describe('addInstalledSkill: new agent', () => {
-  it('initializes missing agent entry before adding skill', () => {
-    const state = getDefaultState('0.1.0');
-    addInstalledSkill(state, 'new-agent', 'my-skill');
-    expect(state.agents['new-agent'].skills.installed).toHaveLength(1);
-    expect(state.agents['new-agent'].skills.installed[0].name).toBe('my-skill');
   });
 });

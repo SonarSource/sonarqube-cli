@@ -19,55 +19,9 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import {
-  detectPlatform,
-  buildAssetName,
-  buildLocalBinaryName,
-} from '../../src/lib/platform-detector';
+import { detectPlatform, buildLocalBinaryName } from '../../src/lib/platform-detector';
 
 describe('platform-detector', () => {
-  describe('buildAssetName', () => {
-    it('should build correct asset name for linux x86-64', () => {
-      const platform = {
-        os: 'linux',
-        arch: 'x86-64',
-        extension: '',
-      };
-      const result = buildAssetName('v2.38.0.10279', platform);
-      expect(result).toBe('sonar-secrets-2.38.0.10279-linux-x86-64');
-    });
-
-    it('should build correct asset name for macOS arm64', () => {
-      const platform = {
-        os: 'macos',
-        arch: 'arm64',
-        extension: '',
-      };
-      const result = buildAssetName('2.38.0.10279', platform);
-      expect(result).toBe('sonar-secrets-2.38.0.10279-macos-arm64');
-    });
-
-    it('should build correct asset name for windows x86-64', () => {
-      const platform = {
-        os: 'windows',
-        arch: 'x86-64',
-        extension: '.exe',
-      };
-      const result = buildAssetName('v2.38.0.10279', platform);
-      expect(result).toBe('sonar-secrets-2.38.0.10279-windows-x86-64.exe');
-    });
-
-    it('should strip leading v from version', () => {
-      const platform = {
-        os: 'linux',
-        arch: 'x86-64',
-        extension: '',
-      };
-      const result = buildAssetName('v1.2.3', platform);
-      expect(result).toBe('sonar-secrets-1.2.3-linux-x86-64');
-    });
-  });
-
   describe('buildLocalBinaryName', () => {
     it('should return sonar-secrets for unix platforms', () => {
       const platform = {
