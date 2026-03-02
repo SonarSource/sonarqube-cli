@@ -35,7 +35,6 @@ import {
   addOrUpdateConnection,
   generateConnectionId,
 } from '../lib/state-manager.js';
-import { runCommand } from '../lib/run-command.js';
 import logger from '../lib/logger.js';
 import { warn, success, print, note, textPrompt, confirmPrompt } from '../ui/index.js';
 import { green, red, dim } from '../ui/colors.js';
@@ -243,170 +242,157 @@ export async function authLoginCommand(options: {
   withToken?: string;
   region?: string;
 }): Promise<void> {
-  await runCommand(async () => {
-    const server = await validateLoginOptions(options);
+  const server = await validateLoginOptions(options);
 
-    const isCloud = isSonarCloud(server);
-    const region = (options.region || 'eu') as 'eu' | 'us';
-    const isNonInteractive = !!options.withToken;
+  const isCloud = isSonarCloud(server);
+  const region = (options.region || 'eu') as 'eu' | 'us';
+  const isNonInteractive = !!options.withToken;
 
-    const token = await getOrGenerateToken(
-      server,
-      options.org,
-      isNonInteractive,
-      options.withToken,
+  const token = await getOrGenerateToken(server, options.org, isNonInteractive, options.withToken);
+
+  let org = options.org;
+
+  if (isCloud) {
+    const client = new SonarQubeClient(server, token);
+    org = await validateOrSelectOrganization(client, org, isNonInteractive);
+
+    print('');
+    warn(
+      'If the organization is incorrect, you may get 403 Unauthorized errors in later requests. Logout and login again if needed.',
     );
+  } else {
+    org = await setupOnPremiseOrganization(org);
+  }
 
-    let org = options.org;
+  await saveToken(server, token, org);
 
-    if (isCloud) {
-      const client = new SonarQubeClient(server, token);
-      org = await validateOrSelectOrganization(client, org, isNonInteractive);
+  const state = loadState();
+  const keystoreKey = generateConnectionId(server, org);
 
-      print('');
-      warn(
-        'If the organization is incorrect, you may get 403 Unauthorized errors in later requests. Logout and login again if needed.',
-      );
-    } else {
-      org = await setupOnPremiseOrganization(org);
-    }
-
-    await saveToken(server, token, org);
-
-    const state = loadState();
-    const keystoreKey = generateConnectionId(server, org);
-
-    const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
-      orgKey: org,
-      region: isCloud ? region : undefined,
-      keystoreKey,
-    });
-
-    // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
-    const actualToken = token || (await getKeystoreToken(server, org));
-    if (actualToken) {
-      const apiClient = new SonarQubeClient(server, actualToken);
-      connection.userUuid = (await apiClient.getCurrentUser())?.id ?? null;
-      if (isCloud && org) {
-        connection.organizationUuidV4 = await apiClient.getOrganizationId(org);
-      } else if (!isCloud) {
-        const status = await apiClient.getSystemStatus();
-        connection.sqsInstallationId = status.id ?? null;
-      }
-    }
-
-    saveState(state);
-
-    const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
-    success(`Authentication successful for: ${displayServer}`);
+  const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
+    orgKey: org,
+    region: isCloud ? region : undefined,
+    keystoreKey,
   });
+
+  // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
+  const actualToken = token || (await getKeystoreToken(server, org));
+  if (actualToken) {
+    const apiClient = new SonarQubeClient(server, actualToken);
+    connection.userUuid = (await apiClient.getCurrentUser())?.id ?? null;
+    if (isCloud && org) {
+      connection.organizationUuidV4 = await apiClient.getOrganizationId(org);
+    } else if (!isCloud) {
+      const status = await apiClient.getSystemStatus();
+      connection.sqsInstallationId = status.id ?? null;
+    }
+  }
+
+  saveState(state);
+
+  const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
+  success(`Authentication successful for: ${displayServer}`);
 }
 
 /**
  * Logout command - remove token from keychain
  */
 export async function authLogoutCommand(options: { server?: string; org?: string }): Promise<void> {
-  await runCommand(async () => {
-    let server = options.server;
-    if (!server) {
-      const configServer = await findServerInConfigs();
-      server = configServer || SONARCLOUD_URL;
-    }
-    const org = options.org;
+  let server = options.server;
+  if (!server) {
+    const configServer = await findServerInConfigs();
+    server = configServer || SONARCLOUD_URL;
+  }
+  const org = options.org;
 
-    if (isSonarCloud(server) && !org) {
-      throw new Error('Organization key is required for SonarCloud logout');
-    }
+  if (isSonarCloud(server) && !org) {
+    throw new Error('Organization key is required for SonarCloud logout');
+  }
 
-    const token = await getKeystoreToken(server, org);
-    if (!token) {
-      const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
-      print(`No token found for: ${displayServer}`);
-      return;
-    }
+  const token = await getKeystoreToken(server, org);
+  if (!token) {
+    const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
+    print(`No token found for: ${displayServer}`);
+    return;
+  }
 
-    await deleteToken(server, org);
+  await deleteToken(server, org);
 
-    const state = loadState();
-    const connectionId = generateConnectionId(server, org);
-    state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
+  const state = loadState();
+  const connectionId = generateConnectionId(server, org);
+  state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
 
-    if (state.auth.activeConnectionId === connectionId) {
-      state.auth.activeConnectionId = state.auth.connections[0]?.id;
-    }
+  if (state.auth.activeConnectionId === connectionId) {
+    state.auth.activeConnectionId = state.auth.connections[0]?.id;
+  }
 
-    if (state.auth.connections.length === 0) {
-      state.auth.isAuthenticated = false;
-    }
+  if (state.auth.connections.length === 0) {
+    state.auth.isAuthenticated = false;
+  }
 
-    saveState(state);
+  saveState(state);
 
-    const displayServerLogout = isSonarCloud(server) ? `${server} (${org})` : server;
-    success(`Logged out from: ${displayServerLogout}`);
-  });
+  const displayServerLogout = isSonarCloud(server) ? `${server} (${org})` : server;
+  success(`Logged out from: ${displayServerLogout}`);
 }
 
 /**
  * Purge command - remove all tokens from keychain
  */
 export async function authPurgeCommand(): Promise<void> {
-  await runCommand(async () => {
-    const credentials = await getAllCredentials();
+  const credentials = await getAllCredentials();
 
-    if (credentials.length === 0) {
-      print('No tokens found in keychain');
-      return;
-    }
+  if (credentials.length === 0) {
+    print('No tokens found in keychain');
+    return;
+  }
 
-    print(`Found ${credentials.length} token(s):`);
-    credentials.forEach((cred) => {
-      print(`  - ${cred.account}`);
-    });
-    print('');
-
-    const confirmed = await confirmPrompt('Remove all tokens?');
-    if (!confirmed) {
-      print('Cancelled');
-      return;
-    }
-
-    await purgeAllTokens();
-
-    const state = loadState();
-    state.auth.connections = [];
-    state.auth.activeConnectionId = undefined;
-    state.auth.isAuthenticated = false;
-    saveState(state);
-
-    success('All tokens have been removed from keychain');
+  print(`Found ${credentials.length} token(s):`);
+  credentials.forEach((cred) => {
+    print(`  - ${cred.account}`);
   });
+  print('');
+
+  const confirmed = await confirmPrompt('Remove all tokens?');
+  if (!confirmed) {
+    print('Cancelled');
+    return;
+  }
+
+  await purgeAllTokens();
+
+  const state = loadState();
+  state.auth.connections = [];
+  state.auth.activeConnectionId = undefined;
+  state.auth.isAuthenticated = false;
+  saveState(state);
+
+  success('All tokens have been removed from keychain');
 }
 
 /**
  * Show active authentication connection with token verification
  */
 export async function authStatusCommand(): Promise<void> {
-  await runCommand(async () => {
-    const state = loadState();
+  const state = loadState();
 
-    if (state.auth.connections.length === 0) {
-      print('No saved connection');
-      return;
-    }
+  if (state.auth.connections.length === 0) {
+    print('No saved connection');
+    return;
+  }
 
-    const conn = state.auth.connections[0];
-    const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
+  const conn = state.auth.connections[0];
+  const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
 
-    const lines = [`Server  ${conn.serverUrl}`, ...(conn.orgKey ? [`Org     ${conn.orgKey}`] : [])];
+  const lines = [`Server  ${conn.serverUrl}`, ...(conn.orgKey ? [`Org     ${conn.orgKey}`] : [])];
 
-    if (token === null) {
-      note([...lines, '', 'Run "sonar auth login" to restore the token'], '✗ Token missing', {
-        borderColor: red,
-        titleColor: red,
-        contentColor: dim,
-      });
-    } else {
-      note(lines, '✓ Connected', { borderColor: green, titleColor: green, contentColor: dim });
-    }
-  });
+  if (token === null) {
+    note([...lines, '', 'Run "sonar auth login" to restore the token'], '✗ Token missing', {
+      borderColor: red,
+      titleColor: red,
+      contentColor: dim,
+    });
+  } else {
+    note(lines, '✓ Connected', { borderColor: green, titleColor: green, contentColor: dim });
+  }
 }

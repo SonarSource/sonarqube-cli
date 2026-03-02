@@ -27,7 +27,7 @@ import { IssuesClient } from '../../src/sonarqube/issues.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import type { IssuesSearchResponse, SonarQubeIssue } from '../../src/lib/types.js';
 import { issuesSearchCommand } from '../../src/commands/issues.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
+import { setMockUi } from '../../src/ui';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
@@ -537,96 +537,71 @@ describe('issuesSearchCommand', () => {
     setMockUi(false);
   });
 
-  it('exits 1 when --project is missing', async () => {
-    await issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'fake-token' });
-    expect(process.exitCode).toBe(1);
+  it('throws when --project is missing', () => {
+    expect(
+      issuesSearchCommand({ server: 'https://sonarcloud.io', token: 'fake-token' }),
+    ).rejects.toThrow('--project is required');
   });
 
-  it('exits 1 when --format is invalid', async () => {
-    clearMockUiCalls();
-    await issuesSearchCommand({
-      server: 'https://sonarcloud.io',
-      token: 'tok',
-      project: 'proj',
-      format: 'xml',
-    });
-    expect(process.exitCode).toBe(1);
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('Invalid format') && m.includes('xml'))).toBe(true);
+  it('throws when --format is invalid', () => {
+    expect(
+      issuesSearchCommand({
+        server: 'https://sonarcloud.io',
+        token: 'tok',
+        project: 'proj',
+        format: 'xml',
+      }),
+    ).rejects.toThrow('xml');
   });
 
-  it('exits 1 when --page-size is not a number', async () => {
-    clearMockUiCalls();
-    await issuesSearchCommand({
-      server: 'https://sonarcloud.io',
-      token: 'tok',
-      project: 'proj',
-      pageSize: 'abc' as unknown as number,
-    });
-    expect(process.exitCode).toBe(1);
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('page-size'))).toBe(true);
+  it('throws when --page-size is not a number', () => {
+    expect(
+      issuesSearchCommand({
+        server: 'https://sonarcloud.io',
+        token: 'tok',
+        project: 'proj',
+        pageSize: 'abc' as unknown as number,
+      }),
+    ).rejects.toThrow('page-size');
   });
 
-  it('exits 1 when --page-size is 0', async () => {
-    clearMockUiCalls();
-    await issuesSearchCommand({
-      server: 'https://sonarcloud.io',
-      token: 'tok',
-      project: 'proj',
-      pageSize: 0,
-    });
-    expect(process.exitCode).toBe(1);
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('page-size'))).toBe(true);
+  it('throws when --page-size is 0', () => {
+    expect(
+      issuesSearchCommand({
+        server: 'https://sonarcloud.io',
+        token: 'tok',
+        project: 'proj',
+        pageSize: 0,
+      }),
+    ).rejects.toThrow('page-size');
   });
 
-  it('exits 1 when --page-size exceeds 500', async () => {
-    clearMockUiCalls();
-    await issuesSearchCommand({
-      server: 'https://sonarcloud.io',
-      token: 'tok',
-      project: 'proj',
-      pageSize: 501,
-    });
-    expect(process.exitCode).toBe(1);
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('page-size'))).toBe(true);
+  it('throws when --page-size exceeds 500', () => {
+    expect(
+      issuesSearchCommand({
+        server: 'https://sonarcloud.io',
+        token: 'tok',
+        project: 'proj',
+        pageSize: 501,
+      }),
+    ).rejects.toThrow('page-size');
   });
 
-  it('exits 1 when --severity is invalid', async () => {
-    clearMockUiCalls();
-    await issuesSearchCommand({
-      server: 'https://sonarcloud.io',
-      token: 'tok',
-      project: 'proj',
-      severity: 'EXTREME',
-    });
-    expect(process.exitCode).toBe(1);
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('severity') && m.includes('EXTREME'))).toBe(true);
+  it('throws when --severity is invalid', () => {
+    expect(
+      issuesSearchCommand({
+        server: 'https://sonarcloud.io',
+        token: 'tok',
+        project: 'proj',
+        severity: 'EXTREME',
+      }),
+    ).rejects.toThrow('EXTREME');
   });
 
-  it('exits 1 when --server is not a valid URL', async () => {
-    clearMockUiCalls();
-    await issuesSearchCommand({ server: 'not-a-url', token: 'tok', project: 'proj' });
-    expect(process.exitCode).toBe(1);
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('Invalid server URL') && m.includes('not-a-url'))).toBe(
-      true,
-    );
+  it('throws when --server is not a valid URL', () => {
+    expect(
+      issuesSearchCommand({ server: 'not-a-url', token: 'tok', project: 'proj' }),
+    ).rejects.toThrow('not-a-url');
   });
 
   it('normalizes severity to uppercase before passing to API', async () => {

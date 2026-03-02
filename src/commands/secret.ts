@@ -41,7 +41,6 @@ import logger from '../lib/logger.js';
 import type { PlatformInfo } from '../lib/install-types.js';
 import { SECRETS_BINARY_NAME } from '../lib/install-types.js';
 import { text, blank, note, success, warn, withSpinner, print } from '../ui/index.js';
-import { runCommand } from '../lib/run-command.js';
 
 export { secretCheckCommand } from './secret-scan.js';
 
@@ -82,11 +81,9 @@ export async function secretInstallCommand(
   options: { force?: boolean },
   { binDir }: { binDir?: string } = {},
 ): Promise<void> {
-  await runCommand(async () => {
-    text('\nInstalling sonar-secrets binary\n');
-    const binaryPath = await performSecretInstall(options, { binDir });
-    logInstallationSuccess(binaryPath);
-  });
+  text('\nInstalling sonar-secrets binary\n');
+  const binaryPath = await performSecretInstall(options, { binDir });
+  logInstallationSuccess(binaryPath);
 }
 
 async function performInstallation(
@@ -138,50 +135,48 @@ async function performInstallation(
  * Status command: sonar secret status
  */
 export async function secretStatusCommand({ binDir }: { binDir?: string } = {}): Promise<void> {
-  await runCommand(async () => {
-    const platform = detectPlatform();
-    const resolvedBinDir = binDir ?? BIN_DIR;
-    const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
+  const platform = detectPlatform();
+  const resolvedBinDir = binDir ?? BIN_DIR;
+  const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
 
-    text('\nChecking sonar-secrets installation status\n');
+  text('\nChecking sonar-secrets installation status\n');
 
-    if (!existsSync(binaryPath)) {
-      text('Status: Not installed');
-      text('  Install with: sonar install secrets');
-      return;
-    }
+  if (!existsSync(binaryPath)) {
+    text('Status: Not installed');
+    text('  Install with: sonar install secrets');
+    return;
+  }
 
-    const version = await checkInstalledVersion(binaryPath);
+  const version = await checkInstalledVersion(binaryPath);
 
-    if (version) {
-      text(`Status: Installed (v${version})`);
-      text(`Path: ${binaryPath}`);
-
-      // Check for updates
-      try {
-        const latestVersion = SONAR_SECRETS_VERSION;
-
-        if (version === latestVersion) {
-          blank();
-          success('Up to date');
-        } else {
-          blank();
-          warn(`Update available: v${latestVersion}`);
-          text('  Run: sonar secret install');
-        }
-      } catch (err) {
-        logger.debug(`Failed to check for updates: ${(err as Error).message}`);
-        warn('Could not check for updates (network/API error)');
-      }
-
-      return;
-    }
-
-    warn('Binary exists but not working');
+  if (version) {
+    text(`Status: Installed (v${version})`);
     text(`Path: ${binaryPath}`);
-    text('  Reinstall with: sonar install secrets --force');
-    throw new Error('Binary not working. Reinstall with: sonar install secrets --force');
-  });
+
+    // Check for updates
+    try {
+      const latestVersion = SONAR_SECRETS_VERSION;
+
+      if (version === latestVersion) {
+        blank();
+        success('Up to date');
+      } else {
+        blank();
+        warn(`Update available: v${latestVersion}`);
+        text('  Run: sonar secret install');
+      }
+    } catch (err) {
+      logger.debug(`Failed to check for updates: ${(err as Error).message}`);
+      warn('Could not check for updates (network/API error)');
+    }
+
+    return;
+  }
+
+  warn('Binary exists but not working');
+  text(`Path: ${binaryPath}`);
+  text('  Reinstall with: sonar install secrets --force');
+  throw new Error('Binary not working. Reinstall with: sonar install secrets --force');
 }
 
 function ensureBinDirectory(dir?: string): string {

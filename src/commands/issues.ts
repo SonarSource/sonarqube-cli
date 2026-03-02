@@ -27,7 +27,6 @@ import { formatTable } from '../formatter/table.js';
 import { formatCSV } from '../formatter/csv.js';
 import type { IssuesSearchParams } from '../lib/types.js';
 import { resolveAuth } from '../lib/auth-resolver.js';
-import { runCommand } from '../lib/run-command.js';
 import { print } from '../ui/index.js';
 
 const DEFAULT_PAGE_SIZE = 500;
@@ -57,86 +56,84 @@ export interface IssuesSearchOptions {
  * Issues search command handler
  */
 export async function issuesSearchCommand(options: IssuesSearchOptions): Promise<void> {
-  await runCommand(async () => {
-    // Validate options before any auth/network operations
-    const format = options.format ?? 'json';
-    if (!VALID_FORMATS.includes(format.toLowerCase())) {
-      throw new Error(`Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`);
-    }
+  // Validate options before any auth/network operations
+  const format = options.format ?? 'json';
+  if (!VALID_FORMATS.includes(format.toLowerCase())) {
+    throw new Error(`Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`);
+  }
 
-    if (options.pageSize !== undefined) {
-      const ps = options.pageSize;
-      if (!Number.isInteger(ps) || ps < 1 || ps > DEFAULT_PAGE_SIZE) {
-        throw new Error(
-          `Invalid --page-size: '${options.pageSize}'. Must be an integer between 1 and 500`,
-        );
-      }
-    }
-
-    if (options.severity) {
-      const sev = options.severity.toUpperCase();
-      if (!VALID_SEVERITIES.includes(sev)) {
-        throw new Error(
-          `Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`,
-        );
-      }
-    }
-
-    if (!options.project) {
-      throw new Error('--project is required');
-    }
-
-    const resolved = await resolveAuth({ token: options.token, server: options.server });
-
-    try {
-      new URL(resolved.serverUrl);
-    } catch {
+  if (options.pageSize !== undefined) {
+    const ps = options.pageSize;
+    if (!Number.isInteger(ps) || ps < 1 || ps > DEFAULT_PAGE_SIZE) {
       throw new Error(
-        `Invalid server URL: '${resolved.serverUrl}'. Provide a valid URL (e.g., https://sonarcloud.io)`,
+        `Invalid --page-size: '${options.pageSize}'. Must be an integer between 1 and 500`,
       );
     }
+  }
 
-    const client = new SonarQubeClient(resolved.serverUrl, resolved.token);
-    const issuesClient = new IssuesClient(client);
-
-    const params: IssuesSearchParams = {
-      projects: options.project,
-      organization: resolved.orgKey,
-      severities: options.severity?.toUpperCase(),
-      types: options.type,
-      statuses: options.status,
-      rules: options.rule,
-      tags: options.tag,
-      branch: options.branch,
-      pullRequest: options.pullRequest,
-      resolved: options.resolved,
-      ps: options.pageSize ?? DEFAULT_PAGE_SIZE,
-      p: options.page ?? 1,
-    };
-
-    const result = options.all
-      ? await issuesClient.searchAllIssues(params)
-      : await issuesClient.searchIssues(params);
-
-    let output: string;
-
-    switch (format.toLowerCase()) {
-      case 'toon':
-        output = encodeToToon(result);
-        break;
-      case 'json':
-        output = JSON.stringify(result, null, 2);
-        break;
-      case 'table':
-        output = formatTable(result.issues);
-        break;
-      case 'csv':
-        output = formatCSV(result.issues);
-        break;
-      default:
-        output = JSON.stringify(result, null, 2);
+  if (options.severity) {
+    const sev = options.severity.toUpperCase();
+    if (!VALID_SEVERITIES.includes(sev)) {
+      throw new Error(
+        `Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`,
+      );
     }
+  }
 
-    print(output);
-  });
+  if (!options.project) {
+    throw new Error('--project is required');
+  }
+
+  const resolved = await resolveAuth({ token: options.token, server: options.server });
+
+  try {
+    new URL(resolved.serverUrl);
+  } catch {
+    throw new Error(
+      `Invalid server URL: '${resolved.serverUrl}'. Provide a valid URL (e.g., https://sonarcloud.io)`,
+    );
+  }
+
+  const client = new SonarQubeClient(resolved.serverUrl, resolved.token);
+  const issuesClient = new IssuesClient(client);
+
+  const params: IssuesSearchParams = {
+    projects: options.project,
+    organization: resolved.orgKey,
+    severities: options.severity?.toUpperCase(),
+    types: options.type,
+    statuses: options.status,
+    rules: options.rule,
+    tags: options.tag,
+    branch: options.branch,
+    pullRequest: options.pullRequest,
+    resolved: options.resolved,
+    ps: options.pageSize ?? DEFAULT_PAGE_SIZE,
+    p: options.page ?? 1,
+  };
+
+  const result = options.all
+    ? await issuesClient.searchAllIssues(params)
+    : await issuesClient.searchIssues(params);
+
+  let output: string;
+
+  switch (format.toLowerCase()) {
+    case 'toon':
+      output = encodeToToon(result);
+      break;
+    case 'json':
+      output = JSON.stringify(result, null, 2);
+      break;
+    case 'table':
+      output = formatTable(result.issues);
+      break;
+    case 'csv':
+      output = formatCSV(result.issues);
+      break;
+    default:
+      output = JSON.stringify(result, null, 2);
+  }
+
+  print(output);
 }

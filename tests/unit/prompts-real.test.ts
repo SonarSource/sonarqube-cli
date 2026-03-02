@@ -22,7 +22,8 @@
 // mock.module replaces @clack/core so no real TTY is needed.
 // The mock invokes the render() callback with different states to cover all render branches.
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { confirmPrompt, pressEnterKeyPrompt, textPrompt } from '../../src/ui/components/prompts.js';
 
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';
@@ -88,9 +89,6 @@ void mock.module('@clack/core', () => {
     isCancel: (value: unknown) => typeof value === 'symbol',
   };
 });
-
-import { mock } from 'bun:test';
-import { textPrompt, confirmPrompt, pressEnterKeyPrompt } from '../../src/ui/components/prompts.js';
 
 // ─── textPrompt non-mock ──────────────────────────────────────────────────────
 

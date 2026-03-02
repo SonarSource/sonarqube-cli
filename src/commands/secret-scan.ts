@@ -327,7 +327,10 @@ function handleScanFailure(
   }
   blank();
   // Binary exit 1 = secrets found — remap to 51 so hooks can distinguish from generic errors
-  process.exitCode = exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode;
+  throw new CommandFailedError(
+    `Scan failed with exit code: ${exitCode}`,
+    exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode,
+  );
 }
 
 function handleScanError(err: unknown): void {
