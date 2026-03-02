@@ -27,6 +27,7 @@ import * as health from '../../src/bootstrap/health.js';
 import * as repair from '../../src/bootstrap/repair.js';
 import * as auth from '../../src/bootstrap/auth.js';
 import * as keychain from '../../src/lib/keychain.js';
+import * as hooks from '../../src/bootstrap/hooks.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
@@ -351,17 +352,44 @@ describe('integrateCommand: configuration validation', () => {
     }
   });
 
-  it('exits 1 when project key cannot be determined', async () => {
+  it('exits 0 and installs hooks when no project key is configured (secrets-only mode)', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrateCommand('claude', { server: 'https://sonarcloud.io' });
-      expect(process.exitCode).toBe(1);
-      const errors = getMockUiCalls()
-        .filter((c) => c.method === 'error')
-        .map((c) => String(c.args[0]));
-      expect(errors.some((m) => m.includes('Project key'))).toBe(true);
+      await integrateCommand('claude', {});
+      expect(process.exitCode).toBe(0);
+      expect(hooksSpy).toHaveBeenCalled();
     } finally {
       discoverSpy.mockRestore();
+      hooksSpy.mockRestore();
+    }
+  });
+
+  it('shows secrets-only message when no project key is configured', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    try {
+      await integrateCommand('claude', {});
+      const texts = getMockUiCalls()
+        .filter((c) => c.method === 'text')
+        .map((c) => String(c.args[0]));
+      expect(texts.some((m) => m.includes('No project key'))).toBe(true);
+    } finally {
+      discoverSpy.mockRestore();
+      hooksSpy.mockRestore();
+    }
+  });
+
+  it('exits 0 and installs hooks when server is set but no project key (secrets-only mode)', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    try {
+      await integrateCommand('claude', { server: 'https://sonarcloud.io' });
+      expect(process.exitCode).toBe(0);
+      expect(hooksSpy).toHaveBeenCalled();
+    } finally {
+      discoverSpy.mockRestore();
+      hooksSpy.mockRestore();
     }
   });
 

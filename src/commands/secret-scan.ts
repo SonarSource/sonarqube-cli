@@ -25,15 +25,17 @@ import { join } from 'node:path';
 import { spawnProcess } from '../lib/process.js';
 import { BIN_DIR } from '../lib/config-constants.js';
 import { buildLocalBinaryName, detectPlatform } from '../lib/platform-detector.js';
-import { getActiveConnection, loadState } from '../lib/state-manager.js';
-import { getToken } from '../lib/keychain.js';
+import { resolveAuth } from '../lib/auth-resolver.js';
 import logger from '../lib/logger.js';
 import { text, blank, success, error, print } from '../ui';
 import { CommandFailedError, InvalidOptionError } from './common/error.js';
 
+// Env var names expected by the sonar-secrets binary
+const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
+const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
+
 const SCAN_TIMEOUT_MS = 30000;
 const STDIN_READ_TIMEOUT_MS = 5000;
-const SECRET_SCAN_POSITIVE_EXIT_CODE = 51;
 
 /**
  * Check command: sonar secret check [--file <path>] [--stdin]
@@ -58,8 +60,8 @@ async function handleCheckCommand(options: { file?: string; stdin?: boolean }): 
 
 interface ScanEnvironment {
   binaryPath: string;
-  authUrl: string;
-  authToken: string;
+  authUrl?: string;
+  authToken?: string;
 }
 
 async function setupScanEnvironment(options: {
@@ -69,7 +71,7 @@ async function setupScanEnvironment(options: {
   validateScanOptions(options);
 
   const binaryPath = setupBinaryPath();
-  const { authUrl, authToken } = await setupAuth();
+  const { authUrl, authToken } = await resolveSecretsAuth();
 
   return { binaryPath, authUrl, authToken };
 }
@@ -93,30 +95,20 @@ function setupBinaryPath(): string {
   return binaryPath;
 }
 
-async function setupAuth(): Promise<{ authUrl: string; authToken: string }> {
-  const state = loadState();
-  const activeConnection = getActiveConnection(state);
-
-  if (!activeConnection) {
-    logAuthConfigError();
-    throw new CommandFailedError('sonar-secrets authentication is not configured');
+async function resolveSecretsAuth(): Promise<{ authUrl?: string; authToken?: string }> {
+  try {
+    const auth = await resolveAuth({});
+    return { authUrl: auth.serverUrl, authToken: auth.token };
+  } catch {
+    // Auth resolution failure is non-fatal — binary works without auth
+    return {};
   }
-
-  const authUrl = activeConnection.serverUrl;
-  const authToken = await getToken(authUrl, activeConnection.orgKey);
-
-  if (!authUrl || !authToken) {
-    logAuthConfigError();
-    throw new CommandFailedError('sonar-secrets authentication is not configured');
-  }
-
-  return { authUrl, authToken };
 }
 
 async function performStdinScan(
   binaryPath: string,
-  authUrl: string,
-  authToken: string,
+  authUrl: string | undefined,
+  authToken: string | undefined,
   scanStartTime: number,
 ): Promise<void> {
   const result = await runScanFromStdin(binaryPath, authUrl, authToken);
@@ -133,8 +125,8 @@ async function performStdinScan(
 async function performFileScan(
   binaryPath: string,
   file: string | undefined,
-  authUrl: string,
-  authToken: string,
+  authUrl: string | undefined,
+  authToken: string | undefined,
   scanStartTime: number,
 ): Promise<void> {
   if (!file) {
@@ -164,25 +156,21 @@ function validateCheckCommandEnvironment(binaryPath: string): void {
   }
 }
 
-function logAuthConfigError(): void {
-  error('sonar-secrets authentication is not configured');
-  text('  Run: sonar auth login');
-}
-
 async function runScan(
   binaryPath: string,
   file: string,
-  authUrl: string,
-  authToken: string,
+  authUrl: string | undefined,
+  authToken: string | undefined,
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   return Promise.race([
-    spawnProcess(binaryPath, [file], {
+    spawnProcess(binaryPath, ['--non-interactive', file], {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
-        SONAR_SECRETS_AUTH_URL: authUrl,
-        SONAR_SECRETS_TOKEN: authToken,
+        ...(authUrl && authToken
+          ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
+          : {}),
       },
     }),
     new Promise<never>((_resolve, reject) =>
@@ -195,8 +183,8 @@ async function runScan(
 
 async function runScanFromStdin(
   binaryPath: string,
-  authUrl: string,
-  authToken: string,
+  authUrl: string | undefined,
+  authToken: string | undefined,
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   const { writeFileSync, unlinkSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
@@ -215,8 +203,9 @@ async function runScanFromStdin(
         stdout: 'pipe',
         stderr: 'pipe',
         env: {
-          SONAR_SECRETS_AUTH_URL: authUrl,
-          SONAR_SECRETS_TOKEN: authToken,
+          ...(authUrl && authToken
+            ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
+            : {}),
         },
       }),
       new Promise<never>((_resolve, reject) =>
@@ -309,7 +298,7 @@ function handleScanFailure(
   exitCode: number,
 ): void {
   blank();
-  error('Scan failed');
+  error('Scan found secrets');
   logger.error(`Scan failed with exit code: ${exitCode}`);
   text(`  Exit code: ${exitCode}`);
   text(`  Duration: ${scanDurationMs}ms`);
@@ -326,11 +315,7 @@ function handleScanFailure(
     print(result.stdout);
   }
   blank();
-  // Binary exit 1 = secrets found — remap to 51 so hooks can distinguish from generic errors
-  throw new CommandFailedError(
-    `Scan failed with exit code: ${exitCode}`,
-    exitCode === 1 ? SECRET_SCAN_POSITIVE_EXIT_CODE : exitCode,
-  );
+  throw new CommandFailedError(`Scan failed with exit code: ${exitCode}`, exitCode);
 }
 
 function handleScanError(err: unknown): void {

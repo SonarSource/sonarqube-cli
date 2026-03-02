@@ -20,7 +20,6 @@
 
 // Integrate command - setup SonarQube integration for Claude Code
 
-import { homedir } from 'node:os';
 import { discoverProject, type ProjectInfo } from '../bootstrap/discovery.js';
 import { runHealthChecks } from '../bootstrap/health.js';
 import { runRepair } from '../bootstrap/repair.js';
@@ -33,11 +32,14 @@ import {
   saveState,
   markAgentConfigured,
   addInstalledHook,
+  addOrUpdateConnection,
+  generateConnectionId,
 } from '../lib/state-manager.js';
 import { runCommand } from '../lib/run-command.js';
-import { version as VERSION } from '../../package.json';
+import { VERSION } from '../version.js';
 import logger from '../lib/logger.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
+import { homedir } from 'node:os';
 import { ENV_TOKEN, ENV_SERVER } from '../lib/auth-resolver.js';
 import { text, blank, info, success, warn, intro, outro } from '../ui/index.js';
 
@@ -49,6 +51,12 @@ export interface OnboardAgentOptions {
   nonInteractive?: boolean;
   skipHooks?: boolean;
   global?: boolean;
+}
+
+interface RepairOptions {
+  skipHooks: boolean | undefined;
+  hooksGlobal: boolean | undefined;
+  nonInteractive: boolean | undefined;
 }
 
 interface ConfigurationData {
@@ -279,8 +287,7 @@ async function runHealthCheckAndRepair(
   projectInfo: ProjectInfo,
   token: string | undefined,
   organization: string | undefined,
-  skipHooks: boolean | undefined,
-  hooksGlobal?: boolean,
+  repairOptions: RepairOptions,
 ): Promise<string | undefined> {
   text('\nPhase 2/3: Health Check & Repair');
   blank();
@@ -290,14 +297,16 @@ async function runHealthCheckAndRepair(
     return undefined;
   }
 
-  const hooksRoot = hooksGlobal ? homedir() : projectInfo.root;
+  const { skipHooks, hooksGlobal, nonInteractive } = repairOptions;
+  const globalDir = hooksGlobal ? homedir() : undefined;
+  const hooksRoot = globalDir ?? projectInfo.root;
 
   const healthResult = await runHealthChecks(serverURL, token, projectKey, hooksRoot, organization);
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
     if (!skipHooks) {
-      await installSecretScanningHooks(projectInfo.root, hooksGlobal ? homedir() : undefined);
+      await installSecretScanningHooks(projectInfo.root, globalDir);
     }
     return token;
   }
@@ -307,12 +316,27 @@ async function runHealthCheckAndRepair(
     text(`  - ${msg}`);
   }
 
+  if (nonInteractive && !healthResult.tokenValid) {
+    // Can't repair token without browser interaction — install hooks and continue
+    if (!skipHooks) {
+      await installSecretScanningHooks(projectInfo.root, globalDir);
+    }
+    return token;
+  }
+
   // Repair (part of Phase 2)
   text('\n  Running repair...');
 
-  await runRepair(serverURL, projectInfo.root, healthResult, projectKey, organization);
+  const repairedToken = await runRepair(
+    serverURL,
+    projectInfo.root,
+    healthResult,
+    projectKey,
+    organization,
+    globalDir,
+  );
 
-  return token;
+  return repairedToken ?? token;
 }
 
 /**
@@ -323,6 +347,7 @@ async function runRepairWithoutToken(
   projectKey: string,
   projectInfo: ProjectInfo,
   organization: string | undefined,
+  globalDir?: string,
 ): Promise<string> {
   text('\n  Running repair...');
 
@@ -340,6 +365,7 @@ async function runRepairWithoutToken(
     },
     projectKey,
     organization,
+    globalDir,
   );
 
   const repairedToken = await getToken(serverURL, organization);
@@ -374,9 +400,116 @@ function printFinalVerificationResults(
 }
 
 /**
+ * Run Phase 3 final verification and update state
+ */
+async function runFinalVerification(
+  serverURL: string,
+  token: string,
+  projectKey: string,
+  hooksRoot: string,
+  config: ConfigurationData,
+  options: OnboardAgentOptions,
+): Promise<void> {
+  text('\nPhase 3/3: Final Verification');
+  blank();
+
+  const finalHealth = await runHealthChecks(
+    serverURL,
+    token,
+    projectKey,
+    hooksRoot,
+    config.organization,
+    false,
+  );
+  printFinalVerificationResults(finalHealth);
+
+  updateStateAfterConfiguration(!options.skipHooks, {
+    serverURL,
+    organization: config.organization,
+  });
+}
+
+/**
+ * Handle secrets-only mode: no project key configured — install hooks and exit
+ */
+async function runSecretsOnlyMode(
+  projectInfo: ProjectInfo,
+  options: OnboardAgentOptions,
+): Promise<void> {
+  text('\nNo project key configured.');
+  text('Installing secret scanning hooks only.');
+  text('\nPhase 2/3: Health Check & Repair — skipped (no project key)');
+  text('Phase 3/3: Final Verification — skipped (no project key)');
+  if (!options.skipHooks) {
+    await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
+    updateStateAfterConfiguration(true);
+  }
+  outro('Setup complete!', 'success');
+}
+
+/**
+ * Run full SonarQube integration (phases 2 and 3)
+ */
+async function runFullSonarIntegration(
+  serverURL: string,
+  projectKey: string,
+  projectInfo: ProjectInfo,
+  config: ConfigurationData,
+  options: OnboardAgentOptions,
+  effectiveNonInteractive: boolean,
+): Promise<void> {
+  const hooksRoot = options.global ? homedir() : projectInfo.root;
+  let token = await ensureToken(config.token, serverURL, config.organization);
+
+  const repairOptions: RepairOptions = {
+    skipHooks: options.skipHooks,
+    hooksGlobal: options.global,
+    nonInteractive: effectiveNonInteractive,
+  };
+
+  if (token) {
+    token = await runHealthCheckAndRepair(
+      serverURL,
+      projectKey,
+      projectInfo,
+      token,
+      config.organization,
+      repairOptions,
+    );
+
+    if (token) {
+      await runFinalVerification(serverURL, token, projectKey, hooksRoot, config, options);
+      return;
+    }
+  }
+
+  if (effectiveNonInteractive) {
+    if (!options.skipHooks) {
+      await installSecretScanningHooks(projectInfo.root);
+    }
+    updateStateAfterConfiguration(!options.skipHooks);
+    outro('Setup complete!', 'success');
+    return;
+  }
+
+  token = await runRepairWithoutToken(
+    serverURL,
+    projectKey,
+    projectInfo,
+    config.organization,
+    options.global ? homedir() : undefined,
+  );
+
+  await runFinalVerification(serverURL, token, projectKey, hooksRoot, config, options);
+}
+
+/**
  * Update state after successful configuration
  */
-function updateStateAfterConfiguration(hooksInstalled: boolean): void {
+function updateStateAfterConfiguration(
+  hooksInstalled: boolean,
+  connection?: { serverURL: string; organization?: string },
+): void {
   try {
     const state = loadState();
 
@@ -387,6 +520,14 @@ function updateStateAfterConfiguration(hooksInstalled: boolean): void {
     if (hooksInstalled) {
       addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
       addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
+    }
+
+    // Save connection so `sonar auth status` reports the active connection
+    if (connection) {
+      const { serverURL, organization } = connection;
+      const type = serverURL.includes(SONARCLOUD_HOSTNAME) ? 'cloud' : 'on-premise';
+      const keystoreKey = generateConnectionId(serverURL, organization);
+      addOrUpdateConnection(state, serverURL, type, { orgKey: organization, keystoreKey });
     }
 
     saveState(state);
@@ -402,12 +543,10 @@ function updateStateAfterConfiguration(hooksInstalled: boolean): void {
  */
 export async function integrateCommand(agent: string, options: OnboardAgentOptions): Promise<void> {
   await runCommand(async () => {
-    // Validate agent
     const agentName = validateAgent(agent);
 
     intro(`SonarQube Integration Setup for ${agentName}`);
 
-    // Phase 1: Discovery & Validation
     text('\nPhase 1/3: Discovery & Validation');
     blank();
 
@@ -418,71 +557,26 @@ export async function integrateCommand(agent: string, options: OnboardAgentOptio
       text('Git repository detected');
     }
 
-    // Load configuration from all sources
     const config = await loadConfiguration(projectInfo, options);
 
-    // Validate and extract required values
+    if (!config.projectKey) {
+      await runSecretsOnlyMode(projectInfo, options);
+      return;
+    }
+
     const { serverURL, projectKey } = validateAndPrintConfiguration(config);
 
-    // Ensure token is available
-    let token = await ensureToken(config.token, serverURL, config.organization);
+    // When both env vars are set, treat as non-interactive (CI context)
+    const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
+    const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
 
-    const hooksRoot = options.global ? homedir() : projectInfo.root;
-
-    // Phase 2 & 3: Health Check and Repair
-    if (token) {
-      token = await runHealthCheckAndRepair(
-        serverURL,
-        projectKey,
-        projectInfo,
-        token,
-        config.organization,
-        options.skipHooks,
-        options.global,
-      );
-
-      if (token) {
-        // Health check passed, skip to final verification
-        text('\nPhase 3/3: Final Verification');
-        blank();
-
-        const finalHealth = await runHealthChecks(
-          serverURL,
-          token,
-          projectKey,
-          hooksRoot,
-          config.organization,
-          false,
-        );
-        printFinalVerificationResults(finalHealth);
-
-        // Update state with configuration
-        updateStateAfterConfiguration(!options.skipHooks);
-
-        return;
-      }
-    }
-
-    // If no token, run repair to generate one
-    if (!token) {
-      token = await runRepairWithoutToken(serverURL, projectKey, projectInfo, config.organization);
-    }
-
-    // Phase 3: Final Verification
-    text('\nPhase 3/3: Final Verification');
-    blank();
-
-    const finalHealth = await runHealthChecks(
+    await runFullSonarIntegration(
       serverURL,
-      token,
       projectKey,
-      hooksRoot,
-      config.organization,
-      false,
+      projectInfo,
+      config,
+      options,
+      effectiveNonInteractive,
     );
-    printFinalVerificationResults(finalHealth);
-
-    // Update state with configuration
-    updateStateAfterConfiguration(!options.skipHooks);
   });
 }
