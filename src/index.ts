@@ -24,7 +24,7 @@
 // Generated from cli-spec.yaml by Plop.js
 
 import { version as VERSION } from '../package.json';
-import { Command } from 'commander';
+import { Argument, Command } from 'commander';
 import { runCommand } from './lib/run-command.js';
 import { issuesSearchCommand } from './commands/issues.js';
 import {
@@ -41,7 +41,7 @@ import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from './telemetr
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config.js';
 
 // Constants for argument validation
-const VALID_TOOLS = ['claude', 'gemini', 'codex'] as const;
+const VALID_TOOLS = ['claude'] as const;
 const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
 const ANALYZE_ARG_INDEX = 2;
 const ANALYZE_SUBCOMMAND_INDEX = 3;
@@ -73,9 +73,12 @@ install
 
 // Setup SonarQube integration for AI coding agent
 program
-  .command('integrate <tool>')
+  .command('integrate')
+  .addArgument(
+    new Argument('<tool>', 'AI coding agent or tool to integrate with').choices([...VALID_TOOLS]),
+  )
   .description(
-    'Setup SonarQube integration for various tools, like AI coding agents, git and others',
+    'Setup SonarQube integration (hooks, config...) for various tools, like AI coding agents, git and others',
   )
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-p, --project <project>', 'Project key')
@@ -87,14 +90,7 @@ program
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .action((agent, options) =>
-    runCommand(async () => {
-      if (!VALID_TOOLS.includes(agent)) {
-        throw new Error(`Invalid tool. Must be one of: ${VALID_TOOLS.join(', ')}`);
-      }
-      await integrateCommand(agent, options);
-    }),
-  );
+  .action((agent, options) => runCommand(() => integrateCommand(agent, options)));
 
 // List Sonar resources
 const list = program.command('list').description('List Sonar resources');

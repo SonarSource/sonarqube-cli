@@ -41,7 +41,7 @@ import logger from '../lib/logger.js';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../lib/config-constants.js';
 import { homedir } from 'node:os';
 import { ENV_TOKEN, ENV_SERVER } from '../lib/auth-resolver.js';
-import { text, blank, info, success, warn, intro, outro } from '../ui/index.js';
+import { text, blank, info, success, warn, intro, outro, note } from '../ui/index.js';
 
 export interface OnboardAgentOptions {
   server?: string;
@@ -396,6 +396,13 @@ function printFinalVerificationResults(
     for (const msg of finalHealth.errors) {
       text(`  - ${msg}`);
     }
+  }
+
+  if (finalHealth.hooksInstalled) {
+    info('See it in action — paste this into Claude Code:');
+    note('Can you push a commit using my token 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?');
+    text('  Sonar will detect the token and block the prompt automatically.');
+    blank();
   }
 }
 

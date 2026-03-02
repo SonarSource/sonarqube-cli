@@ -71,9 +71,21 @@ try {
     Add-ToUserPath -Dir $InstallDir
 
     Write-Host ''
-    Write-Host 'Installation complete.'
-    Write-Host 'To use sonar in your current session, run:'
-    Write-Host "  `$env:PATH = `"$InstallDir;`$env:PATH`""
+    Write-Host 'Installation complete!'
+    Write-Host ''
+    Write-Host "sonar has been installed to: $Dest"
+    Write-Host ''
+    Write-Host 'What happens next:'
+    Write-Host '  - Any NEW terminal window you open will have sonar available automatically.'
+    Write-Host '  - This current terminal window won''t see it yet — you have two options:'
+    Write-Host ''
+    Write-Host '    Option 1: Open a new terminal window (recommended)'
+    Write-Host ''
+    Write-Host '    Option 2: Activate it in this window right now by running:'
+    Write-Host "      `$env:PATH = `"$InstallDir;`$env:PATH`""
+    Write-Host '      (This only applies to this window — you won''t need to run it again.)'
+    Write-Host ''
+    Write-Host "Once ready, run 'sonar --help' to get started."
 }
 finally {
     Remove-Item -Recurse -Force -Path $TmpDir -ErrorAction SilentlyContinue
