@@ -144,15 +144,15 @@ Setup SonarQube integration (hooks, config...) for various tools, like AI coding
 
 **Options:**
 
-| Option              | Type    | Required | Description                                                                 | Default |
-| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ------- |
-| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | -       |
-| `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
-| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -       |
-| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -       |
-| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
-| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | -       |
-| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
+| Option              | Type    | Required | Description                                                                 | Default                 |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ----------------------- |
+| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | `https://sonarcloud.io` |
+| `--project`, `-p`   | string  | No       | Project key                                                                 | -                       |
+| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -                       |
+| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -                       |
+| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | `false`                 |
+| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | `false`                 |
+| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | `false`                 |
 
 **Examples:**
 
@@ -169,7 +169,7 @@ Integrate without installing hooks
 ```bash
 sonar integrate claude -g -s https://sonarcloud.io -p my-project
 ```
-Integrate globally and install hooks to ~/.claude which will be available for all projects
+Integrate globally and install hooks to ~/.claude for all projects
 
 ---
 
@@ -322,6 +322,13 @@ Disable collection of anonymous usage statistics
 ## State Management
 
 See [State Management](./docs/state-management.md) for more information.
+
+## Contributing
+
+Please be aware that we are not actively looking for feature contributions. The truth is that it's extremely difficult for someone outside
+SonarSource to comply with our roadmap and expectations. Therefore, we typically only accept minor cosmetic changes and typo fixes.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, coding guidelines, and how to run tests.
 
 ## License
 
