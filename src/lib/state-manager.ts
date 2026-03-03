@@ -34,7 +34,7 @@ import {
   getDefaultState,
 } from './state.js';
 import { CLI_DIR, STATE_FILE } from './config-constants.js';
-import { version as VERSION } from '../../package.json';
+import { VERSION } from '../version.js';
 
 /**
  * Ensure state directory exists

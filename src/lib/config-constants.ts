@@ -41,6 +41,9 @@ export const APP_NAME = 'sonarqube-cli';
 /** Root directory for all CLI data: ~/.sonar/sonarqube-cli (override via SONAR_CLI_DIR env var in test environment) */
 export const CLI_DIR = process.env.SONAR_CLI_DIR ?? join(homedir(), '.sonar', APP_NAME);
 
+/** User home directory used for global agent config (~/.claude). Override via SONAR_CLI_GLOBAL_DIR in test environments. */
+export const GLOBAL_DIR = process.env.SONAR_CLI_GLOBAL_DIR ?? homedir();
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------

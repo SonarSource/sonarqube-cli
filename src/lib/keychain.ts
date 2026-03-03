@@ -20,6 +20,7 @@
 
 // Keychain operations wrapper for keytar
 
+import { readFileSync, writeFileSync } from 'node:fs';
 import { APP_NAME as SERVICE_NAME } from './config-constants.js';
 
 interface Credential {
@@ -44,11 +45,60 @@ const noOpKeytar: KeytarModule = {
   findCredentials: () => Promise.resolve([]),
 };
 
+interface KeychainStore {
+  tokens: Record<string, string>;
+}
+
+function createFileKeytar(filePath: string): KeytarModule {
+  const readStore = (): KeychainStore => {
+    try {
+      return JSON.parse(readFileSync(filePath, 'utf-8')) as KeychainStore;
+    } catch {
+      return { tokens: {} };
+    }
+  };
+
+  const writeStore = (store: KeychainStore): void => {
+    writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf-8');
+  };
+
+  return {
+    getPassword: (_service, account) => Promise.resolve(readStore().tokens[account] ?? null),
+    setPassword: (_service, account, password) => {
+      const store = readStore();
+      store.tokens[account] = password;
+      writeStore(store);
+      return Promise.resolve();
+    },
+    deletePassword: (_service, account) => {
+      const store = readStore();
+      if (!(account in store.tokens)) {
+        return Promise.resolve(false);
+      }
+      const { [account]: _removed, ...remaining } = store.tokens;
+      store.tokens = remaining;
+      writeStore(store);
+      return Promise.resolve(true);
+    },
+    findCredentials: (_service) => {
+      const store = readStore();
+      return Promise.resolve(
+        Object.entries(store.tokens).map(([account, password]) => ({ account, password })),
+      );
+    },
+  };
+}
+
 export function clearTokenCache(): void {
   tokenCache.clear();
 }
 
 async function getKeytar() {
+  const keychainFile = process.env.SONAR_CLI_KEYCHAIN_FILE;
+  if (keychainFile) {
+    return createFileKeytar(keychainFile);
+  }
+
   if (process.env.SONAR_CLI_DISABLE_KEYCHAIN === 'true') {
     return noOpKeytar;
   }

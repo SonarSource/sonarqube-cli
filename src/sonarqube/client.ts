@@ -20,7 +20,7 @@
 
 // SonarQube API HTTP client
 
-import { version as VERSION } from '../../package.json';
+import { VERSION } from '../version.js';
 import { SONARCLOUD_API_URL } from '../lib/config-constants.js';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds

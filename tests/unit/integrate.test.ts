@@ -174,6 +174,34 @@ describe('integrateCommand: full flow', () => {
     }
   });
 
+  it('saves active connection to state after successful integration', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+    const capturedState = getDefaultState('test');
+    loadStateSpy.mockReturnValue(capturedState);
+    saveStateSpy.mockImplementation(() => {});
+
+    try {
+      await integrateCommand('claude', {
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        skipHooks: true,
+      });
+
+      // Verify connection was added to state
+      expect(capturedState.auth.activeConnectionId).toBeDefined();
+      expect(capturedState.auth.connections).toHaveLength(1);
+      expect(capturedState.auth.connections[0].serverUrl).toBe('https://sonarcloud.io');
+      expect(capturedState.auth.connections[0].orgKey).toBe('test-org');
+      expect(capturedState.auth.isAuthenticated).toBe(true);
+    } finally {
+      discoverSpy.mockRestore();
+      healthSpy.mockRestore();
+    }
+  });
+
   it('shows verification results after successful health check', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
