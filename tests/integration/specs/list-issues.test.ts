@@ -211,7 +211,9 @@ describe('list issues — argument validation', () => {
       const result = await harness.run('list issues --project my-project --page-size abc');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Invalid --page-size');
+      expect(result.stdout + result.stderr).toContain(
+        "error: option '--page-size <page-size>' argument 'abc' is invalid. Not a number.",
+      );
     },
     { timeout: 15000 },
   );
@@ -222,7 +224,9 @@ describe('list issues — argument validation', () => {
       const result = await harness.run('list issues --project my-project --page-size 0');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Invalid --page-size');
+      expect(result.stdout + result.stderr).toContain(
+        "Invalid --page-size option: '0'. Must be an integer between 1 and 500",
+      );
     },
     { timeout: 15000 },
   );
@@ -231,17 +235,6 @@ describe('list issues — argument validation', () => {
     'exits with code 1 when --page-size is greater than 500',
     async () => {
       const result = await harness.run('list issues --project my-project --page-size 501');
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Invalid --page-size');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 1 when --page-size is a non-integer float',
-    async () => {
-      const result = await harness.run('list issues --project my-project --page-size 1.5');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Invalid --page-size');

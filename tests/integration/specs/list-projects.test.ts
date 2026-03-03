@@ -120,7 +120,9 @@ describe('list projects', () => {
       const result = await harness.run('list projects --page-size abc');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Invalid --page-size');
+      expect(result.stdout + result.stderr).toContain(
+        "error: option \'--page-size <page-size>\' argument \'abc\' is invalid. Not a number.",
+      );
     },
     { timeout: 15000 },
   );
@@ -131,7 +133,9 @@ describe('list projects', () => {
       const result = await harness.run('list projects --page-size 0');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('page-size must be greater than 0');
+      expect(result.stdout + result.stderr).toContain(
+        "Invalid --page-size option: '0'. Must be an integer between 1 and 500",
+      );
     },
     { timeout: 15000 },
   );
@@ -142,7 +146,9 @@ describe('list projects', () => {
       const result = await harness.run('list projects --page-size 501');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('page-size must be greater than 0');
+      expect(result.stdout + result.stderr).toContain(
+        "Invalid --page-size option: '501'. Must be an integer between 1 and 500",
+      );
     },
     { timeout: 15000 },
   );
