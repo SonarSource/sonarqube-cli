@@ -196,7 +196,7 @@ A user authenticated with a self-hosted SonarQube instance (no organization requ
 
 ### Example 3: Full Configuration with Hooks and Skills
 
-A complete setup with SonarCloud, multiple hooks, skills, and installed tools.
+A complete setup with SonarQube Cloud, multiple hooks, skills, and installed tools.
 
 ```json
 {

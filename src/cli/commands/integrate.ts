@@ -169,7 +169,7 @@ async function tryGetTokenForServerOrg(
 }
 
 /**
- * Try to get token from SonarCloud credentials in keychain
+ * Try to get token from SonarQube Cloud credentials in keychain
  */
 async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }> {
   const credentials = await getAllCredentials();
@@ -197,7 +197,7 @@ async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }
 }
 
 /**
- * Apply SonarCloud credentials from keychain result
+ * Apply SonarQube Cloud credentials from keychain result
  */
 function applySonarCloudCredentials(
   config: ConfigurationData,
@@ -268,10 +268,10 @@ async function loadConfiguration(
     await fetchKeychainCredentials(config);
   }
 
-  // If organization is provided but no server URL, default to SonarCloud
+  // If organization is provided but no server URL, default to SonarQube Cloud
   if (config.organization && !config.serverURL) {
     config.serverURL = SONARCLOUD_URL;
-    info('Organization provided, defaulting to SonarCloud');
+    info('Organization provided, defaulting to SonarQube Cloud');
   }
 
   return config;

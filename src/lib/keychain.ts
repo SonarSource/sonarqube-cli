@@ -70,7 +70,7 @@ function generateKeychainAccount(serverURL: string, org?: string): string {
     const url = new URL(serverURL);
     const hostname = url.hostname;
 
-    // SonarCloud with organization
+    // SonarQube Cloud with organization
     if (org) {
       return `${hostname}:${org}`;
     }
@@ -83,7 +83,7 @@ function generateKeychainAccount(serverURL: string, org?: string): string {
 
 /**
  * Get token from system keychain
- * For SonarCloud: pass org parameter
+ * For SonarQube Cloud: pass org parameter
  * For SonarQube: org parameter is ignored
  * Uses in-memory cache to avoid repeated keychain prompts
  */
@@ -105,7 +105,7 @@ export async function getToken(serverURL: string, org?: string): Promise<string 
 
 /**
  * Save token to system keychain
- * For SonarCloud: pass org parameter
+ * For SonarQube Cloud: pass org parameter
  * For SonarQube: org parameter is ignored
  * Updates in-memory cache
  */
@@ -119,7 +119,7 @@ export async function saveToken(serverURL: string, token: string, org?: string):
 
 /**
  * Delete token from system keychain
- * For SonarCloud: pass org parameter
+ * For SonarQube Cloud: pass org parameter
  * For SonarQube: org parameter is ignored
  * Removes from cache
  */
