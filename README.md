@@ -42,7 +42,7 @@ sonar auth login
 Interactive login for SonarCloud with browser
 
 ```bash
-sonar auth login -o my-org -t squ_abc123
+sonar auth login -o my-org
 ```
 Non-interactive login with direct token
 
