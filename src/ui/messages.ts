@@ -45,6 +45,10 @@ export function success(message: string): void {
 }
 
 export function discreetSuccess(message: string): void {
+  if (isMockActive()) {
+    recordCall('discreetSuccess', message);
+    return;
+  }
   write(process.stdout, `  ${green('✓')}  ${message}`);
 }
 

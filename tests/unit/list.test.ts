@@ -91,23 +91,23 @@ function createMockIssuesResponse(
   });
 }
 
-  // Helper to create a mock project component
-  function createMockProject(key: string, name: string = `Project ${key}`) {
-    return { key, name };
-  }
+// Helper to create a mock project component
+function createMockProject(key: string, name: string = `Project ${key}`) {
+  return { key, name };
+}
 
-  // Helper to create a mock API response
-  function createMockProjectsResponse(
-    components: { key: string; name: string }[],
-    pageIndex: number,
-    pageSize: number,
-    total: number,
-  ): Promise<ProjectsSearchResponse> {
-    return Promise.resolve({
-      paging: { pageIndex, pageSize, total },
-      components,
-    });
-  }
+// Helper to create a mock API response
+function createMockProjectsResponse(
+  components: { key: string; name: string }[],
+  pageIndex: number,
+  pageSize: number,
+  total: number,
+): Promise<ProjectsSearchResponse> {
+  return Promise.resolve({
+    paging: { pageIndex, pageSize, total },
+    components,
+  });
+}
 
 describe('IssuesClient', () => {
   describe('searchIssues', () => {
@@ -336,7 +336,9 @@ describe('IssuesClient', () => {
       const twoIssues = 2;
       const mockIssues = [createMockIssue('issue-1'), createMockIssue('issue-2')];
       const mockGet = mock(() => {
-        return Promise.resolve(createMockIssuesResponse(mockIssues, 1, DEFAULT_PAGE_SIZE, twoIssues));
+        return Promise.resolve(
+          createMockIssuesResponse(mockIssues, 1, DEFAULT_PAGE_SIZE, twoIssues),
+        );
       });
 
       const client = createMockClient(mockGet);
@@ -358,7 +360,9 @@ describe('IssuesClient', () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
         expect(params?.p).toBe(1);
         expect(params?.ps).toBe(DEFAULT_PAGE_SIZE);
-        return Promise.resolve(createMockIssuesResponse(mockIssues, 1, DEFAULT_PAGE_SIZE, twoIssues));
+        return Promise.resolve(
+          createMockIssuesResponse(mockIssues, 1, DEFAULT_PAGE_SIZE, twoIssues),
+        );
       });
 
       const client = createMockClient(mockGet);
@@ -523,7 +527,9 @@ describe('IssuesClient', () => {
         expect(params?.severities).toBe('CRITICAL');
         expect(params?.resolved).toBe(false);
         expect(params?.branch).toBe('main');
-        return Promise.resolve(createMockIssuesResponse([], params?.p as number, DEFAULT_PAGE_SIZE, 0));
+        return Promise.resolve(
+          createMockIssuesResponse([], params?.p as number, DEFAULT_PAGE_SIZE, 0),
+        );
       });
 
       const client = createMockClient(mockGet);
@@ -705,7 +711,6 @@ describe('issuesSearchCommand', () => {
 });
 
 describe('ProjectsClient', () => {
-
   describe('searchProjects', () => {
     it('should call client.get with correct endpoint', async () => {
       const mockGet = mock((endpoint: string) => {

@@ -20,6 +20,7 @@
 
 // Unit tests for sonar integrate command
 
+import { homedir } from 'node:os';
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { integrate } from '../../src/cli/commands/integrate.js';
 import * as discovery from '../../src/bootstrap/discovery.js';
@@ -32,7 +33,7 @@ import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import { ENV_TOKEN, ENV_SERVER } from '../../src/lib/auth-resolver.js';
-import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/common/error';
+import { InvalidOptionError } from '../../src/cli/commands/common/error';
 
 const FAKE_PROJECT_INFO = {
   root: '/fake/project',
@@ -317,47 +318,22 @@ describe('integrateCommand: configuration validation', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     try {
       expect(integrate('claude', { project: 'my-project' })).rejects.toThrow(
-        new CommandFailedError(
-          'Server URL is required. Use --server flag or --org flag for SonarCloud',
-        ),
+        'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
       );
     } finally {
       discoverSpy.mockRestore();
     }
   });
 
-  it('installs hooks when no project key is configured (secrets-only mode)', async () => {
+  it('installs hooks when no project key is configured', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrate('claude', {});
-      expect(hooksSpy).toHaveBeenCalled();
-    } finally {
-      discoverSpy.mockRestore();
-      hooksSpy.mockRestore();
-    }
-  });
-
-  it('shows secrets-only message when no project key is configured', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
-    try {
-      await integrate('claude', {});
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('No project key'))).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      hooksSpy.mockRestore();
-    }
-  });
-
-  it('exits 0 and installs hooks when server is set but no project key (secrets-only mode)', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
-    try {
-      await integrate('claude', { server: 'https://sonarcloud.io' });
+      await integrate('claude', {
+        server: 'https://sonarcloud.io',
+        org: 'my-org',
+        nonInteractive: true,
+      });
       expect(hooksSpy).toHaveBeenCalled();
     } finally {
       discoverSpy.mockRestore();
@@ -511,6 +487,57 @@ describe('integrateCommand: --global flag', () => {
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
+    }
+  });
+
+  it('installs hooks into homedir when --global is set', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+
+    try {
+      await integrate('claude', {
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        skipHooks: false,
+        global: true,
+      });
+      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir());
+    } finally {
+      discoverSpy.mockRestore();
+      healthSpy.mockRestore();
+      hooksSpy.mockRestore();
+    }
+  });
+
+  it('installs hooks into homedir and saves connection in non-interactive mode without token', async () => {
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const getTokenSpy = spyOn(auth, 'getToken').mockResolvedValue(null);
+    const getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
+    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    const addOrUpdateConnectionSpy = spyOn(stateManager, 'addOrUpdateConnection');
+
+    try {
+      await integrate('claude', {
+        server: 'https://sonarcloud.io',
+        nonInteractive: true,
+        global: true,
+      });
+      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir());
+      expect(addOrUpdateConnectionSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        'https://sonarcloud.io',
+        expect.any(String),
+        expect.anything(),
+      );
+    } finally {
+      discoverSpy.mockRestore();
+      getTokenSpy.mockRestore();
+      getAllCredentialsSpy.mockRestore();
+      hooksSpy.mockRestore();
+      addOrUpdateConnectionSpy.mockRestore();
     }
   });
 });

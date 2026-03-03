@@ -61,8 +61,8 @@ async function logAndValidate(
 export async function runHealthChecks(
   serverURL: string,
   token: string,
-  projectKey: string,
-  projectRoot: string,
+  projectKey: string | undefined,
+  hooksRoot: string,
   organization?: string,
   verbose = true,
 ): Promise<HealthCheckResult> {
@@ -88,13 +88,15 @@ export async function runHealthChecks(
     verbose,
   );
 
-  const projectAccessible = await logAndValidate(
-    'Verifying project access...',
-    () => client.checkComponent(projectKey),
-    `Project not accessible: ${projectKey}`,
-    errors,
-    verbose,
-  );
+  const projectAccessible = projectKey
+    ? await logAndValidate(
+        'Verifying project access...',
+        () => client.checkComponent(projectKey),
+        `Project not accessible: ${projectKey}`,
+        errors,
+        verbose,
+      )
+    : true;
 
   let organizationAccessible = true;
   if (organization) {
@@ -107,17 +109,19 @@ export async function runHealthChecks(
     );
   }
 
-  const qualityProfilesAccessible = await logAndValidate(
-    'Verifying quality profiles access...',
-    () => client.checkQualityProfiles(projectKey, organization),
-    `Quality profiles not accessible for project: ${projectKey}`,
-    errors,
-    verbose,
-  );
+  const qualityProfilesAccessible = projectKey
+    ? await logAndValidate(
+        'Verifying quality profiles access...',
+        () => client.checkQualityProfiles(projectKey, organization),
+        `Quality profiles not accessible for project: ${projectKey}`,
+        errors,
+        verbose,
+      )
+    : true;
 
   const hooksInstalled = await logAndValidate(
     'Checking hooks installation...',
-    () => areHooksInstalled(projectRoot),
+    () => areHooksInstalled(hooksRoot),
     'Hooks not installed',
     errors,
     verbose,

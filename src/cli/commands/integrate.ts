@@ -88,9 +88,10 @@ export async function integrate(tool: string, options: IntegrateOptions): Promis
 
   const config = await loadConfiguration(projectInfo, options);
 
-  if (!config.projectKey) {
-    await runSecretsOnlyMode(projectInfo, options);
-    return;
+  if (!config.serverURL && !config.organization) {
+    throw new CommandFailedError(
+      'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
+    );
   }
 
   const { serverURL, projectKey } = validateAndPrintConfiguration(config);
@@ -268,10 +269,10 @@ async function loadConfiguration(
     await fetchKeychainCredentials(config);
   }
 
-  // If organization is provided but no server URL, default to SonarQube Cloud
-  if (config.organization && !config.serverURL) {
+  // Default to SonarQube Cloud only when organization is set (SonarCloud implies org)
+  if (!config.serverURL && config.organization) {
     config.serverURL = SONARCLOUD_URL;
-    info('Organization provided, defaulting to SonarQube Cloud');
+    info('Using SonarQube Cloud.');
   }
 
   return config;
@@ -282,40 +283,28 @@ async function loadConfiguration(
  */
 function validateAndPrintConfiguration(config: ConfigurationData): {
   serverURL: string;
-  projectKey: string;
+  projectKey: string | undefined;
 } {
-  if (!config.serverURL) {
-    throw new CommandFailedError(
-      'Server URL is required. Use --server flag or --org flag for SonarCloud',
-    );
-  }
+  // serverURL is always set by loadConfiguration (defaults to SonarCloud)
+  const serverURL = config.serverURL ?? SONARCLOUD_URL;
 
-  if (!config.projectKey) {
-    throw new CommandFailedError('Project key is required. Use --project flag');
+  text(`\nServer: ${serverURL}`);
+  if (config.projectKey) {
+    text(`Project: ${config.projectKey}`);
+  } else {
+    text('No project key provided — project-level checks will be skipped.');
   }
-
-  text(`\nServer: ${config.serverURL}`);
-  text(`Project: ${config.projectKey}`);
   if (config.organization) {
     text(`Organization: ${config.organization}`);
   }
 
-  return { serverURL: config.serverURL, projectKey: config.projectKey };
+  return { serverURL, projectKey: config.projectKey };
 }
 
 /**
- * Ensure token is available, get from keychain or print warning
+ * Warn if token is missing
  */
-async function ensureToken(
-  token: string | undefined,
-  serverURL: string,
-  organization: string | undefined,
-): Promise<string | undefined> {
-  if (!token) {
-    const storedToken = await getToken(serverURL, organization);
-    token = storedToken ?? undefined;
-  }
-
+function ensureToken(token: string | undefined): string | undefined {
   if (!token) {
     warn('No token found. Will generate during repair phase.');
   }
@@ -328,7 +317,7 @@ async function ensureToken(
  */
 async function runHealthCheckAndRepair(
   serverURL: string,
-  projectKey: string,
+  projectKey: string | undefined,
   projectInfo: ProjectInfo,
   token: string | undefined,
   organization: string | undefined,
@@ -389,7 +378,7 @@ async function runHealthCheckAndRepair(
  */
 async function runRepairWithoutToken(
   serverURL: string,
-  projectKey: string,
+  projectKey: string | undefined,
   projectInfo: ProjectInfo,
   organization: string | undefined,
   globalDir?: string,
@@ -426,12 +415,13 @@ async function runRepairWithoutToken(
  */
 function printFinalVerificationResults(
   finalHealth: Awaited<ReturnType<typeof runHealthChecks>>,
+  projectKey: string | undefined,
 ): void {
   if (finalHealth.tokenValid) text('Token valid');
   if (finalHealth.serverAvailable) text('Server available');
-  if (finalHealth.projectAccessible) text('Project accessible');
+  if (projectKey && finalHealth.projectAccessible) text('Project accessible');
   if (finalHealth.organizationAccessible) text('Organization accessible');
-  if (finalHealth.qualityProfilesAccessible) text('Quality profiles accessible');
+  if (projectKey && finalHealth.qualityProfilesAccessible) text('Quality profiles accessible');
   if (finalHealth.hooksInstalled) text('Hooks installed');
 
   outro('Setup complete!', 'success');
@@ -457,7 +447,7 @@ function printFinalVerificationResults(
 async function runFinalVerification(
   serverURL: string,
   token: string,
-  projectKey: string,
+  projectKey: string | undefined,
   hooksRoot: string,
   config: ConfigurationData,
   options: IntegrateOptions,
@@ -473,7 +463,7 @@ async function runFinalVerification(
     config.organization,
     false,
   );
-  printFinalVerificationResults(finalHealth);
+  printFinalVerificationResults(finalHealth, projectKey);
 
   updateStateAfterConfiguration(!options.skipHooks, {
     serverURL,
@@ -482,36 +472,18 @@ async function runFinalVerification(
 }
 
 /**
- * Handle secrets-only mode: no project key configured — install hooks and exit
- */
-async function runSecretsOnlyMode(
-  projectInfo: ProjectInfo,
-  options: IntegrateOptions,
-): Promise<void> {
-  text('\nNo project key configured.');
-  text('Installing secret scanning hooks only.');
-  text('\nPhase 2/3: Health Check & Repair — skipped (no project key)');
-  text('Phase 3/3: Final Verification — skipped (no project key)');
-  if (!options.skipHooks) {
-    await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
-    updateStateAfterConfiguration(true);
-  }
-  outro('Setup complete!', 'success');
-}
-
-/**
  * Run full SonarQube integration (phases 2 and 3)
  */
 async function runFullSonarIntegration(
   serverURL: string,
-  projectKey: string,
+  projectKey: string | undefined,
   projectInfo: ProjectInfo,
   config: ConfigurationData,
   options: IntegrateOptions,
   effectiveNonInteractive: boolean,
 ): Promise<void> {
   const hooksRoot = options.global ? homedir() : projectInfo.root;
-  let token = await ensureToken(config.token, serverURL, config.organization);
+  let token = ensureToken(config.token);
 
   const repairOptions: RepairOptions = {
     skipHooks: options.skipHooks,
@@ -537,9 +509,12 @@ async function runFullSonarIntegration(
 
   if (effectiveNonInteractive) {
     if (!options.skipHooks) {
-      await installSecretScanningHooks(projectInfo.root);
+      await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
     }
-    updateStateAfterConfiguration(!options.skipHooks);
+    updateStateAfterConfiguration(!options.skipHooks, {
+      serverURL,
+      organization: config.organization,
+    });
     outro('Setup complete!', 'success');
     return;
   }
