@@ -2,7 +2,6 @@
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) 20+
 - [Bun](https://bun.sh/) 1.3.9+ — required for running tests and building binaries
 
 ## Setup
