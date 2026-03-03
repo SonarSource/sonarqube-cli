@@ -64,10 +64,12 @@ export async function runRepair(
     success('Token saved to keychain');
   }
 
-  // Install sonar-secrets hooks for secret scanning
-  text('Installing secret scanning hooks...');
-  await installSecretScanningHooks(projectRoot, globalDir);
-  success('Secret scanning hooks installed');
+  // Install sonar-secrets hooks for secret scanning if not already present
+  if (!healthResult.hooksInstalled) {
+    text('Installing secret scanning hooks...');
+    await installSecretScanningHooks(projectRoot, globalDir);
+    success('Secret scanning hooks installed');
+  }
 
   return newToken;
 }

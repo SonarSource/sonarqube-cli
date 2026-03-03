@@ -80,14 +80,6 @@ describe('Repair Orchestrator', () => {
     );
   });
 
-  it('installs secret scanning hooks even when hooksInstalled is true', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthAllGood, 'test_key', 'test-org');
-
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(
-      true,
-    );
-  });
-
   it('does not create old sonar-prompt.sh verify hook', async () => {
     await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'key', 'org');
 

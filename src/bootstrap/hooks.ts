@@ -34,6 +34,7 @@ import {
 const CLAUDE_DIR = '.claude';
 const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
+const SONAR_SECRETS_MARKER = 'sonar-secrets';
 
 interface HookConfig {
   matcher: string;
@@ -45,8 +46,15 @@ interface HookConfig {
 }
 
 interface ClaudeSettings {
-  hooks?: Record<string, HookConfig[]>;
+  hooks?: Record<string, HookConfig[] | undefined>;
   [key: string]: unknown;
+}
+
+/**
+ * Returns true if a hook config entry belongs to sonar-secrets
+ */
+function isSonarSecretsEntry(entry: HookConfig): boolean {
+  return entry.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER));
 }
 
 /**
@@ -64,10 +72,11 @@ function getScriptExtension(): string {
 }
 
 /**
- * Check if hooks are installed
+ * Check if hooks are installed.
+ * When globalDir is provided, checks the global Claude directory instead of the project directory.
  */
-export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
-  const settingsPath = join(projectRoot, CLAUDE_DIR, SETTINGS_FILE);
+export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
+  const settingsPath = join(hooksRoot, CLAUDE_DIR, SETTINGS_FILE);
 
   if (!existsSync(settingsPath)) {
     return false;
@@ -76,13 +85,13 @@ export async function areHooksInstalled(projectRoot: string): Promise<boolean> {
   try {
     const fs = await import('node:fs/promises');
     const data = await fs.readFile(settingsPath, 'utf-8');
-    const settings = JSON.parse(data);
+    const settings = JSON.parse(data) as ClaudeSettings;
 
-    // Check if PreToolUse hook is configured (secret scanning hooks)
-    return !!(
+    // Check if a sonar-secrets PreToolUse hook is configured
+    return Boolean(
       settings.hooks?.PreToolUse &&
       Array.isArray(settings.hooks.PreToolUse) &&
-      settings.hooks.PreToolUse.length > 0
+      settings.hooks.PreToolUse.some(isSonarSecretsEntry),
     );
   } catch {
     return false;
@@ -149,7 +158,7 @@ export async function installSecretScanningHooks(
 
     if (existsSync(settingsPath)) {
       const data = await fs.readFile(settingsPath, 'utf-8');
-      settings = JSON.parse(data);
+      settings = JSON.parse(data) as ClaudeSettings;
     }
 
     // Ensure hooks section exists
@@ -167,31 +176,20 @@ export async function installSecretScanningHooks(
       ? `powershell -NoProfile -File ${promptScript.replaceAll('\\', '/')}`
       : promptScript;
 
-    // Add sonar-secrets hooks to settings
+    // Merge sonar-secrets hooks into existing entries, replacing any prior sonar-secrets entry
     settings.hooks.PreToolUse = [
+      ...(settings.hooks.PreToolUse ?? []).filter((e) => !isSonarSecretsEntry(e)),
       {
         matcher: 'Read',
-        hooks: [
-          {
-            type: 'command',
-            command: preToolCommand,
-            timeout: 60,
-          },
-        ],
+        hooks: [{ type: 'command', command: preToolCommand, timeout: 60 }],
       },
     ];
 
-    // UserPromptSubmit for prompt scanning
     settings.hooks.UserPromptSubmit = [
+      ...(settings.hooks.UserPromptSubmit ?? []).filter((e) => !isSonarSecretsEntry(e)),
       {
         matcher: '*',
-        hooks: [
-          {
-            type: 'command',
-            command: promptCommand,
-            timeout: 60,
-          },
-        ],
+        hooks: [{ type: 'command', command: promptCommand, timeout: 60 }],
       },
     ];
 

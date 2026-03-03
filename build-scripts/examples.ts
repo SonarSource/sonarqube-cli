@@ -78,7 +78,7 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Integrate without installing hooks',
     },
     {
-      command: 'sonar integrate claude -g -s https://sonarcloud.io -p my-project',
+      command: 'sonar integrate claude -g -s https://sonarcloud.io',
       description:
         'Integrate globally and install hooks to ~/.claude which will be available for all projects',
     },
