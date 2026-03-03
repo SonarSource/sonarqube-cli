@@ -7,13 +7,13 @@ A CLI application for interacting with SonarQube products. This product is curre
 **Linux/Mac OS:**
 
 ```bash
-curl -o- https://gist.githubusercontent.com/kirill-knize-sonarsource/663e7735f883c3b624575f27276a6b79/raw/b9e6add7371f16922a6a7a69d56822906b9e5758/install.sh | bash
+curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 ```
 
 **Windows (from PowerShell):**
 
 ```powershell
-irm https://gist.githubusercontent.com/kirill-knize-sonarsource/d75dd5f99228f5a67bcd11ec7d2ed295/raw/a5237e27b0c7bff9a5c7bdeec5fe4b112299b5d8/install.ps1 | iex
+irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 ```
 
 ## Commands
@@ -144,14 +144,15 @@ Setup SonarQube integration for various tools, like AI coding agents, git and ot
 
 **Options:**
 
-| Option              | Type    | Required | Description                       | Default                 |
-| ------------------- | ------- | -------- | --------------------------------- | ----------------------- |
-| `--server`, `-s`    | string  | No       | SonarQube server URL              | `https://sonarcloud.io` |
-| `--project`, `-p`   | string  | No       | Project key                       | -                       |
-| `--token`, `-t`     | string  | No       | Existing authentication token     | -                       |
-| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud) | -                       |
-| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts) | `false`                 |
-| `--skip-hooks`      | boolean | No       | Skip hooks installation           | `false`                 |
+| Option              | Type    | Required | Description                                                                 | Default                 |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ----------------------- |
+| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | `https://sonarcloud.io` |
+| `--project`, `-p`   | string  | No       | Project key                                                                 | -                       |
+| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -                       |
+| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -                       |
+| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | `false`                 |
+| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | `false`                 |
+| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | `false`                 |
 
 **Examples:**
 
@@ -164,6 +165,11 @@ Integrate Claude Code with interactive setup
 sonar integrate claude --skip-hooks
 ```
 Integrate without installing hooks
+
+```bash
+sonar integrate claude -g -s https://sonarcloud.io -p my-project
+```
+Integrate globally and install hooks to ~/.claude for all projects
 
 ---
 
