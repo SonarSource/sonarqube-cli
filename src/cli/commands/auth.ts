@@ -36,7 +36,7 @@ import {
   generateConnectionId,
 } from '../../lib/state-manager';
 import logger from '../../lib/logger';
-import { warn, success, print, note, textPrompt, confirmPrompt } from '../../ui';
+import { discreetSuccess, success, print, note, textPrompt, confirmPrompt } from '../../ui';
 import { green, red, dim } from '../../ui/colors';
 import { SONARCLOUD_URL, SONARCLOUD_HOSTNAME } from '../../lib/config-constants';
 import { InvalidOptionError } from './common/error';
@@ -145,7 +145,7 @@ async function getOrGenerateToken(
 
   print(`\nAuthenticating with: ${server}`);
   const token = await generateTokenViaBrowser(server);
-  success('Token received');
+  discreetSuccess('Token received');
   return token;
 }
 
@@ -257,11 +257,6 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   if (isCloud) {
     const client = new SonarQubeClient(server, token);
     org = await validateOrSelectOrganization(client, org, isNonInteractive);
-
-    print('');
-    warn(
-      'If the organization is incorrect, you may get 403 Unauthorized errors in later requests. Logout and login again if needed.',
-    );
   } else {
     org = await setupOnPremiseOrganization(org);
   }
