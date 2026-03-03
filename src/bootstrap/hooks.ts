@@ -54,7 +54,9 @@ interface ClaudeSettings {
  * Returns true if a hook config entry belongs to sonar-secrets
  */
 function isSonarSecretsEntry(entry: HookConfig): boolean {
-  return entry.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER));
+  return (
+    Array.isArray(entry.hooks) && entry.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER))
+  );
 }
 
 /**
@@ -73,7 +75,7 @@ function getScriptExtension(): string {
 
 /**
  * Check if hooks are installed.
- * When globalDir is provided, checks the global Claude directory instead of the project directory.
+ * The hooksRoot parameter is the directory whose .claude/settings.json file is inspected.
  */
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
   const settingsPath = join(hooksRoot, CLAUDE_DIR, SETTINGS_FILE);
