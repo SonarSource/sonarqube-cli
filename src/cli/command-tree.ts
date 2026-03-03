@@ -21,6 +21,7 @@
 import { version as VERSION } from '../../package.json';
 import { Command, Option } from 'commander';
 import { runCommand } from '../lib/run-command';
+import { blue } from '../ui/colors.js';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -48,12 +49,30 @@ const ANALYZE_ARG_INDEX = 2;
 const ANALYZE_SUBCOMMAND_INDEX = 3;
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
+const HELP_BANNER_WIDTH = 28;
+
+function getHelpBanner(): string {
+  const versionText = `v${VERSION}`;
+  const text = `SonarQube CLI  ${versionText}`;
+  // Center the text: add spaces so the line fills HELP_BANNER_WIDTH, split evenly left/right
+  const totalSpaces = Math.max(0, HELP_BANNER_WIDTH - text.length);
+  const spacesLeft = Math.floor(totalSpaces / 2);
+  const spacesRight = totalSpaces - spacesLeft;
+  const line = `│ ${' '.repeat(spacesLeft)}SonarQube CLI  ${blue(versionText)}${' '.repeat(spacesRight)} │`;
+  return [
+    `┌${'─'.repeat(HELP_BANNER_WIDTH + 2)}┐`,
+    line,
+    `└${'─'.repeat(HELP_BANNER_WIDTH + 2)}┘`,
+    '',
+  ].join('\n');
+}
 
 export const COMMAND_TREE = new Command();
 
 COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
-  .version(VERSION, '-v, --version', 'display version for command');
+  .version(VERSION, '-v, --version', 'display version for command')
+  .addHelpText('beforeAll', getHelpBanner());
 
 // Install Sonar tools
 const install = COMMAND_TREE.command('install').description('Install Sonar tools');
@@ -122,7 +141,7 @@ const auth = COMMAND_TREE.command('auth').description(
 auth
   .command('login')
   .description('Save authentication token to keychain')
-  .option('-s, --server <server>', 'SonarQube server URL (default is SonarQube Cloud)')
+  .option('-s, --server <server>', 'SonarQube URL (default is SonarQube https://sonarcloud.io)')
   .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
   .action((options: AuthLoginOptions) => runCommand(() => authLogin(options)));
