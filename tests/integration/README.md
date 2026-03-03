@@ -1,133 +1,135 @@
 # Integration Tests
 
-Integration tests verify real behavior of CLI commands with real dependencies (binaries, APIs, filesystem).
+Integration tests verify real CLI behaviour by spawning the compiled binary in an isolated
+environment. Most tests require no external services or credentials.
 
-## Required Environment Variables
+## Prerequisites
 
-To run integration tests, set the following environment variables:
+### 1. Build the CLI binary
 
-### For sonar-secrets checks
-
-```bash
-export SONAR_SECRETS_AUTH_URL="https://sonarcloud.io"
-export SONAR_SECRETS_TOKEN="<your-sonarcloud-token>"
-```
-
-**How to get a token:**
-- Go to https://sonarcloud.io
-- Sign in to your account
-- Account → Security → Generate token
-- Copy the token
-
-**Alternative:** If you don't have a token, integration tests for sonar-secrets will be skipped gracefully.
-
-### For onboard-agent tests
+Integration tests spawn `dist/sonarqube-cli`. Build it once before running tests:
 
 ```bash
-export SONARCLOUD_TOKEN="<your-sonarcloud-token>"
+bun run build:binary
 ```
 
-(Can be the same value as `SONAR_SECRETS_TOKEN`)
+Rebuild after any source changes.
 
-## Running Integration Tests
+### 2. Install the sonar-secrets binary
+
+Tests that exercise secret scanning (`analyze-secrets`, `install-secrets`) need
+`tests/integration/resources/sonar-secrets`. This binary is gitignored and must be
+obtained locally via the CLI itself:
 
 ```bash
-# Set environment variables
-export SONAR_SECRETS_TOKEN="sqp_xxxxx"
-export SONARCLOUD_TOKEN="sqp_xxxxx"
-
-# Run integration tests
-npm run test:integration
-
-# Or run all tests (unit + integration)
-npm run test:all
+SONAR_CLI_DIR=/tmp/sonar-test-setup dist/sonarqube-cli install secrets
+mkdir -p tests/integration/resources
+cp /tmp/sonar-test-setup/bin/sonar-secrets tests/integration/resources/sonar-secrets
+chmod +x tests/integration/resources/sonar-secrets
 ```
 
-## How Tests Work
+Re-run this when the `sonar-secrets` version changes.
 
-### Automatic Binary Download
+## Running Tests
 
-Before running sonar-secrets integration tests:
-- Checks for binary in `~/.sonar/sonarqube-cli/bin/sonar-secrets`
-- If missing - automatically downloads and installs from GitHub releases
-- Uses real binary from official releases
+```bash
+# Integration tests only
+bun run test:integration
 
-### Process
+# Unit + integration + script tests
+bun run test:all
 
+# With coverage
+bun run test:coverage
 ```
-beforeAll() →
-  ✓ Check sonar-secrets binary exists
-  ✓ If not → download via `dist/sonar-cli secret install`
 
-each test →
-  ✓ Call `dist/sonar-cli secret check --stdin` or `--file`
-  ✓ Verify exit code and output
-  ✓ Clean up temporary files
+## Environment Variables
 
-afterAll() →
-  ✓ Optional cleanup
+Most tests need no env vars — `TestHarness` provides full isolation via
+`SONAR_CLI_DIR` and `SONAR_CLI_KEYCHAIN_FILE`.
+
+The exception is `analyze-secrets` tests that validate authenticated secret scanning.
+Those tests pass `SONAR_SECRETS_AUTH_URL` and `SONAR_SECRETS_TOKEN` to the
+`sonar-secrets` binary. If the variables are absent the tests still run but
+authenticated scan scenarios will behave as unauthenticated.
+
+## Architecture
+
+### TestHarness
+
+All tests under `specs/` use `TestHarness` — a builder that:
+
+- creates an isolated `tmpdir` per test
+- writes `state.json` with the requested connection/auth setup
+- writes a file-based `keychain.json` instead of touching the system keychain
+- spawns `dist/sonarqube-cli` with a clean environment (only `PATH`, `HOME`, etc.)
+- stops any fake HTTP servers and deletes `tmpdir` on `dispose()`
+
+```typescript
+const harness = await TestHarness.create();
+
+harness
+  .env()
+  .withActiveConnection('https://sonarcloud.io', 'cloud')
+  .withKeychainToken('https://sonarcloud.io', 'my-token', 'my-org')
+  .withSecretsBinaryInstalled();
+
+const result = await harness.run('analyze secrets --stdin', { stdin: 'content' });
+await harness.dispose();
+```
+
+### FakeSonarQubeServer
+
+Tests that call SonarQube APIs use `FakeSonarQubeServer` — an in-process HTTP server
+that records requests and returns configured responses:
+
+```typescript
+const server = await harness.newFakeServer().withProject('my-project-key').start();
+
+// server.url → 'http://127.0.0.1:<port>'
+// server.requests → recorded HTTP calls
 ```
 
 ## Test Structure
 
 ```
 tests/integration/
-├── README.md                    # This file
-├── onboard.test.ts             # Tests for onboard-agent command
-└── secret-check.test.ts        # Tests for sonar secret check (stdin + file)
+├── README.md
+├── harness/
+│   ├── index.ts                  # TestHarness — main entry point
+│   ├── cli-runner.ts             # Spawns dist/sonarqube-cli
+│   ├── environment-builder.ts    # Builds state.json + keychain.json
+│   ├── fake-sonarqube-server.ts  # In-process HTTP stub
+│   ├── fs-builder.ts             # Filesystem helpers for test projects
+│   └── types.ts                  # Shared types (CliResult, RunOptions…)
+├── resources/
+│   └── sonar-secrets             # Real binary, gitignored — see Prerequisites
+├── specs/                        # TestHarness-based tests (require binary)
+│   ├── analyze-secrets.test.ts
+│   ├── auth.test.ts
+│   ├── install-secrets.test.ts
+│   ├── integrate.test.ts
+│   ├── list-issues.test.ts
+│   ├── list-issues-auth.test.ts
+│   ├── list-projects.test.ts
+│   └── secret-scan.test.ts
+├── onboard.test.ts               # Imports TypeScript directly (no binary needed)
+└── secret-install-integration.test.ts  # Imports TypeScript directly (no binary needed)
 ```
-
-## What's NOT Tested Here
-
-- Thread safety
-- Edge cases (tested in unit tests)
-- Internal function logic (tested in unit tests)
 
 ## Troubleshooting
 
-### "sonar-secrets command not found"
+### Tests fail instantly (0–5 ms) with binary-not-found error
 
-```bash
-# Install binary manually
-dist/sonar-cli secret install
-```
+The binary is missing or stale. Run `bun run build:binary`.
 
-### "Scan timed out"
+### `sonar-secrets mock binary not found` error
 
-Timeout on large files or slow internet is acceptable behavior.
+`tests/integration/resources/sonar-secrets` is missing.
+Follow the [Install the sonar-secrets binary](#2-install-the-sonar-secrets-binary) step above.
 
-### "Token authentication failed"
+### Tests time out on secret scanning
 
-Check that:
-1. Token hasn't expired (generate new one on sonarcloud.io)
-2. Environment variable is set correctly: `echo $SONAR_SECRETS_TOKEN`
-3. Test has access to the variable
-
-### Tests Skipped
-
-If token is not set - tests are skipped automatically:
-
-```typescript
-if (!process.env.SONAR_SECRETS_TOKEN) {
-  test.skip('SONAR_SECRETS_TOKEN not set', () => {})
-}
-```
-
-This is normal for local development.
-
-## CI/CD
-
-In GitHub Actions, add secrets:
-
-```yaml
-env:
-  SONAR_SECRETS_TOKEN: ${{ secrets.SONAR_SECRETS_TOKEN }}
-  SONARCLOUD_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
-
-jobs:
-  integration-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - run: npm run test:integration
-```
+The `sonar-secrets` binary contacted a real endpoint and didn't get a response.
+Check that `SONAR_SECRETS_AUTH_URL` points to a reachable server, or run tests
+without authentication env vars to use the unauthenticated path.
