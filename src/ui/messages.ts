@@ -41,7 +41,11 @@ export function success(message: string): void {
     recordCall('success', message);
     return;
   }
-  write(process.stdout, `  ✅ ${green(message)}`);
+  write(process.stdout, `✅ ${green(message)}`);
+}
+
+export function discreetSuccess(message: string): void {
+  write(process.stdout, `  ${green('✓')}  ${message}`);
 }
 
 export function warn(message: string): void {
@@ -49,7 +53,7 @@ export function warn(message: string): void {
     recordCall('warn', message);
     return;
   }
-  write(process.stderr, `  ${yellow('⚠')}  ${message}`);
+  write(process.stderr, `⚠️ ${yellow(message)}`);
 }
 
 export function error(message: string): void {
@@ -57,7 +61,7 @@ export function error(message: string): void {
     recordCall('error', message);
     return;
   }
-  write(process.stderr, `  ❌ ${red(message)}`);
+  write(process.stderr, `❌ ${red(message)}`);
 }
 
 // Plain terminal output — human-readable, no semantic icon, optional color

@@ -20,7 +20,7 @@
 
 // Public API for the UI module
 
-export { info, success, warn, error, text, print, blank } from './messages.js';
+export { info, discreetSuccess, success, warn, error, text, print, blank } from './messages.js';
 export { note } from './components/note.js';
 export { phase, phaseItem } from './components/phase.js';
 export type { PhaseItem, StepStatus } from './components/phase.js';
