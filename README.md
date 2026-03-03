@@ -196,7 +196,7 @@ Search for issues in SonarQube
 | `--branch`        | string  | No       | Branch name                      | -       |
 | `--pull-request`  | string  | No       | Pull request ID                  | -       |
 | `--all`           | boolean | No       | Fetch all issues with pagination | -       |
-| `--page-size`     | number  | No       | Page size for pagination         | `500`   |
+| `--page-size`     | number  | No       | Page size (1-500)                | `500`   |
 
 **Examples:**
 

@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /*
  * SonarQube CLI
  * Copyright (C) 2026 SonarSource Sàrl
@@ -20,13 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Main CLI entry point
-
 import { version as VERSION } from '../../package.json';
 import { Argument, Command, Option } from 'commander';
 import { runCommand } from '../lib/run-command';
 import {
-  DEFAULT_PAGE_SIZE,
   listIssues,
   type ListIssuesOptions,
   listProjects,
@@ -45,11 +40,15 @@ import { integrate, type IntegrateOptions, VALID_TOOLS } from './commands/integr
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config';
+import { parseInteger } from './commands/common/parsing';
+import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 
 // Constants for argument validation
 const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
 const ANALYZE_ARG_INDEX = 2;
 const ANALYZE_SUBCOMMAND_INDEX = 3;
+
+const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
 export const COMMAND_TREE = new Command();
 
@@ -90,6 +89,10 @@ COMMAND_TREE.command('integrate')
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');
 
+const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
+  .default(DEFAULT_PAGE_SIZE)
+  .argParser(parseInteger);
+
 list
   .command('issues')
   .description('Search for issues in SonarQube')
@@ -101,17 +104,15 @@ list
   .option('--branch <branch>', 'Branch name')
   .option('--pull-request <pull-request>', 'Pull request ID')
   .option('--all', 'Fetch all issues with pagination')
-  .addOption(
-    new Option('--page-size <page-size>', 'Page size for pagination').default(DEFAULT_PAGE_SIZE),
-  )
+  .addOption(pageSizeOption)
   .action((options: ListIssuesOptions) => runCommand(() => listIssues(options)));
 
 list
   .command('projects')
   .description('Search for projects in SonarQube')
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
-  .addOption(new Option('-p, --page <page>', 'Page number').default(1))
-  .addOption(new Option('--page-size <page-size>', 'Page size (1-500)').default(DEFAULT_PAGE_SIZE))
+  .addOption(new Option('-p, --page <page>', 'Page number').default(1).argParser(parseInteger))
+  .addOption(pageSizeOption)
   .action((options: ListProjectsOptions) => runCommand(() => listProjects(options)));
 
 // Manage authentication tokens and credentials
