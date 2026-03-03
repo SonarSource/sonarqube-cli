@@ -31,18 +31,18 @@ Save authentication token to keychain
 
 **Options:**
 
-| Option               | Type   | Required | Description                                           | Default |
-| -------------------- | ------ | -------- | ----------------------------------------------------- | ------- |
-| `--server`, `-s`     | string | No       | SonarQube server URL (default is SonarCloud)          | -       |
-| `--org`, `-o`        | string | No       | SonarCloud organization key (required for SonarCloud) | -       |
-| `--with-token`, `-t` | string | No       | Token value (skips browser, non-interactive mode)     | -       |
+| Option               | Type   | Required | Description                                                     | Default |
+| -------------------- | ------ | -------- | --------------------------------------------------------------- | ------- |
+| `--server`, `-s`     | string | No       | SonarQube server URL (default is SonarQube Cloud)               | -       |
+| `--org`, `-o`        | string | No       | SonarQube Cloud organization key (required for SonarQube Cloud) | -       |
+| `--with-token`, `-t` | string | No       | Token value (skips browser, non-interactive mode)               | -       |
 
 **Examples:**
 
 ```bash
 sonar auth login
 ```
-Interactive login for SonarCloud with browser
+Interactive login for SonarQube Cloud with browser
 
 ```bash
 sonar auth login -o my-org -t squ_abc123
@@ -62,17 +62,17 @@ Remove authentication token from keychain
 
 **Options:**
 
-| Option           | Type   | Required | Description                                           | Default |
-| ---------------- | ------ | -------- | ----------------------------------------------------- | ------- |
-| `--server`, `-s` | string | No       | SonarQube server URL                                  | -       |
-| `--org`, `-o`    | string | No       | SonarCloud organization key (required for SonarCloud) | -       |
+| Option           | Type   | Required | Description                                                     | Default |
+| ---------------- | ------ | -------- | --------------------------------------------------------------- | ------- |
+| `--server`, `-s` | string | No       | SonarQube server URL                                            | -       |
+| `--org`, `-o`    | string | No       | SonarQube Cloud organization key (required for SonarQube Cloud) | -       |
 
 **Examples:**
 
 ```bash
 sonar auth logout -o my-org
 ```
-Remove token for SonarCloud organization
+Remove token for SonarQube Cloud organization
 
 ```bash
 sonar auth logout -s https://my-sonarqube.io
@@ -147,15 +147,15 @@ Setup SonarQube integration (hooks, config...) for various tools, like AI coding
 
 **Options:**
 
-| Option              | Type    | Required | Description                                                                 | Default |
-| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ------- |
-| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | -       |
-| `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
-| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -       |
-| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -       |
-| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
-| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | -       |
-| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
+| Option              | Type    | Required | Description                                                                 | Default                 |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ----------------------- |
+| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | `https://sonarcloud.io` |
+| `--project`, `-p`   | string  | No       | Project key                                                                 | -                       |
+| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -                       |
+| `--org`, `-o`       | string  | No       | Organization key (for SonarQube Cloud)                                      | -                       |
+| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | `false`                 |
+| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | `false`                 |
+| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | `false`                 |
 
 **Examples:**
 
