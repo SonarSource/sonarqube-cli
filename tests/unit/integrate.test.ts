@@ -182,7 +182,7 @@ describe('integrateCommand: full flow', () => {
     saveStateSpy.mockImplementation(() => {});
 
     try {
-      await integrateCommand('claude', {
+      await integrate('claude', {
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',

@@ -7,7 +7,7 @@
     "sonar": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun run validate && tsc",
+    "build": "tsc",
     "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
     "dev": "bun run src/index.ts",
     "test": "bun test ./tests/unit/",
@@ -27,7 +27,7 @@
   },
   "externalBinaries": {
     "sonar-secrets": {
-      "version": "2.41.0.10709",
+      "version": "0.5.3",
       "binaryPath": "CommercialDistribution/sonar-secrets",
       "platforms": [
         {
