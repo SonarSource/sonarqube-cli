@@ -20,6 +20,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnProcess } from '../../lib/process.js';
+import type { SpawnResult } from '../../lib/process.js';
 import { buildLocalBinaryName, detectPlatform } from '../../lib/platform-detector.js';
 import { resolveAuth } from '../../lib/auth-resolver.js';
 import logger from '../../lib/logger.js';
@@ -158,31 +159,36 @@ async function runScan(
   file: string,
   authUrl: string | undefined,
   authToken: string | undefined,
-): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-  return Promise.race([
-    spawnProcess(binaryPath, ['--non-interactive', file], {
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'pipe',
-      env: {
-        ...(authUrl && authToken
-          ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
-          : {}),
-      },
-    }),
-    new Promise<never>((_resolve, reject) =>
-      setTimeout(() => {
-        reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`));
-      }, SCAN_TIMEOUT_MS),
-    ),
-  ]);
+): Promise<SpawnResult> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      spawnProcess(binaryPath, ['--non-interactive', file], {
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: {
+          ...(authUrl && authToken
+            ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
+            : {}),
+        },
+      }),
+      new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`));
+        }, SCAN_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function runScanFromStdin(
   binaryPath: string,
   authUrl: string | undefined,
   authToken: string | undefined,
-): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+): Promise<SpawnResult> {
   const { writeFileSync, unlinkSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const pathModule = await import('node:path');
@@ -192,6 +198,7 @@ async function runScanFromStdin(
 
   const tempFile = pathJoin(tmpdir(), `sonar-secrets-scan-${Date.now()}.tmp`);
 
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     writeFileSync(tempFile, stdinData);
 
@@ -205,13 +212,14 @@ async function runScanFromStdin(
             : {}),
         },
       }),
-      new Promise<never>((_resolve, reject) =>
-        setTimeout(() => {
+      new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
           reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`));
-        }, SCAN_TIMEOUT_MS),
-      ),
+        }, SCAN_TIMEOUT_MS);
+      }),
     ]);
   } finally {
+    clearTimeout(timeoutId);
     try {
       unlinkSync(tempFile);
     } catch {
