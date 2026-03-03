@@ -603,9 +603,7 @@ describe('issuesSearchCommand', () => {
   });
 
   it('throws when --project is missing', () => {
-    expect(listIssues({page: 1, pageSize: 500})).rejects.toThrow(
-      '--project is required',
-    );
+    expect(listIssues({ page: 1, pageSize: 500 })).rejects.toThrow('--project is required');
   });
 
   it('throws when --format is invalid', () => {
