@@ -45,7 +45,7 @@ function Add-ToUserPath {
 #Write-Host 'Fetching latest version...'
 #$SonarVersion = Resolve-LatestVersion
 
-$SonarVersion = "0.3.0.243"
+$SonarVersion = "0.4.0.345"
 Write-Host "Latest version: $SonarVersion"
 
 $Filename     = "sonarqube-cli-$SonarVersion-$Platform.exe"
