@@ -26,7 +26,6 @@ import { encode as encodeToToon } from '@toon-format/toon';
 import { formatTable } from '../../formatter/table';
 import { formatCSV } from '../../formatter/csv';
 import type { IssuesSearchParams } from '../../lib/types';
-import { resolveAuth } from '../../lib/auth-resolver';
 import { print } from '../../ui';
 import { getActiveConnection, loadState } from '../../lib/state-manager';
 import { getToken } from '../../lib/keychain';
@@ -36,8 +35,6 @@ const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 
 export interface ListIssuesOptions {
-  server?: string;
-  token?: string;
   project?: string;
   severity?: string;
   type?: string;
@@ -86,22 +83,24 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     throw new Error('--project is required');
   }
 
-  const resolved = await resolveAuth({ token: options.token, server: options.server });
+  const state = loadState();
+  const activeConnection = getActiveConnection(state);
 
-  try {
-    new URL(resolved.serverUrl);
-  } catch {
-    throw new Error(
-      `Invalid server URL: '${resolved.serverUrl}'. Provide a valid URL (e.g., https://sonarcloud.io)`,
-    );
+  if (!activeConnection) {
+    throw new Error('No active connection found. Run: sonar auth login');
   }
 
-  const client = new SonarQubeClient(resolved.serverUrl, resolved.token);
+  const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
+  if (!token) {
+    throw new Error('No token found. Run: sonar auth login');
+  }
+
+  const client = new SonarQubeClient(activeConnection.serverUrl, token);
   const issuesClient = new IssuesClient(client);
 
   const params: IssuesSearchParams = {
     projects: options.project,
-    organization: resolved.orgKey,
+    organization: activeConnection.orgKey,
     severities: options.severity?.toUpperCase(),
     types: options.type,
     statuses: options.status,

@@ -143,19 +143,7 @@ Check if sonar-secrets is installed and up to date
 
 ### `sonar integrate`
 
-Setup SonarQube integration (hooks, config...) for various tools, like AI coding agents, git and others
-
-**Options:**
-
-| Option              | Type    | Required | Description                                                                 | Default                 |
-| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ----------------------- |
-| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | `https://sonarcloud.io` |
-| `--project`, `-p`   | string  | No       | Project key                                                                 | -                       |
-| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -                       |
-| `--org`, `-o`       | string  | No       | Organization key (for SonarQube Cloud)                                      | -                       |
-| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | `false`                 |
-| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | `false`                 |
-| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | `false`                 |
+Setup SonarQube integration for AI coding agents, git and others.
 
 **Examples:**
 
@@ -174,6 +162,22 @@ sonar integrate claude -g -s https://sonarcloud.io -p my-project
 ```
 Integrate globally and install hooks to ~/.claude which will be available for all projects
 
+#### `sonar integrate claude`
+
+Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.
+
+**Options:**
+
+| Option              | Type    | Required | Description                                                                 | Default |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ------- |
+| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | -       |
+| `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
+| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -       |
+| `--org`, `-o`       | string  | No       | Organization key (for SonarQube Cloud)                                      | -       |
+| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
+| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | -       |
+| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
+
 ---
 
 ### `sonar list`
@@ -188,8 +192,6 @@ Search for issues in SonarQube
 
 | Option            | Type    | Required | Description                      | Default |
 | ----------------- | ------- | -------- | -------------------------------- | ------- |
-| `--server`, `-s`  | string  | No       | SonarQube server URL             | -       |
-| `--token`, `-t`   | string  | No       | Authentication token             | -       |
 | `--project`, `-p` | string  | Yes      | Project key                      | -       |
 | `--severity`      | string  | No       | Filter by severity               | -       |
 | `--format`        | string  | No       | Output format                    | `json`  |
