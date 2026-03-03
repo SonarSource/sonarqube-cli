@@ -548,9 +548,14 @@ describe('issuesSearchCommand', () => {
   });
 
   it('throws when --project is missing', () => {
-    expect(listIssues({ server: 'https://sonarcloud.io', token: 'fake-token' })).rejects.toThrow(
-      '--project is required',
-    );
+    expect(
+      listIssues({
+        server: 'https://sonarcloud.io',
+        token: 'fake-token',
+        page: 1,
+        pageSize: 500,
+      }),
+    ).rejects.toThrow('--project is required');
   });
 
   it('throws when --format is invalid', () => {
@@ -560,19 +565,22 @@ describe('issuesSearchCommand', () => {
         token: 'tok',
         project: 'proj',
         format: 'xml',
+        page: 1,
+        pageSize: 500,
       }),
     ).rejects.toThrow('xml');
   });
 
-  it('throws when --page-size is not a number', () => {
+  it('throws when --page is 0', () => {
     expect(
       listIssues({
         server: 'https://sonarcloud.io',
         token: 'tok',
         project: 'proj',
-        pageSize: 'abc' as unknown as number,
+        page: 0,
+        pageSize: 500,
       }),
-    ).rejects.toThrow('page-size');
+    ).rejects.toThrow('page');
   });
 
   it('throws when --page-size is 0', () => {
@@ -581,6 +589,7 @@ describe('issuesSearchCommand', () => {
         server: 'https://sonarcloud.io',
         token: 'tok',
         project: 'proj',
+        page: 1,
         pageSize: 0,
       }),
     ).rejects.toThrow('page-size');
@@ -592,6 +601,8 @@ describe('issuesSearchCommand', () => {
         server: 'https://sonarcloud.io',
         token: 'tok',
         project: 'proj',
+
+        page: 1,
         pageSize: 501,
       }),
     ).rejects.toThrow('page-size');
@@ -604,14 +615,22 @@ describe('issuesSearchCommand', () => {
         token: 'tok',
         project: 'proj',
         severity: 'EXTREME',
+        page: 1,
+        pageSize: 500,
       }),
     ).rejects.toThrow('EXTREME');
   });
 
   it('throws when --server is not a valid URL', () => {
-    expect(listIssues({ server: 'not-a-url', token: 'tok', project: 'proj' })).rejects.toThrow(
-      'not-a-url',
-    );
+    expect(
+      listIssues({
+        server: 'not-a-url',
+        token: 'tok',
+        project: 'proj',
+        page: 1,
+        pageSize: 500,
+      }),
+    ).rejects.toThrow('not-a-url');
   });
 
   it('normalizes severity to uppercase before passing to API', async () => {
@@ -635,6 +654,8 @@ describe('issuesSearchCommand', () => {
         token: 'test-token',
         project: 'my-project',
         severity: 'major',
+        page: 1,
+        pageSize: 500,
       });
       expect(capturedSeverities).toBe('MAJOR');
     } finally {
@@ -656,6 +677,8 @@ describe('issuesSearchCommand', () => {
         server: 'https://sonarcloud.io',
         token: 'test-token',
         project: 'my-project',
+        page: 1,
+        pageSize: 500,
       });
     } finally {
       getSpy.mockRestore();

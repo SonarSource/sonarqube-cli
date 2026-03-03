@@ -32,8 +32,6 @@ import { getActiveConnection, loadState } from '../../lib/state-manager';
 import { getToken } from '../../lib/keychain';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../sonarqube/projects';
 
-export const DEFAULT_PAGE_SIZE = 500;
-
 const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 
@@ -51,8 +49,8 @@ export interface ListIssuesOptions {
   resolved?: boolean;
   format?: string;
   all?: boolean;
-  pageSize?: number;
-  page?: number;
+  pageSize: number;
+  page: number;
 }
 
 /**
@@ -65,13 +63,14 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     throw new Error(`Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`);
   }
 
-  if (options.pageSize !== undefined) {
-    const ps = options.pageSize;
-    if (!Number.isInteger(ps) || ps < 1 || ps > DEFAULT_PAGE_SIZE) {
-      throw new Error(
-        `Invalid --page-size: '${options.pageSize}'. Must be an integer between 1 and 500`,
-      );
-    }
+  const ps = options.pageSize;
+  if (ps < 1 || ps > MAX_PAGE_SIZE) {
+    throw new Error(`Invalid --page-size option: '${ps}'. Must be an integer between 1 and 500`);
+  }
+
+  const page = options.page;
+  if (page < 1) {
+    throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
   if (options.severity) {
@@ -111,8 +110,8 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     branch: options.branch,
     pullRequest: options.pullRequest,
     resolved: options.resolved,
-    ps: options.pageSize ?? DEFAULT_PAGE_SIZE,
-    p: options.page ?? 1,
+    ps: options.pageSize,
+    p: options.page,
   };
 
   const result = options.all
@@ -143,8 +142,8 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
 
 export interface ListProjectsOptions {
   query?: string;
-  pageSize?: number;
-  page?: number;
+  pageSize: number;
+  page: number;
 }
 
 /**
@@ -163,11 +162,16 @@ export async function listProjects(options: ListProjectsOptions): Promise<void> 
     throw new Error('No token found. Run: sonar auth login');
   }
 
-  const pageSize = options.pageSize ?? MAX_PAGE_SIZE;
-  if (pageSize <= 0 || pageSize > MAX_PAGE_SIZE) {
+  const pageSize = options.pageSize;
+  if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
     throw new Error(
-      `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
+      `Invalid --page-size option: '${pageSize}'. Must be an integer between 1 and 500`,
     );
+  }
+
+  const page = options.page;
+  if (page < 1) {
+    throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
   const client = new SonarQubeClient(activeConnection.serverUrl, token);
@@ -176,7 +180,7 @@ export async function listProjects(options: ListProjectsOptions): Promise<void> 
   const result = await projectsClient.searchProjects({
     q: options.query,
     ps: pageSize,
-    p: options.page ?? 1,
+    p: options.page,
     organization: activeConnection.orgKey,
   });
 

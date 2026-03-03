@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { MAX_PAGE_SIZE } from '../../src/sonarqube/projects.js';
-import { listProjects } from '../../src/cli/commands/list';
+import { listProjects, ListProjectsOptions } from '../../src/cli/commands/list';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import * as keychain from '../../src/lib/keychain.js';
@@ -12,6 +12,11 @@ import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui/index.
 import { getDefaultState } from '../../src/lib/state.js';
 import type { AuthConnection } from '../../src/lib/state.js';
 import type { ProjectsSearchResponse } from '../../src/lib/types.js';
+
+const DEFAULT_OPTIONS: ListProjectsOptions = {
+  page: 1,
+  pageSize: 500,
+};
 
 const MOCK_CONNECTION: AuthConnection = {
   id: 'test-conn-id',
@@ -81,31 +86,45 @@ describe('projectsSearchCommand', () => {
     it('throws when there is no active connection', () => {
       loadStateSpy.mockReturnValue(getDefaultState('test'));
 
-      expect(listProjects({})).rejects.toThrow('No active connection found. Run: sonar auth login');
+      expect(listProjects(DEFAULT_OPTIONS)).rejects.toThrow(
+        'No active connection found. Run: sonar auth login',
+      );
     });
 
     it('throws when no token is found in the keychain', () => {
       getTokenSpy.mockResolvedValue(null);
 
-      expect(listProjects({})).rejects.toThrow('No token found. Run: sonar auth login');
-    });
-
-    it('throws when page size is not positive', () => {
-      expect(listProjects({ pageSize: 0 })).rejects.toThrow(
-        `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
+      expect(listProjects(DEFAULT_OPTIONS)).rejects.toThrow(
+        'No token found. Run: sonar auth login',
       );
     });
 
+    it('throws when page size is not positive', () => {
+      expect(
+        listProjects({
+          page: 1,
+          pageSize: 0,
+        }),
+      ).rejects.toThrow(`Invalid --page-size option: '0'. Must be an integer between 1 and 500`);
+    });
+
     it('throws when page size exceeds the maximum', () => {
-      expect(listProjects({ pageSize: MAX_PAGE_SIZE + 1 })).rejects.toThrow(
-        `--page-size must be greater than 0 and less than or equal to ${MAX_PAGE_SIZE}`,
+      expect(
+        listProjects({
+          page: 1,
+          pageSize: MAX_PAGE_SIZE + 1,
+        }),
+      ).rejects.toThrow(
+        `Invalid --page-size option: '${MAX_PAGE_SIZE + 1}'. Must be an integer between 1 and 500`,
       );
     });
 
     it('propagates API errors', () => {
       getSpy.mockRejectedValue(new Error('SonarQube API error: 401 Unauthorized'));
 
-      expect(listProjects({})).rejects.toThrow('SonarQube API error: 401 Unauthorized');
+      expect(listProjects(DEFAULT_OPTIONS)).rejects.toThrow(
+        'SonarQube API error: 401 Unauthorized',
+      );
     });
   });
 
@@ -114,7 +133,7 @@ describe('projectsSearchCommand', () => {
       clearMockUiCalls();
       getSpy.mockResolvedValue(makeProjectsResponse([]) as unknown as never);
 
-      await listProjects({});
+      await listProjects(DEFAULT_OPTIONS);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -134,7 +153,7 @@ describe('projectsSearchCommand', () => {
         ]) as unknown as never,
       );
 
-      await listProjects({});
+      await listProjects(DEFAULT_OPTIONS);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -174,7 +193,7 @@ describe('projectsSearchCommand', () => {
     });
 
     it('uses the active connection server URL to create the client', async () => {
-      await listProjects({});
+      await listProjects(DEFAULT_OPTIONS);
 
       expect(getTokenSpy).toHaveBeenCalledWith(MOCK_CONNECTION.serverUrl, MOCK_CONNECTION.orgKey);
     });
@@ -186,7 +205,10 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ query: 'my-project' });
+      await listProjects({
+        query: 'my-project',
+        ...DEFAULT_OPTIONS,
+      });
 
       expect(capturedParams?.q).toBe('my-project');
     });
@@ -198,7 +220,10 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ page: 3 });
+      await listProjects({
+        page: 3,
+        pageSize: 500,
+      });
 
       expect(capturedParams?.p).toBe(3);
     });
@@ -210,33 +235,12 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ pageSize: 50 });
+      await listProjects({
+        page: 1,
+        pageSize: 50,
+      });
 
       expect(capturedParams?.ps).toBe(50);
-    });
-
-    it('defaults to page 1 when page option is not provided', async () => {
-      let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
-        capturedParams = params;
-        return makeProjectsResponse([]);
-      });
-
-      await listProjects({});
-
-      expect(capturedParams?.p).toBe(1);
-    });
-
-    it('defaults to MAX_PAGE_SIZE when page size is not provided', async () => {
-      let capturedParams: Record<string, unknown> | undefined;
-      getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
-        capturedParams = params;
-        return makeProjectsResponse([]);
-      });
-
-      await listProjects({});
-
-      expect(capturedParams?.ps).toBe(MAX_PAGE_SIZE);
     });
 
     it('passes organization key for SonarCloud connections', async () => {
@@ -249,7 +253,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({});
+      await listProjects(DEFAULT_OPTIONS);
 
       expect(capturedParams?.organization).toBe('my-org');
     });
@@ -261,7 +265,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({});
+      await listProjects(DEFAULT_OPTIONS);
 
       expect(capturedParams?.organization).toBeUndefined();
     });
