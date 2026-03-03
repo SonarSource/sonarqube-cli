@@ -816,3 +816,28 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
   });
 });
+
+// ─── Argument validation ──────────────────────────────────────────────────────
+
+describe('integrate — argument validation', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'exits with code 1 when an unsupported tool argument is provided',
+    async () => {
+      const result = await harness.run('integrate gemini');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Allowed choices are claude');
+    },
+    { timeout: 15000 },
+  );
+});

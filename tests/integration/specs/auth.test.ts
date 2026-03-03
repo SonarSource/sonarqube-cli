@@ -37,6 +37,17 @@ describe('auth login', () => {
   });
 
   it(
+    'exits with code 1 when --server is not a valid URL',
+    async () => {
+      const result = await harness.run('auth login --server not-a-url --with-token mytoken');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Invalid server URL');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'saves token to keychain and state after --with-token and --server',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-login-token').start();

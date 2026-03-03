@@ -113,4 +113,37 @@ describe('list projects', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'exits with code 1 when --page-size is not a number',
+    async () => {
+      const result = await harness.run('list projects --page-size abc');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Invalid --page-size');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 when --page-size is 0',
+    async () => {
+      const result = await harness.run('list projects --page-size 0');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('page-size must be greater than 0');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 when --page-size exceeds 500',
+    async () => {
+      const result = await harness.run('list projects --page-size 501');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('page-size must be greater than 0');
+    },
+    { timeout: 15000 },
+  );
 });

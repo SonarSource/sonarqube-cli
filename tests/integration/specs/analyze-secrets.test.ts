@@ -177,6 +177,17 @@ describe('analyze secrets', () => {
   );
 
   it(
+    'exits with code 1 when both --file and --stdin are provided',
+    async () => {
+      const result = await harness.run('analyze secrets --file somefile.js --stdin');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Cannot use both --file and --stdin');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'forwards auth from active connection and keychain to binary',
     async () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
