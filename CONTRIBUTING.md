@@ -71,8 +71,8 @@ bun run test:all
 Integration tests hit real external services and require environment variables:
 
 ```bash
-export SONAR_SECRETS_TOKEN="sqp_xxxxx"   # SonarQube Server token for secret scanning
-export SONARCLOUD_TOKEN="sqp_xxxxx"       # SonarQube Cloud token for onboard-agent tests
+export SONAR_SECRETS_TOKEN="sqp_xxxxx"   # SonarQube token for secret scanning
+export SONAR_SECRETS_AUTH_URL="https://sonarcloud.io"       # SonarQube token for onboard-agent tests
 ```
 
 Obtain a token from **sonarcloud.io → Account → Security → Generate token**.
