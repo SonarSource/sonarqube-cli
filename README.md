@@ -1,5 +1,8 @@
 # SonarQube CLI
 
+[![Build](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=SonarSource_sonarqube-cli&metric=alert_status&token=4ad890bd54c6c3feb5d5251004fa3e5b1f665dea)](https://sonarcloud.io/summary/new_code?id=SonarSource_sonarqube-cli)
+
 A CLI application for interacting with SonarQube products. This product is currently in Open Beta and we are actively collecting feedback on it. Please share your thoughts via [this form](https://forms.gle/xE61HS2E5NzxFCSR9)!
 
 ## Installation
@@ -144,15 +147,15 @@ Setup SonarQube integration (hooks, config...) for various tools, like AI coding
 
 **Options:**
 
-| Option              | Type    | Required | Description                                                                 | Default                 |
-| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ----------------------- |
-| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | `https://sonarcloud.io` |
-| `--project`, `-p`   | string  | No       | Project key                                                                 | -                       |
-| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -                       |
-| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -                       |
-| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | `false`                 |
-| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | `false`                 |
-| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | `false`                 |
+| Option              | Type    | Required | Description                                                                 | Default |
+| ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ------- |
+| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | -       |
+| `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
+| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -       |
+| `--org`, `-o`       | string  | No       | Organization key (for SonarCloud)                                           | -       |
+| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
+| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | -       |
+| `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
 
 **Examples:**
 
@@ -169,7 +172,7 @@ Integrate without installing hooks
 ```bash
 sonar integrate claude -g -s https://sonarcloud.io -p my-project
 ```
-Integrate globally and install hooks to ~/.claude for all projects
+Integrate globally and install hooks to ~/.claude which will be available for all projects
 
 ---
 
