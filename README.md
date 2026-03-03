@@ -169,7 +169,7 @@ Integrate without installing hooks
 ```bash
 sonar integrate claude -g -s https://sonarcloud.io -p my-project
 ```
-Integrate globally and install hooks to ~/.claude for all projects
+Integrate globally and install hooks to ~/.claude which will be available for all projects
 
 ---
 
