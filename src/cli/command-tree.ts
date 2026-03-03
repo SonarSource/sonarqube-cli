@@ -19,7 +19,7 @@
  */
 
 import { version as VERSION } from '../../package.json';
-import { Argument, Command, Option } from 'commander';
+import { Command, Option } from 'commander';
 import { runCommand } from '../lib/run-command';
 import {
   listIssues,
@@ -36,7 +36,7 @@ import {
   authStatus,
 } from './commands/auth';
 import { installSecrets, type InstallSecretsOptions } from './commands/install';
-import { integrate, type IntegrateOptions, VALID_TOOLS } from './commands/integrate';
+import { integrate, type IntegrateOptions } from './commands/integrate';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config';
@@ -44,7 +44,6 @@ import { parseInteger } from './commands/common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 
 // Constants for argument validation
-const AUTH_ARGC_WITHOUT_SUBCOMMAND = 3;
 const ANALYZE_ARG_INDEX = 2;
 const ANALYZE_SUBCOMMAND_INDEX = 3;
 
@@ -67,24 +66,26 @@ install
   .action((options: InstallSecretsOptions) => runCommand(() => installSecrets(options)));
 
 // Setup SonarQube integration for AI coding agent
-COMMAND_TREE.command('integrate')
-  .addArgument(
-    new Argument('<tool>', 'AI coding agent or tool to integrate with').choices([...VALID_TOOLS]),
-  )
+const integrateCommand = COMMAND_TREE.command('integrate').description(
+  'Setup SonarQube integration for AI coding agents, git and others.',
+);
+
+integrateCommand
+  .command('claude')
   .description(
-    'Setup SonarQube integration (hooks, config...) for various tools, like AI coding agents, git and others',
+    'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.',
   )
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-p, --project <project>', 'Project key')
   .option('-t, --token <token>', 'Existing authentication token')
-  .option('-o, --org <org>', 'Organization key (for SonarCloud)')
+  .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-hooks', 'Skip hooks installation')
   .option(
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .action((tool: string, options: IntegrateOptions) => runCommand(() => integrate(tool, options)));
+  .action((options: IntegrateOptions) => runCommand(() => integrate('claude', options)));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');
@@ -96,8 +97,6 @@ const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)'
 list
   .command('issues')
   .description('Search for issues in SonarQube')
-  .option('-s, --server <server>', 'SonarQube server URL')
-  .option('-t, --token <token>', 'Authentication token')
   .requiredOption('-p, --project <project>', 'Project key')
   .option('--severity <severity>', 'Filter by severity')
   .option('--format <format>', 'Output format', 'json')
@@ -111,7 +110,7 @@ list
   .command('projects')
   .description('Search for projects in SonarQube')
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
-  .addOption(new Option('-p, --page <page>', 'Page number').default(1).argParser(parseInteger))
+  .addOption(new Option('--page <page>', 'Page number').default(1).argParser(parseInteger))
   .addOption(pageSizeOption)
   .action((options: ListProjectsOptions) => runCommand(() => listProjects(options)));
 
@@ -123,8 +122,8 @@ const auth = COMMAND_TREE.command('auth').description(
 auth
   .command('login')
   .description('Save authentication token to keychain')
-  .option('-s, --server <server>', 'SonarQube server URL (default is SonarCloud)')
-  .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
+  .option('-s, --server <server>', 'SonarQube server URL (default is SonarQube Cloud)')
+  .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
   .action((options: AuthLoginOptions) => runCommand(() => authLogin(options)));
 
@@ -132,7 +131,7 @@ auth
   .command('logout')
   .description('Remove authentication token from keychain')
   .option('-s, --server <server>', 'SonarQube server URL')
-  .option('-o, --org <org>', 'SonarCloud organization key (required for SonarCloud)')
+  .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
   .action((options: AuthLogoutOptions) => runCommand(() => authLogout(options)));
 
 auth
@@ -174,12 +173,6 @@ if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
 COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
   await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
 });
-
-// Handle `sonar auth` without subcommand (defaults to login)
-if (process.argv.length === AUTH_ARGC_WITHOUT_SUBCOMMAND && process.argv[2] === 'auth') {
-  // User ran `sonar auth` without subcommand - inject 'login' subcommand
-  process.argv.splice(AUTH_ARGC_WITHOUT_SUBCOMMAND, 0, 'login');
-}
 
 // Handle `sonar analyze` without subcommand (defaults to secrets)
 if (process.argv[ANALYZE_ARG_INDEX] === 'analyze') {

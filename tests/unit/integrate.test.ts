@@ -365,7 +365,7 @@ describe('integrateCommand: configuration validation', () => {
     }
   });
 
-  it('defaults to SonarCloud when org is provided but no server', async () => {
+  it('defaults to SonarQube Cloud when org is provided but no server', async () => {
     const projectInfoWithOrg = { ...FAKE_PROJECT_INFO };
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithOrg);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
@@ -379,7 +379,7 @@ describe('integrateCommand: configuration validation', () => {
       const infos = getMockUiCalls()
         .filter((c) => c.method === 'info')
         .map((c) => String(c.args[0]));
-      expect(infos.some((m) => m.toLowerCase().includes('sonarcloud'))).toBe(true);
+      expect(infos.some((m) => m.toLowerCase().includes('sonarqube cloud'))).toBe(true);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();

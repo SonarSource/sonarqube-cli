@@ -25,7 +25,10 @@ export interface Example {
 
 export const EXAMPLES: Record<string, Example[]> = {
   'sonar auth login': [
-    { command: 'sonar auth login', description: 'Interactive login for SonarCloud with browser' },
+    {
+      command: 'sonar auth login',
+      description: 'Interactive login for SonarQube Cloud with browser',
+    },
     {
       command: 'sonar auth login -o my-org -t squ_abc123',
       description: 'Non-interactive login with direct token',
@@ -38,7 +41,7 @@ export const EXAMPLES: Record<string, Example[]> = {
   'sonar auth logout': [
     {
       command: 'sonar auth logout -o my-org',
-      description: 'Remove token for SonarCloud organization',
+      description: 'Remove token for SonarQube Cloud organization',
     },
     {
       command: 'sonar auth logout -s https://my-sonarqube.io',
