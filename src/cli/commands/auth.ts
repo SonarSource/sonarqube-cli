@@ -145,7 +145,7 @@ async function getOrGenerateToken(
 
   print(`\nAuthenticating with: ${server}`);
   const token = await generateTokenViaBrowser(server);
-  print('Token received');
+  success('Token received');
   return token;
 }
 

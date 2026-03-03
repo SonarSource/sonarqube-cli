@@ -32,7 +32,7 @@ import { SonarQubeClient } from '../sonarqube/client.js';
 import { startLoopbackServer } from '../lib/loopback-server.js';
 import logger from '../lib/logger.js';
 import { warn, print, pressEnterKeyPrompt, isMockActive } from '../ui/index.js';
-import { green, dim } from '../ui/colors.js';
+import { green, dim, blue } from '../ui/colors.js';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
@@ -294,7 +294,7 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
         if (this.state === 'submit') return `  ${green('✓')}  Token accepted`;
         if (this.state === 'cancel') return undefined;
         return [
-          `  ${dim('›')}  Waiting for browser... or paste token and press Enter:`,
+          `  ⏳  Waiting for authorization... or paste token and press Enter:`,
           `  ${dim('›')} ${this.userInputWithCursor}`,
         ].join('\n');
       },
@@ -343,8 +343,8 @@ export async function generateTokenViaBrowser(
 
   const authURL = buildAuthURL(serverURL, server.port);
 
-  print('Obtaining access token from SonarQube...');
-  print(`URL: ${authURL}`);
+  print('🔑 Obtaining access token from SonarQube...');
+  print(`URL: ${blue(authURL)}`);
   await pressEnterKeyPrompt('Press Enter to open the browser');
   await openBrowserFn(authURL);
 

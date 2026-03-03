@@ -38,6 +38,7 @@ export const gray = c(pc.gray);
 export const bold = c(pc.bold);
 export const dim = c(pc.dim);
 export const white = c(pc.white);
+export const blue = c(pc.blue);
 
 export const STATUS_COLORS: Record<StepStatus, ColorFn> = {
   done: green,
