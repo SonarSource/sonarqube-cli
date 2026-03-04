@@ -30,18 +30,19 @@ detect_platform() {
 }
 
 resolve_latest_version() {
+  local releases_url="https://github.com/SonarSource/sonarqube-cli/releases/latest"
   local version
   if command -v curl &>/dev/null; then
-    version="$(curl -fsSL "$BASE_URL/latest-version.txt")"
+    version="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$releases_url" | grep -oE '[^/]+$')"
   elif command -v wget &>/dev/null; then
-    version="$(wget -qO- "$BASE_URL/latest-version.txt")"
+    version="$(wget -qO /dev/null --server-response "$releases_url" 2>&1 | grep -i 'location:' | tail -1 | grep -oE '[^/]+$')"
   else
     echo "Error: neither curl nor wget is available. Please install one and retry." >&2
     exit 1
   fi
 
-  version="$(printf '%s' "$version" | tr -d '[:space:]')"
-  if [[ -z "$version" ]]; then
+  version="$(printf '%s' "$version" | tr -d '[:space:]' | sed 's/^v//')"
+  if [[ -z "$version" ]] || [[ "$version" == "latest" ]]; then
     echo "Error: could not determine the latest version." >&2
     exit 1
   fi
@@ -68,9 +69,8 @@ main() {
   platform="$(detect_platform)"
 
   local version
-  #echo "Fetching latest version..."
-  #version="$(resolve_latest_version)"
-  version="0.4.0.345"
+  echo "Fetching latest version..."
+  version="$(resolve_latest_version)"
   echo "Latest version: $version"
 
   local filename="sonarqube-cli-${version}-${platform}.exe"

@@ -10,8 +10,14 @@ $BaseUrl    = 'https://binaries.sonarsource.com/Distribution/sonarqube-cli'
 $Platform   = 'windows-x86-64'
 
 function Resolve-LatestVersion {
-    $Version = (Invoke-WebRequest -Uri "$BaseUrl/latest-version.txt" -UseBasicParsing).Content.Trim()
-    if (-not $Version) {
+    $ReleasesUrl = 'https://github.com/SonarSource/sonarqube-cli/releases/latest'
+    $Request = [System.Net.WebRequest]::Create($ReleasesUrl)
+    $Request.AllowAutoRedirect = $true
+    $Response = $Request.GetResponse()
+    $FinalUrl = $Response.ResponseUri.AbsoluteUri
+    $Response.Close()
+    $Version = ($FinalUrl -split '/')[-1] -replace '^v', ''
+    if (-not $Version -or $Version -eq 'latest') {
         Write-Error 'Could not determine the latest version.'
         exit 1
     }
@@ -42,10 +48,8 @@ function Add-ToUserPath {
 
 # --- Main ---
 
-#Write-Host 'Fetching latest version...'
-#$SonarVersion = Resolve-LatestVersion
-
-$SonarVersion = "0.4.0.345"
+Write-Host 'Fetching latest version...'
+$SonarVersion = Resolve-LatestVersion
 Write-Host "Latest version: $SonarVersion"
 
 $Filename     = "sonarqube-cli-$SonarVersion-$Platform.exe"
