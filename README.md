@@ -33,26 +33,26 @@ Save authentication token to keychain
 
 | Option               | Type   | Required | Description                                                     | Default |
 | -------------------- | ------ | -------- | --------------------------------------------------------------- | ------- |
-| `--server`, `-s`     | string | No       | SonarQube server URL (default is SonarQube Cloud)               | -       |
+| `--server`, `-s`     | string | No       | SonarQube URL (default is SonarQube https://sonarcloud.io)      | -       |
 | `--org`, `-o`        | string | No       | SonarQube Cloud organization key (required for SonarQube Cloud) | -       |
 | `--with-token`, `-t` | string | No       | Token value (skips browser, non-interactive mode)               | -       |
 
 **Examples:**
 
+Interactive login for SonarQube Cloud with browser
 ```bash
 sonar auth login
 ```
-Interactive login for SonarQube Cloud with browser
 
+Non-interactive login with direct token
 ```bash
 sonar auth login -o my-org -t squ_abc123
 ```
-Non-interactive login with direct token
 
+Non-interactive login for custom server with token
 ```bash
 sonar auth login -s https://my-sonarqube.io --with-token squ_def456
 ```
-Non-interactive login for custom server with token
 
 ---
 
@@ -69,15 +69,15 @@ Remove authentication token from keychain
 
 **Examples:**
 
+Remove token for SonarQube Cloud organization
 ```bash
 sonar auth logout -o my-org
 ```
-Remove token for SonarQube Cloud organization
 
+Remove token for custom SonarQube server
 ```bash
 sonar auth logout -s https://my-sonarqube.io
 ```
-Remove token for custom SonarQube server
 
 ---
 
@@ -87,10 +87,10 @@ Remove all authentication tokens from keychain
 
 **Examples:**
 
+Interactively remove all saved tokens
 ```bash
 sonar auth purge
 ```
-Interactively remove all saved tokens
 
 ---
 
@@ -100,10 +100,10 @@ Show active authentication connection with token verification
 
 **Examples:**
 
+Show current server connection and token status
 ```bash
 sonar auth status
 ```
-Show current server connection and token status
 
 ---
 
@@ -124,20 +124,20 @@ Install sonar-secrets binary from https://binaries.sonarsource.com
 
 **Examples:**
 
+Install latest sonar-secrets binary
 ```bash
 sonar install secrets
 ```
-Install latest sonar-secrets binary
 
+Reinstall sonar-secrets (overwrite existing)
 ```bash
 sonar install secrets --force
 ```
-Reinstall sonar-secrets (overwrite existing)
 
+Check if sonar-secrets is installed and up to date
 ```bash
 sonar install secrets --status
 ```
-Check if sonar-secrets is installed and up to date
 
 ---
 
@@ -147,20 +147,20 @@ Setup SonarQube integration for AI coding agents, git and others.
 
 **Examples:**
 
+Integrate Claude Code with interactive setup
 ```bash
 sonar integrate claude -s https://sonarcloud.io -p my-project
 ```
-Integrate Claude Code with interactive setup
 
+Integrate without installing hooks
 ```bash
 sonar integrate claude --skip-hooks
 ```
-Integrate without installing hooks
 
-```bash
-sonar integrate claude -g -s https://sonarcloud.io -p my-project
-```
 Integrate globally and install hooks to ~/.claude which will be available for all projects
+```bash
+sonar integrate claude -g
+```
 
 #### `sonar integrate claude`
 
@@ -202,20 +202,20 @@ Search for issues in SonarQube
 
 **Examples:**
 
+List issues in a project
 ```bash
 sonar list issues -p my-project
 ```
-List issues in a project
 
+Output issues in TOON format for AI agents
 ```bash
 sonar list issues -p my-project --format toon
 ```
-Output issues in TOON format for AI agents
 
+Fetch all critical issues
 ```bash
 sonar list issues -p my-project --severity CRITICAL --all
 ```
-Fetch all critical issues
 
 ---
 
@@ -228,25 +228,25 @@ Search for projects in SonarQube
 | Option          | Type   | Required | Description                                    | Default |
 | --------------- | ------ | -------- | ---------------------------------------------- | ------- |
 | `--query`, `-q` | string | No       | Search query to filter projects by name or key | -       |
-| `--page`, `-p`  | number | No       | Page number                                    | `1`     |
+| `--page`        | number | No       | Page number                                    | `1`     |
 | `--page-size`   | number | No       | Page size (1-500)                              | `500`   |
 
 **Examples:**
 
+List first 500 accessible projects
 ```bash
 sonar list projects
 ```
-List first 500 accessible projects
 
+Search projects by name or key
 ```bash
 sonar list projects -q my-project
 ```
-Search projects by name or key
 
+Paginate through projects
 ```bash
 sonar list projects --page 2 --page-size 50
 ```
-Paginate through projects
 
 ---
 
@@ -267,15 +267,15 @@ Scan a file or stdin for hardcoded secrets
 
 **Examples:**
 
+Scan a file for hardcoded secrets
 ```bash
 sonar analyze secrets --file src/config.ts
 ```
-Scan a file for hardcoded secrets
 
+Scan stdin for hardcoded secrets
 ```bash
 cat .env | sonar analyze secrets --stdin
 ```
-Scan stdin for hardcoded secrets
 
 ---
 
@@ -296,15 +296,15 @@ Configure telemetry settings
 
 **Examples:**
 
+Enable collection of anonymous usage statistics
 ```bash
 sonar config telemetry --enabled
 ```
-Enable collection of anonymous usage statistics
 
+Disable collection of anonymous usage statistics
 ```bash
 sonar config telemetry --disabled
 ```
-Disable collection of anonymous usage statistics
 
 ---
 
