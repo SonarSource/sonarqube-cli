@@ -19,6 +19,16 @@ curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/
 irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 ```
 
+## Setup steps for Claude Code integration
+Below is an example of a setup which will work for SonarQube Cloud.
+The authentication step is optional. With authentication, more types of secrets can be detected.
+
+```
+sonar auth login
+sonar install secrets
+sonar integrate claude -g
+```
+
 ## Commands
 
 ### `sonar auth`
