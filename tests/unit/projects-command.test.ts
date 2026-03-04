@@ -108,6 +108,15 @@ describe('projectsSearchCommand', () => {
       ).rejects.toThrow(`Invalid --page-size option: '0'. Must be an integer between 1 and 500`);
     });
 
+    it('throws when page is not positive', () => {
+      expect(
+        listProjects({
+          page: 0,
+          pageSize: 500,
+        }),
+      ).rejects.toThrow(`Invalid --page option: '0'. Must be an integer >= 1`);
+    });
+
     it('throws when page size exceeds the maximum', () => {
       expect(
         listProjects({

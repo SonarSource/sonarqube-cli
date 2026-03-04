@@ -109,10 +109,10 @@ integrateCommand
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');
 
+const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
 const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
   .default(DEFAULT_PAGE_SIZE)
   .argParser(parseInteger);
-
 list
   .command('issues')
   .description('Search for issues in SonarQube')
@@ -122,13 +122,14 @@ list
   .option('--branch <branch>', 'Branch name')
   .option('--pull-request <pull-request>', 'Pull request ID')
   .addOption(pageSizeOption)
+  .addOption(pageOption)
   .action((options: ListIssuesOptions) => runCommand(() => listIssues(options)));
 
 list
   .command('projects')
   .description('Search for projects in SonarQube')
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
-  .addOption(new Option('--page <page>', 'Page number').default(1).argParser(parseInteger))
+  .addOption(pageOption)
   .addOption(pageSizeOption)
   .action((options: ListProjectsOptions) => runCommand(() => listProjects(options)));
 

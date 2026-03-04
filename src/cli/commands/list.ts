@@ -109,7 +109,7 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     pullRequest: options.pullRequest,
     resolved: options.resolved,
     ps: options.pageSize,
-    p: options.page,
+    p: page,
   };
 
   const result = await issuesClient.searchIssues(params);
