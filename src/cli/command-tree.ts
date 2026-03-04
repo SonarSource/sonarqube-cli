@@ -121,7 +121,6 @@ list
   .option('--format <format>', 'Output format', 'json')
   .option('--branch <branch>', 'Branch name')
   .option('--pull-request <pull-request>', 'Pull request ID')
-  .option('--all', 'Fetch all issues with pagination')
   .addOption(pageSizeOption)
   .action((options: ListIssuesOptions) => runCommand(() => listIssues(options)));
 

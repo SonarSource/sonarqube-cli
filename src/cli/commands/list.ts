@@ -45,7 +45,6 @@ export interface ListIssuesOptions {
   pullRequest?: string;
   resolved?: boolean;
   format?: string;
-  all?: boolean;
   pageSize: number;
   page: number;
 }
@@ -113,9 +112,7 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     p: options.page,
   };
 
-  const result = options.all
-    ? await issuesClient.searchAllIssues(params)
-    : await issuesClient.searchIssues(params);
+  const result = await issuesClient.searchIssues(params);
 
   let output: string;
 

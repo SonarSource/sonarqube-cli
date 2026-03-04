@@ -89,10 +89,6 @@ export const EXAMPLES: Record<string, Example[]> = {
       command: 'sonar list issues -p my-project --format toon',
       description: 'Output issues in TOON format for AI agents',
     },
-    {
-      command: 'sonar list issues -p my-project --severity CRITICAL --all',
-      description: 'Fetch all critical issues',
-    },
   ],
   'sonar list projects': [
     { command: 'sonar list projects', description: 'List first 500 accessible projects' },

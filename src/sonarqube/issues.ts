@@ -23,8 +23,6 @@
 import { type SonarQubeClient } from './client.js';
 import type { IssuesSearchParams, IssuesSearchResponse } from '../lib/types.js';
 
-const DEFAULT_PAGE_SIZE_ISSUES = 500;
-
 export class IssuesClient {
   private readonly client: SonarQubeClient;
 
@@ -54,34 +52,5 @@ export class IssuesClient {
     if (params.p) queryParams.p = params.p;
 
     return await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams);
-  }
-
-  /**
-   * Search all issues with pagination
-   */
-  async searchAllIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
-    let page = 1;
-    let allIssues: IssuesSearchResponse['issues'] = [];
-    let totalPages = 1;
-    let lastResponse: IssuesSearchResponse;
-
-    do {
-      lastResponse = await this.searchIssues({
-        ...params,
-        p: page,
-        ps: params.ps || DEFAULT_PAGE_SIZE_ISSUES,
-      });
-
-      allIssues = allIssues.concat(lastResponse.issues);
-      totalPages = Math.ceil(lastResponse.paging.total / lastResponse.paging.pageSize);
-      page++;
-    } while (page <= totalPages);
-
-    // Return last response with all accumulated issues
-    return {
-      ...lastResponse,
-      issues: allIssues,
-      total: allIssues.length,
-    };
   }
 }
