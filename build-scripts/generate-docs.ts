@@ -97,7 +97,7 @@ function renderExamples(name: string): string {
   if (!examples || examples.length === 0) return '';
   const lines = ['**Examples:**\n'];
   for (const ex of examples) {
-    lines.push('```bash', ex.command, '```', ex.description, '');
+    lines.push(ex.description, '```bash', ex.command, '```', '');
   }
   return lines.join('\n');
 }
