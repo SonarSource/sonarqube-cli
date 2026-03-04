@@ -190,15 +190,14 @@ Search for issues in SonarQube
 
 **Options:**
 
-| Option            | Type    | Required | Description                      | Default |
-| ----------------- | ------- | -------- | -------------------------------- | ------- |
-| `--project`, `-p` | string  | Yes      | Project key                      | -       |
-| `--severity`      | string  | No       | Filter by severity               | -       |
-| `--format`        | string  | No       | Output format                    | `json`  |
-| `--branch`        | string  | No       | Branch name                      | -       |
-| `--pull-request`  | string  | No       | Pull request ID                  | -       |
-| `--all`           | boolean | No       | Fetch all issues with pagination | -       |
-| `--page-size`     | number  | No       | Page size (1-500)                | `500`   |
+| Option            | Type   | Required | Description        | Default |
+| ----------------- | ------ | -------- | ------------------ | ------- |
+| `--project`, `-p` | string | Yes      | Project key        | -       |
+| `--severity`      | string | No       | Filter by severity | -       |
+| `--format`        | string | No       | Output format      | `json`  |
+| `--branch`        | string | No       | Branch name        | -       |
+| `--pull-request`  | string | No       | Pull request ID    | -       |
+| `--page-size`     | number | No       | Page size (1-500)  | `500`   |
 
 **Examples:**
 
@@ -210,11 +209,6 @@ sonar list issues -p my-project
 Output issues in TOON format for AI agents
 ```bash
 sonar list issues -p my-project --format toon
-```
-
-Fetch all critical issues
-```bash
-sonar list issues -p my-project --severity CRITICAL --all
 ```
 
 ---
