@@ -23,6 +23,7 @@ import { getActiveConnection, loadState, saveState } from '../lib/state-manager.
 import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
 import { getOrCreateUserId } from './user.js';
 import { type Command } from 'commander';
+import { version as VERSION } from '../../package.json';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
 
@@ -57,7 +58,7 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
   const eventPayload: TelemetryEventPayload = {
     cli_installation_id: state.telemetry.installationId!,
     machine_id: getOrCreateUserId(),
-    cli_version: state.version,
+    cli_version: VERSION,
     command: topCommand,
     subcommand,
     invocation_id: randomUUID(),
