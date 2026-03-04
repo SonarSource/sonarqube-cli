@@ -70,7 +70,7 @@ main() {
   local version
   #echo "Fetching latest version..."
   #version="$(resolve_latest_version)"
-  version="0.4.0.345"
+  version="0.5.0.409"
   echo "Latest version: $version"
 
   local filename="sonarqube-cli-${version}-${platform}.exe"
