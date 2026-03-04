@@ -198,6 +198,7 @@ Search for issues in SonarQube
 | `--branch`        | string | No       | Branch name        | -       |
 | `--pull-request`  | string | No       | Pull request ID    | -       |
 | `--page-size`     | number | No       | Page size (1-500)  | `500`   |
+| `--page`          | number | No       | Page number        | `1`     |
 
 **Examples:**
 
