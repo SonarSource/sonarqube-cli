@@ -99,7 +99,6 @@ integrateCommand
   .option('-t, --token <token>', 'Existing authentication token')
   .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option('--skip-hooks', 'Skip hooks installation')
   .option(
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',

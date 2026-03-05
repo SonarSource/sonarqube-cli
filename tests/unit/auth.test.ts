@@ -375,11 +375,3 @@ it('auth: purgeAllTokens with mixed credentials', async () => {
   expect(await getToken(sonarcloud, 'org-b')).toBe(null);
   expect(await getToken(sonarqube)).toBe(null);
 });
-
-// Regression: embedded server cleanup does not hang process.
-// The generateTokenViaBrowser flow must release all resources so the process exits
-// gracefully. Verified manually:
-//   echo "" | sonar auth login --with-token <token> -s https://sonarcloud.io -o org
-//   sonar onboard-agent claude --non-interactive --skip-hooks
-// Both must return to prompt immediately.
-// Token delivery is tested in auth-helpers.test.ts (generateTokenViaBrowser tests).

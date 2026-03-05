@@ -74,10 +74,6 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Integrate Claude Code with interactive setup',
     },
     {
-      command: 'sonar integrate claude --skip-hooks',
-      description: 'Integrate without installing hooks',
-    },
-    {
       command: 'sonar integrate claude -g',
       description:
         'Integrate globally and install hooks to ~/.claude which will be available for all projects',

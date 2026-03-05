@@ -51,12 +51,10 @@ export interface IntegrateOptions {
   token?: string;
   org?: string;
   nonInteractive?: boolean;
-  skipHooks?: boolean;
   global?: boolean;
 }
 
 interface RepairOptions {
-  skipHooks: boolean | undefined;
   hooksGlobal: boolean | undefined;
   nonInteractive: boolean | undefined;
 }
@@ -331,7 +329,7 @@ async function runHealthCheckAndRepair(
     return undefined;
   }
 
-  const { skipHooks, hooksGlobal, nonInteractive } = repairOptions;
+  const { hooksGlobal, nonInteractive } = repairOptions;
   const globalDir = hooksGlobal ? homedir() : undefined;
   const hooksRoot = globalDir ?? projectInfo.root;
 
@@ -339,9 +337,7 @@ async function runHealthCheckAndRepair(
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
-    if (!skipHooks) {
-      await installSecretScanningHooks(projectInfo.root, globalDir);
-    }
+    await installSecretScanningHooks(projectInfo.root, globalDir);
     return token;
   }
 
@@ -352,9 +348,7 @@ async function runHealthCheckAndRepair(
 
   if (nonInteractive && !healthResult.tokenValid) {
     // Can't repair token without browser interaction — install hooks and continue
-    if (!skipHooks) {
-      await installSecretScanningHooks(projectInfo.root, globalDir);
-    }
+    await installSecretScanningHooks(projectInfo.root, globalDir);
     return token;
   }
 
@@ -450,7 +444,6 @@ async function runFinalVerification(
   projectKey: string | undefined,
   hooksRoot: string,
   config: ConfigurationData,
-  options: IntegrateOptions,
 ): Promise<void> {
   text('\nPhase 3/3: Final Verification');
   blank();
@@ -465,7 +458,7 @@ async function runFinalVerification(
   );
   printFinalVerificationResults(finalHealth, projectKey);
 
-  updateStateAfterConfiguration(!options.skipHooks, {
+  updateStateAfterConfiguration({
     serverURL,
     organization: config.organization,
   });
@@ -486,7 +479,6 @@ async function runFullSonarIntegration(
   let token = ensureToken(config.token);
 
   const repairOptions: RepairOptions = {
-    skipHooks: options.skipHooks,
     hooksGlobal: options.global,
     nonInteractive: effectiveNonInteractive,
   };
@@ -502,16 +494,14 @@ async function runFullSonarIntegration(
     );
 
     if (token) {
-      await runFinalVerification(serverURL, token, projectKey, hooksRoot, config, options);
+      await runFinalVerification(serverURL, token, projectKey, hooksRoot, config);
       return;
     }
   }
 
   if (effectiveNonInteractive) {
-    if (!options.skipHooks) {
-      await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
-    }
-    updateStateAfterConfiguration(!options.skipHooks, {
+    await installSecretScanningHooks(projectInfo.root, options.global ? homedir() : undefined);
+    updateStateAfterConfiguration({
       serverURL,
       organization: config.organization,
     });
@@ -527,16 +517,16 @@ async function runFullSonarIntegration(
     options.global ? homedir() : undefined,
   );
 
-  await runFinalVerification(serverURL, token, projectKey, hooksRoot, config, options);
+  await runFinalVerification(serverURL, token, projectKey, hooksRoot, config);
 }
 
 /**
  * Update state after successful configuration
  */
-function updateStateAfterConfiguration(
-  hooksInstalled: boolean,
-  connection?: { serverURL: string; organization?: string },
-): void {
+function updateStateAfterConfiguration(connection?: {
+  serverURL: string;
+  organization?: string;
+}): void {
   try {
     const state = loadState();
 
@@ -544,10 +534,8 @@ function updateStateAfterConfiguration(
     markAgentConfigured(state, 'claude-code', VERSION);
 
     // Track installed hooks
-    if (hooksInstalled) {
-      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
-      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
-    }
+    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
+    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
 
     // Save connection so `sonar auth status` reports the active connection
     if (connection) {
