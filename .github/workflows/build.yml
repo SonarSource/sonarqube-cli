@@ -49,30 +49,12 @@ jobs:
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
 
-  build-binaries:
-    name: Build Binary - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
+  build-and-publish-binaries:
+    name: Build and Publish Binaries
+    runs-on: sonar-m-public
     needs: prepare
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            runner: sonar-m-public
-            target: bun-linux-x64
-            platform: linux-x86-64
-          - os: macos
-            runner: macos-latest-xlarge
-            target: bun-darwin-arm64
-            platform: macos-arm64
-          - os: windows
-            runner: warp-custom-windows-2022-s
-            target: bun-windows-x64
-            platform: windows-x86-64
+    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
-      - name: Setup Cloudflare WARP (macOS only)
-        if: matrix.os == 'macos'
-        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
-
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
@@ -96,6 +78,7 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
             development/kv/data/sign key | GPG_SIGNING_KEY;
             development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
       - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
@@ -111,43 +94,57 @@ jobs:
           ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: bun ci
 
-      - name: Compute artifact name
-        id: artifact
-        shell: bash
-        env:
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: echo "name=sonarqube-cli-${PROJECT_VERSION}-${{ matrix.platform }}.exe" >> $GITHUB_OUTPUT
-
       - name: Fetch binary signatures
         run: bun run fetch:signatures
 
-      - name: Build binary for ${{ matrix.os }}
+      - name: Build binaries
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
         run: |
-          echo "Building ${{ matrix.os }} binary..."
-          bun build src/index.ts --compile --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
-          echo "✅ Binary built successfully"
+          BUN_COMPILE_TARGET_TARBALL_URL=https://repox.jfrog.io/artifactory/api/npm/npm/@oven/bun-windows-x64/-/bun-windows-x64-1.3.9.tgz bun build src/index.ts --compile --outfile dist/sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe --target bun-windows-x64
+          bun build src/index.ts --compile --outfile dist/sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.exe --target bun-linux-x64
 
-      - name: Sign binary
+      - name: Sign binaries
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-        run: bun build-scripts/sign.mjs dist/${{ steps.artifact.outputs.name }}
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+        run: |
+          bun build-scripts/sign.mjs dist/sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.exe
+          bun build-scripts/sign.mjs dist/sonarqube-cli-${PROJECT_VERSION}-macos-arm64.exe
+          bun build-scripts/sign.mjs dist/sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe
 
-      - name: List built artifacts (Unix)
-        if: matrix.os != 'windows'
-        run: ls -lh dist/
+      - name: Copy user scripts to dist
+        run: cp user-scripts/install.sh user-scripts/install.ps1 dist/
 
-      - name: List built artifacts (Windows)
-        if: matrix.os == 'windows'
-        run: dir dist\
+      - name: Generate latest-version.txt
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+        run: echo "${PROJECT_VERSION}" > dist/latest-version.txt
 
-      - name: Upload binary to GitHub
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        with:
-          name: binary-${{ matrix.os }}
-          path: |
-            dist/${{ steps.artifact.outputs.name }}
-            dist/${{ steps.artifact.outputs.name }}.asc
+      - name: Upload binaries to Artifactory
+        env:
+          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
+          ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
+          PROJECT: ${{ github.event.repository.name }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
+          ARTIFACTS_TO_PUBLISH: "org.sonarsource.cli:sonarqube-cli:exe:linux-x86-64,org.sonarsource.cli:sonarqube-cli:exe:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64"
+        run: |
+          jf config add repox \
+            --artifactory-url="${ARTIFACTORY_URL}" \
+            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}"
+          jf rt upload \
+            "dist/*" \
+            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/" \
+            --server-id=repox \
+            --flat=true \
+            --build-name="${PROJECT}" \
+            --build-number="${BUILD_NUMBER}" \
+            --module="org.sonarsource.cli:${PROJECT}:${PROJECT_VERSION}"
+          jf rt build-collect-env "${PROJECT}" "${BUILD_NUMBER}"
+          jf rt build-publish "${PROJECT}" "${BUILD_NUMBER}"
 
   test-and-scan:
     name: Run Tests and Scan with SonarQube
@@ -208,82 +205,13 @@ jobs:
         run: |
           .github/scripts/sonarqube-analysis.sh
 
-  publish-binaries:
-    name: Publish Binaries to Artifactory
-    runs-on: sonar-m-public
-    needs:
-      - prepare
-      - build-binaries
-    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
-        with:
-          secrets: |
-            development/kv/data/repox url | ARTIFACTORY_URL;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
-
-      - name: Download linux binary
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: binary-linux
-          path: dist/
-
-      - name: Download macos binary
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: binary-macos
-          path: dist/
-
-      - name: Download windows binary
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: binary-windows
-          path: dist/
-
-      - name: Copy user scripts to dist
-        run: cp user-scripts/install.sh user-scripts/install.ps1 dist/
-
-      - name: Generate latest-version.txt
-        env:
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: echo "${PROJECT_VERSION}" > dist/latest-version.txt
-
-      - name: Upload binaries to Artifactory
-        env:
-          ARTIFACTORY_URL: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_URL }}
-          ARTIFACTORY_DEPLOY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_DEPLOY_PASSWORD }}
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-          ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
-          PROJECT: ${{ github.event.repository.name }}
-          BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          ARTIFACTS_TO_PUBLISH: "org.sonarsource.cli:sonarqube-cli:exe:linux-x86-64,org.sonarsource.cli:sonarqube-cli:exe:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64"
-        run: |
-          jf config add repox \
-            --artifactory-url="${ARTIFACTORY_URL}" \
-            --access-token="${ARTIFACTORY_DEPLOY_PASSWORD}"
-          jf rt upload \
-            "dist/*" \
-            "${ARTIFACTORY_DEPLOY_REPO}/org/sonarsource/cli/sonarqube-cli/${PROJECT_VERSION}/" \
-            --server-id=repox \
-            --flat=true \
-            --build-name="${PROJECT}" \
-            --build-number="${BUILD_NUMBER}" \
-            --module="org.sonarsource.cli:${PROJECT}:${PROJECT_VERSION}"
-          jf rt build-collect-env "${PROJECT}" "${BUILD_NUMBER}"
-          jf rt build-publish "${PROJECT}" "${BUILD_NUMBER}"
-
   promote:
     runs-on: sonar-s-public
     name: Promote
     needs:
       - prepare
-      - build-binaries
+      - build-and-publish-binaries
       - test-and-scan
-      - publish-binaries
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
       - uses: SonarSource/ci-github-actions/promote@148774f456203f228b7bd1bd68ed0c22254d9cd1 # 1.3.24
