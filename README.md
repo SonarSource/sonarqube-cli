@@ -164,11 +164,6 @@ Integrate Claude Code with interactive setup
 sonar integrate claude -s https://sonarcloud.io -p my-project
 ```
 
-Integrate without installing hooks
-```bash
-sonar integrate claude --skip-hooks
-```
-
 Integrate globally and install hooks to ~/.claude which will be available for all projects
 ```bash
 sonar integrate claude -g
@@ -187,7 +182,6 @@ Setup SonarQube integration for Claude Code. This will install secrets scanning 
 | `--token`, `-t`     | string  | No       | Existing authentication token                                               | -       |
 | `--org`, `-o`       | string  | No       | Organization key (for SonarQube Cloud)                                      | -       |
 | `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
-| `--skip-hooks`      | boolean | No       | Skip hooks installation                                                     | -       |
 | `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
 
 ---
