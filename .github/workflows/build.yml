@@ -41,21 +41,11 @@ jobs:
         id: get-build-number
 
       - name: Update package.json version with build number
+        id: project_version
         env:
           BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
         run: |
-          node - <<'EOF'
-          const fs = require('fs');
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          pkg.version += `.${process.env.BUILD_NUMBER}`;
-          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          EOF
-
-      - name: Get project version
-        id: project_version
-        shell: bash
-        run: |
-          PACKAGE_VERSION=$(npm pkg get version --workspaces=false | tr -d '"')
+          PACKAGE_VERSION=$(bun build-scripts/set-build-number.ts "${BUILD_NUMBER}")
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
 
@@ -107,14 +97,13 @@ jobs:
             development/kv/data/sign key | GPG_SIGNING_KEY;
             development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
 
-      - name: Cache NPM dependencies
+      - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
         with:
           path: |
-            ~/.npm
-            node_modules/
-          key: npm-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-          restore-keys: npm-${{ runner.os }}
+            ~/.bun
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}
 
       - name: Install dependencies
         env:
@@ -142,7 +131,7 @@ jobs:
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-        run: node build-scripts/sign.mjs dist/${{ steps.artifact.outputs.name }}
+        run: bun build-scripts/sign.mjs dist/${{ steps.artifact.outputs.name }}
 
       - name: List built artifacts (Unix)
         if: matrix.os != 'windows'
@@ -185,14 +174,13 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
-      - name: Cache NPM dependencies
+      - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
         with:
           path: |
-            ~/.npm
-            node_modules/
-          key: npm-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-          restore-keys: npm-${{ runner.os }}
+            ~/.bun
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}
 
       - name: Install dependencies
         env:
