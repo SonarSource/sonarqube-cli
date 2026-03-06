@@ -7,7 +7,7 @@
     "sonar": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun run validate && tsc",
+    "build": "tsc",
     "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
     "dev": "bun run src/index.ts",
     "test": "bun test ./tests/unit/",

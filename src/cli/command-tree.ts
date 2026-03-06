@@ -39,6 +39,7 @@ import {
 import { installSecrets, type InstallSecretsOptions } from './commands/install';
 import { integrate, type IntegrateOptions } from './commands/integrate';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze';
+import { apiCommand, type ApiCommandOptions } from './commands/api';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config';
 import { parseInteger } from './commands/common/parsing';
@@ -73,6 +74,19 @@ COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
   .version(VERSION, '-v, --version', 'display version for command')
   .addHelpText('beforeAll', getHelpBanner());
+
+// Generic API access
+COMMAND_TREE.command('api')
+  .description('Make authenticated API requests to SonarQube')
+  .argument('<method>', 'HTTP method (get, post, patch, delete)')
+  .argument('<endpoint>', 'API endpoint path (e.g. /api/issues/search?ps=100)')
+  .option('-s, --server <server>', 'SonarQube server URL')
+  .option('-t, --token <token>', 'Authentication token')
+  .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
+  .option('-d, --data <data>', 'JSON request body (for POST/PATCH)')
+  .action((method: string, endpoint: string, options: ApiCommandOptions) =>
+    runCommand(() => apiCommand(method, endpoint, options)),
+  );
 
 // Install Sonar tools
 const install = COMMAND_TREE.command('install').description('Install Sonar tools');
