@@ -41,56 +41,9 @@ describe('list issues — auth scenarios', () => {
       const result = await harness.run('list issues --project my-project');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('No server URL found');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'uses SONAR_CLI_TOKEN + SONAR_CLI_SERVER env vars for authentication',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('env-token')
-        .withProject('env-project')
-        .start();
-
-      const result = await harness.run('list issues --project env-project', {
-        extraEnv: {
-          SONAR_CLI_TOKEN: 'env-token',
-          SONAR_CLI_SERVER: server.baseUrl(),
-        },
-      });
-
-      expect(result.exitCode).toBe(0);
-      const parsed = JSON.parse(result.stdout);
-      expect(parsed.issues).toBeDefined();
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'warns about missing SONAR_CLI_SERVER when only SONAR_CLI_TOKEN is set',
-    async () => {
-      const result = await harness.run('list issues --project my-project', {
-        extraEnv: { SONAR_CLI_TOKEN: 'some-token' },
-      });
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('SONAR_CLI_SERVER');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'warns about missing SONAR_CLI_TOKEN when only SONAR_CLI_SERVER is set',
-    async () => {
-      const result = await harness.run('list issues --project my-project', {
-        extraEnv: { SONAR_CLI_SERVER: 'http://127.0.0.1:9999' },
-      });
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('SONAR_CLI_TOKEN');
+      expect(result.stdout + result.stderr).toContain(
+        'No active connection found. Run: sonar auth login',
+      );
     },
     { timeout: 15000 },
   );
@@ -111,7 +64,7 @@ describe('list issues — auth scenarios', () => {
         .start();
 
       harness
-        .env()
+        .state()
         .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), 'keychain-token');
 

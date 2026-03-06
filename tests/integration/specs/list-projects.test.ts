@@ -53,7 +53,7 @@ describe('list projects', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('some-token').start();
 
-      harness.env().withActiveConnection(server.baseUrl());
+      harness.state().withActiveConnection(server.baseUrl());
       // No withKeychainToken — token absent from keychain
 
       const result = await harness.run('list projects');
@@ -75,7 +75,7 @@ describe('list projects', () => {
         .start();
 
       harness
-        .env()
+        .state()
         .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), 'valid-token');
 
@@ -102,7 +102,7 @@ describe('list projects', () => {
         .start();
 
       harness
-        .env()
+        .state()
         .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), 'wrong-token');
 

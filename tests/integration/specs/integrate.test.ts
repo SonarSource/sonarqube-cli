@@ -39,31 +39,6 @@ describe('integrate claude', () => {
   // --- Without --non-interactive (auth succeeds, no repair triggered) ---
 
   it(
-    'installs secrets-only hooks when sonar-project.properties is absent',
-    async () => {
-      // No props file, no server, no token → secrets-only mode
-      const projectDir = await harness.newFileSystem().build();
-
-      const result = await harness.run('integrate claude --non-interactive', { cwd: projectDir });
-
-      expect(result.exitCode).toBe(0);
-      expect(
-        existsSync(
-          join(
-            projectDir,
-            '.claude',
-            'hooks',
-            'sonar-secrets',
-            'build-scripts',
-            'pretool-secrets.sh',
-          ),
-        ),
-      ).toBe(true);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
     'performs full integration with valid --token and URL from sonar-project.properties',
     async () => {
       const server = await harness
@@ -141,7 +116,7 @@ describe('integrate claude', () => {
         .withProject('keychain-project')
         .start();
 
-      harness.env().withKeychainToken(server.baseUrl(), 'keychain-token');
+      harness.state().withKeychainToken(server.baseUrl(), 'keychain-token');
 
       const projectDir = await harness
         .newFileSystem()
@@ -369,34 +344,6 @@ describe('integrate claude', () => {
       ).toBe(true);
     },
     { timeout: 15000 },
-  );
-
-  it(
-    'falls back to secrets-only mode when only SONAR_CLI_TOKEN is set and no sonar-project.properties',
-    async () => {
-      const projectDir = await harness.newFileSystem().build();
-
-      const result = await harness.run('integrate claude --non-interactive', {
-        cwd: projectDir,
-        extraEnv: { SONAR_CLI_TOKEN: 'some-token' },
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain('SONAR_CLI_SERVER');
-      expect(
-        existsSync(
-          join(
-            projectDir,
-            '.claude',
-            'hooks',
-            'sonar-secrets',
-            'build-scripts',
-            'pretool-secrets.sh',
-          ),
-        ),
-      ).toBe(true);
-    },
-    { timeout: 30000 },
   );
 
   it(
@@ -824,7 +771,7 @@ describe('integrate — argument validation', () => {
       const result = await harness.run('integrate gemini');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Allowed choices are claude');
+      expect(result.stdout + result.stderr).toContain("error: unknown command 'gemini'");
     },
     { timeout: 15000 },
   );

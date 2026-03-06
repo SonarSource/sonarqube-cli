@@ -60,7 +60,7 @@ describe('analyze secrets --file', () => {
         .withFile('src/config.js', `const token = "${GITHUB_TEST_TOKEN}";`)
         .build();
 
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run(`analyze secrets --file ${testDir}/src/config.js`);
 
@@ -76,7 +76,7 @@ describe('analyze secrets --file', () => {
     async () => {
       const testDir = await harness.newFileSystem().withFile('src/clean.js', CLEAN_CONTENT).build();
 
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run(`analyze secrets --file ${testDir}/src/clean.js`);
 
@@ -88,7 +88,7 @@ describe('analyze secrets --file', () => {
   it(
     'exits with code 1 for non-existent file',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('analyze secrets --file /nonexistent/path/file.txt');
 

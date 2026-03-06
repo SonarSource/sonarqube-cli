@@ -22,7 +22,7 @@
 // Note: actual download scenarios are not suitable for integration tests (network dependency).
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness/index.js';
+import { TestHarness } from '../harness';
 
 describe('install secrets --status', () => {
   let harness: TestHarness;
@@ -50,7 +50,7 @@ describe('install secrets --status', () => {
   it(
     'reports installed when sonar-secrets binary is present',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('install secrets --status');
 

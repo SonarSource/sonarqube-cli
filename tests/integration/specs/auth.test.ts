@@ -96,7 +96,7 @@ describe('auth logout', () => {
       const server = await harness.newFakeServer().withAuthToken('logout-token').start();
 
       harness
-        .env()
+        .state()
         .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), 'logout-token');
 
@@ -162,7 +162,7 @@ describe('auth purge', () => {
       const server2 = await harness.newFakeServer().withAuthToken('purge-token-2').start();
 
       harness
-        .env()
+        .state()
         .withKeychainToken(server.baseUrl(), 'purge-token-1')
         .withKeychainToken(server2.baseUrl(), 'purge-token-2');
 
@@ -209,7 +209,7 @@ describe('auth status', () => {
     'reports token missing when connection exists but no keychain token',
     async () => {
       const server = await harness.newFakeServer().start();
-      harness.env().withActiveConnection(server.baseUrl());
+      harness.state().withActiveConnection(server.baseUrl());
       // No withKeychainToken
 
       const result = await harness.run('auth status');
@@ -226,7 +226,7 @@ describe('auth status', () => {
       const server = await harness.newFakeServer().withAuthToken('status-token').start();
 
       harness
-        .env()
+        .state()
         .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), 'status-token');
 

@@ -64,7 +64,9 @@ export const BIN_DIR = join(CLI_DIR, 'bin');
 // Sonarsource binaries
 // ---------------------------------------------------------------------------
 
-export const SONARSOURCE_BINARIES_URL = 'https://binaries.sonarsource.com';
+/** Base URL for downloading SonarSource binaries. Override via SONAR_CLI_BINARIES_URL for test environments. */
+export const SONARSOURCE_BINARIES_URL =
+  process.env.SONAR_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
 
 // ---------------------------------------------------------------------------

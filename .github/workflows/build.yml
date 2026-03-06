@@ -194,18 +194,6 @@ jobs:
       - name: Check linting
         run: bun lint
 
-      - name: Build binary for tests
-        run: bun run build:binary
-
-      - name: Setup integration test resources
-        env:
-          SONAR_CLI_DIR: /tmp/sonar-test-setup
-        run: |
-          dist/sonarqube-cli install secrets
-          mkdir -p tests/integration/resources
-          cp /tmp/sonar-test-setup/bin/sonar-secrets tests/integration/resources/sonar-secrets
-          chmod +x tests/integration/resources/sonar-secrets
-
       - name: Run all tests
         run: bun test:coverage
 

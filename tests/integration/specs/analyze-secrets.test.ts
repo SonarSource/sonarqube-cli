@@ -46,7 +46,7 @@ describe('analyze secrets', () => {
   it(
     'exits with code 0 for clean file when binary is installed (--file)',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const testDir = await harness.newFileSystem().withFile('clean.js', CLEAN_CONTENT).build();
 
@@ -61,7 +61,7 @@ describe('analyze secrets', () => {
   it(
     'exits with code 51 for file with secrets when binary is installed (--file)',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const testDir = await harness
         .newFileSystem()
@@ -81,7 +81,7 @@ describe('analyze secrets', () => {
   it(
     'exits with code 0 for clean content via --stdin when binary is installed',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('analyze secrets --stdin', { stdin: CLEAN_CONTENT });
 
@@ -94,7 +94,7 @@ describe('analyze secrets', () => {
   it(
     'exits with code 51 for content with secrets via --stdin when binary is installed',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('analyze secrets --stdin', {
         stdin: `const token = "${GITHUB_TEST_TOKEN}";`,
@@ -125,7 +125,7 @@ describe('analyze secrets', () => {
   it(
     'exits with code 1 when neither --file nor --stdin is provided',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('analyze secrets');
 
@@ -138,7 +138,7 @@ describe('analyze secrets', () => {
   it(
     'exits with code 1 for non-existent file path',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('analyze secrets --file /nonexistent/path/file.txt');
 
@@ -151,7 +151,7 @@ describe('analyze secrets', () => {
   it(
     'forwards auth to binary when SONAR_CLI_TOKEN + SONAR_CLI_SERVER are set',
     async () => {
-      harness.env().withSecretsBinaryInstalled();
+      harness.state().withSecretsBinaryInstalled();
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
 
       // Use a file with secrets so the binary outputs exit 51 and CLI forwards binary stderr.
@@ -193,7 +193,7 @@ describe('analyze secrets', () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
 
       harness
-        .env()
+        .state()
         .withSecretsBinaryInstalled()
         .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), VALID_TOKEN);

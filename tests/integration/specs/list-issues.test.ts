@@ -46,10 +46,12 @@ describe('list issues', () => {
             .withIssue({ ruleKey: 'java:S5678', message: 'Another issue', severity: 'CRITICAL' }),
         )
         .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(
-        `list issues --project my-project --server ${server.baseUrl()} --token test-token`,
-      );
+      const result = await harness.run(`list issues --project my-project`);
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('java:S1234');
@@ -67,10 +69,12 @@ describe('list issues', () => {
         .withAuthToken('test-token')
         .withProject('empty-project')
         .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(
-        `list issues --project empty-project --server ${server.baseUrl()} --token test-token`,
-      );
+      const result = await harness.run(`list issues --project empty-project`);
 
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout);
@@ -109,10 +113,12 @@ describe('list issues', () => {
             .withIssue({ ruleKey: 'java:S9999', message: 'Blocker issue', severity: 'BLOCKER' }),
         )
         .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(
-        `list issues --project my-project --server ${server.baseUrl()} --token test-token --severity BLOCKER`,
-      );
+      const result = await harness.run(`list issues --project my-project --severity BLOCKER`);
 
       expect(result.exitCode).toBe(0);
       const recorded = server.getRecordedRequests();
@@ -130,10 +136,12 @@ describe('list issues', () => {
         .withAuthToken('my-token')
         .withProject('test-project')
         .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'my-token');
 
-      await harness.run(
-        `list issues --project test-project --server ${server.baseUrl()} --token my-token`,
-      );
+      await harness.run(`list issues --project test-project`);
 
       const recorded = server.getRecordedRequests();
       const issuesRequest = recorded.find((r) => r.path === '/api/issues/search');
@@ -179,10 +187,12 @@ describe('list issues', () => {
           p.withIssue({ ruleKey: 'ts:S1000', message: 'TypeScript issue', severity: 'MINOR' }),
         )
         .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'tok');
 
-      const result = await harness.run(
-        `list issues --project proj --server ${server.baseUrl()} --token tok`,
-      );
+      const result = await harness.run(`list issues --project proj`);
 
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout);

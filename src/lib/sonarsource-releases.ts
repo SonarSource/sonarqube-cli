@@ -18,12 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Sonarsource binaries client for downloading sonar-secrets
+// SonarSource binaries client for downloading sonar-secrets
 
 import { readFileSync } from 'node:fs';
 import type { PlatformInfo } from './install-types.js';
 import logger from './logger.js';
-import { VERSION } from '../version.js';
+import { version as VERSION } from '../../package.json';
 import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from './config-constants.js';
 
 const DOWNLOAD_TIMEOUT_MS = 60000;
