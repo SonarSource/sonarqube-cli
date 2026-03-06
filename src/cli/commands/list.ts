@@ -20,6 +20,7 @@
 
 // Issues command - search for SonarQube issues
 
+import { resolveAuth } from '../../lib/auth-resolver';
 import { SonarQubeClient } from '../../sonarqube/client';
 import { IssuesClient } from '../../sonarqube/issues';
 import { encode as encodeToToon } from '@toon-format/toon';
@@ -27,8 +28,6 @@ import { formatTable } from '../../formatter/table';
 import { formatCSV } from '../../formatter/csv';
 import type { IssuesSearchParams } from '../../lib/types';
 import { print } from '../../ui';
-import { getActiveConnection, loadState } from '../../lib/state-manager';
-import { getToken } from '../../lib/keychain';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../sonarqube/projects';
 
 const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
@@ -53,7 +52,8 @@ export interface ListIssuesOptions {
  * Issues search command handler
  */
 export async function listIssues(options: ListIssuesOptions): Promise<void> {
-  // Validate options before any auth/network operations
+  const resolvedAuth = await resolveAuth({});
+
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
     throw new Error(`Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`);
@@ -82,24 +82,12 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     throw new Error('--project is required');
   }
 
-  const state = loadState();
-  const activeConnection = getActiveConnection(state);
-
-  if (!activeConnection) {
-    throw new Error('No active connection found. Run: sonar auth login');
-  }
-
-  const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
-  if (!token) {
-    throw new Error('No token found. Run: sonar auth login');
-  }
-
-  const client = new SonarQubeClient(activeConnection.serverUrl, token);
+  const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
   const issuesClient = new IssuesClient(client);
 
   const params: IssuesSearchParams = {
     projects: options.project,
-    organization: activeConnection.orgKey,
+    organization: resolvedAuth.orgKey,
     severities: options.severity?.toUpperCase(),
     types: options.type,
     statuses: options.status,
@@ -146,17 +134,7 @@ export interface ListProjectsOptions {
  * Projects search command handler
  */
 export async function listProjects(options: ListProjectsOptions): Promise<void> {
-  const state = loadState();
-  const activeConnection = getActiveConnection(state);
-
-  if (!activeConnection) {
-    throw new Error('No active connection found. Run: sonar auth login');
-  }
-
-  const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
-  if (!token) {
-    throw new Error('No token found. Run: sonar auth login');
-  }
+  const resolvedAuth = await resolveAuth({});
 
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
@@ -170,14 +148,14 @@ export async function listProjects(options: ListProjectsOptions): Promise<void> 
     throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
-  const client = new SonarQubeClient(activeConnection.serverUrl, token);
+  const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
   const projectsClient = new ProjectsClient(client);
 
   const result = await projectsClient.searchProjects({
     q: options.query,
     ps: pageSize,
     p: options.page,
-    organization: activeConnection.orgKey,
+    organization: resolvedAuth.orgKey,
   });
 
   const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;

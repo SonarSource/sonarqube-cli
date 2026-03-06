@@ -33,8 +33,7 @@ import type {
 import { listIssues } from '../../src/cli/commands/list.js';
 import { setMockUi } from '../../src/ui';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../src/sonarqube/projects';
-import * as stateManager from '../../src/lib/state-manager.js';
-import * as keychain from '../../src/lib/keychain.js';
+import * as authResolver from '../../src/lib/auth-resolver.js';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
@@ -349,33 +348,49 @@ describe('IssuesClient', () => {
 });
 
 describe('issuesSearchCommand', () => {
-  let loadStateSpy: ReturnType<typeof spyOn>;
-  let getActiveConnectionSpy: ReturnType<typeof spyOn>;
-  let getTokenSpy: ReturnType<typeof spyOn>;
+  let resolveAuthSpy: ReturnType<typeof spyOn>;
 
-  const mockConnection = {
-    id: 'test-id',
-    type: 'cloud' as const,
-    authenticatedAt: new Date().toISOString(),
-    keystoreKey: 'test-keystore-key',
+  const mockAuth = {
+    token: 'test-token',
     serverUrl: 'https://sonarcloud.io',
     orgKey: 'test-org',
   };
 
+  const emptyApiResponse = {
+    issues: [],
+    total: 0,
+    p: 1,
+    ps: 500,
+    paging: { pageIndex: 1, pageSize: 500, total: 0 },
+  };
+
   beforeEach(() => {
     setMockUi(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue({} as never);
-    getActiveConnectionSpy = spyOn(stateManager, 'getActiveConnection').mockReturnValue(
-      mockConnection,
-    );
-    getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue('test-token');
+    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(mockAuth);
   });
 
   afterEach(() => {
     setMockUi(false);
-    loadStateSpy.mockRestore();
-    getActiveConnectionSpy.mockRestore();
-    getTokenSpy.mockRestore();
+    resolveAuthSpy.mockRestore();
+  });
+
+  it('calls resolveAuth', async () => {
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
+
+    try {
+      await listIssues({ project: 'my-project', page: 1, pageSize: 500 });
+      expect(resolveAuthSpy).toHaveBeenCalledWith({});
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
+
+  it('propagates auth errors', () => {
+    resolveAuthSpy.mockRejectedValue(new Error('Not authenticated. Run: sonar auth login'));
+
+    expect(listIssues({ project: 'proj', page: 1, pageSize: 500 })).rejects.toThrow(
+      'sonar auth login',
+    );
   });
 
   it('throws when --project is missing', () => {
@@ -383,55 +398,28 @@ describe('issuesSearchCommand', () => {
   });
 
   it('throws when --format is invalid', () => {
-    expect(
-      listIssues({
-        project: 'proj',
-        format: 'xml',
-        page: 1,
-        pageSize: 500,
-      }),
-    ).rejects.toThrow('xml');
+    expect(listIssues({ project: 'proj', format: 'xml', page: 1, pageSize: 500 })).rejects.toThrow(
+      'xml',
+    );
   });
 
   it('throws when --page is 0', () => {
-    expect(
-      listIssues({
-        project: 'proj',
-        page: 0,
-        pageSize: 500,
-      }),
-    ).rejects.toThrow('page');
+    expect(listIssues({ project: 'proj', page: 0, pageSize: 500 })).rejects.toThrow('page');
   });
 
   it('throws when --page-size is 0', () => {
-    expect(
-      listIssues({
-        project: 'proj',
-        page: 1,
-        pageSize: 0,
-      }),
-    ).rejects.toThrow('page-size');
+    expect(listIssues({ project: 'proj', page: 1, pageSize: 0 })).rejects.toThrow('page-size');
   });
 
-  it('throws when --page-size exceeds 500', () => {
-    expect(
-      listIssues({
-        project: 'proj',
-
-        page: 1,
-        pageSize: 501,
-      }),
-    ).rejects.toThrow('page-size');
+  it('throws when --page-size exceeds maximum', () => {
+    expect(listIssues({ project: 'proj', page: 1, pageSize: MAX_PAGE_SIZE + 1 })).rejects.toThrow(
+      'page-size',
+    );
   });
 
   it('throws when --severity is invalid', () => {
     expect(
-      listIssues({
-        project: 'proj',
-        severity: 'EXTREME',
-        page: 1,
-        pageSize: 500,
-      }),
+      listIssues({ project: 'proj', severity: 'EXTREME', page: 1, pageSize: 500 }),
     ).rejects.toThrow('EXTREME');
   });
 
@@ -440,44 +428,23 @@ describe('issuesSearchCommand', () => {
     const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
         capturedSeverities = (params as Record<string, string>)?.severities;
-        return Promise.resolve({
-          issues: [],
-          total: 0,
-          p: 1,
-          ps: 500,
-          paging: { pageIndex: 1, pageSize: 500, total: 0 },
-        } as unknown as T);
+        return Promise.resolve(emptyApiResponse as unknown as T);
       },
     );
 
     try {
-      await listIssues({
-        project: 'my-project',
-        severity: 'major',
-        page: 1,
-        pageSize: 500,
-      });
+      await listIssues({ project: 'my-project', severity: 'major', page: 1, pageSize: 500 });
       expect(capturedSeverities).toBe('MAJOR');
     } finally {
       getSpy.mockRestore();
     }
   });
 
-  it('exits 0 when issues search succeeds', async () => {
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue({
-      issues: [],
-      total: 0,
-      p: 1,
-      ps: 500,
-      paging: { pageIndex: 1, pageSize: 500, total: 0 },
-    });
+  it('succeeds when issues search returns results', async () => {
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
 
     try {
-      await listIssues({
-        project: 'my-project',
-        page: 1,
-        pageSize: 500,
-      });
+      await listIssues({ project: 'my-project', page: 1, pageSize: 500 });
     } finally {
       getSpy.mockRestore();
     }
