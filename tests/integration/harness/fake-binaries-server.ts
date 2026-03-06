@@ -23,20 +23,6 @@
 // without real network calls. Serve the pre-built artifact or configure error responses
 // via the builder before calling start().
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { detectPlatform, buildLocalBinaryName } from '../../../src/lib/platform-detector.js';
-
-/** Default path to the pre-built sonar-secrets artifact used as the served binary. */
-const DEFAULT_ARTIFACT_PATH = join(
-  import.meta.dir,
-  '..',
-  'resources',
-  buildLocalBinaryName(detectPlatform()),
-);
-
-type ResponseConfig = { kind: 'artifact'; path: string } | { kind: 'status'; code: number };
-
 export class FakeBinariesServer {
   private readonly server: ReturnType<typeof Bun.serve>;
 
@@ -51,57 +37,5 @@ export class FakeBinariesServer {
 
   async stop(): Promise<void> {
     await this.server.stop(true);
-  }
-}
-
-export class FakeBinariesServerBuilder {
-  private _response: ResponseConfig = { kind: 'artifact', path: DEFAULT_ARTIFACT_PATH };
-
-  /**
-   * Serve the real sonar-secrets artifact so PGP verification passes.
-   * Optionally override the path; defaults to tests/integration/resources/sonar-secrets.
-   * This is the default behaviour when no other method is called.
-   */
-  withArtifact(artifactPath?: string): this {
-    this._response = { kind: 'artifact', path: artifactPath ?? DEFAULT_ARTIFACT_PATH };
-    return this;
-  }
-
-  /**
-   * Respond with the given HTTP status code and an empty body.
-   * Use this to simulate error conditions (e.g. 404 = artifact not found, 500 = server error).
-   */
-  withHttpStatus(statusCode: number): this {
-    this._response = { kind: 'status', code: statusCode };
-    return this;
-  }
-
-  start(): FakeBinariesServer {
-    const response = this._response;
-
-    if (response.kind === 'artifact' && !existsSync(response.path)) {
-      throw new Error(
-        `Fake binaries server: artifact not found at: ${response.path}\n` +
-          `Run the setup script to download it:\n` +
-          `  bash build-scripts/setup-integration-resources.sh`,
-      );
-    }
-
-    const binaryFile = response.kind === 'artifact' ? Bun.file(response.path) : null;
-
-    const server = Bun.serve({
-      port: 0,
-      hostname: '127.0.0.1',
-      fetch(_req) {
-        if (binaryFile) {
-          return new Response(binaryFile, {
-            headers: { 'Content-Type': 'application/octet-stream' },
-          });
-        }
-        return new Response(null, { status: (response as { kind: 'status'; code: number }).code });
-      },
-    });
-
-    return new FakeBinariesServer(server);
   }
 }

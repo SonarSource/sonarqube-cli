@@ -23,7 +23,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TestHarness } from '../harness/index.js';
+import { TestHarness } from '../harness';
 
 describe('auth login', () => {
   let harness: TestHarness;

@@ -20,10 +20,10 @@
 
 // Integration tests for `sonar integrate claude`
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join, isAbsolute } from 'node:path';
-import { TestHarness } from '../harness/index.js';
+import { isAbsolute, join } from 'node:path';
+import { TestHarness } from '../harness';
 
 describe('integrate claude', () => {
   let harness: TestHarness;
@@ -46,32 +46,21 @@ describe('integrate claude', () => {
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-        )
-        .build();
+        );
 
-      const result = await harness.run('integrate claude --token test-token --non-interactive', {
-        cwd: projectDir,
-      });
+      const result = await harness.run('integrate claude --token test-token --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(existsSync(join(projectDir, '.claude', 'settings.json'))).toBe(true);
+      expect(harness.cwd().exists('.claude', 'settings.json')).toBe(true);
       expect(
-        existsSync(
-          join(
-            projectDir,
-            '.claude',
-            'hooks',
-            'sonar-secrets',
-            'build-scripts',
-            'pretool-secrets.sh',
-          ),
-        ),
+        harness
+          .cwd()
+          .exists('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh'),
       ).toBe(true);
     },
     { timeout: 30000 },
@@ -88,13 +77,9 @@ describe('integrate claude', () => {
 
       // sonar-project.properties has only the project key — no sonar.host.url,
       // so the server URL must come exclusively from SONAR_CLI_SERVER env var
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile('sonar-project.properties', 'sonar.projectKey=env-project')
-        .build();
+      harness.cwd().writeFile('sonar-project.properties', 'sonar.projectKey=env-project');
 
       const result = await harness.run('integrate claude --non-interactive', {
-        cwd: projectDir,
         extraEnv: {
           SONAR_CLI_TOKEN: 'env-token',
           SONAR_CLI_SERVER: server.baseUrl(),
@@ -102,7 +87,7 @@ describe('integrate claude', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(existsSync(join(projectDir, '.claude', 'settings.json'))).toBe(true);
+      expect(harness.cwd().exists('.claude', 'settings.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -115,21 +100,18 @@ describe('integrate claude', () => {
         .withAuthToken('keychain-token')
         .withProject('keychain-project')
         .start();
-
       harness.state().withKeychainToken(server.baseUrl(), 'keychain-token');
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=keychain-project'].join('\n'),
-        )
-        .build();
+        );
 
-      const result = await harness.run('integrate claude --non-interactive', { cwd: projectDir });
+      const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(existsSync(join(projectDir, '.claude', 'settings.json'))).toBe(true);
+      expect(harness.cwd().exists('.claude', 'settings.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -138,26 +120,15 @@ describe('integrate claude', () => {
     'installs secrets-only hooks when sonar-project.properties has URL but no project key',
     async () => {
       const server = await harness.newFakeServer().start();
+      harness.cwd().writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}`);
 
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}`)
-        .build();
-
-      const result = await harness.run('integrate claude --non-interactive', { cwd: projectDir });
+      const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(
-        existsSync(
-          join(
-            projectDir,
-            '.claude',
-            'hooks',
-            'sonar-secrets',
-            'build-scripts',
-            'pretool-secrets.sh',
-          ),
-        ),
+        harness
+          .cwd()
+          .exists('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh'),
       ).toBe(true);
     },
     { timeout: 30000 },
@@ -174,21 +145,19 @@ describe('integrate claude', () => {
         .withProject('browser-project')
         .start();
 
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=browser-project'].join('\n'),
-        )
-        .build();
+        );
 
       const result = await harness.run('integrate claude', {
-        cwd: projectDir,
         browserToken: 'browser-token',
       });
 
       expect(result.exitCode).toBe(0);
-      expect(existsSync(join(projectDir, '.claude', 'settings.json'))).toBe(true);
+      expect(harness.cwd().exists('.claude', 'settings.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -201,22 +170,19 @@ describe('integrate claude', () => {
         .withAuthToken('valid-browser-token')
         .withProject('repair-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=repair-project'].join('\n'),
-        )
-        .build();
+        );
 
       const result = await harness.run('integrate claude --token invalid-token', {
-        cwd: projectDir,
         browserToken: 'valid-browser-token',
       });
 
       expect(result.exitCode).toBe(0);
-      expect(existsSync(join(projectDir, '.claude', 'settings.json'))).toBe(true);
+      expect(harness.cwd().exists('.claude', 'settings.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -231,31 +197,20 @@ describe('integrate claude', () => {
         .withAuthToken('valid-token')
         .withProject('my-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-        )
-        .build();
+        );
 
-      const result = await harness.run('integrate claude --token wrong-token --non-interactive', {
-        cwd: projectDir,
-      });
+      const result = await harness.run('integrate claude --token wrong-token --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(
-        existsSync(
-          join(
-            projectDir,
-            '.claude',
-            'hooks',
-            'sonar-secrets',
-            'build-scripts',
-            'pretool-secrets.sh',
-          ),
-        ),
+        harness
+          .cwd()
+          .exists('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh'),
       ).toBe(true);
     },
     { timeout: 30000 },
@@ -269,29 +224,20 @@ describe('integrate claude', () => {
         .withAuthToken('some-token')
         .withProject('my-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-        )
-        .build();
+        );
 
-      const result = await harness.run('integrate claude --non-interactive', { cwd: projectDir });
+      const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(
-        existsSync(
-          join(
-            projectDir,
-            '.claude',
-            'hooks',
-            'sonar-secrets',
-            'build-scripts',
-            'pretool-secrets.sh',
-          ),
-        ),
+        harness
+          .cwd()
+          .exists('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh'),
       ).toBe(true);
     },
     { timeout: 30000 },
@@ -308,19 +254,16 @@ describe('integrate claude', () => {
         .withAuthToken('valid-token') // server only accepts 'valid-token'
         .withProject('my-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-        )
-        .build();
+        );
 
       const result = await harness.run(
         'integrate claude', // no --non-interactive flag
         {
-          cwd: projectDir,
           extraEnv: {
             SONAR_CLI_TOKEN: 'invalid-token', // rejected by server → tokenValid = false
             SONAR_CLI_SERVER: server.baseUrl(),
@@ -331,16 +274,9 @@ describe('integrate claude', () => {
 
       expect(result.exitCode).toBe(0);
       expect(
-        existsSync(
-          join(
-            projectDir,
-            '.claude',
-            'hooks',
-            'sonar-secrets',
-            'build-scripts',
-            'pretool-secrets.sh',
-          ),
-        ),
+        harness
+          .cwd()
+          .exists('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh'),
       ).toBe(true);
     },
     { timeout: 15000 },
@@ -354,17 +290,14 @@ describe('integrate claude', () => {
         .withAuthToken('some-token')
         .withProject('my-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-        )
-        .build();
+        );
 
       const result = await harness.run('integrate claude --non-interactive', {
-        cwd: projectDir,
         extraEnv: { SONAR_CLI_TOKEN: 'some-token' },
       });
 
@@ -384,19 +317,8 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
 
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
-          'sonar-project.properties',
-          ['sonar.host.url=http://wrong-server.example.com', 'sonar.projectKey=my-project'].join(
-            '\n',
-          ),
-        )
-        .build();
-
       const result = await harness.run(
         `integrate claude --token test-token --server ${server.baseUrl()} --non-interactive`,
-        { cwd: projectDir },
       );
 
       expect(result.exitCode).toBe(0);
@@ -415,24 +337,15 @@ describe('integrate claude', () => {
         .withProject('flag-project')
         .start();
 
-      const projectDir = await harness.newFileSystem().build();
-
       const result = await harness.run(
         `integrate claude --token flag-token --server ${server.baseUrl()} --project flag-project --non-interactive`,
-        { cwd: projectDir },
       );
 
       expect(result.exitCode).toBe(0);
-      expect(existsSync(join(projectDir, '.claude', 'settings.json'))).toBe(true);
+      expect(harness.cwd().exists('.claude', 'settings.json')).toBe(true);
     },
     { timeout: 30000 },
   );
-
-  // TODO: --skip-hooks is not fully respected in the repair path (runRepair always installs hooks).
-  // Re-enable once the bug is fixed.
-  // it('does not install hooks when --skip-hooks flag is provided', async () => {
-  //   ...
-  // });
 
   it(
     'installs settings.json with PreToolUse hook on full integration',
@@ -442,21 +355,17 @@ describe('integrate claude', () => {
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-        )
-        .build();
+        );
 
-      const result = await harness.run('integrate claude --token test-token --non-interactive', {
-        cwd: projectDir,
-      });
+      const result = await harness.run('integrate claude --token test-token --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      const settingsPath = join(projectDir, '.claude', 'settings.json');
+      const settingsPath = harness.cwd().file('.claude', 'settings.json');
       expect(existsSync(settingsPath)).toBe(true);
       const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
       expect(settings.hooks?.PreToolUse).toBeDefined();
@@ -472,27 +381,18 @@ describe('integrate claude', () => {
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
-
-      const projectDir = await harness
-        .newFileSystem()
-        .withFile(
+      harness
+        .cwd()
+        .writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
-        )
-        .build();
+        );
 
-      await harness.run('integrate claude --token test-token --non-interactive', {
-        cwd: projectDir,
-      });
+      await harness.run('integrate claude --token test-token --non-interactive');
 
-      const scriptPath = join(
-        projectDir,
-        '.claude',
-        'hooks',
-        'sonar-secrets',
-        'build-scripts',
-        'pretool-secrets.sh',
-      );
+      const scriptPath = harness
+        .cwd()
+        .file('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh');
       expect(existsSync(scriptPath)).toBe(true);
       const stats = statSync(scriptPath);
       // Check executable bit (owner execute)
@@ -526,44 +426,26 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
-
-        const projectDir = await harness
-          .newFileSystem()
-          .withFile(
+        harness
+          .cwd()
+          .writeFile(
             'sonar-project.properties',
             [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
-          )
-          .build();
+          );
 
-        const result = await harness.run('integrate claude --token tok --non-interactive', {
-          cwd: projectDir,
-        });
+        const result = await harness.run('integrate claude --token tok --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(existsSync(join(projectDir, '.claude', 'settings.json'))).toBe(true);
+        expect(harness.cwd().exists('.claude', 'settings.json')).toBe(true);
         expect(
-          existsSync(
-            join(
-              projectDir,
-              '.claude',
-              'hooks',
-              'sonar-secrets',
-              'build-scripts',
-              'pretool-secrets.sh',
-            ),
-          ),
+          harness
+            .cwd()
+            .exists('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh'),
         ).toBe(true);
         expect(
-          existsSync(
-            join(
-              projectDir,
-              '.claude',
-              'hooks',
-              'sonar-secrets',
-              'build-scripts',
-              'prompt-secrets.sh',
-            ),
-          ),
+          harness
+            .cwd()
+            .exists('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'prompt-secrets.sh'),
         ).toBe(true);
       },
       { timeout: 30000 },
@@ -572,23 +454,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'does not touch the global dir when running without -g',
       async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('tok')
-          .withProject('proj')
-          .start();
-
-        const projectDir = await harness
-          .newFileSystem()
-          .withFile(
-            'sonar-project.properties',
-            [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
-          )
-          .build();
-
-        await harness.run('integrate claude --token tok --non-interactive', {
-          cwd: projectDir,
-        });
+        await harness.run('integrate claude --non-interactive');
 
         // Global dir must be completely untouched
         expect(existsSync(join(harness.homeDir, '.claude'))).toBe(false);
@@ -604,22 +470,16 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
-
-        const projectDir = await harness
-          .newFileSystem()
-          .withFile(
+        harness
+          .cwd()
+          .writeFile(
             'sonar-project.properties',
             [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
-          )
-          .build();
+          );
 
-        await harness.run('integrate claude --token tok --non-interactive', {
-          cwd: projectDir,
-        });
+        await harness.run('integrate claude --token tok --non-interactive');
 
-        const settings = JSON.parse(
-          readFileSync(join(projectDir, '.claude', 'settings.json'), 'utf-8'),
-        );
+        const settings = harness.cwd().fileAsJson('.claude', 'settings.json');
         const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
         const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
 
@@ -644,18 +504,14 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
-
-        const projectDir = await harness
-          .newFileSystem()
-          .withFile(
+        harness
+          .cwd()
+          .writeFile(
             'sonar-project.properties',
             [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
-          )
-          .build();
+          );
 
-        const result = await harness.run('integrate claude -g --token tok --non-interactive', {
-          cwd: projectDir,
-        });
+        const result = await harness.run('integrate claude -g --token tok --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(existsSync(join(harness.homeDir, '.claude', 'settings.json'))).toBe(true);
@@ -696,20 +552,17 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withProject('proj')
           .start();
 
-        const projectDir = await harness
-          .newFileSystem()
-          .withFile(
+        harness
+          .cwd()
+          .writeFile(
             'sonar-project.properties',
             [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
-          )
-          .build();
+          );
 
-        await harness.run('integrate claude -g --token tok --non-interactive', {
-          cwd: projectDir,
-        });
+        await harness.run('integrate claude -g --token tok --non-interactive');
 
         // Project-level .claude/ must NOT be created
-        expect(existsSync(join(projectDir, '.claude'))).toBe(false);
+        expect(harness.cwd().exists('.claude')).toBe(false);
       },
       { timeout: 30000 },
     );
@@ -722,18 +575,14 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
-
-        const projectDir = await harness
-          .newFileSystem()
-          .withFile(
+        harness
+          .cwd()
+          .writeFile(
             'sonar-project.properties',
             [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
-          )
-          .build();
+          );
 
-        await harness.run('integrate claude -g --token tok --non-interactive', {
-          cwd: projectDir,
-        });
+        await harness.run('integrate claude -g --non-interactive');
 
         const settings = JSON.parse(
           readFileSync(join(harness.homeDir, '.claude', 'settings.json'), 'utf-8'),

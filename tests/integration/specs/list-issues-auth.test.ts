@@ -22,7 +22,7 @@
 // Complements list-issues.test.ts which covers happy-path and basic error cases
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness/index.js';
+import { TestHarness } from '../harness';
 
 describe('list issues — auth scenarios', () => {
   let harness: TestHarness;

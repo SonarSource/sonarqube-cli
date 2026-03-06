@@ -24,7 +24,7 @@
 // sonar-ignore-next-line S6769
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness/index.js';
+import { TestHarness } from '../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -47,10 +47,9 @@ describe('analyze secrets', () => {
     'exits with code 0 for clean file when binary is installed (--file)',
     async () => {
       harness.state().withSecretsBinaryInstalled();
+      harness.cwd().writeFile('clean.js', CLEAN_CONTENT);
 
-      const testDir = await harness.newFileSystem().withFile('clean.js', CLEAN_CONTENT).build();
-
-      const result = await harness.run(`analyze secrets --file ${testDir}/clean.js`);
+      const result = await harness.run(`analyze secrets --file clean.js`);
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Scan completed successfully');
@@ -62,13 +61,9 @@ describe('analyze secrets', () => {
     'exits with code 51 for file with secrets when binary is installed (--file)',
     async () => {
       harness.state().withSecretsBinaryInstalled();
+      harness.cwd().writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
-      const testDir = await harness
-        .newFileSystem()
-        .withFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`)
-        .build();
-
-      const result = await harness.run(`analyze secrets --file ${testDir}/secrets.js`);
+      const result = await harness.run(`analyze secrets --file secrets.js`);
 
       expect(result.exitCode).toBe(51);
       // Binary always reports auth status when no credentials are configured
@@ -112,9 +107,9 @@ describe('analyze secrets', () => {
     'exits with code 1 and reports binary not installed when binary is absent',
     async () => {
       // No withSecretsBinaryInstalled() — binary absent
-      const testDir = await harness.newFileSystem().withFile('file.js', CLEAN_CONTENT).build();
+      harness.cwd().writeFile('file.js', CLEAN_CONTENT);
 
-      const result = await harness.run(`analyze secrets --file ${testDir}/file.js`);
+      const result = await harness.run(`analyze secrets --file file.js`);
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('not installed');
@@ -156,12 +151,9 @@ describe('analyze secrets', () => {
 
       // Use a file with secrets so the binary outputs exit 51 and CLI forwards binary stderr.
       // With valid auth the binary must NOT report "Authentication was not successful".
-      const testDir = await harness
-        .newFileSystem()
-        .withFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`)
-        .build();
+      harness.cwd().writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
-      const result = await harness.run(`analyze secrets --file ${testDir}/secrets.js`, {
+      const result = await harness.run(`analyze secrets --file secrets.js`, {
         extraEnv: {
           SONAR_CLI_TOKEN: VALID_TOKEN,
           SONAR_CLI_SERVER: server.baseUrl(),
@@ -200,12 +192,9 @@ describe('analyze secrets', () => {
 
       // Use a file with secrets so the binary outputs exit 51 and CLI forwards binary stderr.
       // With valid auth the binary must NOT report "Authentication was not successful".
-      const testDir = await harness
-        .newFileSystem()
-        .withFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`)
-        .build();
+      harness.cwd().writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
-      const result = await harness.run(`analyze secrets --file ${testDir}/secrets.js`, {
+      const result = await harness.run(`analyze secrets --file secrets.js`, {
         extraEnv: {
           SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true',
         },

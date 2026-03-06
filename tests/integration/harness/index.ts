@@ -25,19 +25,19 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCli } from './cli-runner.js';
 import { EnvironmentBuilder } from './environment-builder.js';
-import { FileSystemBuilder } from './fs-builder.js';
+import { Cwd } from './fs-builder.js';
 import { FakeSonarQubeServerBuilder, FakeSonarQubeServer } from './fake-sonarqube-server.js';
-import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
+import { FakeBinariesServer } from './fake-binaries-server.js';
 import type { CliResult, RunOptions } from './types.js';
 
 export { EnvironmentBuilder } from './environment-builder.js';
-export { FileSystemBuilder } from './fs-builder.js';
+export { Cwd } from './fs-builder.js';
 export {
   FakeSonarQubeServerBuilder,
   FakeSonarQubeServer,
   ProjectBuilder,
 } from './fake-sonarqube-server.js';
-export { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
+export { FakeBinariesServer } from './fake-binaries-server.js';
 export type { CliResult, RunOptions, RecordedRequest } from './types.js';
 
 /**
@@ -79,14 +79,16 @@ function tokenize(command: string): string[] {
 
 export class TestHarness {
   private readonly tempDir: string;
+  private readonly _cwd: Cwd;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private _extraEnv: Record<string, string> = {};
-  private _fsCounter = 0;
+  private readonly _fsCounter = 0;
 
   private constructor(tempDir: string) {
     this.tempDir = tempDir;
+    this._cwd = new Cwd(join(tempDir, `cwd-${++this._fsCounter}`));
   }
 
   static create(): Promise<TestHarness> {
@@ -141,45 +143,12 @@ export class TestHarness {
   }
 
   /**
-   * Creates a new FakeBinariesServerBuilder for simulating binaries.sonarsource.com.
-   * Call .start() on the result to get a running server. The server is stopped automatically
-   * when dispose() is called.
-   *
-   * When a fake binaries server is active, every run() call automatically injects
-   * SONAR_CLI_BINARIES_URL pointing at it, so `sonar install secrets` downloads from
-   * the fake server instead of the real one.
-   *
-   * By default (no builder methods called) the server responds 200 with the real
-   * sonar-secrets artifact, meaning PGP verification passes without any bypass.
-   * Use .withHttpStatus(404) etc. to simulate error conditions.
-   */
-  newFakeBinariesServer(): FakeBinariesServerBuilder & { start: () => FakeBinariesServer } {
-    const builder = new FakeBinariesServerBuilder();
-
-    const originalStart = builder.start.bind(builder);
-    builder.start = () => {
-      const server = originalStart();
-      this.binariesServers.push(server);
-      return server;
-    };
-
-    return builder;
-  }
-
-  /**
    * Creates a FileSystemBuilder rooted at a unique subdirectory of tempDir.
+   * When build() is called, the resulting directory is automatically registered
+   * as the working directory for subsequent run() calls.
    */
-  newFileSystem(): FileSystemBuilder {
-    const subDir = join(this.tempDir, `files-${++this._fsCounter}`);
-    return new FileSystemBuilder(subDir);
-  }
-
-  /**
-   * Adds an extra environment variable that will be passed to all CLI invocations.
-   */
-  withEnv(key: string, value: string): this {
-    this._extraEnv[key] = value;
-    return this;
+  cwd(): Cwd {
+    return this._cwd;
   }
 
   /**
@@ -227,7 +196,7 @@ export class TestHarness {
     return runCli(args, env, {
       stdin: options?.stdin,
       timeoutMs: options?.timeoutMs,
-      cwd: options?.cwd,
+      cwd: this._cwd.path(),
       browserToken: options?.browserToken,
     });
   }

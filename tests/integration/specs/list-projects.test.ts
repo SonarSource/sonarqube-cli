@@ -24,7 +24,7 @@
 // so env vars SONAR_CLI_TOKEN/SONAR_CLI_SERVER are NOT used here.
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness/index.js';
+import { TestHarness } from '../harness';
 
 describe('list projects', () => {
   let harness: TestHarness;

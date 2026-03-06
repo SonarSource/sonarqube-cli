@@ -31,7 +31,6 @@ export interface RunOptions {
   extraEnv?: Record<string, string>;
   timeoutMs?: number;
   stdin?: string;
-  cwd?: string;
   /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
    * port (pattern: `port=\d+`), then delivers this token via GET request to

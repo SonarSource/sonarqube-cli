@@ -20,45 +20,36 @@
 
 // Declarative builder for test file system fixtures
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
-export class FileSystemBuilder {
+export class Cwd {
   private readonly baseDir: string;
-  private readonly files: Array<{ path: string; content: string }> = [];
-  private readonly dirs: string[] = [];
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
   }
 
-  withFile(relativePath: string, content: string): this {
-    this.files.push({ path: relativePath, content });
-    return this;
+  path() {
+    return this.baseDir;
   }
 
-  withDirectory(relativePath: string): this {
-    this.dirs.push(relativePath);
-    return this;
+  file(...paths: string[]): string {
+    return join(this.baseDir, ...paths);
   }
 
-  /**
-   * Creates all configured directories and files under baseDir.
-   * Returns the absolute path to the root directory.
-   */
-  build(): Promise<string> {
+  fileAsJson(...paths: string[]): any {
+    return JSON.parse(readFileSync(this.file(...paths), 'utf-8'));
+  }
+
+  exists(...paths: string[]): boolean {
+    return existsSync(this.file(...paths));
+  }
+
+  writeFile(relativePath: string, content: string) {
     mkdirSync(this.baseDir, { recursive: true });
-
-    for (const dir of this.dirs) {
-      mkdirSync(join(this.baseDir, dir), { recursive: true });
-    }
-
-    for (const file of this.files) {
-      const fullPath = join(this.baseDir, file.path);
-      mkdirSync(dirname(fullPath), { recursive: true });
-      writeFileSync(fullPath, file.content, 'utf-8');
-    }
-
-    return Promise.resolve(this.baseDir);
+    const fullPath = join(this.baseDir, relativePath);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content, 'utf-8');
   }
 }

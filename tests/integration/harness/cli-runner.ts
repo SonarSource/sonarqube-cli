@@ -20,7 +20,7 @@
 
 // CLI runner — spawns the compiled sonarqube-cli binary and captures output
 
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CliResult } from './types.js';
 
@@ -28,10 +28,6 @@ const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const DEFAULT_BINARY = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');
 const BINARY_PATH = process.env.SONAR_CLI_BINARY ?? DEFAULT_BINARY;
 const DEFAULT_TIMEOUT_MS = 30000;
-
-export function getCliBinaryPath(): string {
-  return BINARY_PATH;
-}
 
 export function assertBinaryExists(): void {
   if (!existsSync(BINARY_PATH)) {
@@ -46,22 +42,23 @@ export function assertBinaryExists(): void {
 export async function runCli(
   args: string[],
   env: Record<string, string>,
-  options?: { stdin?: string; timeoutMs?: number; cwd?: string; browserToken?: string },
+  options: { stdin?: string; timeoutMs?: number; cwd: string; browserToken?: string },
 ): Promise<CliResult> {
   assertBinaryExists();
 
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const startTime = Date.now();
+  mkdirSync(options.cwd, { recursive: true });
 
   const proc = Bun.spawn([BINARY_PATH, ...args], {
     env,
     stdout: 'pipe',
     stderr: 'pipe',
-    stdin: options?.stdin !== undefined ? 'pipe' : 'ignore',
-    cwd: options?.cwd,
+    stdin: options.stdin ? 'pipe' : 'ignore',
+    cwd: options.cwd,
   });
 
-  if (options?.stdin !== undefined && proc.stdin) {
+  if (options.stdin !== undefined && proc.stdin) {
     // proc.stdin is a Bun FileSink (not a Web WritableStream)
     const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
     sink.write(new TextEncoder().encode(options.stdin));
@@ -76,7 +73,7 @@ export async function runCli(
 
   let stdout: string;
 
-  if (options?.browserToken) {
+  if (options.browserToken) {
     stdout = await streamStdoutAndDeliverToken(proc.stdout, options.browserToken);
   } else {
     stdout = await new Response(proc.stdout).text();

@@ -21,7 +21,7 @@
 // Integration tests for `config telemetry`
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness/index.js';
+import { TestHarness } from '../harness';
 
 describe('config telemetry', () => {
   let harness: TestHarness;
