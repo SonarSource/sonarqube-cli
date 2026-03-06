@@ -113,7 +113,6 @@ describe('integrateCommand: env var auth', () => {
       project: 'my-project',
       token: 'squ_cli_token',
       org: 'my-org',
-      skipHooks: true,
     });
     const warns = getMockUiCalls()
       .filter((c) => c.method === 'warn')
@@ -128,7 +127,6 @@ describe('integrateCommand: env var auth', () => {
       project: 'my-project',
       token: 'squ_cli_token',
       org: 'my-org',
-      skipHooks: true,
     });
     const warns = getMockUiCalls()
       .filter((c) => c.method === 'warn')
@@ -166,7 +164,6 @@ describe('integrateCommand: full flow', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: true,
       });
     } finally {
       discoverSpy.mockRestore();
@@ -187,7 +184,6 @@ describe('integrateCommand: full flow', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: true,
       });
 
       // Verify connection was added to state
@@ -212,7 +208,6 @@ describe('integrateCommand: full flow', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: true,
       });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
@@ -244,7 +239,6 @@ describe('integrateCommand: full flow', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: true,
       });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
@@ -274,7 +268,6 @@ describe('integrateCommand: full flow', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: true,
       });
       expect(repairSpy).toHaveBeenCalled();
     } finally {
@@ -295,7 +288,6 @@ describe('integrateCommand: full flow', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: false,
       });
       expect(addInstalledHookSpy).toHaveBeenCalledWith(
         expect.anything(),
@@ -378,7 +370,6 @@ describe('integrateCommand: configuration validation', () => {
         project: 'my-project',
         org: 'my-org',
         token: 'test-token',
-        skipHooks: true,
       });
       const infos = getMockUiCalls()
         .filter((c) => c.method === 'info')
@@ -423,7 +414,7 @@ describe('integrateCommand: discovered project configuration', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithProps);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrate('claude', { token: 'test-token', skipHooks: true });
+      await integrate('claude', { token: 'test-token' });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
@@ -449,7 +440,7 @@ describe('integrateCommand: discovered project configuration', () => {
     );
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrate('claude', { token: 'test-token', skipHooks: true });
+      await integrate('claude', { token: 'test-token' });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
@@ -490,7 +481,6 @@ describe('integrateCommand: --global flag', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: true,
         global: true,
       });
     } finally {
@@ -509,7 +499,6 @@ describe('integrateCommand: --global flag', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: false,
         global: true,
       });
     } finally {
@@ -529,7 +518,6 @@ describe('integrateCommand: --global flag', () => {
         project: 'my-project',
         token: 'test-token',
         org: 'test-org',
-        skipHooks: false,
         global: true,
       });
       expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir());
@@ -602,7 +590,6 @@ describe('integrateCommand: no token available', () => {
         integrate('claude', {
           server: 'https://sonarcloud.io',
           project: 'my-project',
-          skipHooks: true,
         }),
       ).rejects.toThrow(new Error('repair failed'));
       const warns = getMockUiCalls()

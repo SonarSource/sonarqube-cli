@@ -574,7 +574,6 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'writes hook scripts and settings.json inside projectDir/.claude/',
       async () => {
-        const fakeGlobalDir = join(harness.isolatedDir, 'fake-home');
         const server = await harness
           .newFakeServer()
           .withAuthToken('tok')
@@ -591,7 +590,6 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         const result = await harness.run('integrate claude --token tok --non-interactive', {
           cwd: projectDir,
-          extraEnv: { SONAR_CLI_GLOBAL_DIR: fakeGlobalDir },
         });
 
         expect(result.exitCode).toBe(0);
@@ -627,7 +625,6 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'does not touch the global dir when running without -g',
       async () => {
-        const fakeGlobalDir = join(harness.isolatedDir, 'fake-home');
         const server = await harness
           .newFakeServer()
           .withAuthToken('tok')
@@ -644,11 +641,10 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         await harness.run('integrate claude --token tok --non-interactive', {
           cwd: projectDir,
-          extraEnv: { SONAR_CLI_GLOBAL_DIR: fakeGlobalDir },
         });
 
         // Global dir must be completely untouched
-        expect(existsSync(join(fakeGlobalDir, '.claude'))).toBe(false);
+        expect(existsSync(join(harness.homeDir, '.claude'))).toBe(false);
       },
       { timeout: 30000 },
     );
@@ -656,7 +652,6 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'registers hook commands with relative paths in settings.json',
       async () => {
-        const fakeGlobalDir = join(harness.isolatedDir, 'fake-home');
         const server = await harness
           .newFakeServer()
           .withAuthToken('tok')
@@ -673,7 +668,6 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         await harness.run('integrate claude --token tok --non-interactive', {
           cwd: projectDir,
-          extraEnv: { SONAR_CLI_GLOBAL_DIR: fakeGlobalDir },
         });
 
         const settings = JSON.parse(
@@ -696,9 +690,8 @@ describe('integrate claude — file placement (local vs global)', () => {
 
   describe('global hooks (-g flag)', () => {
     it(
-      'writes hook scripts and settings.json to SONAR_CLI_GLOBAL_DIR/.claude/',
+      'writes hook scripts and settings.json to $HOME/.claude/',
       async () => {
-        const fakeGlobalDir = join(harness.isolatedDir, 'fake-home');
         const server = await harness
           .newFakeServer()
           .withAuthToken('tok')
@@ -715,15 +708,14 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         const result = await harness.run('integrate claude -g --token tok --non-interactive', {
           cwd: projectDir,
-          extraEnv: { SONAR_CLI_GLOBAL_DIR: fakeGlobalDir },
         });
 
         expect(result.exitCode).toBe(0);
-        expect(existsSync(join(fakeGlobalDir, '.claude', 'settings.json'))).toBe(true);
+        expect(existsSync(join(harness.homeDir, '.claude', 'settings.json'))).toBe(true);
         expect(
           existsSync(
             join(
-              fakeGlobalDir,
+              harness.homeDir,
               '.claude',
               'hooks',
               'sonar-secrets',
@@ -735,7 +727,7 @@ describe('integrate claude — file placement (local vs global)', () => {
         expect(
           existsSync(
             join(
-              fakeGlobalDir,
+              harness.homeDir,
               '.claude',
               'hooks',
               'sonar-secrets',
@@ -751,7 +743,6 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'does not create .claude/ inside the project directory when -g is set',
       async () => {
-        const fakeGlobalDir = join(harness.isolatedDir, 'fake-home');
         const server = await harness
           .newFakeServer()
           .withAuthToken('tok')
@@ -768,7 +759,6 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         await harness.run('integrate claude -g --token tok --non-interactive', {
           cwd: projectDir,
-          extraEnv: { SONAR_CLI_GLOBAL_DIR: fakeGlobalDir },
         });
 
         // Project-level .claude/ must NOT be created
@@ -778,9 +768,8 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'registers hook commands with absolute paths pointing to SONAR_CLI_GLOBAL_DIR',
+      'registers hook commands with absolute paths pointing to $HOME',
       async () => {
-        const fakeGlobalDir = join(harness.isolatedDir, 'fake-home');
         const server = await harness
           .newFakeServer()
           .withAuthToken('tok')
@@ -797,20 +786,19 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         await harness.run('integrate claude -g --token tok --non-interactive', {
           cwd: projectDir,
-          extraEnv: { SONAR_CLI_GLOBAL_DIR: fakeGlobalDir },
         });
 
         const settings = JSON.parse(
-          readFileSync(join(fakeGlobalDir, '.claude', 'settings.json'), 'utf-8'),
+          readFileSync(join(harness.homeDir, '.claude', 'settings.json'), 'utf-8'),
         );
         const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
         const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
 
-        // Must be absolute paths rooted at fakeGlobalDir
+        // Must be absolute paths rooted at harness.homeDir
         expect(isAbsolute(preToolCmd)).toBe(true);
-        expect(preToolCmd.startsWith(fakeGlobalDir)).toBe(true);
+        expect(preToolCmd.startsWith(harness.homeDir)).toBe(true);
         expect(isAbsolute(promptCmd)).toBe(true);
-        expect(promptCmd.startsWith(fakeGlobalDir)).toBe(true);
+        expect(promptCmd.startsWith(harness.homeDir)).toBe(true);
       },
       { timeout: 30000 },
     );

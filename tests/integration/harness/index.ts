@@ -101,6 +101,14 @@ export class TestHarness {
   }
 
   /**
+   * Isolated home directory injected as HOME (Unix) or USERPROFILE (Windows) for every
+   * CLI invocation. Use this in assertions instead of the real user home.
+   */
+  get homeDir(): string {
+    return join(this.tempDir, 'home');
+  }
+
+  /**
    * Returns the EnvironmentBuilder for this harness (lazily created, shared instance).
    * Configure it before calling run().
    */
@@ -166,6 +174,9 @@ export class TestHarness {
       if (val !== undefined) systemVars[key] = val;
     }
 
+    const homeEnv: Record<string, string> =
+      process.platform === 'win32' ? { USERPROFILE: this.homeDir } : { HOME: this.homeDir };
+
     const env: Record<string, string> = {
       ...systemVars,
       SONAR_CLI_DIR: this.tempDir,
@@ -173,6 +184,7 @@ export class TestHarness {
       CI: 'true',
       ...this._extraEnv,
       ...(options?.extraEnv ?? {}),
+      ...homeEnv,
     };
 
     const args = tokenize(command);

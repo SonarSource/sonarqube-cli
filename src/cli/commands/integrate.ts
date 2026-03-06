@@ -22,12 +22,12 @@
 
 // Config is read from sonar-project.properties, no need to save separate file
 import { homedir } from 'node:os';
-import {discoverProject, type ProjectInfo} from '../../bootstrap/discovery';
-import {runHealthChecks} from '../../bootstrap/health';
-import {runRepair} from '../../bootstrap/repair';
-import {getToken} from '../../bootstrap/auth';
-import {getAllCredentials} from '../../lib/keychain';
-import {installSecretScanningHooks} from '../../bootstrap/hooks';
+import { discoverProject, type ProjectInfo } from '../../bootstrap/discovery';
+import { runHealthChecks } from '../../bootstrap/health';
+import { runRepair } from '../../bootstrap/repair';
+import { getToken } from '../../bootstrap/auth';
+import { getAllCredentials } from '../../lib/keychain';
+import { installSecretScanningHooks } from '../../bootstrap/hooks';
 import {
   addInstalledHook,
   addOrUpdateConnection,
@@ -36,12 +36,12 @@ import {
   markAgentConfigured,
   saveState,
 } from '../../lib/state-manager.js';
-import {version as VERSION} from '../../../package.json';
+import { version as VERSION } from '../../../package.json';
 import logger from '../../lib/logger';
-import {SONARCLOUD_HOSTNAME, SONARCLOUD_URL, GLOBAL_DIR} from '../../lib/config-constants';
-import {ENV_SERVER, ENV_TOKEN} from '../../lib/auth-resolver';
-import {blank, info, intro, note, outro, success, text, warn} from '../../ui';
-import {CommandFailedError, InvalidOptionError} from './common/error';
+import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../lib/config-constants';
+import { ENV_SERVER, ENV_TOKEN } from '../../lib/auth-resolver';
+import { blank, info, intro, note, outro, success, text, warn } from '../../ui';
+import { CommandFailedError, InvalidOptionError } from './common/error';
 
 export const VALID_TOOLS: string[] = ['claude'] as const;
 
@@ -92,7 +92,7 @@ export async function integrate(tool: string, options: IntegrateOptions): Promis
     );
   }
 
-  const {serverURL, projectKey} = validateAndPrintConfiguration(config);
+  const { serverURL, projectKey } = validateAndPrintConfiguration(config);
 
   // When both env vars are set, treat as non-interactive (CI context)
   const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
@@ -183,7 +183,7 @@ async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }
   const cred = sonarCloudCreds[0];
   const [, org] = cred.account.split(':');
 
-  const result: { token?: string; org?: string } = {token: cred.password, org};
+  const result: { token?: string; org?: string } = { token: cred.password, org };
 
   text(`Using stored credentials for organization: ${org}`);
 
@@ -296,7 +296,7 @@ function validateAndPrintConfiguration(config: ConfigurationData): {
     text(`Organization: ${config.organization}`);
   }
 
-  return {serverURL, projectKey: config.projectKey};
+  return { serverURL, projectKey: config.projectKey };
 }
 
 /**
@@ -329,8 +329,8 @@ async function runHealthCheckAndRepair(
     return undefined;
   }
 
-  const {hooksGlobal, nonInteractive} = repairOptions;
-  const globalDir = hooksGlobal ? GLOBAL_DIR : undefined;
+  const { hooksGlobal, nonInteractive } = repairOptions;
+  const globalDir = hooksGlobal ? homedir() : undefined;
   const hooksRoot = globalDir ?? projectInfo.root;
 
   const healthResult = await runHealthChecks(serverURL, token, projectKey, hooksRoot, organization);
@@ -475,7 +475,7 @@ async function runFullSonarIntegration(
   options: IntegrateOptions,
   effectiveNonInteractive: boolean,
 ): Promise<void> {
-  const hooksRoot = options.global ? GLOBAL_DIR : projectInfo.root;
+  const hooksRoot = options.global ? homedir() : projectInfo.root;
   let token = ensureToken(config.token);
 
   const repairOptions: RepairOptions = {
@@ -514,7 +514,7 @@ async function runFullSonarIntegration(
     projectKey,
     projectInfo,
     config.organization,
-    options.global ? GLOBAL_DIR : undefined,
+    options.global ? homedir() : undefined,
   );
 
   await runFinalVerification(serverURL, token, projectKey, hooksRoot, config);
@@ -539,10 +539,10 @@ function updateStateAfterConfiguration(connection?: {
 
     // Save connection so `sonar auth status` reports the active connection
     if (connection) {
-      const {serverURL, organization} = connection;
+      const { serverURL, organization } = connection;
       const type = serverURL.includes(SONARCLOUD_HOSTNAME) ? 'cloud' : 'on-premise';
       const keystoreKey = generateConnectionId(serverURL, organization);
-      addOrUpdateConnection(state, serverURL, type, {orgKey: organization, keystoreKey});
+      addOrUpdateConnection(state, serverURL, type, { orgKey: organization, keystoreKey });
     }
 
     saveState(state);
