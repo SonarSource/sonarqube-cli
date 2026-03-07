@@ -37,8 +37,11 @@ Use `runCommand()` from `src/lib/run-command.ts` to wrap command handlers — it
 
 ## Tests
 
+Please try to create integration tests in priority. If the test is too complicated to set up, write unit tests.
+Try to get inspiration from other tests to follow the same structure.
+
 - Unit tests: `tests/unit/` — run with `bun test`
-- Integration tests: `tests/integration/` — require env vars, skipped locally by default
+- Integration tests: `tests/integration/` — require env vars. They are using a harness to help set up tests and make assertions.
 - The UI module has a built-in mock system (`src/ui/mock.ts`) — use it instead of mocking stdout directly.
 
 ## Documentation
