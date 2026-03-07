@@ -22,7 +22,7 @@
 // Note: actual download scenarios are not suitable for integration tests (network dependency).
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness';
+import { TestHarness } from '../../harness';
 
 describe('install secrets --status', () => {
   let harness: TestHarness;

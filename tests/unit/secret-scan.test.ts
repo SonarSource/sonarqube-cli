@@ -30,7 +30,7 @@ import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { saveToken } from '../../src/lib/keychain.js';
-import { createMockKeytar } from '../helpers/mock-keytar.js';
+import { createMockKeytar } from './helpers/mock-keytar.js';
 import { analyzeSecrets } from '../../src/cli/commands/analyze.js';
 import { CommandFailedError } from '../../src/cli/commands/common/error.js';
 

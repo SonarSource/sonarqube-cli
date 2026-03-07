@@ -18,13 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `list issues` auth scenarios
-// Complements list-issues.test.ts which covers happy-path and basic error cases
+// Integration tests for `config telemetry`
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness';
+import { TestHarness } from '../../harness';
 
-describe('list issues — auth scenarios', () => {
+describe('config telemetry', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -36,44 +35,45 @@ describe('list issues — auth scenarios', () => {
   });
 
   it(
-    'exits with code 1 and reports missing server when no auth is configured',
+    'exits with code 1 when both --enabled and --disabled are provided',
     async () => {
-      const result = await harness.run('list issues --project my-project');
+      const result = await harness.run('config telemetry --enabled --disabled');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
-        'No active connection found. Run: sonar auth login',
-      );
+      expect(result.stdout + result.stderr).toContain('Cannot use both --enabled and --disabled');
     },
     { timeout: 15000 },
   );
 
   it(
-    'uses keychain token from active state connection',
+    'exits with code 0 and reports current status when no flags are provided',
     async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('keychain-token')
-        .withProject('state-project', (p) =>
-          p.withIssue({
-            ruleKey: 'java:S100',
-            message: 'Issue from keychain auth',
-            severity: 'MINOR',
-          }),
-        )
-        .start();
-
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'keychain-token');
-
-      const result = await harness.run('list issues --project state-project');
+      const result = await harness.run('config telemetry');
 
       expect(result.exitCode).toBe(0);
-      const parsed = JSON.parse(result.stdout);
-      expect(parsed.issues).toHaveLength(1);
-      expect(parsed.issues[0].message).toBe('Issue from keychain auth');
+      expect(result.stdout + result.stderr).toContain('Telemetry is currently');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 0 and enables telemetry when --enabled is provided',
+    async () => {
+      const result = await harness.run('config telemetry --enabled');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Telemetry enabled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 0 and disables telemetry when --disabled is provided',
+    async () => {
+      const result = await harness.run('config telemetry --disabled');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Telemetry disabled');
     },
     { timeout: 15000 },
   );

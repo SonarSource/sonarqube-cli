@@ -21,7 +21,7 @@
 // Shared mock keytar for unit tests
 
 import { mock } from 'bun:test';
-import { clearTokenCache } from '../../src/lib/keychain.js';
+import { clearTokenCache } from '../../../src/lib/keychain';
 
 export interface MockKeytarImpl {
   getPassword(service: string, account: string): Promise<string | null>;

@@ -37,6 +37,10 @@ export class File {
     return existsSync(this.path);
   }
 
+  get lastModified(): number | null {
+    return this.exists() ? statSync(this.path).mtimeMs : null;
+  }
+
   get isExecutable(): boolean {
     const stats = statSync(this.path);
     return !!(stats.mode & 0o100);

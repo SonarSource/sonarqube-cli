@@ -22,7 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { isAbsolute } from 'node:path';
-import { TestHarness } from '../harness';
+import { TestHarness } from '../../harness';
 
 describe('integrate claude', () => {
   let harness: TestHarness;

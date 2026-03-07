@@ -21,7 +21,7 @@
 // Integration tests for `sonar auth login`, `auth logout`, `auth purge`, and `auth status`
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness';
+import { TestHarness } from '../../harness';
 
 describe('auth login', () => {
   let harness: TestHarness;

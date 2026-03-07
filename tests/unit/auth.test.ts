@@ -28,7 +28,7 @@ import {
   getAllCredentials,
   purgeAllTokens,
 } from '../../src/lib/keychain.js';
-import { createMockKeytar } from '../helpers/mock-keytar.js';
+import { createMockKeytar } from './helpers/mock-keytar.js';
 
 const TOKEN_COUNT = 3;
 

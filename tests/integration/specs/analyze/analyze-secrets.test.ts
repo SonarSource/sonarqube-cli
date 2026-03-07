@@ -24,7 +24,7 @@
 // sonar-ignore-next-line S6769
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../harness';
+import { TestHarness } from '../../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -112,7 +112,7 @@ describe('analyze secrets', () => {
       const result = await harness.run(`analyze secrets --file file.js`);
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('not installed');
+      expect(result.stdout + result.stderr).toContain('sonar-secrets is not installed');
     },
     { timeout: 15000 },
   );
@@ -125,7 +125,7 @@ describe('analyze secrets', () => {
       const result = await harness.run('analyze secrets');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('--file or --stdin');
+      expect(result.stdout + result.stderr).toContain('Either --file or --stdin is required');
     },
     { timeout: 15000 },
   );
