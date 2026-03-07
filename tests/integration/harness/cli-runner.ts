@@ -40,7 +40,7 @@ export function assertBinaryExists(): void {
 }
 
 export async function runCli(
-  args: string[],
+  command: string,
   env: Record<string, string>,
   options: { stdin?: string; timeoutMs?: number; cwd: string; browserToken?: string },
 ): Promise<CliResult> {
@@ -50,6 +50,7 @@ export async function runCli(
   const startTime = Date.now();
   mkdirSync(options.cwd, { recursive: true });
 
+  const args = tokenize(command);
   const proc = Bun.spawn([BINARY_PATH, ...args], {
     env,
     stdout: 'pipe',
@@ -132,4 +133,41 @@ async function streamStdoutAndDeliverToken(
   }
 
   return accumulated;
+}
+
+/**
+ * Tokenize a command string into an args array.
+ * Handles single- and double-quoted strings to support paths with spaces.
+ */
+function tokenize(command: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let inQuote = false;
+  let quoteChar = '';
+
+  for (const char of command) {
+    if (inQuote) {
+      if (char === quoteChar) {
+        inQuote = false;
+      } else {
+        current += char;
+      }
+    } else if (char === '"' || char === "'") {
+      inQuote = true;
+      quoteChar = char;
+    } else if (char === ' ') {
+      if (current) {
+        args.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+
+  if (current) {
+    args.push(current);
+  }
+
+  return args;
 }

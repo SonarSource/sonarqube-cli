@@ -19,8 +19,10 @@
  */
 
 /**
- * Downloads the sonar-secrets binary for the current platform from
- * binaries.sonarsource.com and places it in tests/integration/resources/.
+ * Downloads the sonar-secrets binary and its PGP signature for the current
+ * platform from binaries.sonarsource.com and places them in
+ * tests/integration/resources/ using the original versioned filenames
+ * (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe).
  *
  * Run via: bun build-scripts/setup-integration-resources.ts
  * Or via:  bun run test:integration:prepare
@@ -29,7 +31,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
-import { detectPlatform, buildLocalBinaryName } from '../src/lib/platform-detector.js';
+import { detectPlatform } from '../src/lib/platform-detector.js';
 import {
   buildDownloadUrl,
   downloadBinary,
@@ -43,31 +45,45 @@ import {
 
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
 const platform = detectPlatform();
-const binaryName = buildLocalBinaryName(platform);
-const destPath = join(RESOURCES_DIR, binaryName);
+const downloadUrl = buildDownloadUrl(SONAR_SECRETS_VERSION, platform);
+const signatureUrl = `${downloadUrl}.asc`;
+// Keep the original versioned filename so the fake binaries server can match requests exactly
+const downloadFilename = downloadUrl.split('/').at(-1)!;
+const destPath = join(RESOURCES_DIR, downloadFilename);
+const ascDestPath = join(RESOURCES_DIR, `${downloadFilename}.asc`);
 
-if (existsSync(destPath)) {
-  console.log(`sonar-secrets already present at ${destPath} — skipping download.`);
+const binaryExists = existsSync(destPath);
+const ascExists = existsSync(ascDestPath);
+
+if (binaryExists && ascExists) {
+  console.log(`Resources already present at ${RESOURCES_DIR} — skipping download.`);
   process.exit(0);
 }
 
 mkdirSync(RESOURCES_DIR, { recursive: true });
 
-const downloadUrl = buildDownloadUrl(SONAR_SECRETS_VERSION, platform);
-console.log(
-  `Downloading sonar-secrets ${SONAR_SECRETS_VERSION} for ${platform.os}-${platform.arch}`,
-);
-console.log(`  from ${downloadUrl}`);
+if (!binaryExists) {
+  console.log(
+    `Downloading sonar-secrets ${SONAR_SECRETS_VERSION} for ${platform.os}-${platform.arch}`,
+  );
+  console.log(`  from ${downloadUrl}`);
+  await downloadBinary(downloadUrl, destPath);
+  console.log('  Download complete.');
 
-await downloadBinary(downloadUrl, destPath);
-console.log('  Download complete.');
+  console.log('Verifying PGP signature...');
+  await verifyBinarySignature(destPath, platform, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY);
+  console.log('  Signature verified.');
 
-console.log('Verifying PGP signature...');
-await verifyBinarySignature(destPath, platform, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY);
-console.log('  Signature verified.');
+  if (platform.os !== 'windows') {
+    await chmod(destPath, 0o755);
+  }
 
-if (platform.os !== 'windows') {
-  await chmod(destPath, 0o755);
+  console.log(`sonar-secrets ready at ${destPath}`);
 }
 
-console.log(`sonar-secrets ready at ${destPath}`);
+if (!ascExists) {
+  console.log(`Downloading PGP signature file...`);
+  console.log(`  from ${signatureUrl}`);
+  await downloadBinary(signatureUrl, ascDestPath);
+  console.log(`  Signature file ready at ${ascDestPath}`);
+}

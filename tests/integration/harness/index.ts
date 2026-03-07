@@ -27,7 +27,7 @@ import { runCli } from './cli-runner.js';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { Dir } from './dir';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
-import { FakeBinariesServer } from './fake-binaries-server.js';
+import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 import type { CliResult, RunOptions } from './types.js';
 import { File } from './file';
 
@@ -37,45 +37,8 @@ export {
   FakeSonarQubeServer,
   ProjectBuilder,
 } from './fake-sonarqube-server.js';
-export { FakeBinariesServer } from './fake-binaries-server.js';
+export { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 export type { CliResult, RunOptions, RecordedRequest } from './types.js';
-
-/**
- * Tokenize a command string into an args array.
- * Handles single- and double-quoted strings to support paths with spaces.
- */
-function tokenize(command: string): string[] {
-  const args: string[] = [];
-  let current = '';
-  let inQuote = false;
-  let quoteChar = '';
-
-  for (const char of command) {
-    if (inQuote) {
-      if (char === quoteChar) {
-        inQuote = false;
-      } else {
-        current += char;
-      }
-    } else if (char === '"' || char === "'") {
-      inQuote = true;
-      quoteChar = char;
-    } else if (char === ' ') {
-      if (current) {
-        args.push(current);
-        current = '';
-      }
-    } else {
-      current += char;
-    }
-  }
-
-  if (current) {
-    args.push(current);
-  }
-
-  return args;
-}
 
 export class TestHarness {
   private readonly tempDir: Dir;
@@ -137,6 +100,26 @@ export class TestHarness {
   }
 
   /**
+   * Creates a new FakeBinariesServerBuilder. Call .start() on the result to get a
+   * running server. The server serves the mock sonar-secrets binary for any request
+   * and records all requests. It is stopped automatically when dispose() is called.
+   */
+  newFakeBinariesServer(): FakeBinariesServerBuilder & {
+    start: () => Promise<FakeBinariesServer>;
+  } {
+    const builder = new FakeBinariesServerBuilder();
+
+    const originalStart = builder.start.bind(builder);
+    builder.start = async () => {
+      const server = await originalStart();
+      this.binariesServers.push(server);
+      return server;
+    };
+
+    return builder;
+  }
+
+  /**
    * Runs the CLI binary with the given command string.
    *
    * Before spawning, applies the configured environment (writes state.json + copies binary).
@@ -177,9 +160,7 @@ export class TestHarness {
       ...homeEnv,
     };
 
-    const args = tokenize(command);
-
-    return runCli(args, env, {
+    return runCli(command, env, {
       stdin: options?.stdin,
       timeoutMs: options?.timeoutMs,
       cwd: this.cwd.path,

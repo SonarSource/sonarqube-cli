@@ -24,6 +24,9 @@ import { mkdirSync, writeFileSync, copyFileSync, chmodSync, existsSync } from 'n
 import { join } from 'node:path';
 import type { CliState } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
+import { detectPlatform } from '../../../src/lib/platform-detector.js';
+import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
+import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
 
 /** Mirrors the account-key logic in src/lib/keychain.ts */
 function toKeychainAccount(serverURL: string, org?: string): string {
@@ -36,7 +39,10 @@ function toKeychainAccount(serverURL: string, org?: string): string {
 }
 
 function resolveSecretsBinarySource(): string {
-  return join(import.meta.dir, '..', 'resources', 'sonar-secrets');
+  const platform = detectPlatform();
+  const downloadUrl = buildDownloadUrl(SONAR_SECRETS_VERSION, platform);
+  const filename = downloadUrl.split('/').at(-1)!;
+  return join(import.meta.dir, '..', 'resources', filename);
 }
 
 export class EnvironmentBuilder {
@@ -137,8 +143,8 @@ export class EnvironmentBuilder {
     if (!existsSync(destPath)) {
       if (!existsSync(source)) {
         throw new Error(
-          `sonar-secrets mock binary not found at: ${source}\n` +
-            `Restore the file at tests/integration/resources/sonar-secrets and ensure it is executable.`,
+          `sonar-secrets binary not found at: ${source}\n` +
+            `Run 'bun run test:integration:prepare' to download it.`,
         );
       }
       copyFileSync(source, destPath);

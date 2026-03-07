@@ -9,5 +9,5 @@ dist/
 .idea/
 plan.md
 coverage/
-tests/integration/resources/sonar-secrets
+tests/integration/resources/sonar-secrets*
 .eslintcache

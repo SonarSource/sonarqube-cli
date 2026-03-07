@@ -110,11 +110,6 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  withSystemStatus(status: 'UP' | 'DOWN'): this {
-    this.systemStatus = status;
-    return this;
-  }
-
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const validToken = this.validToken;
@@ -191,8 +186,8 @@ export class FakeSonarQubeServerBuilder {
               type: issue.type,
             })) ?? [];
 
-          const pageSize = parseInt(query.ps ?? '500', 10);
-          const page = parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '500', 10);
+          const page = Number.parseInt(query.p ?? '1', 10);
 
           return new Response(
             JSON.stringify({
@@ -237,8 +232,8 @@ export class FakeSonarQubeServerBuilder {
             qualifier: 'TRK',
           }));
 
-          const pageSize = parseInt(query.ps ?? '500', 10);
-          const page = parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '500', 10);
+          const page = Number.parseInt(query.p ?? '1', 10);
 
           return new Response(
             JSON.stringify({
