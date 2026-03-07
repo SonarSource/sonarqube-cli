@@ -116,8 +116,7 @@ describe('analyze secrets --file', () => {
 
       // System state must be untouched
       expect(mtimeAfter).toBe(mtimeBefore);
-      // Isolated dir must have received the write
-      expect(existsSync(join(harness.isolatedDir, 'state.json'))).toBe(true);
+      expect(harness.stateJsonFile.exists()).toBe(true);
     },
     { timeout: 15000 },
   );

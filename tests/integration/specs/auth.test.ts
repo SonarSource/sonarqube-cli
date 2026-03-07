@@ -21,8 +21,6 @@
 // Integration tests for `sonar auth login`, `auth logout`, `auth purge`, and `auth status`
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { TestHarness } from '../harness';
 
 describe('auth login', () => {
@@ -60,18 +58,15 @@ describe('auth login', () => {
       expect(result.stdout).toContain('Authentication successful');
 
       // Verify keychain file was written with the token
-      const keychainPath = join(harness.isolatedDir, 'keychain.json');
-      expect(existsSync(keychainPath)).toBe(true);
-      const keychain = JSON.parse(readFileSync(keychainPath, 'utf-8')) as {
+      expect(harness.keychainJsonFile.exists()).toBe(true);
+      const keychain = harness.keychainJsonFile.asJson() as {
         tokens: Record<string, string>;
       };
       // Account key is hostname of the server (127.0.0.1)
       expect(Object.values(keychain.tokens)).toContain('my-login-token');
 
       // Verify state.json has a connection
-      const statePath = join(harness.isolatedDir, 'state.json');
-      expect(existsSync(statePath)).toBe(true);
-      const state = JSON.parse(readFileSync(statePath, 'utf-8'));
+      const state = harness.stateJsonFile.asJson();
       expect(state.auth.connections.length).toBeGreaterThan(0);
       expect(state.auth.connections[0].serverUrl).toBe(server.baseUrl());
     },
@@ -106,13 +101,11 @@ describe('auth logout', () => {
       expect(result.stdout).toContain('Logged out');
 
       // Verify token was removed from keychain
-      const keychainPath = join(harness.isolatedDir, 'keychain.json');
-      if (existsSync(keychainPath)) {
-        const keychain = JSON.parse(readFileSync(keychainPath, 'utf-8')) as {
-          tokens: Record<string, string>;
-        };
-        expect(Object.values(keychain.tokens)).not.toContain('logout-token');
-      }
+      expect(harness.keychainJsonFile.exists()).toBe(true);
+      const keychain = harness.keychainJsonFile.asJson() as {
+        tokens: Record<string, string>;
+      };
+      expect(Object.values(keychain.tokens)).not.toContain('logout-token');
     },
     { timeout: 15000 },
   );
@@ -172,11 +165,10 @@ describe('auth purge', () => {
       expect(result.exitCode).toBe(0);
 
       // All tokens must have been removed from the keychain file
-      const keychainPath = join(harness.isolatedDir, 'keychain.json');
-      const keychainRaw = existsSync(keychainPath)
-        ? readFileSync(keychainPath, 'utf-8')
-        : '{"tokens":{}}';
-      const keychain = JSON.parse(keychainRaw) as { tokens?: Record<string, string> };
+      expect(harness.keychainJsonFile.exists()).toBe(true);
+      const keychain = harness.keychainJsonFile.asJson() as {
+        tokens: Record<string, string>;
+      };
       expect(Object.keys(keychain.tokens ?? {}).length).toBe(0);
     },
     { timeout: 15000 },

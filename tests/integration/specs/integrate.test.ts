@@ -21,7 +21,6 @@
 // Integration tests for `sonar integrate claude`
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { TestHarness } from '../harness';
 
@@ -367,9 +366,9 @@ describe('integrate claude', () => {
       const result = await harness.run('integrate claude --token test-token --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      const settingsPath = harness.cwd.file('.claude', 'settings.json');
-      expect(existsSync(settingsPath)).toBe(true);
-      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+      const claudeSettingsFile = harness.cwd.file('.claude', 'settings.json');
+      expect(claudeSettingsFile.exists()).toBe(true);
+      const settings = claudeSettingsFile.asJson();
       expect(settings.hooks?.PreToolUse).toBeDefined();
     },
     { timeout: 30000 },
@@ -390,17 +389,15 @@ describe('integrate claude', () => {
 
       await harness.run('integrate claude --token test-token --non-interactive');
 
-      const scriptPath = harness.cwd.file(
+      const preToolScriptFile = harness.cwd.file(
         '.claude',
         'hooks',
         'sonar-secrets',
         'build-scripts',
         'pretool-secrets.sh',
       );
-      expect(existsSync(scriptPath)).toBe(true);
-      const stats = statSync(scriptPath);
-      // Check executable bit (owner execute)
-      expect(stats.mode & 0o100).toBeTruthy();
+      expect(preToolScriptFile.exists()).toBe(true);
+      expect(preToolScriptFile.isExecutable).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -487,7 +484,7 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         await harness.run('integrate claude --token tok --non-interactive');
 
-        const settings = harness.cwd.fileAsJson('.claude', 'settings.json');
+        const settings = harness.cwd.file('.claude', 'settings.json').asJson();
         const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
         const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
 
@@ -580,7 +577,7 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         await harness.run('integrate claude -g --non-interactive');
 
-        const settings = harness.userHome.fileAsJson('.claude', 'settings.json');
+        const settings = harness.userHome.file('.claude', 'settings.json').asJson();
         const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
         const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
 

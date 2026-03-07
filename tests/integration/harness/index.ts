@@ -29,6 +29,7 @@ import { Dir } from './dir';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { FakeBinariesServer } from './fake-binaries-server.js';
 import type { CliResult, RunOptions } from './types.js';
+import { File } from './file';
 
 export { EnvironmentBuilder } from './environment-builder.js';
 export {
@@ -77,18 +78,24 @@ function tokenize(command: string): string[] {
 }
 
 export class TestHarness {
-  private readonly tempDir: string;
+  private readonly tempDir: Dir;
   public readonly cwd: Dir;
   public readonly userHome: Dir;
+  public readonly cliHome: Dir;
+  public readonly stateJsonFile: File;
+  public readonly keychainJsonFile: File;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private _extraEnv: Record<string, string> = {};
 
   private constructor(tempDir: string) {
-    this.tempDir = tempDir;
-    this.cwd = new Dir(join(tempDir, 'cwd'));
-    this.userHome = new Dir(join(tempDir, 'home'));
+    this.tempDir = new Dir(tempDir);
+    this.cwd = this.tempDir.dir('cwd');
+    this.userHome = this.tempDir.dir('home');
+    this.cliHome = this.userHome.dir('.sonar', 'sonarqube-cli');
+    this.stateJsonFile = this.cliHome.file('state.json');
+    this.keychainJsonFile = this.tempDir.file('keychain.json');
   }
 
   static create(): Promise<TestHarness> {
@@ -98,11 +105,6 @@ export class TestHarness {
     );
     mkdirSync(tempDir, { recursive: true });
     return Promise.resolve(new TestHarness(tempDir));
-  }
-
-  /** Absolute path to the isolated temp directory used by this harness instance. */
-  get isolatedDir(): string {
-    return this.tempDir;
   }
 
   /**
@@ -143,7 +145,7 @@ export class TestHarness {
   async run(command: string, options?: RunOptions): Promise<CliResult> {
     // Apply environment to tempDir before each run
     if (this._envBuilder) {
-      await this._envBuilder.writeTo(this.tempDir);
+      await this._envBuilder.writeTo(this.cliHome.path, this.keychainJsonFile.path);
     }
 
     // Clean environment — only include the minimum system vars needed to run a binary.
@@ -168,7 +170,7 @@ export class TestHarness {
     const env: Record<string, string> = {
       ...systemVars,
       ...fakeBinariesEnv,
-      SONAR_CLI_KEYCHAIN_FILE: join(this.tempDir, 'keychain.json'),
+      SONAR_CLI_KEYCHAIN_FILE: this.keychainJsonFile.path,
       CI: 'true',
       ...this._extraEnv,
       ...(options?.extraEnv ?? {}),
@@ -196,6 +198,6 @@ export class TestHarness {
         }),
       ),
     );
-    rmSync(this.tempDir, { recursive: true, force: true });
+    rmSync(this.tempDir.path, { recursive: true, force: true });
   }
 }

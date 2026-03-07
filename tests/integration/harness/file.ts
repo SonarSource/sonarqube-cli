@@ -20,37 +20,25 @@
 
 // Declarative builder for test file system fixtures
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { File } from './file';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
-export class Dir {
-  private readonly baseDir: string;
+export class File {
+  public readonly path: string;
 
-  constructor(baseDir: string) {
-    this.baseDir = baseDir;
+  constructor(path: string) {
+    this.path = path;
   }
 
-  get path() {
-    return this.baseDir;
+  asJson(): any {
+    return JSON.parse(readFileSync(this.path, 'utf-8'));
   }
 
-  dir(...paths: string[]): Dir {
-    return new Dir(join(this.baseDir, ...paths));
+  exists(): boolean {
+    return existsSync(this.path);
   }
 
-  file(...paths: string[]): File {
-    return new File(join(this.baseDir, ...paths));
-  }
-
-  exists(...paths: string[]): boolean {
-    return this.file(...paths).exists();
-  }
-
-  writeFile(relativePath: string, content: string) {
-    mkdirSync(this.baseDir, { recursive: true });
-    const fullPath = join(this.baseDir, relativePath);
-    mkdirSync(dirname(fullPath), { recursive: true });
-    writeFileSync(fullPath, content, 'utf-8');
+  get isExecutable(): boolean {
+    const stats = statSync(this.path);
+    return !!(stats.mode & 0o100);
   }
 }

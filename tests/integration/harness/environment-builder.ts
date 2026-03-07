@@ -109,27 +109,27 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Writes state.json to <dir>/state.json and, if withSecretsBinaryInstalled() was called,
-   * copies the mock binary to <dir>/bin/sonar-secrets.
+   * Writes state.json to <cliHome>/state.json and, if withSecretsBinaryInstalled() was called,
+   * copies the mock binary to <cliHome>/bin/sonar-secrets.
    */
-  writeTo(dir: string): Promise<void> {
+  writeTo(cliHome: string, keychainJsonPath: string): Promise<void> {
     const state = this.build();
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
+    mkdirSync(cliHome, { recursive: true });
+    writeFileSync(join(cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
 
     if (this.keychainTokens.length > 0) {
       const tokens: Record<string, string> = {};
       for (const { serverURL, token, org } of this.keychainTokens) {
         tokens[toKeychainAccount(serverURL, org)] = token;
       }
-      writeFileSync(join(dir, 'keychain.json'), JSON.stringify({ tokens }, null, 2), 'utf-8');
+      writeFileSync(keychainJsonPath, JSON.stringify({ tokens }, null, 2), 'utf-8');
     }
 
     if (!this._installSecretsBinary) {
       return Promise.resolve();
     }
 
-    const binDir = join(dir, 'bin');
+    const binDir = join(cliHome, 'bin');
     mkdirSync(binDir, { recursive: true });
 
     const source = resolveSecretsBinarySource();
