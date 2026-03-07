@@ -54,7 +54,7 @@ export class EnvironmentBuilder {
   /**
    * Ensures sonar-secrets is available inside the isolated test environment.
    * Copies the mock binary from tests/integration/resources/sonar-secrets
-   * into <tempDir>/bin/sonar-secrets. The CLI finds it there via SONAR_CLI_DIR.
+   * into <tempDir>/bin/sonar-secrets.
    */
   withSecretsBinaryInstalled(): this {
     this._installSecretsBinary = true;

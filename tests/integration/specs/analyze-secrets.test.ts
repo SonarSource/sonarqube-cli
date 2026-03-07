@@ -47,7 +47,7 @@ describe('analyze secrets', () => {
     'exits with code 0 for clean file when binary is installed (--file)',
     async () => {
       harness.state().withSecretsBinaryInstalled();
-      harness.cwd().writeFile('clean.js', CLEAN_CONTENT);
+      harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
 
       const result = await harness.run(`analyze secrets --file clean.js`);
 
@@ -61,7 +61,7 @@ describe('analyze secrets', () => {
     'exits with code 51 for file with secrets when binary is installed (--file)',
     async () => {
       harness.state().withSecretsBinaryInstalled();
-      harness.cwd().writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
       const result = await harness.run(`analyze secrets --file secrets.js`);
 
@@ -107,7 +107,7 @@ describe('analyze secrets', () => {
     'exits with code 1 and reports binary not installed when binary is absent',
     async () => {
       // No withSecretsBinaryInstalled() — binary absent
-      harness.cwd().writeFile('file.js', CLEAN_CONTENT);
+      harness.cwd.writeFile('file.js', CLEAN_CONTENT);
 
       const result = await harness.run(`analyze secrets --file file.js`);
 
@@ -151,7 +151,7 @@ describe('analyze secrets', () => {
 
       // Use a file with secrets so the binary outputs exit 51 and CLI forwards binary stderr.
       // With valid auth the binary must NOT report "Authentication was not successful".
-      harness.cwd().writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
       const result = await harness.run(`analyze secrets --file secrets.js`, {
         extraEnv: {
@@ -192,7 +192,7 @@ describe('analyze secrets', () => {
 
       // Use a file with secrets so the binary outputs exit 51 and CLI forwards binary stderr.
       // With valid auth the binary must NOT report "Authentication was not successful".
-      harness.cwd().writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
       const result = await harness.run(`analyze secrets --file secrets.js`, {
         extraEnv: {

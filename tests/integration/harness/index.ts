@@ -25,13 +25,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCli } from './cli-runner.js';
 import { EnvironmentBuilder } from './environment-builder.js';
-import { Cwd } from './fs-builder.js';
-import { FakeSonarQubeServerBuilder, FakeSonarQubeServer } from './fake-sonarqube-server.js';
+import { Dir } from './dir';
+import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { FakeBinariesServer } from './fake-binaries-server.js';
 import type { CliResult, RunOptions } from './types.js';
 
 export { EnvironmentBuilder } from './environment-builder.js';
-export { Cwd } from './fs-builder.js';
 export {
   FakeSonarQubeServerBuilder,
   FakeSonarQubeServer,
@@ -79,16 +78,17 @@ function tokenize(command: string): string[] {
 
 export class TestHarness {
   private readonly tempDir: string;
-  private readonly _cwd: Cwd;
+  public readonly cwd: Dir;
+  public readonly userHome: Dir;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private _extraEnv: Record<string, string> = {};
-  private readonly _fsCounter = 0;
 
   private constructor(tempDir: string) {
     this.tempDir = tempDir;
-    this._cwd = new Cwd(join(tempDir, `cwd-${++this._fsCounter}`));
+    this.cwd = new Dir(join(tempDir, 'cwd'));
+    this.userHome = new Dir(join(tempDir, 'home'));
   }
 
   static create(): Promise<TestHarness> {
@@ -103,14 +103,6 @@ export class TestHarness {
   /** Absolute path to the isolated temp directory used by this harness instance. */
   get isolatedDir(): string {
     return this.tempDir;
-  }
-
-  /**
-   * Isolated home directory injected as HOME (Unix) or USERPROFILE (Windows) for every
-   * CLI invocation. Use this in assertions instead of the real user home.
-   */
-  get homeDir(): string {
-    return join(this.tempDir, 'home');
   }
 
   /**
@@ -143,19 +135,10 @@ export class TestHarness {
   }
 
   /**
-   * Creates a FileSystemBuilder rooted at a unique subdirectory of tempDir.
-   * When build() is called, the resulting directory is automatically registered
-   * as the working directory for subsequent run() calls.
-   */
-  cwd(): Cwd {
-    return this._cwd;
-  }
-
-  /**
    * Runs the CLI binary with the given command string.
    *
    * Before spawning, applies the configured environment (writes state.json + copies binary).
-   * Automatically injects SONAR_CLI_DIR and SONAR_CLI_DISABLE_KEYCHAIN=true.
+   * Automatically injects SONAR_CLI_DISABLE_KEYCHAIN=true.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
     // Apply environment to tempDir before each run
@@ -173,7 +156,9 @@ export class TestHarness {
     }
 
     const homeEnv: Record<string, string> =
-      process.platform === 'win32' ? { USERPROFILE: this.homeDir } : { HOME: this.homeDir };
+      process.platform === 'win32'
+        ? { USERPROFILE: this.userHome.path }
+        : { HOME: this.userHome.path };
 
     const activeBinariesServer = this.binariesServers.at(-1);
     const fakeBinariesEnv: Record<string, string> = activeBinariesServer
@@ -183,7 +168,6 @@ export class TestHarness {
     const env: Record<string, string> = {
       ...systemVars,
       ...fakeBinariesEnv,
-      SONAR_CLI_DIR: this.tempDir,
       SONAR_CLI_KEYCHAIN_FILE: join(this.tempDir, 'keychain.json'),
       CI: 'true',
       ...this._extraEnv,
@@ -196,7 +180,7 @@ export class TestHarness {
     return runCli(args, env, {
       stdin: options?.stdin,
       timeoutMs: options?.timeoutMs,
-      cwd: this._cwd.path(),
+      cwd: this.cwd.path,
       browserToken: options?.browserToken,
     });
   }

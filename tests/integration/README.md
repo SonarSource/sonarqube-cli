@@ -3,33 +3,6 @@
 Integration tests verify real CLI behaviour by spawning the compiled binary in an isolated
 environment. Most tests require no external services or credentials.
 
-## Prerequisites
-
-### 1. Build the CLI binary
-
-Integration tests spawn `dist/sonarqube-cli`. Build it once before running tests:
-
-```bash
-bun run build:binary
-```
-
-Rebuild after any source changes.
-
-### 2. Install the sonar-secrets binary
-
-Tests that exercise secret scanning (`analyze-secrets`, `install-secrets`) need
-`tests/integration/resources/sonar-secrets`. This binary is gitignored and must be
-obtained locally via the CLI itself:
-
-```bash
-SONAR_CLI_DIR=/tmp/sonar-test-setup dist/sonarqube-cli install secrets
-mkdir -p tests/integration/resources
-cp /tmp/sonar-test-setup/bin/sonar-secrets tests/integration/resources/sonar-secrets
-chmod +x tests/integration/resources/sonar-secrets
-```
-
-Re-run this when the `sonar-secrets` version changes.
-
 ## Running Tests
 
 ```bash
@@ -45,8 +18,7 @@ bun run test:coverage
 
 ## Environment Variables
 
-Most tests need no env vars — `TestHarness` provides full isolation via
-`SONAR_CLI_DIR` and `SONAR_CLI_KEYCHAIN_FILE`.
+Most tests need no env vars — `TestHarness` provides full isolation via `SONAR_CLI_KEYCHAIN_FILE`.
 
 The exception is `analyze-secrets` tests that validate authenticated secret scanning.
 Those tests pass `SONAR_SECRETS_AUTH_URL` and `SONAR_SECRETS_TOKEN` to the
@@ -113,7 +85,6 @@ tests/integration/
 │   ├── list-issues-auth.test.ts
 │   ├── list-projects.test.ts
 │   └── secret-scan.test.ts
-├── onboard.test.ts               # Imports TypeScript directly (no binary needed)
 └── secret-install-integration.test.ts  # Imports TypeScript directly (no binary needed)
 ```
 

@@ -23,14 +23,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
-export class Cwd {
+export class Dir {
   private readonly baseDir: string;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
   }
 
-  path() {
+  get path() {
     return this.baseDir;
   }
 

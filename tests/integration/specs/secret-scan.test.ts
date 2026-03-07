@@ -55,7 +55,7 @@ describe('analyze secrets --file', () => {
   it(
     'detects secret in file (exit code 51)',
     async () => {
-      harness.cwd().writeFile('src/config.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      harness.cwd.writeFile('src/config.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run(`analyze secrets --file src/config.js`);
@@ -70,7 +70,7 @@ describe('analyze secrets --file', () => {
   it(
     'returns exit code 0 for a clean file',
     async () => {
-      harness.cwd().writeFile('src/clean.js', CLEAN_CONTENT);
+      harness.cwd.writeFile('src/clean.js', CLEAN_CONTENT);
       harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run(`analyze secrets --file src/clean.js`);
