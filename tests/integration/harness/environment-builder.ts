@@ -73,6 +73,9 @@ export class EnvironmentBuilder {
   build(): CliState {
     const state = getDefaultState('integration-test');
 
+    // disable telemetry for integration tests
+    state.telemetry.enabled = false;
+
     if (this.activeConnectionUrl) {
       const connectionId = 'test-connection-id';
       state.auth.isAuthenticated = true;
