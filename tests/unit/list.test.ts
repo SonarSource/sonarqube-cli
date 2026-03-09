@@ -379,7 +379,18 @@ describe('issuesSearchCommand', () => {
 
     try {
       await listIssues({ project: 'my-project', page: 1, pageSize: 500 });
-      expect(resolveAuthSpy).toHaveBeenCalledWith({});
+      expect(resolveAuthSpy).toHaveBeenCalledWith({ org: undefined });
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
+
+  it('passes --org to resolveAuth', async () => {
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
+
+    try {
+      await listIssues({ project: 'my-project', org: 'my-org', page: 1, pageSize: 500 });
+      expect(resolveAuthSpy).toHaveBeenCalledWith({ org: 'my-org' });
     } finally {
       getSpy.mockRestore();
     }

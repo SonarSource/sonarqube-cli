@@ -116,6 +116,7 @@ list
   .command('issues')
   .description('Search for issues in SonarQube')
   .requiredOption('-p, --project <project>', 'Project key')
+  .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
   .option('--severity <severity>', 'Filter by severity')
   .option('--format <format>', 'Output format', 'json')
   .option('--branch <branch>', 'Branch name')
@@ -127,6 +128,7 @@ list
 list
   .command('projects')
   .description('Search for projects in SonarQube')
+  .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
   .addOption(pageOption)
   .addOption(pageSizeOption)

@@ -35,6 +35,7 @@ const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 
 export interface ListIssuesOptions {
   project?: string;
+  org?: string;
   severity?: string;
   type?: string;
   status?: string;
@@ -52,7 +53,7 @@ export interface ListIssuesOptions {
  * Issues search command handler
  */
 export async function listIssues(options: ListIssuesOptions): Promise<void> {
-  const resolvedAuth = await resolveAuth({});
+  const resolvedAuth = await resolveAuth({ org: options.org });
 
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
@@ -126,6 +127,7 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
 
 export interface ListProjectsOptions {
   query?: string;
+  org?: string;
   pageSize: number;
   page: number;
 }
@@ -134,7 +136,7 @@ export interface ListProjectsOptions {
  * Projects search command handler
  */
 export async function listProjects(options: ListProjectsOptions): Promise<void> {
-  const resolvedAuth = await resolveAuth({});
+  const resolvedAuth = await resolveAuth({ org: options.org });
 
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
