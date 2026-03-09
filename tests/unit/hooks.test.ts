@@ -26,7 +26,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setMockUi } from '../../src/ui';
 
-import { installSecretScanningHooks, areHooksInstalled } from '../../src/bootstrap/hooks.js';
+import {
+  installSecretScanningHooks,
+  areHooksInstalled,
+} from '../../src/cli/commands/integrate/claude/hooks';
 
 describe('Hooks', () => {
   beforeEach(() => {

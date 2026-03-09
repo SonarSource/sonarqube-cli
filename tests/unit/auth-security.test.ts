@@ -23,7 +23,7 @@
 
 import { describe, it, expect, afterEach } from 'bun:test';
 
-import { createRequestHandler } from '../../src/bootstrap/auth.js';
+import { createRequestHandler } from '../../src/cli/commands/_common/token';
 import { startLoopbackServer, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
 
 const LOOPBACK_HOST = '127.0.0.1';

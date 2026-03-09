@@ -31,8 +31,8 @@ import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { saveToken } from '../../src/lib/keychain.js';
 import { createMockKeytar } from './helpers/mock-keytar.js';
-import { analyzeSecrets } from '../../src/cli/commands/analyze.js';
-import { CommandFailedError } from '../../src/cli/commands/common/error.js';
+import { analyzeSecrets } from '../../src/cli/commands/analyze/secrets';
+import { CommandFailedError } from '../../src/cli/commands/_common/error.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';

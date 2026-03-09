@@ -20,15 +20,15 @@
 
 // Issues command - search for SonarQube issues
 
-import { resolveAuth } from '../../lib/auth-resolver';
-import { SonarQubeClient } from '../../sonarqube/client';
-import { IssuesClient } from '../../sonarqube/issues';
+import { resolveAuth } from '../../../lib/auth-resolver';
+import { SonarQubeClient } from '../../../sonarqube/client';
+import { IssuesClient } from '../../../sonarqube/issues';
 import { encode as encodeToToon } from '@toon-format/toon';
-import { formatTable } from '../../formatter/table';
-import { formatCSV } from '../../formatter/csv';
-import type { IssuesSearchParams } from '../../lib/types';
-import { print } from '../../ui';
-import { MAX_PAGE_SIZE, ProjectsClient } from '../../sonarqube/projects';
+import { formatTable } from '../../../formatter/table';
+import { formatCSV } from '../../../formatter/csv';
+import type { IssuesSearchParams } from '../../../lib/types';
+import { print } from '../../../ui';
+import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
 
 const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
@@ -122,53 +122,4 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
   }
 
   print(output);
-}
-
-export interface ListProjectsOptions {
-  query?: string;
-  org?: string;
-  pageSize: number;
-  page: number;
-}
-
-/**
- * Projects search command handler
- */
-export async function listProjects(options: ListProjectsOptions): Promise<void> {
-  const pageSize = options.pageSize;
-  if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
-    throw new Error(
-      `Invalid --page-size option: '${pageSize}'. Must be an integer between 1 and 500`,
-    );
-  }
-
-  const page = options.page;
-  if (page < 1) {
-    throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
-  }
-
-  const resolvedAuth = await resolveAuth({ org: options.org });
-  const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
-  const projectsClient = new ProjectsClient(client);
-
-  const result = await projectsClient.searchProjects({
-    q: options.query,
-    ps: pageSize,
-    p: options.page,
-    organization: resolvedAuth.orgKey,
-  });
-
-  const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
-
-  print(
-    JSON.stringify({
-      projects: result.components.map((c) => ({ key: c.key, name: c.name })),
-      paging: {
-        pageIndex: result.paging.pageIndex,
-        pageSize: result.paging.pageSize,
-        total: result.paging.total,
-        hasNextPage,
-      },
-    }),
-  );
 }

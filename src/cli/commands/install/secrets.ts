@@ -22,25 +22,25 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnProcess } from '../../lib/process';
-import { BIN_DIR } from '../../lib/config-constants';
-import { buildLocalBinaryName, detectPlatform } from '../../lib/platform-detector';
+import { spawnProcess } from '../../../lib/process';
+import { BIN_DIR } from '../../../lib/config-constants';
+import { buildLocalBinaryName, detectPlatform } from '../../../lib/platform-detector';
 import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
-} from '../../lib/sonarsource-releases';
+} from '../../../lib/sonarsource-releases';
 import {
   SONAR_SECRETS_VERSION,
   SONAR_SECRETS_SIGNATURES,
   SONARSOURCE_PUBLIC_KEY,
-} from '../../lib/signatures';
-import { loadState, saveState } from '../../lib/state-manager';
-import { version as VERSION } from '../../../package.json';
-import logger from '../../lib/logger';
-import type { PlatformInfo } from '../../lib/install-types';
-import { SECRETS_BINARY_NAME } from '../../lib/install-types';
-import { text, blank, note, success, warn, withSpinner, print } from '../../ui';
+} from '../../../lib/signatures';
+import { loadState, saveState } from '../../../lib/state-manager';
+import { version as VERSION } from '../../../../package.json';
+import logger from '../../../lib/logger';
+import type { PlatformInfo } from '../../../lib/install-types';
+import { SECRETS_BINARY_NAME } from '../../../lib/install-types';
+import { text, blank, note, success, warn, withSpinner, print } from '../../../ui';
 
 const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
 const VERSION_REGEX_MAX_SEGMENT = 20;

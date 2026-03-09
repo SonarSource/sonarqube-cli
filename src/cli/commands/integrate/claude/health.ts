@@ -20,11 +20,11 @@
 
 // Health check orchestrator - validates configuration
 
-import { validateToken } from './auth.js';
-import { SonarQubeClient } from '../sonarqube/client.js';
-import { areHooksInstalled } from './hooks.js';
-import logger from '../lib/logger.js';
-import { text } from '../ui/index.js';
+import { validateToken } from '../../_common/token';
+import { SonarQubeClient } from '../../../../sonarqube/client';
+import { areHooksInstalled } from './hooks';
+import logger from '../../../../lib/logger';
+import { text } from '../../../../ui';
 
 export interface HealthCheckResult {
   tokenValid: boolean;

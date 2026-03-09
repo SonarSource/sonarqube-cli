@@ -26,13 +26,13 @@ import {
   getToken as getKeystoreToken,
   saveToken as saveKeystoreToken,
   deleteToken as deleteKeystoreToken,
-} from '../lib/keychain.js';
-import { openBrowser } from '../lib/browser.js';
-import { SonarQubeClient } from '../sonarqube/client.js';
-import { startLoopbackServer } from '../lib/loopback-server.js';
-import logger from '../lib/logger.js';
-import { warn, print, pressEnterKeyPrompt, isMockActive } from '../ui/index.js';
-import { green, dim, blue } from '../ui/colors.js';
+} from '../../../lib/keychain';
+import { openBrowser } from '../../../lib/browser';
+import { SonarQubeClient } from '../../../sonarqube/client';
+import { startLoopbackServer } from '../../../lib/loopback-server';
+import logger from '../../../lib/logger';
+import { warn, print, pressEnterKeyPrompt, isMockActive } from '../../../ui';
+import { green, dim, blue } from '../../../ui/colors';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;

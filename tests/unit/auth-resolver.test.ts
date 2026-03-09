@@ -24,7 +24,7 @@ import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { resolveAuth, ENV_TOKEN, ENV_SERVER } from '../../src/lib/auth-resolver.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { setMockUi } from '../../src/ui/index.js';
+import { setMockUi } from '../../src/ui';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';

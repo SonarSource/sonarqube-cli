@@ -23,7 +23,7 @@
 // The mock invokes the render() callback with different states to cover all render branches.
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { confirmPrompt, pressEnterKeyPrompt, textPrompt } from '../../src/ui/components/prompts.js';
+import { confirmPrompt, pressEnterKeyPrompt, textPrompt } from '../../src/ui';
 
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';

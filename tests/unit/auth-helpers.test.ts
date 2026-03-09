@@ -25,9 +25,9 @@ import {
   buildAuthURL,
   getSuccessHTML,
   generateTokenViaBrowser,
-} from '../../src/bootstrap/auth.js';
+} from '../../src/cli/commands/_common/token';
 import { startLoopbackServer } from '../../src/lib/loopback-server.js';
-import { setMockUi } from '../../src/ui/index.js';
+import { setMockUi } from '../../src/ui';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
 const SONARQUBE_CLOUD_US_SERVER = 'https://sonarqube.us';

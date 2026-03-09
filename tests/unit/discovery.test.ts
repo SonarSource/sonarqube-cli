@@ -25,7 +25,7 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { discoverProject } from '../../src/bootstrap/discovery.js';
+import { discoverProject } from '../../src/cli/commands/_common/discovery';
 it('discovery: sonar-project.properties parsing', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-discovery-' + Date.now());
   mkdirSync(testDir, { recursive: true });

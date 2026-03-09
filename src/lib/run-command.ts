@@ -20,7 +20,7 @@
 
 import logger from './logger.js';
 import { error } from '../ui';
-import { CommandFailedError } from '../cli/commands/common/error.js';
+import { CommandFailedError } from '../cli/commands/_common/error.js';
 
 export async function runCommand(fn: () => Promise<void>): Promise<void> {
   try {

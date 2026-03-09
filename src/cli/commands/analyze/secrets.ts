@@ -19,14 +19,14 @@
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnProcess } from '../../lib/process.js';
-import type { SpawnResult } from '../../lib/process.js';
-import { buildLocalBinaryName, detectPlatform } from '../../lib/platform-detector.js';
-import { resolveAuth } from '../../lib/auth-resolver.js';
-import logger from '../../lib/logger.js';
-import { blank, error, print, success, text } from '../../ui';
-import { CommandFailedError, InvalidOptionError } from './common/error.js';
-import { BIN_DIR } from '../../lib/config-constants';
+import { spawnProcess } from '../../../lib/process';
+import type { SpawnResult } from '../../../lib/process';
+import { buildLocalBinaryName, detectPlatform } from '../../../lib/platform-detector';
+import { resolveAuth } from '../../../lib/auth-resolver';
+import logger from '../../../lib/logger';
+import { blank, error, print, success, text } from '../../../ui';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
+import { BIN_DIR } from '../../../lib/config-constants';
 
 export interface AnalyzeSecretsOptions {
   file?: string;

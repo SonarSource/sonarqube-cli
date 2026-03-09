@@ -22,18 +22,17 @@
 
 import { homedir } from 'node:os';
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { integrate } from '../../src/cli/commands/integrate.js';
-import * as discovery from '../../src/bootstrap/discovery.js';
-import * as health from '../../src/bootstrap/health.js';
-import * as repair from '../../src/bootstrap/repair.js';
-import * as auth from '../../src/bootstrap/auth.js';
+import { integrateClaude } from '../../src/cli/commands/integrate/claude';
+import * as discovery from '../../src/cli/commands/_common/discovery';
+import * as health from '../../src/cli/commands/integrate/claude/health';
+import * as repair from '../../src/cli/commands/integrate/claude/repair';
+import * as auth from '../../src/cli/commands/_common/token';
 import * as keychain from '../../src/lib/keychain.js';
-import * as hooks from '../../src/bootstrap/hooks.js';
+import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import { ENV_TOKEN, ENV_SERVER } from '../../src/lib/auth-resolver.js';
-import { InvalidOptionError } from '../../src/cli/commands/common/error';
 
 const FAKE_PROJECT_INFO = {
   root: '/fake/project',
@@ -66,14 +65,6 @@ describe('integrateCommand: validateAgent', () => {
 
   afterEach(() => {
     setMockUi(false);
-  });
-
-  it('throws when unsupported agent is provided', () => {
-    expect(integrate('gemini', {})).rejects.toThrow(
-      new InvalidOptionError(
-        'Agent \"gemini\" is not yet supported.\nCurrently supported agents: claude\nComing soon: gemini, codex',
-      ),
-    );
   });
 });
 
@@ -108,7 +99,7 @@ describe('integrateCommand: env var auth', () => {
 
   it('warns when only SONAR_CLI_TOKEN is set (partial env vars)', async () => {
     process.env[ENV_TOKEN] = 'squ_env_token';
-    await integrate('claude', {
+    await integrateClaude({
       server: 'https://sonarcloud.io',
       project: 'my-project',
       token: 'squ_cli_token',
@@ -122,7 +113,7 @@ describe('integrateCommand: env var auth', () => {
 
   it('warns when only SONAR_CLI_SERVER is set (partial env vars)', async () => {
     process.env[ENV_SERVER] = 'https://sonarcloud.io';
-    await integrate('claude', {
+    await integrateClaude({
       server: 'https://sonarcloud.io',
       project: 'my-project',
       token: 'squ_cli_token',
@@ -159,7 +150,7 @@ describe('integrateCommand: full flow', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -179,7 +170,7 @@ describe('integrateCommand: full flow', () => {
     saveStateSpy.mockImplementation(() => {});
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -203,7 +194,7 @@ describe('integrateCommand: full flow', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -234,7 +225,7 @@ describe('integrateCommand: full flow', () => {
     const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -263,7 +254,7 @@ describe('integrateCommand: full flow', () => {
     const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -283,7 +274,7 @@ describe('integrateCommand: full flow', () => {
     const addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook');
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -337,7 +328,7 @@ describe('integrateCommand: configuration validation', () => {
   it('throws when server URL cannot be determined', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     try {
-      expect(integrate('claude', { project: 'my-project' })).rejects.toThrow(
+      expect(integrateClaude({ project: 'my-project' })).rejects.toThrow(
         'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
       );
     } finally {
@@ -349,7 +340,7 @@ describe('integrateCommand: configuration validation', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         org: 'my-org',
         nonInteractive: true,
@@ -366,7 +357,7 @@ describe('integrateCommand: configuration validation', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithOrg);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrate('claude', {
+      await integrateClaude({
         project: 'my-project',
         org: 'my-org',
         token: 'test-token',
@@ -414,7 +405,7 @@ describe('integrateCommand: discovered project configuration', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithProps);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrate('claude', { token: 'test-token' });
+      await integrateClaude({ token: 'test-token' });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
@@ -440,7 +431,7 @@ describe('integrateCommand: discovered project configuration', () => {
     );
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
     try {
-      await integrate('claude', { token: 'test-token' });
+      await integrateClaude({ token: 'test-token' });
       const texts = getMockUiCalls()
         .filter((c) => c.method === 'text')
         .map((c) => String(c.args[0]));
@@ -476,7 +467,7 @@ describe('integrateCommand: --global flag', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -494,7 +485,7 @@ describe('integrateCommand: --global flag', () => {
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -513,7 +504,7 @@ describe('integrateCommand: --global flag', () => {
     const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         project: 'my-project',
         token: 'test-token',
@@ -536,7 +527,7 @@ describe('integrateCommand: --global flag', () => {
     const addOrUpdateConnectionSpy = spyOn(stateManager, 'addOrUpdateConnection');
 
     try {
-      await integrate('claude', {
+      await integrateClaude({
         server: 'https://sonarcloud.io',
         nonInteractive: true,
         global: true,
@@ -587,7 +578,7 @@ describe('integrateCommand: no token available', () => {
 
     try {
       expect(
-        integrate('claude', {
+        integrateClaude({
           server: 'https://sonarcloud.io',
           project: 'my-project',
         }),

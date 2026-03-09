@@ -21,14 +21,14 @@
 // Unit tests for sonar secret command
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 import * as fs from 'node:fs';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildLocalBinaryName, detectPlatform } from '../../src/lib/platform-detector.js';
-import { installSecretScanningHooks } from '../../src/bootstrap/hooks.js';
-import { installSecrets, performSecretInstall } from '../../src/cli/commands/install.js';
+import { installSecretScanningHooks } from '../../src/cli/commands/integrate/claude/hooks';
+import { installSecrets, performSecretInstall } from '../../src/cli/commands/install/secrets';
 import * as releases from '../../src/lib/sonarsource-releases.js';
 import { SONAR_SECRETS_VERSION } from '../../src/lib/signatures.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
@@ -38,7 +38,7 @@ import { getDefaultState } from '../../src/lib/state.js';
 import { saveToken } from '../../src/lib/keychain.js';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 import type { PlatformInfo } from '../../src/lib/install-types.js';
-import { analyzeSecrets } from '../../src/cli/commands/analyze';
+import { analyzeSecrets } from '../../src/cli/commands/analyze/secrets';
 
 // =============================================================================
 // SECTION 1: Platform Detection and Binary Naming (no setup)

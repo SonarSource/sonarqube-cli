@@ -39,8 +39,8 @@ void mock.module('../../src/ui/colors.js', () => ({
   white: (s: string) => s,
 }));
 
-import { note } from '../../src/ui/components/note.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock.js';
+import { note } from '../../src/ui';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 

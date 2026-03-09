@@ -30,7 +30,7 @@ import type {
   ProjectsSearchResponse,
   SonarQubeIssue,
 } from '../../src/lib/types.js';
-import { listIssues } from '../../src/cli/commands/list.js';
+import { listIssues } from '../../src/cli/commands/list/issues';
 import { setMockUi } from '../../src/ui';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../src/sonarqube/projects';
 import * as authResolver from '../../src/lib/auth-resolver.js';

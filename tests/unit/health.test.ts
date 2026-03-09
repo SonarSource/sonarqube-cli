@@ -18,13 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for bootstrap/health.ts — runHealthChecks
-
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { runHealthChecks } from '../../src/bootstrap/health.js';
+import { runHealthChecks } from '../../src/cli/commands/integrate/claude/health';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
-import * as auth from '../../src/bootstrap/auth.js';
-import * as hooks from '../../src/bootstrap/hooks.js';
+import * as auth from '../../src/cli/commands/_common/token';
+import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
 import { setMockUi } from '../../src/ui';
 
 const SERVER = 'https://sonarcloud.io';
