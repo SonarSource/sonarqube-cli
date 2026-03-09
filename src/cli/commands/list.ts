@@ -138,7 +138,6 @@ export interface ListProjectsOptions {
 export async function listProjects(options: ListProjectsOptions): Promise<void> {
   const resolvedAuth = await resolveAuth({ org: options.org });
 
-
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
     throw new Error(
@@ -150,18 +149,6 @@ export async function listProjects(options: ListProjectsOptions): Promise<void> 
   if (page < 1) {
     throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
-  const state = loadState();
-  const activeConnection = getActiveConnection(state);
-
-  if (!activeConnection) {
-    throw new Error('No active connection found. Run: sonar auth login');
-  }
-
-  const token = await getToken(activeConnection.serverUrl, activeConnection.orgKey);
-  if (!token) {
-    throw new Error('No token found. Run: sonar auth login');
-  }
-
   const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
   const projectsClient = new ProjectsClient(client);
 
