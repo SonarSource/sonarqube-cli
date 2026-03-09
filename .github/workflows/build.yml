@@ -23,7 +23,7 @@ permissions:
 jobs:
   prepare:
     name: Prepare Build
-    runs-on: sonar-xs-public
+    runs-on: github-ubuntu-latest-s
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
@@ -51,7 +51,7 @@ jobs:
 
   build-and-publish-binaries:
     name: Build and Publish Binaries
-    runs-on: sonar-m-public
+    runs-on: github-ubuntu-latest-m
     needs: prepare
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
@@ -149,7 +149,7 @@ jobs:
 
   test-and-scan:
     name: Run Tests and Scan with SonarQube
-    runs-on: sonar-m-public
+    runs-on: github-ubuntu-latest-m
     needs: [prepare]
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -207,7 +207,7 @@ jobs:
           .github/scripts/sonarqube-analysis.sh
 
   promote:
-    runs-on: sonar-s-public
+    runs-on: github-ubuntu-latest-s
     name: Promote
     needs:
       - prepare
