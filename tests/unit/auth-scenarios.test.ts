@@ -38,11 +38,11 @@ import {
   openBrowserWithFallback,
   buildAuthURL,
   getSuccessHTML,
-} from '../../src/bootstrap/auth.js';
+} from '../../src/cli/commands/_common/token';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { clearTokenCache } from '../../src/lib/keychain.js';
 import { setKeytarImpl } from './helpers/mock-keytar.js';
-import { setMockUi } from '../../src/ui/index.js';
+import { setMockUi } from '../../src/ui';
 
 const HTTP_SCHEME = 'http';
 const LOOPBACK_HOST = '127.0.0.1';

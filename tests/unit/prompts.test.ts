@@ -25,14 +25,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { textPrompt, confirmPrompt, pressEnterKeyPrompt } from '../../src/ui/components/prompts.js';
+import { textPrompt, confirmPrompt, pressEnterKeyPrompt } from '../../src/ui';
 import {
   setMockUi,
   getMockUiCalls,
   clearMockUiCalls,
   clearMockResponses,
   queueMockResponse,
-} from '../../src/ui/mock.js';
+} from '../../src/ui';
 
 // ─── textPrompt ───────────────────────────────────────────────────────────────
 

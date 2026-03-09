@@ -26,7 +26,7 @@ import {
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
-} from '../../src/bootstrap/hook-templates.js';
+} from '../../src/cli/commands/integrate/claude/hook-templates';
 
 describe('Secret Scanning Hook Templates', () => {
   it('PreTool Unix hook: bash shebang, sonar analyze command, exit code 51', () => {

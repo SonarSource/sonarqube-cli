@@ -22,12 +22,12 @@
 
 // Config is read from sonar-project.properties, no need to save separate file
 import { homedir } from 'node:os';
-import { discoverProject, type ProjectInfo } from '../../bootstrap/discovery';
-import { runHealthChecks } from '../../bootstrap/health';
-import { runRepair } from '../../bootstrap/repair';
-import { getToken } from '../../bootstrap/auth';
-import { getAllCredentials } from '../../lib/keychain';
-import { installSecretScanningHooks } from '../../bootstrap/hooks';
+import { discoverProject, type ProjectInfo } from '../../_common/discovery';
+import { runHealthChecks } from './health';
+import { runRepair } from './repair';
+import { getToken } from '../../_common/token';
+import { getAllCredentials } from '../../../../lib/keychain';
+import { installSecretScanningHooks } from './hooks';
 import {
   addInstalledHook,
   addOrUpdateConnection,
@@ -35,17 +35,15 @@ import {
   loadState,
   markAgentConfigured,
   saveState,
-} from '../../lib/state-manager.js';
-import { version as VERSION } from '../../../package.json';
-import logger from '../../lib/logger';
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../lib/config-constants';
-import { ENV_SERVER, ENV_TOKEN } from '../../lib/auth-resolver';
-import { blank, info, intro, note, outro, success, text, warn } from '../../ui';
-import { CommandFailedError, InvalidOptionError } from './common/error';
+} from '../../../../lib/state-manager';
+import { version as VERSION } from '../../../../../package.json';
+import logger from '../../../../lib/logger';
+import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../../lib/config-constants';
+import { ENV_SERVER, ENV_TOKEN } from '../../../../lib/auth-resolver';
+import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
+import { CommandFailedError } from '../../_common/error';
 
-export const VALID_TOOLS: string[] = ['claude'] as const;
-
-export interface IntegrateOptions {
+export interface IntegrateClaudeOptions {
   server?: string;
   project?: string;
   token?: string;
@@ -69,10 +67,8 @@ interface ConfigurationData {
 /**
  * Integrate command handler
  */
-export async function integrate(tool: string, options: IntegrateOptions): Promise<void> {
-  const toolName = validateTool(tool);
-
-  intro(`SonarQube Integration Setup for ${toolName}`);
+export async function integrateClaude(options: IntegrateClaudeOptions): Promise<void> {
+  intro(`SonarQube Integration Setup for Claude`);
 
   text('\nPhase 1/3: Discovery & Validation');
   blank();
@@ -106,25 +102,6 @@ export async function integrate(tool: string, options: IntegrateOptions): Promis
     options,
     effectiveNonInteractive,
   );
-}
-
-/**
- * Validate that tool is supported
- */
-function validateTool(tool: string): string {
-  if (!VALID_TOOLS.includes(tool)) {
-    throw new InvalidOptionError(
-      `Agent "${tool}" is not yet supported.\nCurrently supported agents: claude\nComing soon: gemini, codex`,
-    );
-  }
-
-  const agentNames: Record<string, string> = {
-    claude: 'Claude Code',
-    gemini: 'Gemini',
-    codex: 'Codex',
-  };
-
-  return agentNames[tool] ?? 'Unknown Agent';
 }
 
 /**
@@ -233,7 +210,7 @@ async function fetchKeychainCredentials(config: ConfigurationData): Promise<void
  */
 async function loadConfiguration(
   projectInfo: ProjectInfo,
-  options: IntegrateOptions,
+  options: IntegrateClaudeOptions,
 ): Promise<ConfigurationData> {
   const config: ConfigurationData = {
     serverURL: options.server,
@@ -472,7 +449,7 @@ async function runFullSonarIntegration(
   projectKey: string | undefined,
   projectInfo: ProjectInfo,
   config: ConfigurationData,
-  options: IntegrateOptions,
+  options: IntegrateClaudeOptions,
   effectiveNonInteractive: boolean,
 ): Promise<void> {
   const hooksRoot = options.global ? homedir() : projectInfo.root;

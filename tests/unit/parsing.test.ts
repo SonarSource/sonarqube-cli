@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { parseInteger } from '../../src/cli/commands/common/parsing';
+import { parseInteger } from '../../src/cli/commands/_common/parsing';
 import { InvalidArgumentError } from 'commander';
 
 describe('CLI option parsing', () => {

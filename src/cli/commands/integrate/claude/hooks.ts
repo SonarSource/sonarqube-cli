@@ -23,13 +23,13 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform } from 'node:os';
-import logger from '../lib/logger.js';
+import logger from '../../../../lib/logger';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
-} from './hook-templates.js';
+} from './hook-templates';
 
 const CLAUDE_DIR = '.claude';
 const HOOKS_DIR = 'hooks';

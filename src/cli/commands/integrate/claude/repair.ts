@@ -20,11 +20,16 @@
 
 // Repair orchestrator - fixes configuration issues
 
-import { generateTokenViaBrowser, saveToken, validateToken, deleteToken } from './auth.js';
-import { installSecretScanningHooks } from './hooks.js';
-import type { HealthCheckResult } from './health.js';
-import logger from '../lib/logger.js';
-import { text, success } from '../ui/index.js';
+import {
+  generateTokenViaBrowser,
+  saveToken,
+  validateToken,
+  deleteToken,
+} from '../../_common/token';
+import { installSecretScanningHooks } from './hooks';
+import type { HealthCheckResult } from './health';
+import logger from '../../../../lib/logger';
+import { text, success } from '../../../../ui';
 
 /**
  * Run repair actions based on health check results

@@ -22,8 +22,8 @@
 // Covers both mock mode (recordCall) and real output paths
 
 import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
-import { info, success, warn, error, text, print, blank } from '../../src/ui/messages.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock.js';
+import { info, success, warn, error, text, print, blank } from '../../src/ui';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 

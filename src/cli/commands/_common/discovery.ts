@@ -22,8 +22,9 @@
 
 import { existsSync, statSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
-import { spawnProcess } from '../lib/process.js';
-import logger from '../lib/logger.js';
+import { spawnProcess } from '../../../lib/process';
+import logger from '../../../lib/logger';
+import { print } from '../../../ui';
 
 export interface ProjectInfo {
   root: string;
@@ -47,6 +48,57 @@ export interface SonarLintConfig {
   serverURL: string;
   projectKey: string;
   organization: string;
+}
+
+/**
+ * Try to find server URL from project configs
+ */
+export async function discoverServer(): Promise<string | null> {
+  try {
+    const projectInfo = await discoverProject(process.cwd());
+
+    // Check sonar-project.properties first
+    if (projectInfo.sonarPropsData?.hostURL) {
+      const url = projectInfo.sonarPropsData.hostURL;
+      print(`Found server in sonar-project.properties: ${url}`);
+      return url;
+    }
+
+    // Check .sonarlint config
+    if (projectInfo.sonarLintData?.serverURL) {
+      const url = projectInfo.sonarLintData.serverURL;
+      print(`Found server in .sonarlint config: ${url}`);
+      return url;
+    }
+
+    return null;
+  } catch (error) {
+    logger.debug(`Error finding server in configs: ${(error as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * Try to find organization from project configs
+ */
+export async function discoverOrganization(): Promise<string | null> {
+  try {
+    const projectInfo = await discoverProject(process.cwd());
+
+    // Check sonar-project.properties
+    if (projectInfo.sonarPropsData?.organization) {
+      return projectInfo.sonarPropsData.organization;
+    }
+
+    // Check .sonarlint config
+    if (projectInfo.sonarLintData?.organization) {
+      return projectInfo.sonarLintData.organization;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**

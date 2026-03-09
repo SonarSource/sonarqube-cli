@@ -22,26 +22,18 @@ import { version as VERSION } from '../../package.json';
 import { Command, Option } from 'commander';
 import { runCommand } from '../lib/run-command';
 import { blue } from '../ui/colors.js';
-import {
-  listIssues,
-  type ListIssuesOptions,
-  listProjects,
-  type ListProjectsOptions,
-} from './commands/list';
-import {
-  authLogin,
-  type AuthLoginOptions,
-  authLogout,
-  type AuthLogoutOptions,
-  authPurge,
-  authStatus,
-} from './commands/auth';
-import { installSecrets, type InstallSecretsOptions } from './commands/install';
-import { integrate, type IntegrateOptions } from './commands/integrate';
-import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze';
+import { listIssues, type ListIssuesOptions } from './commands/list/issues';
+import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { authLogin, type AuthLoginOptions } from './commands/auth/login';
+import { authLogout, type AuthLogoutOptions } from './commands/auth/logout';
+import { authPurge } from './commands/auth/purge';
+import { authStatus } from './commands/auth/status';
+import { installSecrets, type InstallSecretsOptions } from './commands/install/secrets';
+import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
+import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
-import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config';
-import { parseInteger } from './commands/common/parsing';
+import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
+import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 
 // Constants for argument validation
@@ -103,7 +95,7 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .action((options: IntegrateOptions) => runCommand(() => integrate('claude', options)));
+  .action((options: IntegrateClaudeOptions) => runCommand(() => integrateClaude(options)));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');

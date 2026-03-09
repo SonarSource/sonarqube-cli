@@ -21,11 +21,14 @@
 // Tests for src/commands/auth.ts exported functions
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { saveToken, getToken } from '../../src/bootstrap/auth.js';
-import * as authBootstrap from '../../src/bootstrap/auth.js';
-import { authLogin, authLogout, authPurge, authStatus } from '../../src/cli/commands/auth.js';
+import { saveToken, getToken } from '../../src/cli/commands/_common/token';
+import * as token from '../../src/cli/commands/_common/token';
+import { authLogin } from '../../src/cli/commands/auth/login';
+import { authLogout } from '../../src/cli/commands/auth/logout';
+import { authPurge } from '../../src/cli/commands/auth/purge';
+import { authStatus } from '../../src/cli/commands/auth/status';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
-import * as discovery from '../../src/bootstrap/discovery.js';
+import * as discovery from '../../src/cli/commands/_common/discovery';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 import * as stateManager from '../../src/lib/state-manager.js';
@@ -211,7 +214,7 @@ describe('authLoginCommand', () => {
   });
 
   it('throws when saving token to keychain fails', () => {
-    const saveTokenSpy = spyOn(authBootstrap, 'saveToken').mockRejectedValue(
+    const saveTokenSpy = spyOn(token, 'saveToken').mockRejectedValue(
       new Error('Keychain access denied'),
     );
     try {
@@ -224,9 +227,7 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 0 when browser login succeeds for on-premise server', async () => {
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
-      'browser-token',
-    );
+    const browserSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue('browser-token');
     const getSystemStatusSpy = spyOn(
       SonarQubeClient.prototype,
       'getSystemStatus',
@@ -241,9 +242,7 @@ describe('authLoginCommand', () => {
   });
 
   it('exits 0 when browser login succeeds for SonarCloud with org', async () => {
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
-      'browser-token',
-    );
+    const browserSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue('browser-token');
     const checkOrgSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
       true,
     );
@@ -268,9 +267,7 @@ describe('authLoginCommand', () => {
         organization: 'my-org',
       },
     });
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
-      'browser-token',
-    );
+    const browserSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue('browser-token');
     try {
       // No options — defaults to SonarCloud, org picked from config, browser flow
       await authLogin({});
@@ -281,7 +278,7 @@ describe('authLoginCommand', () => {
   });
 
   it('throws when browser authentication fails', () => {
-    const browserSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockRejectedValue(
+    const browserSpy = spyOn(token, 'generateTokenViaBrowser').mockRejectedValue(
       new Error('Authentication cancelled'),
     );
     try {

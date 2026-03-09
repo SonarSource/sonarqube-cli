@@ -24,9 +24,9 @@ import { describe, it, beforeEach, afterEach, expect, spyOn } from 'bun:test';
 import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runRepair } from '../../src/bootstrap/repair.js';
-import * as auth from '../../src/bootstrap/auth.js';
-import type { HealthCheckResult } from '../../src/bootstrap/health.js';
+import { runRepair } from '../../src/cli/commands/integrate/claude/repair';
+import * as auth from '../../src/cli/commands/_common/token';
+import type { HealthCheckResult } from '../../src/cli/commands/integrate/claude/health';
 import { setMockUi } from '../../src/ui';
 
 const healthAllGood: HealthCheckResult = {

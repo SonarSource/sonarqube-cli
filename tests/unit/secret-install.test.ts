@@ -46,7 +46,7 @@ void mock.module('../../src/lib/sonarsource-releases.js', () => ({
     `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-${version}-${platform.os}-${platform.arch}.exe`,
 }));
 
-const { installSecrets } = await import('../../src/cli/commands/install');
+const { installSecrets } = await import('../../src/cli/commands/install/secrets');
 
 describe('secretInstallCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;

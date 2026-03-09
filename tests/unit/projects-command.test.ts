@@ -4,10 +4,10 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { MAX_PAGE_SIZE } from '../../src/sonarqube/projects.js';
-import { listProjects, ListProjectsOptions } from '../../src/cli/commands/list';
+import { listProjects, ListProjectsOptions } from '../../src/cli/commands/list/projects';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as authResolver from '../../src/lib/auth-resolver.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui/index.js';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import type { ProjectsSearchResponse } from '../../src/lib/types.js';
 
 const DEFAULT_OPTIONS: ListProjectsOptions = {

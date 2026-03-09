@@ -61,10 +61,10 @@ void mock.module('../../src/ui/colors.js', () => ({
 }));
 
 import { mock } from 'bun:test';
-import { phase, phaseItem } from '../../src/ui/components/phase.js';
-import { intro, outro } from '../../src/ui/components/sections.js';
-import { withSpinner } from '../../src/ui/components/spinner.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock.js';
+import { phase, phaseItem } from '../../src/ui';
+import { intro, outro } from '../../src/ui';
+import { withSpinner } from '../../src/ui';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 
 // ─── phaseItem helper ─────────────────────────────────────────────────────────
 
