@@ -38,8 +38,8 @@ export const APP_NAME = 'sonarqube-cli';
 // CLI data directory
 // ---------------------------------------------------------------------------
 
-/** Root directory for all CLI data: ~/.sonar/sonarqube-cli (override via SONAR_CLI_DIR env var in test environment) */
-export const CLI_DIR = process.env.SONAR_CLI_DIR ?? join(homedir(), '.sonar', APP_NAME);
+/** Root directory for all CLI data: ~/.sonar/sonarqube-cli */
+export const CLI_DIR = join(homedir(), '.sonar', APP_NAME);
 
 // ---------------------------------------------------------------------------
 // State
@@ -64,7 +64,9 @@ export const BIN_DIR = join(CLI_DIR, 'bin');
 // Sonarsource binaries
 // ---------------------------------------------------------------------------
 
-export const SONARSOURCE_BINARIES_URL = 'https://binaries.sonarsource.com';
+/** Base URL for downloading SonarSource binaries. Override via SONAR_CLI_BINARIES_URL for test environments. */
+export const SONARSOURCE_BINARIES_URL =
+  process.env.SONAR_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
 
 // ---------------------------------------------------------------------------

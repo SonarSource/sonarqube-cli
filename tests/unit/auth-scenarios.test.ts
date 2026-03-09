@@ -41,7 +41,7 @@ import {
 } from '../../src/bootstrap/auth.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { clearTokenCache } from '../../src/lib/keychain.js';
-import { setKeytarImpl } from '../helpers/mock-keytar.js';
+import { setKeytarImpl } from './helpers/mock-keytar.js';
 import { setMockUi } from '../../src/ui/index.js';
 
 const HTTP_SCHEME = 'http';

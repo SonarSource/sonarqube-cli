@@ -18,5 +18,32 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Auto-generated from package.json — do not edit manually
-export const VERSION = '0.4.2';
+// Integration test harness — shared types
+
+export interface CliResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+}
+
+export interface RunOptions {
+  extraEnv?: Record<string, string>;
+  timeoutMs?: number;
+  stdin?: string;
+  /**
+   * When set, the harness streams CLI stdout looking for the loopback OAuth
+   * port (pattern: `port=\d+`), then delivers this token via GET request to
+   * the loopback server. Use this to test interactive browser-auth flows.
+   */
+  browserToken?: string;
+}
+
+export interface RecordedRequest {
+  method: string;
+  url: string;
+  path: string;
+  query: Record<string, string>;
+  headers: Record<string, string>;
+  timestamp: number;
+}

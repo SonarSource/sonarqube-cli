@@ -42,11 +42,12 @@ fi
 
 echo "🔄 Updating version to $NEW_VERSION..."
 
-# Update package.json (single source of truth)
+# Update package.json (single source of truth — only top-level version field)
 echo "  📝 Updating package.json..."
-sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" package.json
+npm pkg set version="$NEW_VERSION" --no-git-tag-version 2>/dev/null || \
+  node -e "const fs=require('fs'),p='package.json',j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$NEW_VERSION';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
 
-# Update VERSION in src/version.ts (preserve license header)
+# Update src/version.ts (single-line export, safe to replace)
 echo "  📝 Updating src/version.ts..."
 sed -i '' "s/export const VERSION = '[^']*';/export const VERSION = '$NEW_VERSION';/" src/version.ts
 

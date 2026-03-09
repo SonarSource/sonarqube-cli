@@ -25,7 +25,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { clearTokenCache, getToken } from '../../src/lib/keychain.js';
-import { createMockKeytar } from '../helpers/mock-keytar.js';
+import { createMockKeytar } from './helpers/mock-keytar.js';
 
 // Test constants
 const MULTIPLE_TOKENS_COUNT = 3;

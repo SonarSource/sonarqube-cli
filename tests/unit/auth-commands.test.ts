@@ -27,7 +27,7 @@ import { authLogin, authLogout, authPurge, authStatus } from '../../src/cli/comm
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as discovery from '../../src/bootstrap/discovery.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
-import { createMockKeytar } from '../helpers/mock-keytar.js';
+import { createMockKeytar } from './helpers/mock-keytar.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 
