@@ -41,9 +41,7 @@ describe('list issues — auth scenarios', () => {
       const result = await harness.run('list issues --project my-project');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
-        'No active connection found. Run: sonar auth login',
-      );
+      expect(result.stdout + result.stderr).toContain('No server URL found');
     },
     { timeout: 15000 },
   );

@@ -53,8 +53,6 @@ export interface ListIssuesOptions {
  * Issues search command handler
  */
 export async function listIssues(options: ListIssuesOptions): Promise<void> {
-  const resolvedAuth = await resolveAuth({ org: options.org });
-
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
     throw new Error(`Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`);
@@ -83,6 +81,7 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     throw new Error('--project is required');
   }
 
+  const resolvedAuth = await resolveAuth({ org: options.org });
   const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
   const issuesClient = new IssuesClient(client);
 
@@ -136,8 +135,6 @@ export interface ListProjectsOptions {
  * Projects search command handler
  */
 export async function listProjects(options: ListProjectsOptions): Promise<void> {
-  const resolvedAuth = await resolveAuth({ org: options.org });
-
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
     throw new Error(
@@ -149,6 +146,8 @@ export async function listProjects(options: ListProjectsOptions): Promise<void> 
   if (page < 1) {
     throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
+
+  const resolvedAuth = await resolveAuth({ org: options.org });
   const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
   const projectsClient = new ProjectsClient(client);
 

@@ -43,7 +43,7 @@ describe('list projects', () => {
       const result = await harness.run('list projects');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('No active connection found');
+      expect(result.stdout + result.stderr).toContain('No server URL found');
     },
     { timeout: 15000 },
   );
@@ -59,7 +59,7 @@ describe('list projects', () => {
       const result = await harness.run('list projects');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('No token found');
+      expect(result.stdout + result.stderr).toContain('No authentication token found');
     },
     { timeout: 15000 },
   );
