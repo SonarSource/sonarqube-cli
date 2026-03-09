@@ -27,6 +27,7 @@ import crypto, { randomUUID } from 'node:crypto';
 import logger from './logger.js';
 import {
   type AgentConfig,
+  type AgentExtension,
   type HookType,
   type AuthConnection,
   type CliState,
@@ -76,6 +77,11 @@ function migrateState(state: CliState) {
       firstUseDate: new Date().toISOString(),
       events: [],
     };
+  }
+  // users might have a state file without agentExtensions (pre-registry format)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (!state.agentExtensions) {
+    state.agentExtensions = [];
   }
 }
 
@@ -174,7 +180,7 @@ export function markAgentConfigured(state: CliState, agentName: string, cliVersi
 }
 
 /**
- * Add installed hook for agent
+ * Add installed hook for agent (legacy — kept for backward compatibility)
  */
 export function addInstalledHook(
   state: CliState,
@@ -190,9 +196,9 @@ export function addInstalledHook(
     };
   }
 
-  // Remove duplicate if exists
+  // Remove duplicate if exists (match by both name and type)
   state.agents[agentName].hooks.installed = state.agents[agentName].hooks.installed.filter(
-    (h) => h.name !== hookName,
+    (h) => !(h.name === hookName && h.type === hookType),
   );
 
   state.agents[agentName].hooks.installed.push({
@@ -200,4 +206,40 @@ export function addInstalledHook(
     type: hookType,
     installedAt: new Date().toISOString(),
   });
+}
+
+/**
+ * Upsert an agent extension in the registry.
+ * Matches by agentId + projectRoot + kind + name + (hookType for hooks).
+ */
+export function upsertAgentExtension(state: CliState, extension: AgentExtension): void {
+  const idx = state.agentExtensions.findIndex((e) => {
+    if (e.agentId !== extension.agentId) return false;
+    if (e.projectRoot !== extension.projectRoot) return false;
+    if (e.kind !== extension.kind) return false;
+    if (e.name !== extension.name) return false;
+    if (e.kind === 'hook' && extension.kind === 'hook') {
+      return e.hookType === extension.hookType;
+    }
+    return true;
+  });
+
+  if (idx >= 0) {
+    state.agentExtensions[idx] = extension;
+  } else {
+    state.agentExtensions.push(extension);
+  }
+}
+
+/**
+ * Find all extensions registered for a specific agent + project root combination.
+ */
+export function findExtensionsByProject(
+  state: CliState,
+  agentId: string,
+  projectRoot: string,
+): AgentExtension[] {
+  return state.agentExtensions.filter(
+    (e) => e.agentId === agentId && e.projectRoot === projectRoot,
+  );
 }

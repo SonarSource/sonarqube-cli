@@ -22,7 +22,7 @@
 
 /**
  * Unix template for sonar-secrets PreToolUse hook (bash)
- */
+1 */
 export function getSecretPreToolTemplateUnix(): string {
   return String.raw`#!/bin/bash
 # PreToolUse hook: Scan files before reading to prevent secret leakage
@@ -151,6 +151,79 @@ if [[ $exit_code -eq 51 ]]; then
   echo "{\"decision\":\"block\",\"reason\":\"$reason\"}"
   exit 0
 fi
+
+exit 0
+`;
+}
+
+/**
+ * Unix template for A3S PostToolUse hook (bash)
+ * Runs after Edit/Write — analyzes the modified file with A3S.
+ */
+export function getA3sPostToolTemplateUnix(): string {
+  return String.raw`#!/bin/bash
+# PostToolUse hook: Run A3S analysis on edited/written files
+
+if ! command -v sonar &> /dev/null; then
+  exit 0
+fi
+
+# Read JSON from stdin
+stdin_data=$(cat)
+
+# Extract tool_name
+tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name":"\([^"]*\)".*/\1/p' | head -1)
+
+if [[ "$tool_name" != "Edit" ]] && [[ "$tool_name" != "Write" ]]; then
+  exit 0
+fi
+
+# Extract file_path from tool_input
+file_path=$(echo "$stdin_data" | sed -n 's/.*"tool_input":\s*{\([^}]*\)}.*/\1/p' | \
+  sed -n 's/.*"file_path":"\([^"]*\)".*/\1/p' | head -1)
+
+if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
+  exit 0
+fi
+
+# Run A3S analysis (non-blocking — output shown to user, never blocks)
+sonar analyze a3s --file "$file_path" 2>/dev/null || true
+
+exit 0
+`;
+}
+
+/**
+ * Windows template for A3S PostToolUse hook (PowerShell)
+ */
+export function getA3sPostToolTemplateWindows(): string {
+  return String.raw`param(
+    [Parameter(ValueFromPipeline = $true)]
+    [string]$InputData
+)
+
+try {
+    $input = $InputData | ConvertFrom-Json -ErrorAction Stop
+} catch {
+    exit 0
+}
+
+$toolName = $input.tool_name
+$filePath = $input.tool_input.file_path
+
+if (($toolName -ne "Edit" -and $toolName -ne "Write") -or [string]::IsNullOrEmpty($filePath) -or -not (Test-Path $filePath)) {
+    exit 0
+}
+
+if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
+    exit 0
+}
+
+try {
+    & sonar analyze a3s --file $filePath 2>$null
+} catch {
+    # Non-blocking
+}
 
 exit 0
 `;

@@ -206,4 +206,141 @@ describe('Hooks', () => {
       rmSync(testDir, { recursive: true, force: true });
     }
   });
+  it('hooks: installs A3S PostToolUse hook with Edit|Write matcher', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-posttool-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installSecretScanningHooks(testDir);
+
+      const settingsPath = join(testDir, '.claude', 'settings.json');
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+
+      expect(settings.hooks.PostToolUse).toBeDefined();
+      expect(settings.hooks.PostToolUse.length).toBeGreaterThanOrEqual(1);
+      const postToolEntry = settings.hooks.PostToolUse[0];
+      expect(postToolEntry.matcher).toBe('Edit|Write');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: creates sonar-a3s scripts directory with posttool-a3s.sh', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-a3s-dir-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installSecretScanningHooks(testDir);
+
+      const a3sScriptsDir = join(testDir, '.claude', 'hooks', 'sonar-a3s', 'build-scripts');
+      expect(existsSync(a3sScriptsDir)).toBe(true);
+
+      const postToolScript = join(a3sScriptsDir, 'posttool-a3s.sh');
+      expect(existsSync(postToolScript)).toBe(true);
+
+      const stats = statSync(postToolScript);
+      const isExecutable = (stats.mode & 0o111) !== 0;
+      expect(isExecutable).toBe(true);
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: posttool-a3s.sh script contains sonar analyze a3s command', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-a3s-content-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installSecretScanningHooks(testDir);
+
+      const scriptPath = join(
+        testDir,
+        '.claude',
+        'hooks',
+        'sonar-a3s',
+        'build-scripts',
+        'posttool-a3s.sh',
+      );
+      const content = readFileSync(scriptPath, 'utf-8');
+
+      expect(content.includes('sonar analyze a3s --file')).toBe(true);
+      // PostToolUse is non-blocking — should not emit permissionDecision
+      expect(content.includes('permissionDecision')).toBe(false);
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: global install uses absolute paths for PostToolUse command', async () => {
+    const fakeGlobalDir = join(tmpdir(), 'sonarqube-cli-test-global-a3s-' + Date.now());
+    mkdirSync(fakeGlobalDir, { recursive: true });
+
+    try {
+      await installSecretScanningHooks('/some/project', fakeGlobalDir);
+
+      const settingsPath = join(fakeGlobalDir, '.claude', 'settings.json');
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+
+      const postToolCommand = settings.hooks.PostToolUse[0].hooks[0].command as string;
+      expect(postToolCommand.startsWith(fakeGlobalDir)).toBe(true);
+    } finally {
+      rmSync(fakeGlobalDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: project install uses relative paths for PostToolUse command', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-relative-a3s-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installSecretScanningHooks(testDir);
+
+      const settingsPath = join(testDir, '.claude', 'settings.json');
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+
+      const postToolCommand = settings.hooks.PostToolUse[0].hooks[0].command as string;
+      expect(postToolCommand.startsWith('.claude')).toBe(true);
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: overwrite preserves existing PostToolUse entries from other tools', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-merge-a3s-' + Date.now());
+    const claudeDir = join(testDir, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+
+    try {
+      const fs = await import('node:fs/promises');
+      const existing = {
+        hooks: {
+          PostToolUse: [
+            {
+              matcher: 'Bash',
+              hooks: [{ type: 'command', command: 'echo bash ran' }],
+            },
+          ],
+        },
+      };
+      await fs.writeFile(join(claudeDir, 'settings.json'), JSON.stringify(existing, null, 2));
+
+      await installSecretScanningHooks(testDir);
+
+      const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf-8'));
+
+      // Our new sonar-a3s entry should be present
+      const a3sEntry = settings.hooks.PostToolUse.find(
+        (e: { matcher: string }) => e.matcher === 'Edit|Write',
+      );
+      expect(a3sEntry).toBeDefined();
+
+      // Existing Bash entry should be preserved
+      const bashEntry = settings.hooks.PostToolUse.find(
+        (e: { matcher: string }) => e.matcher === 'Bash',
+      );
+      expect(bashEntry).toBeDefined();
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
 }); // describe('Hooks')
