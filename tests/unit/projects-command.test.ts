@@ -56,7 +56,13 @@ describe('projectsSearchCommand', () => {
   it('calls resolveAuth', async () => {
     await listProjects(DEFAULT_OPTIONS);
 
-    expect(resolveAuthSpy).toHaveBeenCalledWith({});
+    expect(resolveAuthSpy).toHaveBeenCalledWith({ org: undefined });
+  });
+
+  it('passes --org to resolveAuth', async () => {
+    await listProjects({ ...DEFAULT_OPTIONS, org: 'my-org' });
+
+    expect(resolveAuthSpy).toHaveBeenCalledWith({ org: 'my-org' });
   });
 
   it('propagates auth errors', () => {
