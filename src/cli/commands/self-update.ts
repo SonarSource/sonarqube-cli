@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { version as CURRENT_VERSION } from '../../../package.json';
 import { UPDATE_SCRIPT_BASE_URL } from '../../lib/config-constants';
+import { CommandFailedError } from './common/error';
 import { info, success, warn, text, blank } from '../../ui';
 
 const VERSION_PATTERNS = [
@@ -163,7 +164,10 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
-    process.exit(0);
+    // Throw instead of process.exit(0) so runCommand() can set the exit code
+    // and the postAction telemetry hook runs before the process terminates.
+    // The detached child is already unref'd and will outlive the parent.
+    throw new CommandFailedError('', 0);
   } else {
     // On Unix the binary is not locked, so run the script synchronously and
     // stream its output directly to the terminal.

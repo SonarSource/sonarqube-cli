@@ -120,7 +120,10 @@ describe('checkForUpdate', () => {
 
   it('returns updateAvailable: true when latest > current (with build number)', async () => {
     const scriptContent = 'version="99.0.0.241"\necho hi';
-    fetchSpy.mockResolvedValue({ ok: true, text: async () => scriptContent } as Response);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      text: async () => Promise.resolve(scriptContent),
+    } as Response);
 
     const result = await checkForUpdate();
 
@@ -134,7 +137,10 @@ describe('checkForUpdate', () => {
     // Same major.minor.patch as current; build number must be ignored.
     const [major, minor, patch] = (await import('../../package.json')).version.split('.');
     const scriptContent = `version="${major}.${minor}.${patch}.999"\necho hi`;
-    fetchSpy.mockResolvedValue({ ok: true, text: async () => scriptContent } as Response);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      text: async () => Promise.resolve(scriptContent),
+    } as Response);
 
     const result = await checkForUpdate();
 
@@ -151,7 +157,7 @@ describe('checkForUpdate', () => {
   it('throws when version cannot be extracted from the script', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => '#!/bin/bash\necho "no version here"',
+      text: async () => Promise.resolve('#!/bin/bash\necho "no version here"'),
     } as Response);
 
     expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
@@ -175,7 +181,7 @@ describe('selfUpdate --status', () => {
   it('reports an available update without installing', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => 'version="99.0.0.241"\necho hi',
+      text: async () => Promise.resolve('version="99.0.0.241"\necho hi'),
     } as Response);
 
     await selfUpdate({ status: true });
@@ -189,7 +195,7 @@ describe('selfUpdate --status', () => {
   it('reports already up to date', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => 'version="0.0.1"\necho hi',
+      text: async () => Promise.resolve('version="0.0.1"\necho hi'),
     } as Response);
 
     await selfUpdate({ status: true });
@@ -201,7 +207,6 @@ describe('selfUpdate --status', () => {
 
 describe('selfUpdate --force', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
-  let exitSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -209,23 +214,30 @@ describe('selfUpdate --force', () => {
     spawnMock.mockClear();
     spawnSyncMock.mockClear();
     fetchSpy = spyOn(globalThis, 'fetch');
-    // Prevent process.exit(0) from terminating the test runner (Windows path).
-    exitSpy = spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    exitSpy.mockRestore();
     setMockUi(false);
   });
 
-  it('installs even when already up to date', async () => {
+  // On Windows the install spawns a detached child then throws CommandFailedError(exitCode=0)
+  // so runCommand() can set the exit code and let telemetry run before the process exits.
+  // Tests catch that throw and verify the UI messages printed before it.
+  async function runForce(scriptContent: string): Promise<void> {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => 'version="0.0.1"\necho hi',
+      text: async () => Promise.resolve(scriptContent),
     } as Response);
+    try {
+      await selfUpdate({ force: true });
+    } catch (err) {
+      if ((err as { exitCode?: number }).exitCode !== 0) throw err;
+    }
+  }
 
-    await selfUpdate({ force: true });
+  it('installs even when already up to date', async () => {
+    await runForce('version="0.0.1"\necho hi');
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(false);
@@ -233,12 +245,7 @@ describe('selfUpdate --force', () => {
   });
 
   it('shows the normal update message when an update is also available', async () => {
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      text: async () => 'version="99.0.0"\necho hi',
-    } as Response);
-
-    await selfUpdate({ force: true });
+    await runForce('version="99.0.0"\necho hi');
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /updating/i.test(m))).toBe(true);
