@@ -181,6 +181,7 @@ configure
 COMMAND_TREE.command('self-update')
   .description('Update sonar CLI to the latest version')
   .option('--status', 'Check for a newer version without installing')
+  .option('--force', 'Install the latest version even if already up to date')
   .action((options: SelfUpdateOptions) => runCommand(() => selfUpdate(options)));
 
 // Hidden flush command — only registered when running as a telemetry worker.

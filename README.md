@@ -317,9 +317,10 @@ Update sonar CLI to the latest version
 
 **Options:**
 
-| Option     | Type    | Required | Description                                  | Default |
-| ---------- | ------- | -------- | -------------------------------------------- | ------- |
-| `--status` | boolean | No       | Check for a newer version without installing | -       |
+| Option     | Type    | Required | Description                                           | Default |
+| ---------- | ------- | -------- | ----------------------------------------------------- | ------- |
+| `--status` | boolean | No       | Check for a newer version without installing          | -       |
+| `--force`  | boolean | No       | Install the latest version even if already up to date | -       |
 
 ---
 

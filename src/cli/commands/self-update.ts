@@ -97,6 +97,7 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 
 export interface SelfUpdateOptions {
   status?: boolean;
+  force?: boolean;
 }
 
 async function selfUpdateStatus(): Promise<void> {
@@ -127,12 +128,16 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
   const { currentVersion, latestVersion, updateAvailable, scriptContent, scriptName } =
     await checkForUpdate();
 
-  if (!updateAvailable) {
+  if (!updateAvailable && !options.force) {
     success(`Already up to date (v${currentVersion})`);
     return;
   }
 
-  info(`Updating v${currentVersion} → v${latestVersion}...`);
+  if (updateAvailable) {
+    info(`Updating v${currentVersion} → v${latestVersion}...`);
+  } else {
+    info(`Force installing v${latestVersion}...`);
+  }
 
   const tempPath = join(tmpdir(), scriptName);
 

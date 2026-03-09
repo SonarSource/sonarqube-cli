@@ -18,14 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
-import {
-  extractVersion,
-  isNewerVersion,
-  checkForUpdate,
-  selfUpdate,
-} from '../../src/cli/commands/self-update';
+import { mock, describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
+
+// Mock node:child_process before importing self-update so that the named
+// imports (spawn, spawnSync) in self-update.ts resolve to the test doubles.
+const childProcess = await import('node:child_process');
+const spawnMock = mock(() => ({ unref: () => {} }));
+const spawnSyncMock = mock(() => ({ status: 0 }));
+void mock.module('node:child_process', () => ({
+  ...childProcess,
+  spawn: spawnMock as unknown as typeof childProcess.spawn,
+  spawnSync: spawnSyncMock as unknown as typeof childProcess.spawnSync,
+}));
+
+const { extractVersion, isNewerVersion, checkForUpdate, selfUpdate } =
+  await import('../../src/cli/commands/self-update');
 
 describe('extractVersion', () => {
   it('extracts version from a shell script (double quotes)', () => {
@@ -156,8 +164,7 @@ describe('selfUpdate --status', () => {
 
     await selfUpdate({ status: true });
 
-    const calls = getMockUiCalls();
-    const messages = calls.map((c) => c.args.join(' '));
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => m.includes('99.0.0'))).toBe(true);
     expect(messages.some((m) => /update available/i.test(m))).toBe(true);
   });
@@ -170,8 +177,53 @@ describe('selfUpdate --status', () => {
 
     await selfUpdate({ status: true });
 
-    const calls = getMockUiCalls();
-    const messages = calls.map((c) => c.args.join(' '));
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(true);
+  });
+});
+
+describe('selfUpdate --force', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+  let exitSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    spawnMock.mockClear();
+    spawnSyncMock.mockClear();
+    fetchSpy = spyOn(globalThis, 'fetch');
+    // Prevent process.exit(0) from terminating the test runner (Windows path).
+    exitSpy = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    exitSpy.mockRestore();
+    setMockUi(false);
+  });
+
+  it('installs even when already up to date', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      text: async () => 'version="0.0.1"\necho hi',
+    } as Response);
+
+    await selfUpdate({ force: true });
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(messages.some((m) => /up to date/i.test(m))).toBe(false);
+    expect(messages.some((m) => /force/i.test(m))).toBe(true);
+  });
+
+  it('shows the normal update message when an update is also available', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      text: async () => 'version="99.0.0"\necho hi',
+    } as Response);
+
+    await selfUpdate({ force: true });
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(messages.some((m) => /updating/i.test(m))).toBe(true);
   });
 });
