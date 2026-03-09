@@ -311,6 +311,18 @@ sonar config telemetry --disabled
 
 ---
 
+### `sonar self-update`
+
+Update sonar CLI to the latest version
+
+**Options:**
+
+| Option     | Type    | Required | Description                                  | Default |
+| ---------- | ------- | -------- | -------------------------------------------- | ------- |
+| `--status` | boolean | No       | Check for a newer version without installing | -       |
+
+---
+
 ## Option Types
 
 - `string` — text value (e.g. `--server https://sonarcloud.io`)
