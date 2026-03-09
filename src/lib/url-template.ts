@@ -23,7 +23,7 @@
  * Values are URI-encoded. Throws if a placeholder has no matching context key.
  */
 export function resolveUrlTemplate(template: string, context: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (_match, key: string) => {
+  return template.replaceAll(/\{(\w+)\}/g, (_match, key: string) => {
     if (!(key in context)) {
       const available = Object.keys(context).join(', ');
       throw new Error(

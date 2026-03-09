@@ -19,7 +19,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { apiCommand } from '../../src/cli/commands/api.js';
+import { apiCommand, resolveBaseUrl } from '../../src/cli/commands/api.js';
 import * as authResolver from '../../src/lib/auth-resolver.js';
 import * as discovery from '../../src/bootstrap/discovery.js';
 import * as apiRequestModule from '../../src/lib/api-request.js';
@@ -306,6 +306,41 @@ describe('apiCommand', () => {
     });
   });
 
+  describe('SonarCloud URL routing', () => {
+    it('uses sonarcloud.io for /api endpoints on SonarCloud', async () => {
+      resolveAuthSpy.mockResolvedValue({
+        token: 'test-token',
+        serverUrl: 'https://sonarcloud.io',
+        orgKey: 'my-org',
+      });
+
+      await apiCommand('get', '/api/issues/search', {});
+
+      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
+      expect(url).toBe('https://sonarcloud.io/api/issues/search');
+    });
+
+    it('uses api.sonarcloud.io for non-/api endpoints on SonarCloud', async () => {
+      resolveAuthSpy.mockResolvedValue({
+        token: 'test-token',
+        serverUrl: 'https://sonarcloud.io',
+        orgKey: 'my-org',
+      });
+
+      await apiCommand('get', '/monitoring/metrics', {});
+
+      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
+      expect(url).toBe('https://api.sonarcloud.io/monitoring/metrics');
+    });
+
+    it('does not reroute non-SonarCloud servers', async () => {
+      await apiCommand('get', '/monitoring/metrics', {});
+
+      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
+      expect(url).toBe('https://sonar.example.com/monitoring/metrics');
+    });
+  });
+
   describe('trailing slash handling', () => {
     it('strips trailing slash from server URL', async () => {
       resolveAuthSpy.mockResolvedValue({
@@ -319,5 +354,37 @@ describe('apiCommand', () => {
       const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
       expect(url).toBe('https://sonar.example.com/api/system/status');
     });
+  });
+});
+
+describe('resolveBaseUrl', () => {
+  it('returns sonarcloud.io for /api endpoints on SonarCloud', () => {
+    expect(resolveBaseUrl('https://sonarcloud.io', '/api/issues/search')).toBe(
+      'https://sonarcloud.io',
+    );
+  });
+
+  it('returns api.sonarcloud.io for non-/api endpoints on SonarCloud', () => {
+    expect(resolveBaseUrl('https://sonarcloud.io', '/monitoring/metrics')).toBe(
+      'https://api.sonarcloud.io',
+    );
+  });
+
+  it('returns sonarcloud.io for /api/v2 endpoints on SonarCloud', () => {
+    expect(resolveBaseUrl('https://sonarcloud.io', '/api/v2/projects')).toBe(
+      'https://sonarcloud.io',
+    );
+  });
+
+  it('strips trailing slash for non-SonarCloud servers', () => {
+    expect(resolveBaseUrl('https://mysonar.example.com/', '/api/test')).toBe(
+      'https://mysonar.example.com',
+    );
+  });
+
+  it('returns server URL as-is for non-SonarCloud servers', () => {
+    expect(resolveBaseUrl('https://mysonar.example.com', '/monitoring/metrics')).toBe(
+      'https://mysonar.example.com',
+    );
   });
 });

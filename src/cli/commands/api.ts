@@ -22,6 +22,11 @@ import { resolveAuth } from '../../lib/auth-resolver.js';
 import { apiRequest } from '../../lib/api-request.js';
 import { resolveUrlTemplate } from '../../lib/url-template.js';
 import { discoverProject } from '../../bootstrap/discovery.js';
+import {
+  SONARCLOUD_API_URL,
+  SONARCLOUD_HOSTNAME,
+  SONARCLOUD_URL,
+} from '../../lib/config-constants.js';
 import { InvalidOptionError } from './common/error.js';
 import { print } from '../../ui/index.js';
 import type { ContentType, HttpMethod } from '../../lib/api-request.js';
@@ -89,7 +94,8 @@ export async function apiCommand(
   }
 
   const resolvedEndpoint = resolveUrlTemplate(endpoint, templateContext);
-  const url = `${auth.serverUrl.replace(/\/$/, '')}${resolvedEndpoint}`;
+  const baseUrl = resolveBaseUrl(auth.serverUrl, resolvedEndpoint);
+  const url = `${baseUrl}${resolvedEndpoint}`;
   const contentType: ContentType = resolvedEndpoint.startsWith('/api/v2/') ? 'json' : 'form';
 
   const response = await apiRequest(
@@ -107,4 +113,22 @@ export async function apiCommand(
   if (response.status < HTTP_OK_MIN || response.status > HTTP_OK_MAX) {
     throw new Error(`HTTP ${response.status} ${response.statusText}`);
   }
+}
+
+/**
+ * Determine the base URL for a request. SonarCloud uses separate hosts:
+ * - sonarcloud.io for /api/... endpoints
+ * - api.sonarcloud.io for all other endpoints
+ */
+export function resolveBaseUrl(serverUrl: string, endpoint: string): string {
+  const normalized = serverUrl.replace(/\/$/, '');
+  try {
+    const url = new URL(normalized);
+    if (url.hostname === SONARCLOUD_HOSTNAME) {
+      return endpoint.startsWith('/api') ? SONARCLOUD_URL : SONARCLOUD_API_URL;
+    }
+  } catch {
+    // Not a valid URL — fall through to use as-is
+  }
+  return normalized;
 }
