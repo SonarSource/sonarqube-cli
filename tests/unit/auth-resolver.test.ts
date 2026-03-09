@@ -201,6 +201,65 @@ describe('resolveAuth', () => {
         loadStateSpy.mockRestore();
       }
     });
+
+    it('includes connectionType from the active connection', async () => {
+      const state = getDefaultState('test');
+      state.auth.connections = [
+        {
+          id: 'conn-cloud',
+          type: 'cloud',
+          serverUrl: SONARCLOUD_URL,
+          orgKey: 'my-org',
+          authenticatedAt: new Date().toISOString(),
+          keystoreKey: 'sonarcloud.io:my-org',
+        },
+      ];
+      state.auth.activeConnectionId = 'conn-cloud';
+      state.auth.isAuthenticated = true;
+
+      const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      await keytarHandle.mock.setPassword('sonarqube-cli', 'sonarcloud.io:my-org', FAKE_TOKEN);
+
+      try {
+        const result = await resolveAuth({});
+        expect(result.connectionType).toBe('cloud');
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+
+    it('includes connectionType: on-premise for self-hosted connections', async () => {
+      const state = getDefaultState('test');
+      state.auth.connections = [
+        {
+          id: 'conn-onprem',
+          type: 'on-premise',
+          serverUrl: SONARQUBE_URL,
+          authenticatedAt: new Date().toISOString(),
+          keystoreKey: 'sonarqube.example.com',
+        },
+      ];
+      state.auth.activeConnectionId = 'conn-onprem';
+      state.auth.isAuthenticated = true;
+
+      const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      await keytarHandle.mock.setPassword('sonarqube-cli', 'sonarqube.example.com', FAKE_TOKEN);
+
+      try {
+        const result = await resolveAuth({});
+        expect(result.connectionType).toBe('on-premise');
+      } finally {
+        loadStateSpy.mockRestore();
+      }
+    });
+
+    it('connectionType is undefined when auth comes from env vars only', async () => {
+      process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+      process.env[ENV_SERVER] = SONARCLOUD_URL;
+
+      const result = await resolveAuth({});
+      expect(result.connectionType).toBeUndefined();
+    });
   });
 
   // ─── No auth found ─────────────────────────────────────────────────────

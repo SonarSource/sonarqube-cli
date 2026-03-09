@@ -101,7 +101,7 @@ describe('Hooks', () => {
       );
       const content = readFileSync(scriptPath, 'utf-8');
 
-      expect(content.includes('sonar analyze --file')).toBe(true);
+      expect(content.includes('sonar analyze secrets --file')).toBe(true);
       expect(content.includes('exit_code -eq 51')).toBe(true);
     } finally {
       rmSync(testDir, { recursive: true, force: true });
@@ -339,6 +339,23 @@ describe('Hooks', () => {
         (e: { matcher: string }) => e.matcher === 'Bash',
       );
       expect(bashEntry).toBeDefined();
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: areHooksInstalled returns false when settings.json contains malformed JSON', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-malformed-' + Date.now());
+    const claudeDir = join(testDir, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+
+    try {
+      const fs = await import('node:fs/promises');
+      // Write invalid JSON to settings.json to trigger the catch block in areHooksInstalled
+      await fs.writeFile(join(claudeDir, 'settings.json'), '{ invalid json !!!', 'utf-8');
+
+      const installed = await areHooksInstalled(testDir);
+      expect(installed).toBe(false);
     } finally {
       rmSync(testDir, { recursive: true, force: true });
     }

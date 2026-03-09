@@ -78,8 +78,8 @@ export class SonarQubeClient {
   /**
    * Make POST request to SonarQube API using Bearer token
    */
-  async post<T>(endpoint: string, body: unknown): Promise<T> {
-    const url = `${this.serverURL}${endpoint}`;
+  async post<T>(endpoint: string, body: unknown, baseUrl?: string): Promise<T> {
+    const url = `${baseUrl ?? this.serverURL}${endpoint}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -194,4 +194,58 @@ export class SonarQubeClient {
       return false;
     }
   }
+
+  /**
+   * Run A3S server-side analysis on a single file.
+   * SonarQube Cloud only — endpoint lives on api.sonarcloud.io.
+   */
+  async analyzeFile(request: A3sAnalysisRequest): Promise<A3sAnalysisResponse> {
+    return await this.post<A3sAnalysisResponse>(
+      '/a3s-analysis/analyses',
+      request,
+      SONARCLOUD_API_URL,
+    );
+  }
+}
+
+export interface A3sAnalysisRequest {
+  organizationKey: string;
+  projectKey: string;
+  branchName?: string;
+  filePath: string;
+  fileContent: string;
+  fileScope?: 'MAIN' | 'TEST';
+}
+
+export interface A3sAnalysisResponse {
+  id: string;
+  issues: A3sIssue[];
+  patchResult?: {
+    newIssues: A3sIssue[];
+    matchedIssues: A3sIssue[];
+    closedIssues: string[];
+  } | null;
+  errors?: Array<{ code: string; message: string }> | null;
+}
+
+export interface A3sIssue {
+  id: string;
+  filePath?: string | null;
+  message: string;
+  rule: string;
+  textRange?: {
+    startLine: number;
+    endLine: number;
+    startOffset: number;
+    endOffset: number;
+  } | null;
+  flows?: Array<{
+    type: string;
+    description?: string | null;
+    locations: Array<{
+      textRange?: { startLine: number; endLine: number } | null;
+      message?: string | null;
+      file?: string | null;
+    }>;
+  }> | null;
 }

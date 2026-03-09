@@ -20,8 +20,16 @@
 
 // Declarative builder for the isolated test environment: state.json + binary setup
 
-import { mkdirSync, writeFileSync, copyFileSync, chmodSync, existsSync } from 'node:fs';
+import {
+  mkdirSync,
+  writeFileSync,
+  copyFileSync,
+  chmodSync,
+  existsSync,
+  realpathSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { CliState } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
@@ -45,15 +53,29 @@ function resolveSecretsBinarySource(): string {
   return join(import.meta.dir, '..', 'resources', filename);
 }
 
+interface A3sExtensionConfig {
+  projectRoot: string;
+  projectKey: string;
+  orgKey?: string;
+  serverUrl?: string;
+}
+
 export class EnvironmentBuilder {
   private activeConnectionUrl?: string;
   private activeConnectionType: 'cloud' | 'on-premise' = 'on-premise';
+  private activeConnectionOrgKey?: string;
   private _installSecretsBinary = false;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
+  private readonly a3sExtensions: A3sExtensionConfig[] = [];
 
-  withActiveConnection(url: string, type: 'cloud' | 'on-premise' = 'on-premise'): this {
+  withActiveConnection(
+    url: string,
+    type: 'cloud' | 'on-premise' = 'on-premise',
+    orgKey?: string,
+  ): this {
     this.activeConnectionUrl = url;
     this.activeConnectionType = type;
+    this.activeConnectionOrgKey = orgKey;
     return this;
   }
 
@@ -76,6 +98,20 @@ export class EnvironmentBuilder {
     return this;
   }
 
+  /**
+   * Registers a sonar-a3s PostToolUse extension for a project.
+   * Required for `analyze a3s` and `analyze` (full pipeline) to run A3S.
+   */
+  withA3sExtension(
+    projectRoot: string,
+    projectKey: string,
+    orgKey?: string,
+    serverUrl?: string,
+  ): this {
+    this.a3sExtensions.push({ projectRoot, projectKey, orgKey, serverUrl });
+    return this;
+  }
+
   build(): CliState {
     const state = getDefaultState('integration-test');
 
@@ -90,6 +126,7 @@ export class EnvironmentBuilder {
           id: connectionId,
           type: this.activeConnectionType,
           serverUrl: this.activeConnectionUrl,
+          orgKey: this.activeConnectionOrgKey,
           authenticatedAt: new Date().toISOString(),
           keystoreKey: `sonarqube-cli:${this.activeConnectionUrl}`,
         },
@@ -109,6 +146,31 @@ export class EnvironmentBuilder {
           },
         ],
       };
+    }
+
+    for (const ext of this.a3sExtensions) {
+      // Resolve symlinks so the stored path matches process.cwd() in the CLI subprocess
+      // (e.g. /var/folders/... → /private/var/folders/... on macOS)
+      let resolvedRoot: string;
+      try {
+        resolvedRoot = realpathSync(ext.projectRoot);
+      } catch {
+        resolvedRoot = ext.projectRoot;
+      }
+      state.agentExtensions.push({
+        id: randomUUID(),
+        agentId: 'claude-code',
+        projectRoot: resolvedRoot,
+        global: false,
+        projectKey: ext.projectKey,
+        orgKey: ext.orgKey ?? this.activeConnectionOrgKey,
+        serverUrl: ext.serverUrl ?? this.activeConnectionUrl,
+        updatedByCliVersion: 'integration-test',
+        updatedAt: new Date().toISOString(),
+        kind: 'hook',
+        name: 'sonar-a3s',
+        hookType: 'PostToolUse',
+      });
     }
 
     return state;

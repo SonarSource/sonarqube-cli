@@ -34,6 +34,17 @@ export interface IssueConfig {
   line?: number;
 }
 
+export interface A3sIssueConfig {
+  rule: string;
+  message: string;
+  startLine?: number;
+}
+
+export interface A3sResponseConfig {
+  issues?: A3sIssueConfig[];
+  errors?: Array<{ code: string; message: string }>;
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -97,6 +108,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private validToken?: string;
   private systemStatus: 'UP' | 'DOWN' = 'UP';
+  private a3sResponse?: A3sResponseConfig;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -110,10 +122,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withA3sResponse(response: A3sResponseConfig = {}): this {
+    this.a3sResponse = response;
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const validToken = this.validToken;
     const systemStatus = this.systemStatus;
+    const a3sResponse = this.a3sResponse;
     const requests: RecordedRequest[] = [];
 
     const server = Bun.serve({
@@ -248,6 +266,32 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify({ organizations: [] }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
+          if (!a3sResponse) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: 'A3S endpoint not configured' }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+
+          const issues = (a3sResponse.issues ?? []).map((i) => ({
+            rule: i.rule,
+            message: i.message,
+            textRange: i.startLine
+              ? { startLine: i.startLine, endLine: i.startLine, startOffset: 0, endOffset: 0 }
+              : null,
+          }));
+
+          return new Response(
+            JSON.stringify({
+              id: `a3s-analysis-${Date.now()}`,
+              issues,
+              errors: a3sResponse.errors ?? null,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         return new Response(JSON.stringify({ errors: [{ msg: `Unknown endpoint: ${path}` }] }), {

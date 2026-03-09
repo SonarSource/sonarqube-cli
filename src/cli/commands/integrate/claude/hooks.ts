@@ -53,36 +53,47 @@ interface ClaudeSettings {
   [key: string]: unknown;
 }
 
-/**
- * Returns true if a hook config entry belongs to sonar-secrets
- */
-function isSonarSecretsEntry(entry: HookConfig): boolean {
-  return (
-    Array.isArray(entry.hooks) && entry.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER))
-  );
-}
+type FsWriter = {
+  writeFile: (path: string, data: string, options?: { mode?: number }) => Promise<void>;
+};
 
-/**
- * Returns true if a hook config entry belongs to sonar-a3s
- */
-function isSonarA3sEntry(entry: HookConfig): boolean {
-  return (
-    Array.isArray(entry.hooks) && entry.hooks.some((h) => h.command.includes(SONAR_A3S_MARKER))
-  );
-}
-
-/**
- * Get platform identifier
- */
 function getPlatform(): 'windows' | 'unix' {
   return platform() === 'win32' ? 'windows' : 'unix';
 }
 
-/**
- * Get script extension based on platform
- */
 function getScriptExtension(): string {
   return getPlatform() === 'windows' ? '.ps1' : '.sh';
+}
+
+/**
+ * Write a script file with executable permissions on Unix.
+ */
+async function writeScript(
+  fs: FsWriter,
+  scriptPath: string,
+  content: string,
+  isWindows: boolean,
+): Promise<void> {
+  await fs.writeFile(scriptPath, content, isWindows ? undefined : { mode: 0o755 });
+}
+
+/**
+ * Upsert a hook entry in settings.json, replacing any existing entry owned by the same marker.
+ */
+function upsertHookEntry(
+  settings: ClaudeSettings,
+  eventType: string,
+  marker: string,
+  matcher: string,
+  command: string,
+  timeout: number,
+): void {
+  const isOwned = (e: HookConfig) =>
+    Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(marker));
+  settings.hooks![eventType] = [
+    ...(settings.hooks![eventType] ?? []).filter((e) => !isOwned(e)),
+    { matcher, hooks: [{ type: 'command', command, timeout }] },
+  ];
 }
 
 /**
@@ -105,57 +116,13 @@ export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
     return Boolean(
       settings.hooks?.PreToolUse &&
       Array.isArray(settings.hooks.PreToolUse) &&
-      settings.hooks.PreToolUse.some(isSonarSecretsEntry),
+      settings.hooks.PreToolUse.some(
+        (e) =>
+          Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER)),
+      ),
     );
   } catch {
     return false;
-  }
-}
-
-type FsWriter = {
-  writeFile: (path: string, data: string, options?: { mode?: number }) => Promise<void>;
-};
-
-/**
- * Generate secret scanning hooks dynamically
- */
-async function generateSecretHooks(
-  fs: FsWriter,
-  isWindows: boolean,
-  scriptExt: string,
-  targetScriptsDir: string,
-): Promise<void> {
-  const preTool = isWindows ? getSecretPreToolTemplateWindows() : getSecretPreToolTemplateUnix();
-  const prompt = isWindows ? getSecretPromptTemplateWindows() : getSecretPromptTemplateUnix();
-
-  const preToolPath = join(targetScriptsDir, `pretool-secrets${scriptExt}`);
-  const promptPath = join(targetScriptsDir, `prompt-secrets${scriptExt}`);
-
-  if (isWindows) {
-    await fs.writeFile(preToolPath, preTool);
-    await fs.writeFile(promptPath, prompt);
-  } else {
-    await fs.writeFile(preToolPath, preTool, { mode: 0o755 });
-    await fs.writeFile(promptPath, prompt, { mode: 0o755 });
-  }
-}
-
-/**
- * Generate A3S PostToolUse hook script
- */
-async function generateA3sHook(
-  fs: FsWriter,
-  isWindows: boolean,
-  scriptExt: string,
-  targetScriptsDir: string,
-): Promise<void> {
-  const postTool = isWindows ? getA3sPostToolTemplateWindows() : getA3sPostToolTemplateUnix();
-  const postToolPath = join(targetScriptsDir, `posttool-a3s${scriptExt}`);
-
-  if (isWindows) {
-    await fs.writeFile(postToolPath, postTool);
-  } else {
-    await fs.writeFile(postToolPath, postTool, { mode: 0o755 });
   }
 }
 
@@ -174,74 +141,78 @@ export async function installSecretScanningHooks(
     const baseDir = isGlobal ? globalDir : projectRoot;
     const claudePath = join(baseDir, CLAUDE_DIR);
     const hooksPath = join(claudePath, HOOKS_DIR);
-
-    // Create hooks directory
-    mkdirSync(hooksPath, { recursive: true });
-
-    const secretsScriptsDir = join(hooksPath, 'sonar-secrets', 'build-scripts');
-    const a3sScriptsDir = join(hooksPath, 'sonar-a3s', 'build-scripts');
-
-    mkdirSync(secretsScriptsDir, { recursive: true });
-    mkdirSync(a3sScriptsDir, { recursive: true });
-
     const isWindows = getPlatform() === 'windows';
     const scriptExt = getScriptExtension();
 
-    await generateSecretHooks(fs, isWindows, scriptExt, secretsScriptsDir);
-    await generateA3sHook(fs, isWindows, scriptExt, a3sScriptsDir);
+    // Create script directories and write scripts
+    const secretsScriptsDir = join(hooksPath, 'sonar-secrets', 'build-scripts');
+    const a3sScriptsDir = join(hooksPath, 'sonar-a3s', 'build-scripts');
+    mkdirSync(secretsScriptsDir, { recursive: true });
+    mkdirSync(a3sScriptsDir, { recursive: true });
 
-    // Register hooks in settings.json
+    await writeScript(
+      fs,
+      join(secretsScriptsDir, `pretool-secrets${scriptExt}`),
+      isWindows ? getSecretPreToolTemplateWindows() : getSecretPreToolTemplateUnix(),
+      isWindows,
+    );
+    await writeScript(
+      fs,
+      join(secretsScriptsDir, `prompt-secrets${scriptExt}`),
+      isWindows ? getSecretPromptTemplateWindows() : getSecretPromptTemplateUnix(),
+      isWindows,
+    );
+    await writeScript(
+      fs,
+      join(a3sScriptsDir, `posttool-a3s${scriptExt}`),
+      isWindows ? getA3sPostToolTemplateWindows() : getA3sPostToolTemplateUnix(),
+      isWindows,
+    );
+
+    // Load or initialise settings.json
     const settingsPath = join(claudePath, SETTINGS_FILE);
     let settings: ClaudeSettings = { hooks: {} };
-
     if (existsSync(settingsPath)) {
       const data = await fs.readFile(settingsPath, 'utf-8');
       settings = JSON.parse(data) as ClaudeSettings;
     }
-
-    // Ensure hooks section exists
     settings.hooks ??= {};
 
-    // Global hooks use absolute paths; project hooks use paths relative to project root
+    // Resolve command paths (absolute for global, relative for project)
     const secretsRelativeDir = join(CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts');
     const a3sRelativeDir = join(CLAUDE_DIR, HOOKS_DIR, 'sonar-a3s', 'build-scripts');
     const secretsDir = isGlobal ? join(baseDir, secretsRelativeDir) : secretsRelativeDir;
     const a3sDir = isGlobal ? join(baseDir, a3sRelativeDir) : a3sRelativeDir;
 
-    const preToolScript = join(secretsDir, `pretool-secrets${scriptExt}`);
-    const promptScript = join(secretsDir, `prompt-secrets${scriptExt}`);
-    const postToolScript = join(a3sDir, `posttool-a3s${scriptExt}`);
-
-    const makeCommand = (script: string) =>
+    const cmd = (script: string) =>
       isWindows ? `powershell -NoProfile -File ${script.replaceAll('\\', '/')}` : script;
 
-    // Merge secrets hooks — replace any prior sonar-secrets entry
-    settings.hooks.PreToolUse = [
-      ...(settings.hooks.PreToolUse ?? []).filter((e) => !isSonarSecretsEntry(e)),
-      {
-        matcher: 'Read',
-        hooks: [{ type: 'command', command: makeCommand(preToolScript), timeout: 60 }],
-      },
-    ];
+    // Register hooks — each call replaces the prior entry for that marker
+    upsertHookEntry(
+      settings,
+      'PreToolUse',
+      SONAR_SECRETS_MARKER,
+      'Read',
+      cmd(join(secretsDir, `pretool-secrets${scriptExt}`)),
+      60,
+    );
+    upsertHookEntry(
+      settings,
+      'UserPromptSubmit',
+      SONAR_SECRETS_MARKER,
+      '*',
+      cmd(join(secretsDir, `prompt-secrets${scriptExt}`)),
+      60,
+    );
+    upsertHookEntry(
+      settings,
+      'PostToolUse',
+      SONAR_A3S_MARKER,
+      'Edit|Write',
+      cmd(join(a3sDir, `posttool-a3s${scriptExt}`)),
+      60,
+    );
 
-    settings.hooks.UserPromptSubmit = [
-      ...(settings.hooks.UserPromptSubmit ?? []).filter((e) => !isSonarSecretsEntry(e)),
-      {
-        matcher: '*',
-        hooks: [{ type: 'command', command: makeCommand(promptScript), timeout: 60 }],
-      },
-    ];
-
-    // Merge A3S PostToolUse hook — replace any prior sonar-a3s entry
-    settings.hooks.PostToolUse = [
-      ...(settings.hooks.PostToolUse ?? []).filter((e) => !isSonarA3sEntry(e)),
-      {
-        matcher: 'Edit|Write',
-        hooks: [{ type: 'command', command: makeCommand(postToolScript), timeout: 60 }],
-      },
-    ];
-
-    // Save updated settings
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
   } catch (error) {
     logger.debug(`Failed to install secret scanning hooks: ${(error as Error).message}`);

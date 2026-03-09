@@ -329,4 +329,119 @@ describe('SonarQubeClient', () => {
       expect(await client.checkQualityProfiles('my-project')).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // analyzeFile
+  // -------------------------------------------------------------------------
+
+  describe('analyzeFile', () => {
+    it('sends POST to SONARCLOUD_API_URL/a3s-analysis/analyses', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const url = lastFetchUrl(fetchSpy);
+      expect(url).toBe(`${SONARCLOUD_API_URL}/a3s-analysis/analyses`);
+    });
+
+    it('sends Bearer token in Authorization header', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('sends request body as JSON', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.organizationKey).toBe('my-org');
+      expect(body.projectKey).toBe('my-project');
+      expect(body.filePath).toBe('src/index.ts');
+      expect(body.fileContent).toBe('const x = 1;');
+    });
+
+    it('does not include branchName in body when not provided', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.branchName).toBeUndefined();
+    });
+
+    it('includes branchName in body when provided', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+        branchName: 'feature/my-branch',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.branchName).toBe('feature/my-branch');
+    });
+
+    it('returns parsed response', async () => {
+      const mockResponse = {
+        id: 'analysis-123',
+        issues: [{ rule: 'ts:S1234', message: 'Fix this', textRange: null }],
+        errors: null,
+      };
+      fetchSpy = mockFetch(mockResponse);
+
+      const result = await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      expect(result.id).toBe('analysis-123');
+      expect(result.issues).toHaveLength(1);
+    });
+
+    it('throws on non-OK response', () => {
+      fetchSpy = mockFetch({ message: 'Invalid request body' }, false, 400);
+
+      expect(
+        client.analyzeFile({
+          organizationKey: 'my-org',
+          projectKey: 'my-project',
+          filePath: 'src/index.ts',
+          fileContent: 'const x = 1;',
+        }),
+      ).rejects.toThrow('400');
+    });
+  });
 });

@@ -75,7 +75,9 @@ export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
 
 export const SONARCLOUD_HOSTNAME = 'sonarcloud.io';
 export const SONARCLOUD_URL = 'https://sonarcloud.io';
-export const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';
+/** Base URL for SonarCloud API calls. Override via SONAR_CLI_SONARCLOUD_API_URL for test environments. */
+export const SONARCLOUD_API_URL =
+  process.env.SONAR_CLI_SONARCLOUD_API_URL ?? 'https://api.sonarcloud.io';
 
 // ---------------------------------------------------------------------------
 // Auth loopback server
@@ -86,4 +88,5 @@ export const SONARCLOUD_API_URL = 'https://api.sonarcloud.io';
 // ---------------------------------------------------------------------------
 
 export const AUTH_PORT_START = 64120;
+// Total number of ports in the auth loopback range
 export const AUTH_PORT_COUNT = 11;

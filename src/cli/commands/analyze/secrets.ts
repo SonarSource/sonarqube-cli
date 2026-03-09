@@ -17,20 +17,34 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { spawnProcess } from '../../../lib/process';
 import type { SpawnResult } from '../../../lib/process';
 import { buildLocalBinaryName, detectPlatform } from '../../../lib/platform-detector';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
-import { blank, error, print, success, text } from '../../../ui';
+import { blank, error, print, success, text, warn } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { BIN_DIR } from '../../../lib/config-constants';
+import { SonarQubeClient } from '../../../sonarqube/client';
+import type { A3sIssue } from '../../../sonarqube/client';
+import { loadState, findExtensionsByProject } from '../../../lib/state-manager';
+import type { HookExtension } from '../../../lib/state';
 
 export interface AnalyzeSecretsOptions {
   file?: string;
   stdin?: boolean;
+}
+
+export interface AnalyzeFileOptions {
+  file: string;
+  branch?: string;
+}
+
+export interface AnalyzeA3sOptions {
+  file: string;
+  branch?: string;
 }
 
 export async function analyzeSecrets(options: AnalyzeSecretsOptions): Promise<void> {
@@ -69,7 +83,16 @@ async function setupScanEnvironment(options: {
   validateScanOptions(options);
 
   const binaryPath = setupBinaryPath();
-  const { authUrl, authToken } = await resolveSecretsAuth();
+
+  let authUrl: string | undefined;
+  let authToken: string | undefined;
+  try {
+    const auth = await resolveAuth({});
+    authUrl = auth.serverUrl;
+    authToken = auth.token;
+  } catch {
+    // Auth resolution failure is non-fatal — binary works without auth
+  }
 
   return { binaryPath, authUrl, authToken };
 }
@@ -91,16 +114,6 @@ function setupBinaryPath(): string {
   validateCheckCommandEnvironment(binaryPath);
 
   return binaryPath;
-}
-
-async function resolveSecretsAuth(): Promise<{ authUrl?: string; authToken?: string }> {
-  try {
-    const auth = await resolveAuth({});
-    return { authUrl: auth.serverUrl, authToken: auth.token };
-  } catch {
-    // Auth resolution failure is non-fatal — binary works without auth
-    return {};
-  }
 }
 
 async function performStdinScan(
@@ -352,4 +365,167 @@ function handleScanError(err: unknown): void {
 
   blank();
   throw new CommandFailedError(errorMessage);
+}
+
+// ---------------------------------------------------------------------------
+// Full file analysis pipeline: secrets → A3S
+// ---------------------------------------------------------------------------
+
+const SECRETS_FOUND_EXIT_CODE = 51;
+
+export async function analyzeFile(options: AnalyzeFileOptions): Promise<void> {
+  const { file, branch } = options;
+
+  if (!file) {
+    throw new InvalidOptionError('--file is required');
+  }
+
+  if (!existsSync(file)) {
+    throw new InvalidOptionError(`File not found: ${file}`);
+  }
+
+  // Step 1: secrets scan
+  const secretsResult = await runSecretsOnFile(file);
+  if (secretsResult === 'secrets-found') {
+    blank();
+    warn('Secrets detected in this file.');
+    text('  Remove the secrets before running full analysis to get additional issues.');
+    blank();
+    return;
+  }
+
+  // Step 2: A3S analysis
+  await runA3sAnalysis(file, branch);
+}
+
+// ---------------------------------------------------------------------------
+// Standalone A3S analysis
+// ---------------------------------------------------------------------------
+
+export async function analyzeA3s(options: AnalyzeA3sOptions): Promise<void> {
+  const { file, branch } = options;
+
+  if (!existsSync(file)) {
+    throw new InvalidOptionError(`File not found: ${file}`);
+  }
+
+  await runA3sAnalysis(file, branch);
+}
+
+// ---------------------------------------------------------------------------
+// Shared A3S logic
+// ---------------------------------------------------------------------------
+
+async function runSecretsOnFile(file: string): Promise<'secrets-found' | 'ok'> {
+  try {
+    const platform = detectPlatform();
+    const binaryPath = join(BIN_DIR, buildLocalBinaryName(platform));
+    if (!existsSync(binaryPath)) {
+      logger.debug('sonar-secrets binary not found, skipping secrets scan');
+      return 'ok';
+    }
+
+    const auth = await resolveAuth({});
+    const result = await runScan(binaryPath, file, auth.serverUrl, auth.token);
+    if ((result.exitCode ?? 0) === SECRETS_FOUND_EXIT_CODE) {
+      return 'secrets-found';
+    }
+    return 'ok';
+  } catch (err) {
+    logger.debug(`Secrets scan error (non-blocking): ${(err as Error).message}`);
+    return 'ok';
+  }
+}
+
+async function runA3sAnalysis(file: string, branch?: string): Promise<void> {
+  let auth;
+  let projectKey: string | undefined;
+
+  try {
+    auth = await resolveAuth({});
+    if (!auth.token || !auth.orgKey || auth.connectionType === 'on-premise') {
+      logger.debug('A3S analysis skipped: no auth, missing orgKey, or on-premise server');
+      return;
+    }
+
+    // Get projectKey from the agentExtensions registry (populated during sonar integrate)
+    const state = loadState();
+    const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
+    const a3sExt = extensions.find(
+      (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-a3s',
+    );
+
+    if (!a3sExt?.projectKey) {
+      logger.debug('A3S analysis skipped: no project key found in extensions registry');
+      return;
+    }
+
+    projectKey = a3sExt.projectKey;
+  } catch {
+    logger.debug('A3S analysis skipped: failed to resolve auth or extensions');
+    return;
+  }
+
+  const { serverUrl, token, orgKey } = auth;
+
+  let fileContent: string;
+  try {
+    fileContent = readFileSync(file, 'utf-8');
+  } catch (err) {
+    throw new CommandFailedError(`Failed to read file: ${(err as Error).message}`);
+  }
+
+  const filePath = relative(process.cwd(), file);
+  const client = new SonarQubeClient(serverUrl, token);
+
+  blank();
+  text('Running A3S analysis...');
+
+  try {
+    const response = await client.analyzeFile({
+      organizationKey: orgKey,
+      projectKey,
+      ...(branch ? { branchName: branch } : {}),
+      filePath,
+      fileContent,
+    });
+
+    displayA3sResults(response.issues, response.errors);
+  } catch (err) {
+    logger.error(`A3S analysis failed: ${(err as Error).message}`);
+    blank();
+    error('A3S analysis failed.');
+    text(`  ${(err as Error).message}`);
+    blank();
+    throw new CommandFailedError('A3S analysis failed');
+  }
+}
+
+function displayA3sResults(
+  issues: A3sIssue[],
+  errors?: Array<{ code: string; message: string }> | null,
+): void {
+  if (errors && errors.length > 0) {
+    blank();
+    error('A3S analysis returned errors:');
+    errors.forEach((e) => {
+      text(`  [${e.code}] ${e.message}`);
+    });
+    blank();
+    return;
+  }
+
+  blank();
+  if (issues.length === 0) {
+    success('A3S analysis completed — no issues found.');
+  } else {
+    error(`A3S analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
+    blank();
+    issues.forEach((issue, idx) => {
+      const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
+      text(`  [${idx + 1}] ${issue.message}${location}`);
+      text(`      Rule: ${issue.rule}`);
+    });
+  }
+  blank();
 }

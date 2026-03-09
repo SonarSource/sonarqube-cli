@@ -32,6 +32,8 @@ export interface ResolvedAuth {
   token: string;
   serverUrl: string;
   orgKey?: string;
+  /** Type of the active connection; undefined when resolved from env vars alone */
+  connectionType?: 'cloud' | 'on-premise';
 }
 
 /**
@@ -72,12 +74,12 @@ export async function resolveAuth(options: {
   }
 
   // Resolve active connection from state
-  let connection: { serverUrl: string; orgKey?: string } | undefined;
+  let connection: { serverUrl: string; orgKey?: string; type?: 'cloud' | 'on-premise' } | undefined;
   try {
     const state = loadState();
     const active = getActiveConnection(state);
     if (active) {
-      connection = { serverUrl: active.serverUrl, orgKey: active.orgKey };
+      connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };
     }
   } catch (err) {
     logger.debug(`Failed to load state: ${(err as Error).message}`);
@@ -93,16 +95,17 @@ export async function resolveAuth(options: {
 
   // Resolve orgKey: options.org > connection.orgKey
   const orgKey = options.org ?? connection?.orgKey;
+  const connectionType = connection?.type;
 
   // 3. options.token provided → no keychain lookup needed
   if (options.token) {
-    return { token: options.token, serverUrl, orgKey };
+    return { token: options.token, serverUrl, orgKey, connectionType };
   }
 
   // 4 & 5. Look up token in keychain
   const token = await getToken(serverUrl, orgKey);
   if (token) {
-    return { token, serverUrl, orgKey };
+    return { token, serverUrl, orgKey, connectionType };
   }
 
   throw new Error(

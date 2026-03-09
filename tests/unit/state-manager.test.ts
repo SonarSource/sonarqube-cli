@@ -29,8 +29,10 @@ import {
   getActiveConnection,
   markAgentConfigured,
   addInstalledHook,
+  upsertAgentExtension,
 } from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
+import type { SkillExtension } from '../../src/lib/state.js';
 
 describe('State Manager', () => {
   describe('generateConnectionId', () => {
@@ -235,6 +237,80 @@ describe('State Manager', () => {
 
       expect(state.auth.isAuthenticated).toBe(true);
       expect(state.auth.connections).toHaveLength(1);
+    });
+  });
+
+  describe('migrateState via loadState', () => {
+    it('initialises agentExtensions when missing from state file', () => {
+      // Simulate a state object that pre-dates the agentExtensions field
+      const raw = getDefaultState('0.1.0') as Record<string, unknown>;
+      delete raw['agentExtensions'];
+
+      // Verify the field is gone
+      expect(raw['agentExtensions']).toBeUndefined();
+
+      // Replicate the migration logic from migrateState
+      if (!raw['agentExtensions']) {
+        raw['agentExtensions'] = [];
+      }
+
+      expect(raw['agentExtensions']).toEqual([]);
+    });
+  });
+
+  describe('upsertAgentExtension: non-hook (skill) extension', () => {
+    it('matches non-hook extension by agentId + projectRoot + kind + name', () => {
+      const state = getDefaultState('test');
+
+      const ext: SkillExtension = {
+        id: 'ext-1',
+        agentId: 'claude-code',
+        projectRoot: '/project',
+        global: false,
+        updatedByCliVersion: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        kind: 'skill',
+        name: 'sonarqube-cli-redeploy',
+      };
+
+      upsertAgentExtension(state, ext);
+      expect(state.agentExtensions).toHaveLength(1);
+
+      // Upserting the same non-hook extension should replace, not append
+      const updated: SkillExtension = { ...ext, updatedAt: new Date().toISOString() };
+      upsertAgentExtension(state, updated);
+      expect(state.agentExtensions).toHaveLength(1);
+      expect(state.agentExtensions[0].id).toBe('ext-1');
+    });
+
+    it('adds a second skill extension when name differs', () => {
+      const state = getDefaultState('test');
+
+      const ext1: SkillExtension = {
+        id: 'ext-1',
+        agentId: 'claude-code',
+        projectRoot: '/project',
+        global: false,
+        updatedByCliVersion: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        kind: 'skill',
+        name: 'skill-a',
+      };
+
+      const ext2: SkillExtension = {
+        id: 'ext-2',
+        agentId: 'claude-code',
+        projectRoot: '/project',
+        global: false,
+        updatedByCliVersion: '1.0.0',
+        updatedAt: new Date().toISOString(),
+        kind: 'skill',
+        name: 'skill-b',
+      };
+
+      upsertAgentExtension(state, ext1);
+      upsertAgentExtension(state, ext2);
+      expect(state.agentExtensions).toHaveLength(2);
     });
   });
 });

@@ -32,26 +32,22 @@ if ! command -v sonar &> /dev/null; then
   exit 0
 fi
 
-# Read JSON from stdin
+# Read JSON from stdin and parse with python3 (handles multi-line JSON)
 stdin_data=$(cat)
-
-# Extract tool_name and file_path using sed (no jq dependency)
-tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name":"\([^"]*\)".*/\1/p' | head -1)
+tool_name=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null)
 
 if [[ "$tool_name" != "Read" ]]; then
   exit 0
 fi
 
-# Extract file_path from tool_input
-file_path=$(echo "$stdin_data" | sed -n 's/.*"tool_input":\s*{\([^}]*\)}.*/\1/p' | \
-  sed -n 's/.*"file_path":"\([^"]*\)".*/\1/p' | head -1)
+file_path=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
 
 if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
 fi
 
 # Scan file for secrets
-sonar analyze --file "$file_path" > /dev/null 2>&1
+sonar analyze secrets --file "$file_path" > /dev/null 2>&1
 exit_code=$?
 
 if [[ $exit_code -eq 51 ]]; then
@@ -92,7 +88,7 @@ if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
 }
 
 try {
-    & sonar analyze --file $filePath | Out-Null
+    & sonar analyze secrets --file $filePath | Out-Null
     $exitCode = $LASTEXITCODE
 } catch {
     exit 0
@@ -168,26 +164,33 @@ if ! command -v sonar &> /dev/null; then
   exit 0
 fi
 
-# Read JSON from stdin
+# Read JSON from stdin and parse with python3 (handles multi-line JSON)
 stdin_data=$(cat)
-
-# Extract tool_name
-tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name":"\([^"]*\)".*/\1/p' | head -1)
+tool_name=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null)
 
 if [[ "$tool_name" != "Edit" ]] && [[ "$tool_name" != "Write" ]]; then
   exit 0
 fi
 
-# Extract file_path from tool_input
-file_path=$(echo "$stdin_data" | sed -n 's/.*"tool_input":\s*{\([^}]*\)}.*/\1/p' | \
-  sed -n 's/.*"file_path":"\([^"]*\)".*/\1/p' | head -1)
+file_path=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
 
 if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
 fi
 
-# Run A3S analysis (non-blocking — output shown to user, never blocks)
-sonar analyze a3s --file "$file_path" 2>/dev/null || true
+# Capture A3S analysis output and pass it to Claude via additionalContext
+output=$(sonar analyze a3s --file "$file_path" 2>/dev/null)
+
+python3 -c "
+import json, sys
+output = sys.argv[1]
+print(json.dumps({
+  'hookSpecificOutput': {
+    'hookEventName': 'PostToolUse',
+    'additionalContext': output
+  }
+}))
+" "$output"
 
 exit 0
 `;
@@ -220,7 +223,14 @@ if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
 }
 
 try {
-    & sonar analyze a3s --file $filePath 2>$null
+    $output = & sonar analyze a3s --file $filePath 2>$null | Out-String
+    $result = @{
+        hookSpecificOutput = @{
+            hookEventName   = "PostToolUse"
+            additionalContext = $output.Trim()
+        }
+    } | ConvertTo-Json -Compress
+    Write-Output $result
 } catch {
     # Non-blocking
 }

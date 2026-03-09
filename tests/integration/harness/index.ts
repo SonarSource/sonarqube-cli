@@ -150,9 +150,17 @@ export class TestHarness {
       ? { SONAR_CLI_BINARIES_URL: activeBinariesServer.baseUrl() }
       : {};
 
+    // Redirect SonarCloud API calls to the active fake server so that
+    // integration tests don't hit api.sonarcloud.io (e.g. for A3S analysis)
+    const activeFakeServer = this.servers.at(-1);
+    const fakeSonarcloudApiEnv: Record<string, string> = activeFakeServer
+      ? { SONAR_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
+      : {};
+
     const env: Record<string, string> = {
       ...systemVars,
       ...fakeBinariesEnv,
+      ...fakeSonarcloudApiEnv,
       SONAR_CLI_KEYCHAIN_FILE: this.keychainJsonFile.path,
       CI: 'true',
       ...this._extraEnv,
