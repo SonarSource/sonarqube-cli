@@ -42,6 +42,15 @@ export function extractVersion(scriptContent: string): string | null {
   return null;
 }
 
+/**
+ * Strips the build number (4th segment) from a version string.
+ * The install script version may include a build number (e.g. "0.5.0.241") while
+ * the CLI version from package.json only has three segments ("0.5.0").
+ */
+export function stripBuildNumber(version: string): string {
+  return version.split('.').slice(0, 3).join('.');
+}
+
 /** Returns true when `candidate` is strictly newer than `current` (semver, numeric comparison). */
 export function isNewerVersion(current: string, candidate: string): boolean {
   const parse = (v: string): number[] => v.split('.').map(Number);
@@ -89,7 +98,7 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
   return {
     currentVersion: CURRENT_VERSION,
     latestVersion,
-    updateAvailable: isNewerVersion(CURRENT_VERSION, latestVersion),
+    updateAvailable: isNewerVersion(CURRENT_VERSION, stripBuildNumber(latestVersion)),
     scriptContent,
     scriptName,
   };
@@ -105,12 +114,13 @@ async function selfUpdateStatus(): Promise<void> {
 
   const { currentVersion, latestVersion, updateAvailable } = await checkForUpdate();
 
+  const displayLatest = stripBuildNumber(latestVersion);
   text(`Current version: v${currentVersion}`);
-  text(`Latest version:  v${latestVersion}`);
+  text(`Latest version:  v${displayLatest}`);
   blank();
 
   if (updateAvailable) {
-    warn(`Update available: v${latestVersion}`);
+    warn(`Update available: v${displayLatest}`);
     text('  Run: sonar self-update');
   } else {
     success('Already up to date');

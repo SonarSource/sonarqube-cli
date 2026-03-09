@@ -32,7 +32,7 @@ void mock.module('node:child_process', () => ({
   spawnSync: spawnSyncMock as unknown as typeof childProcess.spawnSync,
 }));
 
-const { extractVersion, isNewerVersion, checkForUpdate, selfUpdate } =
+const { extractVersion, isNewerVersion, stripBuildNumber, checkForUpdate, selfUpdate } =
   await import('../../src/cli/commands/self-update');
 
 describe('extractVersion', () => {
@@ -93,6 +93,20 @@ describe('isNewerVersion', () => {
   });
 });
 
+describe('stripBuildNumber', () => {
+  it('removes the 4th segment from a version with a build number', () => {
+    expect(stripBuildNumber('0.5.0.241')).toBe('0.5.0');
+  });
+
+  it('leaves a 3-segment version unchanged', () => {
+    expect(stripBuildNumber('1.2.3')).toBe('1.2.3');
+  });
+
+  it('leaves a 2-segment version unchanged', () => {
+    expect(stripBuildNumber('1.2')).toBe('1.2');
+  });
+});
+
 describe('checkForUpdate', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
@@ -104,41 +118,43 @@ describe('checkForUpdate', () => {
     fetchSpy.mockRestore();
   });
 
-  it('returns updateAvailable: true when latest > current', async () => {
-    const scriptContent = 'version="99.0.0"\necho hi';
+  it('returns updateAvailable: true when latest > current (with build number)', async () => {
+    const scriptContent = 'version="99.0.0.241"\necho hi';
     fetchSpy.mockResolvedValue({ ok: true, text: async () => scriptContent } as Response);
 
     const result = await checkForUpdate();
 
     expect(result.updateAvailable).toBe(true);
-    expect(result.latestVersion).toBe('99.0.0');
+    expect(result.latestVersion).toBe('99.0.0.241');
     expect(result.scriptContent).toBe(scriptContent);
     expect(result.scriptName).toMatch(/install\.(sh|ps1)$/);
   });
 
-  it('returns updateAvailable: false when latest <= current', async () => {
-    const scriptContent = 'version="0.0.1"\necho hi';
+  it('returns updateAvailable: false when latest matches current (with build number)', async () => {
+    // Same major.minor.patch as current; build number must be ignored.
+    const [major, minor, patch] = (await import('../../package.json')).version.split('.');
+    const scriptContent = `version="${major}.${minor}.${patch}.999"\necho hi`;
     fetchSpy.mockResolvedValue({ ok: true, text: async () => scriptContent } as Response);
 
     const result = await checkForUpdate();
 
     expect(result.updateAvailable).toBe(false);
-    expect(result.currentVersion).toMatch(/^\d+\.\d+\.\d+/);
+    expect(result.latestVersion).toMatch(/\.\d+$/); // still contains build number for display
   });
 
-  it('throws on HTTP error', async () => {
+  it('throws on HTTP error', () => {
     fetchSpy.mockResolvedValue({ ok: false, status: 404 } as Response);
 
-    await expect(checkForUpdate()).rejects.toThrow('HTTP 404');
+    expect(checkForUpdate()).rejects.toThrow('HTTP 404');
   });
 
-  it('throws when version cannot be extracted from the script', async () => {
+  it('throws when version cannot be extracted from the script', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => '#!/bin/bash\necho "no version here"',
     } as Response);
 
-    await expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
+    expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
   });
 });
 
@@ -159,13 +175,14 @@ describe('selfUpdate --status', () => {
   it('reports an available update without installing', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => 'version="99.0.0"\necho hi',
+      text: async () => 'version="99.0.0.241"\necho hi',
     } as Response);
 
     await selfUpdate({ status: true });
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
-    expect(messages.some((m) => m.includes('99.0.0'))).toBe(true);
+    // Build number must be stripped from displayed versions
+    expect(messages.some((m) => m.includes('99.0.0') && !m.includes('99.0.0.241'))).toBe(true);
     expect(messages.some((m) => /update available/i.test(m))).toBe(true);
   });
 
