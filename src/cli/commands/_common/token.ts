@@ -277,13 +277,29 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
     function settle(token?: string, err?: Error): void {
       if (settled) return;
       settled = true;
-      promptAbort.abort();
       if (err) reject(err);
       else resolve(token!);
     }
 
     serverTokenPromise
       .then((token) => {
+        if (settled) return;
+        // Erase the 2-line prompt before aborting: clack's abort path skips render(),
+        // so without this the "Waiting for authorization..." lines stay on screen.
+        if (process.stdout.isTTY) {
+          process.stdout.moveCursor(0, -1); // cursor was on the › line; move up to ⏳ line
+          process.stdout.cursorTo(0);
+          process.stdout.clearScreenDown();
+        }
+        promptAbort.abort(); // triggers clack close(), which writes one trailing \n
+        // Undo that trailing \n so the next output starts on the cleared line
+        if (process.stdout.isTTY) {
+          process.stdout.moveCursor(0, -1);
+          process.stdout.cursorTo(0);
+        }
+        // clack does not pause stdin after close(); do it explicitly so subsequent
+        // prompts (e.g. org key selection) can acquire stdin cleanly on all platforms
+        process.stdin.pause();
         settle(token);
       })
       .catch(() => undefined);
@@ -303,7 +319,7 @@ async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Pro
     prompt
       .prompt()
       .then((result) => {
-        if (promptAbort.signal.aborted) return;
+        if (settled) return;
         if (isCancel(result)) {
           settle(undefined, new Error('Authentication cancelled'));
           return;
