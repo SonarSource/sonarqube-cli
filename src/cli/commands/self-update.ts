@@ -159,21 +159,20 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
     // it has its own console and the user can see the output.
     writeFileSync(tempPath, scriptContent, 'utf8');
     info('Starting update in a new terminal window...');
+    // The ComSpec environment variable (always points to the system cmd.exe)
+    const cmdExe = process.env.ComSpec ?? String.raw`C:\Windows\System32\cmd.exe`;
     const child = spawn(
-      'cmd',
+      cmdExe,
       ['/c', 'start', 'powershell', '-NoExit', '-ExecutionPolicy', 'Bypass', '-File', tempPath],
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
-    // Throw instead of process.exit(0) so runCommand() can set the exit code
-    // and the postAction telemetry hook runs before the process terminates.
-    // The detached child is already unref'd and will outlive the parent.
     throw new CommandFailedError('', 0);
   } else {
     // On Unix the binary is not locked, so run the script synchronously and
     // stream its output directly to the terminal.
     writeFileSync(tempPath, scriptContent, { encoding: 'utf8', mode: 0o755 });
-    const result = spawnSync('bash', [tempPath], { stdio: 'inherit' });
+    const result = spawnSync('/bin/bash', [tempPath], { stdio: 'inherit' });
     if (result.status !== 0) {
       throw new Error(`Update script exited with code ${String(result.status ?? 'unknown')}`);
     }
