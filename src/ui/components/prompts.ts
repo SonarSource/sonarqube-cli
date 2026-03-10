@@ -93,7 +93,7 @@ export async function selectPrompt<T>(
   options: SelectOption<T>[],
 ): Promise<T | null> {
   if (isMockActive()) {
-    const value = dequeueMockResponse<T>(options[0]?.value);
+    const value = dequeueMockResponse<T | null>(options.length ? options[0].value : null);
     recordCall('selectPrompt', message, value);
     return value;
   }

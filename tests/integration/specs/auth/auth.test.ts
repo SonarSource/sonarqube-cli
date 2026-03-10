@@ -98,8 +98,8 @@ describe('auth login — organization selection', () => {
         `auth login --with-token my-token --server ${server.baseUrl()}`,
         {
           extraEnv: {
-            SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
-            SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+            SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+            SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
           },
         },
       );
@@ -123,8 +123,8 @@ describe('auth login — organization selection', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         extraEnv: {
-          SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
-          SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
         browserToken: 'my-token',
         stdin: 'open-source-org\r',
@@ -145,8 +145,8 @@ describe('auth login — organization selection', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         extraEnv: {
-          SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
-          SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
         browserToken: 'my-token',
         stdin: '\x03', // Ctrl+C
@@ -163,8 +163,8 @@ describe('auth login — organization selection', () => {
 
     const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
-        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
-        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
       stdin: '\r', // Enter
@@ -186,8 +186,8 @@ describe('auth login — organization selection', () => {
 
     const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
-        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
-        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
       stdin: '\x1b[B\r', // down once, enter
