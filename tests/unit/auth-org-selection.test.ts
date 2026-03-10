@@ -21,15 +21,15 @@
 // Unit tests for org selection logic in auth.ts
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { authLogin } from '../../src/cli/commands/auth.js';
-import * as authBootstrap from '../../src/bootstrap/auth.js';
-import { getToken } from '../../src/bootstrap/auth.js';
-import { SonarQubeClient } from '../../src/sonarqube/client.js';
-import * as discovery from '../../src/bootstrap/discovery.js';
-import * as stateManager from '../../src/lib/state-manager.js';
-import { getDefaultState } from '../../src/lib/state.js';
-import { setMockUi, clearMockUiCalls, queueMockResponse } from '../../src/ui/mock.js';
-import { createMockKeytar } from './helpers/mock-keytar.js';
+import { authLogin } from '../../src/cli/commands/auth/login';
+import { getToken } from '../../src/cli/commands/_common/token';
+import * as token from '../../src/cli/commands/_common/token';
+import { SonarQubeClient } from '../../src/sonarqube/client';
+import * as discovery from '../../src/cli/commands/_common/discovery';
+import * as stateManager from '../../src/lib/state-manager';
+import { getDefaultState } from '../../src/lib/state';
+import { setMockUi, clearMockUiCalls, queueMockResponse } from '../../src/ui/mock';
+import { createMockKeytar } from './helpers/mock-keytar';
 
 const keytarHandle = createMockKeytar();
 
@@ -72,14 +72,17 @@ describe('authLogin: org selection', () => {
     // Before: no token
     expect(await getToken('https://sonarcloud.io', 'org-two')).toBeNull();
 
-    const generateTokenSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
+    const generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(
       'mock-token',
     );
     const listOrgsSpy = spyOn(SonarQubeClient.prototype, 'listUserOrganizations').mockResolvedValue(
-      [
-        { key: 'org-one', name: 'Org One' },
-        { key: 'org-two', name: 'Org Two' },
-      ],
+      {
+        organizations: [
+          { key: 'org-one', name: 'Org One' },
+          { key: 'org-two', name: 'Org Two' },
+        ],
+        total: 2,
+      },
     );
 
     // Simulate user picking 'org-two' from the select prompt
@@ -98,11 +101,11 @@ describe('authLogin: org selection', () => {
     // Before: no token
     expect(await getToken('https://sonarcloud.io', 'org-one')).toBeNull();
 
-    const generateTokenSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
+    const generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(
       'mock-token',
     );
     const listOrgsSpy = spyOn(SonarQubeClient.prototype, 'listUserOrganizations').mockResolvedValue(
-      [{ key: 'org-one', name: 'Single One' }],
+      { organizations: [{ key: 'org-one', name: 'Single One' }], total: 1 },
     );
 
     try {
@@ -118,11 +121,11 @@ describe('authLogin: org selection', () => {
     // Before: no token
     expect(await getToken('https://sonarcloud.io', 'custom-org-one')).toBeNull();
 
-    const generateTokenSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
+    const generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(
       'mock-token',
     );
     const listOrgsSpy = spyOn(SonarQubeClient.prototype, 'listUserOrganizations').mockResolvedValue(
-      [],
+      { organizations: [], total: 0 },
     );
 
     // Simulate user entering 'custom-org-one' manually
@@ -138,11 +141,11 @@ describe('authLogin: org selection', () => {
   });
 
   it('exits with error when user cancels the organization prompt', async () => {
-    const generateTokenSpy = spyOn(authBootstrap, 'generateTokenViaBrowser').mockResolvedValue(
+    const generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(
       'mock-token',
     );
     const listOrgsSpy = spyOn(SonarQubeClient.prototype, 'listUserOrganizations').mockResolvedValue(
-      [],
+      { organizations: [], total: 0 },
     );
 
     // Simulate user canceling the prompt
@@ -153,6 +156,31 @@ describe('authLogin: org selection', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect(error.message).toBe('Organization selection cancelled');
+    } finally {
+      generateTokenSpy.mockRestore();
+      listOrgsSpy.mockRestore();
+    }
+  });
+
+  it('saves connection for the org selected by the user when user is a member of more than 100 organizations', async () => {
+    const generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(
+      'mock-token',
+    );
+    const listOrgsSpy = spyOn(SonarQubeClient.prototype, 'listUserOrganizations').mockResolvedValue(
+      {
+        organizations: Array.from({ length: 100 }, (_, i) => ({
+          key: `org-${i}`,
+          name: `Org ${i}`,
+        })),
+        total: 200,
+      },
+    );
+
+    queueMockResponse('org-99');
+
+    try {
+      await authLogin({ server: 'https://sonarcloud.io' });
+      expect(await getToken('https://sonarcloud.io', 'org-99')).toBe('mock-token');
     } finally {
       generateTokenSpy.mockRestore();
       listOrgsSpy.mockRestore();

@@ -98,6 +98,7 @@ export class FakeSonarQubeServerBuilder {
   private validToken?: string;
   private systemStatus: 'UP' | 'DOWN' = 'UP';
   private memberOrganizations: Array<{ key: string; name: string }> = [];
+  private memberOrganizationsTotal?: number;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -116,11 +117,18 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withOrganizationTotal(total: number): this {
+    this.memberOrganizationsTotal = total;
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const validToken = this.validToken;
     const systemStatus = this.systemStatus;
     const memberOrganizations = this.memberOrganizations;
+    const memberOrganizationsTotal =
+      this.memberOrganizationsTotal ?? this.memberOrganizations.length;
     const requests: RecordedRequest[] = [];
 
     const server = Bun.serve({
@@ -254,9 +262,17 @@ export class FakeSonarQubeServerBuilder {
         if (path === '/api/organizations/search') {
           // member=true → list orgs the user belongs to
           if (query.member === 'true') {
-            return new Response(JSON.stringify({ organizations: memberOrganizations }), {
-              headers: { 'Content-Type': 'application/json' },
-            });
+            return new Response(
+              JSON.stringify({
+                organizations: memberOrganizations,
+                paging: {
+                  pageIndex: 1,
+                  pageSize: memberOrganizations.length,
+                  total: memberOrganizationsTotal,
+                },
+              }),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
           }
           // organizations=KEY → validate a specific org key
           if (query.organizations) {

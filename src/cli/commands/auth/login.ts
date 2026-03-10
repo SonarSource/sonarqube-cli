@@ -179,7 +179,10 @@ async function getUserSelectedOrganization(
   }
   const MANUAL_ENTRY = '__manual__';
   const orgOptions = [
-    ...memberOrgs.map((org: { key: string; name: string }) => ({ value: org.key, label: `${org.name} (${org.key})` })),
+    ...memberOrgs.map((org: { key: string; name: string }) => ({
+      value: org.key,
+      label: `${org.name} (${org.key})`,
+    })),
     { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
   ];
 

@@ -163,16 +163,19 @@ export class SonarQubeClient {
   }
 
   /**
-   * Search organizations the authenticated user is a member of.
+   * Search organizations the authenticated user is a member of (first 100).
    * Uses the API endpoint api/organizations/search?member=true.
    */
-  async listUserOrganizations(): Promise<{ organizations: Array<{ key: string; name: string }>; total: number }> {
+  async listUserOrganizations(): Promise<{
+    organizations: Array<{ key: string; name: string }>;
+    total: number;
+  }> {
     try {
-      const result = await this.get<{ organizations: Array<{ key: string; name: string }>; total: number }>(
-        '/api/organizations/search',
-        { member: true },
-      );
-      return { organizations: result.organizations, total: result.total };
+      const result = await this.get<{
+        organizations: Array<{ key: string; name: string }>;
+        paging: { total: number };
+      }>('/api/organizations/search', { member: true, ps: 100 });
+      return { organizations: result.organizations, total: result.paging.total };
     } catch {
       return { organizations: [], total: 0 };
     }
