@@ -32,7 +32,15 @@ void mock.module('node:child_process', () => ({
   spawnSync: spawnSyncMock as unknown as typeof childProcess.spawnSync,
 }));
 
-const { extractVersion, isNewerVersion, stripBuildNumber, checkForUpdate, selfUpdate } =
+// Mock the version module — isNewerVersion and stripBuildNumber are tested in version.test.ts.
+const { isNewerVersion: realIsNewerVersion, stripBuildNumber: realStripBuildNumber } =
+  await import('../../src/lib/version');
+void mock.module('../../src/lib/version', () => ({
+  isNewerVersion: mock(realIsNewerVersion),
+  stripBuildNumber: mock(realStripBuildNumber),
+}));
+
+const { extractVersion, checkForUpdate, selfUpdate } =
   await import('../../src/cli/commands/self-update/self-update');
 
 describe('extractVersion', () => {
@@ -58,52 +66,6 @@ describe('extractVersion', () => {
 
   it('returns null when no version is found', () => {
     expect(extractVersion('#!/usr/bin/env bash\necho "hello"')).toBeNull();
-  });
-});
-
-describe('isNewerVersion', () => {
-  it('returns true when candidate has a higher major', () => {
-    expect(isNewerVersion('1.0.0', '2.0.0')).toBe(true);
-  });
-
-  it('returns true when candidate has a higher minor', () => {
-    expect(isNewerVersion('1.2.0', '1.3.0')).toBe(true);
-  });
-
-  it('returns true when candidate has a higher patch', () => {
-    expect(isNewerVersion('1.2.3', '1.2.4')).toBe(true);
-  });
-
-  it('returns false when versions are equal', () => {
-    expect(isNewerVersion('1.2.3', '1.2.3')).toBe(false);
-  });
-
-  it('returns false when current is higher', () => {
-    expect(isNewerVersion('2.0.0', '1.9.9')).toBe(false);
-  });
-
-  it('handles four-segment versions', () => {
-    expect(isNewerVersion('1.2.3.0', '1.2.3.1')).toBe(true);
-    expect(isNewerVersion('1.2.3.1', '1.2.3.0')).toBe(false);
-  });
-
-  it('treats a missing segment as 0', () => {
-    expect(isNewerVersion('1.2.3', '1.2.3.0')).toBe(false);
-    expect(isNewerVersion('1.2.3', '1.2.3.1')).toBe(true);
-  });
-});
-
-describe('stripBuildNumber', () => {
-  it('removes the 4th segment from a version with a build number', () => {
-    expect(stripBuildNumber('0.5.0.241')).toBe('0.5.0');
-  });
-
-  it('leaves a 3-segment version unchanged', () => {
-    expect(stripBuildNumber('1.2.3')).toBe('1.2.3');
-  });
-
-  it('leaves a 2-segment version unchanged', () => {
-    expect(stripBuildNumber('1.2')).toBe('1.2');
   });
 });
 

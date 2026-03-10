@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /*
  * SonarQube CLI
  * Copyright (C) 2026 SonarSource Sàrl
@@ -20,10 +18,26 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Main CLI entry point
+import { mock, describe, it, expect } from 'bun:test';
 
-import { COMMAND_TREE } from './cli/command-tree';
-import { runPostUpdateActions } from './lib/post-update';
+const runPostUpdateActionsMock = mock(async () => {});
+void mock.module('../../src/lib/post-update', () => ({
+  runPostUpdateActions: runPostUpdateActionsMock,
+}));
 
-await runPostUpdateActions();
-COMMAND_TREE.parse();
+const parseMock = mock(() => {});
+void mock.module('../../src/cli/command-tree', () => ({
+  COMMAND_TREE: { parse: parseMock },
+}));
+
+await import('../../src/index');
+
+describe('index', () => {
+  it('calls runPostUpdateActions on startup', () => {
+    expect(runPostUpdateActionsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls COMMAND_TREE.parse on startup', () => {
+    expect(parseMock).toHaveBeenCalledTimes(1);
+  });
+});
