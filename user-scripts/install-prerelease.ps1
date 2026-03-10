@@ -5,7 +5,7 @@ param(
     [string]$Version,
 
     [Parameter(Mandatory = $false)]
-    [string]$Token = $env:JFROG_TOKEN
+    [string]$Token = $env:ARTIFACTORY_ACCESS_TOKEN
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,7 +16,7 @@ $BaseUrl    = 'https://repox.jfrog.io/artifactory/sonarsource-public-builds/org/
 $Platform   = 'windows-x86-64'
 
 if (-not $Token) {
-    Write-Error 'JFrog token is required. Pass -Token or set the JFROG_TOKEN environment variable.'
+    Write-Error 'JFrog token is required. Pass -Token or set the ARTIFACTORY_ACCESS_TOKEN environment variable.'
     exit 1
 }
 
