@@ -73,13 +73,13 @@ usage() {
   echo ""
   echo "Options:"
   echo "  --version   Pre-release version to install (e.g. 0.6.0.424); defaults to latest"
-  echo "  --token     JFrog API token (or set JFROG_TOKEN env var)"
+  echo "  --token     JFrog API token (or set ARTIFACTORY_ACCESS_TOKEN env var)"
   exit 1
 }
 
 main() {
   local version=""
-  local token="${JFROG_TOKEN:-}"
+  local token="${ARTIFACTORY_ACCESS_TOKEN:-}"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -99,7 +99,7 @@ main() {
   done
 
   if [[ -z "$token" ]]; then
-    echo "Error: JFrog token is required. Pass --token or set JFROG_TOKEN." >&2
+    echo "Error: JFrog token is required. Pass --token or set ARTIFACTORY_ACCESS_TOKEN." >&2
     usage
   fi
 
