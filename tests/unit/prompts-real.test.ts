@@ -23,11 +23,12 @@
 // The mock invokes the render() callback with different states to cover all render branches.
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { confirmPrompt, pressEnterKeyPrompt, textPrompt } from '../../src/ui';
+import { confirmPrompt, pressEnterKeyPrompt, selectPrompt, textPrompt } from '../../src/ui';
 
 // Mutable state for controlling what each prompt returns
 let mockTextResult: string | symbol = 'default';
 let mockConfirmResult: boolean | symbol = true;
+let mockSelectResult: unknown = 'default';
 
 void mock.module('@clack/core', () => {
   class TextPromptMock {
@@ -83,9 +84,33 @@ void mock.module('@clack/core', () => {
     }
   }
 
+  class SelectPromptMock {
+    state: string = 'initial';
+    value: unknown = undefined;
+    cursor: number = 0;
+    private _render: () => string;
+
+    constructor(opts: { options: unknown[]; render: () => string }) {
+      this._render = opts.render;
+    }
+
+    prompt() {
+      // Exercise all render states
+      this.state = 'initial';
+      this._render.call(this);
+      this.state = 'submit';
+      this.value = mockSelectResult;
+      this._render.call(this);
+      this.state = 'cancel';
+      this._render.call(this);
+      return mockSelectResult;
+    }
+  }
+
   return {
     TextPrompt: TextPromptMock,
     ConfirmPrompt: ConfirmPromptMock,
+    SelectPrompt: SelectPromptMock,
     isCancel: (value: unknown) => typeof value === 'symbol',
   };
 });
@@ -138,6 +163,31 @@ describe('confirmPrompt: real prompt path', () => {
   it('returns null when prompt is cancelled (symbol returned)', async () => {
     mockConfirmResult = Symbol('cancel');
     const result = await confirmPrompt('Are you sure?');
+    expect(result).toBeNull();
+  });
+});
+
+// ─── selectPrompt non-mock ────────────────────────────────────────────────────
+
+describe('selectPrompt: real prompt path', () => {
+  const options = [
+    { value: 'opt-a', label: 'Option A' },
+    { value: 'opt-b', label: 'Option B' },
+  ];
+
+  beforeEach(() => {
+    mockSelectResult = 'opt-a';
+  });
+
+  it('returns the selected value from prompt', async () => {
+    mockSelectResult = 'opt-b';
+    const result = await selectPrompt('Pick one', options);
+    expect(result).toBe('opt-b');
+  });
+
+  it('returns null when prompt is cancelled (symbol returned)', async () => {
+    mockSelectResult = Symbol('cancel');
+    const result = await selectPrompt('Pick one', options);
     expect(result).toBeNull();
   });
 });

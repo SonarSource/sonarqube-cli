@@ -74,6 +74,132 @@ describe('auth login', () => {
   );
 });
 
+describe('auth login — organization selection', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'auto-selects the single org when user is a member of exactly one organization',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+
+      const result = await harness.run(
+        `auth login --with-token my-token --server ${server.baseUrl()}`,
+        {
+          extraEnv: {
+            SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+            SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      expect(result.stdout).toContain('my-org');
+
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ orgKey: string }> };
+      };
+      expect(state.auth.connections[0].orgKey).toBe('my-org');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prompts for manual org key when user is not a member of any organization',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: {
+          SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+        stdin: 'open-source-org\r',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `Authentication successful for: ${server.baseUrl()} (open-source-org)`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with error when user cancels the organization prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: {
+          SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+        stdin: '\x03', // Ctrl+C
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain('Organization selection cancelled');
+    },
+    { timeout: 15000 },
+  );
+
+  it('exits with error when user enters an empty organization key', async () => {
+    const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      extraEnv: {
+        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+      },
+      browserToken: 'my-token',
+      stdin: '\r', // Enter
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain('Organization key is required');
+  });
+
+  it('lets user select an organization from a list when user is a member of multiple organizations', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('my-token')
+      .withOrganizations([
+        { key: 'my-org', name: 'My Org' },
+        { key: 'my-org-2', name: 'My Org 2' },
+      ])
+      .start();
+
+    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      extraEnv: {
+        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+      },
+      browserToken: 'my-token',
+      stdin: '\x1b[B\r', // down once, enter
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+    );
+  });
+});
+
 describe('auth logout', () => {
   let harness: TestHarness;
 

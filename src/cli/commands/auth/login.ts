@@ -30,7 +30,7 @@ import {
   loadState,
   saveState,
 } from '../../../lib/state-manager';
-import { discreetSuccess, print, success, textPrompt } from '../../../ui';
+import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { InvalidOptionError } from '../_common/error';
@@ -134,13 +134,72 @@ async function getOrGenerateToken(
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     print(`Token already exists for: ${displayServer}`);
     print('You are already authenticated');
-    return '';
+    return existingToken;
   }
 
   print(`\nAuthenticating with: ${server}`);
   const token = await generateTokenViaBrowser(server);
   discreetSuccess('Token received');
   return token;
+}
+
+async function getUserSelectedOrganization(
+  client: SonarQubeClient,
+  isNonInteractive: boolean,
+): Promise<string> {
+  // Deduce organization from API: if user is member of exactly one org, use it
+  const { organizations: memberOrgs, total: orgTotal } = await client.listUserOrganizations();
+  if (memberOrgs.length === 1 && orgTotal === 1) {
+    const singleOrg = memberOrgs[0].key;
+    print(`Using organization (only member): ${singleOrg}`);
+    return singleOrg;
+  }
+
+  if (isNonInteractive) {
+    throw new Error('Organization must be specified with -o/--org in non-interactive mode');
+  }
+
+  // No org memberships — prompt for manual entry
+  if (memberOrgs.length === 0) {
+    const manualOrg = await textPrompt('Enter organization key');
+    if (manualOrg === null) {
+      throw new Error('Organization selection cancelled');
+    }
+    if (!manualOrg.trim()) {
+      throw new Error('Organization key is required');
+    }
+    return manualOrg.trim();
+  }
+
+  // Multiple orgs available — let user pick from a list or enter manually
+  if (orgTotal > memberOrgs.length) {
+    print(
+      `Showing first ${memberOrgs.length} of ${orgTotal} organizations. Use manual entry to select a different organization.`,
+    );
+  }
+  const MANUAL_ENTRY = '__manual__';
+  const orgOptions = [
+    ...memberOrgs.map((org: { key: string; name: string }) => ({ value: org.key, label: `${org.name} (${org.key})` })),
+    { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
+  ];
+
+  const choice = await selectPrompt<string>('Select an organization', orgOptions);
+  if (choice === null) {
+    throw new Error('Organization selection cancelled');
+  }
+
+  if (choice === MANUAL_ENTRY) {
+    const manualOrg = await textPrompt('Enter organization key');
+    if (manualOrg === null) {
+      throw new Error('Organization selection cancelled');
+    }
+    if (!manualOrg.trim()) {
+      throw new Error('Organization key is required');
+    }
+    return manualOrg.trim();
+  }
+
+  return choice;
 }
 
 /**
@@ -167,22 +226,7 @@ async function validateOrSelectOrganization(
     return configOrg;
   }
 
-  // If not in config, prompt user
-  print(
-    'Please specify your organization key or run this command in a project with sonar-project.properties or .sonarlint config.',
-  );
-
-  if (isNonInteractive) {
-    throw new Error('Organization must be specified with -o/--org in non-interactive mode');
-  }
-
-  const selectedOrg = await textPrompt('Enter organization key');
-  if (!selectedOrg?.trim()) {
-    throw new Error('Organization key is required');
-  }
-
-  print(`Using organization: ${selectedOrg.trim()}`);
-  return selectedOrg.trim();
+  return await getUserSelectedOrganization(client, isNonInteractive);
 }
 
 async function validateLoginOptions(options: {

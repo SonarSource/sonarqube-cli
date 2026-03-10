@@ -163,6 +163,22 @@ export class SonarQubeClient {
   }
 
   /**
+   * Search organizations the authenticated user is a member of.
+   * Uses the API endpoint api/organizations/search?member=true.
+   */
+  async listUserOrganizations(): Promise<{ organizations: Array<{ key: string; name: string }>; total: number }> {
+    try {
+      const result = await this.get<{ organizations: Array<{ key: string; name: string }>; total: number }>(
+        '/api/organizations/search',
+        { member: true },
+      );
+      return { organizations: result.organizations, total: result.total };
+    } catch {
+      return { organizations: [], total: 0 };
+    }
+  }
+
+  /**
    * Check if organization exists and is accessible
    */
   async checkOrganization(organizationKey: string): Promise<boolean> {

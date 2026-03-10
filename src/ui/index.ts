@@ -36,4 +36,10 @@ export {
 export type { UiCall } from './mock.js';
 export type { NoteOptions, PhaseOptions, LogOptions, ColorFn } from './types.js';
 export { withSpinner } from './components/spinner.js';
-export { textPrompt, confirmPrompt, pressEnterKeyPrompt } from './components/prompts.js';
+export {
+  textPrompt,
+  confirmPrompt,
+  pressEnterKeyPrompt,
+  selectPrompt,
+} from './components/prompts.js';
+export type { SelectOption } from './components/prompts.js';
