@@ -185,7 +185,8 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/issues/search') {
-          const projectKey = query.projects;
+          // SonarQube Server uses `components`, SonarQube Cloud uses `projects`
+          const projectKey = query.components ?? query.projects;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
           const issues: SonarQubeIssue[] =

@@ -129,7 +129,7 @@ describe('list issues', () => {
   );
 
   it(
-    'records the HTTP request sent to the fake server',
+    'sends `components` query param to an on-premise server',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -147,7 +147,9 @@ describe('list issues', () => {
       const issuesRequest = recorded.find((r) => r.path === '/api/issues/search');
 
       expect(issuesRequest).toBeDefined();
-      expect(issuesRequest!.query.projects).toBe('test-project');
+      // On-premise SonarQube uses `components`; the fake server runs on localhost (non-cloud)
+      expect(issuesRequest!.query.components).toBe('test-project');
+      expect(issuesRequest!.query.projects).toBeUndefined();
     },
     { timeout: 15000 },
   );
