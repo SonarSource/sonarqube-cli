@@ -148,7 +148,7 @@ async function installHook(params: HookInstallParams): Promise<void> {
  * The hooksRoot parameter is the directory whose agent config settings.json file is inspected.
  */
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
-  const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR['claude'], SETTINGS_FILE);
+  const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR.claude, SETTINGS_FILE);
 
   if (!existsSync(settingsPath)) {
     return false;
@@ -175,8 +175,13 @@ export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
 /**
  * Install all hooks (cross-platform).
  * Secrets hooks install to globalDir (if provided), A3S hook installs to projectRoot.
+ * A3S hook is only installed when installA3s is true (requires cloud connection + entitlement).
  */
-export async function installHooks(projectRoot: string, globalDir?: string): Promise<void> {
+export async function installHooks(
+  projectRoot: string,
+  globalDir?: string,
+  installA3s = false,
+): Promise<void> {
   const secretsDir = globalDir ?? projectRoot;
   const secretsScope = globalDir ? 'global' : 'project';
 
@@ -201,16 +206,18 @@ export async function installHooks(projectRoot: string, globalDir?: string): Pro
       scriptContentUnix: getSecretPromptTemplateUnix(),
       scriptContentWindows: getSecretPromptTemplateWindows(),
     });
-    await installHook({
-      installDir: projectRoot,
-      scope: 'project',
-      agent: 'claude',
-      eventType: 'PostToolUse',
-      matcher: 'Edit|Write',
-      scriptPath: 'sonar-a3s/build-scripts/posttool-a3s',
-      scriptContentUnix: getA3sPostToolTemplateUnix(),
-      scriptContentWindows: getA3sPostToolTemplateWindows(),
-    });
+    if (installA3s) {
+      await installHook({
+        installDir: projectRoot,
+        scope: 'project',
+        agent: 'claude',
+        eventType: 'PostToolUse',
+        matcher: 'Edit|Write',
+        scriptPath: 'sonar-a3s/build-scripts/posttool-a3s',
+        scriptContentUnix: getA3sPostToolTemplateUnix(),
+        scriptContentWindows: getA3sPostToolTemplateWindows(),
+      });
+    }
   } catch (error) {
     logger.debug(`Failed to install hooks: ${(error as Error).message}`);
     // Non-critical - don't fail if hooks installation fails

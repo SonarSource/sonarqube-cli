@@ -30,6 +30,7 @@ import { getToken } from '../../_common/token';
 import { getAllCredentials } from '../../../../lib/keychain';
 import { installHooks } from './hooks';
 import { runMigrations } from './migration';
+import { SonarQubeClient } from '../../../../sonarqube/client';
 import {
   addInstalledHook,
   addOrUpdateConnection,
@@ -291,6 +292,20 @@ function ensureToken(token: string | undefined): string | undefined {
 }
 
 /**
+ * Check if the organisation has A3S entitlement.
+ * Returns false for on-premise, missing org, or failed API call.
+ */
+async function resolveA3sEntitlement(
+  serverURL: string,
+  token: string,
+  organization: string | undefined,
+): Promise<boolean> {
+  if (!organization || !serverURL.includes(SONARCLOUD_HOSTNAME)) return false;
+  const client = new SonarQubeClient(serverURL, token);
+  return client.hasA3sEntitlement(organization);
+}
+
+/**
  * Run health check and handle repair if needed
  */
 async function runHealthCheckAndRepair(
@@ -300,6 +315,7 @@ async function runHealthCheckAndRepair(
   token: string | undefined,
   organization: string | undefined,
   repairOptions: RepairOptions,
+  a3sEnabled: boolean,
 ): Promise<string | undefined> {
   text('\nPhase 2/3: Health Check & Repair');
   blank();
@@ -317,8 +333,8 @@ async function runHealthCheckAndRepair(
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
-    await runMigrations(projectInfo.root, globalDir);
-    await installHooks(projectInfo.root, globalDir);
+    await runMigrations(projectInfo.root, globalDir, a3sEnabled);
+    await installHooks(projectInfo.root, globalDir, a3sEnabled);
     return token;
   }
 
@@ -329,8 +345,8 @@ async function runHealthCheckAndRepair(
 
   if (nonInteractive && !healthResult.tokenValid) {
     // Can't repair token without browser interaction — install hooks and continue
-    await runMigrations(projectInfo.root, globalDir);
-    await installHooks(projectInfo.root, globalDir);
+    await runMigrations(projectInfo.root, globalDir, a3sEnabled);
+    await installHooks(projectInfo.root, globalDir, a3sEnabled);
     return token;
   }
 
@@ -428,6 +444,7 @@ async function runFinalVerification(
   config: ConfigurationData,
   projectRoot: string,
   isGlobal: boolean,
+  a3sEnabled: boolean,
 ): Promise<void> {
   text('\nPhase 3/3: Final Verification');
   blank();
@@ -448,6 +465,7 @@ async function runFinalVerification(
     projectKey,
     projectRoot,
     isGlobal,
+    hasA3s: a3sEnabled,
   });
 }
 
@@ -473,6 +491,11 @@ async function runFullSonarIntegration(
   const globalDir = options.global ? homedir() : undefined;
   const isGlobal = options.global ?? false;
 
+  // Check A3S entitlement once — requires cloud connection + eligible && enabled org
+  const a3sEnabled = token
+    ? await resolveA3sEntitlement(serverURL, token, config.organization)
+    : false;
+
   if (token) {
     token = await runHealthCheckAndRepair(
       serverURL,
@@ -481,6 +504,7 @@ async function runFullSonarIntegration(
       token,
       config.organization,
       repairOptions,
+      a3sEnabled,
     );
 
     if (token) {
@@ -492,20 +516,22 @@ async function runFullSonarIntegration(
         config,
         projectInfo.root,
         isGlobal,
+        a3sEnabled,
       );
       return;
     }
   }
 
   if (effectiveNonInteractive) {
-    await runMigrations(projectInfo.root, globalDir);
-    await installHooks(projectInfo.root, globalDir);
+    await runMigrations(projectInfo.root, globalDir, a3sEnabled);
+    await installHooks(projectInfo.root, globalDir, a3sEnabled);
     updateStateAfterConfiguration({
       serverURL,
       organization: config.organization,
       projectKey,
       projectRoot: projectInfo.root,
       isGlobal,
+      hasA3s: a3sEnabled,
     });
     outro('Setup complete!', 'success');
     return;
@@ -527,6 +553,7 @@ async function runFullSonarIntegration(
     config,
     projectInfo.root,
     isGlobal,
+    a3sEnabled,
   );
 }
 
@@ -536,6 +563,7 @@ interface ConfigurationContext {
   projectKey?: string;
   projectRoot: string;
   isGlobal: boolean;
+  hasA3s: boolean;
 }
 
 /**
@@ -582,9 +610,9 @@ function updateStateAfterConfiguration(context: ConfigurationContext): void {
       hookType: 'UserPromptSubmit',
     });
 
-    // Register A3S hook only for cloud connections
+    // Register A3S hook only when org has entitlement
     const isCloud = serverURL.includes(SONARCLOUD_HOSTNAME);
-    if (isCloud) {
+    if (context.hasA3s) {
       upsertAgentExtension(state, {
         ...baseExt,
         id: randomUUID(),

@@ -208,7 +208,7 @@ describe('Hooks', () => {
     mkdirSync(testDir, { recursive: true });
 
     try {
-      await installHooks(testDir);
+      await installHooks(testDir, undefined, true);
 
       const settingsPath = join(testDir, '.claude', 'settings.json');
       const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
@@ -227,7 +227,7 @@ describe('Hooks', () => {
     mkdirSync(testDir, { recursive: true });
 
     try {
-      await installHooks(testDir);
+      await installHooks(testDir, undefined, true);
 
       const a3sScriptsDir = join(testDir, '.claude', 'hooks', 'sonar-a3s', 'build-scripts');
       expect(existsSync(a3sScriptsDir)).toBe(true);
@@ -248,7 +248,7 @@ describe('Hooks', () => {
     mkdirSync(testDir, { recursive: true });
 
     try {
-      await installHooks(testDir);
+      await installHooks(testDir, undefined, true);
 
       const scriptPath = join(
         testDir,
@@ -275,7 +275,7 @@ describe('Hooks', () => {
     mkdirSync(fakeGlobalDir, { recursive: true });
 
     try {
-      await installHooks(projectDir, fakeGlobalDir);
+      await installHooks(projectDir, fakeGlobalDir, true);
 
       // A3S hook goes into projectRoot with relative path
       const projectSettings = JSON.parse(
@@ -300,7 +300,7 @@ describe('Hooks', () => {
     mkdirSync(testDir, { recursive: true });
 
     try {
-      await installHooks(testDir);
+      await installHooks(testDir, undefined, true);
 
       const settingsPath = join(testDir, '.claude', 'settings.json');
       const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
@@ -331,7 +331,7 @@ describe('Hooks', () => {
       };
       await fs.writeFile(join(claudeDir, 'settings.json'), JSON.stringify(existing, null, 2));
 
-      await installHooks(testDir);
+      await installHooks(testDir, undefined, true);
 
       const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf-8'));
 
@@ -346,6 +346,22 @@ describe('Hooks', () => {
         (e: { matcher: string }) => e.matcher === 'Bash',
       );
       expect(bashEntry).toBeDefined();
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: A3S PostToolUse hook is NOT installed when installA3s is false', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-no-a3s-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, false);
+
+      const settingsPath = join(testDir, '.claude', 'settings.json');
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+
+      expect(settings.hooks?.PostToolUse).toBeUndefined();
     } finally {
       rmSync(testDir, { recursive: true, force: true });
     }

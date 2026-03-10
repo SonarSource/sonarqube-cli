@@ -48,7 +48,11 @@ const CLI_105_AFFECTED_VERSION = '0.5.1';
  * Run all pending config migrations for Claude Code agent.
  * Called during sonar claude setup. Non-blocking — logs and continues on error.
  */
-export async function runMigrations(projectRoot: string, globalDir?: string): Promise<void> {
+export async function runMigrations(
+  projectRoot: string,
+  globalDir?: string,
+  installA3s = false,
+): Promise<void> {
   try {
     const state = loadState();
     const agentConfig = state.agents['claude-code'];
@@ -85,7 +89,7 @@ export async function runMigrations(projectRoot: string, globalDir?: string): Pr
     migrateHookScripts(projectRoot, globalDir);
 
     // Install new PostToolUse hook
-    await installHooks(projectRoot, globalDir);
+    await installHooks(projectRoot, globalDir, installA3s);
 
     // Register PostToolUse hook in state (legacy format for backward compat)
     addInstalledHook(state, 'claude-code', 'sonar-a3s', 'PostToolUse');

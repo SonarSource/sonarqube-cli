@@ -512,7 +512,7 @@ describe('integrateCommand: --global flag', () => {
         org: 'test-org',
         global: true,
       });
-      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir());
+      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir(), false);
     } finally {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
@@ -533,7 +533,7 @@ describe('integrateCommand: --global flag', () => {
         nonInteractive: true,
         global: true,
       });
-      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir());
+      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir(), false);
       expect(addOrUpdateConnectionSpy).toHaveBeenCalledWith(
         expect.anything(),
         'https://sonarcloud.io',

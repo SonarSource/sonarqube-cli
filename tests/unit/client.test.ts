@@ -223,29 +223,97 @@ describe('SonarQubeClient', () => {
   describe('getOrganizationId', () => {
     it('hits api.sonarcloud.io, not the serverURL', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ id: 'org-uuid-v4' });
+      fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
       await cloudClient.getOrganizationId('my-org');
       expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_API_URL);
       expect(lastFetchUrl(fetchSpy)).not.toContain(`${SONARCLOUD_URL}/api`);
     });
 
-    it('calls /organizations with organizationKey param', async () => {
+    it('calls /organizations/organizations with organizationKey param', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ id: 'org-uuid-v4' });
+      fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
       await cloudClient.getOrganizationId('my-org');
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/organizations');
+      expect(url.pathname).toBe('/organizations/organizations');
       expect(url.searchParams.get('organizationKey')).toBe('my-org');
     });
 
-    it('returns the organization id on success', async () => {
-      fetchSpy = mockFetch({ id: 'org-uuid-v4' });
+    it('returns the uuidV4 of the first result on success', async () => {
+      fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
       expect(await client.getOrganizationId('my-org')).toBe('org-uuid-v4');
     });
 
     it('returns null on error', async () => {
       fetchSpy = mockFetch({}, false, 404);
       expect(await client.getOrganizationId('unknown-org')).toBeNull();
+    });
+
+    it('returns null when result array is empty', async () => {
+      fetchSpy = mockFetch([]);
+      expect(await client.getOrganizationId('my-org')).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // checkA3sEntitlement
+  // -------------------------------------------------------------------------
+
+  describe('checkA3sEntitlement', () => {
+    it('hits api.sonarcloud.io /a3s-analysis/org-config/{uuid}', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: true });
+      await client.checkA3sEntitlement('test-uuid');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.hostname).toBe('api.sonarcloud.io');
+      expect(url.pathname).toBe('/a3s-analysis/org-config/test-uuid');
+    });
+
+    it('returns true when eligible and enabled are both true', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: true });
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(true);
+    });
+
+    it('returns false when eligible is false', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: false });
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
+    });
+
+    it('returns false when enabled is false', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: false, eligible: true });
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
+    });
+
+    it('returns false on API error (404)', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // hasA3sEntitlement
+  // -------------------------------------------------------------------------
+
+  describe('hasA3sEntitlement', () => {
+    it('returns true when org has valid UUID and entitlement is active', async () => {
+      // First call: getOrganizationId → [{ uuidV4: 'org-uuid' }]
+      // Second call: checkA3sEntitlement → { enabled: true, eligible: true }
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
+        } as Response);
+
+      expect(await client.hasA3sEntitlement('my-org')).toBe(true);
+    });
+
+    it('returns false when org UUID cannot be resolved', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await client.hasA3sEntitlement('unknown-org')).toBe(false);
     });
   });
 

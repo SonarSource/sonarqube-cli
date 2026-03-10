@@ -128,7 +128,7 @@ describe('runMigrations — migration execution', () => {
 
     await runMigrations('/some/project');
 
-    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', undefined);
+    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', undefined, false);
   });
 
   it('passes globalDir to installHooks when provided', async () => {
@@ -136,7 +136,7 @@ describe('runMigrations — migration execution', () => {
 
     await runMigrations('/some/project', '/global/dir');
 
-    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', '/global/dir');
+    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', '/global/dir', false);
   });
 
   it('registers sonar-a3s PostToolUse hook in state', async () => {
