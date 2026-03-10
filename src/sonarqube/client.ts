@@ -31,10 +31,12 @@ const HTTP_STATUS_NOT_FOUND = 404;
 export class SonarQubeClient {
   private readonly serverURL: string;
   private readonly token: string;
+  public readonly isCloud: boolean;
 
   constructor(serverURL: string, token: string) {
     this.serverURL = serverURL.replace(/\/$/, ''); // Remove trailing slash
     this.token = token;
+    this.isCloud = serverURL.includes('sonarcloud.io') || serverURL.includes('sonarqube.us');
   }
 
   /**

@@ -294,6 +294,36 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
+  // isCloud
+  // -------------------------------------------------------------------------
+
+  describe('isCloud', () => {
+    it('is true for sonarcloud.io', () => {
+      const cloudClient = new SonarQubeClient('https://sonarcloud.io', TOKEN);
+      expect(cloudClient.isCloud).toBe(true);
+    });
+
+    it('is true for sonarcloud.io with trailing slash', () => {
+      const cloudClient = new SonarQubeClient('https://sonarcloud.io/', TOKEN);
+      expect(cloudClient.isCloud).toBe(true);
+    });
+
+    it('is true for sonarqube.us', () => {
+      const usClient = new SonarQubeClient('https://sonarqube.us', TOKEN);
+      expect(usClient.isCloud).toBe(true);
+    });
+
+    it('is false for an on-premise server', () => {
+      expect(client.isCloud).toBe(false);
+    });
+
+    it('is false for any other URL', () => {
+      const onPremClient = new SonarQubeClient('https://sonarqube.mycompany.com', TOKEN);
+      expect(onPremClient.isCloud).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // checkQualityProfiles
   // -------------------------------------------------------------------------
 

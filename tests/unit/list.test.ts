@@ -44,8 +44,11 @@ type MockParams = Record<string, MockParamValue>;
 type MockGetFn = (endpoint: string, params?: MockParams) => Promise<unknown>;
 
 // Helper to create a mock SonarQubeClient
-function createMockClient(mockGet: MockGetFn): SonarQubeClient {
-  const client = new SonarQubeClient('https://sonarcloud.io', 'test-token');
+function createMockClient(
+  mockGet: MockGetFn,
+  serverUrl = 'https://sonarcloud.io',
+): SonarQubeClient {
+  const client = new SonarQubeClient(serverUrl, 'test-token');
   client.get = mockGet as SonarQubeClient['get'];
   return client;
 }
@@ -277,18 +280,56 @@ describe('IssuesClient', () => {
       });
     });
 
-    it('should pass componentKeys parameter', async () => {
+    it('sends `projects` query param for SonarCloud (sonarcloud.io)', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
-        expect(params?.componentKeys).toBe('my-project:src/file.ts');
+        expect(params?.projects).toBe('my-project');
+        expect(params?.components).toBeUndefined();
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
 
-      const client = createMockClient(mockGet);
+      const client = createMockClient(mockGet, 'https://sonarcloud.io');
       const issuesClient = new IssuesClient(client);
 
-      await issuesClient.searchIssues({
-        componentKeys: 'my-project:src/file.ts',
+      await issuesClient.searchIssues({ projects: 'my-project' });
+    });
+
+    it('sends `projects` query param for SonarQube Cloud US (sonarqube.us)', async () => {
+      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+        expect(params?.projects).toBe('my-project');
+        expect(params?.components).toBeUndefined();
+        return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
+
+      const client = createMockClient(mockGet, 'https://sonarqube.us');
+      const issuesClient = new IssuesClient(client);
+
+      await issuesClient.searchIssues({ projects: 'my-project' });
+    });
+
+    it('sends `components` query param for on-premise SonarQube', async () => {
+      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+        expect(params?.components).toBe('my-project');
+        expect(params?.projects).toBeUndefined();
+        return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
+      });
+
+      const client = createMockClient(mockGet, 'https://sonarqube.example.com');
+      const issuesClient = new IssuesClient(client);
+
+      await issuesClient.searchIssues({ projects: 'my-project' });
+    });
+
+    it('sends no project param when projects is not provided', async () => {
+      const mockGet = mock((_endpoint: string, params?: MockParams) => {
+        expect(params?.projects).toBeUndefined();
+        expect(params?.components).toBeUndefined();
+        return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
+      });
+
+      const client = createMockClient(mockGet, 'https://sonarqube.example.com');
+      const issuesClient = new IssuesClient(client);
+
+      await issuesClient.searchIssues({});
     });
 
     it('should pass pagination parameters', async () => {

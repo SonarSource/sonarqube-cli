@@ -36,8 +36,13 @@ export class IssuesClient {
   async searchIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
     const queryParams: Record<string, string | number | boolean> = {};
 
-    if (params.componentKeys) queryParams.componentKeys = params.componentKeys;
-    if (params.projects) queryParams.projects = params.projects;
+    if (params.projects) {
+      if (this.client.isCloud) {
+        queryParams.projects = params.projects;
+      } else {
+        queryParams.components = params.projects;
+      }
+    }
     if (params.organization) queryParams.organization = params.organization;
     if (params.severities) queryParams.severities = params.severities;
     if (params.types) queryParams.types = params.types;
