@@ -98,8 +98,8 @@ describe('auth login — organization selection', () => {
         `auth login --with-token my-token --server ${server.baseUrl()}`,
         {
           extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-            SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+            SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+            SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
           },
         },
       );
@@ -123,8 +123,8 @@ describe('auth login — organization selection', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+          SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
         browserToken: 'my-token',
         stdin: 'open-source-org\r',
@@ -145,8 +145,8 @@ describe('auth login — organization selection', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+          SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
         browserToken: 'my-token',
         stdin: '\x03', // Ctrl+C
@@ -163,8 +163,8 @@ describe('auth login — organization selection', () => {
 
     const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
-        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
       stdin: '\r', // Enter
@@ -186,8 +186,8 @@ describe('auth login — organization selection', () => {
 
     const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
-        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
       stdin: '\x1b[B\r', // down once, enter
@@ -199,20 +199,20 @@ describe('auth login — organization selection', () => {
     );
   });
 
-  it('shows a message when user is a member of more than 100 organizations', async () => {
+  it('shows a message when user is a member of more than 10 organizations', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken('my-token')
       .withOrganizations(
-        Array.from({ length: 100 }, (_, i) => ({ key: `org-${i}`, name: `Org ${i}` })),
+        Array.from({ length: 10 }, (_, i) => ({ key: `org-${i}`, name: `Org ${i}` })),
       )
       .withOrganizationTotal(200)
       .start();
 
     const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
-        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
       browserToken: 'my-token',
       stdin: '\x1b[B\x1b[B\r', // down twice, enter
@@ -220,9 +220,35 @@ describe('auth login — organization selection', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      'Showing first 100 of 200 organizations. Use manual entry to select a different organization.',
+      'Showing first 10 of 200 organizations. Use manual entry to select a different organization.',
     );
     expect(result.stdout).toContain(`Authentication successful for: ${server.baseUrl()} (org-2)`);
+  });
+
+  it('should remove the "waiting for authorization..." line when token is received', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('my-token')
+      .withOrganizations([
+        { key: 'my-org', name: 'My Org' },
+        { key: 'my-org-2', name: 'My Org 2' },
+      ])
+      .start();
+
+    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      extraEnv: {
+        SONAR_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONAR_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+      },
+      browserToken: 'my-token',
+      stdin: '\x1b[B\r', // down once, enter
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+    );
+    expect(result.stdout).not.toContain('Waiting for authorization...');
   });
 });
 

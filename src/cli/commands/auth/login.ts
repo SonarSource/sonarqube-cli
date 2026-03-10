@@ -193,10 +193,7 @@ async function getUserSelectedOrganization(
 
   if (choice === MANUAL_ENTRY) {
     const manualOrg = await textPrompt('Enter organization key');
-    if (manualOrg === null) {
-      throw new Error('Organization selection cancelled');
-    }
-    if (!manualOrg.trim()) {
+    if (!manualOrg?.trim()) {
       throw new Error('Organization key is required');
     }
     return manualOrg.trim();

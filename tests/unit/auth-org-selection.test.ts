@@ -162,13 +162,13 @@ describe('authLogin: org selection', () => {
     }
   });
 
-  it('saves connection for the org selected by the user when user is a member of more than 100 organizations', async () => {
+  it('saves connection for the org selected by the user when user is a member of more than 10 organizations', async () => {
     const generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(
       'mock-token',
     );
     const listOrgsSpy = spyOn(SonarQubeClient.prototype, 'listUserOrganizations').mockResolvedValue(
       {
-        organizations: Array.from({ length: 100 }, (_, i) => ({
+        organizations: Array.from({ length: 10 }, (_, i) => ({
           key: `org-${i}`,
           name: `Org ${i}`,
         })),
