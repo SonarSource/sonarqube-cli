@@ -234,7 +234,14 @@ describe('analyze (full pipeline)', () => {
   it(
     'warns and returns early when secrets are detected in the file',
     async () => {
-      harness.state().withSecretsBinaryInstalled();
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+
+      harness
+        .state()
+        .withSecretsBinaryInstalled()
+        .withActiveConnection(server.baseUrl(), 'cloud', TEST_ORG)
+        .withKeychainToken(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
       harness.cwd.writeFile('config.ts', `const token = "${GITHUB_TEST_TOKEN}";`);
 
       const result = await harness.run('analyze --file config.ts');
