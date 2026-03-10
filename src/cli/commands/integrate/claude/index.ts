@@ -432,20 +432,25 @@ function printFinalVerificationResults(
     blank();
   }
 }
+interface FinalVerificationParams {
+  serverURL: string;
+  token: string;
+  projectKey: string | undefined;
+  hooksRoot: string;
+  config: ConfigurationData;
+  projectRoot: string;
+  isGlobal: boolean;
+  a3sEnabled: boolean;
+}
+
 
 /**
  * Run Phase 3 final verification and update state
  */
-async function runFinalVerification(
-  serverURL: string,
-  token: string,
-  projectKey: string | undefined,
-  hooksRoot: string,
-  config: ConfigurationData,
-  projectRoot: string,
-  isGlobal: boolean,
-  a3sEnabled: boolean,
-): Promise<void> {
+async function runFinalVerification(params: FinalVerificationParams): Promise<void> {
+  const { serverURL, token, projectKey, hooksRoot, config, projectRoot, isGlobal, a3sEnabled } =
+    params;
+
   text('\nPhase 3/3: Final Verification');
   blank();
 
@@ -508,16 +513,16 @@ async function runFullSonarIntegration(
     );
 
     if (token) {
-      await runFinalVerification(
+      await runFinalVerification({
         serverURL,
         token,
         projectKey,
         hooksRoot,
         config,
-        projectInfo.root,
+        projectRoot: projectInfo.root,
         isGlobal,
         a3sEnabled,
-      );
+      });
       return;
     }
   }
@@ -545,16 +550,16 @@ async function runFullSonarIntegration(
     globalDir,
   );
 
-  await runFinalVerification(
+  await runFinalVerification({
     serverURL,
     token,
     projectKey,
     hooksRoot,
     config,
-    projectInfo.root,
+    projectRoot: projectInfo.root,
     isGlobal,
     a3sEnabled,
-  );
+  });
 }
 
 interface ConfigurationContext {
