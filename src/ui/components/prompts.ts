@@ -110,7 +110,7 @@ export async function selectPrompt<T>(
       for (let i = 0; i < options.length; i++) {
         const opt = options[i];
         const selected = i === this.cursor;
-        lines.push(`  ${selected ? cyan('›') : ' '} ${selected ? opt.label : dim(opt.label)}`);
+        lines.push(`    ${selected ? cyan('›') : ' '} ${selected ? opt.label : dim(opt.label)}`);
       }
       return lines.join('\n');
     },
