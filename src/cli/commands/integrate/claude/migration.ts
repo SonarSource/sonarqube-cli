@@ -35,7 +35,7 @@ import {
   getActiveConnection,
 } from '../../../../lib/state-manager';
 import type { HookExtension } from '../../../../lib/state';
-import { installSecretScanningHooks } from './hooks';
+import { installHooks } from './hooks';
 import { version as CURRENT_VERSION } from '../../../../../package.json';
 
 // Version that introduced the new hook architecture (separate secrets/A3S hooks)
@@ -85,7 +85,7 @@ export async function runMigrations(projectRoot: string, globalDir?: string): Pr
     migrateHookScripts(projectRoot, globalDir);
 
     // Install new PostToolUse hook
-    await installSecretScanningHooks(projectRoot, globalDir);
+    await installHooks(projectRoot, globalDir);
 
     // Register PostToolUse hook in state (legacy format for backward compat)
     addInstalledHook(state, 'claude-code', 'sonar-a3s', 'PostToolUse');

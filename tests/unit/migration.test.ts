@@ -48,7 +48,7 @@ describe('runMigrations — skip conditions', () => {
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
-    installHooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -112,7 +112,7 @@ describe('runMigrations — migration execution', () => {
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
-    installHooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -123,7 +123,7 @@ describe('runMigrations — migration execution', () => {
     installHooksSpy.mockRestore();
   });
 
-  it('calls installSecretScanningHooks when version differs from current', async () => {
+  it('calls installHooks when version differs from current', async () => {
     loadStateSpy.mockReturnValue(makeConfiguredState(OLD_VERSION));
 
     await runMigrations('/some/project');
@@ -131,7 +131,7 @@ describe('runMigrations — migration execution', () => {
     expect(installHooksSpy).toHaveBeenCalledWith('/some/project', undefined);
   });
 
-  it('passes globalDir to installSecretScanningHooks when provided', async () => {
+  it('passes globalDir to installHooks when provided', async () => {
     loadStateSpy.mockReturnValue(makeConfiguredState(OLD_VERSION));
 
     await runMigrations('/some/project', '/global/dir');
@@ -180,7 +180,7 @@ describe('runMigrations — migration execution', () => {
     expect(saveStateSpy).toHaveBeenCalled();
   });
 
-  it('is non-blocking: resolves without throwing when installSecretScanningHooks fails', async () => {
+  it('is non-blocking: resolves without throwing when installHooks fails', async () => {
     loadStateSpy.mockReturnValue(makeConfiguredState(OLD_VERSION));
     installHooksSpy.mockRejectedValue(new Error('Hook install failed'));
 
@@ -249,7 +249,7 @@ describe('runMigrations — CLI-105 patch', () => {
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
-    installHooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -340,7 +340,7 @@ describe('runMigrations — hook script rewriting', () => {
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
-    installHooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -436,7 +436,7 @@ describe('runMigrations — already-migrated extensions not duplicated', () => {
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
-    installHooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
   });
 
   afterEach(() => {

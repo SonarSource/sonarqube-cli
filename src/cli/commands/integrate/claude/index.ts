@@ -28,7 +28,7 @@ import { runHealthChecks } from './health';
 import { runRepair } from './repair';
 import { getToken } from '../../_common/token';
 import { getAllCredentials } from '../../../../lib/keychain';
-import { installSecretScanningHooks } from './hooks';
+import { installHooks } from './hooks';
 import { runMigrations } from './migration';
 import {
   addInstalledHook,
@@ -318,7 +318,7 @@ async function runHealthCheckAndRepair(
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
     await runMigrations(projectInfo.root, globalDir);
-    await installSecretScanningHooks(projectInfo.root, globalDir);
+    await installHooks(projectInfo.root, globalDir);
     return token;
   }
 
@@ -330,7 +330,7 @@ async function runHealthCheckAndRepair(
   if (nonInteractive && !healthResult.tokenValid) {
     // Can't repair token without browser interaction — install hooks and continue
     await runMigrations(projectInfo.root, globalDir);
-    await installSecretScanningHooks(projectInfo.root, globalDir);
+    await installHooks(projectInfo.root, globalDir);
     return token;
   }
 
@@ -499,7 +499,7 @@ async function runFullSonarIntegration(
 
   if (effectiveNonInteractive) {
     await runMigrations(projectInfo.root, globalDir);
-    await installSecretScanningHooks(projectInfo.root, globalDir);
+    await installHooks(projectInfo.root, globalDir);
     updateStateAfterConfiguration({
       serverURL,
       organization: config.organization,

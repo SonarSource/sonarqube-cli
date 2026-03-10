@@ -18,10 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Hooks installation - install Claude Code hooks (cross-platform)
+// Hooks installation (cross-platform)
 
 import { existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, basename, join } from 'node:path';
 import { platform } from 'node:os';
 import logger from '../../../../lib/logger';
 import {
@@ -33,11 +33,13 @@ import {
   getA3sPostToolTemplateWindows,
 } from './hook-templates';
 
-const CLAUDE_DIR = '.claude';
 const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
 const SONAR_SECRETS_MARKER = 'sonar-secrets';
-const SONAR_A3S_MARKER = 'sonar-a3s';
+
+const AGENT_CONFIG_DIR: Record<string, string> = {
+  claude: '.claude',
+};
 
 interface HookConfig {
   matcher: string;
@@ -48,14 +50,24 @@ interface HookConfig {
   }>;
 }
 
-interface ClaudeSettings {
+interface AgentSettings {
   hooks?: Record<string, HookConfig[] | undefined>;
   [key: string]: unknown;
 }
 
-type FsWriter = {
-  writeFile: (path: string, data: string, options?: { mode?: number }) => Promise<void>;
-};
+interface HookInstallParams {
+  installDir: string;
+  /** 'global' uses absolute command path; 'project' uses path relative to installDir */
+  scope: 'global' | 'project';
+  agent: 'claude';
+  eventType: string;
+  matcher: string;
+  /** Path within hooks dir, without extension: 'sonar-secrets/build-scripts/pretool-secrets' */
+  scriptPath: string;
+  scriptContentUnix: string;
+  scriptContentWindows: string;
+  timeout?: number;
+}
 
 function getPlatform(): 'windows' | 'unix' {
   return platform() === 'win32' ? 'windows' : 'unix';
@@ -65,23 +77,8 @@ function getScriptExtension(): string {
   return getPlatform() === 'windows' ? '.ps1' : '.sh';
 }
 
-/**
- * Write a script file with executable permissions on Unix.
- */
-async function writeScript(
-  fs: FsWriter,
-  scriptPath: string,
-  content: string,
-  isWindows: boolean,
-): Promise<void> {
-  await fs.writeFile(scriptPath, content, isWindows ? undefined : { mode: 0o755 });
-}
-
-/**
- * Upsert a hook entry in settings.json, replacing any existing entry owned by the same marker.
- */
 function upsertHookEntry(
-  settings: ClaudeSettings,
+  settings: AgentSettings,
   eventType: string,
   marker: string,
   matcher: string,
@@ -96,12 +93,62 @@ function upsertHookEntry(
   ];
 }
 
+async function installHook(params: HookInstallParams): Promise<void> {
+  const {
+    installDir,
+    scope,
+    agent,
+    eventType,
+    matcher,
+    scriptPath,
+    scriptContentUnix,
+    scriptContentWindows,
+    timeout = 60,
+  } = params;
+
+  const isWindows = getPlatform() === 'windows';
+  const scriptExt = getScriptExtension();
+  const configDir = AGENT_CONFIG_DIR[agent];
+  const fs = await import('node:fs/promises');
+
+  // Write script file
+  const fullScriptDir = join(installDir, configDir, HOOKS_DIR, dirname(scriptPath));
+  mkdirSync(fullScriptDir, { recursive: true });
+  const fullScriptPath = join(fullScriptDir, `${basename(scriptPath)}${scriptExt}`);
+  await fs.writeFile(
+    fullScriptPath,
+    isWindows ? scriptContentWindows : scriptContentUnix,
+    isWindows ? undefined : { mode: 0o755 },
+  );
+
+  // Global: absolute path; project: relative to installDir (portable when project is moved)
+  const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${scriptExt}`);
+  const commandPath = scope === 'global' ? fullScriptPath : relativePath;
+  const command = isWindows
+    ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
+    : commandPath;
+
+  // Marker derived from first path segment (e.g. 'sonar-secrets' from 'sonar-secrets/build-scripts/pretool-secrets')
+  const marker = scriptPath.split('/')[0];
+
+  // Update settings.json
+  const settingsPath = join(installDir, configDir, SETTINGS_FILE);
+  let settings: AgentSettings = { hooks: {} };
+  if (existsSync(settingsPath)) {
+    const data = await fs.readFile(settingsPath, 'utf-8');
+    settings = JSON.parse(data) as AgentSettings;
+  }
+  settings.hooks ??= {};
+  upsertHookEntry(settings, eventType, marker, matcher, command, timeout);
+  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
 /**
  * Check if hooks are installed.
- * The hooksRoot parameter is the directory whose .claude/settings.json file is inspected.
+ * The hooksRoot parameter is the directory whose agent config settings.json file is inspected.
  */
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
-  const settingsPath = join(hooksRoot, CLAUDE_DIR, SETTINGS_FILE);
+  const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR['claude'], SETTINGS_FILE);
 
   if (!existsSync(settingsPath)) {
     return false;
@@ -110,9 +157,8 @@ export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
   try {
     const fs = await import('node:fs/promises');
     const data = await fs.readFile(settingsPath, 'utf-8');
-    const settings = JSON.parse(data) as ClaudeSettings;
+    const settings = JSON.parse(data) as AgentSettings;
 
-    // Check if a sonar-secrets PreToolUse hook is configured
     return Boolean(
       settings.hooks?.PreToolUse &&
       Array.isArray(settings.hooks.PreToolUse) &&
@@ -127,95 +173,46 @@ export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
 }
 
 /**
- * Install sonar-secrets hooks (cross-platform).
- * When globalDir is provided, installs to globalDir/.claude/ with absolute command paths.
- * When globalDir is undefined (default), installs to projectRoot/.claude/ with relative paths.
+ * Install all hooks (cross-platform).
+ * Secrets hooks install to globalDir (if provided), A3S hook installs to projectRoot.
  */
-export async function installSecretScanningHooks(
-  projectRoot: string,
-  globalDir?: string,
-): Promise<void> {
+export async function installHooks(projectRoot: string, globalDir?: string): Promise<void> {
+  const secretsDir = globalDir ?? projectRoot;
+  const secretsScope = globalDir ? 'global' : 'project';
+
   try {
-    const fs = await import('node:fs/promises');
-    const isGlobal = globalDir !== undefined;
-    const baseDir = isGlobal ? globalDir : projectRoot;
-    const claudePath = join(baseDir, CLAUDE_DIR);
-    const hooksPath = join(claudePath, HOOKS_DIR);
-    const isWindows = getPlatform() === 'windows';
-    const scriptExt = getScriptExtension();
-
-    // Create script directories and write scripts
-    const secretsScriptsDir = join(hooksPath, 'sonar-secrets', 'build-scripts');
-    const a3sScriptsDir = join(hooksPath, 'sonar-a3s', 'build-scripts');
-    mkdirSync(secretsScriptsDir, { recursive: true });
-    mkdirSync(a3sScriptsDir, { recursive: true });
-
-    await writeScript(
-      fs,
-      join(secretsScriptsDir, `pretool-secrets${scriptExt}`),
-      isWindows ? getSecretPreToolTemplateWindows() : getSecretPreToolTemplateUnix(),
-      isWindows,
-    );
-    await writeScript(
-      fs,
-      join(secretsScriptsDir, `prompt-secrets${scriptExt}`),
-      isWindows ? getSecretPromptTemplateWindows() : getSecretPromptTemplateUnix(),
-      isWindows,
-    );
-    await writeScript(
-      fs,
-      join(a3sScriptsDir, `posttool-a3s${scriptExt}`),
-      isWindows ? getA3sPostToolTemplateWindows() : getA3sPostToolTemplateUnix(),
-      isWindows,
-    );
-
-    // Load or initialise settings.json
-    const settingsPath = join(claudePath, SETTINGS_FILE);
-    let settings: ClaudeSettings = { hooks: {} };
-    if (existsSync(settingsPath)) {
-      const data = await fs.readFile(settingsPath, 'utf-8');
-      settings = JSON.parse(data) as ClaudeSettings;
-    }
-    settings.hooks ??= {};
-
-    // Resolve command paths (absolute for global, relative for project)
-    const secretsRelativeDir = join(CLAUDE_DIR, HOOKS_DIR, 'sonar-secrets', 'build-scripts');
-    const a3sRelativeDir = join(CLAUDE_DIR, HOOKS_DIR, 'sonar-a3s', 'build-scripts');
-    const secretsDir = isGlobal ? join(baseDir, secretsRelativeDir) : secretsRelativeDir;
-    const a3sDir = isGlobal ? join(baseDir, a3sRelativeDir) : a3sRelativeDir;
-
-    const cmd = (script: string) =>
-      isWindows ? `powershell -NoProfile -File ${script.replaceAll('\\', '/')}` : script;
-
-    // Register hooks — each call replaces the prior entry for that marker
-    upsertHookEntry(
-      settings,
-      'PreToolUse',
-      SONAR_SECRETS_MARKER,
-      'Read',
-      cmd(join(secretsDir, `pretool-secrets${scriptExt}`)),
-      60,
-    );
-    upsertHookEntry(
-      settings,
-      'UserPromptSubmit',
-      SONAR_SECRETS_MARKER,
-      '*',
-      cmd(join(secretsDir, `prompt-secrets${scriptExt}`)),
-      60,
-    );
-    upsertHookEntry(
-      settings,
-      'PostToolUse',
-      SONAR_A3S_MARKER,
-      'Edit|Write',
-      cmd(join(a3sDir, `posttool-a3s${scriptExt}`)),
-      60,
-    );
-
-    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+    await installHook({
+      installDir: secretsDir,
+      scope: secretsScope,
+      agent: 'claude',
+      eventType: 'PreToolUse',
+      matcher: 'Read',
+      scriptPath: 'sonar-secrets/build-scripts/pretool-secrets',
+      scriptContentUnix: getSecretPreToolTemplateUnix(),
+      scriptContentWindows: getSecretPreToolTemplateWindows(),
+    });
+    await installHook({
+      installDir: secretsDir,
+      scope: secretsScope,
+      agent: 'claude',
+      eventType: 'UserPromptSubmit',
+      matcher: '*',
+      scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
+      scriptContentUnix: getSecretPromptTemplateUnix(),
+      scriptContentWindows: getSecretPromptTemplateWindows(),
+    });
+    await installHook({
+      installDir: projectRoot,
+      scope: 'project',
+      agent: 'claude',
+      eventType: 'PostToolUse',
+      matcher: 'Edit|Write',
+      scriptPath: 'sonar-a3s/build-scripts/posttool-a3s',
+      scriptContentUnix: getA3sPostToolTemplateUnix(),
+      scriptContentWindows: getA3sPostToolTemplateWindows(),
+    });
   } catch (error) {
-    logger.debug(`Failed to install secret scanning hooks: ${(error as Error).message}`);
+    logger.debug(`Failed to install hooks: ${(error as Error).message}`);
     // Non-critical - don't fail if hooks installation fails
   }
 }

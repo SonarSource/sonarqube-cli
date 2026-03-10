@@ -32,15 +32,15 @@ if ! command -v sonar &> /dev/null; then
   exit 0
 fi
 
-# Read JSON from stdin and parse with python3 (handles multi-line JSON)
+# Read JSON from stdin and extract fields using grep/cut (no external runtimes required)
 stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null)
+tool_name=$(echo "$stdin_data" | grep -o '"tool_name":"[^"]*"' | cut -d'"' -f4)
 
 if [[ "$tool_name" != "Read" ]]; then
   exit 0
 fi
 
-file_path=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
+file_path=$(echo "$stdin_data" | grep -o '"file_path":"[^"]*"' | cut -d'"' -f4)
 
 if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
@@ -164,15 +164,15 @@ if ! command -v sonar &> /dev/null; then
   exit 0
 fi
 
-# Read JSON from stdin and parse with python3 (handles multi-line JSON)
+# Read JSON from stdin and extract fields using grep/cut (no external runtimes required)
 stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null)
+tool_name=$(echo "$stdin_data" | grep -o '"tool_name":"[^"]*"' | cut -d'"' -f4)
 
 if [[ "$tool_name" != "Edit" ]] && [[ "$tool_name" != "Write" ]]; then
   exit 0
 fi
 
-file_path=$(echo "$stdin_data" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
+file_path=$(echo "$stdin_data" | grep -o '"file_path":"[^"]*"' | cut -d'"' -f4)
 
 if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
@@ -181,16 +181,10 @@ fi
 # Capture A3S analysis output and pass it to Claude via additionalContext
 output=$(sonar analyze a3s --file "$file_path" 2>/dev/null)
 
-python3 -c "
-import json, sys
-output = sys.argv[1]
-print(json.dumps({
-  'hookSpecificOutput': {
-    'hookEventName': 'PostToolUse',
-    'additionalContext': output
-  }
-}))
-" "$output"
+# JSON-escape the output using awk (no external runtimes required)
+escaped=$(printf '%s' "$output" | awk 'BEGIN{ORS=""} {gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); if(NR>1) printf "\\n"; print}')
+
+printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$escaped"
 
 exit 0
 `;

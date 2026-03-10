@@ -338,7 +338,7 @@ describe('integrateCommand: configuration validation', () => {
 
   it('installs hooks when no project key is configured', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    const hooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
     try {
       await integrateClaude({
         server: 'https://sonarcloud.io',
@@ -400,6 +400,7 @@ describe('integrateCommand: discovered project configuration', () => {
         hostURL: 'https://sonarcloud.io',
         projectKey: 'discovered-project',
         organization: 'discovered-org',
+        projectName: 'discovered-project',
       },
     };
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithProps);
@@ -501,7 +502,7 @@ describe('integrateCommand: --global flag', () => {
   it('installs hooks into homedir when --global is set', async () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    const hooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
 
     try {
       await integrateClaude({
@@ -523,7 +524,7 @@ describe('integrateCommand: --global flag', () => {
     const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
     const getTokenSpy = spyOn(auth, 'getToken').mockResolvedValue(null);
     const getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
-    const hooksSpy = spyOn(hooks, 'installSecretScanningHooks').mockResolvedValue(undefined);
+    const hooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
     const addOrUpdateConnectionSpy = spyOn(stateManager, 'addOrUpdateConnection');
 
     try {
