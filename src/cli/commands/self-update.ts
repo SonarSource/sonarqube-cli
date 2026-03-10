@@ -49,7 +49,8 @@ export function extractVersion(scriptContent: string): string | null {
  * the CLI version from package.json only has three segments ("0.5.0").
  */
 export function stripBuildNumber(version: string): string {
-  return version.split('.').slice(0, 3).join('.');
+  const SEMVER_SEGMENTS = 3;
+  return version.split('.').slice(0, SEMVER_SEGMENTS).join('.');
 }
 
 /** Returns true when `candidate` is strictly newer than `current` (semver, numeric comparison). */
