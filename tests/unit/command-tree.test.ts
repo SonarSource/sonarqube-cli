@@ -21,7 +21,7 @@
 // Tests for src/cli/command-tree.ts — covers the analyze action arg parsing
 
 import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
-import * as analyzeModule from '../../src/cli/commands/analyze.js';
+import * as analyzeModule from '../../src/cli/commands/analyze/secrets';
 import * as telemetry from '../../src/telemetry/index.js';
 import { COMMAND_TREE } from '../../src/cli/command-tree.js';
 import { setMockUi } from '../../src/ui/index.js';

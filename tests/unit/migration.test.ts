@@ -26,10 +26,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setMockUi } from '../../src/ui';
 import * as stateManager from '../../src/lib/state-manager.js';
-import * as hooks from '../../src/bootstrap/hooks.js';
+import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
 import { getDefaultState } from '../../src/lib/state.js';
 import type { HookExtension } from '../../src/lib/state.js';
-import { runMigrations } from '../../src/bootstrap/migration.js';
+import { runMigrations } from '../../src/cli/commands/integrate/claude/migration';
 import { version as CURRENT_VERSION } from '../../package.json';
 
 const OLD_VERSION = '0.4.0';

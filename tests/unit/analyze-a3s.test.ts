@@ -28,8 +28,8 @@ import * as authResolver from '../../src/lib/auth-resolver.js';
 import * as processLib from '../../src/lib/process.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { analyzeA3s, analyzeFile } from '../../src/cli/commands/analyze.js';
-import { InvalidOptionError } from '../../src/cli/commands/common/error.js';
+import { analyzeA3s, analyzeFile } from '../../src/cli/commands/analyze/secrets';
+import { InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';

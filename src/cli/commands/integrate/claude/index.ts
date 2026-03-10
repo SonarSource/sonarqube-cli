@@ -43,7 +43,7 @@ import { version as VERSION } from '../../../../../package.json';
 import logger from '../../../../lib/logger';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../../lib/config-constants';
 import { ENV_SERVER, ENV_TOKEN } from '../../../../lib/auth-resolver';
-import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
+import { blank, info, intro, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 
 export interface IntegrateClaudeOptions {
