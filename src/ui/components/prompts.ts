@@ -20,7 +20,7 @@
 
 // Interactive prompts — text input, confirmation, press-to-continue
 
-import { TextPrompt, ConfirmPrompt, isCancel } from '@clack/core';
+import { TextPrompt, ConfirmPrompt, SelectPrompt, isCancel } from '@clack/core';
 import { cyan, green, red, dim } from '../colors.js';
 import { isMockActive, recordCall, dequeueMockResponse } from '../mock.js';
 
@@ -78,6 +78,47 @@ export async function confirmPrompt(message: string): Promise<boolean | null> {
   const result = await prompt.prompt();
   if (isCancel(result)) return null;
   return result!;
+}
+
+export interface SelectOption<T> {
+  value: T;
+  label: string;
+}
+
+/**
+ * Selection prompt. Returns null if cancelled (Ctrl+C).
+ */
+export async function selectPrompt<T>(
+  message: string,
+  options: SelectOption<T>[],
+): Promise<T | null> {
+  if (isMockActive()) {
+    const value = dequeueMockResponse<T>(options[0]?.value);
+    recordCall('selectPrompt', message, value);
+    return value;
+  }
+
+  const prompt = new SelectPrompt({
+    options,
+    render() {
+      if (this.state === 'submit') {
+        const selected = options.find((o) => o.value === this.value);
+        return `  ${green('✓')}  ${message} ${dim(selected?.label ?? String(this.value))}`;
+      }
+      if (this.state === 'cancel') return `  ${red('✗')}  ${message}`;
+      const lines = [`  ${cyan('?')}  ${message}`];
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        const selected = i === this.cursor;
+        lines.push(`  ${selected ? cyan('›') : ' '} ${selected ? opt.label : dim(opt.label)}`);
+      }
+      return lines.join('\n');
+    },
+  });
+
+  const result = await prompt.prompt();
+  if (isCancel(result)) return null;
+  return result as T;
 }
 
 /**

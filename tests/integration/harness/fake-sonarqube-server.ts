@@ -97,6 +97,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private validToken?: string;
   private systemStatus: 'UP' | 'DOWN' = 'UP';
+  private memberOrganizations: Array<{ key: string; name: string }> = [];
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -110,10 +111,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withOrganizations(orgs: Array<{ key: string; name: string }>): this {
+    this.memberOrganizations = orgs;
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const validToken = this.validToken;
     const systemStatus = this.systemStatus;
+    const memberOrganizations = this.memberOrganizations;
     const requests: RecordedRequest[] = [];
 
     const server = Bun.serve({
@@ -244,8 +251,21 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/organizations') {
-          return new Response(JSON.stringify({ organizations: [] }), {
+        if (path === '/api/organizations/search') {
+          // member=true → list orgs the user belongs to
+          if (query.member === 'true') {
+            return new Response(JSON.stringify({ organizations: memberOrganizations }), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          // organizations=KEY → validate a specific org key
+          if (query.organizations) {
+            const match = memberOrganizations.filter((o) => o.key === query.organizations);
+            return new Response(JSON.stringify({ organizations: match }), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ organizations: memberOrganizations }), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
