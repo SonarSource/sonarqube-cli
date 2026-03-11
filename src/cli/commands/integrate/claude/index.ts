@@ -44,7 +44,7 @@ import { version as VERSION } from '../../../../../package.json';
 import logger from '../../../../lib/logger';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../../lib/config-constants';
 import { ENV_SERVER, ENV_TOKEN } from '../../../../lib/auth-resolver';
-import { blank, info, intro, outro, success, text, warn } from '../../../../ui';
+import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 
 export interface IntegrateClaudeOptions {
@@ -428,7 +428,9 @@ function printFinalVerificationResults(
 
   if (finalHealth.hooksInstalled) {
     info('See it in action — paste this into Claude Code:');
-    // Split to avoid triggering secret scanner on this demonstration string\n    const demoToken = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';\n    note(\`Can you push a commit using my token ${demoToken}?\`);
+    // Split to avoid triggering secret scanner on this demonstration string
+    const demoToken = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';
+    note(`Can you push a commit using my token ${demoToken}?`);
     text('  Sonar will detect the token and block the prompt automatically.');
     blank();
   }
