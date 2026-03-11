@@ -30,6 +30,11 @@ import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { installSecrets, type InstallSecretsOptions } from './commands/install/secrets';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
+import {
+  integrateGit,
+  integrateGitTest,
+  type IntegrateGitOptions,
+} from './commands/integrate/git/index';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
@@ -97,6 +102,31 @@ integrateCommand
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
   .action((options: IntegrateClaudeOptions) => runCommand(() => integrateClaude(options)));
+
+const integrateGitCommand = integrateCommand
+  .command('git')
+  .description(
+    'Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).',
+  )
+  .option(
+    '--hook <type>',
+    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in pushed commits)',
+    'pre-commit',
+  )
+  .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '--global',
+    'Install hook globally for all repositories (sets git config --global core.hooksPath)',
+  )
+  .action((options: IntegrateGitOptions) => runCommand(() => integrateGit(options)));
+
+integrateGitCommand
+  .command('test')
+  .description(
+    'Run a quick test to verify the secrets hook blocks a commit whose staged files contain a secret (creates and removes a test file).',
+  )
+  .action(() => runCommand(() => integrateGitTest()));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');

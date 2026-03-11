@@ -18,21 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import logger from './logger.js';
-import { error } from '../ui';
-import { CommandFailedError } from '../cli/commands/_common/error.js';
-
-export async function runCommand(fn: () => Promise<void>): Promise<void> {
-  try {
-    await fn();
-  } catch (err) {
-    const message = (err as Error).message;
-    if (err instanceof CommandFailedError) {
-      logger.error(message);
-    } else {
-      error(message);
-      logger.error(message);
-    }
-    process.exitCode = err instanceof CommandFailedError ? err.exitCode : 1;
-  }
+declare module 'js-yaml' {
+  export function load(str: string): unknown;
+  export function dump(obj: unknown, options?: { lineWidth?: number }): string;
 }

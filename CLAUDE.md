@@ -23,6 +23,10 @@ bun run test:all      # Unit + integration + script tests
 
 Each command lives in `src/cli/commands/`. The command tree is defined in `src/cli/command-tree.ts` and the entry point is `src/index.ts`.
 
+- `sonar integrate claude` — Setup for Claude Code (hooks + MCP).
+- `sonar integrate git` — Install a git hook that scans staged files for secrets before each commit (`pre-commit`) or scans committed files for secrets before each push (`pre-push`). If `.pre-commit-config.yaml` exists, the hook is added there and `pre-commit install` is run; else if `.husky/pre-commit` or `.husky/pre-push` exists (for the matching hook type), the check is appended there; otherwise a raw script is written to `.git/hooks/`. Use `--hook`, `--force`, `--non-interactive` as needed. Shows inline status at the end. Use `--global` to install a hook globally (sets `git config --global core.hooksPath` to `~/.sonar/sonarqube-cli/hooks`).
+- `sonar integrate git test` — Run a quick test to verify the hook blocks a commit whose staged files contain a secret.
+
 To add a new command: add it to `src/cli/command-tree.ts` and implement the logic in a new file under `src/cli/commands/`.
 
 ## Error handling

@@ -306,24 +306,16 @@ function handleScanFailure(
   exitCode: number,
 ): void {
   blank();
-  error('Scan found secrets');
+  error(`Secrets found (exit code ${exitCode}, ${scanDurationMs}ms)`);
   logger.error(`Scan failed with exit code: ${exitCode}`);
-  text(`  Exit code: ${exitCode}`);
-  text(`  Duration: ${scanDurationMs}ms`);
 
-  if (result.stderr) {
+  const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
+  if (output) {
     blank();
-    text('Error output:');
-    print(result.stderr);
-  }
-
-  if (result.stdout) {
-    blank();
-    text('Output:');
-    print(result.stdout);
+    print(output);
   }
   blank();
-  throw new CommandFailedError(`Scan failed with exit code: ${exitCode}`, exitCode);
+  throw new CommandFailedError('Secrets found', exitCode);
 }
 
 function handleScanError(err: unknown): void {
