@@ -197,7 +197,7 @@ describe('secretCheckCommand', () => {
     setMockUi(false);
   });
 
-  it('throws InvalidOptionError when called without --file or --stdin', () => {
+  it('throws InvalidOptionError when called without paths or --stdin', () => {
     expect(analyzeSecrets({})).rejects.toThrow(InvalidOptionError);
   });
 
@@ -206,7 +206,7 @@ describe('secretCheckCommand', () => {
 
     clearMockUiCalls();
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
     } finally {
       existsSyncSpy.mockRestore();
     }
@@ -218,13 +218,13 @@ describe('secretCheckCommand', () => {
     expect(textMessages.some((m) => m.includes('sonar install secrets'))).toBe(true);
   });
 
-  it('throws InvalidOptionError when --file and --stdin are both provided', () => {
-    expect(analyzeSecrets({ file: 'some-file.ts', stdin: true })).rejects.toThrow(
+  it('throws InvalidOptionError when paths and --stdin are both provided', () => {
+    expect(analyzeSecrets({ paths: ['some-file.ts'], stdin: true })).rejects.toThrow(
       InvalidOptionError,
     );
   });
 
-  it('throws InvalidOptionError with file-not-found message when --file points to nonexistent path', async () => {
+  it('throws InvalidOptionError with path-not-found message when path does not exist', async () => {
     // Set up state with an active connection
     const state = getDefaultState('test');
     stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
@@ -242,8 +242,8 @@ describe('secretCheckCommand', () => {
     );
 
     try {
-      expect(analyzeSecrets({ file: '/nonexistent/does-not-exist.ts' })).rejects.toThrow(
-        'File not found',
+      expect(analyzeSecrets({ paths: ['/nonexistent/does-not-exist.ts'] })).rejects.toThrow(
+        'Path not found',
       );
     } finally {
       existsSyncSpy.mockRestore();

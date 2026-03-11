@@ -162,10 +162,14 @@ const analyze = COMMAND_TREE.command('analyze').description('Analyze code for se
 
 analyze
   .command('secrets')
-  .description('Scan a file or stdin for hardcoded secrets')
-  .option('--file <file>', 'File path to scan for secrets')
-  .option('--stdin', 'Read from standard input instead of a file')
-  .action((options: AnalyzeSecretsOptions) => runCommand(() => analyzeSecrets(options)));
+  .description('Scan files or stdin for hardcoded secrets')
+  .argument('[paths...]', 'File or directory paths to scan for secrets')
+  .option('--stdin', 'Read from standard input instead of paths')
+  .action((paths: string[], options: AnalyzeSecretsOptions) =>
+    runCommand(() =>
+      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }),
+    ),
+  );
 
 // Configure things related to the CLI
 const configure = COMMAND_TREE.command('config').description('Configure CLI settings');

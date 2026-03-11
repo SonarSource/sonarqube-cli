@@ -280,7 +280,7 @@ function logInstallationSuccess(binaryPath: string): void {
     `Binary path: ${binaryPath}`,
     '',
     'Manual usage:',
-    '  sonar analyze secrets --file <file>',
+    '  sonar analyze secrets [path...]',
     '',
     'Check installation status:',
     '  sonar install secrets --status',

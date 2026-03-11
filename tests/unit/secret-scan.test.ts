@@ -32,7 +32,7 @@ import { getDefaultState } from '../../src/lib/state.js';
 import { saveToken } from '../../src/lib/keychain.js';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 import { analyzeSecrets } from '../../src/cli/commands/analyze/secrets';
-import { CommandFailedError } from '../../src/cli/commands/_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -95,7 +95,7 @@ describe('secretCheckCommand: runs without authentication', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ file: 'src/index.ts' });
+      await analyzeSecrets({ paths: ['src/index.ts'] });
     } finally {
       existsSpy.mockRestore();
     }
@@ -110,7 +110,7 @@ describe('secretCheckCommand: runs without authentication', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ file: 'src/index.ts' });
+      await analyzeSecrets({ paths: ['src/index.ts'] });
     } finally {
       existsSpy.mockRestore();
     }
@@ -128,13 +128,30 @@ describe('secretCheckCommand: runs without authentication', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ file: 'src/index.ts' });
+      await analyzeSecrets({ paths: ['src/index.ts'] });
     } finally {
       existsSpy.mockRestore();
     }
 
     const spawnCall = spawnSpy.mock.calls[0];
     expect(spawnCall[1][0]).toBe('--non-interactive');
+  });
+
+  it('passes all paths as args to binary when given two files', async () => {
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets({ paths: ['src/index.ts', 'src/lib/auth.ts'] });
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    const spawnCall = spawnSpy.mock.calls[0];
+    expect(spawnCall[1]).toEqual(['--non-interactive', 'src/index.ts', 'src/lib/auth.ts']);
   });
 });
 
@@ -151,7 +168,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ file: 'src/index.ts' });
+      await analyzeSecrets({ paths: ['src/index.ts'] });
     } finally {
       existsSpy.mockRestore();
     }
@@ -177,7 +194,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ file: 'src/index.ts' });
+      await analyzeSecrets({ paths: ['src/index.ts'] });
     } finally {
       existsSpy.mockRestore();
     }
@@ -206,7 +223,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ file: 'src/index.ts' });
+      await analyzeSecrets({ paths: ['src/index.ts'] });
     } finally {
       existsSpy.mockRestore();
     }
@@ -227,7 +244,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ file: 'src/index.ts' });
+      await analyzeSecrets({ paths: ['src/index.ts'] });
     } finally {
       existsSpy.mockRestore();
     }
@@ -236,6 +253,16 @@ describe('secretCheckCommand: successful scan', () => {
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));
     expect(texts.some((m) => m.includes('No issues detected'))).toBe(true);
+  });
+});
+
+// ─── Input validation paths ───────────────────────────────────────────────────
+
+describe('secretCheckCommand: input validation', () => {
+  it('throws InvalidOptionError when paths array is empty', () => {
+    expect(analyzeSecrets({ paths: [] })).rejects.toThrow(
+      new InvalidOptionError('Either provide file/directory paths or --stdin'),
+    );
   });
 });
 
@@ -248,7 +275,7 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 51', 51),
       );
     } finally {
@@ -267,7 +294,7 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 1', 1),
       );
     } finally {
@@ -282,7 +309,7 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 2', 2),
       );
     } finally {
@@ -302,7 +329,7 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 2', 2),
       );
     } finally {
@@ -325,7 +352,7 @@ describe('secretCheckCommand: scan error handling', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
     }
@@ -342,7 +369,7 @@ describe('secretCheckCommand: scan error handling', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
     }
@@ -359,7 +386,7 @@ describe('secretCheckCommand: scan error handling', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
     }
@@ -373,26 +400,26 @@ describe('secretCheckCommand: scan error handling', () => {
 
 // ─── stdin scan paths ─────────────────────────────────────────────────────────
 
+async function withMockStdin(content: string, fn: () => Promise<void>): Promise<void> {
+  const { EventEmitter } = await import('node:events');
+  const mockStdin = new EventEmitter();
+  const originalStdin = process.stdin;
+  process.stdin = mockStdin as unknown as typeof process.stdin;
+
+  const emitData = (): void => {
+    mockStdin.emit('data', Buffer.from(content));
+    mockStdin.emit('end');
+  };
+
+  // Emit after current microtask so listeners are registered first
+  setTimeout(emitData, 0);
+
+  return fn().finally(() => {
+    process.stdin = originalStdin;
+  });
+}
+
 describe('secretCheckCommand: stdin scan', () => {
-  async function withMockStdin(content: string, fn: () => Promise<void>): Promise<void> {
-    const { EventEmitter } = await import('node:events');
-    const mockStdin = new EventEmitter();
-    const originalStdin = process.stdin;
-    process.stdin = mockStdin;
-
-    const emitData = (): void => {
-      mockStdin.emit('data', Buffer.from(content));
-      mockStdin.emit('end');
-    };
-
-    // Emit after current microtask so listeners are registered first
-    setTimeout(emitData, 0);
-
-    return fn().finally(() => {
-      process.stdin = originalStdin;
-    });
-  }
-
   it('succeeds when stdin scan succeeds with no issues', async () => {
     await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
@@ -433,7 +460,7 @@ describe('secretCheckCommand: throws CommandFailedError for scan failures', () =
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ file: 'src/index.ts' })).rejects.toThrow(CommandFailedError);
+      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
     }
