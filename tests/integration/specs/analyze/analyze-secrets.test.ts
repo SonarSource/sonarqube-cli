@@ -44,12 +44,12 @@ describe('analyze secrets', () => {
   });
 
   it(
-    'exits with code 0 for clean file when binary is installed (--file)',
+    'exits with code 0 for clean file when binary is installed',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
 
-      const result = await harness.run(`analyze secrets --file clean.js`);
+      const result = await harness.run('analyze secrets clean.js');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Scan completed successfully');
@@ -58,12 +58,12 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'exits with code 51 for file with secrets when binary is installed (--file)',
+    'exits with code 51 for file with secrets when binary is installed',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
-      const result = await harness.run(`analyze secrets --file secrets.js`);
+      const result = await harness.run('analyze secrets secrets.js');
 
       expect(result.exitCode).toBe(51);
       // Binary always reports auth status when no credentials are configured
@@ -109,7 +109,7 @@ describe('analyze secrets', () => {
       // No withSecretsBinaryInstalled() — binary absent
       harness.cwd.writeFile('file.js', CLEAN_CONTENT);
 
-      const result = await harness.run(`analyze secrets --file file.js`);
+      const result = await harness.run('analyze secrets file.js');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('sonar-secrets is not installed');
@@ -118,14 +118,16 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'exits with code 1 when neither --file nor --stdin is provided',
+    'exits with code 1 when neither paths nor --stdin is provided',
     async () => {
       harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('analyze secrets');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Either --file or --stdin is required');
+      expect(result.stdout + result.stderr).toContain(
+        'Either provide file/directory paths or --stdin',
+      );
     },
     { timeout: 15000 },
   );
@@ -135,10 +137,10 @@ describe('analyze secrets', () => {
     async () => {
       harness.state().withSecretsBinaryInstalled();
 
-      const result = await harness.run('analyze secrets --file /nonexistent/path/file.txt');
+      const result = await harness.run('analyze secrets /nonexistent/path/file.txt');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('File not found');
+      expect(result.stdout + result.stderr).toContain('Path not found');
     },
     { timeout: 15000 },
   );
@@ -153,7 +155,7 @@ describe('analyze secrets', () => {
       // With valid auth the binary must NOT report "Authentication was not successful".
       harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
-      const result = await harness.run(`analyze secrets --file secrets.js`, {
+      const result = await harness.run('analyze secrets secrets.js', {
         extraEnv: {
           SONAR_CLI_TOKEN: VALID_TOKEN,
           SONAR_CLI_SERVER: server.baseUrl(),
@@ -169,12 +171,12 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'exits with code 1 when both --file and --stdin are provided',
+    'exits with code 1 when both paths and --stdin are provided',
     async () => {
-      const result = await harness.run('analyze secrets --file somefile.js --stdin');
+      const result = await harness.run('analyze secrets somefile.js --stdin');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Cannot use both --file and --stdin');
+      expect(result.stdout + result.stderr).toContain('Cannot use both paths and --stdin');
     },
     { timeout: 15000 },
   );
@@ -194,7 +196,7 @@ describe('analyze secrets', () => {
       // With valid auth the binary must NOT report "Authentication was not successful".
       harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
 
-      const result = await harness.run(`analyze secrets --file secrets.js`, {
+      const result = await harness.run('analyze secrets secrets.js', {
         extraEnv: {
           SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true',
         },

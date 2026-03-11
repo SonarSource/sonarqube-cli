@@ -164,10 +164,14 @@ const analyze = COMMAND_TREE.command('analyze')
 
 analyze
   .command('secrets')
-  .description('Scan a file or stdin for hardcoded secrets')
-  .option('--file <file>', 'File path to scan for secrets')
-  .option('--stdin', 'Read from standard input instead of a file')
-  .action((options: AnalyzeSecretsOptions) => runCommand(() => analyzeSecrets(options)));
+  .description('Scan files or stdin for hardcoded secrets')
+  .argument('[paths...]', 'File or directory paths to scan for secrets')
+  .option('--stdin', 'Read from standard input instead of paths')
+  .action((paths: string[], options: AnalyzeSecretsOptions) =>
+    runCommand(() =>
+      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }),
+    ),
+  );
 
 analyze
   .command('a3s')

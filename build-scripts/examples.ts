@@ -99,8 +99,12 @@ export const EXAMPLES: Record<string, Example[]> = {
   ],
   'sonar analyze secrets': [
     {
-      command: 'sonar analyze secrets --file src/config.ts',
+      command: 'sonar analyze secrets src/config.ts',
       description: 'Scan a file for hardcoded secrets',
+    },
+    {
+      command: 'sonar analyze secrets src/file1.ts src/file2.ts',
+      description: 'Scan multiple files for hardcoded secrets',
     },
     {
       command: 'cat .env | sonar analyze secrets --stdin',

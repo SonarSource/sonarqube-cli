@@ -259,20 +259,24 @@ Analyze code for security issues
 
 #### `sonar analyze secrets`
 
-Scan a file or stdin for hardcoded secrets
+Scan files or stdin for hardcoded secrets
 
 **Options:**
 
-| Option    | Type    | Required | Description                                | Default |
-| --------- | ------- | -------- | ------------------------------------------ | ------- |
-| `--file`  | string  | No       | File path to scan for secrets              | -       |
-| `--stdin` | boolean | No       | Read from standard input instead of a file | -       |
+| Option    | Type    | Required | Description                               | Default |
+| --------- | ------- | -------- | ----------------------------------------- | ------- |
+| `--stdin` | boolean | No       | Read from standard input instead of paths | -       |
 
 **Examples:**
 
 Scan a file for hardcoded secrets
 ```bash
-sonar analyze secrets --file src/config.ts
+sonar analyze secrets src/config.ts
+```
+
+Scan multiple files for hardcoded secrets
+```bash
+sonar analyze secrets src/file1.ts src/file2.ts
 ```
 
 Scan stdin for hardcoded secrets
