@@ -177,6 +177,7 @@ analyze
   .description('Run A3S server-side analysis on a file (SonarQube Cloud only)')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
+  .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
   .action((options: AnalyzeA3sOptions) => runCommand(() => analyzeA3s(options)));
 
 // Full pipeline: secrets → A3S. Options are parsed manually because `analyze` also has

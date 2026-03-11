@@ -29,7 +29,7 @@ import * as processLib from '../../src/lib/process.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { analyzeA3s, analyzeFile } from '../../src/cli/commands/analyze/secrets';
-import { InvalidOptionError } from '../../src/cli/commands/_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
@@ -278,6 +278,47 @@ describe('analyzeA3s: API call and result display', () => {
     analyzeFileSpy.mockRejectedValue(new Error('Network error'));
 
     expect(analyzeA3s({ file: 'src/index.ts' })).rejects.toThrow('A3S analysis failed');
+  });
+});
+
+// ─── analyzeA3s: explicit --project option ───────────────────────────────────
+
+describe('analyzeA3s: explicit --project option', () => {
+  it('uses provided project key directly without consulting extensions registry', async () => {
+    loadStateSpy.mockReturnValue(makeCloudStateNoExt());
+
+    await analyzeA3s({ file: 'src/index.ts', project: 'explicit-project' });
+
+    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
+    expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('explicit-project');
+  });
+
+  it('uses provided project key even when extension has a different project key', async () => {
+    await analyzeA3s({ file: 'src/index.ts', project: 'override-project' });
+
+    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
+    expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('override-project');
+  });
+
+  it('throws CommandFailedError with auth hint when --project given but no auth', () => {
+    resolveAuthSpy.mockResolvedValue({ token: '', serverUrl: SONARCLOUD_URL, orgKey: TEST_ORG });
+
+    expect(analyzeA3s({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
+      CommandFailedError,
+    );
+  });
+
+  it('throws CommandFailedError when --project given but on-premise server', () => {
+    resolveAuthSpy.mockResolvedValue({
+      token: TEST_TOKEN,
+      serverUrl: 'https://mysonar.company.com',
+      orgKey: TEST_ORG,
+      connectionType: 'on-premise',
+    });
+
+    expect(analyzeA3s({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
+      CommandFailedError,
+    );
   });
 });
 

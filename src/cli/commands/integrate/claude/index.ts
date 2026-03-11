@@ -360,6 +360,7 @@ async function runHealthCheckAndRepair(
     projectKey,
     organization,
     globalDir,
+    a3sEnabled,
   );
 
   return repairedToken ?? token;

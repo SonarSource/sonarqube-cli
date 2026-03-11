@@ -45,6 +45,7 @@ export interface AnalyzeFileOptions {
 export interface AnalyzeA3sOptions {
   file: string;
   branch?: string;
+  project?: string;
 }
 
 export async function analyzeSecrets(options: AnalyzeSecretsOptions): Promise<void> {
@@ -403,13 +404,13 @@ export async function analyzeFile(options: AnalyzeFileOptions): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function analyzeA3s(options: AnalyzeA3sOptions): Promise<void> {
-  const { file, branch } = options;
+  const { file, branch, project } = options;
 
   if (!existsSync(file)) {
     throw new InvalidOptionError(`File not found: ${file}`);
   }
 
-  await runA3sAnalysis(file, branch);
+  await runA3sAnalysis(file, branch, project);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,31 +438,45 @@ async function runSecretsOnFile(file: string): Promise<'secrets-found' | 'ok'> {
   }
 }
 
-async function runA3sAnalysis(file: string, branch?: string): Promise<void> {
+async function runA3sAnalysis(
+  file: string,
+  branch?: string,
+  explicitProject?: string,
+): Promise<void> {
   let auth;
   let projectKey: string | undefined;
 
   try {
     auth = await resolveAuth({});
     if (!auth.token || !auth.orgKey || auth.connectionType === 'on-premise') {
+      if (explicitProject) {
+        throw new CommandFailedError(
+          'A3S analysis requires a SonarQube Cloud connection. Run: sonar auth login',
+        );
+      }
       logger.debug('A3S analysis skipped: no auth, missing orgKey, or on-premise server');
       return;
     }
 
-    // Get projectKey from the agentExtensions registry (populated during sonar integrate)
-    const state = loadState();
-    const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
-    const a3sExt = extensions.find(
-      (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-a3s',
-    );
+    if (explicitProject) {
+      projectKey = explicitProject;
+    } else {
+      // Get projectKey from the agentExtensions registry (populated during sonar integrate)
+      const state = loadState();
+      const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
+      const a3sExt = extensions.find(
+        (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-a3s',
+      );
 
-    if (!a3sExt?.projectKey) {
-      logger.debug('A3S analysis skipped: no project key found in extensions registry');
-      return;
+      if (!a3sExt?.projectKey) {
+        logger.debug('A3S analysis skipped: no project key found in extensions registry');
+        return;
+      }
+
+      projectKey = a3sExt.projectKey;
     }
-
-    projectKey = a3sExt.projectKey;
-  } catch {
+  } catch (err) {
+    if (err instanceof CommandFailedError) throw err;
     logger.debug('A3S analysis skipped: failed to resolve auth or extensions');
     return;
   }

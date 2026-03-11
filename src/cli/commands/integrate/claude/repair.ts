@@ -41,6 +41,7 @@ export async function runRepair(
   _projectKey?: string,
   organization?: string,
   globalDir?: string,
+  installA3s = false,
 ): Promise<string | undefined> {
   let newToken: string | undefined;
 
@@ -69,9 +70,9 @@ export async function runRepair(
     success('Token saved to keychain');
   }
 
-  // Ensure sonar-secrets hooks for secret scanning are installed (idempotent)
+  // Ensure hooks are installed (idempotent); A3S hook only when entitlement confirmed
   text('Installing secret scanning hooks...');
-  await installHooks(projectRoot, globalDir);
+  await installHooks(projectRoot, globalDir, installA3s);
   success('Secret scanning hooks installed');
 
   return newToken;

@@ -403,6 +403,86 @@ describe('integrate claude', () => {
   );
 });
 
+// ─── A3S entitlement guard ────────────────────────────────────────────────────
+
+describe('integrate claude — A3S entitlement guard', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'installs PostToolUse A3S hook when Cloud org has A3S entitlement (repair path)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withA3sEntitlement('my-org', 'test-uuid-1234')
+        .start();
+
+      // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
+      // and getOrganizationId / checkA3sEntitlement hit the same fake server
+      const serverUrl = server.baseUrl();
+
+      const result = await harness.run(
+        `integrate claude --token cloud-token --server ${serverUrl} --org my-org --non-interactive`,
+        {
+          extraEnv: {
+            SONAR_CLI_SONARCLOUD_URL: serverUrl,
+            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeDefined();
+      expect(
+        harness.cwd.exists('.claude', 'hooks', 'sonar-a3s', 'build-scripts', 'posttool-a3s.sh'),
+      ).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not install PostToolUse A3S hook when org has no A3S entitlement (repair path)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withA3sEntitlement('my-org', 'test-uuid-1234', { eligible: false, enabled: false })
+        .start();
+
+      const serverUrl = server.baseUrl();
+
+      const result = await harness.run(
+        `integrate claude --token cloud-token --server ${serverUrl} --org my-org --non-interactive`,
+        {
+          extraEnv: {
+            SONAR_CLI_SONARCLOUD_URL: serverUrl,
+            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeUndefined();
+      expect(
+        harness.cwd.exists('.claude', 'hooks', 'sonar-a3s', 'build-scripts', 'posttool-a3s.sh'),
+      ).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+});
+
 // ─── Local vs Global file placement ──────────────────────────────────────────
 
 describe('integrate claude — file placement (local vs global)', () => {
