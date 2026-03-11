@@ -79,6 +79,29 @@ export const EXAMPLES: Record<string, Example[]> = {
         'Integrate globally and install hooks to ~/.claude which will be available for all projects',
     },
   ],
+  'sonar integrate git': [
+    {
+      command: 'sonar integrate git',
+      description: 'Install a pre-commit hook that scans staged files for secrets (interactive)',
+    },
+    {
+      command: 'sonar integrate git --hook pre-push',
+      description: 'Install a pre-push hook that scans committed files for secrets before pushing',
+    },
+    {
+      command: 'sonar integrate git --global',
+      description:
+        'Install a staged-file secrets hook globally for all repositories (sets git config --global core.hooksPath)',
+    },
+    {
+      command: 'sonar integrate git --hook pre-push --global --non-interactive',
+      description: 'Non-interactive: install a pre-push secrets hook globally for all repositories',
+    },
+    {
+      command: 'sonar integrate git test',
+      description: 'Verify the hook blocks a commit whose staged files contain a secret',
+    },
+  ],
   'sonar list issues': [
     { command: 'sonar list issues -p my-project', description: 'List issues in a project' },
     {

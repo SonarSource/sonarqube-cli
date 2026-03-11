@@ -92,18 +92,18 @@ describe('runMigrations — skip conditions', () => {
   });
 });
 
+function makeConfiguredState(version: string) {
+  const state = getDefaultState('test');
+  state.agents['claude-code'].configured = true;
+  state.agents['claude-code'].configuredByCliVersion = version;
+  return state;
+}
+
 describe('runMigrations — migration execution', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
   let addInstalledHookSpy: ReturnType<typeof spyOn>;
   let installHooksSpy: ReturnType<typeof spyOn>;
-
-  function makeConfiguredState(version: string) {
-    const state = getDefaultState('test');
-    state.agents['claude-code'].configured = true;
-    state.agents['claude-code'].configuredByCliVersion = version;
-    return state;
-  }
 
   beforeEach(() => {
     setMockUi(true);

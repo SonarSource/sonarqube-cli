@@ -60,6 +60,9 @@ export const LOG_FILE = join(LOG_DIR, `${APP_NAME}.log`);
 
 export const BIN_DIR = join(CLI_DIR, 'bin');
 
+/** Directory used for global git hooks when core.hooksPath is set via sonar integrate git --global. */
+export const GLOBAL_HOOKS_DIR = join(CLI_DIR, 'hooks');
+
 // ---------------------------------------------------------------------------
 // Sonarsource binaries
 // ---------------------------------------------------------------------------

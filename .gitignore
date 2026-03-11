@@ -11,4 +11,5 @@ plan.md
 /coverage/
 tests/coverage/reports/
 tests/integration/resources/sonar-secrets*
+tests/unit/.integrate-git-repos/
 .eslintcache
