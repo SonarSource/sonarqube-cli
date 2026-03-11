@@ -51,7 +51,7 @@ if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
 fi
 
 # Scan file for secrets
-sonar analyze --file "$file_path" > /dev/null 2>&1
+sonar analyze --file "$file_path"
 exit_code=$?
 
 if [[ $exit_code -eq 51 ]]; then
@@ -92,7 +92,7 @@ if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
 }
 
 try {
-    & sonar analyze --file $filePath | Out-Null
+    & sonar analyze --file $filePath
     $exitCode = $LASTEXITCODE
 } catch {
     exit 0
