@@ -132,7 +132,7 @@ if [[ -z "$prompt" ]]; then
 fi
 
 # Create temporary file with prompt content (stdin is already occupied by hook input)
-temp_file=$(mktemp)
+temp_file=$(mktemp -t 'sonarqube-cli-hook.XXXXXX')
 trap "rm -f $temp_file" EXIT
 
 echo -n "$prompt" > "$temp_file"
