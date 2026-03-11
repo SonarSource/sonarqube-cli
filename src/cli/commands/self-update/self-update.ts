@@ -153,9 +153,10 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
   const tempPath = join(tmpdir(), scriptName);
 
   if (process.platform === 'win32') {
-    // On Windows the running binary is file-locked, so the parent must exit
-    // before the script can overwrite it. Open PowerShell in a new window so
-    // it has its own console and the user can see the output.
+    // On Windows the running binary is file-locked, so the parent must exit immediately
+    // so that the script can overwrite the executable. Otherwise, the update will fail and
+    // has to be manually retried by the user.
+    // Open PowerShell in a new window so it has its own console and the user can see the output.
     writeFileSync(tempPath, scriptContent, 'utf8');
     info('Starting update in a new terminal window...');
     // The ComSpec environment variable (always points to the system cmd.exe)
