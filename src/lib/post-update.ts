@@ -18,8 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import fs from 'node:fs';
-import { existsSync } from 'node:fs';
+import fs, { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { version as CURRENT_VERSION } from '../../package.json';
