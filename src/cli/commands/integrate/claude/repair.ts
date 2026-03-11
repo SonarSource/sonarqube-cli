@@ -26,7 +26,7 @@ import {
   validateToken,
   deleteToken,
 } from '../../_common/token';
-import { installSecretScanningHooks } from './hooks';
+import { installHooks } from './hooks';
 import type { HealthCheckResult } from './health';
 import logger from '../../../../lib/logger';
 import { text, success } from '../../../../ui';
@@ -71,7 +71,7 @@ export async function runRepair(
 
   // Ensure sonar-secrets hooks for secret scanning are installed (idempotent)
   text('Installing secret scanning hooks...');
-  await installSecretScanningHooks(projectRoot, globalDir);
+  await installHooks(projectRoot, globalDir);
   success('Secret scanning hooks installed');
 
   return newToken;

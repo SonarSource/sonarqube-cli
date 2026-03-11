@@ -21,7 +21,7 @@
 // SonarQube API HTTP client
 
 import { version as VERSION } from '../../package.json';
-import { SONARCLOUD_API_URL } from '../lib/config-constants.js';
+import { SONARCLOUD_API_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '../lib/config-constants.js';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
@@ -31,10 +31,12 @@ const HTTP_STATUS_NOT_FOUND = 404;
 export class SonarQubeClient {
   private readonly serverURL: string;
   private readonly token: string;
+  public readonly isCloud: boolean;
 
   constructor(serverURL: string, token: string) {
     this.serverURL = serverURL.replace(/\/$/, ''); // Remove trailing slash
     this.token = token;
+    this.isCloud = serverURL.includes(SONARCLOUD_URL) || serverURL.includes(SONARCLOUD_US_URL);
   }
 
   /**
@@ -174,6 +176,21 @@ export class SonarQubeClient {
     const uuid = await this.getOrganizationId(organizationKey);
     if (!uuid) return false;
     return this.checkA3sEntitlement(uuid);
+  }
+
+  async listUserOrganizations(): Promise<{
+    organizations: Array<{ key: string; name: string }>;
+    total: number;
+  }> {
+    try {
+      const result = await this.get<{
+        organizations: Array<{ key: string; name: string }>;
+        paging: { total: number };
+      }>('/api/organizations/search', { member: true, ps: 10 });
+      return { organizations: result.organizations, total: result.paging.total };
+    } catch {
+      return { organizations: [], total: 0 };
+    }
   }
 
   /**
