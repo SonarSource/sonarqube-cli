@@ -21,7 +21,7 @@
 // Auth module - OAuth flow and token management
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { TextPrompt, isCancel } from '@clack/core';
+import * as readline from 'node:readline';
 import {
   getToken as getKeystoreToken,
   saveToken as saveKeystoreToken,
@@ -32,7 +32,7 @@ import { SonarQubeClient } from '../../../sonarqube/client';
 import { startLoopbackServer } from '../../../lib/loopback-server';
 import logger from '../../../lib/logger';
 import { warn, print, pressEnterKeyPrompt, isMockActive } from '../../../ui';
-import { green, dim, blue } from '../../../ui/colors';
+import { blue } from '../../../ui/colors';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
@@ -268,68 +268,47 @@ export function createRequestHandler(onToken: (token: string) => void) {
  * Interactive wait: resolves when the loopback server delivers the token
  * OR the user manually pastes one and presses Enter.
  * Rejects on Ctrl+C cancellation.
+ * Uses readline (not TextPrompt) so that when the server delivers the token we can
+ * close the interface and release stdin, avoiding the prompt staying open and
+ * blocking the next prompt (e.g. org key) on Windows.
  */
-async function waitForTokenInteractive(serverTokenPromise: Promise<string>): Promise<string> {
+export async function waitForTokenInteractive(
+  serverTokenPromise: Promise<string>,
+): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const promptAbort = new AbortController();
     let settled = false;
+    /** Only call rl.close() once; skip when we're already inside the 'close' handler (e.g. Ctrl+C). */
+    let rlClosed = false;
 
     function settle(token?: string, err?: Error): void {
       if (settled) return;
       settled = true;
+      if (!rlClosed) {
+        rlClosed = true;
+        rl.close();
+      }
       if (err) reject(err);
-      else resolve(token!);
+      else resolve(token ?? '');
     }
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+    rl.on('close', () => {
+      if (!settled) settle(undefined, new Error('Authentication cancelled'));
+    });
 
     serverTokenPromise
       .then((token) => {
-        if (settled) return;
-        // Erase the 2-line prompt before aborting: clack's abort path skips render(),
-        // so without this the "Waiting for authorization..." lines stay on screen.
-        if (process.stdout.isTTY) {
-          process.stdout.moveCursor(0, -1); // cursor was on the › line; move up to ⏳ line
-          process.stdout.cursorTo(0);
-          process.stdout.clearScreenDown();
-        }
-        promptAbort.abort(); // triggers clack close(), which writes one trailing \n
-        // Undo that trailing \n so the next output starts on the cleared line
-        if (process.stdout.isTTY) {
-          process.stdout.moveCursor(0, -1);
-          process.stdout.cursorTo(0);
-        }
-        // clack does not pause stdin after close(); do it explicitly so subsequent
-        // prompts (e.g. org key selection) can acquire stdin cleanly on all platforms
-        process.stdin.pause();
         settle(token);
       })
       .catch(() => undefined);
 
-    const prompt = new TextPrompt({
-      signal: promptAbort.signal,
-      render() {
-        if (this.state === 'submit') return `  ${green('✓')}  Token accepted`;
-        if (this.state === 'cancel') return undefined;
-        return [
-          `  ⏳  Waiting for authorization... or paste token and press Enter:`,
-          `  ${dim('›')} ${this.userInputWithCursor}`,
-        ].join('\n');
-      },
+    print('  ⏳  Waiting for authorization... or paste token and press Enter:');
+    rl.question('  › ', (line) => {
+      if (settled) return;
+      const userToken = line.trim();
+      if (userToken.length > 0) settle(userToken);
     });
-
-    prompt
-      .prompt()
-      .then((result) => {
-        if (settled) return;
-        if (isCancel(result)) {
-          settle(undefined, new Error('Authentication cancelled'));
-          return;
-        }
-        const userToken = result!.trim();
-        if (userToken.length > 0) settle(userToken);
-      })
-      .catch((err: unknown) => {
-        settle(undefined, err as Error);
-      });
   });
 }
 
