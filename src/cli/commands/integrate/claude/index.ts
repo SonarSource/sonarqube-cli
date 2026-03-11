@@ -29,7 +29,7 @@ import { runRepair } from './repair';
 import { getToken } from '../../_common/token';
 import { getAllCredentials } from '../../../../lib/keychain';
 import { installHooks } from './hooks';
-import { runMigrations } from './migration';
+import { runMigrations } from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import {
   addInstalledHook,

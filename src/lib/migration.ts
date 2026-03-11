@@ -26,17 +26,17 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import logger from '../../../../lib/logger';
+import logger from './logger';
 import {
   loadState,
   saveState,
   addInstalledHook,
   upsertAgentExtension,
   getActiveConnection,
-} from '../../../../lib/state-manager';
-import type { HookExtension } from '../../../../lib/state';
-import { installHooks } from './hooks';
-import { version as CURRENT_VERSION } from '../../../../../package.json';
+} from './state-manager';
+import type { HookExtension } from './state';
+import { installHooks } from '../cli/commands/integrate/claude/hooks';
+import { version as CURRENT_VERSION } from '../../package.json';
 
 // Version that introduced the new hook architecture (separate secrets/A3S hooks)
 const NEW_HOOK_ARCH_VERSION = CURRENT_VERSION;
@@ -169,8 +169,9 @@ function migrateToExtensionsRegistry(
 
 /**
  * Rewrite old hook scripts that called `sonar analyze --file` to use specific subcommands.
+ * Also called from post-update.ts for automatic migration after CLI upgrades.
  */
-function migrateHookScripts(projectRoot: string, globalDir?: string): void {
+export function migrateHookScripts(projectRoot: string, globalDir?: string): void {
   const baseDir = globalDir ?? projectRoot;
   const secretsDir = join(baseDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts');
 
