@@ -24,7 +24,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { version as CURRENT_VERSION } from '../../../package.json';
 import { UPDATE_SCRIPT_BASE_URL } from '../../lib/config-constants';
-import { CommandFailedError } from './common/error';
 import { info, success, warn, text, blank } from '../../ui';
 
 const VERSION_PATTERNS = [
@@ -167,7 +166,6 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
-    throw new CommandFailedError('', 0);
   } else {
     // On Unix the binary is not locked, so run the script synchronously and
     // stream its output directly to the terminal.

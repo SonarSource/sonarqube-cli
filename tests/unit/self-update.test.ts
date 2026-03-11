@@ -221,19 +221,12 @@ describe('selfUpdate --force', () => {
     setMockUi(false);
   });
 
-  // On Windows the install spawns a detached child then throws CommandFailedError(exitCode=0)
-  // so runCommand() can set the exit code and let telemetry run before the process exits.
-  // Tests catch that throw and verify the UI messages printed before it.
   async function runForce(scriptContent: string): Promise<void> {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve(scriptContent),
     } as Response);
-    try {
-      await selfUpdate({ force: true });
-    } catch (err) {
-      if ((err as { exitCode?: number }).exitCode !== 0) throw err;
-    }
+    await selfUpdate({ force: true });
   }
 
   it('installs even when already up to date', async () => {
