@@ -29,7 +29,7 @@ import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { BIN_DIR } from '../../../lib/config-constants';
 
 export interface AnalyzeSecretsOptions {
-  file?: string;
+  paths?: string[];
   stdin?: boolean;
 }
 
@@ -52,7 +52,7 @@ async function handleCheckCommand(options: AnalyzeSecretsOptions): Promise<void>
   if (options.stdin) {
     await performStdinScan(binaryPath, authUrl, authToken, scanStartTime);
   } else {
-    await performFileScan(binaryPath, options.file, authUrl, authToken, scanStartTime);
+    await performPathsScan(binaryPath, options.paths ?? [], authUrl, authToken, scanStartTime);
   }
 }
 
@@ -63,7 +63,7 @@ interface ScanEnvironment {
 }
 
 async function setupScanEnvironment(options: {
-  file?: string;
+  paths?: string[];
   stdin?: boolean;
 }): Promise<ScanEnvironment> {
   validateScanOptions(options);
@@ -83,13 +83,14 @@ async function setupScanEnvironment(options: {
   return { binaryPath, authUrl, authToken };
 }
 
-function validateScanOptions(options: { file?: string; stdin?: boolean }): void {
-  if (!options.file && !options.stdin) {
-    throw new InvalidOptionError('Either --file or --stdin is required');
+function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): void {
+  const hasPaths = (options.paths?.length ?? 0) > 0;
+  if (!hasPaths && !options.stdin) {
+    throw new InvalidOptionError('Either provide file/directory paths or --stdin');
   }
 
-  if (options.file && options.stdin) {
-    throw new InvalidOptionError('Cannot use both --file and --stdin');
+  if (hasPaths && options.stdin) {
+    throw new InvalidOptionError('Cannot use both paths and --stdin');
   }
 }
 
@@ -119,22 +120,24 @@ async function performStdinScan(
   }
 }
 
-async function performFileScan(
+async function performPathsScan(
   binaryPath: string,
-  file: string | undefined,
+  paths: string[],
   authUrl: string | undefined,
   authToken: string | undefined,
   scanStartTime: number,
 ): Promise<void> {
-  if (!file) {
-    throw new InvalidOptionError('File path is required');
+  if (paths.length === 0) {
+    throw new InvalidOptionError('At least one path is required');
   }
 
-  if (!existsSync(file)) {
-    throw new InvalidOptionError(`File not found: ${file}`);
+  for (const p of paths) {
+    if (!existsSync(p)) {
+      throw new InvalidOptionError(`Path not found: ${p}`);
+    }
   }
 
-  const result = await runScan(binaryPath, file, authUrl, authToken);
+  const result = await runScan(binaryPath, paths, authUrl, authToken);
   const scanDurationMs = Date.now() - scanStartTime;
 
   const exitCode = result.exitCode ?? 1;
@@ -155,14 +158,14 @@ function validateCheckCommandEnvironment(binaryPath: string): void {
 
 async function runScan(
   binaryPath: string,
-  file: string,
+  paths: string[],
   authUrl: string | undefined,
   authToken: string | undefined,
 ): Promise<SpawnResult> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      spawnProcess(binaryPath, ['--non-interactive', file], {
+      spawnProcess(binaryPath, ['--non-interactive', ...paths], {
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',

@@ -191,9 +191,9 @@ export function migrateHookScripts(projectRoot: string, globalDir?: string): voi
 
     try {
       const content = readFileSync(scriptPath, 'utf-8');
-      // Replace old `sonar analyze --file` with `sonar analyze secrets --file`
+      // Replace old `sonar analyze --file` with `sonar analyze secrets`
       // Only replace if it's the direct analyze command, not already migrated
-      const migrated = content.replaceAll('sonar analyze --file', 'sonar analyze secrets --file');
+      const migrated = content.replaceAll('sonar analyze --file', 'sonar analyze secrets');
 
       if (migrated !== content) {
         writeFileSync(scriptPath, migrated, 'utf-8');

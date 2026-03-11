@@ -98,7 +98,7 @@ describe('Hooks', () => {
       );
       const content = readFileSync(scriptPath, 'utf-8');
 
-      expect(content.includes('sonar analyze secrets --file')).toBe(true);
+      expect(content.includes('sonar analyze secrets')).toBe(true);
       expect(content.includes('exit_code -eq 51')).toBe(true);
     } finally {
       rmSync(testDir, { recursive: true, force: true });

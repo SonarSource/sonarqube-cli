@@ -47,7 +47,7 @@ if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
 fi
 
 # Scan file for secrets
-sonar analyze secrets --file "$file_path" > /dev/null 2>&1
+sonar analyze secrets "$file_path" > /dev/null 2>&1
 exit_code=$?
 
 if [[ $exit_code -eq 51 ]]; then
@@ -88,7 +88,7 @@ if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
 }
 
 try {
-    & sonar analyze secrets --file $filePath | Out-Null
+    & sonar analyze secrets $filePath | Out-Null
     $exitCode = $LASTEXITCODE
 } catch {
     exit 0
@@ -138,7 +138,7 @@ trap "rm -f $temp_file" EXIT
 echo -n "$prompt" > "$temp_file"
 
 # Scan prompt for secrets (using file instead of stdin pipe)
-sonar analyze --file "$temp_file" > /dev/null 2>&1
+sonar analyze secrets "$temp_file" > /dev/null 2>&1
 exit_code=$?
 
 if [[ $exit_code -eq 51 ]]; then
@@ -265,7 +265,7 @@ try {
     $prompt | Set-Content -Path $tempFile -NoNewline -Encoding UTF8
 
     # Scan prompt for secrets (using file instead of stdin pipe)
-    & sonar analyze --file $tempFile | Out-Null
+    & sonar analyze secrets $tempFile | Out-Null
     $exitCode = $LASTEXITCODE
 } catch {
     $exitCode = 0

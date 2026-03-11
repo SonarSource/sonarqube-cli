@@ -779,7 +779,7 @@ describe('integrate claude — legacy state without agentExtensions', () => {
 
       // Hook scripts must be rewritten to use the new subcommand
       const pretoolContent = harness.cwd.file(pretoolScriptRel).asText();
-      expect(pretoolContent).toContain('sonar analyze secrets --file');
+      expect(pretoolContent).toContain('sonar analyze secrets');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
       // settings.json must have correctly structured hook entries (relative paths, project-level)
@@ -880,7 +880,7 @@ describe('post-update migration — hook script rewrite on CLI upgrade', () => {
 
       // Scripts must be rewritten with the new subcommand
       const pretoolContent = harness.userHome.file(pretoolScriptRel).asText();
-      expect(pretoolContent).toContain('sonar analyze secrets --file');
+      expect(pretoolContent).toContain('sonar analyze secrets');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
       // settings.json must have correctly structured hook entries (absolute paths, global)

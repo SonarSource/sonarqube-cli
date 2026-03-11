@@ -35,7 +35,7 @@ describe('Secret Scanning Hook Templates', () => {
     const template = getSecretPreToolTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar analyze secrets --file')).toBe(true);
+    expect(template.includes('sonar analyze secrets')).toBe(true);
     expect(template.includes('exit_code -eq 51')).toBe(true);
     expect(template.includes('permissionDecision')).toBe(true);
   });
@@ -43,7 +43,7 @@ describe('Secret Scanning Hook Templates', () => {
   it('PreTool Windows hook: PowerShell, sonar analyze command, exit code 51', () => {
     const template = getSecretPreToolTemplateWindows();
 
-    expect(template.includes('sonar analyze secrets --file')).toBe(true);
+    expect(template.includes('sonar analyze secrets')).toBe(true);
     expect(template.includes('$exitCode -eq 51')).toBe(true);
     expect(typeof template).toBe('string');
   });
@@ -52,14 +52,14 @@ describe('Secret Scanning Hook Templates', () => {
     const template = getSecretPromptTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar analyze --file')).toBe(true);
+    expect(template.includes('sonar analyze secrets')).toBe(true);
     expect(template.includes('exit_code -eq 51')).toBe(true);
   });
 
   it('UserPromptSubmit Windows hook: PowerShell, sonar analyze command, exit code 51', () => {
     const template = getSecretPromptTemplateWindows();
 
-    expect(template.includes('sonar analyze --file')).toBe(true);
+    expect(template.includes('sonar analyze secrets')).toBe(true);
     expect(template.includes('$exitCode -eq 51')).toBe(true);
     expect(typeof template).toBe('string');
   });

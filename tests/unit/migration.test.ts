@@ -360,16 +360,16 @@ describe('runMigrations — hook script rewriting', () => {
     return path;
   }
 
-  it('rewrites sonar analyze --file to sonar analyze secrets --file in Unix scripts', async () => {
+  it('rewrites sonar analyze to sonar analyze secrets in Unix scripts', async () => {
     const scriptPath = writeOldScript(
       'pretool-secrets.sh',
-      '#!/bin/bash\nsonar analyze --file "$file_path" > /dev/null 2>&1\n',
+      '#!/bin/bash\nsonar analyze --file "$filePath" > /dev/null 2>&1\n',
     );
 
     await runMigrations(testDir);
 
     const content = readFileSync(scriptPath, 'utf-8');
-    expect(content).toContain('sonar analyze secrets --file');
+    expect(content).toContain('sonar analyze secrets');
     expect(content).not.toContain('sonar analyze --file');
   });
 
@@ -390,13 +390,13 @@ describe('runMigrations — hook script rewriting', () => {
 
     for (const [, path] of Object.entries(paths)) {
       const content = readFileSync(path, 'utf-8');
-      expect(content).toContain('sonar analyze secrets --file');
+      expect(content).toContain('sonar analyze secrets');
       expect(content).not.toContain('sonar analyze --file');
     }
   });
 
   it('leaves already-migrated scripts unchanged', async () => {
-    const migrated = '#!/bin/bash\nsonar analyze secrets --file "$file_path"\n';
+    const migrated = '#!/bin/bash\nsonar analyze secrets "$file_path"\n';
     const scriptPath = writeOldScript('pretool-secrets.sh', migrated);
 
     await runMigrations(testDir);
