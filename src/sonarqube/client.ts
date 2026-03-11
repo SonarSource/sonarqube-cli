@@ -21,7 +21,7 @@
 // SonarQube API HTTP client
 
 import { version as VERSION } from '../../package.json';
-import { SONARCLOUD_API_URL } from '../lib/config-constants.js';
+import { SONARCLOUD_API_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '../lib/config-constants.js';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
@@ -36,7 +36,7 @@ export class SonarQubeClient {
   constructor(serverURL: string, token: string) {
     this.serverURL = serverURL.replace(/\/$/, ''); // Remove trailing slash
     this.token = token;
-    this.isCloud = serverURL.includes('sonarcloud.io') || serverURL.includes('sonarqube.us');
+    this.isCloud = serverURL.includes(SONARCLOUD_URL) || serverURL.includes(SONARCLOUD_US_URL);
   }
 
   /**
