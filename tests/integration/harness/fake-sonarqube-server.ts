@@ -34,6 +34,17 @@ export interface IssueConfig {
   line?: number;
 }
 
+export interface A3sIssueConfig {
+  rule: string;
+  message: string;
+  startLine?: number;
+}
+
+export interface A3sResponseConfig {
+  issues?: A3sIssueConfig[];
+  errors?: Array<{ code: string; message: string }>;
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -97,8 +108,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private validToken?: string;
   private systemStatus: 'UP' | 'DOWN' = 'UP';
-  private memberOrganizations: Array<{ key: string; name: string }> = [];
-  private memberOrganizationsTotal?: number;
+  private a3sResponse?: A3sResponseConfig;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -112,13 +122,8 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  withOrganizations(orgs: Array<{ key: string; name: string }>): this {
-    this.memberOrganizations = orgs;
-    return this;
-  }
-
-  withOrganizationTotal(total: number): this {
-    this.memberOrganizationsTotal = total;
+  withA3sResponse(response: A3sResponseConfig = {}): this {
+    this.a3sResponse = response;
     return this;
   }
 
@@ -126,9 +131,7 @@ export class FakeSonarQubeServerBuilder {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const validToken = this.validToken;
     const systemStatus = this.systemStatus;
-    const memberOrganizations = this.memberOrganizations;
-    const memberOrganizationsTotal =
-      this.memberOrganizationsTotal ?? this.memberOrganizations.length;
+    const a3sResponse = this.a3sResponse;
     const requests: RecordedRequest[] = [];
 
     const server = Bun.serve({
@@ -185,8 +188,7 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/issues/search') {
-          // SonarQube Server uses `components`, SonarQube Cloud uses `projects`
-          const projectKey = query.components ?? query.projects;
+          const projectKey = query.projects;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
           const issues: SonarQubeIssue[] =
@@ -260,31 +262,36 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/organizations/search') {
-          // member=true → list orgs the user belongs to
-          if (query.member === 'true') {
-            return new Response(
-              JSON.stringify({
-                organizations: memberOrganizations,
-                paging: {
-                  pageIndex: 1,
-                  pageSize: memberOrganizations.length,
-                  total: memberOrganizationsTotal,
-                },
-              }),
-              { headers: { 'Content-Type': 'application/json' } },
-            );
-          }
-          // organizations=KEY → validate a specific org key
-          if (query.organizations) {
-            const match = memberOrganizations.filter((o) => o.key === query.organizations);
-            return new Response(JSON.stringify({ organizations: match }), {
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          return new Response(JSON.stringify({ organizations: memberOrganizations }), {
+        if (path === '/api/organizations') {
+          return new Response(JSON.stringify({ organizations: [] }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
+          if (!a3sResponse) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: 'A3S endpoint not configured' }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+
+          const issues = (a3sResponse.issues ?? []).map((i) => ({
+            rule: i.rule,
+            message: i.message,
+            textRange: i.startLine
+              ? { startLine: i.startLine, endLine: i.startLine, startOffset: 0, endOffset: 0 }
+              : null,
+          }));
+
+          return new Response(
+            JSON.stringify({
+              id: `a3s-analysis-${Date.now()}`,
+              issues,
+              errors: a3sResponse.errors ?? null,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         return new Response(JSON.stringify({ errors: [{ msg: `Unknown endpoint: ${path}` }] }), {
