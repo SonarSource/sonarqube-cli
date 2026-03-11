@@ -68,6 +68,8 @@ export const BIN_DIR = join(CLI_DIR, 'bin');
 export const SONARSOURCE_BINARIES_URL =
   process.env.SONAR_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
+export const UPDATE_SCRIPT_BASE_URL =
+  'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
 
 // ---------------------------------------------------------------------------
 // SonarCloud

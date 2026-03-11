@@ -33,6 +33,7 @@ import { integrateClaude, type IntegrateClaudeOptions } from './commands/integra
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
+import { selfUpdate } from './commands/self-update';
 import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 
@@ -175,6 +176,11 @@ configure
   .option('--enabled', 'Enable collection of anonymous usage statistics')
   .option('--disabled', 'Disable collection of anonymous usage statistics')
   .action((options: ConfigureTelemetryOptions) => runCommand(() => configureTelemetry(options)));
+
+// Update the CLI to the latest version
+COMMAND_TREE.command('self-update')
+  .description('Update sonar CLI to the latest version')
+  .action(() => runCommand(() => selfUpdate()));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
