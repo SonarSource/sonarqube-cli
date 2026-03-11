@@ -27,7 +27,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildLocalBinaryName, detectPlatform } from '../../src/lib/platform-detector.js';
-import { installSecretScanningHooks } from '../../src/cli/commands/integrate/claude/hooks';
+import { installHooks } from '../../src/cli/commands/integrate/claude/hooks';
 import { installSecrets, performSecretInstall } from '../../src/cli/commands/install/secrets';
 import * as releases from '../../src/lib/sonarsource-releases.js';
 import { SONAR_SECRETS_VERSION } from '../../src/lib/signatures.js';
@@ -91,7 +91,7 @@ describe('Platform Detection and Binary Naming', () => {
 // SECTION 2: Secret Scanning Hooks Installation
 // =============================================================================
 
-describe('installSecretScanningHooks', () => {
+describe('installHooks', () => {
   let testProjectRoot: string;
   let claudeDir: string;
   let settingsPath: string;
@@ -110,7 +110,7 @@ describe('installSecretScanningHooks', () => {
   });
 
   it('creates PreToolUse hook pointing to pretool-secrets script', async () => {
-    await installSecretScanningHooks(testProjectRoot);
+    await installHooks(testProjectRoot);
 
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
     expect(settings.hooks.PreToolUse).toBeDefined();
@@ -120,7 +120,7 @@ describe('installSecretScanningHooks', () => {
   });
 
   it('creates UserPromptSubmit hook pointing to prompt-secrets script', async () => {
-    await installSecretScanningHooks(testProjectRoot);
+    await installHooks(testProjectRoot);
 
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
     expect(settings.hooks.UserPromptSubmit).toBeDefined();
@@ -129,7 +129,7 @@ describe('installSecretScanningHooks', () => {
   });
 
   it('creates hook build-scripts on disk', async () => {
-    await installSecretScanningHooks(testProjectRoot);
+    await installHooks(testProjectRoot);
 
     const scriptsDir = join(claudeDir, 'hooks', 'sonar-secrets', 'build-scripts');
     expect(existsSync(scriptsDir)).toBe(true);
@@ -154,7 +154,7 @@ describe('installSecretScanningHooks', () => {
     const fs = await import('node:fs/promises');
     await fs.writeFile(settingsPath, JSON.stringify(existingSettings, null, 2));
 
-    await installSecretScanningHooks(testProjectRoot);
+    await installHooks(testProjectRoot);
 
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
     expect(settings.hooks.PostToolUse).toBeDefined();
@@ -163,7 +163,7 @@ describe('installSecretScanningHooks', () => {
   });
 
   it('hook timeouts are 60 seconds', async () => {
-    await installSecretScanningHooks(testProjectRoot);
+    await installHooks(testProjectRoot);
 
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
     const EXPECTED_TIMEOUT = 60;

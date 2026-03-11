@@ -33,6 +33,10 @@ export class File {
     return JSON.parse(readFileSync(this.path, 'utf-8'));
   }
 
+  asText(): string {
+    return readFileSync(this.path, 'utf-8');
+  }
+
   exists(): boolean {
     return existsSync(this.path);
   }

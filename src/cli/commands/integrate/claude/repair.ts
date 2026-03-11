@@ -26,7 +26,7 @@ import {
   validateToken,
   deleteToken,
 } from '../../_common/token';
-import { installSecretScanningHooks } from './hooks';
+import { installHooks } from './hooks';
 import type { HealthCheckResult } from './health';
 import logger from '../../../../lib/logger';
 import { text, success } from '../../../../ui';
@@ -38,9 +38,10 @@ export async function runRepair(
   serverURL: string,
   projectRoot: string,
   healthResult: HealthCheckResult,
-  _projectKey?: string,
+  projectKey?: string,
   organization?: string,
   globalDir?: string,
+  installA3s = false,
 ): Promise<string | undefined> {
   let newToken: string | undefined;
 
@@ -69,9 +70,9 @@ export async function runRepair(
     success('Token saved to keychain');
   }
 
-  // Ensure sonar-secrets hooks for secret scanning are installed (idempotent)
+  // Ensure hooks are installed (idempotent); A3S hook only when entitlement confirmed
   text('Installing secret scanning hooks...');
-  await installSecretScanningHooks(projectRoot, globalDir);
+  await installHooks(projectRoot, globalDir, installA3s, projectKey);
   success('Secret scanning hooks installed');
 
   return newToken;

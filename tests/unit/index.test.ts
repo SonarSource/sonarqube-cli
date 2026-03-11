@@ -26,8 +26,9 @@ void mock.module('../../src/lib/post-update', () => ({
 }));
 
 const parseMock = mock(() => {});
+const parseAsyncMock = mock(async () => {});
 void mock.module('../../src/cli/command-tree', () => ({
-  COMMAND_TREE: { parse: parseMock },
+  COMMAND_TREE: { parse: parseMock, parseAsync: parseAsyncMock },
 }));
 
 await import('../../src/index');

@@ -65,6 +65,7 @@ export class EnvironmentBuilder {
   private activeConnectionType: 'cloud' | 'on-premise' = 'on-premise';
   private activeConnectionOrgKey?: string;
   private _installSecretsBinary = false;
+  private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly a3sExtensions: A3sExtensionConfig[] = [];
 
@@ -95,6 +96,15 @@ export class EnvironmentBuilder {
    */
   withKeychainToken(serverURL: string, token: string, org?: string): this {
     this.keychainTokens.push({ serverURL, token, org });
+    return this;
+  }
+
+  /**
+   * Write a raw JSON string as state.json instead of building state from the builder fields.
+   * Use this to simulate state files written by older CLI versions.
+   */
+  withRawState(json: string): this {
+    this._rawStateJson = json;
     return this;
   }
 
@@ -181,9 +191,9 @@ export class EnvironmentBuilder {
    * copies the mock binary to <cliHome>/bin/sonar-secrets.
    */
   writeTo(cliHome: string, keychainJsonPath: string): Promise<void> {
-    const state = this.build();
     mkdirSync(cliHome, { recursive: true });
-    writeFileSync(join(cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
+    const stateJson = this._rawStateJson ?? JSON.stringify(this.build(), null, 2);
+    writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
 
     if (this.keychainTokens.length > 0) {
       const tokens: Record<string, string> = {};

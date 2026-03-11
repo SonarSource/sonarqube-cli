@@ -24,7 +24,7 @@ import type { SpawnResult } from '../../../lib/process';
 import { buildLocalBinaryName, detectPlatform } from '../../../lib/platform-detector';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
-import { blank, error, print, success, text, warn } from '../../../ui';
+import { blank, error, info, print, success, text, warn } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { BIN_DIR } from '../../../lib/config-constants';
 import { SonarQubeClient } from '../../../sonarqube/client';
@@ -45,6 +45,7 @@ export interface AnalyzeFileOptions {
 export interface AnalyzeA3sOptions {
   file: string;
   branch?: string;
+  project?: string;
 }
 
 export async function analyzeSecrets(options: AnalyzeSecretsOptions): Promise<void> {
@@ -403,13 +404,13 @@ export async function analyzeFile(options: AnalyzeFileOptions): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function analyzeA3s(options: AnalyzeA3sOptions): Promise<void> {
-  const { file, branch } = options;
+  const { file, branch, project } = options;
 
   if (!existsSync(file)) {
     throw new InvalidOptionError(`File not found: ${file}`);
   }
 
-  await runA3sAnalysis(file, branch);
+  await runA3sAnalysis(file, branch, project);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,18 +438,56 @@ async function runSecretsOnFile(file: string): Promise<'secrets-found' | 'ok'> {
   }
 }
 
-async function runA3sAnalysis(file: string, branch?: string): Promise<void> {
-  let auth;
-  let projectKey: string | undefined;
+async function runA3sAnalysis(
+  file: string,
+  branch?: string,
+  explicitProject?: string,
+): Promise<void> {
+  const auth = await resolveCloudAuth(explicitProject);
+  if (!auth) return;
 
+  const projectKey = explicitProject ?? resolveA3sProjectKey();
+  if (!projectKey) return;
+
+  const fileContent = readA3sFileContent(file);
+  await callA3sApiAndDisplay(auth, projectKey, file, fileContent, branch);
+}
+
+/**
+ * Resolve auth and validate that the connection is SonarQube Cloud.
+ * Returns null when A3S should be silently skipped (no auth / on-premise without --project).
+ * Throws CommandFailedError when --project is set but the connection is not Cloud.
+ */
+async function resolveCloudAuth(
+  explicitProject: string | undefined,
+): Promise<{ serverUrl: string; token: string; orgKey: string } | null> {
+  let auth;
   try {
     auth = await resolveAuth({});
-    if (!auth.token || !auth.orgKey || auth.connectionType === 'on-premise') {
-      logger.debug('A3S analysis skipped: no auth, missing orgKey, or on-premise server');
-      return;
-    }
+  } catch {
+    logger.debug('A3S analysis skipped: failed to resolve auth');
+    return null;
+  }
 
-    // Get projectKey from the agentExtensions registry (populated during sonar integrate)
+  if (!auth.token || !auth.orgKey || auth.connectionType === 'on-premise') {
+    if (explicitProject) {
+      throw new CommandFailedError(
+        'A3S analysis requires a SonarQube Cloud connection. Run: sonar auth login',
+      );
+    }
+    logger.debug('A3S analysis skipped: no auth, missing orgKey, or on-premise server');
+    return null;
+  }
+
+  return { serverUrl: auth.serverUrl, token: auth.token, orgKey: auth.orgKey };
+}
+
+/**
+ * Look up the project key for the current directory from the agentExtensions registry.
+ * Returns null when A3S should be silently skipped.
+ */
+function resolveA3sProjectKey(): string | null {
+  try {
     const state = loadState();
     const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
     const a3sExt = extensions.find(
@@ -457,33 +496,54 @@ async function runA3sAnalysis(file: string, branch?: string): Promise<void> {
 
     if (!a3sExt?.projectKey) {
       logger.debug('A3S analysis skipped: no project key found in extensions registry');
-      return;
+      if (process.stdin.isTTY) {
+        info(
+          'A3S analysis is not configured for this project. ' +
+            'Run `sonar integrate claude` to set it up, or use --project to specify the project key explicitly.',
+        );
+      }
+      return null;
     }
 
-    projectKey = a3sExt.projectKey;
+    return a3sExt.projectKey;
   } catch {
-    logger.debug('A3S analysis skipped: failed to resolve auth or extensions');
-    return;
+    logger.debug('A3S analysis skipped: failed to resolve extensions');
+    return null;
   }
+}
 
-  const { serverUrl, token, orgKey } = auth;
-
-  let fileContent: string;
+/**
+ * Read file content for A3S analysis.
+ * Throws CommandFailedError when the file cannot be read.
+ */
+function readA3sFileContent(file: string): string {
   try {
-    fileContent = readFileSync(file, 'utf-8');
+    return readFileSync(file, 'utf-8');
   } catch (err) {
     throw new CommandFailedError(`Failed to read file: ${(err as Error).message}`);
   }
+}
 
+/**
+ * Call the A3S API and display the results.
+ * Throws CommandFailedError on API failure.
+ */
+async function callA3sApiAndDisplay(
+  auth: { serverUrl: string; token: string; orgKey: string },
+  projectKey: string,
+  file: string,
+  fileContent: string,
+  branch: string | undefined,
+): Promise<void> {
   const filePath = relative(process.cwd(), file);
-  const client = new SonarQubeClient(serverUrl, token);
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
   blank();
   text('Running A3S analysis...');
 
   try {
     const response = await client.analyzeFile({
-      organizationKey: orgKey,
+      organizationKey: auth.orgKey,
       projectKey,
       ...(branch ? { branchName: branch } : {}),
       filePath,
