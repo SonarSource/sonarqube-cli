@@ -22,9 +22,9 @@ import { spawn, spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { version as CURRENT_VERSION } from '../../../package.json';
-import { UPDATE_SCRIPT_BASE_URL } from '../../lib/config-constants';
-import { info, success, warn, text, blank } from '../../ui';
+import { version as CURRENT_VERSION } from '../../../../package.json';
+import { UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
+import { info, success, warn, text, blank } from '../../../ui';
 
 const VERSION_PATTERNS = [
   // Shell:       version="1.2.3"  or  version='1.2.3'

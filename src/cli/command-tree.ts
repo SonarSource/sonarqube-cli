@@ -33,7 +33,7 @@ import { integrateClaude, type IntegrateClaudeOptions } from './commands/integra
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
-import { selfUpdate, type SelfUpdateOptions } from './commands/self-update';
+import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 

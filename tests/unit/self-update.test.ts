@@ -33,7 +33,7 @@ void mock.module('node:child_process', () => ({
 }));
 
 const { extractVersion, isNewerVersion, stripBuildNumber, checkForUpdate, selfUpdate } =
-  await import('../../src/cli/commands/self-update');
+  await import('../../src/cli/commands/self-update/self-update');
 
 describe('extractVersion', () => {
   it('extracts version from a shell script (double quotes)', () => {
