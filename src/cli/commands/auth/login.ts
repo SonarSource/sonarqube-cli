@@ -84,6 +84,12 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
 
   const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
   success(`Authentication successful for: ${displayServer}`);
+
+  // When org came from config we never ran the org selection prompts, so stdin is still
+  // resumed from the token step (for Windows). Pause it so the process can exit.
+  if (process.stdin.isTTY) {
+    process.stdin.pause();
+  }
 }
 
 /**

@@ -286,6 +286,7 @@ export async function waitForTokenInteractive(
       if (!rlClosed) {
         rlClosed = true;
         rl.close();
+        process.stdin.resume(); // so next prompt (e.g. org key) receives keypresses on Windows
       }
       if (err) reject(err);
       else resolve(token ?? '');
@@ -304,7 +305,7 @@ export async function waitForTokenInteractive(
       .catch(() => undefined);
 
     print('  ⏳  Waiting for authorization... or paste token and press Enter:');
-    rl.question('  › ', (line) => {
+    rl.question('', (line) => {
       if (settled) return;
       const userToken = line.trim();
       if (userToken.length > 0) settle(userToken);
@@ -353,12 +354,9 @@ export async function generateTokenViaBrowser(
       token = await waitForTokenInteractive(tokenPromise);
     }
   } finally {
-    server.close().then(
-      () => undefined,
-      (err: unknown) => {
-        logger.warn(`Auth server shutdown error: ${(err as Error).message}`);
-      },
-    );
+    await server.close().catch((err: unknown) => {
+      logger.warn(`Auth server shutdown error: ${(err as Error).message}`);
+    });
   }
 
   return token;
