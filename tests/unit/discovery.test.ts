@@ -20,12 +20,12 @@
 
 // Discovery module tests
 
-import { it, expect } from 'bun:test';
-import { execSync } from 'node:child_process';
+import { it, expect, spyOn } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { discoverProject } from '../../src/cli/commands/_common/discovery';
+import * as processLib from '../../src/lib/process.js';
 it('discovery: sonar-project.properties parsing', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-discovery-' + Date.now());
   mkdirSync(testDir, { recursive: true });
@@ -139,19 +139,20 @@ it('discovery: detects git repository when .git dir present', async () => {
 
 it('discovery: reads git remote when git repository has origin', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-gitremote-' + Date.now());
-  mkdirSync(testDir, { recursive: true });
+  mkdirSync(join(testDir, '.git'), { recursive: true });
+
+  const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    exitCode: 0,
+    stdout: 'https://github.com/example/test-project.git',
+    stderr: '',
+  });
 
   try {
-    execSync('git init', { cwd: testDir, stdio: 'pipe' });
-    execSync('git remote add origin https://github.com/example/test-project.git', {
-      cwd: testDir,
-      stdio: 'pipe',
-    });
-
     const info = await discoverProject(testDir);
     expect(info.isGitRepo).toBe(true);
     expect(info.gitRemote).toBe('https://github.com/example/test-project.git');
   } finally {
+    spawnSpy.mockRestore();
     rmSync(testDir, { recursive: true, force: true });
   }
 });
