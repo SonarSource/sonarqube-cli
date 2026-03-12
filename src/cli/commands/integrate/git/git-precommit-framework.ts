@@ -113,9 +113,10 @@ export function ensurePreCommitConfig(root: string, hook: GitHookType): void {
 async function runPreCommitCommand(args: string[], cwd: string): Promise<void> {
   const result = await spawnProcess('pre-commit', args, { cwd });
   if (result.exitCode !== 0) {
+    const detailSuffix = detail ? `: ${detail}` : '';
     const detail = [result.stderr, result.stdout].filter(Boolean).join('\n');
     throw new Error(
-      `pre-commit ${args.join(' ')} failed (exit code ${result.exitCode})${detail ? `: ${detail}` : ''}`,
+      `pre-commit ${args.join(' ')} failed (exit code ${result.exitCode})${detailSuffix}`,
     );
   }
 }
