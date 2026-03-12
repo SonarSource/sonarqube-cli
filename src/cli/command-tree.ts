@@ -30,13 +30,9 @@ import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { installSecrets, type InstallSecretsOptions } from './commands/install/secrets';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
-import {
-  analyzeSecrets,
-  analyzeFile,
-  analyzeA3s,
-  type AnalyzeSecretsOptions,
-  type AnalyzeA3sOptions,
-} from './commands/analyze/secrets';
+import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
+import { analyzeA3s, type AnalyzeA3sOptions } from './commands/analyze/a3s';
+import { analyzeFile } from './commands/analyze/analyze';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
@@ -179,7 +175,7 @@ analyze
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
   .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
-  .action((options: AnalyzeA3sOptions) => runCommand(() => analyzeA3s(options)));
+  .action((options: AnalyzeA3sOptions, cmd: Command) => runCommand(() => analyzeA3s(options, cmd)));
 
 // Full pipeline: secrets → A3S. Options are parsed manually because `analyze` also has
 // subcommands that use the same --file/--branch option names.
@@ -193,7 +189,7 @@ analyze.action(function (this: Command) {
   const file = fileIdx >= 0 ? args[fileIdx + 1] : undefined;
   const branchIdx = args.indexOf('--branch');
   const branch = branchIdx >= 0 ? args[branchIdx + 1] : undefined;
-  return runCommand(() => analyzeFile({ file: file!, branch }));
+  return runCommand(() => analyzeFile(file!, branch));
 });
 
 // Configure things related to the CLI

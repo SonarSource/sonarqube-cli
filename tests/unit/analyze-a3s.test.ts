@@ -28,7 +28,8 @@ import * as authResolver from '../../src/lib/auth-resolver.js';
 import * as processLib from '../../src/lib/process.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { analyzeA3s, analyzeFile } from '../../src/cli/commands/analyze/secrets';
+import { analyzeA3s } from '../../src/cli/commands/analyze/a3s';
+import { analyzeFile } from '../../src/cli/commands/analyze/analyze';
 import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
@@ -328,15 +329,13 @@ describe('analyzeA3s: explicit --project option', () => {
 describe('analyzeFile: input validation', () => {
   it('throws InvalidOptionError with "--file is required" when no file is given', () => {
     // Simulates CLI calling analyzeFile without --file (manual arg parsing yields undefined)
-    expect(analyzeFile({ file: undefined as unknown as string })).rejects.toThrow(
-      '--file is required',
-    );
+    expect(analyzeFile(undefined as unknown as string)).rejects.toThrow('--file is required');
   });
 
   it('throws InvalidOptionError when file does not exist', () => {
     existsSpy.mockReturnValue(false);
 
-    expect(analyzeFile({ file: 'nonexistent.ts' })).rejects.toThrow(InvalidOptionError);
+    expect(analyzeFile('nonexistent.ts')).rejects.toThrow(InvalidOptionError);
   });
 
   it('throws CommandFailedError when file cannot be read', () => {
@@ -344,7 +343,7 @@ describe('analyzeFile: input validation', () => {
       throw new Error('EACCES: permission denied');
     });
 
-    expect(analyzeFile({ file: 'src/index.ts' })).rejects.toThrow('Failed to read file');
+    expect(analyzeFile('src/index.ts')).rejects.toThrow('Failed to read file');
   });
 });
 
@@ -372,7 +371,7 @@ describe('analyzeFile: secrets scan gate', () => {
   it('warns and returns early without calling A3S when secrets are detected', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
 
-    await analyzeFile({ file: 'src/index.ts' });
+    await analyzeFile('src/index.ts');
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -384,7 +383,7 @@ describe('analyzeFile: secrets scan gate', () => {
   it('proceeds to A3S when secrets scan passes (exit 0)', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '{}', stderr: '' });
 
-    await analyzeFile({ file: 'src/index.ts' });
+    await analyzeFile('src/index.ts');
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
   });
@@ -392,7 +391,7 @@ describe('analyzeFile: secrets scan gate', () => {
   it('proceeds to A3S when secrets scan errors (non-blocking)', async () => {
     spawnSpy.mockRejectedValue(new Error('binary crashed'));
 
-    await analyzeFile({ file: 'src/index.ts' });
+    await analyzeFile('src/index.ts');
 
     // Secrets scan error is non-blocking — A3S should still run
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
