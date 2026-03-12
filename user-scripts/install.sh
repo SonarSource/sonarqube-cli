@@ -13,14 +13,19 @@ trap cleanup EXIT
 BASE_URL="https://binaries.sonarsource.com/Distribution/sonarqube-cli"
 
 detect_platform() {
-  local os
+  local os arch
   os="$(uname -s)"
   case "$os" in
     Linux*)
       echo "linux-x86-64"
       ;;
     Darwin*)
-      echo "macos-arm64"
+      arch="$(uname -m)"
+      if [[ "$arch" == "arm64" ]]; then
+        echo "macos-arm64"
+      else
+        echo "macos-x64"
+      fi
       ;;
     *)
       echo "Unsupported operating system: $os" >&2
