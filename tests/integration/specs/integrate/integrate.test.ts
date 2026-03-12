@@ -782,10 +782,22 @@ describe('integrate claude — legacy state without agentExtensions', () => {
       expect(pretoolContent).toContain('sonar analyze secrets --file');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
-      // settings.json must retain PreToolUse + UserPromptSubmit entries
+      // settings.json must have correctly structured hook entries (relative paths, project-level)
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
-      expect(settings.hooks?.PreToolUse).toBeDefined();
-      expect(settings.hooks?.UserPromptSubmit).toBeDefined();
+      const preToolEntry = settings.hooks?.PreToolUse?.[0];
+      const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
+      expect(preToolEntry?.matcher).toBe('Read');
+      expect(preToolEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
+        timeout: 60,
+      });
+      expect(promptEntry?.matcher).toBe('*');
+      expect(promptEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
+        timeout: 60,
+      });
     },
     { timeout: 30000 },
   );
@@ -871,10 +883,22 @@ describe('post-update migration — hook script rewrite on CLI upgrade', () => {
       expect(pretoolContent).toContain('sonar analyze secrets --file');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
-      // settings.json must retain hook entries after migration
+      // settings.json must have correctly structured hook entries (absolute paths, global)
       const settings = harness.userHome.file('.claude', 'settings.json').asJson();
-      expect(settings.hooks?.PreToolUse).toBeDefined();
-      expect(settings.hooks?.UserPromptSubmit).toBeDefined();
+      const preToolEntry = settings.hooks?.PreToolUse?.[0];
+      const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
+      expect(preToolEntry?.matcher).toBe('Read');
+      expect(preToolEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: harness.userHome.file(pretoolScriptRel).path,
+        timeout: 60,
+      });
+      expect(promptEntry?.matcher).toBe('*');
+      expect(promptEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: harness.userHome.file(promptScriptRel).path,
+        timeout: 60,
+      });
     },
     { timeout: 30000 },
   );
