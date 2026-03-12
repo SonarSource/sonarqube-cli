@@ -313,7 +313,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
 // ---------------------------------------------------------------------------
 
 /** Fake SonarQube token used only by the test command to verify the hook blocks the commit. Not a real secret. */
-const TEST_SECRET_CONTENT = `const API_KEY = "sqp_1aa323ae0689cd4a1abd062a2ad0a224ae8a1d13";
+const TEST_SECRET_CONTENT = `const AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
 `;
 
 const TEST_FILE_NAME = 'secrets-test.js';
