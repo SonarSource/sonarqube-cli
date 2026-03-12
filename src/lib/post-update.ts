@@ -18,12 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import fs from 'node:fs';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { version as CURRENT_VERSION } from '../../package.json';
 import { STATE_FILE } from './config-constants';
 import logger from './logger';
 import { loadState, saveState } from './state-manager';
 import { isNewerVersion } from './version';
+import { migrateHookScripts } from './migration.js';
+import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
 
 /**
  * Runs any actions that need to happen once after the CLI has been updated.
@@ -34,7 +38,7 @@ import { isNewerVersion } from './version';
  *   actions are not repeated on the next invocation.
  */
 export async function runPostUpdateActions(): Promise<void> {
-  if (!fs.existsSync(STATE_FILE)) {
+  if (!existsSync(STATE_FILE)) {
     // No state file means this is a fresh installation — nothing to migrate.
     return;
   }
@@ -57,7 +61,61 @@ export async function runPostUpdateActions(): Promise<void> {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
-  // Add version-specific migration steps here as the CLI evolves.
+  await migrateClaudeCodeHooks();
+}
+
+/**
+ * Migrate Claude Code hook scripts and reinstall secrets hooks for all known locations.
+ *
+ * Location discovery strategy:
+ * 1. If agentExtensions registry has claude-code entries → use those (new format).
+ * 2. Fallback for pre-registry installs: if agent is configured but registry is empty,
+ *    check whether global hooks exist in homedir()/.claude and migrate there.
+ *    Project-level hooks without registry entries cannot be discovered — user must
+ *    re-run `sonar integrate claude` once to populate the registry.
+ *
+ * installA3s is always false here: A3S entitlement check requires a token which
+ * is not available during post-update. User re-runs `sonar integrate claude` to
+ * get the A3S hook installed.
+ *
+ * @param homedirFn - Injectable for tests; defaults to os.homedir()
+ */
+export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir): Promise<void> {
+  const state = loadState();
+
+  type Location = { projectRoot: string; globalDir: string | undefined };
+  const locations: Location[] = [];
+
+  const extensions = state.agentExtensions.filter((e) => e.agentId === 'claude-code');
+
+  if (extensions.length > 0) {
+    // New format: use registry entries, deduplicate by (projectRoot, globalDir)
+    const seen = new Set<string>();
+    for (const ext of extensions) {
+      const globalDir = ext.global ? homedirFn() : undefined;
+      const key = `${ext.projectRoot}|${globalDir ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      locations.push({ projectRoot: ext.projectRoot, globalDir });
+    }
+  } else if (state.agents['claude-code'].configured) {
+    // Pre-registry fallback: check for global hooks in homedir
+    const globalHooksDir = join(homedirFn(), '.claude', 'hooks', 'sonar-secrets');
+    if (existsSync(globalHooksDir)) {
+      locations.push({ projectRoot: homedirFn(), globalDir: homedirFn() });
+    }
+  }
+
+  for (const { projectRoot, globalDir } of locations) {
+    try {
+      migrateHookScripts(projectRoot, globalDir);
+      await installHooks(projectRoot, globalDir, false);
+      logger.debug(`Migrated Claude Code hooks for: ${globalDir ?? projectRoot}`);
+    } catch (err) {
+      logger.debug(
+        `Hook migration failed for ${globalDir ?? projectRoot}: ${(err as Error).message}`,
+      );
+    }
+  }
 }

@@ -223,29 +223,97 @@ describe('SonarQubeClient', () => {
   describe('getOrganizationId', () => {
     it('hits api.sonarcloud.io, not the serverURL', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ id: 'org-uuid-v4' });
+      fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
       await cloudClient.getOrganizationId('my-org');
       expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_API_URL);
       expect(lastFetchUrl(fetchSpy)).not.toContain(`${SONARCLOUD_URL}/api`);
     });
 
-    it('calls /organizations with organizationKey param', async () => {
+    it('calls /organizations/organizations with organizationKey param', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
-      fetchSpy = mockFetch({ id: 'org-uuid-v4' });
+      fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
       await cloudClient.getOrganizationId('my-org');
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/organizations');
+      expect(url.pathname).toBe('/organizations/organizations');
       expect(url.searchParams.get('organizationKey')).toBe('my-org');
     });
 
-    it('returns the organization id on success', async () => {
-      fetchSpy = mockFetch({ id: 'org-uuid-v4' });
+    it('returns the uuidV4 of the first result on success', async () => {
+      fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
       expect(await client.getOrganizationId('my-org')).toBe('org-uuid-v4');
     });
 
     it('returns null on error', async () => {
       fetchSpy = mockFetch({}, false, 404);
       expect(await client.getOrganizationId('unknown-org')).toBeNull();
+    });
+
+    it('returns null when result array is empty', async () => {
+      fetchSpy = mockFetch([]);
+      expect(await client.getOrganizationId('my-org')).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // checkA3sEntitlement
+  // -------------------------------------------------------------------------
+
+  describe('checkA3sEntitlement', () => {
+    it('hits api.sonarcloud.io /a3s-analysis/org-config/{uuid}', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: true });
+      await client.checkA3sEntitlement('test-uuid');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.hostname).toBe('api.sonarcloud.io');
+      expect(url.pathname).toBe('/a3s-analysis/org-config/test-uuid');
+    });
+
+    it('returns true when eligible and enabled are both true', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: true });
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(true);
+    });
+
+    it('returns false when eligible is false', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: false });
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
+    });
+
+    it('returns false when enabled is false', async () => {
+      fetchSpy = mockFetch({ id: 'uuid', enabled: false, eligible: true });
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
+    });
+
+    it('returns false on API error (404)', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // hasA3sEntitlement
+  // -------------------------------------------------------------------------
+
+  describe('hasA3sEntitlement', () => {
+    it('returns true when org has valid UUID and entitlement is active', async () => {
+      // First call: getOrganizationId → [{ uuidV4: 'org-uuid' }]
+      // Second call: checkA3sEntitlement → { enabled: true, eligible: true }
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
+        } as Response);
+
+      expect(await client.hasA3sEntitlement('my-org')).toBe(true);
+    });
+
+    it('returns false when org UUID cannot be resolved', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await client.hasA3sEntitlement('unknown-org')).toBe(false);
     });
   });
 
@@ -294,36 +362,6 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // isCloud
-  // -------------------------------------------------------------------------
-
-  describe('isCloud', () => {
-    it('is true for sonarcloud.io', () => {
-      const cloudClient = new SonarQubeClient('https://sonarcloud.io', TOKEN);
-      expect(cloudClient.isCloud).toBe(true);
-    });
-
-    it('is true for sonarcloud.io with trailing slash', () => {
-      const cloudClient = new SonarQubeClient('https://sonarcloud.io/', TOKEN);
-      expect(cloudClient.isCloud).toBe(true);
-    });
-
-    it('is true for sonarqube.us', () => {
-      const usClient = new SonarQubeClient('https://sonarqube.us', TOKEN);
-      expect(usClient.isCloud).toBe(true);
-    });
-
-    it('is false for an on-premise server', () => {
-      expect(client.isCloud).toBe(false);
-    });
-
-    it('is false for any other URL', () => {
-      const onPremClient = new SonarQubeClient('https://sonarqube.mycompany.com', TOKEN);
-      expect(onPremClient.isCloud).toBe(false);
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // checkQualityProfiles
   // -------------------------------------------------------------------------
 
@@ -357,6 +395,121 @@ describe('SonarQubeClient', () => {
     it('returns false on error', async () => {
       fetchSpy = mockFetch({}, false, 403);
       expect(await client.checkQualityProfiles('my-project')).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // analyzeFile
+  // -------------------------------------------------------------------------
+
+  describe('analyzeFile', () => {
+    it('sends POST to SONARCLOUD_API_URL/a3s-analysis/analyses', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const url = lastFetchUrl(fetchSpy);
+      expect(url).toBe(`${SONARCLOUD_API_URL}/a3s-analysis/analyses`);
+    });
+
+    it('sends Bearer token in Authorization header', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('sends request body as JSON', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.organizationKey).toBe('my-org');
+      expect(body.projectKey).toBe('my-project');
+      expect(body.filePath).toBe('src/index.ts');
+      expect(body.fileContent).toBe('const x = 1;');
+    });
+
+    it('does not include branchName in body when not provided', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.branchName).toBeUndefined();
+    });
+
+    it('includes branchName in body when provided', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+        branchName: 'feature/my-branch',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.branchName).toBe('feature/my-branch');
+    });
+
+    it('returns parsed response', async () => {
+      const mockResponse = {
+        id: 'analysis-123',
+        issues: [{ rule: 'ts:S1234', message: 'Fix this', textRange: null }],
+        errors: null,
+      };
+      fetchSpy = mockFetch(mockResponse);
+
+      const result = await client.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      expect(result.id).toBe('analysis-123');
+      expect(result.issues).toHaveLength(1);
+    });
+
+    it('throws on non-OK response', () => {
+      fetchSpy = mockFetch({ message: 'Invalid request body' }, false, 400);
+
+      expect(
+        client.analyzeFile({
+          organizationKey: 'my-org',
+          projectKey: 'my-project',
+          filePath: 'src/index.ts',
+          fileContent: 'const x = 1;',
+        }),
+      ).rejects.toThrow('400');
     });
   });
 });

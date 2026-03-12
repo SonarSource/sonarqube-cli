@@ -31,15 +31,13 @@ import { authStatus } from './commands/auth/status';
 import { installSecrets, type InstallSecretsOptions } from './commands/install/secrets';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
+import { analyzeA3s, type AnalyzeA3sOptions } from './commands/analyze/a3s';
+import { analyzeFile } from './commands/analyze/analyze';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
-
-// Constants for argument validation
-const ANALYZE_ARG_INDEX = 2;
-const ANALYZE_SUBCOMMAND_INDEX = 3;
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 const HELP_BANNER_WIDTH = 28;
@@ -65,7 +63,8 @@ export const COMMAND_TREE = new Command();
 COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
   .version(VERSION, '-v, --version', 'display version for command')
-  .addHelpText('beforeAll', getHelpBanner());
+  .addHelpText('beforeAll', getHelpBanner())
+  .enablePositionalOptions();
 
 // Install Sonar tools
 const install = COMMAND_TREE.command('install').description('Install Sonar tools');
@@ -158,7 +157,10 @@ auth
   .action(() => runCommand(() => authStatus()));
 
 // Analyze code for security issues
-const analyze = COMMAND_TREE.command('analyze').description('Analyze code for security issues');
+const analyze = COMMAND_TREE.command('analyze')
+  .description('Analyze code for security issues')
+  .enablePositionalOptions()
+  .allowUnknownOption();
 
 analyze
   .command('secrets')
@@ -166,6 +168,29 @@ analyze
   .option('--file <file>', 'File path to scan for secrets')
   .option('--stdin', 'Read from standard input instead of a file')
   .action((options: AnalyzeSecretsOptions) => runCommand(() => analyzeSecrets(options)));
+
+analyze
+  .command('a3s')
+  .description('Run A3S server-side analysis on a file (SonarQube Cloud only)')
+  .requiredOption('--file <file>', 'File path to analyze')
+  .option('--branch <branch>', 'Branch name for analysis context')
+  .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
+  .action((options: AnalyzeA3sOptions, cmd: Command) => runCommand(() => analyzeA3s(options, cmd)));
+
+// Full pipeline: secrets → A3S. Options are parsed manually because `analyze` also has
+// subcommands that use the same --file/--branch option names.
+analyze.addHelpText(
+  'after',
+  '\nOptions (full pipeline):\n  --file <file>      File path to analyze (secrets + A3S)\n  --branch <branch>  Branch name for A3S analysis context',
+);
+analyze.action(function (this: Command) {
+  const args = this.args;
+  const fileIdx = args.indexOf('--file');
+  const file = fileIdx >= 0 ? args[fileIdx + 1] : undefined;
+  const branchIdx = args.indexOf('--branch');
+  const branch = branchIdx >= 0 ? args[branchIdx + 1] : undefined;
+  return runCommand(() => analyzeFile(file!, branch));
+});
 
 // Configure things related to the CLI
 const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
@@ -193,11 +218,3 @@ if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
 COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
   await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
 });
-
-// Handle `sonar analyze` without subcommand (defaults to secrets)
-if (process.argv[ANALYZE_ARG_INDEX] === 'analyze') {
-  const nextArg = process.argv[ANALYZE_SUBCOMMAND_INDEX];
-  if (!nextArg || nextArg.startsWith('-')) {
-    process.argv.splice(ANALYZE_SUBCOMMAND_INDEX, 0, 'secrets');
-  }
-}

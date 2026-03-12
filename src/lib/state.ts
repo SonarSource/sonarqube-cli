@@ -79,7 +79,7 @@ export interface AuthState {
 }
 
 /**
- * Installed hook metadata
+ * Installed hook metadata (legacy — kept for migration compatibility)
  */
 export interface InstalledHook {
   /** Hook name/identifier */
@@ -91,7 +91,7 @@ export interface InstalledHook {
 }
 
 /**
- * Installed skill metadata
+ * Installed skill metadata (legacy — kept for migration compatibility)
  */
 export interface InstalledSkill {
   /** Skill name/identifier */
@@ -99,6 +99,57 @@ export interface InstalledSkill {
   /** Timestamp when installed */
   installedAt: string;
 }
+
+/**
+ * Base fields shared by all agent extension entries
+ */
+export interface BaseAgentExtension {
+  /** Unique identifier for this entry */
+  id: string;
+  /** Agent that owns this extension (e.g. 'claude-code') */
+  agentId: string;
+  /** Absolute path to the project root where the extension was installed */
+  projectRoot: string;
+  /** True when installed in the user's global Claude dir (~/) instead of the project dir */
+  global: boolean;
+  /** SonarQube project key associated with this extension, if known */
+  projectKey?: string;
+  /** Organization key (SonarCloud only) */
+  orgKey?: string;
+  /** Server URL */
+  serverUrl?: string;
+  /** CLI version that last wrote this entry */
+  updatedByCliVersion: string;
+  /** ISO timestamp of the last update */
+  updatedAt: string;
+}
+
+/**
+ * A Claude Code hook installed for a specific project
+ */
+export interface HookExtension extends BaseAgentExtension {
+  kind: 'hook';
+  /** Hook script name (e.g. 'sonar-secrets', 'sonar-a3s') */
+  name: string;
+  /** Claude Code hook type */
+  hookType: HookType;
+}
+
+/**
+ * A Claude Code skill installed for a specific project
+ */
+export interface SkillExtension extends BaseAgentExtension {
+  kind: 'skill';
+  /** Skill name */
+  name: string;
+  /** Skill version, if versioned */
+  version?: string;
+}
+
+/**
+ * Union of all extension types stored in the registry
+ */
+export type AgentExtension = HookExtension | SkillExtension;
 
 /**
  * Agent hooks configuration
@@ -126,6 +177,8 @@ export interface AgentConfig {
   configuredAt?: string;
   /** CLI version that performed configuration */
   configuredByCliVersion?: string;
+  /** Timestamp when hooks were last auto-migrated */
+  migratedAt?: string;
   /** Hooks installed for this agent */
   hooks: AgentHooks;
   /** Skills installed for this agent */
@@ -251,6 +304,8 @@ export interface CliState {
   tools?: ToolsState;
   /** Telemetry configuration and pending event batch */
   telemetry: TelemetryState;
+  /** Registry of all agent extensions (hooks, skills) installed per project */
+  agentExtensions: AgentExtension[];
 }
 
 /**
@@ -290,5 +345,6 @@ export function getDefaultState(cliVersion: string): CliState {
       firstUseDate: new Date().toISOString(),
       events: [],
     },
+    agentExtensions: [],
   };
 }

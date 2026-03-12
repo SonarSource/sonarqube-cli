@@ -403,6 +403,87 @@ describe('integrate claude', () => {
   );
 });
 
+// ─── A3S entitlement guard ────────────────────────────────────────────────────
+
+describe('integrate claude — A3S entitlement guard', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'installs PostToolUse A3S hook when Cloud org has A3S entitlement (repair path)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withA3sEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+
+      // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
+      // and getOrganizationId / checkA3sEntitlement hit the same fake server
+      const serverUrl = server.baseUrl();
+
+      const result = await harness.run(
+        `integrate claude --token cloud-token --server ${serverUrl} --org my-org --project my-project --non-interactive`,
+        {
+          extraEnv: {
+            SONAR_CLI_SONARCLOUD_URL: serverUrl,
+            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeDefined();
+      expect(
+        harness.cwd.exists('.claude', 'hooks', 'sonar-a3s', 'build-scripts', 'posttool-a3s.sh'),
+      ).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not install PostToolUse A3S hook when org has no A3S entitlement (repair path)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withA3sEntitlement('my-org', 'test-uuid-1234', { eligible: false, enabled: false })
+        .start();
+
+      const serverUrl = server.baseUrl();
+
+      const result = await harness.run(
+        `integrate claude --token cloud-token --server ${serverUrl} --org my-org --non-interactive`,
+        {
+          extraEnv: {
+            SONAR_CLI_SONARCLOUD_URL: serverUrl,
+            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeUndefined();
+      expect(
+        harness.cwd.exists('.claude', 'hooks', 'sonar-a3s', 'build-scripts', 'posttool-a3s.sh'),
+      ).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+});
+
 // ─── Local vs Global file placement ──────────────────────────────────────────
 
 describe('integrate claude — file placement (local vs global)', () => {
@@ -593,6 +674,235 @@ describe('integrate claude — file placement (local vs global)', () => {
 });
 
 // ─── Argument validation ──────────────────────────────────────────────────────
+
+// ─── Legacy state migration ────────────────────────────────────────────────────
+
+describe('integrate claude — legacy state without agentExtensions', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'migrates old hook scripts and populates agentExtensions when upgrading from pre-registry state',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+
+      const serverUrl = server.baseUrl();
+
+      // Old state: claude-code was configured by v0.4.0 (pre-registry), hooks.installed populated,
+      // no agentExtensions field
+      harness.state().withRawState(
+        JSON.stringify(
+          {
+            version: 1,
+            config: { cliVersion: '0.4.0' },
+            auth: {
+              isAuthenticated: true,
+              connections: [
+                {
+                  id: 'conn-1',
+                  type: 'on-premise',
+                  serverUrl,
+                  authenticatedAt: new Date().toISOString(),
+                  keystoreKey: `sonarqube-cli:${serverUrl}`,
+                },
+              ],
+              activeConnectionId: 'conn-1',
+            },
+            agents: {
+              'claude-code': {
+                configured: true,
+                configuredByCliVersion: '0.4.0',
+                hooks: {
+                  installed: [
+                    { name: 'sonar-secrets', type: 'PreToolUse' },
+                    { name: 'sonar-secrets', type: 'UserPromptSubmit' },
+                  ],
+                },
+              },
+            },
+            tools: { installed: [] },
+            telemetry: { enabled: false },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Old hook scripts — use the deprecated `sonar analyze --file` command
+      const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
+      const pretoolScriptRel = '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh';
+      const promptScriptRel = '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh';
+      harness.cwd.writeFile(pretoolScriptRel, oldScript);
+      harness.cwd.writeFile(promptScriptRel, oldScript);
+
+      // Old settings.json — hook entries referencing those scripts
+      harness.cwd.writeFile(
+        '.claude/settings.json',
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: 'Read',
+                  hooks: [{ type: 'command', command: pretoolScriptRel, timeout: 60 }],
+                },
+              ],
+              UserPromptSubmit: [
+                {
+                  matcher: '*',
+                  hooks: [{ type: 'command', command: promptScriptRel, timeout: 60 }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      const result = await harness.run(
+        `integrate claude --token test-token --server ${serverUrl} --project my-project --non-interactive`,
+      );
+
+      expect(result.exitCode).toBe(0);
+
+      // Hook scripts must be rewritten to use the new subcommand
+      const pretoolContent = harness.cwd.file(pretoolScriptRel).asText();
+      expect(pretoolContent).toContain('sonar analyze secrets --file');
+      expect(pretoolContent).not.toContain('sonar analyze --file');
+
+      // settings.json must have correctly structured hook entries (relative paths, project-level)
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      const preToolEntry = settings.hooks?.PreToolUse?.[0];
+      const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
+      expect(preToolEntry?.matcher).toBe('Read');
+      expect(preToolEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
+        timeout: 60,
+      });
+      expect(promptEntry?.matcher).toBe('*');
+      expect(promptEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
+        timeout: 60,
+      });
+    },
+    { timeout: 30000 },
+  );
+});
+
+// ─── Post-update migration ─────────────────────────────────────────────────────
+
+describe('post-update migration — hook script rewrite on CLI upgrade', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'rewrites old hook scripts on first run after CLI upgrade (pre-registry state)',
+    async () => {
+      // Old state: configured by v0.4.0, no agentExtensions field (pre-registry)
+      harness.state().withRawState(
+        JSON.stringify(
+          {
+            version: 1,
+            config: { cliVersion: '0.4.0' },
+            auth: { isAuthenticated: false, connections: [], activeConnectionId: null },
+            agents: {
+              'claude-code': {
+                configured: true,
+                configuredByCliVersion: '0.4.0',
+                hooks: { installed: [] },
+              },
+            },
+            tools: { installed: [] },
+            telemetry: { enabled: false },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Old global hook scripts in homedir (pre-registry fallback location)
+      const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
+      const pretoolScriptRel = '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh';
+      const promptScriptRel = '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh';
+      harness.userHome.writeFile(pretoolScriptRel, oldScript);
+      harness.userHome.writeFile(promptScriptRel, oldScript);
+
+      // Old settings.json in homedir — hook entries referencing those scripts
+      harness.userHome.writeFile(
+        '.claude/settings.json',
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: 'Read',
+                  hooks: [{ type: 'command', command: pretoolScriptRel, timeout: 60 }],
+                },
+              ],
+              UserPromptSubmit: [
+                {
+                  matcher: '*',
+                  hooks: [{ type: 'command', command: promptScriptRel, timeout: 60 }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Run any CLI command — post-update fires automatically when cliVersion < current
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+
+      // Scripts must be rewritten with the new subcommand
+      const pretoolContent = harness.userHome.file(pretoolScriptRel).asText();
+      expect(pretoolContent).toContain('sonar analyze secrets --file');
+      expect(pretoolContent).not.toContain('sonar analyze --file');
+
+      // settings.json must have correctly structured hook entries (absolute paths, global)
+      const settings = harness.userHome.file('.claude', 'settings.json').asJson();
+      const preToolEntry = settings.hooks?.PreToolUse?.[0];
+      const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
+      expect(preToolEntry?.matcher).toBe('Read');
+      expect(preToolEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: harness.userHome.file(pretoolScriptRel).path,
+        timeout: 60,
+      });
+      expect(promptEntry?.matcher).toBe('*');
+      expect(promptEntry?.hooks?.[0]).toEqual({
+        type: 'command',
+        command: harness.userHome.file(promptScriptRel).path,
+        timeout: 60,
+      });
+    },
+    { timeout: 30000 },
+  );
+});
 
 describe('integrate — argument validation', () => {
   let harness: TestHarness;

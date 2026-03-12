@@ -34,6 +34,17 @@ export interface IssueConfig {
   line?: number;
 }
 
+export interface A3sIssueConfig {
+  rule: string;
+  message: string;
+  startLine?: number;
+}
+
+export interface A3sResponseConfig {
+  issues?: A3sIssueConfig[];
+  errors?: Array<{ code: string; message: string }>;
+}
+
 interface ProjectData {
   key: string;
   name: string;
@@ -99,6 +110,9 @@ export class FakeSonarQubeServerBuilder {
   private systemStatus: 'UP' | 'DOWN' = 'UP';
   private memberOrganizations: Array<{ key: string; name: string }> = [];
   private memberOrganizationsTotal?: number;
+  private a3sResponse?: A3sResponseConfig;
+  private a3sEntitlementOrgs: Map<string, { uuid: string; eligible: boolean; enabled: boolean }> =
+    new Map();
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -122,6 +136,24 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withA3sResponse(response: A3sResponseConfig = {}): this {
+    this.a3sResponse = response;
+    return this;
+  }
+
+  withA3sEntitlement(
+    orgKey: string,
+    uuid: string,
+    options: { eligible?: boolean; enabled?: boolean } = {},
+  ): this {
+    this.a3sEntitlementOrgs.set(orgKey, {
+      uuid,
+      eligible: options.eligible ?? true,
+      enabled: options.enabled ?? true,
+    });
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const validToken = this.validToken;
@@ -129,6 +161,8 @@ export class FakeSonarQubeServerBuilder {
     const memberOrganizations = this.memberOrganizations;
     const memberOrganizationsTotal =
       this.memberOrganizationsTotal ?? this.memberOrganizations.length;
+    const a3sResponse = this.a3sResponse;
+    const a3sEntitlementOrgs = this.a3sEntitlementOrgs;
     const requests: RecordedRequest[] = [];
 
     const server = Bun.serve({
@@ -285,6 +319,66 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify({ organizations: memberOrganizations }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/organizations/organizations') {
+          const orgKey = query.organizationKey;
+          const entitlement = orgKey ? a3sEntitlementOrgs.get(orgKey) : undefined;
+          if (!entitlement) {
+            return new Response(JSON.stringify([]), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(
+            JSON.stringify([{ id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey }]),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        const orgConfigMatch = /^\/a3s-analysis\/org-config\/(.+)$/.exec(path);
+        if (orgConfigMatch) {
+          const uuid = orgConfigMatch[1];
+          const entitlement = [...a3sEntitlementOrgs.values()].find((e) => e.uuid === uuid);
+          if (!entitlement) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(
+            JSON.stringify({
+              id: uuid,
+              eligible: entitlement.eligible,
+              enabled: entitlement.enabled,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
+          if (!a3sResponse) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: 'A3S endpoint not configured' }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+
+          const issues = (a3sResponse.issues ?? []).map((i) => ({
+            rule: i.rule,
+            message: i.message,
+            textRange: i.startLine
+              ? { startLine: i.startLine, endLine: i.startLine, startOffset: 0, endOffset: 0 }
+              : null,
+          }));
+
+          return new Response(
+            JSON.stringify({
+              id: `a3s-analysis-${Date.now()}`,
+              issues,
+              errors: a3sResponse.errors ?? null,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         return new Response(JSON.stringify({ errors: [{ msg: `Unknown endpoint: ${path}` }] }), {

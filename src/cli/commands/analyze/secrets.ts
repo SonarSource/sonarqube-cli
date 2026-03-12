@@ -69,7 +69,16 @@ async function setupScanEnvironment(options: {
   validateScanOptions(options);
 
   const binaryPath = setupBinaryPath();
-  const { authUrl, authToken } = await resolveSecretsAuth();
+
+  let authUrl: string | undefined;
+  let authToken: string | undefined;
+  try {
+    const auth = await resolveAuth({});
+    authUrl = auth.serverUrl;
+    authToken = auth.token;
+  } catch {
+    // Auth resolution failure is non-fatal — binary works without auth
+  }
 
   return { binaryPath, authUrl, authToken };
 }
@@ -91,16 +100,6 @@ function setupBinaryPath(): string {
   validateCheckCommandEnvironment(binaryPath);
 
   return binaryPath;
-}
-
-async function resolveSecretsAuth(): Promise<{ authUrl?: string; authToken?: string }> {
-  try {
-    const auth = await resolveAuth({});
-    return { authUrl: auth.serverUrl, authToken: auth.token };
-  } catch {
-    // Auth resolution failure is non-fatal — binary works without auth
-    return {};
-  }
 }
 
 async function performStdinScan(
