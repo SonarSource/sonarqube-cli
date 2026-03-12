@@ -286,7 +286,8 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   ]);
   if (gitResult.exitCode !== 0) {
     const detail = [gitResult.stderr, gitResult.stdout].filter(Boolean).join('\n');
-    const msg = `git config --global core.hooksPath failed (exit code ${gitResult.exitCode})${detail ? `: ${detail}` : ''}`;
+    const detailSuffix = detail ? `: ${detail}` : '';
+    const msg = `git config --global core.hooksPath failed (exit code ${gitResult.exitCode})${detailSuffix}`;
     error(msg);
     logger.error(msg);
     throw new CommandFailedError(msg);
