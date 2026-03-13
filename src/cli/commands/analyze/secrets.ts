@@ -299,30 +299,30 @@ function displayScanResults(scanResult: {
   });
 }
 
+const EXIT_CODE_SECRETS_FOUND = 51;
+
 function handleScanFailure(
   result: { exitCode: number | null; stderr: string; stdout: string },
   scanDurationMs: number,
   exitCode: number,
 ): void {
   blank();
-  error('Scan found secrets');
+
+  const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
+  if (output) {
+    print(output);
+    blank();
+  }
+
+  if (exitCode === EXIT_CODE_SECRETS_FOUND) {
+    error(`Secrets found (${scanDurationMs}ms)`);
+    logger.error(`Secrets found, exit code: ${exitCode}`);
+    throw new CommandFailedError('Secrets found', exitCode);
+  }
+
+  error(`Scan error (exit code ${exitCode}, ${scanDurationMs}ms)`);
   logger.error(`Scan failed with exit code: ${exitCode}`);
-  text(`  Exit code: ${exitCode}`);
-  text(`  Duration: ${scanDurationMs}ms`);
-
-  if (result.stderr) {
-    blank();
-    text('Error output:');
-    print(result.stderr);
-  }
-
-  if (result.stdout) {
-    blank();
-    text('Output:');
-    print(result.stdout);
-  }
-  blank();
-  throw new CommandFailedError(`Scan failed with exit code: ${exitCode}`, exitCode);
+  throw new CommandFailedError(`Scan error (exit code ${exitCode})`, exitCode);
 }
 
 function handleScanError(err: unknown): void {
