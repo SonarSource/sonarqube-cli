@@ -24,6 +24,7 @@ import { resolveAuth } from '../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../../sonarqube/projects';
+import { InvalidOptionError } from '../_common/error';
 
 export interface ListProjectsOptions {
   query?: string;
@@ -38,14 +39,14 @@ export interface ListProjectsOptions {
 export async function listProjects(options: ListProjectsOptions): Promise<void> {
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
-    throw new Error(
+    throw new InvalidOptionError(
       `Invalid --page-size option: '${pageSize}'. Must be an integer between 1 and 500`,
     );
   }
 
   const page = options.page;
   if (page < 1) {
-    throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
+    throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
   const resolvedAuth = await resolveAuth({ org: options.org });

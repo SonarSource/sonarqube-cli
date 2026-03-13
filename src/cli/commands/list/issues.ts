@@ -29,6 +29,7 @@ import { formatCSV } from '../../../formatter/csv';
 import type { IssuesSearchParams } from '../../../lib/types';
 import { print } from '../../../ui';
 import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
+import { InvalidOptionError } from '../_common/error';
 
 const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
@@ -55,30 +56,34 @@ export interface ListIssuesOptions {
 export async function listIssues(options: ListIssuesOptions): Promise<void> {
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
-    throw new Error(`Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`);
+    throw new InvalidOptionError(
+      `Invalid format: '${format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
+    );
   }
 
   const ps = options.pageSize;
   if (ps < 1 || ps > MAX_PAGE_SIZE) {
-    throw new Error(`Invalid --page-size option: '${ps}'. Must be an integer between 1 and 500`);
+    throw new InvalidOptionError(
+      `Invalid --page-size option: '${ps}'. Must be an integer between 1 and 500`,
+    );
   }
 
   const page = options.page;
   if (page < 1) {
-    throw new Error(`Invalid --page option: '${page}'. Must be an integer >= 1`);
+    throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
   if (options.severity) {
     const sev = options.severity.toUpperCase();
     if (!VALID_SEVERITIES.includes(sev)) {
-      throw new Error(
+      throw new InvalidOptionError(
         `Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`,
       );
     }
   }
 
   if (!options.project) {
-    throw new Error('--project is required');
+    throw new InvalidOptionError('--project is required');
   }
 
   const resolvedAuth = await resolveAuth({ org: options.org });
