@@ -30,6 +30,7 @@ import { installHooks } from './hooks';
 import type { HealthCheckResult } from './health';
 import logger from '../../../../lib/logger';
 import { text, success } from '../../../../ui';
+import { CommandFailedError } from '../../_common/error';
 
 /**
  * Run repair actions based on health check results
@@ -62,7 +63,7 @@ export async function runRepair(
     // Validate new token
     const valid = await validateToken(serverURL, newToken);
     if (!valid) {
-      throw new Error('Generated token is invalid');
+      throw new CommandFailedError('Generated token is invalid');
     }
 
     // Save to keychain
