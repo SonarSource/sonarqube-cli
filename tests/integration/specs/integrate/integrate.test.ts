@@ -825,9 +825,7 @@ describe('integrate claude — file placement (local vs global)', () => {
         expect(projectSecretsHooks.length).toBe(2);
 
         // Global sonar-secrets hooks must also be added
-        const globalSecretsHooks = extensions.filter(
-          (e) => e.name === 'sonar-secrets' && e.global,
-        );
+        const globalSecretsHooks = extensions.filter((e) => e.name === 'sonar-secrets' && e.global);
         expect(globalSecretsHooks.length).toBeGreaterThan(0);
 
         // sonar-a3s is always project-level, even when -g is used
