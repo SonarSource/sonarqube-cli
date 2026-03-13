@@ -28,6 +28,7 @@ import {
 } from '../../_common/token';
 import logger from '../../../../lib/logger';
 import { text, success } from '../../../../ui';
+import { CommandFailedError } from '../../_common/error';
 
 export async function repairToken(serverURL: string, organization?: string): Promise<string> {
   text('Obtaining access token...');
@@ -38,7 +39,7 @@ export async function repairToken(serverURL: string, organization?: string): Pro
   // Validate new token
   const valid = await validateToken(serverURL, newToken);
   if (!valid) {
-    throw new Error('Generated token is invalid');
+    throw new CommandFailedError('Generated token is invalid');
   }
 
   // Delete old token

@@ -121,7 +121,7 @@ describe('list projects', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        "error: option \'--page-size <page-size>\' argument \'abc\' is invalid. Not a number.",
+        "error: option '--page-size <page-size>' argument 'abc' is invalid. Not a number.",
       );
     },
     { timeout: 15000 },

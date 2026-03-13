@@ -150,9 +150,9 @@ async function performPathsScan(
 
 function validateCheckCommandEnvironment(binaryPath: string): void {
   if (!existsSync(binaryPath)) {
-    error('sonar-secrets is not installed');
-    text('  Install with: sonar install secrets');
-    throw new CommandFailedError('sonar-secrets is not installed');
+    throw new CommandFailedError(
+      'sonar-secrets is not installed\n  Install with: sonar install secrets',
+    );
   }
 }
 
@@ -306,7 +306,6 @@ function handleScanFailure(
 ): void {
   blank();
   error('Scan found secrets');
-  logger.error(`Scan failed with exit code: ${exitCode}`);
   text(`  Exit code: ${exitCode}`);
   text(`  Duration: ${scanDurationMs}ms`);
 
@@ -336,22 +335,16 @@ function handleScanError(err: unknown): void {
 
   const errorMessage = (err as Error).message;
 
-  blank();
-  error(`Error: ${errorMessage}`);
-  logger.error(`Scan error: ${errorMessage}`);
-
+  let details: string;
   if (errorMessage.includes('timed out')) {
-    text(
-      '\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.',
-    );
+    details =
+      '\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.';
   } else if (errorMessage.includes('ENOENT')) {
-    text(
-      '\nThe binary file was not found or is not executable.\nReinstall with: sonar install secrets --force',
-    );
+    details =
+      '\nThe binary file was not found or is not executable.\nReinstall with: sonar install secrets --force';
   } else {
-    text('\nCheck installation with: sonar install secrets --status');
+    details = '\nCheck installation with: sonar install secrets --status';
   }
 
-  blank();
-  throw new CommandFailedError(errorMessage);
+  throw new CommandFailedError(`Error: ${errorMessage}\n${details}\n`);
 }

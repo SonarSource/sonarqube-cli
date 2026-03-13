@@ -17,12 +17,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { InvalidOptionError } from './error';
+import { InvalidArgumentError } from 'commander';
 
 export function parseInteger(value: string): number {
   const parsedValue = Number.parseInt(value, 10);
   if (Number.isNaN(parsedValue)) {
-    throw new InvalidOptionError('Not a number.');
+    throw new InvalidArgumentError('Not a number.');
   }
   return parsedValue;
 }

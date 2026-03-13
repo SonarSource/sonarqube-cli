@@ -157,12 +157,7 @@ async function callSqaaApiAndDisplay(
 
     displaySqaaResults(response.issues, response.errors);
   } catch (err) {
-    logger.error(`SQAA analysis failed: ${(err as Error).message}`);
-    blank();
-    error('SQAA analysis failed.');
-    text(`  ${(err as Error).message}`);
-    blank();
-    throw new CommandFailedError('SQAA analysis failed');
+    throw new CommandFailedError(`SQAA analysis failed.\n  ${(err as Error).message}`);
   }
 }
 

@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildLocalBinaryName, detectPlatform } from '../../src/lib/platform-detector.js';
+import { BIN_DIR } from '../../src/lib/config-constants.js';
 import { installHooks } from '../../src/cli/commands/integrate/claude/hooks';
 import { installSecrets, performSecretInstall } from '../../src/cli/commands/install/secrets';
 import * as releases from '../../src/lib/sonarsource-releases.js';
@@ -201,21 +202,22 @@ describe('secretCheckCommand', () => {
     expect(analyzeSecrets({})).rejects.toThrow(InvalidOptionError);
   });
 
-  it('throws CommandFailedError with install hint when sonar-secrets binary is missing', () => {
+  it('throws CommandFailedError with install hint when sonar-secrets binary is missing', async () => {
     const existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
 
-    clearMockUiCalls();
+    let caughtError: unknown;
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
+      await analyzeSecrets({ paths: ['src/index.ts'] });
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSyncSpy.mockRestore();
     }
 
-    const uiCalls = getMockUiCalls();
-    const errorMessages = uiCalls.filter((c) => c.method === 'error').map((c) => String(c.args[0]));
-    const textMessages = uiCalls.filter((c) => c.method === 'text').map((c) => String(c.args[0]));
-    expect(errorMessages.some((m) => m.includes('sonar-secrets is not installed'))).toBe(true);
-    expect(textMessages.some((m) => m.includes('sonar install secrets'))).toBe(true);
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe(
+      'sonar-secrets is not installed\n  Install with: sonar install secrets',
+    );
   });
 
   it('throws InvalidOptionError when paths and --stdin are both provided', () => {
@@ -520,10 +522,10 @@ describe('secretStatusCommand', () => {
       spawnSpy.mockRestore();
     }
 
-    expect(caughtError).toBeDefined();
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('sonar install secrets --force'))).toBe(true);
+    const expectedBinaryPath = join(BIN_DIR, buildLocalBinaryName(detectPlatform()));
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe(
+      `Binary is installed but could not be called.\nPath: ${expectedBinaryPath}\n  Reinstall with: sonar install secrets --force`,
+    );
   });
 });

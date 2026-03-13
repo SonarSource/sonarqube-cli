@@ -23,6 +23,7 @@ import { discoverServer } from '../_common/discovery';
 import { generateConnectionId, loadState, saveState } from '../../../lib/state-manager';
 import { print, success } from '../../../ui';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
+import { CommandFailedError } from '../_common/error';
 
 /**
  * Check if server is SonarCloud
@@ -53,7 +54,7 @@ export async function authLogout(options: AuthLogoutOptions): Promise<void> {
   const org = options.org;
 
   if (isSonarCloud(server) && !org) {
-    throw new Error('Organization key is required for SonarCloud logout');
+    throw new CommandFailedError('Organization key is required for SonarCloud logout');
   }
 
   const token = await getKeystoreToken(server, org);

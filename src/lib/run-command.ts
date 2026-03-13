@@ -19,17 +19,15 @@
  */
 
 import logger from './logger.js';
-import { error } from '../ui';
+import { blank, error } from '../ui';
 import { CommandFailedError } from '../cli/commands/_common/error.js';
 
 export async function runCommand(fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
   } catch (err) {
-    // CommandFailedError already displayed its message before throwing
-    if (!(err instanceof CommandFailedError)) {
-      error((err as Error).message);
-    }
+    blank();
+    error((err as Error).message);
     logger.error((err as Error).message);
     process.exitCode = err instanceof CommandFailedError ? err.exitCode : 1;
   }

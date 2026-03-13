@@ -33,7 +33,7 @@ import {
 import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { InvalidOptionError } from '../_common/error';
+import { CommandFailedError, InvalidOptionError } from '../_common/error';
 
 /**
  * Login command - authenticate and save token with organization
@@ -162,17 +162,19 @@ async function getUserSelectedOrganization(
   }
 
   if (isNonInteractive) {
-    throw new Error('Organization must be specified with -o/--org in non-interactive mode');
+    throw new CommandFailedError(
+      'Organization must be specified with -o/--org in non-interactive mode',
+    );
   }
 
   // No org memberships — prompt for manual entry
   if (memberOrgs.length === 0) {
     const manualOrg = await textPrompt('Enter organization key');
     if (manualOrg === null) {
-      throw new Error('Organization selection cancelled');
+      throw new CommandFailedError('Organization selection cancelled');
     }
     if (!manualOrg.trim()) {
-      throw new Error('Organization key is required');
+      throw new CommandFailedError('Organization key is required');
     }
     return manualOrg.trim();
   }
@@ -194,13 +196,13 @@ async function getUserSelectedOrganization(
 
   const choice = await selectPrompt<string>('Select an organization', orgOptions);
   if (choice === null) {
-    throw new Error('Organization selection cancelled');
+    throw new CommandFailedError('Organization selection cancelled');
   }
 
   if (choice === MANUAL_ENTRY) {
     const manualOrg = await textPrompt('Enter organization key');
     if (!manualOrg?.trim()) {
-      throw new Error('Organization key is required');
+      throw new CommandFailedError('Organization key is required');
     }
     return manualOrg.trim();
   }
@@ -219,7 +221,7 @@ async function validateOrSelectOrganization(
   if (org) {
     const orgExists = await client.checkOrganization(org);
     if (!orgExists) {
-      throw new Error(`Organization "${org}" not found or not accessible`);
+      throw new CommandFailedError(`Organization "${org}" not found or not accessible`);
     }
     print(`Using organization: ${org}`);
     return org;

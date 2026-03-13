@@ -351,16 +351,19 @@ describe('secretCheckCommand: scan error handling', () => {
     spawnSpy.mockRejectedValue(new Error('Scan timed out after 30000ms'));
 
     const existsSpy = mockBinaryExists(true);
+    let caughtError: unknown;
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
+      await analyzeSecrets({ paths: ['src/index.ts'] });
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
 
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('30 seconds'))).toBe(true);
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe(
+      'Error: Scan timed out after 30000ms\n\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.\n',
+    );
   });
 
   it('shows reinstall hint and exits 1 when binary is not executable (ENOENT)', async () => {
@@ -368,16 +371,19 @@ describe('secretCheckCommand: scan error handling', () => {
     spawnSpy.mockRejectedValue(new Error('spawn ENOENT: no such file or directory'));
 
     const existsSpy = mockBinaryExists(true);
+    let caughtError: unknown;
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
+      await analyzeSecrets({ paths: ['src/index.ts'] });
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
 
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('sonar install secrets --force'))).toBe(true);
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe(
+      'Error: spawn ENOENT: no such file or directory\n\nThe binary file was not found or is not executable.\nReinstall with: sonar install secrets --force\n',
+    );
   });
 
   it('shows generic status check hint and exits 1 for unexpected errors', async () => {
@@ -385,16 +391,19 @@ describe('secretCheckCommand: scan error handling', () => {
     spawnSpy.mockRejectedValue(new Error('Something unexpected went wrong'));
 
     const existsSpy = mockBinaryExists(true);
+    let caughtError: unknown;
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
+      await analyzeSecrets({ paths: ['src/index.ts'] });
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
 
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('sonar install secrets --status'))).toBe(true);
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe(
+      'Error: Something unexpected went wrong\n\nCheck installation with: sonar install secrets --status\n',
+    );
   });
 });
 
