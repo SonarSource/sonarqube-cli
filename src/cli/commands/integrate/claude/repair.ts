@@ -47,27 +47,7 @@ export async function runRepair(
 
   // Fix token if invalid
   if (!healthResult.tokenValid) {
-    text('Obtaining access token...');
-
-    // Delete old token
-    try {
-      await deleteToken(serverURL, organization);
-    } catch (error) {
-      logger.debug(`Failed to delete token during repair: ${(error as Error).message}`);
-    }
-
-    // Generate new token
-    newToken = await generateTokenViaBrowser(serverURL);
-
-    // Validate new token
-    const valid = await validateToken(serverURL, newToken);
-    if (!valid) {
-      throw new Error('Generated token is invalid');
-    }
-
-    // Save to keychain
-    await saveToken(serverURL, newToken, organization);
-    success('Token saved to keychain');
+    newToken = await repairToken(serverURL, organization);
   }
 
   // Ensure hooks are installed (idempotent); A3S hook only when entitlement confirmed
@@ -75,5 +55,31 @@ export async function runRepair(
   await installHooks(projectRoot, globalDir, installA3s, projectKey);
   success('Secret scanning hooks installed');
 
+  return newToken;
+}
+
+export async function repairToken(serverURL: string, organization?: string): Promise<string> {
+  let newToken: string | undefined;
+  text('Obtaining access token...');
+
+  // Generate new token
+  newToken = await generateTokenViaBrowser(serverURL);
+
+  // Validate new token
+  const valid = await validateToken(serverURL, newToken);
+  if (!valid) {
+    throw new Error('Generated token is invalid');
+  }
+
+  // Delete old token
+  try {
+    await deleteToken(serverURL, organization);
+  } catch (error) {
+    logger.debug(`Failed to delete token during repair: ${(error as Error).message}`);
+  }
+
+  // Save to keychain
+  await saveToken(serverURL, newToken, organization);
+  success('Token saved to keychain');
   return newToken;
 }

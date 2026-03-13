@@ -25,9 +25,8 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { discoverProject, type ProjectInfo } from '../../_common/discovery';
 import { runHealthChecks } from './health';
-import { runRepair } from './repair';
+import {repairToken, runRepair} from './repair';
 import { getToken } from '../../_common/token';
-import { getAllCredentials } from '../../../../lib/keychain';
 import { installHooks } from './hooks';
 import { runMigrations } from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -43,7 +42,7 @@ import {
 import { version as VERSION } from '../../../../../package.json';
 import logger from '../../../../lib/logger';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../../lib/config-constants';
-import { ENV_SERVER, ENV_TOKEN } from '../../../../lib/auth-resolver';
+import {ENV_SERVER, ENV_TOKEN, resolveAuth} from '../../../../lib/auth-resolver';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 
@@ -85,22 +84,13 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
   }
 
   const config = await loadConfiguration(projectInfo, options);
-
-  if (!config.serverURL && !config.organization) {
-    throw new CommandFailedError(
-      'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
-    );
-  }
-
-  const { serverURL, projectKey } = validateAndPrintConfiguration(config);
+  validateAndPrintConfiguration(config);
 
   // When both env vars are set, treat as non-interactive (CI context)
   const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
   const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
 
   await runFullSonarIntegration(
-    serverURL,
-    projectKey,
     projectInfo,
     config,
     options,
@@ -132,84 +122,6 @@ function getDiscoveredConfiguration(projectInfo: ProjectInfo): Partial<Configura
 }
 
 /**
- * Try to get token from specific server/org combination
- */
-async function tryGetTokenForServerOrg(
-  serverURL: string | undefined,
-  organization: string | undefined,
-): Promise<string | undefined> {
-  if ((organization || serverURL) && serverURL) {
-    const keychainToken = await getToken(serverURL, organization);
-    if (keychainToken) {
-      text('Found stored credentials');
-      return keychainToken;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Try to get token from SonarQube Cloud credentials in keychain
- */
-async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }> {
-  const credentials = await getAllCredentials();
-  const sonarCloudCreds = credentials.filter((cred) =>
-    cred.account.startsWith(`${SONARCLOUD_HOSTNAME}:`),
-  );
-
-  if (sonarCloudCreds.length === 0) {
-    return {};
-  }
-
-  const cred = sonarCloudCreds[0];
-  const [, org] = cred.account.split(':');
-
-  const result: { token?: string; org?: string } = { token: cred.password, org };
-
-  text(`Using stored credentials for organization: ${org}`);
-
-  if (sonarCloudCreds.length > 1) {
-    info(`Multiple organizations found (${sonarCloudCreds.length}). Using: ${org}`);
-    info('  To use a different organization, specify --org');
-  }
-
-  return result;
-}
-
-/**
- * Apply SonarQube Cloud credentials from keychain result
- */
-function applySonarCloudCredentials(
-  config: ConfigurationData,
-  scResult: { token?: string; org?: string },
-): void {
-  config.token = config.token || scResult.token;
-  config.organization = config.organization || scResult.org;
-  if (scResult.org && !config.serverURL) {
-    config.serverURL = SONARCLOUD_URL;
-  }
-}
-
-/**
- * Fetch credentials from keychain if needed
- * Extracted to reduce nesting complexity in loadConfiguration
- */
-async function fetchKeychainCredentials(config: ConfigurationData): Promise<void> {
-  try {
-    if (!config.token) {
-      config.token = await tryGetTokenForServerOrg(config.serverURL, config.organization);
-    }
-
-    if (!config.token || !config.organization) {
-      const scResult = await tryGetSonarCloudToken();
-      applySonarCloudCredentials(config, scResult);
-    }
-  } catch {
-    // Silently fail keychain access - will validate required values below
-  }
-}
-
-/**
  * Load configuration from all available sources
  */
 async function loadConfiguration(
@@ -223,61 +135,66 @@ async function loadConfiguration(
     token: options.token,
   };
 
-  // Apply env var credentials (CLI options already set above take precedence via ??=)
-  const envToken = process.env[ENV_TOKEN];
-  const envServer = process.env[ENV_SERVER];
-
-  if (envToken && envServer) {
-    config.token ??= envToken;
-    config.serverURL ??= envServer;
-  } else if (envToken || envServer) {
-    const missing = envToken ? ENV_SERVER : ENV_TOKEN;
-    warn(
-      `${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`,
-    );
+  let resolvedAuth;
+  try {
+    resolvedAuth = await resolveAuth({
+      server: config.serverURL,
+      org: config.organization,
+      token: config.token,
+    });
+  } catch {
+    // ignore error, command will attempt to call `auth login` flow
   }
 
-  // Merge with discovered configuration
   const discovered = getDiscoveredConfiguration(projectInfo);
-  config.serverURL = config.serverURL || discovered.serverURL;
-  config.projectKey = config.projectKey || discovered.projectKey;
-  config.organization = config.organization || discovered.organization;
 
-  // Try to get credentials from keychain if not fully provided
-  if (!config.token || !config.organization || !config.serverURL) {
-    await fetchKeychainCredentials(config);
+  if (!!resolvedAuth?.serverUrl && !!discovered.serverURL && (resolvedAuth.serverUrl != discovered.serverURL)) {
+    warn('Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command');
   }
 
-  // Default to SonarQube Cloud only when organization is set (SonarCloud implies org)
-  if (!config.serverURL && config.organization) {
-    config.serverURL = SONARCLOUD_URL;
-    info('Using SonarQube Cloud.');
+  if (!!resolvedAuth?.orgKey && !!discovered.organization && (resolvedAuth.orgKey != discovered.organization)) {
+    warn('Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this in not intended please consider providing "-o" option');
   }
 
-  return config;
+  const resolvedProjectKey = config.projectKey || discovered.projectKey;
+
+  if (resolvedAuth) {
+    return {
+      serverURL: resolvedAuth.serverUrl,
+      organization: resolvedAuth.orgKey,
+      token: resolvedAuth.token,
+      projectKey: resolvedProjectKey,
+    }
+  } else {
+    return {
+      serverURL: config.serverURL || discovered.serverURL || SONARCLOUD_URL,
+      organization: config.organization || discovered.organization,
+      token: undefined,
+      projectKey: resolvedProjectKey
+    }
+  }
 }
 
 /**
  * Validate and print configuration
  */
-function validateAndPrintConfiguration(config: ConfigurationData): {
-  serverURL: string;
-  projectKey: string | undefined;
-} {
-  // serverURL is always set by loadConfiguration (defaults to SonarCloud)
-  const serverURL = config.serverURL ?? SONARCLOUD_URL;
+function validateAndPrintConfiguration(config: ConfigurationData): void {
+  if (!config.serverURL && !config.organization) {
+    throw new CommandFailedError(
+      'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
+    );
+  }
 
-  text(`\nServer: ${serverURL}`);
+  blank();
+  text(`Server: ${config.serverURL}`);
   if (config.projectKey) {
     text(`Project: ${config.projectKey}`);
   } else {
-    text('No project key provided — project-level checks will be skipped.');
+    text('No project key provided - project-level checks will be skipped.');
   }
   if (config.organization) {
     text(`Organization: ${config.organization}`);
   }
-
-  return { serverURL, projectKey: config.projectKey };
 }
 
 /**
@@ -292,7 +209,7 @@ function ensureToken(token: string | undefined): string | undefined {
 }
 
 /**
- * Check if the organisation has A3S entitlement.
+ * Check if the organization has A3S entitlement.
  * Returns false for on-premise, missing org, or failed API call.
  */
 async function resolveA3sEntitlement(
@@ -317,12 +234,13 @@ async function runHealthCheckAndRepair(
   repairOptions: RepairOptions,
   a3sEnabled: boolean,
 ): Promise<string | undefined> {
-  text('\nPhase 2/3: Health Check & Repair');
+  blank();
+  text('Phase 2/3: Health Check & Repair');
   blank();
 
   if (!token) {
-    text('Skipping health check (no token available)');
-    return undefined;
+    text('No token available');
+    token = await repairToken(serverURL, organization);
   }
 
   const { hooksGlobal, nonInteractive } = repairOptions;
@@ -464,13 +382,13 @@ async function runFinalVerification(
  * Run full SonarQube integration (phases 2 and 3)
  */
 async function runFullSonarIntegration(
-  serverURL: string,
-  projectKey: string | undefined,
   projectInfo: ProjectInfo,
   config: ConfigurationData,
   options: IntegrateClaudeOptions,
   effectiveNonInteractive: boolean,
 ): Promise<void> {
+  const serverURL = config.serverURL!;
+  const projectKey = config.projectKey;
   const hooksRoot = options.global ? homedir() : projectInfo.root;
   let token = ensureToken(config.token);
 
@@ -496,21 +414,19 @@ async function runFullSonarIntegration(
     hasA3s: a3sEnabled,
   };
 
-  if (token) {
-    token = await runHealthCheckAndRepair(
-      serverURL,
-      projectKey,
-      projectInfo,
-      token,
-      config.organization,
-      repairOptions,
-      a3sEnabled,
-    );
+  token = await runHealthCheckAndRepair(
+    serverURL,
+    projectKey,
+    projectInfo,
+    token,
+    config.organization,
+    repairOptions,
+    a3sEnabled,
+  );
 
-    if (token) {
-      await runFinalVerification(token, hooksRoot, context);
-      return;
-    }
+  if (token) {
+    await runFinalVerification(token, hooksRoot, context);
+    return;
   }
 
   if (effectiveNonInteractive) {
