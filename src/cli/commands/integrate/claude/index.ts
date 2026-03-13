@@ -585,11 +585,13 @@ function updateStateAfterConfiguration(context: ConfigurationContext): void {
       hookType: 'UserPromptSubmit',
     });
 
-    // Register A3S hook only when org has entitlement
+    // Register A3S hook only when org has entitlement.
+    // A3S is always project-level (never global), regardless of the -g flag.
     const isCloud = serverURL.includes(SONARCLOUD_HOSTNAME);
     if (context.hasA3s) {
       upsertAgentExtension(state, {
         ...baseExt,
+        global: false,
         id: randomUUID(),
         kind: 'hook',
         name: 'sonar-a3s',

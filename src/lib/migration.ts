@@ -137,7 +137,8 @@ function migrateToExtensionsRegistry(
     updatedAt: now,
   };
 
-  // Migrate entries from old hooks.installed that don't yet have a registry entry
+  // Migrate entries from old hooks.installed that don't yet have a registry entry.
+  // sonar-a3s is always project-level (never global), regardless of the -g flag.
   const oldHooks = state.agents['claude-code'].hooks.installed;
   for (const hook of oldHooks) {
     const alreadyMigrated = existingExtensions.some(
@@ -147,6 +148,7 @@ function migrateToExtensionsRegistry(
     if (!alreadyMigrated) {
       upsertAgentExtension(state, {
         ...baseExt,
+        global: hook.name === 'sonar-a3s' ? false : isGlobal,
         id: randomUUID(),
         kind: 'hook',
         name: hook.name,
@@ -155,11 +157,13 @@ function migrateToExtensionsRegistry(
     }
   }
 
-  // Add the new sonar-a3s PostToolUse extension for cloud connections
+  // Add the new sonar-a3s PostToolUse extension for cloud connections.
+  // A3S is always project-level (never global), regardless of the -g flag.
   const isCloud = connection?.type === 'cloud';
   if (isCloud) {
     upsertAgentExtension(state, {
       ...baseExt,
+      global: false,
       id: randomUUID(),
       kind: 'hook',
       name: 'sonar-a3s',
