@@ -33,6 +33,7 @@ import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import { ENV_TOKEN, ENV_SERVER } from '../../src/lib/auth-resolver.js';
+import { SonarQubeClient } from '../../src/sonarqube/client.js';
 
 const FAKE_PROJECT_INFO = {
   root: '/fake/project',
@@ -296,6 +297,35 @@ describe('integrateCommand: full flow', () => {
       discoverSpy.mockRestore();
       healthSpy.mockRestore();
       addInstalledHookSpy.mockRestore();
+    }
+  });
+
+  // CLI-143: sonar-a3s agentExtension must always be project-level
+  it('registers sonar-a3s agentExtension with global:false even when -g is set', async () => {
+    const capturedState = getDefaultState('test');
+    loadStateSpy.mockReturnValue(capturedState);
+    saveStateSpy.mockImplementation(() => {});
+
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+    const a3sSpy = spyOn(SonarQubeClient.prototype, 'hasA3sEntitlement').mockResolvedValue(true);
+
+    try {
+      await integrateClaude({
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        global: true,
+      });
+
+      const a3sExt = capturedState.agentExtensions.find((e) => e.name === 'sonar-a3s');
+      expect(a3sExt).toBeDefined();
+      expect(a3sExt!.global).toBe(false);
+    } finally {
+      discoverSpy.mockRestore();
+      healthSpy.mockRestore();
+      a3sSpy.mockRestore();
     }
   });
 });
