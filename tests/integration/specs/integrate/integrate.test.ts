@@ -404,6 +404,29 @@ describe('integrate claude', () => {
     },
     { timeout: 30000 },
   );
+  it(
+    'prompt-secrets.sh uses correct subcommand (sonar analyze secrets) after integration',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      await harness.run('integrate claude --token test-token --non-interactive');
+
+      const promptScriptContent = harness.cwd
+        .file('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'prompt-secrets.sh')
+        .asText();
+      expect(promptScriptContent).toContain('sonar analyze secrets');
+      expect(promptScriptContent).not.toContain('sonar analyze --file');
+    },
+    { timeout: 30000 },
+  );
 });
 
 // ─── A3S entitlement guard ────────────────────────────────────────────────────

@@ -368,6 +368,55 @@ describe('Hooks', () => {
     }
   });
 
+  // CLI-142: correct analyze subcommand in hook scripts
+  it('hooks: prompt-secrets.sh uses sonar analyze secrets subcommand', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-secrets-cmd-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, false);
+
+      const scriptPath = join(
+        testDir,
+        '.claude',
+        'hooks',
+        'sonar-secrets',
+        'build-scripts',
+        'prompt-secrets.sh',
+      );
+      const content = readFileSync(scriptPath, 'utf-8');
+
+      expect(content).toContain('sonar analyze secrets');
+      expect(content).not.toContain('sonar analyze --file');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: pretool-secrets.sh uses sonar analyze secrets subcommand', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-pretool-cmd-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, false);
+
+      const scriptPath = join(
+        testDir,
+        '.claude',
+        'hooks',
+        'sonar-secrets',
+        'build-scripts',
+        'pretool-secrets.sh',
+      );
+      const content = readFileSync(scriptPath, 'utf-8');
+
+      expect(content).toContain('sonar analyze secrets');
+      expect(content).not.toContain('sonar analyze --file');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
   it('hooks: areHooksInstalled returns false when settings.json contains malformed JSON', async () => {
     const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-malformed-' + Date.now());
     const claudeDir = join(testDir, '.claude');
