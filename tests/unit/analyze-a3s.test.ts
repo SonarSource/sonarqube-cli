@@ -276,6 +276,30 @@ describe('analyzeA3s: API call and result display', () => {
     expect(output).toContain('not entitled');
   });
 
+  it('displays both issues and errors when response contains both', async () => {
+    analyzeFileSpy.mockResolvedValue({
+      id: 'a1',
+      issues: [
+        {
+          rule: 'cpp:S1186',
+          message: 'Add a nested comment explaining why this method is empty.',
+          textRange: { startLine: 2, endLine: 2, startOffset: 28, endOffset: 30 },
+        },
+      ],
+      errors: [{ code: 'PARSE_ERROR', message: "'NonExistentHeader.h' file not found" }],
+    });
+
+    await analyzeA3s({ file: 'src/index.ts' });
+
+    const output = getMockUiCalls()
+      .map((c) => String(c.args[0]))
+      .join('\n');
+    expect(output).toContain('cpp:S1186');
+    expect(output).toContain('Add a nested comment');
+    expect(output).toContain('PARSE_ERROR');
+    expect(output).toContain('NonExistentHeader.h');
+  });
+
   it('throws CommandFailedError when A3S API call fails', () => {
     analyzeFileSpy.mockRejectedValue(new Error('Network error'));
 

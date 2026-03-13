@@ -170,17 +170,8 @@ function displayA3sResults(
   issues: A3sIssue[],
   errors?: Array<{ code: string; message: string }> | null,
 ): void {
-  if (errors && errors.length > 0) {
-    blank();
-    error('A3S analysis returned errors:');
-    errors.forEach((e) => {
-      text(`  [${e.code}] ${e.message}`);
-    });
-    blank();
-    return;
-  }
-
   blank();
+
   if (issues.length === 0) {
     success('A3S analysis completed — no issues found.');
   } else {
@@ -192,5 +183,14 @@ function displayA3sResults(
       text(`      Rule: ${issue.rule}`);
     });
   }
+
+  if (errors && errors.length > 0) {
+    blank();
+    error('A3S analysis returned errors:');
+    errors.forEach((e) => {
+      text(`  [${e.code}] ${e.message}`);
+    });
+  }
+
   blank();
 }
