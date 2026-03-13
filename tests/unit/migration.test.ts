@@ -23,7 +23,7 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { setMockUi } from '../../src/ui';
 import * as stateManager from '../../src/lib/state-manager.js';
 import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
@@ -248,11 +248,12 @@ describe('runMigrations — migration execution', () => {
       orgKey: 'my-org',
       keystoreKey: 'sonarcloud.io:my-org',
     });
-    // Pre-populate a global entry for the same hook (as if integrate -g already ran)
+    // Pre-populate a global entry for the same hook (as if integrate -g already ran).
+    // Global entries use homedir() as projectRoot — that's the new invariant after CLI-148.
     stateManager.upsertAgentExtension(state, {
       id: 'pre-existing',
       agentId: 'claude-code',
-      projectRoot: '/some/project',
+      projectRoot: homedir(),
       global: true,
       kind: 'hook',
       name: 'sonar-secrets',
@@ -266,7 +267,10 @@ describe('runMigrations — migration execution', () => {
     await runMigrations('/some/project');
 
     const projectExts = state.agentExtensions.filter(
-      (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && !e.global,
+      (e) =>
+        e.name === 'sonar-secrets' &&
+        e.hookType === 'PreToolUse' &&
+        e.projectRoot === '/some/project',
     );
     expect(projectExts.length).toBe(1);
   });

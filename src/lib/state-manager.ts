@@ -210,13 +210,13 @@ export function addInstalledHook(
 
 /**
  * Upsert an agent extension in the registry.
- * Matches by agentId + projectRoot + global + kind + name + (hookType for hooks).
+ * Matches by agentId + projectRoot + kind + name + (hookType for hooks).
+ * For global installs, projectRoot is set to homedir() so it naturally differs from project-level.
  */
 export function upsertAgentExtension(state: CliState, extension: AgentExtension): void {
   const idx = state.agentExtensions.findIndex((e) => {
     if (e.agentId !== extension.agentId) return false;
     if (e.projectRoot !== extension.projectRoot) return false;
-    if (e.global !== extension.global) return false;
     if (e.kind !== extension.kind) return false;
     if (e.name !== extension.name) return false;
     if (e.kind === 'hook' && extension.kind === 'hook') {

@@ -598,12 +598,18 @@ describe('integrateCommand: --global flag', () => {
         global: false,
       });
 
-      // Verify project-level secrets hooks are registered
+      // Verify project-level secrets hooks are registered with project's root path
       const projectSecretsPreTool = capturedState.agentExtensions.find(
-        (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && !e.global,
+        (e) =>
+          e.name === 'sonar-secrets' &&
+          e.hookType === 'PreToolUse' &&
+          e.projectRoot === FAKE_PROJECT_INFO.root,
       );
       const projectSecretsPrompt = capturedState.agentExtensions.find(
-        (e) => e.name === 'sonar-secrets' && e.hookType === 'UserPromptSubmit' && !e.global,
+        (e) =>
+          e.name === 'sonar-secrets' &&
+          e.hookType === 'UserPromptSubmit' &&
+          e.projectRoot === FAKE_PROJECT_INFO.root,
       );
       expect(projectSecretsPreTool).toBeDefined();
       expect(projectSecretsPrompt).toBeDefined();
@@ -617,22 +623,32 @@ describe('integrateCommand: --global flag', () => {
         global: true,
       });
 
-      // Project-level secrets hooks must still be present and unmodified
+      // Project-level secrets hooks must still be present (projectRoot = project dir, not homedir)
       const projectSecretsPreToolAfter = capturedState.agentExtensions.find(
-        (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && !e.global,
+        (e) =>
+          e.name === 'sonar-secrets' &&
+          e.hookType === 'PreToolUse' &&
+          e.projectRoot === FAKE_PROJECT_INFO.root,
       );
       const projectSecretsPromptAfter = capturedState.agentExtensions.find(
-        (e) => e.name === 'sonar-secrets' && e.hookType === 'UserPromptSubmit' && !e.global,
+        (e) =>
+          e.name === 'sonar-secrets' &&
+          e.hookType === 'UserPromptSubmit' &&
+          e.projectRoot === FAKE_PROJECT_INFO.root,
       );
       expect(projectSecretsPreToolAfter).toBeDefined();
       expect(projectSecretsPromptAfter).toBeDefined();
 
-      // Global secrets hooks must also be present
+      // Global secrets hooks must be present with homedir as projectRoot
       const globalSecretsPreTool = capturedState.agentExtensions.find(
-        (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && e.global,
+        (e) =>
+          e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && e.projectRoot === homedir(),
       );
       const globalSecretsPrompt = capturedState.agentExtensions.find(
-        (e) => e.name === 'sonar-secrets' && e.hookType === 'UserPromptSubmit' && e.global,
+        (e) =>
+          e.name === 'sonar-secrets' &&
+          e.hookType === 'UserPromptSubmit' &&
+          e.projectRoot === homedir(),
       );
       expect(globalSecretsPreTool).toBeDefined();
       expect(globalSecretsPrompt).toBeDefined();

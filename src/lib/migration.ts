@@ -120,8 +120,10 @@ function migrateToExtensionsRegistry(
   globalDir: string | undefined,
 ): void {
   const isGlobal = globalDir !== undefined;
+  // For global installs, use globalDir as projectRoot so it doesn't collide with project-level entries.
+  const effectiveProjectRoot = globalDir ?? projectRoot;
   const existingExtensions = state.agentExtensions.filter(
-    (e) => e.agentId === 'claude-code' && e.projectRoot === projectRoot && e.global === isGlobal,
+    (e) => e.agentId === 'claude-code' && e.projectRoot === effectiveProjectRoot,
   );
 
   const connection = getActiveConnection(state);
@@ -129,7 +131,7 @@ function migrateToExtensionsRegistry(
 
   const baseExt = {
     agentId: 'claude-code',
-    projectRoot,
+    projectRoot: effectiveProjectRoot,
     global: isGlobal,
     orgKey: connection?.orgKey,
     serverUrl: connection?.serverUrl,
@@ -146,9 +148,11 @@ function migrateToExtensionsRegistry(
         e.kind === 'hook' && e.name === hook.name && e.hookType === hook.type,
     );
     if (!alreadyMigrated) {
+      const isA3s = hook.name === 'sonar-a3s';
       upsertAgentExtension(state, {
         ...baseExt,
-        global: hook.name === 'sonar-a3s' ? false : isGlobal,
+        projectRoot: isA3s ? projectRoot : effectiveProjectRoot,
+        global: isA3s ? false : isGlobal,
         id: randomUUID(),
         kind: 'hook',
         name: hook.name,
@@ -163,6 +167,7 @@ function migrateToExtensionsRegistry(
   if (isCloud) {
     upsertAgentExtension(state, {
       ...baseExt,
+      projectRoot,
       global: false,
       id: randomUUID(),
       kind: 'hook',

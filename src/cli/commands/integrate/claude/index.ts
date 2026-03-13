@@ -557,11 +557,13 @@ function updateStateAfterConfiguration(context: ConfigurationContext): void {
     addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
     addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
 
-    // Register extensions in the new registry
+    // Register extensions in the new registry.
+    // For global installs, use homedir() as projectRoot so it doesn't collide with project-level entries.
     const now = new Date().toISOString();
+    const effectiveRoot = isGlobal ? homedir() : projectRoot;
     const baseExt = {
       agentId: 'claude-code',
-      projectRoot,
+      projectRoot: effectiveRoot,
       global: isGlobal,
       projectKey,
       orgKey: organization,
@@ -591,6 +593,7 @@ function updateStateAfterConfiguration(context: ConfigurationContext): void {
     if (context.hasA3s) {
       upsertAgentExtension(state, {
         ...baseExt,
+        projectRoot,
         global: false,
         id: randomUUID(),
         kind: 'hook',
