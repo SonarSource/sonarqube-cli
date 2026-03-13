@@ -733,7 +733,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'updates existing project-level agentExtensions to global when -g is passed, but keeps sonar-a3s as project-level',
+      'keeps existing project-level agentExtensions and adds global ones when -g is passed (CLI-148)',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -818,12 +818,17 @@ describe('integrate claude — file placement (local vs global)', () => {
           global: boolean;
         }>;
 
-        // sonar-secrets hooks must be global after upgrading to -g
-        const secretsHooks = extensions.filter((e) => e.name === 'sonar-secrets');
-        expect(secretsHooks.length).toBeGreaterThan(0);
-        for (const hook of secretsHooks) {
-          expect(hook.global).toBe(true);
-        }
+        // Project-level sonar-secrets hooks must still be present (not overwritten by -g run)
+        const projectSecretsHooks = extensions.filter(
+          (e) => e.name === 'sonar-secrets' && !e.global,
+        );
+        expect(projectSecretsHooks.length).toBe(2);
+
+        // Global sonar-secrets hooks must also be added
+        const globalSecretsHooks = extensions.filter(
+          (e) => e.name === 'sonar-secrets' && e.global,
+        );
+        expect(globalSecretsHooks.length).toBeGreaterThan(0);
 
         // sonar-a3s is always project-level, even when -g is used
         const a3sHooks = extensions.filter((e) => e.name === 'sonar-a3s');
