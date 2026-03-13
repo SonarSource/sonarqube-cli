@@ -49,12 +49,30 @@ jobs:
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
 
-  build-and-publish-binaries:
-    name: Build and Publish Binaries
-    runs-on: github-ubuntu-latest-m
+  build-binaries:
+    name: Build Binary - ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     needs: prepare
-    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            runner: github-ubuntu-latest-m
+            target: bun-linux-x64
+            platform: linux-x86-64
+          - os: macos
+            runner: macos-latest-xlarge
+            target: bun-darwin-arm64
+            platform: macos-arm64
+          - os: windows
+            runner: warp-custom-windows-2022-s
+            target: bun-windows-x64
+            platform: windows-x86-64
     steps:
+      - name: Setup Cloudflare WARP (macOS only)
+        if: matrix.os == 'macos'
+        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
+
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
@@ -78,7 +96,6 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
             development/kv/data/sign key | GPG_SIGNING_KEY;
             development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
       - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
@@ -94,26 +111,73 @@ jobs:
           ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: bun ci
 
+      - name: Compute artifact name
+        id: artifact
+        shell: bash
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+        run: echo "name=sonarqube-cli-${PROJECT_VERSION}-${{ matrix.platform }}.exe" >> $GITHUB_OUTPUT
+
       - name: Fetch binary signatures
         run: bun run fetch:signatures
 
-      - name: Build binaries
-        env:
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: |
-          bun build src/index.ts --compile --outfile dist/sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe --target bun-windows-x64
-          bun build src/index.ts --compile --outfile dist/sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.exe --target bun-linux-x64
-          bun build src/index.ts --compile --outfile dist/sonarqube-cli-${PROJECT_VERSION}-macos-arm64.exe --target bun-darwin-arm64
+      - name: Build binary for ${{ matrix.os }}
+        run: bun build src/index.ts --compile --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
 
-      - name: Sign binaries
+      - name: Sign binary
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: |
-          bun build-scripts/sign.mjs dist/sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.exe
-          bun build-scripts/sign.mjs dist/sonarqube-cli-${PROJECT_VERSION}-macos-arm64.exe
-          bun build-scripts/sign.mjs dist/sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe
+        run: bun build-scripts/sign.mjs dist/${{ steps.artifact.outputs.name }}
+
+      - name: Upload binary to GitHub
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: binary-${{ matrix.os }}
+          path: |
+            dist/${{ steps.artifact.outputs.name }}
+            dist/${{ steps.artifact.outputs.name }}.asc
+
+  publish-binaries:
+    name: Publish Binaries to Artifactory
+    runs-on: github-ubuntu-latest-s
+    needs:
+      - prepare
+      - build-binaries
+    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
+        with:
+          version: 2.77.0
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
+
+      - name: Download linux binary
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binary-linux
+          path: dist/
+
+      - name: Download macos binary
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binary-macos
+          path: dist/
+
+      - name: Download windows binary
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binary-windows
+          path: dist/
 
       - name: Copy user scripts to dist
         run: cp user-scripts/install.sh user-scripts/install.ps1 dist/
@@ -211,7 +275,8 @@ jobs:
     name: Promote
     needs:
       - prepare
-      - build-and-publish-binaries
+      - build-binaries
+      - publish-binaries
       - test-and-scan
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
