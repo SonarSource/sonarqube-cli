@@ -25,8 +25,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { discoverProject, type ProjectInfo } from '../../_common/discovery';
 import { runHealthChecks } from './health';
-import {repairToken, runRepair} from './repair';
-import { getToken } from '../../_common/token';
+import { repairToken } from './repair';
 import { installHooks } from './hooks';
 import { runMigrations } from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -42,7 +41,7 @@ import {
 import { version as VERSION } from '../../../../../package.json';
 import logger from '../../../../lib/logger';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../../lib/config-constants';
-import {ENV_SERVER, ENV_TOKEN, resolveAuth} from '../../../../lib/auth-resolver';
+import { isEnvBasedAuth, resolveAuth } from '../../../../lib/auth-resolver';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 
@@ -53,11 +52,6 @@ export interface IntegrateClaudeOptions {
   org?: string;
   nonInteractive?: boolean;
   global?: boolean;
-}
-
-interface RepairOptions {
-  hooksGlobal: boolean | undefined;
-  nonInteractive: boolean | undefined;
 }
 
 interface ConfigurationData {
@@ -73,29 +67,85 @@ interface ConfigurationData {
 export async function integrateClaude(options: IntegrateClaudeOptions): Promise<void> {
   intro(`SonarQube Integration Setup for Claude`);
 
-  text('\nPhase 1/3: Discovery & Validation');
+  blank();
+  text('Phase 1/3: Discovery & Validation');
   blank();
 
   const projectInfo = await discoverProject(process.cwd());
+  const config = await loadConfiguration(projectInfo, options);
+  validateConfiguration(projectInfo, config);
 
-  text(`Project root: ${projectInfo.root}`);
-  if (projectInfo.isGitRepo) {
-    text('Git repository detected');
+  const serverURL = config.serverURL!;
+  const isGlobal = options.global ?? false;
+  const hooksRoot = isGlobal ? homedir() : projectInfo.root;
+  const globalDir = isGlobal ? homedir() : undefined;
+
+  let token = config.token;
+
+  blank();
+  text('Phase 2/3: Health Check & Repair');
+  blank();
+
+  const healthResult = await runHealthChecks(
+    serverURL,
+    token || 'INVALID',
+    config.projectKey,
+    hooksRoot,
+    config.organization);
+
+  if (healthResult.errors.length === 0) {
+    success('All checks passed! Configuration is healthy.');
+  } else {
+    warn(`Found ${healthResult.errors.length} issue(s):`);
+    for (const msg of healthResult.errors) {
+      text(`  - ${msg}`);
+    }
+
+    const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
+
+    if (!isNonInteractive && !healthResult.tokenValid) {
+      blank();
+      text('Running token repair...');
+
+      token = await repairToken(
+        serverURL,
+        config.organization,
+      );
+    }
   }
 
-  const config = await loadConfiguration(projectInfo, options);
-  validateAndPrintConfiguration(config);
+  const a3sEnabled = token
+    ? await resolveA3sEntitlement(serverURL, token, config.organization)
+    : false;
 
-  // When both env vars are set, treat as non-interactive (CI context)
-  const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
-  const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
+  text('Installing claude code hooks...');
+  await runMigrations(projectInfo.root, globalDir, a3sEnabled, config.projectKey);
+  await installHooks(projectInfo.root, globalDir, a3sEnabled, config.projectKey);
+  success('Claude code scanning hooks installed');
 
-  await runFullSonarIntegration(
-    projectInfo,
-    config,
-    options,
-    effectiveNonInteractive,
+  blank();
+  text('Phase 3/3: Final Verification');
+  blank();
+
+  const finalHealth = await runHealthChecks(
+    serverURL,
+    token || 'INVALID',
+    config.projectKey,
+    hooksRoot,
+    config.organization,
+    false,
   );
+  printFinalVerificationResults(finalHealth, config.projectKey);
+
+  const context: ConfigurationContext = {
+    serverURL,
+    organization: config.organization,
+    projectKey: config.projectKey,
+    projectRoot: projectInfo.root,
+    isGlobal,
+    hasA3s: a3sEnabled,
+  };
+  updateStateAfterConfiguration(context);
 }
 
 /**
@@ -128,25 +178,28 @@ async function loadConfiguration(
   projectInfo: ProjectInfo,
   options: IntegrateClaudeOptions,
 ): Promise<ConfigurationData> {
-  const config: ConfigurationData = {
-    serverURL: options.server,
-    projectKey: options.project,
-    organization: options.org,
-    token: options.token,
-  };
-
   let resolvedAuth;
   try {
     resolvedAuth = await resolveAuth({
-      server: config.serverURL,
-      org: config.organization,
-      token: config.token,
+      server: options.server,
+      org: options.org,
+      token: options.token,
     });
   } catch {
     // ignore error, command will attempt to call `auth login` flow
   }
 
   const discovered = getDiscoveredConfiguration(projectInfo);
+  const resolvedProjectKey = options.project || discovered.projectKey;
+
+  if (!resolvedAuth) {
+    return {
+      serverURL: options.server || discovered.serverURL || SONARCLOUD_URL,
+      organization: options.org || discovered.organization,
+      token: undefined,
+      projectKey: resolvedProjectKey
+    }
+  }
 
   if (!!resolvedAuth?.serverUrl && !!discovered.serverURL && (resolvedAuth.serverUrl != discovered.serverURL)) {
     warn('Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command');
@@ -156,29 +209,15 @@ async function loadConfiguration(
     warn('Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this in not intended please consider providing "-o" option');
   }
 
-  const resolvedProjectKey = config.projectKey || discovered.projectKey;
-
-  if (resolvedAuth) {
-    return {
-      serverURL: resolvedAuth.serverUrl,
-      organization: resolvedAuth.orgKey,
-      token: resolvedAuth.token,
-      projectKey: resolvedProjectKey,
-    }
-  } else {
-    return {
-      serverURL: config.serverURL || discovered.serverURL || SONARCLOUD_URL,
-      organization: config.organization || discovered.organization,
-      token: undefined,
-      projectKey: resolvedProjectKey
-    }
+  return {
+    serverURL: resolvedAuth.serverUrl,
+    organization: resolvedAuth.orgKey,
+    token: resolvedAuth.token,
+    projectKey: resolvedProjectKey,
   }
 }
 
-/**
- * Validate and print configuration
- */
-function validateAndPrintConfiguration(config: ConfigurationData): void {
+function validateConfiguration(projectInfo: ProjectInfo, config: ConfigurationData): void {
   if (!config.serverURL && !config.organization) {
     throw new CommandFailedError(
       'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
@@ -187,25 +226,26 @@ function validateAndPrintConfiguration(config: ConfigurationData): void {
 
   blank();
   text(`Server: ${config.serverURL}`);
-  if (config.projectKey) {
-    text(`Project: ${config.projectKey}`);
-  } else {
-    text('No project key provided - project-level checks will be skipped.');
-  }
+
   if (config.organization) {
     text(`Organization: ${config.organization}`);
   }
-}
 
-/**
- * Warn if token is missing
- */
-function ensureToken(token: string | undefined): string | undefined {
-  if (!token) {
+  if (!config.token) {
     warn('No token found. Will generate during repair phase.');
   }
 
-  return token;
+  if (projectInfo.isGitRepo) {
+    text('Git repository detected');
+  }
+
+  text(`Project root: ${projectInfo.root}`);
+
+  if (config.projectKey) {
+    text(`Project: ${config.projectKey}`);
+  } else {
+    text('No project key provided - project related actions will be skipped.');
+  }
 }
 
 /**
@@ -217,108 +257,12 @@ async function resolveA3sEntitlement(
   token: string,
   organization: string | undefined,
 ): Promise<boolean> {
-  if (!organization || !serverURL.includes(SONARCLOUD_HOSTNAME)) return false;
+  if (!organization || !serverURL.includes(SONARCLOUD_HOSTNAME)) {
+    return false;
+  }
+
   const client = new SonarQubeClient(serverURL, token);
   return client.hasA3sEntitlement(organization);
-}
-
-/**
- * Run health check and handle repair if needed
- */
-async function runHealthCheckAndRepair(
-  serverURL: string,
-  projectKey: string | undefined,
-  projectInfo: ProjectInfo,
-  token: string | undefined,
-  organization: string | undefined,
-  repairOptions: RepairOptions,
-  a3sEnabled: boolean,
-): Promise<string | undefined> {
-  blank();
-  text('Phase 2/3: Health Check & Repair');
-  blank();
-
-  if (!token) {
-    text('No token available');
-    token = await repairToken(serverURL, organization);
-  }
-
-  const { hooksGlobal, nonInteractive } = repairOptions;
-  const globalDir = hooksGlobal ? homedir() : undefined;
-  const hooksRoot = globalDir ?? projectInfo.root;
-
-  const healthResult = await runHealthChecks(serverURL, token, projectKey, hooksRoot, organization);
-
-  if (healthResult.errors.length === 0) {
-    success('All checks passed! Configuration is healthy.');
-    await runMigrations(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    await installHooks(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    return token;
-  }
-
-  warn(`Found ${healthResult.errors.length} issue(s):`);
-  for (const msg of healthResult.errors) {
-    text(`  - ${msg}`);
-  }
-
-  if (nonInteractive && !healthResult.tokenValid) {
-    // Can't repair token without browser interaction — install hooks and continue
-    await runMigrations(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    await installHooks(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    return token;
-  }
-
-  // Repair (part of Phase 2)
-  text('\n  Running repair...');
-
-  const repairedToken = await runRepair(
-    serverURL,
-    projectInfo.root,
-    healthResult,
-    projectKey,
-    organization,
-    globalDir,
-    a3sEnabled,
-  );
-
-  return repairedToken ?? token;
-}
-
-/**
- * Run repair without token
- */
-async function runRepairWithoutToken(
-  serverURL: string,
-  projectKey: string | undefined,
-  projectInfo: ProjectInfo,
-  organization: string | undefined,
-  globalDir?: string,
-): Promise<string> {
-  text('\n  Running repair...');
-
-  await runRepair(
-    serverURL,
-    projectInfo.root,
-    {
-      tokenValid: false,
-      serverAvailable: false,
-      projectAccessible: false,
-      organizationAccessible: false,
-      qualityProfilesAccessible: false,
-      hooksInstalled: false,
-      errors: [],
-    },
-    projectKey,
-    organization,
-    globalDir,
-  );
-
-  const repairedToken = await getToken(serverURL, organization);
-  if (!repairedToken) {
-    throw new Error('Failed to obtain token');
-  }
-
-  return repairedToken;
 }
 
 /**
@@ -352,100 +296,6 @@ function printFinalVerificationResults(
     text('  Sonar will detect the token and block the prompt automatically.');
     blank();
   }
-}
-
-/**
- * Run Phase 3 final verification and update state
- */
-async function runFinalVerification(
-  token: string,
-  hooksRoot: string,
-  context: ConfigurationContext,
-): Promise<void> {
-  text('\nPhase 3/3: Final Verification');
-  blank();
-
-  const finalHealth = await runHealthChecks(
-    context.serverURL,
-    token,
-    context.projectKey,
-    hooksRoot,
-    context.organization,
-    false,
-  );
-  printFinalVerificationResults(finalHealth, context.projectKey);
-
-  updateStateAfterConfiguration(context);
-}
-
-/**
- * Run full SonarQube integration (phases 2 and 3)
- */
-async function runFullSonarIntegration(
-  projectInfo: ProjectInfo,
-  config: ConfigurationData,
-  options: IntegrateClaudeOptions,
-  effectiveNonInteractive: boolean,
-): Promise<void> {
-  const serverURL = config.serverURL!;
-  const projectKey = config.projectKey;
-  const hooksRoot = options.global ? homedir() : projectInfo.root;
-  let token = ensureToken(config.token);
-
-  const repairOptions: RepairOptions = {
-    hooksGlobal: options.global,
-    nonInteractive: effectiveNonInteractive,
-  };
-
-  const globalDir = options.global ? homedir() : undefined;
-  const isGlobal = options.global ?? false;
-
-  // Check A3S entitlement once — requires cloud connection + eligible && enabled org
-  const a3sEnabled = token
-    ? await resolveA3sEntitlement(serverURL, token, config.organization)
-    : false;
-
-  const context: ConfigurationContext = {
-    serverURL,
-    organization: config.organization,
-    projectKey,
-    projectRoot: projectInfo.root,
-    isGlobal,
-    hasA3s: a3sEnabled,
-  };
-
-  token = await runHealthCheckAndRepair(
-    serverURL,
-    projectKey,
-    projectInfo,
-    token,
-    config.organization,
-    repairOptions,
-    a3sEnabled,
-  );
-
-  if (token) {
-    await runFinalVerification(token, hooksRoot, context);
-    return;
-  }
-
-  if (effectiveNonInteractive) {
-    await runMigrations(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    await installHooks(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    updateStateAfterConfiguration(context);
-    outro('Setup complete!', 'success');
-    return;
-  }
-
-  token = await runRepairWithoutToken(
-    serverURL,
-    projectKey,
-    projectInfo,
-    config.organization,
-    globalDir,
-  );
-
-  await runFinalVerification(token, hooksRoot, context);
 }
 
 interface ConfigurationContext {

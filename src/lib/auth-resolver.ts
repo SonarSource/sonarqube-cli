@@ -112,3 +112,7 @@ export async function resolveAuth(options: {
     `No authentication token found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`,
   );
 }
+
+export function isEnvBasedAuth(): boolean {
+  return !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
+}

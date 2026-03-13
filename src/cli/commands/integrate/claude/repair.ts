@@ -26,44 +26,14 @@ import {
   validateToken,
   deleteToken,
 } from '../../_common/token';
-import { installHooks } from './hooks';
-import type { HealthCheckResult } from './health';
 import logger from '../../../../lib/logger';
 import { text, success } from '../../../../ui';
 
-/**
- * Run repair actions based on health check results
- */
-export async function runRepair(
-  serverURL: string,
-  projectRoot: string,
-  healthResult: HealthCheckResult,
-  projectKey?: string,
-  organization?: string,
-  globalDir?: string,
-  installA3s = false,
-): Promise<string | undefined> {
-  let newToken: string | undefined;
-
-  // Fix token if invalid
-  if (!healthResult.tokenValid) {
-    newToken = await repairToken(serverURL, organization);
-  }
-
-  // Ensure hooks are installed (idempotent); A3S hook only when entitlement confirmed
-  text('Installing secret scanning hooks...');
-  await installHooks(projectRoot, globalDir, installA3s, projectKey);
-  success('Secret scanning hooks installed');
-
-  return newToken;
-}
-
 export async function repairToken(serverURL: string, organization?: string): Promise<string> {
-  let newToken: string | undefined;
   text('Obtaining access token...');
 
   // Generate new token
-  newToken = await generateTokenViaBrowser(serverURL);
+  const newToken = await generateTokenViaBrowser(serverURL);
 
   // Validate new token
   const valid = await validateToken(serverURL, newToken);
