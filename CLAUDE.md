@@ -28,6 +28,7 @@ To add a new command: add it to `src/cli/command-tree.ts` and implement the logi
 ## Error handling
 
 Use `runCommand()` from `src/lib/run-command.ts` to wrap command handlers — it provides consistent error handling and exit codes. Never handle errors manually in command handlers.
+Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
 
 ## State and auth
 

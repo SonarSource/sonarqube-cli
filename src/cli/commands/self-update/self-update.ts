@@ -26,6 +26,7 @@ import { version as CURRENT_VERSION } from '../../../../package.json';
 import { UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
 import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
 import { info, success, warn, text, blank } from '../../../ui';
+import { CommandFailedError } from '../_common/error';
 
 const VERSION_PATTERNS = [
   // Shell:       version="1.2.3"  or  version='1.2.3'
@@ -64,13 +65,13 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 
   const response = await fetch(scriptUrl);
   if (!response.ok) {
-    throw new Error(`Failed to fetch update script: HTTP ${response.status}`);
+    throw new CommandFailedError(`Failed to fetch update script: HTTP ${response.status}`);
   }
 
   const scriptContent = await response.text();
   const latestVersion = extractVersion(scriptContent);
   if (latestVersion === null) {
-    throw new Error('Could not determine the latest version from the install script');
+    throw new CommandFailedError('Could not determine the latest version from the install script');
   }
 
   return {
@@ -150,7 +151,9 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
     writeFileSync(tempPath, scriptContent, { encoding: 'utf8', mode: 0o755 });
     const result = spawnSync('/bin/bash', [tempPath], { stdio: 'inherit' });
     if (result.status !== 0) {
-      throw new Error(`Update script exited with code ${String(result.status ?? 'unknown')}`);
+      throw new CommandFailedError(
+        `Update script exited with code ${String(result.status ?? 'unknown')}`,
+      );
     }
   }
 }

@@ -41,6 +41,7 @@ import logger from '../../../lib/logger';
 import type { PlatformInfo } from '../../../lib/install-types';
 import { SECRETS_BINARY_NAME } from '../../../lib/install-types';
 import { text, blank, note, success, warn, withSpinner, print } from '../../../ui';
+import { CommandFailedError } from '../_common/error';
 
 const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
 const VERSION_REGEX_MAX_SEGMENT = 20;
@@ -102,7 +103,7 @@ async function performInstallation(
   if (!options.force) {
     const skipStatus = await checkExistingInstallation(binaryPath);
     if (skipStatus) {
-      throw new Error('Installation skipped - already up to date');
+      throw new CommandFailedError('Installation skipped - already up to date');
     }
   }
 
@@ -180,10 +181,9 @@ async function installSecretsStatus({ binDir }: { binDir?: string } = {}): Promi
     return;
   }
 
-  warn('Binary exists but not working');
-  text(`Path: ${binaryPath}`);
-  text('  Reinstall with: sonar install secrets --force');
-  throw new Error('Binary not working. Reinstall with: sonar install secrets --force');
+  throw new CommandFailedError(
+    `Binary is installed but could not be called.\nPath: ${binaryPath}\n  Reinstall with: sonar install secrets --force`,
+  );
 }
 
 function ensureBinDirectory(dir?: string): string {
@@ -222,7 +222,9 @@ async function checkInstalledVersion(path: string): Promise<string | null> {
 async function verifyInstallation(path: string): Promise<string> {
   const version = await checkInstalledVersion(path);
   if (!version) {
-    throw new Error('Installation verification failed. Binary not responding to --version.');
+    throw new CommandFailedError(
+      'Installation verification failed. Binary not responding to --version.',
+    );
   }
   return version;
 }

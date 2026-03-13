@@ -157,12 +157,7 @@ async function callA3sApiAndDisplay(
 
     displayA3sResults(response.issues, response.errors);
   } catch (err) {
-    logger.error(`A3S analysis failed: ${(err as Error).message}`);
-    blank();
-    error('A3S analysis failed.');
-    text(`  ${(err as Error).message}`);
-    blank();
-    throw new CommandFailedError('A3S analysis failed');
+    throw new CommandFailedError(`A3S analysis failed.\n  ${(err as Error).message}\n`);
   }
 }
 

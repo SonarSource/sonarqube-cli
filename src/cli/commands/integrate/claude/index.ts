@@ -397,7 +397,7 @@ async function runRepairWithoutToken(
 
   const repairedToken = await getToken(serverURL, organization);
   if (!repairedToken) {
-    throw new Error('Failed to obtain token');
+    throw new CommandFailedError('Failed to obtain token');
   }
 
   return repairedToken;
