@@ -119,17 +119,19 @@ function migrateToExtensionsRegistry(
   projectRoot: string,
   globalDir: string | undefined,
 ): void {
+  const isGlobal = globalDir !== undefined;
+  // For global installs, use globalDir as projectRoot so it doesn't collide with project-level entries.
+  const effectiveProjectRoot = globalDir ?? projectRoot;
   const existingExtensions = state.agentExtensions.filter(
-    (e) => e.agentId === 'claude-code' && e.projectRoot === projectRoot,
+    (e) => e.agentId === 'claude-code' && e.projectRoot === effectiveProjectRoot,
   );
 
   const connection = getActiveConnection(state);
   const now = new Date().toISOString();
-  const isGlobal = globalDir !== undefined;
 
   const baseExt = {
     agentId: 'claude-code',
-    projectRoot,
+    projectRoot: effectiveProjectRoot,
     global: isGlobal,
     orgKey: connection?.orgKey,
     serverUrl: connection?.serverUrl,
@@ -137,7 +139,8 @@ function migrateToExtensionsRegistry(
     updatedAt: now,
   };
 
-  // Migrate entries from old hooks.installed that don't yet have a registry entry
+  // Migrate entries from old hooks.installed that don't yet have a registry entry.
+  // sonar-a3s is always project-level (never global), regardless of the -g flag.
   const oldHooks = state.agents['claude-code'].hooks.installed;
   for (const hook of oldHooks) {
     const alreadyMigrated = existingExtensions.some(
@@ -145,8 +148,11 @@ function migrateToExtensionsRegistry(
         e.kind === 'hook' && e.name === hook.name && e.hookType === hook.type,
     );
     if (!alreadyMigrated) {
+      const isA3s = hook.name === 'sonar-a3s';
       upsertAgentExtension(state, {
         ...baseExt,
+        projectRoot: isA3s ? projectRoot : effectiveProjectRoot,
+        global: isA3s ? false : isGlobal,
         id: randomUUID(),
         kind: 'hook',
         name: hook.name,
@@ -155,11 +161,14 @@ function migrateToExtensionsRegistry(
     }
   }
 
-  // Add the new sonar-a3s PostToolUse extension for cloud connections
+  // Add the new sonar-a3s PostToolUse extension for cloud connections.
+  // A3S is always project-level (never global), regardless of the -g flag.
   const isCloud = connection?.type === 'cloud';
   if (isCloud) {
     upsertAgentExtension(state, {
       ...baseExt,
+      projectRoot,
+      global: false,
       id: randomUUID(),
       kind: 'hook',
       name: 'sonar-a3s',

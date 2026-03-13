@@ -368,6 +368,113 @@ describe('Hooks', () => {
     }
   });
 
+  // CLI-142: correct analyze subcommand in hook scripts
+  it('hooks: prompt-secrets.sh uses sonar analyze secrets subcommand', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-secrets-cmd-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, false);
+
+      const scriptPath = join(
+        testDir,
+        '.claude',
+        'hooks',
+        'sonar-secrets',
+        'build-scripts',
+        'prompt-secrets.sh',
+      );
+      const content = readFileSync(scriptPath, 'utf-8');
+
+      expect(content).toContain('sonar analyze secrets');
+      expect(content).not.toContain('sonar analyze --file');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: pretool-secrets.sh uses sonar analyze secrets subcommand', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-pretool-cmd-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, false);
+
+      const scriptPath = join(
+        testDir,
+        '.claude',
+        'hooks',
+        'sonar-secrets',
+        'build-scripts',
+        'pretool-secrets.sh',
+      );
+      const content = readFileSync(scriptPath, 'utf-8');
+
+      expect(content).toContain('sonar analyze secrets');
+      expect(content).not.toContain('sonar analyze --file');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  // CLI-144: bash hooks parse both compact and pretty-printed JSON
+  it('hooks: pretool-secrets.sh uses sed with optional whitespace for JSON parsing', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-sed-pretool-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, false);
+
+      const content = readFileSync(
+        join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'pretool-secrets.sh'),
+        'utf-8',
+      );
+
+      expect(content).toContain('[[:space:]]*:[[:space:]]*');
+      expect(content).not.toContain('grep -o');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: prompt-secrets.sh uses sed with optional whitespace for JSON parsing', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-sed-prompt-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, false);
+
+      const content = readFileSync(
+        join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'prompt-secrets.sh'),
+        'utf-8',
+      );
+
+      expect(content).toContain('[[:space:]]*:[[:space:]]*');
+      expect(content).not.toContain('grep -o');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hooks: posttool-a3s.sh uses sed with optional whitespace for JSON parsing', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-sed-posttool-' + Date.now());
+    mkdirSync(testDir, { recursive: true });
+
+    try {
+      await installHooks(testDir, undefined, true, 'test-project');
+
+      const content = readFileSync(
+        join(testDir, '.claude', 'hooks', 'sonar-a3s', 'build-scripts', 'posttool-a3s.sh'),
+        'utf-8',
+      );
+
+      expect(content).toContain('[[:space:]]*:[[:space:]]*');
+      expect(content).not.toContain('grep -o');
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
   it('hooks: areHooksInstalled returns false when settings.json contains malformed JSON', async () => {
     const testDir = join(tmpdir(), 'sonarqube-cli-test-hooks-malformed-' + Date.now());
     const claudeDir = join(testDir, '.claude');

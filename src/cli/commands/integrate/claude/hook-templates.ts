@@ -32,15 +32,15 @@ if ! command -v sonar &> /dev/null; then
   exit 0
 fi
 
-# Read JSON from stdin and extract fields using grep/cut (no external runtimes required)
+# Read JSON from stdin and extract fields using sed (handles both compact and pretty-printed JSON)
 stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | grep -o '"tool_name":"[^"]*"' | cut -d'"' -f4)
+tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 if [[ "$tool_name" != "Read" ]]; then
   exit 0
 fi
 
-file_path=$(echo "$stdin_data" | grep -o '"file_path":"[^"]*"' | cut -d'"' -f4)
+file_path=$(echo "$stdin_data" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
@@ -125,7 +125,7 @@ fi
 stdin_data=$(cat)
 
 # Extract prompt field using sed
-prompt=$(echo "$stdin_data" | sed -n 's/.*"prompt":"\([^"]*\)".*/\1/p' | head -1)
+prompt=$(echo "$stdin_data" | sed -n 's/.*"prompt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 if [[ -z "$prompt" ]]; then
   exit 0
@@ -164,15 +164,15 @@ if ! command -v sonar &> /dev/null; then
   exit 0
 fi
 
-# Read JSON from stdin and extract fields using grep/cut (no external runtimes required)
+# Read JSON from stdin and extract fields using sed (handles both compact and pretty-printed JSON)
 stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | grep -o '"tool_name":"[^"]*"' | cut -d'"' -f4)
+tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 if [[ "$tool_name" != "Edit" ]] && [[ "$tool_name" != "Write" ]]; then
   exit 0
 fi
 
-file_path=$(echo "$stdin_data" | grep -o '"file_path":"[^"]*"' | cut -d'"' -f4)
+file_path=$(echo "$stdin_data" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0

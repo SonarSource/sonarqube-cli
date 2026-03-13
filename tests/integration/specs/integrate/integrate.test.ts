@@ -21,8 +21,11 @@
 // Integration tests for `sonar integrate claude`
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { realpathSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { TestHarness } from '../../harness';
+import { version as CURRENT_VERSION } from '../../../../package.json';
 
 describe('integrate claude', () => {
   let harness: TestHarness;
@@ -401,6 +404,29 @@ describe('integrate claude', () => {
     },
     { timeout: 30000 },
   );
+  it(
+    'prompt-secrets.sh uses correct subcommand (sonar analyze secrets) after integration',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      await harness.run('integrate claude --token test-token --non-interactive');
+
+      const promptScriptContent = harness.cwd
+        .file('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'prompt-secrets.sh')
+        .asText();
+      expect(promptScriptContent).toContain('sonar analyze secrets');
+      expect(promptScriptContent).not.toContain('sonar analyze --file');
+    },
+    { timeout: 30000 },
+  );
 });
 
 // ─── A3S entitlement guard ────────────────────────────────────────────────────
@@ -479,6 +505,41 @@ describe('integrate claude — A3S entitlement guard', () => {
       expect(
         harness.cwd.exists('.claude', 'hooks', 'sonar-a3s', 'build-scripts', 'posttool-a3s.sh'),
       ).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'sonar-a3s agentExtension is always project-level even when -g flag is used',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withA3sEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+
+      const result = await harness.run(
+        `integrate claude -g --token cloud-token --server ${serverUrl} --org my-org --project my-project --non-interactive`,
+        {
+          extraEnv: {
+            SONAR_CLI_SONARCLOUD_URL: serverUrl,
+            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+
+      const state = harness.stateJsonFile.asJson();
+      const a3sExt = (state.agentExtensions as Array<{ name: string; global: boolean }>).find(
+        (e) => e.name === 'sonar-a3s',
+      );
+
+      expect(a3sExt).toBeDefined();
+      expect(a3sExt!.global).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -667,6 +728,111 @@ describe('integrate claude — file placement (local vs global)', () => {
         expect(preToolCmd.startsWith(harness.userHome.path)).toBe(true);
         expect(isAbsolute(promptCmd)).toBe(true);
         expect(promptCmd.startsWith(harness.userHome.path)).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'keeps existing project-level agentExtensions and adds global ones when -g is passed (CLI-148)',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('tok')
+          .withProject('proj')
+          .start();
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+        );
+
+        // Simulate state from a previous project-level integration: agentExtensions with global: false
+        const projectRoot = realpathSync(harness.cwd.path);
+        harness.state().withRawState(
+          JSON.stringify({
+            version: 1,
+            config: { cliVersion: CURRENT_VERSION },
+            auth: {
+              isAuthenticated: true,
+              connections: [
+                {
+                  id: 'conn-1',
+                  type: 'on-premise',
+                  serverUrl: server.baseUrl(),
+                  authenticatedAt: new Date().toISOString(),
+                  keystoreKey: `sonarqube-cli:${server.baseUrl()}`,
+                },
+              ],
+              activeConnectionId: 'conn-1',
+            },
+            agents: {
+              'claude-code': {
+                configured: true,
+                configuredByCliVersion: CURRENT_VERSION,
+                hooks: {
+                  installed: [
+                    { name: 'sonar-secrets', type: 'PreToolUse' },
+                    { name: 'sonar-secrets', type: 'UserPromptSubmit' },
+                  ],
+                },
+              },
+            },
+            tools: { installed: [] },
+            telemetry: { enabled: false },
+            agentExtensions: [
+              {
+                id: randomUUID(),
+                agentId: 'claude-code',
+                projectRoot,
+                global: false,
+                serverUrl: server.baseUrl(),
+                updatedByCliVersion: CURRENT_VERSION,
+                updatedAt: new Date().toISOString(),
+                kind: 'hook',
+                name: 'sonar-secrets',
+                hookType: 'PreToolUse',
+              },
+              {
+                id: randomUUID(),
+                agentId: 'claude-code',
+                projectRoot,
+                global: false,
+                serverUrl: server.baseUrl(),
+                updatedByCliVersion: CURRENT_VERSION,
+                updatedAt: new Date().toISOString(),
+                kind: 'hook',
+                name: 'sonar-secrets',
+                hookType: 'UserPromptSubmit',
+              },
+            ],
+          }),
+        );
+
+        const result = await harness.run('integrate claude -g --token tok --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+
+        const state = harness.stateJsonFile.asJson();
+        const extensions = state.agentExtensions as Array<{
+          name: string;
+          hookType: string;
+          global: boolean;
+        }>;
+
+        // Project-level sonar-secrets hooks must still be present (not overwritten by -g run)
+        const projectSecretsHooks = extensions.filter(
+          (e) => e.name === 'sonar-secrets' && !e.global,
+        );
+        expect(projectSecretsHooks.length).toBe(2);
+
+        // Global sonar-secrets hooks must also be added
+        const globalSecretsHooks = extensions.filter((e) => e.name === 'sonar-secrets' && e.global);
+        expect(globalSecretsHooks.length).toBeGreaterThan(0);
+
+        // sonar-a3s is always project-level, even when -g is used
+        const a3sHooks = extensions.filter((e) => e.name === 'sonar-a3s');
+        for (const hook of a3sHooks) {
+          expect(hook.global).toBe(false);
+        }
       },
       { timeout: 30000 },
     );

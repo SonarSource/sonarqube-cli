@@ -557,11 +557,13 @@ function updateStateAfterConfiguration(context: ConfigurationContext): void {
     addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
     addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
 
-    // Register extensions in the new registry
+    // Register extensions in the new registry.
+    // For global installs, use homedir() as projectRoot so it doesn't collide with project-level entries.
     const now = new Date().toISOString();
+    const effectiveRoot = isGlobal ? homedir() : projectRoot;
     const baseExt = {
       agentId: 'claude-code',
-      projectRoot,
+      projectRoot: effectiveRoot,
       global: isGlobal,
       projectKey,
       orgKey: organization,
@@ -585,11 +587,14 @@ function updateStateAfterConfiguration(context: ConfigurationContext): void {
       hookType: 'UserPromptSubmit',
     });
 
-    // Register A3S hook only when org has entitlement
+    // Register A3S hook only when org has entitlement.
+    // A3S is always project-level (never global), regardless of the -g flag.
     const isCloud = serverURL.includes(SONARCLOUD_HOSTNAME);
     if (context.hasA3s) {
       upsertAgentExtension(state, {
         ...baseExt,
+        projectRoot,
+        global: false,
         id: randomUUID(),
         kind: 'hook',
         name: 'sonar-a3s',
