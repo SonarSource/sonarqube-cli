@@ -234,6 +234,42 @@ describe('runMigrations — migration execution', () => {
     expect(secretsExts.length).toBe(1);
     expect(secretsExts[0].projectRoot).toBe('/some/project');
   });
+
+  // CLI-148: existing global agentExtensions must not be counted as "already migrated"
+  // when running a project-level migration for the same hook name
+  it('creates project-level agentExtensions even when global entries for same hook exist', async () => {
+    const state = makeConfiguredState(OLD_VERSION);
+    state.agents['claude-code'].hooks.installed.push({
+      name: 'sonar-secrets',
+      type: 'PreToolUse',
+      installedAt: new Date().toISOString(),
+    });
+    stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+      keystoreKey: 'sonarcloud.io:my-org',
+    });
+    // Pre-populate a global entry for the same hook (as if integrate -g already ran)
+    stateManager.upsertAgentExtension(state, {
+      id: 'pre-existing',
+      agentId: 'claude-code',
+      projectRoot: '/some/project',
+      global: true,
+      kind: 'hook',
+      name: 'sonar-secrets',
+      hookType: 'PreToolUse',
+      serverUrl: 'https://sonarcloud.io',
+      updatedByCliVersion: '0.0.0',
+      updatedAt: new Date().toISOString(),
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await runMigrations('/some/project');
+
+    const projectExts = state.agentExtensions.filter(
+      (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && !e.global,
+    );
+    expect(projectExts.length).toBe(1);
+  });
 });
 
 describe('runMigrations — CLI-105 patch', () => {

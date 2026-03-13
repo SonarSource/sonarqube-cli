@@ -578,6 +578,69 @@ describe('integrateCommand: --global flag', () => {
       addOrUpdateConnectionSpy.mockRestore();
     }
   });
+
+  // CLI-148: global and project-level agentExtensions must coexist without collision.
+  // Scenario: cd my-project && sonar integrate claude, then sonar integrate claude -g.
+  // The project-level sonar-secrets hooks (global: false) must NOT be lost after the global run.
+  it('keeps separate agentExtensions for project-level and global integrations from same dir', async () => {
+    const capturedState = getDefaultState('test');
+    loadStateSpy.mockReturnValue(capturedState);
+    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
+    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+
+    try {
+      // Step 1: project-level integration (sonar integrate claude)
+      await integrateClaude({
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        global: false,
+      });
+
+      // Verify project-level secrets hooks are registered
+      const projectSecretsPreTool = capturedState.agentExtensions.find(
+        (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && !e.global,
+      );
+      const projectSecretsPrompt = capturedState.agentExtensions.find(
+        (e) => e.name === 'sonar-secrets' && e.hookType === 'UserPromptSubmit' && !e.global,
+      );
+      expect(projectSecretsPreTool).toBeDefined();
+      expect(projectSecretsPrompt).toBeDefined();
+
+      // Step 2: global integration from same directory (sonar integrate claude -g)
+      await integrateClaude({
+        server: 'https://sonarcloud.io',
+        project: 'my-project',
+        token: 'test-token',
+        org: 'test-org',
+        global: true,
+      });
+
+      // Project-level secrets hooks must still be present and unmodified
+      const projectSecretsPreToolAfter = capturedState.agentExtensions.find(
+        (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && !e.global,
+      );
+      const projectSecretsPromptAfter = capturedState.agentExtensions.find(
+        (e) => e.name === 'sonar-secrets' && e.hookType === 'UserPromptSubmit' && !e.global,
+      );
+      expect(projectSecretsPreToolAfter).toBeDefined();
+      expect(projectSecretsPromptAfter).toBeDefined();
+
+      // Global secrets hooks must also be present
+      const globalSecretsPreTool = capturedState.agentExtensions.find(
+        (e) => e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && e.global,
+      );
+      const globalSecretsPrompt = capturedState.agentExtensions.find(
+        (e) => e.name === 'sonar-secrets' && e.hookType === 'UserPromptSubmit' && e.global,
+      );
+      expect(globalSecretsPreTool).toBeDefined();
+      expect(globalSecretsPrompt).toBeDefined();
+    } finally {
+      discoverSpy.mockRestore();
+      healthSpy.mockRestore();
+    }
+  });
 });
 
 // ─── no token path ────────────────────────────────────────────────────────────

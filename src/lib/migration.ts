@@ -119,13 +119,13 @@ function migrateToExtensionsRegistry(
   projectRoot: string,
   globalDir: string | undefined,
 ): void {
+  const isGlobal = globalDir !== undefined;
   const existingExtensions = state.agentExtensions.filter(
-    (e) => e.agentId === 'claude-code' && e.projectRoot === projectRoot,
+    (e) => e.agentId === 'claude-code' && e.projectRoot === projectRoot && e.global === isGlobal,
   );
 
   const connection = getActiveConnection(state);
   const now = new Date().toISOString();
-  const isGlobal = globalDir !== undefined;
 
   const baseExt = {
     agentId: 'claude-code',
