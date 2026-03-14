@@ -114,7 +114,7 @@ main() {
   local filename="sonarqube-cli-${version}-${platform}.exe"
   local url="$BASE_URL/$version/$filename"
   local dest="$INSTALL_DIR/$BINARY_NAME"
-  TMP_DIR="$(mktemp -d)"
+  TMP_DIR="$(mktemp -d -t 'sonarqube-cli-install.XXXXXX')"
 
   echo "Installing pre-release sonarqube-cli $version"
   echo "Detected platform: $platform"
