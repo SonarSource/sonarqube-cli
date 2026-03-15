@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { version as CURRENT_VERSION } from '../../package.json';
@@ -38,7 +38,7 @@ import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
  *   actions are not repeated on the next invocation.
  */
 export async function runPostUpdateActions(): Promise<void> {
-  if (!existsSync(STATE_FILE)) {
+  if (!fs.existsSync(STATE_FILE)) {
     // No state file means this is a fresh installation — nothing to migrate.
     return;
   }
@@ -102,7 +102,7 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
   } else if (state.agents['claude-code'].configured) {
     // Pre-registry fallback: check for global hooks in homedir
     const globalHooksDir = join(homedirFn(), '.claude', 'hooks', 'sonar-secrets');
-    if (existsSync(globalHooksDir)) {
+    if (fs.existsSync(globalHooksDir)) {
       locations.push({ projectRoot: homedirFn(), globalDir: homedirFn() });
     }
   }

@@ -20,9 +20,10 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
+import { SONARCLOUD_HOSTNAME, SONARCLOUD_US_HOSTNAME } from './config-constants';
 import { getToken } from './keychain.js';
 import { loadState, getActiveConnection } from './state-manager.js';
-import { warn } from '../ui/index.js';
+import { warn } from '../ui';
 import logger from './logger.js';
 
 export const ENV_TOKEN = 'SONAR_CLI_TOKEN';
@@ -111,4 +112,17 @@ export async function resolveAuth(options: {
   throw new Error(
     `No authentication token found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`,
   );
+}
+
+export function isEnvBasedAuth(): boolean {
+  return !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
+}
+
+export function isSonarQubeCloud(serverUrl: string): boolean {
+  try {
+    const url = new URL(serverUrl);
+    return url.hostname === SONARCLOUD_HOSTNAME || url.hostname === SONARCLOUD_US_HOSTNAME;
+  } catch {
+    return false;
+  }
 }

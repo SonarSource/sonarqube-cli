@@ -18,35 +18,26 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for sonar integrate command
-
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 import { homedir } from 'node:os';
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { integrateClaude } from '../../src/cli/commands/integrate/claude';
 import * as discovery from '../../src/cli/commands/_common/discovery';
+import { DiscoveredProject } from '../../src/cli/commands/_common/discovery';
+import { CommandFailedError } from '../../src/cli/commands/_common/error';
+import { integrateClaude } from '../../src/cli/commands/integrate/claude';
+import { HealthCheckResult } from '../../src/cli/commands/integrate/claude/health';
 import * as health from '../../src/cli/commands/integrate/claude/health';
-import * as repair from '../../src/cli/commands/integrate/claude/repair';
-import * as auth from '../../src/cli/commands/_common/token';
-import * as keychain from '../../src/lib/keychain.js';
 import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
-import * as stateManager from '../../src/lib/state-manager.js';
-import { getDefaultState } from '../../src/lib/state.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
-import { ENV_TOKEN, ENV_SERVER } from '../../src/lib/auth-resolver.js';
-import { SonarQubeClient } from '../../src/sonarqube/client.js';
+import * as repair from '../../src/cli/commands/integrate/claude/repair';
+import * as state from '../../src/cli/commands/integrate/claude/state';
+import * as authResolver from '../../src/lib/auth-resolver';
+import { ResolvedAuth } from '../../src/lib/auth-resolver';
+import * as migration from '../../src/lib/migration';
+import { getDefaultState } from '../../src/lib/state';
+import * as stateManager from '../../src/lib/state-manager';
+import { SonarQubeClient } from '../../src/sonarqube/client';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 
-const FAKE_PROJECT_INFO = {
-  root: '/fake/project',
-  name: 'fake-project',
-  isGitRepo: true,
-  gitRemote: '',
-  hasSonarProps: false,
-  sonarPropsData: null,
-  hasSonarLintConfig: false,
-  sonarLintData: null,
-};
-
-const CLEAN_HEALTH = {
+const CLEAN_HEALTH: HealthCheckResult = {
   tokenValid: true,
   serverAvailable: true,
   projectAccessible: true,
@@ -56,651 +47,614 @@ const CLEAN_HEALTH = {
   errors: [],
 };
 
-// ─── validateAgent ────────────────────────────────────────────────────────────
+const SERVER_AUTH: ResolvedAuth = {
+  token: 'test-token',
+  serverUrl: 'https://sonar.example.com',
+};
 
-describe('integrateCommand: validateAgent', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
+const CLOUD_AUTH: ResolvedAuth = {
+  token: 'test-token',
+  orgKey: 'cloud-org',
+  serverUrl: 'https://sonarcloud.io',
+};
 
-  afterEach(() => {
-    setMockUi(false);
-  });
-});
-
-// ─── env var auth warning ─────────────────────────────────────────────────────
-
-describe('integrateCommand: env var auth', () => {
-  let discoverSpy: ReturnType<typeof spyOn>;
-  let healthSpy: ReturnType<typeof spyOn>;
+describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
+  let hasA3sEntitlementSpy: Mock<
+    Extract<(typeof SonarQubeClient.prototype)['hasA3sEntitlement'], (...args: any[]) => any>
+  >;
+  let resolveAuthSpy: Mock<Extract<(typeof authResolver)['resolveAuth'], (...args: any[]) => any>>;
+  let isEnvBasedAuthSpy: Mock<
+    Extract<(typeof authResolver)['isEnvBasedAuth'], (...args: any[]) => any>
+  >;
+  let runHealthChecksSpy: Mock<
+    Extract<(typeof health)['runHealthChecks'], (...args: any[]) => any>
+  >;
+  let discoverProjectSpy: Mock<
+    Extract<(typeof discovery)['discoverProject'], (...args: any[]) => any>
+  >;
+  let repairTokenSpy: Mock<Extract<(typeof repair)['repairToken'], (...args: any[]) => any>>;
+  let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
+  let runMigrationsSpy: Mock<Extract<(typeof migration)['runMigrations'], (...args: any[]) => any>>;
+  let updateStateAfterConfigurationSpy: Mock<
+    Extract<(typeof state)['updateStateAfterConfiguration'], (...args: any[]) => any>
+  >;
 
   beforeEach(() => {
     setMockUi(true);
-    clearMockUiCalls();
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+
+    hasA3sEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasA3sEntitlement');
+    hasA3sEntitlementSpy.mockResolvedValue(false);
+
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-    delete process.env[ENV_TOKEN];
-    delete process.env[ENV_SERVER];
+
+    resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
+    isEnvBasedAuthSpy = spyOn(authResolver, 'isEnvBasedAuth');
+    runHealthChecksSpy = spyOn(health, 'runHealthChecks');
+    discoverProjectSpy = spyOn(discovery, 'discoverProject');
+    repairTokenSpy = spyOn(repair, 'repairToken');
+    installHooksSpy = spyOn(hooks, 'installHooks');
+    runMigrationsSpy = spyOn(migration, 'runMigrations');
+    updateStateAfterConfigurationSpy = spyOn(state, 'updateStateAfterConfiguration');
+
+    mockDiscoveredProject({}); // Default mock to prevent tests from reading the real filesystem. Individual tests are overriding this with specific project data as needed.
+    mockHealthCheck(); // Default mock to healthy checks. Individual tests are overriding this with specific health data as needed.
   });
 
   afterEach(() => {
-    discoverSpy.mockRestore();
-    healthSpy.mockRestore();
-    loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
-    delete process.env[ENV_TOKEN];
-    delete process.env[ENV_SERVER];
-    setMockUi(false);
-  });
-
-  it('warns when only SONAR_CLI_TOKEN is set (partial env vars)', async () => {
-    process.env[ENV_TOKEN] = 'squ_env_token';
-    await integrateClaude({
-      server: 'https://sonarcloud.io',
-      project: 'my-project',
-      token: 'squ_cli_token',
-      org: 'my-org',
-    });
-    const warns = getMockUiCalls()
-      .filter((c) => c.method === 'warn')
-      .map((c) => String(c.args[0]));
-    expect(warns.some((m) => m.includes(ENV_SERVER))).toBe(true);
-  });
-
-  it('warns when only SONAR_CLI_SERVER is set (partial env vars)', async () => {
-    process.env[ENV_SERVER] = 'https://sonarcloud.io';
-    await integrateClaude({
-      server: 'https://sonarcloud.io',
-      project: 'my-project',
-      token: 'squ_cli_token',
-      org: 'my-org',
-    });
-    const warns = getMockUiCalls()
-      .filter((c) => c.method === 'warn')
-      .map((c) => String(c.args[0]));
-    expect(warns.some((m) => m.includes(ENV_TOKEN))).toBe(true);
-  });
-});
-
-// ─── full flow ────────────────────────────────────────────────────────────────
-
-describe('integrateCommand: full flow', () => {
-  let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    setMockUi(true);
     clearMockUiCalls();
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
+    setMockUi(false);
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
-    setMockUi(false);
+    hasA3sEntitlementSpy.mockRestore();
+    resolveAuthSpy.mockRestore();
+    isEnvBasedAuthSpy.mockRestore();
+    runHealthChecksSpy.mockRestore();
+    discoverProjectSpy.mockRestore();
+    repairTokenSpy.mockRestore();
+    installHooksSpy.mockRestore();
+    runMigrationsSpy.mockRestore();
+    updateStateAfterConfigurationSpy.mockRestore();
   });
 
-  it('exits 0 when onboarding succeeds with all checks passing', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+  it('shows intro message', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
 
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-      });
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
-  });
+    await integrateClaude({});
 
-  it('saves active connection to state after successful integration', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    const capturedState = getDefaultState('test');
-    loadStateSpy.mockReturnValue(capturedState);
-    saveStateSpy.mockImplementation(() => {});
-
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-      });
-
-      // Verify connection was added to state
-      expect(capturedState.auth.activeConnectionId).toBeDefined();
-      expect(capturedState.auth.connections).toHaveLength(1);
-      expect(capturedState.auth.connections[0].serverUrl).toBe('https://sonarcloud.io');
-      expect(capturedState.auth.connections[0].orgKey).toBe('test-org');
-      expect(capturedState.auth.isAuthenticated).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
-  });
-
-  it('shows verification results after successful health check', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-      });
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('Token valid'))).toBe(true);
-      expect(texts.some((m) => m.includes('Server available'))).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
-  });
-
-  it('shows partial verification results when some checks fail', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const partialHealth = {
-      ...CLEAN_HEALTH,
-      projectAccessible: false,
-      organizationAccessible: false,
-      qualityProfilesAccessible: false,
-      hooksInstalled: false,
-      errors: ['Project not accessible'],
-    };
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(partialHealth);
-    const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
-
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-      });
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('Token valid'))).toBe(true);
-      expect(texts.some((m) => m.includes('Project not accessible'))).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-      repairSpy.mockRestore();
-    }
-  });
-
-  it('runs repair when health check finds issues', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const unhealthyResult = {
-      ...CLEAN_HEALTH,
-      hooksInstalled: false,
-      errors: ['Hooks not installed'],
-    };
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(unhealthyResult);
-    const repairSpy = spyOn(repair, 'runRepair').mockResolvedValue(undefined);
-
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-      });
-      expect(repairSpy).toHaveBeenCalled();
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-      repairSpy.mockRestore();
-    }
-  });
-
-  it('tracks hooks in state when skipHooks is false', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    const addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook');
-
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-      });
-      expect(addInstalledHookSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'claude-code',
-        'sonar-secrets',
-        'PreToolUse',
-      );
-      expect(addInstalledHookSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'claude-code',
-        'sonar-secrets',
-        'UserPromptSubmit',
-      );
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-      addInstalledHookSpy.mockRestore();
-    }
-  });
-
-  // CLI-143: sonar-a3s agentExtension must always be project-level
-  it('registers sonar-a3s agentExtension with global:false even when -g is set', async () => {
-    const capturedState = getDefaultState('test');
-    loadStateSpy.mockReturnValue(capturedState);
-    saveStateSpy.mockImplementation(() => {});
-
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    const a3sSpy = spyOn(SonarQubeClient.prototype, 'hasA3sEntitlement').mockResolvedValue(true);
-
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-        global: true,
-      });
-
-      const a3sExt = capturedState.agentExtensions.find((e) => e.name === 'sonar-a3s');
-      expect(a3sExt).toBeDefined();
-      expect(a3sExt!.global).toBe(false);
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-      a3sSpy.mockRestore();
-    }
-  });
-});
-
-// ─── configuration validation errors ──────────────────────────────────────────
-
-describe('integrateCommand: configuration validation', () => {
-  let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
-  let getAllCredentialsSpy: ReturnType<typeof spyOn>;
-  let getTokenSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-    getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
-    getTokenSpy = spyOn(auth, 'getToken').mockResolvedValue(null);
-  });
-
-  afterEach(() => {
-    loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
-    getAllCredentialsSpy.mockRestore();
-    getTokenSpy.mockRestore();
-    setMockUi(false);
-  });
-
-  it('throws when server URL cannot be determined', () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    try {
-      expect(integrateClaude({ project: 'my-project' })).rejects.toThrow(
-        'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
-      );
-    } finally {
-      discoverSpy.mockRestore();
-    }
-  });
-
-  it('installs hooks when no project key is configured', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const hooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        org: 'my-org',
-        nonInteractive: true,
-      });
-      expect(hooksSpy).toHaveBeenCalled();
-    } finally {
-      discoverSpy.mockRestore();
-      hooksSpy.mockRestore();
-    }
-  });
-
-  it('defaults to SonarQube Cloud when org is provided but no server', async () => {
-    const projectInfoWithOrg = { ...FAKE_PROJECT_INFO };
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithOrg);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    try {
-      await integrateClaude({
-        project: 'my-project',
-        org: 'my-org',
-        token: 'test-token',
-      });
-      const infos = getMockUiCalls()
-        .filter((c) => c.method === 'info')
-        .map((c) => String(c.args[0]));
-      expect(infos.some((m) => m.toLowerCase().includes('sonarqube cloud'))).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
-  });
-});
-
-// ─── discovered configuration ────────────────────────────────────────────────
-
-describe('integrateCommand: discovered project configuration', () => {
-  let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
-    setMockUi(false);
-  });
-
-  it('uses sonar-project.properties when discovered', async () => {
-    const projectInfoWithProps = {
-      ...FAKE_PROJECT_INFO,
-      hasSonarProps: true,
-      sonarPropsData: {
-        hostURL: 'https://sonarcloud.io',
-        projectKey: 'discovered-project',
-        organization: 'discovered-org',
-        projectName: 'discovered-project',
-      },
-    };
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(projectInfoWithProps);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    try {
-      await integrateClaude({ token: 'test-token' });
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('sonar-project.properties'))).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
-  });
-
-  it('uses .sonarlint/connectedMode.json when discovered', async () => {
-    const projectInfoWithSonarLint = {
-      ...FAKE_PROJECT_INFO,
-      hasSonarLintConfig: true,
-      sonarLintData: {
-        serverURL: 'https://sonarcloud.io',
-        projectKey: 'sonarlint-project',
-        organization: 'sonarlint-org',
-      },
-    };
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(
-      projectInfoWithSonarLint,
+    const introText = getMockUiCalls().find(
+      (c) => c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude',
     );
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    try {
-      await integrateClaude({ token: 'test-token' });
-      const texts = getMockUiCalls()
-        .filter((c) => c.method === 'text')
-        .map((c) => String(c.args[0]));
-      expect(texts.some((m) => m.includes('connectedMode.json'))).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
-  });
-});
-
-// ─── global flag ──────────────────────────────────────────────────────────────
-
-describe('integrateCommand: --global flag', () => {
-  let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+    expect(introText).toBeDefined();
   });
 
-  afterEach(() => {
-    loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
-    setMockUi(false);
+  it('shows phase 1 text', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+
+    await integrateClaude({});
+
+    const phaseText = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Phase 1/3: Discovery & Validation',
+    );
+    expect(phaseText).toBeDefined();
   });
 
-  it('exits 0 when global onboarding succeeds', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+  it('server defaults to SonarQube Cloud EU when organization is provided but no server', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({});
 
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-        global: true,
-      });
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
+    await integrateClaude({ org: 'my-org' });
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[0]).toBe('https://sonarcloud.io');
   });
 
-  it('completes successfully with --global and skipHooks=false', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+  it('server option overrides default server', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({});
 
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-        global: true,
-      });
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
+    await integrateClaude({ server: 'https://example-sonarqube.com' });
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[0]).toBe('https://example-sonarqube.com');
   });
 
-  it('installs hooks into homedir when --global is set', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
-    const hooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
+  it('server option overrides discovered server', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({ serverUrl: 'https://discovered-sonarqube.com' });
 
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-        global: true,
-      });
-      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir(), false, 'my-project');
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-      hooksSpy.mockRestore();
-    }
+    await integrateClaude({ server: 'https://example-sonarqube.com' });
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[0]).toBe('https://example-sonarqube.com');
   });
 
-  it('installs hooks into homedir and saves connection in non-interactive mode without token', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const getTokenSpy = spyOn(auth, 'getToken').mockResolvedValue(null);
-    const getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
-    const hooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
-    const addOrUpdateConnectionSpy = spyOn(stateManager, 'addOrUpdateConnection');
+  it('server option overrides auth server', async () => {
+    mockDiscoveredProject({ serverUrl: 'https://non-considered-sonarqube.com' });
 
-    try {
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        nonInteractive: true,
-        global: true,
-      });
-      expect(hooksSpy).toHaveBeenCalledWith(FAKE_PROJECT_INFO.root, homedir(), false, undefined);
-      expect(addOrUpdateConnectionSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        'https://sonarcloud.io',
-        expect.any(String),
-        expect.anything(),
-      );
-    } finally {
-      discoverSpy.mockRestore();
-      getTokenSpy.mockRestore();
-      getAllCredentialsSpy.mockRestore();
-      hooksSpy.mockRestore();
-      addOrUpdateConnectionSpy.mockRestore();
-    }
+    await integrateClaude({ server: 'https://example-sonarqube.com' });
+
+    const resolveAuthCall = resolveAuthSpy.mock.calls.at(0) as Parameters<
+      typeof authResolver.resolveAuth
+    >;
+    expect(resolveAuthCall[0].server).toBe('https://example-sonarqube.com');
   });
 
-  // CLI-148: global and project-level agentExtensions must coexist without collision.
-  // Scenario: cd my-project && sonar integrate claude, then sonar integrate claude -g.
-  // The project-level sonar-secrets hooks (global: false) must NOT be lost after the global run.
-  it('keeps separate agentExtensions for project-level and global integrations from same dir', async () => {
-    const capturedState = getDefaultState('test');
-    loadStateSpy.mockReturnValue(capturedState);
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const healthSpy = spyOn(health, 'runHealthChecks').mockResolvedValue(CLEAN_HEALTH);
+  it('auth server overrides discovered server', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
 
-    try {
-      // Step 1: project-level integration (sonar integrate claude)
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-        global: false,
-      });
+    await integrateClaude({});
 
-      // Verify project-level secrets hooks are registered with project's root path
-      const projectSecretsPreTool = capturedState.agentExtensions.find(
-        (e) =>
-          e.name === 'sonar-secrets' &&
-          e.hookType === 'PreToolUse' &&
-          e.projectRoot === FAKE_PROJECT_INFO.root,
-      );
-      const projectSecretsPrompt = capturedState.agentExtensions.find(
-        (e) =>
-          e.name === 'sonar-secrets' &&
-          e.hookType === 'UserPromptSubmit' &&
-          e.projectRoot === FAKE_PROJECT_INFO.root,
-      );
-      expect(projectSecretsPreTool).toBeDefined();
-      expect(projectSecretsPrompt).toBeDefined();
-
-      // Step 2: global integration from same directory (sonar integrate claude -g)
-      await integrateClaude({
-        server: 'https://sonarcloud.io',
-        project: 'my-project',
-        token: 'test-token',
-        org: 'test-org',
-        global: true,
-      });
-
-      // Project-level secrets hooks must still be present (projectRoot = project dir, not homedir)
-      const projectSecretsPreToolAfter = capturedState.agentExtensions.find(
-        (e) =>
-          e.name === 'sonar-secrets' &&
-          e.hookType === 'PreToolUse' &&
-          e.projectRoot === FAKE_PROJECT_INFO.root,
-      );
-      const projectSecretsPromptAfter = capturedState.agentExtensions.find(
-        (e) =>
-          e.name === 'sonar-secrets' &&
-          e.hookType === 'UserPromptSubmit' &&
-          e.projectRoot === FAKE_PROJECT_INFO.root,
-      );
-      expect(projectSecretsPreToolAfter).toBeDefined();
-      expect(projectSecretsPromptAfter).toBeDefined();
-
-      // Global secrets hooks must be present with homedir as projectRoot
-      const globalSecretsPreTool = capturedState.agentExtensions.find(
-        (e) =>
-          e.name === 'sonar-secrets' && e.hookType === 'PreToolUse' && e.projectRoot === homedir(),
-      );
-      const globalSecretsPrompt = capturedState.agentExtensions.find(
-        (e) =>
-          e.name === 'sonar-secrets' &&
-          e.hookType === 'UserPromptSubmit' &&
-          e.projectRoot === homedir(),
-      );
-      expect(globalSecretsPreTool).toBeDefined();
-      expect(globalSecretsPrompt).toBeDefined();
-    } finally {
-      discoverSpy.mockRestore();
-      healthSpy.mockRestore();
-    }
-  });
-});
-
-// ─── no token path ────────────────────────────────────────────────────────────
-
-describe('integrateCommand: no token available', () => {
-  let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
-  let getAllCredentialsSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
-    getAllCredentialsSpy = spyOn(keychain, 'getAllCredentials').mockResolvedValue([]);
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[0]).toBe(SERVER_AUTH.serverUrl);
   });
 
-  afterEach(() => {
-    loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
-    getAllCredentialsSpy.mockRestore();
-    setMockUi(false);
+  it('auth server overrides default server', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    mockDiscoveredProject({});
+
+    await integrateClaude({});
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[0]).toBe(SERVER_AUTH.serverUrl);
   });
 
-  it('warns when no token found and triggers repair', () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO);
-    const getTokenSpy = spyOn(auth, 'getToken').mockResolvedValue(null);
-    const repairSpy = spyOn(repair, 'runRepair').mockRejectedValue(new Error('repair failed'));
+  it('discovered server overrides default server', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
 
-    try {
-      expect(
-        integrateClaude({
-          server: 'https://sonarcloud.io',
-          project: 'my-project',
-        }),
-      ).rejects.toThrow(new Error('repair failed'));
-      const warns = getMockUiCalls()
-        .filter((c) => c.method === 'warn')
-        .map((c) => String(c.args[0]));
-      expect(warns.some((m) => m.toLowerCase().includes('token'))).toBe(true);
-    } finally {
-      discoverSpy.mockRestore();
-      getTokenSpy.mockRestore();
-      repairSpy.mockRestore();
-    }
+    await integrateClaude({});
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[0]).toBe('https://example-sonarqube.com');
   });
+
+  it('shows warning when resolved server does not match discovered server', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
+
+    await integrateClaude({});
+
+    const warnText = getMockUiCalls().find(
+      (c) => c.method === 'warn' && String(c.args[0]).includes('Server URL mismatch'),
+    );
+    expect(warnText).toBeDefined();
+  });
+
+  it('organization defaults to discovered organization when no auth provided', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({ organization: 'an-org' });
+
+    await integrateClaude({});
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[4]).toBe('an-org');
+  });
+
+  it('organization option overrides discovered organization', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({ organization: 'an-org' });
+
+    await integrateClaude({ org: 'override-org' });
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[4]).toBe('override-org');
+  });
+
+  it('organization option overrides auth organization', async () => {
+    mockDiscoveredProject({ organization: 'not-considered-org' });
+
+    await integrateClaude({ org: 'override-org' });
+
+    const resolveAuthCall = resolveAuthSpy.mock.calls.at(0) as Parameters<
+      typeof authResolver.resolveAuth
+    >;
+    expect(resolveAuthCall[0].org).toBe('override-org');
+  });
+
+  it('auth organization overrides discovered organization', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    mockDiscoveredProject({ organization: 'an-org' });
+
+    await integrateClaude({});
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[4]).toBe(CLOUD_AUTH.orgKey);
+  });
+
+  it('shows warning when resolved organization does not match discovered organization', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    mockDiscoveredProject({ organization: 'an-org' });
+
+    await integrateClaude({});
+
+    const warnText = getMockUiCalls().find(
+      (c) => c.method === 'warn' && String(c.args[0]).includes('organization mismatch'),
+    );
+    expect(warnText).toBeDefined();
+  });
+
+  it('validates organization is provided when server is SonarQube Cloud', () => {
+    mockNoAuth();
+    mockDiscoveredProject({});
+
+    expect(() => integrateClaude({})).toThrow(CommandFailedError);
+  });
+
+  it('token defaults to token option when no auth provided', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({});
+
+    await integrateClaude({ token: 'a-token', org: 'an-org' });
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[1]).toBe('a-token');
+  });
+
+  it('token option overrides auth token', async () => {
+    await integrateClaude({ token: 'a-token', org: 'an-org' });
+
+    const resolveAuthCall = resolveAuthSpy.mock.calls.at(0) as Parameters<
+      typeof authResolver.resolveAuth
+    >;
+    expect(resolveAuthCall[0].token).toBe('a-token');
+  });
+
+  it('project key defaults to discovered project key', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({ projectKey: 'project' });
+
+    await integrateClaude({ org: 'an-org' });
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[2]).toBe('project');
+  });
+
+  it('project key overrides discovered project key', async () => {
+    mockNoAuth();
+    mockDiscoveredProject({ projectKey: 'project' });
+
+    await integrateClaude({ project: 'override-project', org: 'an-org' });
+
+    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
+    expect(lastHealthCheckCall[2]).toBe('override-project');
+  });
+
+  it('shows phase 2 text', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+
+    await integrateClaude({});
+
+    const phaseText = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Phase 2/3: Health Check & Repair',
+    );
+    expect(phaseText).toBeDefined();
+  });
+
+  it('shows success message on heath check success', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+
+    await integrateClaude({});
+
+    const successText = getMockUiCalls().find(
+      (c) =>
+        c.method === 'success' &&
+        String(c.args[0]).includes('All checks passed! Configuration is healthy.'),
+    );
+    expect(successText).toBeDefined();
+  });
+
+  it('shows warning message when heath check fails', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    mockHealthCheckOnce({
+      tokenValid: false,
+      errors: ['HealthError1', 'HealthError2', 'HealthError3'],
+    });
+    mockHealthCheck();
+
+    await integrateClaude({});
+
+    const warnText = getMockUiCalls().find(
+      (c) => c.method === 'warn' && String(c.args[0]).includes('Found 3 issue(s):'),
+    );
+    expect(warnText).toBeDefined();
+  });
+
+  it('shows heath check failures in detail', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    mockHealthCheckOnce({
+      tokenValid: false,
+      errors: ['HealthError1', 'HealthError2', 'HealthError3'],
+    });
+    mockHealthCheck();
+
+    await integrateClaude({});
+
+    const healthText = getMockUiCalls()
+      .filter((c) => c.method === 'text' && String(c.args[0]).includes('HealthError'))
+      .map((c) => String(c.args[0]));
+    expect(healthText).toBeArrayOfSize(3);
+    expect(healthText).toEqual(['  - HealthError1', '  - HealthError2', '  - HealthError3']);
+  });
+
+  it('attempts repair when no token', async () => {
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    mockHealthCheckOnce({ tokenValid: false, errors: ['Token is invalid'] });
+    mockHealthCheck();
+
+    await integrateClaude({ org: 'an-org' });
+
+    expect(repairTokenSpy).toHaveBeenCalledTimes(1);
+    expect(repairTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'an-org');
+  });
+
+  it('attempts repair when health fails for token', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    mockHealthCheckOnce({ tokenValid: false, errors: ['Token is invalid'] });
+    mockHealthCheck();
+
+    await integrateClaude({});
+
+    expect(repairTokenSpy).toHaveBeenCalledTimes(1);
+    expect(repairTokenSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, undefined);
+  });
+
+  it('does not repair token when non-interactive option', async () => {
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    runHealthChecksSpy.mockResolvedValue({
+      ...CLEAN_HEALTH,
+      tokenValid: false,
+      errors: ['Token is invalid'],
+    });
+
+    await integrateClaude({ nonInteractive: true, org: 'an-org' });
+
+    expect(repairTokenSpy).not.toBeCalled();
+  });
+
+  it('does not repair token when env variable based auth provided', async () => {
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    runHealthChecksSpy.mockResolvedValue({
+      ...CLEAN_HEALTH,
+      tokenValid: false,
+      errors: ['Token is invalid'],
+    });
+    isEnvBasedAuthSpy.mockReturnValue(true);
+
+    await integrateClaude({ org: 'an-org' });
+
+    expect(repairTokenSpy).not.toBeCalled();
+  });
+
+  it('checks A3S entitlement when token is provided', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    hasA3sEntitlementSpy.mockResolvedValue(true);
+
+    await integrateClaude({});
+
+    expect(hasA3sEntitlementSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips A3S entitlement when token is not provided', async () => {
+    mockNoAuth();
+    hasA3sEntitlementSpy.mockResolvedValue(true);
+
+    await integrateClaude({ org: 'an-org' });
+
+    expect(hasA3sEntitlementSpy).not.toBeCalled();
+  });
+
+  it('runs migration, installs hooks and updates state when health check succeeds', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockA3sEntitlement(true);
+
+    await integrateClaude({});
+
+    assertMigrationHookInstallationAndStateUpdateRan(
+      'a-project',
+      '/project/root',
+      undefined,
+      false,
+      true,
+    );
+  });
+
+  it('runs migration, installs hooks and updates state when global option and health check succeeds', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockA3sEntitlement(true);
+
+    await integrateClaude({ global: true });
+
+    assertMigrationHookInstallationAndStateUpdateRan(
+      'a-project',
+      '/project/root',
+      homedir(),
+      true,
+      true,
+    );
+  });
+
+  it('runs migration, installs hooks and updates state when health check fails', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    mockA3sEntitlement(true);
+    mockHealthCheck({ organizationAccessible: false, errors: ['Organization not accessible'] });
+
+    await integrateClaude({});
+
+    assertMigrationHookInstallationAndStateUpdateRan(
+      'a-project',
+      '/project/root',
+      undefined,
+      false,
+      true,
+    );
+  });
+
+  it('runs migration, installs hooks and updates state when project key is missing', async () => {
+    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+    mockDiscoveredProject({ rootDir: '/projectB/root' });
+    mockA3sEntitlement(false);
+
+    await integrateClaude({});
+
+    assertMigrationHookInstallationAndStateUpdateRan(
+      undefined,
+      '/projectB/root',
+      undefined,
+      false,
+      false,
+    );
+  });
+
+  it('shows phase 3 text', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+
+    await integrateClaude({});
+
+    const phaseText = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Phase 3/3: Final Verification',
+    );
+    expect(phaseText).toBeDefined();
+  });
+
+  it('shows outro message', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+
+    await integrateClaude({});
+
+    const phaseText = getMockUiCalls().find(
+      (c) => c.method === 'outro' && String(c.args[0]) === 'Setup complete!',
+    );
+    expect(phaseText).toBeDefined();
+  });
+
+  it('shows warning message when final heath check fails', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    mockHealthCheckOnce({ errors: ['HealthError1', 'HealthError2', 'HealthError3'] });
+    mockHealthCheck({ errors: ['RemainingHealthError1', 'RemainingHealthError3'] });
+
+    await integrateClaude({});
+
+    const warnText = getMockUiCalls().find(
+      (c) => c.method === 'warn' && String(c.args[0]).includes('Some issues remain:'),
+    );
+    expect(warnText).toBeDefined();
+  });
+
+  it('shows final heath check failures in detail', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    repairTokenSpy.mockResolvedValue('repaired-token');
+    mockHealthCheckOnce({ errors: ['HealthError1', 'HealthError2', 'HealthError3'] });
+    mockHealthCheck({ errors: ['RemainingHealthError1', 'RemainingHealthError3'] });
+
+    await integrateClaude({});
+
+    const healthText = getMockUiCalls()
+      .filter((c) => c.method === 'text' && String(c.args[0]).includes('RemainingHealthError'))
+      .map((c) => String(c.args[0]));
+    expect(healthText).toBeArrayOfSize(2);
+    expect(healthText).toEqual(['  - RemainingHealthError1', '  - RemainingHealthError3']);
+  });
+
+  it('shows secrets hook example when hooks installed', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+
+    await integrateClaude({});
+
+    const infoText = getMockUiCalls().find(
+      (c) =>
+        c.method === 'info' &&
+        String(c.args[0]) === 'See it in action - paste this into Claude Code:',
+    );
+    expect(infoText).toBeDefined();
+    const exampleText = getMockUiCalls().find(
+      (c) =>
+        c.method === 'note' &&
+        String(c.args[0]).search(/Can you push a commit using my token \w+/) > -1,
+    );
+    expect(exampleText).toBeDefined();
+  });
+
+  it('skips secrets hook example when hooks not installed', async () => {
+    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
+    mockHealthCheck({ hooksInstalled: false });
+
+    await integrateClaude({});
+
+    const infoText = getMockUiCalls().find(
+      (c) =>
+        c.method === 'info' &&
+        String(c.args[0]) === 'See it in action - paste this into Claude Code:',
+    );
+    expect(infoText).not.toBeDefined();
+    const exampleText = getMockUiCalls().find(
+      (c) =>
+        c.method === 'note' &&
+        String(c.args[0]).search(/Can you push a commit using my token \w+/) > -1,
+    );
+    expect(exampleText).not.toBeDefined();
+  });
+
+  function mockNoAuth() {
+    resolveAuthSpy.mockImplementation(() => {
+      throw new Error('No auth');
+    });
+  }
+
+  function mockDiscoveredProject(project: Partial<DiscoveredProject>) {
+    discoverProjectSpy.mockResolvedValue({
+      rootDir: project.rootDir || process.cwd(),
+      isGitRepo: project.isGitRepo ?? false,
+      serverUrl: project.serverUrl,
+      organization: project.organization,
+      projectKey: project.projectKey,
+    });
+  }
+
+  function mockHealthCheck(health?: Partial<HealthCheckResult>) {
+    runHealthChecksSpy.mockResolvedValue({ ...CLEAN_HEALTH, ...health });
+  }
+
+  function mockHealthCheckOnce(health?: Partial<HealthCheckResult>) {
+    runHealthChecksSpy.mockResolvedValueOnce({ ...CLEAN_HEALTH, ...health });
+  }
+
+  function mockA3sEntitlement(hasEntitlement: boolean) {
+    hasA3sEntitlementSpy.mockResolvedValue(hasEntitlement);
+  }
+
+  function assertMigrationHookInstallationAndStateUpdateRan(
+    projectKey: string | undefined,
+    projectRootDir: string,
+    globalDir: string | undefined,
+    isGlobal: boolean,
+    a3sEnabled: boolean,
+  ): void {
+    expect(runMigrationsSpy).toHaveBeenCalledTimes(1);
+    expect(runMigrationsSpy).toHaveBeenCalledWith(
+      projectRootDir,
+      globalDir,
+      a3sEnabled,
+      projectKey,
+    );
+    expect(installHooksSpy).toHaveBeenCalledTimes(1);
+    expect(installHooksSpy).toHaveBeenCalledWith(projectRootDir, globalDir, a3sEnabled, projectKey);
+    expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
+    expect(updateStateAfterConfigurationSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      projectRootDir,
+      isGlobal,
+      a3sEnabled,
+    );
+  }
 });

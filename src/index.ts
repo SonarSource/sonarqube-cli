@@ -23,7 +23,7 @@
 // Main CLI entry point
 
 import { COMMAND_TREE } from './cli/command-tree';
-import { runPostUpdateActions } from './lib/post-update';
+import * as postUpdate from './lib/post-update';
 
-await runPostUpdateActions();
+await postUpdate.runPostUpdateActions();
 COMMAND_TREE.parse();

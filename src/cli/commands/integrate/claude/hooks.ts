@@ -20,9 +20,10 @@
 
 // Hooks installation (cross-platform)
 
-import { existsSync, mkdirSync } from 'node:fs';
+import * as nodeFs from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import { dirname, basename, join } from 'node:path';
-import { platform } from 'node:os';
+import * as nodeOs from 'node:os';
 import logger from '../../../../lib/logger';
 import {
   getSecretPreToolTemplateUnix,
@@ -70,7 +71,7 @@ interface HookInstallParams {
 }
 
 function getPlatform(): 'windows' | 'unix' {
-  return platform() === 'win32' ? 'windows' : 'unix';
+  return nodeOs.platform() === 'win32' ? 'windows' : 'unix';
 }
 
 function getScriptExtension(): string {
@@ -109,13 +110,12 @@ async function installHook(params: HookInstallParams): Promise<void> {
   const isWindows = getPlatform() === 'windows';
   const scriptExt = getScriptExtension();
   const configDir = AGENT_CONFIG_DIR[agent];
-  const fs = await import('node:fs/promises');
 
   // Write script file
   const fullScriptDir = join(installDir, configDir, HOOKS_DIR, dirname(scriptPath));
-  mkdirSync(fullScriptDir, { recursive: true });
+  nodeFs.mkdirSync(fullScriptDir, { recursive: true });
   const fullScriptPath = join(fullScriptDir, `${basename(scriptPath)}${scriptExt}`);
-  await fs.writeFile(
+  await fsPromises.writeFile(
     fullScriptPath,
     isWindows ? scriptContentWindows : scriptContentUnix,
     isWindows ? undefined : { mode: 0o755 },
@@ -134,13 +134,13 @@ async function installHook(params: HookInstallParams): Promise<void> {
   // Update settings.json
   const settingsPath = join(installDir, configDir, SETTINGS_FILE);
   let settings: AgentSettings = { hooks: {} };
-  if (existsSync(settingsPath)) {
-    const data = await fs.readFile(settingsPath, 'utf-8');
+  if (nodeFs.existsSync(settingsPath)) {
+    const data = await fsPromises.readFile(settingsPath, 'utf-8');
     settings = JSON.parse(data) as AgentSettings;
   }
   settings.hooks ??= {};
   upsertHookEntry(settings, eventType, marker, matcher, command, timeout);
-  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+  await fsPromises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
 }
 
 /**
@@ -150,13 +150,12 @@ async function installHook(params: HookInstallParams): Promise<void> {
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
   const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR.claude, SETTINGS_FILE);
 
-  if (!existsSync(settingsPath)) {
+  if (!nodeFs.existsSync(settingsPath)) {
     return false;
   }
 
   try {
-    const fs = await import('node:fs/promises');
-    const data = await fs.readFile(settingsPath, 'utf-8');
+    const data = await fsPromises.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(data) as AgentSettings;
 
     return Boolean(

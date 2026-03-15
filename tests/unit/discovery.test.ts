@@ -20,12 +20,14 @@
 
 // Discovery module tests
 
-import { it, expect, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { discoverProject } from '../../src/cli/commands/_common/discovery';
+import { discoverProject, discoverProjectInfo } from '../../src/cli/commands/_common/discovery';
 import * as processLib from '../../src/lib/process.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
+
 it('discovery: sonar-project.properties parsing', async () => {
   const testDir = join(tmpdir(), 'sonarqube-cli-test-discovery-' + Date.now());
   mkdirSync(testDir, { recursive: true });
@@ -40,7 +42,7 @@ sonar.organization=my-org
 `;
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
 
     expect(info.hasSonarProps).toBe(true);
     expect(info.sonarPropsData).toMatchObject({
@@ -67,7 +69,7 @@ it('discovery: .sonarlint/connectedMode.json parsing', async () => {
     };
     writeFileSync(join(sonarlintDir, 'connectedMode.json'), JSON.stringify(configContent, null, 2));
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
 
     expect(info.hasSonarLintConfig).toBe(true);
     expect(info.sonarLintData).toMatchObject({
@@ -97,7 +99,7 @@ sonar.organization=test-org
 `;
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
 
     expect(info.hasSonarProps).toBe(true);
     expect(info.sonarPropsData).toMatchObject({
@@ -115,7 +117,7 @@ it('discovery: no configuration files', async () => {
   mkdirSync(testDir, { recursive: true });
 
   try {
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
 
     expect(info.hasSonarProps).toBe(false);
     expect(info.hasSonarLintConfig).toBe(false);
@@ -129,7 +131,7 @@ it('discovery: detects git repository when .git dir present', async () => {
   mkdirSync(join(testDir, '.git'), { recursive: true });
 
   try {
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.isGitRepo).toBe(true);
     expect(info.root).toBe(testDir);
   } finally {
@@ -148,7 +150,7 @@ it('discovery: reads git remote when git repository has origin', async () => {
   });
 
   try {
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.isGitRepo).toBe(true);
     expect(info.gitRemote).toBe('https://github.com/example/test-project.git');
   } finally {
@@ -165,7 +167,7 @@ it('discovery: sonar-project.properties with line missing equals sign', async ()
     const propsContent = `sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_key\nINVALID_LINE_NO_EQUALS\n`;
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.hasSonarProps).toBe(true);
     expect(info.sonarPropsData?.projectKey).toBe('my_key');
   } finally {
@@ -181,7 +183,7 @@ it('discovery: sonar-project.properties with no hostURL or projectKey returns nu
     const propsContent = `sonar.projectName=My Project\nsonar.organization=my-org\n`;
     writeFileSync(join(testDir, 'sonar-project.properties'), propsContent);
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.hasSonarProps).toBe(false);
     expect(info.sonarPropsData).toBeNull();
   } finally {
@@ -201,7 +203,7 @@ it('discovery: .sonarlint/settings.json with serverId schema', async () => {
     };
     writeFileSync(join(testDir, '.sonarlint', 'settings.json'), JSON.stringify(configContent));
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.hasSonarLintConfig).toBe(true);
     expect(info.sonarLintData?.serverURL).toBe('my-sonarqube-server');
     expect(info.sonarLintData?.projectKey).toBe('my_project');
@@ -225,7 +227,7 @@ it('discovery: .sonarlint/connected-mode.json with connectionId schema', async (
       JSON.stringify(configContent),
     );
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.hasSonarLintConfig).toBe(true);
     expect(info.sonarLintData?.serverURL).toBe('https://sonarqube.example.com');
     expect(info.sonarLintData?.projectKey).toBe('conn_project');
@@ -244,7 +246,7 @@ it('discovery: .sonarlint config with no matching schema returns null', async ()
       JSON.stringify({ unknownField: 'value', anotherField: 123 }),
     );
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.hasSonarLintConfig).toBe(false);
     expect(info.sonarLintData).toBeNull();
   } finally {
@@ -259,10 +261,221 @@ it('discovery: .sonarlint config with invalid JSON returns null', async () => {
   try {
     writeFileSync(join(testDir, '.sonarlint', 'connectedMode.json'), '{ not valid json ]');
 
-    const info = await discoverProject(testDir);
+    const info = await discoverProjectInfo(testDir);
     expect(info.hasSonarLintConfig).toBe(false);
     expect(info.sonarLintData).toBeNull();
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
+});
+
+describe('discoverProject', () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `sonarqube-cli-test-discover-project-${Date.now()}`);
+    mkdirSync(testDir, { recursive: true });
+    setMockUi(true);
+  });
+
+  afterEach(() => {
+    clearMockUiCalls();
+    setMockUi(false);
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('returns current dir as rootDir when not in a git repo', async () => {
+    const result = await discoverProject(testDir);
+    expect(result.rootDir).toBe(testDir);
+  });
+
+  it('returns isGitRepo false when no .git directory is present', async () => {
+    const result = await discoverProject(testDir);
+    expect(result.isGitRepo).toBe(false);
+  });
+
+  it('returns isGitRepo true and rootDir as git root when .git directory is present', async () => {
+    mkdirSync(join(testDir, '.git'));
+    const result = await discoverProject(testDir);
+    expect(result.isGitRepo).toBe(true);
+    expect(result.rootDir).toBe(testDir);
+  });
+
+  it('returns no serverUrl, projectKey, or organization when no config files are present', async () => {
+    const result = await discoverProject(testDir);
+    expect(result.serverUrl).toBeUndefined();
+    expect(result.projectKey).toBeUndefined();
+    expect(result.organization).toBeUndefined();
+  });
+
+  it('shows no config-found messages when no config files are present', async () => {
+    await discoverProject(testDir);
+    const textCalls = getMockUiCalls().filter((c) => c.method === 'text');
+    expect(textCalls).toHaveLength(0);
+  });
+
+  it('maps sonar-project.properties hostURL to serverUrl', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_project\n',
+    );
+    const result = await discoverProject(testDir);
+    expect(result.serverUrl).toBe('https://sonarcloud.io');
+  });
+
+  it('maps sonar-project.properties projectKey', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_project\n',
+    );
+    const result = await discoverProject(testDir);
+    expect(result.projectKey).toBe('my_project');
+  });
+
+  it('maps sonar-project.properties organization', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_project\nsonar.organization=my-org\n',
+    );
+    const result = await discoverProject(testDir);
+    expect(result.organization).toBe('my-org');
+  });
+
+  it('shows "Found sonar-project.properties" UI message when sonar properties are found', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_project\n',
+    );
+    await discoverProject(testDir);
+    const msg = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Found sonar-project.properties',
+    );
+    expect(msg).toBeDefined();
+  });
+
+  it('maps sonarlint serverURL to serverUrl', async () => {
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarqube.example.com', projectKey: 'lint_project' }),
+    );
+    const result = await discoverProject(testDir);
+    expect(result.serverUrl).toBe('https://sonarqube.example.com');
+  });
+
+  it('maps sonarlint projectKey', async () => {
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarqube.example.com', projectKey: 'lint_project' }),
+    );
+    const result = await discoverProject(testDir);
+    expect(result.projectKey).toBe('lint_project');
+  });
+
+  it('maps sonarlint organization', async () => {
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({
+        sonarQubeUri: 'https://sonarqube.example.com',
+        projectKey: 'lint_project',
+        organization: 'lint-org',
+      }),
+    );
+    const result = await discoverProject(testDir);
+    expect(result.organization).toBe('lint-org');
+  });
+
+  it('shows "Found .sonarlint/connectedMode.json" UI message when sonarlint config is found', async () => {
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarqube.example.com', projectKey: 'lint_project' }),
+    );
+    await discoverProject(testDir);
+    const msg = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Found .sonarlint/connectedMode.json',
+    );
+    expect(msg).toBeDefined();
+  });
+
+  it('sonar-project.properties takes precedence over sonarlint for serverUrl', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+    );
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
+    );
+    const result = await discoverProject(testDir);
+    expect(result.serverUrl).toBe('https://props-server.io');
+  });
+
+  it('sonar-project.properties takes precedence over sonarlint for projectKey', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+    );
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
+    );
+    const result = await discoverProject(testDir);
+    expect(result.projectKey).toBe('props_project');
+  });
+
+  it('sonarlint fills in projectKey when sonar-project.properties does not define one', async () => {
+    // sonar props with only hostURL (passes the null-check, but projectKey is absent)
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\n',
+    );
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
+    );
+    const result = await discoverProject(testDir);
+    expect(result.projectKey).toBe('lint_project');
+  });
+
+  it('sonarlint fills in organization when sonar-project.properties does not define one', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+    );
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({
+        sonarQubeUri: 'https://sonarlint-server.com',
+        projectKey: 'lint_project',
+        organization: 'lint-org',
+      }),
+    );
+    const result = await discoverProject(testDir);
+    expect(result.organization).toBe('lint-org');
+  });
+
+  it('shows both config-found messages when both configs are present', async () => {
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+    );
+    mkdirSync(join(testDir, '.sonarlint'), { recursive: true });
+    writeFileSync(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
+    );
+    await discoverProject(testDir);
+    const textCalls = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(textCalls).toContain('Found sonar-project.properties');
+    expect(textCalls).toContain('Found .sonarlint/connectedMode.json');
+  });
 });

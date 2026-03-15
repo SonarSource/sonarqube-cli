@@ -20,32 +20,19 @@
 
 // Integrate command - setup SonarQube integration for Claude Code
 
-// Config is read from sonar-project.properties, no need to save separate file
 import { homedir } from 'node:os';
-import { randomUUID } from 'node:crypto';
-import { discoverProject, type ProjectInfo } from '../../_common/discovery';
-import { runHealthChecks } from './health';
-import { runRepair } from './repair';
-import { getToken } from '../../_common/token';
-import { getAllCredentials } from '../../../../lib/keychain';
-import { installHooks } from './hooks';
+import { isEnvBasedAuth, isSonarQubeCloud, resolveAuth } from '../../../../lib/auth-resolver';
+import { SONARCLOUD_URL } from '../../../../lib/config-constants';
 import { runMigrations } from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import {
-  addInstalledHook,
-  addOrUpdateConnection,
-  generateConnectionId,
-  loadState,
-  markAgentConfigured,
-  saveState,
-  upsertAgentExtension,
-} from '../../../../lib/state-manager';
-import { version as VERSION } from '../../../../../package.json';
-import logger from '../../../../lib/logger';
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../../lib/config-constants';
-import { ENV_SERVER, ENV_TOKEN } from '../../../../lib/auth-resolver';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
+import type { DiscoveredProject } from '../../_common/discovery';
+import { discoverProject } from '../../_common/discovery';
 import { CommandFailedError } from '../../_common/error';
+import { runHealthChecks } from './health';
+import { installHooks } from './hooks';
+import { repairToken } from './repair';
+import { updateStateAfterConfiguration } from './state';
 
 export interface IntegrateClaudeOptions {
   server?: string;
@@ -56,13 +43,8 @@ export interface IntegrateClaudeOptions {
   global?: boolean;
 }
 
-interface RepairOptions {
-  hooksGlobal: boolean | undefined;
-  nonInteractive: boolean | undefined;
-}
-
-interface ConfigurationData {
-  serverURL: string | undefined;
+export interface ConfigurationData {
+  serverURL: string;
   projectKey: string | undefined;
   organization: string | undefined;
   token: string | undefined;
@@ -74,225 +56,163 @@ interface ConfigurationData {
 export async function integrateClaude(options: IntegrateClaudeOptions): Promise<void> {
   intro(`SonarQube Integration Setup for Claude`);
 
-  text('\nPhase 1/3: Discovery & Validation');
+  blank();
+  text('Phase 1/3: Discovery & Validation');
   blank();
 
-  const projectInfo = await discoverProject(process.cwd());
+  const project = await discoverProject(process.cwd());
+  const config = await loadConfiguration(project, options);
+  validateConfiguration(project, config);
 
-  text(`Project root: ${projectInfo.root}`);
-  if (projectInfo.isGitRepo) {
-    text('Git repository detected');
-  }
+  const isGlobal = options.global ?? false;
+  const hooksRoot = isGlobal ? homedir() : project.rootDir;
+  const globalDir = isGlobal ? homedir() : undefined;
 
-  const config = await loadConfiguration(projectInfo, options);
+  let token = config.token;
 
-  if (!config.serverURL && !config.organization) {
-    throw new CommandFailedError(
-      'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
-    );
-  }
+  blank();
+  text('Phase 2/3: Health Check & Repair');
+  blank();
 
-  const { serverURL, projectKey } = validateAndPrintConfiguration(config);
-
-  // When both env vars are set, treat as non-interactive (CI context)
-  const envBasedAuth = !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
-  const effectiveNonInteractive = options.nonInteractive || envBasedAuth;
-
-  await runFullSonarIntegration(
-    serverURL,
-    projectKey,
-    projectInfo,
-    config,
-    options,
-    effectiveNonInteractive,
-  );
-}
-
-/**
- * Get configuration from discovered project info
- */
-function getDiscoveredConfiguration(projectInfo: ProjectInfo): Partial<ConfigurationData> {
-  const config: Partial<ConfigurationData> = {};
-
-  if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
-    config.serverURL = projectInfo.sonarPropsData.hostURL;
-    config.projectKey = projectInfo.sonarPropsData.projectKey;
-    config.organization = projectInfo.sonarPropsData.organization;
-    text('Found sonar-project.properties');
-  }
-
-  if (projectInfo.hasSonarLintConfig && projectInfo.sonarLintData) {
-    config.serverURL = config.serverURL || projectInfo.sonarLintData.serverURL;
-    config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
-    config.organization = config.organization || projectInfo.sonarLintData.organization;
-    text('Found .sonarlint/connectedMode.json');
-  }
-
-  return config;
-}
-
-/**
- * Try to get token from specific server/org combination
- */
-async function tryGetTokenForServerOrg(
-  serverURL: string | undefined,
-  organization: string | undefined,
-): Promise<string | undefined> {
-  if ((organization || serverURL) && serverURL) {
-    const keychainToken = await getToken(serverURL, organization);
-    if (keychainToken) {
-      text('Found stored credentials');
-      return keychainToken;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Try to get token from SonarQube Cloud credentials in keychain
- */
-async function tryGetSonarCloudToken(): Promise<{ token?: string; org?: string }> {
-  const credentials = await getAllCredentials();
-  const sonarCloudCreds = credentials.filter((cred) =>
-    cred.account.startsWith(`${SONARCLOUD_HOSTNAME}:`),
+  const healthResult = await runHealthChecks(
+    config.serverURL,
+    token || 'INVALID',
+    config.projectKey,
+    hooksRoot,
+    config.organization,
   );
 
-  if (sonarCloudCreds.length === 0) {
-    return {};
-  }
-
-  const cred = sonarCloudCreds[0];
-  const [, org] = cred.account.split(':');
-
-  const result: { token?: string; org?: string } = { token: cred.password, org };
-
-  text(`Using stored credentials for organization: ${org}`);
-
-  if (sonarCloudCreds.length > 1) {
-    info(`Multiple organizations found (${sonarCloudCreds.length}). Using: ${org}`);
-    info('  To use a different organization, specify --org');
-  }
-
-  return result;
-}
-
-/**
- * Apply SonarQube Cloud credentials from keychain result
- */
-function applySonarCloudCredentials(
-  config: ConfigurationData,
-  scResult: { token?: string; org?: string },
-): void {
-  config.token = config.token || scResult.token;
-  config.organization = config.organization || scResult.org;
-  if (scResult.org && !config.serverURL) {
-    config.serverURL = SONARCLOUD_URL;
-  }
-}
-
-/**
- * Fetch credentials from keychain if needed
- * Extracted to reduce nesting complexity in loadConfiguration
- */
-async function fetchKeychainCredentials(config: ConfigurationData): Promise<void> {
-  try {
-    if (!config.token) {
-      config.token = await tryGetTokenForServerOrg(config.serverURL, config.organization);
+  if (healthResult.errors.length === 0) {
+    success('All checks passed! Configuration is healthy.');
+  } else {
+    warn(`Found ${healthResult.errors.length} issue(s):`);
+    for (const msg of healthResult.errors) {
+      text(`  - ${msg}`);
     }
 
-    if (!config.token || !config.organization) {
-      const scResult = await tryGetSonarCloudToken();
-      applySonarCloudCredentials(config, scResult);
+    const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
+
+    if (!isNonInteractive && !healthResult.tokenValid) {
+      blank();
+      text('Running token repair...');
+
+      token = await repairToken(config.serverURL, config.organization);
     }
-  } catch {
-    // Silently fail keychain access - will validate required values below
   }
+
+  const a3sEnabled = token
+    ? await resolveA3sEntitlement(config.serverURL, token, config.organization)
+    : false;
+
+  text('Installing claude code hooks...');
+  await runMigrations(project.rootDir, globalDir, a3sEnabled, config.projectKey);
+  await installHooks(project.rootDir, globalDir, a3sEnabled, config.projectKey);
+  updateStateAfterConfiguration(config, project.rootDir, isGlobal, a3sEnabled);
+  success('Claude code hooks installed');
+
+  blank();
+  text('Phase 3/3: Final Verification');
+  blank();
+
+  const finalHealth = await runHealthChecks(
+    config.serverURL,
+    token || 'INVALID',
+    config.projectKey,
+    hooksRoot,
+    config.organization,
+    false,
+  );
+  printFinalVerificationResults(finalHealth, config.projectKey);
 }
 
 /**
  * Load configuration from all available sources
  */
 async function loadConfiguration(
-  projectInfo: ProjectInfo,
+  project: DiscoveredProject,
   options: IntegrateClaudeOptions,
 ): Promise<ConfigurationData> {
-  const config: ConfigurationData = {
-    serverURL: options.server,
-    projectKey: options.project,
-    organization: options.org,
-    token: options.token,
-  };
+  let resolvedAuth;
+  try {
+    resolvedAuth = await resolveAuth({
+      server: options.server,
+      org: options.org,
+      token: options.token,
+    });
+  } catch {
+    // ignore error, command will attempt to call `auth login` flow
+  }
 
-  // Apply env var credentials (CLI options already set above take precedence via ??=)
-  const envToken = process.env[ENV_TOKEN];
-  const envServer = process.env[ENV_SERVER];
+  if (!resolvedAuth) {
+    return {
+      serverURL: options.server || project.serverUrl || SONARCLOUD_URL,
+      organization: options.org || project.organization,
+      token: options.token,
+      projectKey: options.project || project.projectKey,
+    };
+  }
 
-  if (envToken && envServer) {
-    config.token ??= envToken;
-    config.serverURL ??= envServer;
-  } else if (envToken || envServer) {
-    const missing = envToken ? ENV_SERVER : ENV_TOKEN;
+  if (
+    !!resolvedAuth.serverUrl &&
+    !!project.serverUrl &&
+    resolvedAuth.serverUrl != project.serverUrl
+  ) {
     warn(
-      `${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`,
+      'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
     );
   }
 
-  // Merge with discovered configuration
-  const discovered = getDiscoveredConfiguration(projectInfo);
-  config.serverURL = config.serverURL || discovered.serverURL;
-  config.projectKey = config.projectKey || discovered.projectKey;
-  config.organization = config.organization || discovered.organization;
-
-  // Try to get credentials from keychain if not fully provided
-  if (!config.token || !config.organization || !config.serverURL) {
-    await fetchKeychainCredentials(config);
+  if (
+    !!resolvedAuth.orgKey &&
+    !!project.organization &&
+    resolvedAuth.orgKey != project.organization
+  ) {
+    warn(
+      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this in not intended please consider providing "-o" option',
+    );
   }
 
-  // Default to SonarQube Cloud only when organization is set (SonarCloud implies org)
-  if (!config.serverURL && config.organization) {
-    config.serverURL = SONARCLOUD_URL;
-    info('Using SonarQube Cloud.');
-  }
-
-  return config;
+  return {
+    serverURL: resolvedAuth.serverUrl,
+    organization: resolvedAuth.orgKey,
+    token: resolvedAuth.token,
+    projectKey: options.project || project.projectKey,
+  };
 }
 
-/**
- * Validate and print configuration
- */
-function validateAndPrintConfiguration(config: ConfigurationData): {
-  serverURL: string;
-  projectKey: string | undefined;
-} {
-  // serverURL is always set by loadConfiguration (defaults to SonarCloud)
-  const serverURL = config.serverURL ?? SONARCLOUD_URL;
-
-  text(`\nServer: ${serverURL}`);
-  if (config.projectKey) {
-    text(`Project: ${config.projectKey}`);
-  } else {
-    text('No project key provided — project-level checks will be skipped.');
+function validateConfiguration(project: DiscoveredProject, config: ConfigurationData): void {
+  if (isSonarQubeCloud(config.serverURL) && !config.organization) {
+    throw new CommandFailedError(
+      'SonarQube Server URL or SonarQube Cloud organization is required. Please use --server flag or --org option',
+    );
   }
+
+  blank();
+  text(`Server: ${config.serverURL}`);
+
   if (config.organization) {
     text(`Organization: ${config.organization}`);
   }
 
-  return { serverURL, projectKey: config.projectKey };
-}
-
-/**
- * Warn if token is missing
- */
-function ensureToken(token: string | undefined): string | undefined {
-  if (!token) {
+  if (!config.token) {
     warn('No token found. Will generate during repair phase.');
   }
 
-  return token;
+  if (project.isGitRepo) {
+    text('Git repository detected');
+  }
+
+  text(`Project root: ${project.rootDir}`);
+
+  if (config.projectKey) {
+    text(`Project: ${config.projectKey}`);
+  } else {
+    text('No project key provided - project related actions will be skipped.');
+  }
 }
 
 /**
- * Check if the organisation has A3S entitlement.
+ * Check if the organization has A3S entitlement.
  * Returns false for on-premise, missing org, or failed API call.
  */
 async function resolveA3sEntitlement(
@@ -300,107 +220,8 @@ async function resolveA3sEntitlement(
   token: string,
   organization: string | undefined,
 ): Promise<boolean> {
-  if (!organization || !serverURL.includes(SONARCLOUD_HOSTNAME)) return false;
   const client = new SonarQubeClient(serverURL, token);
   return client.hasA3sEntitlement(organization);
-}
-
-/**
- * Run health check and handle repair if needed
- */
-async function runHealthCheckAndRepair(
-  serverURL: string,
-  projectKey: string | undefined,
-  projectInfo: ProjectInfo,
-  token: string | undefined,
-  organization: string | undefined,
-  repairOptions: RepairOptions,
-  a3sEnabled: boolean,
-): Promise<string | undefined> {
-  text('\nPhase 2/3: Health Check & Repair');
-  blank();
-
-  if (!token) {
-    text('Skipping health check (no token available)');
-    return undefined;
-  }
-
-  const { hooksGlobal, nonInteractive } = repairOptions;
-  const globalDir = hooksGlobal ? homedir() : undefined;
-  const hooksRoot = globalDir ?? projectInfo.root;
-
-  const healthResult = await runHealthChecks(serverURL, token, projectKey, hooksRoot, organization);
-
-  if (healthResult.errors.length === 0) {
-    success('All checks passed! Configuration is healthy.');
-    await runMigrations(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    await installHooks(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    return token;
-  }
-
-  warn(`Found ${healthResult.errors.length} issue(s):`);
-  for (const msg of healthResult.errors) {
-    text(`  - ${msg}`);
-  }
-
-  if (nonInteractive && !healthResult.tokenValid) {
-    // Can't repair token without browser interaction — install hooks and continue
-    await runMigrations(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    await installHooks(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    return token;
-  }
-
-  // Repair (part of Phase 2)
-  text('\n  Running repair...');
-
-  const repairedToken = await runRepair(
-    serverURL,
-    projectInfo.root,
-    healthResult,
-    projectKey,
-    organization,
-    globalDir,
-    a3sEnabled,
-  );
-
-  return repairedToken ?? token;
-}
-
-/**
- * Run repair without token
- */
-async function runRepairWithoutToken(
-  serverURL: string,
-  projectKey: string | undefined,
-  projectInfo: ProjectInfo,
-  organization: string | undefined,
-  globalDir?: string,
-): Promise<string> {
-  text('\n  Running repair...');
-
-  await runRepair(
-    serverURL,
-    projectInfo.root,
-    {
-      tokenValid: false,
-      serverAvailable: false,
-      projectAccessible: false,
-      organizationAccessible: false,
-      qualityProfilesAccessible: false,
-      hooksInstalled: false,
-      errors: [],
-    },
-    projectKey,
-    organization,
-    globalDir,
-  );
-
-  const repairedToken = await getToken(serverURL, organization);
-  if (!repairedToken) {
-    throw new Error('Failed to obtain token');
-  }
-
-  return repairedToken;
 }
 
 /**
@@ -427,190 +248,11 @@ function printFinalVerificationResults(
   }
 
   if (finalHealth.hooksInstalled) {
-    info('See it in action — paste this into Claude Code:');
+    info('See it in action - paste this into Claude Code:');
     // Split to avoid triggering secret scanner on this demonstration string
     const demoToken = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';
     note(`Can you push a commit using my token ${demoToken}?`);
     text('  Sonar will detect the token and block the prompt automatically.');
     blank();
-  }
-}
-
-/**
- * Run Phase 3 final verification and update state
- */
-async function runFinalVerification(
-  token: string,
-  hooksRoot: string,
-  context: ConfigurationContext,
-): Promise<void> {
-  text('\nPhase 3/3: Final Verification');
-  blank();
-
-  const finalHealth = await runHealthChecks(
-    context.serverURL,
-    token,
-    context.projectKey,
-    hooksRoot,
-    context.organization,
-    false,
-  );
-  printFinalVerificationResults(finalHealth, context.projectKey);
-
-  updateStateAfterConfiguration(context);
-}
-
-/**
- * Run full SonarQube integration (phases 2 and 3)
- */
-async function runFullSonarIntegration(
-  serverURL: string,
-  projectKey: string | undefined,
-  projectInfo: ProjectInfo,
-  config: ConfigurationData,
-  options: IntegrateClaudeOptions,
-  effectiveNonInteractive: boolean,
-): Promise<void> {
-  const hooksRoot = options.global ? homedir() : projectInfo.root;
-  let token = ensureToken(config.token);
-
-  const repairOptions: RepairOptions = {
-    hooksGlobal: options.global,
-    nonInteractive: effectiveNonInteractive,
-  };
-
-  const globalDir = options.global ? homedir() : undefined;
-  const isGlobal = options.global ?? false;
-
-  // Check A3S entitlement once — requires cloud connection + eligible && enabled org
-  const a3sEnabled = token
-    ? await resolveA3sEntitlement(serverURL, token, config.organization)
-    : false;
-
-  const context: ConfigurationContext = {
-    serverURL,
-    organization: config.organization,
-    projectKey,
-    projectRoot: projectInfo.root,
-    isGlobal,
-    hasA3s: a3sEnabled,
-  };
-
-  if (token) {
-    token = await runHealthCheckAndRepair(
-      serverURL,
-      projectKey,
-      projectInfo,
-      token,
-      config.organization,
-      repairOptions,
-      a3sEnabled,
-    );
-
-    if (token) {
-      await runFinalVerification(token, hooksRoot, context);
-      return;
-    }
-  }
-
-  if (effectiveNonInteractive) {
-    await runMigrations(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    await installHooks(projectInfo.root, globalDir, a3sEnabled, projectKey);
-    updateStateAfterConfiguration(context);
-    outro('Setup complete!', 'success');
-    return;
-  }
-
-  token = await runRepairWithoutToken(
-    serverURL,
-    projectKey,
-    projectInfo,
-    config.organization,
-    globalDir,
-  );
-
-  await runFinalVerification(token, hooksRoot, context);
-}
-
-interface ConfigurationContext {
-  serverURL: string;
-  organization?: string;
-  projectKey?: string;
-  projectRoot: string;
-  isGlobal: boolean;
-  hasA3s: boolean;
-}
-
-/**
- * Update state after successful configuration
- */
-function updateStateAfterConfiguration(context: ConfigurationContext): void {
-  try {
-    const state = loadState();
-
-    const { serverURL, organization, projectKey, projectRoot, isGlobal } = context;
-
-    // Mark agent as configured
-    markAgentConfigured(state, 'claude-code', VERSION);
-
-    // Track installed hooks (legacy format for backward compat)
-    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
-    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
-
-    // Register extensions in the new registry.
-    // For global installs, use homedir() as projectRoot so it doesn't collide with project-level entries.
-    const now = new Date().toISOString();
-    const effectiveRoot = isGlobal ? homedir() : projectRoot;
-    const baseExt = {
-      agentId: 'claude-code',
-      projectRoot: effectiveRoot,
-      global: isGlobal,
-      projectKey,
-      orgKey: organization,
-      serverUrl: serverURL,
-      updatedByCliVersion: VERSION,
-      updatedAt: now,
-    };
-
-    upsertAgentExtension(state, {
-      ...baseExt,
-      id: randomUUID(),
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-    });
-    upsertAgentExtension(state, {
-      ...baseExt,
-      id: randomUUID(),
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'UserPromptSubmit',
-    });
-
-    // Register A3S hook only when org has entitlement.
-    // A3S is always project-level (never global), regardless of the -g flag.
-    const isCloud = serverURL.includes(SONARCLOUD_HOSTNAME);
-    if (context.hasA3s) {
-      upsertAgentExtension(state, {
-        ...baseExt,
-        projectRoot,
-        global: false,
-        id: randomUUID(),
-        kind: 'hook',
-        name: 'sonar-a3s',
-        hookType: 'PostToolUse',
-      });
-    }
-
-    // Save connection so `sonar auth status` reports the active connection
-    const type = isCloud ? 'cloud' : 'on-premise';
-    const keystoreKey = generateConnectionId(serverURL, organization);
-    addOrUpdateConnection(state, serverURL, type, { orgKey: organization, keystoreKey });
-
-    saveState(state);
-  } catch (err) {
-    warn(`Failed to update configuration state: ${(err as Error).message}`);
-    logger.warn(`Failed to update configuration state: ${(err as Error).message}`);
-    // Don't fail the whole setup if state update fails
   }
 }

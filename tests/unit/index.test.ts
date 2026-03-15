@@ -18,12 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mock, describe, it, expect } from 'bun:test';
+import { afterAll, describe, expect, it, mock, spyOn } from 'bun:test';
+import * as postUpdate from '../../src/lib/post-update';
 
-const runPostUpdateActionsMock = mock(async () => {});
-void mock.module('../../src/lib/post-update', () => ({
-  runPostUpdateActions: runPostUpdateActionsMock,
-}));
+const runPostUpdateActionsSpy = spyOn(postUpdate, 'runPostUpdateActions').mockResolvedValue(
+  undefined,
+);
 
 const parseMock = mock(() => {});
 const parseAsyncMock = mock(async () => {});
@@ -33,9 +33,13 @@ void mock.module('../../src/cli/command-tree', () => ({
 
 await import('../../src/index');
 
+afterAll(() => {
+  runPostUpdateActionsSpy.mockRestore();
+});
+
 describe('index', () => {
   it('calls runPostUpdateActions on startup', () => {
-    expect(runPostUpdateActionsMock).toHaveBeenCalledTimes(1);
+    expect(runPostUpdateActionsSpy).toHaveBeenCalledTimes(1);
   });
 
   it('calls COMMAND_TREE.parse on startup', () => {
