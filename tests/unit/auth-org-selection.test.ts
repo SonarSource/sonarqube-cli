@@ -57,7 +57,7 @@ describe('authLogin: org selection', () => {
     clearMockUiCalls();
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(EMPTY_PROJECT_INFO);
+    discoverSpy = spyOn(discovery, 'discoverProjectInfo').mockResolvedValue(EMPTY_PROJECT_INFO);
   });
 
   afterEach(() => {
@@ -153,7 +153,7 @@ describe('authLogin: org selection', () => {
 
     try {
       await authLogin({ server: 'https://sonarcloud.io' });
-    } catch (error) {
+    } catch (error: any) {
       expect(error).toBeInstanceOf(Error);
       expect(error.message).toBe('Organization selection cancelled');
     } finally {

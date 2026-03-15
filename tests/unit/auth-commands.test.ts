@@ -158,7 +158,7 @@ describe('authLoginCommand', () => {
     setMockUi(true);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(EMPTY_PROJECT_INFO);
+    discoverSpy = spyOn(discovery, 'discoverProjectInfo').mockResolvedValue(EMPTY_PROJECT_INFO);
   });
 
   afterEach(() => {

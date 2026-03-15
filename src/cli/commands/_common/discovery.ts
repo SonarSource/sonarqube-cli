@@ -24,7 +24,7 @@ import { existsSync, statSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { spawnProcess } from '../../../lib/process';
 import logger from '../../../lib/logger';
-import { print } from '../../../ui';
+import { print, text } from '../../../ui';
 
 export interface ProjectInfo {
   root: string;
@@ -35,6 +35,14 @@ export interface ProjectInfo {
   sonarPropsData: SonarProperties | null;
   hasSonarLintConfig: boolean;
   sonarLintData: SonarLintConfig | null;
+}
+
+export interface DiscoveredProject {
+  rootDir: string;
+  isGitRepo: boolean;
+  serverUrl?: string;
+  organization?: string;
+  projectKey?: string;
 }
 
 export interface SonarProperties {
@@ -55,7 +63,7 @@ export interface SonarLintConfig {
  */
 export async function discoverServer(): Promise<string | null> {
   try {
-    const projectInfo = await discoverProject(process.cwd());
+    const projectInfo = await discoverProjectInfo(process.cwd());
 
     // Check sonar-project.properties first
     if (projectInfo.sonarPropsData?.hostURL) {
@@ -83,7 +91,7 @@ export async function discoverServer(): Promise<string | null> {
  */
 export async function discoverOrganization(): Promise<string | null> {
   try {
-    const projectInfo = await discoverProject(process.cwd());
+    const projectInfo = await discoverProjectInfo(process.cwd());
 
     // Check sonar-project.properties
     if (projectInfo.sonarPropsData?.organization) {
@@ -104,7 +112,7 @@ export async function discoverOrganization(): Promise<string | null> {
 /**
  * Discover project information from the current directory
  */
-export async function discoverProject(startDir: string): Promise<ProjectInfo> {
+export async function discoverProjectInfo(startDir: string): Promise<ProjectInfo> {
   const { gitRoot, isGit } = findGitRoot(startDir);
 
   const projectRoot = isGit ? gitRoot : startDir;
@@ -128,6 +136,30 @@ export async function discoverProject(startDir: string): Promise<ProjectInfo> {
     hasSonarLintConfig: sonarLintConfig !== null,
     sonarLintData: sonarLintConfig,
   };
+}
+
+export async function discoverProject(startDir: string): Promise<DiscoveredProject> {
+  const projectInfo = await discoverProjectInfo(startDir);
+  const config: DiscoveredProject = {
+    rootDir: projectInfo.root,
+    isGitRepo: projectInfo.isGitRepo,
+  };
+
+  if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
+    text('Found sonar-project.properties');
+    config.serverUrl = projectInfo.sonarPropsData.hostURL;
+    config.projectKey = projectInfo.sonarPropsData.projectKey;
+    config.organization = projectInfo.sonarPropsData.organization;
+  }
+
+  if (projectInfo.hasSonarLintConfig && projectInfo.sonarLintData) {
+    text('Found .sonarlint/connectedMode.json');
+    config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
+    config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
+    config.organization = config.organization || projectInfo.sonarLintData.organization;
+  }
+
+  return config;
 }
 
 function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {

@@ -116,3 +116,12 @@ export async function resolveAuth(options: {
 export function isEnvBasedAuth(): boolean {
   return !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
 }
+
+export function isSonarQubeCloud(serverUrl: string): boolean {
+  try {
+    const url = new URL(serverUrl);
+    return url.hostname === 'sonarcloud.io' || url.hostname === 'sonarqube.us';
+  } catch {
+    return false;
+  }
+}

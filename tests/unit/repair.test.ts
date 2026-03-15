@@ -18,141 +18,133 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Tests for repair orchestrator
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
+import { repairToken } from '../../src/cli/commands/integrate/claude/repair';
+import * as token from '../../src/cli/commands/_common/token';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 
-import { describe, it, beforeEach, afterEach, expect, spyOn } from 'bun:test';
-import { mkdirSync, rmSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { runRepair } from '../../src/cli/commands/integrate/claude/repair';
-import * as auth from '../../src/cli/commands/_common/token';
-import type { HealthCheckResult } from '../../src/cli/commands/integrate/claude/health';
-import { setMockUi } from '../../src/ui';
+const SERVER_URL = 'https://sonarqube.example.com';
+const NEW_TOKEN = 'new-generated-token';
 
-const healthAllGood: HealthCheckResult = {
-  tokenValid: true,
-  serverAvailable: true,
-  projectAccessible: true,
-  organizationAccessible: true,
-  qualityProfilesAccessible: true,
-  hooksInstalled: true,
-  errors: [],
-};
-
-const healthNeedsHooks: HealthCheckResult = {
-  ...healthAllGood,
-  hooksInstalled: false,
-};
-
-describe('Repair Orchestrator', () => {
-  let testDir: string;
+describe('repairToken', () => {
+  let generateTokenSpy: Mock<
+    Extract<(typeof token)['generateTokenViaBrowser'], (...args: any[]) => any>
+  >;
+  let validateTokenSpy: Mock<Extract<(typeof token)['validateToken'], (...args: any[]) => any>>;
+  let saveTokenSpy: Mock<Extract<(typeof token)['saveToken'], (...args: any[]) => any>>;
+  let deleteTokenSpy: Mock<Extract<(typeof token)['deleteToken'], (...args: any[]) => any>>;
 
   beforeEach(() => {
     setMockUi(true);
-    testDir = join(tmpdir(), `test-repair-${Date.now()}`);
-    mkdirSync(testDir, { recursive: true });
+    generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(NEW_TOKEN);
+    validateTokenSpy = spyOn(token, 'validateToken').mockResolvedValue(true);
+    saveTokenSpy = spyOn(token, 'saveToken').mockResolvedValue(undefined);
+    deleteTokenSpy = spyOn(token, 'deleteToken').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    setMockUi(false);
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true });
-    }
-  });
-
-  it('creates .claude directory when repair runs', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org');
-
-    expect(existsSync(join(testDir, '.claude'))).toBe(true);
-  });
-
-  it('creates hooks directory structure', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org');
-
-    expect(existsSync(join(testDir, '.claude', 'hooks'))).toBe(true);
-  });
-
-  it('creates sonar-secrets hooks directory', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'test_key', 'test-org');
-
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts'))).toBe(
-      true,
-    );
-  });
-
-  it('does not create old sonar-prompt.sh verify hook', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthNeedsHooks, 'key', 'org');
-
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-prompt.sh'))).toBe(false);
-  });
-});
-
-// ─── token invalid path ───────────────────────────────────────────────────────
-
-describe('Repair Orchestrator: token repair', () => {
-  let testDir: string;
-  let generateTokenSpy: ReturnType<typeof spyOn>;
-  let validateTokenSpy: ReturnType<typeof spyOn>;
-  let saveTokenSpy: ReturnType<typeof spyOn>;
-  let deleteTokenSpy: ReturnType<typeof spyOn>;
-
-  const healthTokenInvalid: HealthCheckResult = {
-    tokenValid: false,
-    serverAvailable: true,
-    projectAccessible: true,
-    organizationAccessible: true,
-    qualityProfilesAccessible: true,
-    hooksInstalled: true,
-    errors: [],
-  };
-
-  beforeEach(() => {
-    setMockUi(true);
-    testDir = join(tmpdir(), `test-repair-token-${Date.now()}`);
-    mkdirSync(testDir, { recursive: true });
-    generateTokenSpy = spyOn(auth, 'generateTokenViaBrowser').mockResolvedValue('new-token');
-    validateTokenSpy = spyOn(auth, 'validateToken').mockResolvedValue(true);
-    saveTokenSpy = spyOn(auth, 'saveToken').mockResolvedValue(undefined);
-    deleteTokenSpy = spyOn(auth, 'deleteToken').mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
+    clearMockUiCalls();
     setMockUi(false);
     generateTokenSpy.mockRestore();
     validateTokenSpy.mockRestore();
     saveTokenSpy.mockRestore();
     deleteTokenSpy.mockRestore();
-    if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true });
-    }
   });
 
-  it('generates a new token when tokenValid is false', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthTokenInvalid);
-    expect(generateTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io');
-  });
+  it('shows "Obtaining access token..." text message', async () => {
+    await repairToken(SERVER_URL);
 
-  it('deletes old token before generating a new one', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthTokenInvalid, 'proj', 'my-org');
-    expect(deleteTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'my-org');
-  });
-
-  it('validates generated token and saves it when valid', async () => {
-    await runRepair('https://sonarcloud.io', testDir, healthTokenInvalid, 'proj', 'my-org');
-    expect(validateTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'new-token');
-    expect(saveTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'new-token', 'my-org');
-  });
-
-  it('throws when generated token fails validation', () => {
-    validateTokenSpy.mockResolvedValue(false);
-    expect(runRepair('https://sonarcloud.io', testDir, healthTokenInvalid)).rejects.toThrow(
-      'Generated token is invalid',
+    const msg = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Obtaining access token...',
     );
+    expect(msg).toBeDefined();
   });
 
-  it('continues if deleteToken throws (non-fatal)', async () => {
+  it('shows "Token saved to keychain" success message', async () => {
+    await repairToken(SERVER_URL);
+
+    const msg = getMockUiCalls().find(
+      (c) => c.method === 'success' && String(c.args[0]) === 'Token saved to keychain',
+    );
+    expect(msg).toBeDefined();
+  });
+
+  it('generates a new token via browser using the provided server URL', async () => {
+    await repairToken(SERVER_URL);
+
+    expect(generateTokenSpy).toHaveBeenCalledTimes(1);
+    expect(generateTokenSpy).toHaveBeenCalledWith(SERVER_URL);
+  });
+
+  it('returns the newly generated token', async () => {
+    const actual = await repairToken(SERVER_URL);
+
+    expect(actual).toBe(NEW_TOKEN);
+  });
+
+  it('validates the generated token against the server', async () => {
+    await repairToken(SERVER_URL);
+
+    expect(validateTokenSpy).toHaveBeenCalledTimes(1);
+    expect(validateTokenSpy).toHaveBeenCalledWith(SERVER_URL, NEW_TOKEN);
+  });
+
+  it('throws when the generated token fails validation', () => {
+    validateTokenSpy.mockResolvedValue(false);
+
+    const actual = repairToken(SERVER_URL);
+
+    expect(actual).rejects.toThrow('Generated token is invalid');
+  });
+
+  it('does not save the token when validation fails', async () => {
+    validateTokenSpy.mockResolvedValue(false);
+
+    const actual = repairToken(SERVER_URL);
+
+    await actual.catch(() => {});
+    expect(saveTokenSpy).not.toHaveBeenCalled();
+  });
+
+  it('deletes the old token with the provided organization', async () => {
+    await repairToken(SERVER_URL, 'my-org');
+
+    expect(deleteTokenSpy).toHaveBeenCalledTimes(1);
+    expect(deleteTokenSpy).toHaveBeenCalledWith(SERVER_URL, 'my-org');
+  });
+
+  it('deletes the old token without organization when none is provided', async () => {
+    await repairToken(SERVER_URL);
+
+    expect(deleteTokenSpy).toHaveBeenCalledWith(SERVER_URL, undefined);
+  });
+
+  it('continues and saves the new token even when deleteToken throws', async () => {
     deleteTokenSpy.mockRejectedValue(new Error('keychain unavailable'));
-    await runRepair('https://sonarcloud.io', testDir, healthTokenInvalid);
-    expect(generateTokenSpy).toHaveBeenCalled();
+
+    await repairToken(SERVER_URL);
+
+    expect(saveTokenSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when deleteToken fails', async () => {
+    deleteTokenSpy.mockRejectedValue(new Error('keychain locked'));
+
+    const actual = await repairToken(SERVER_URL);
+
+    expect(actual).toBe(NEW_TOKEN);
+  });
+
+  it('saves the new token to the keychain with the provided organization', async () => {
+    await repairToken(SERVER_URL, 'my-org');
+
+    expect(saveTokenSpy).toHaveBeenCalledTimes(1);
+    expect(saveTokenSpy).toHaveBeenCalledWith(SERVER_URL, NEW_TOKEN, 'my-org');
+  });
+
+  it('saves the new token to the keychain without organization when none is provided', async () => {
+    await repairToken(SERVER_URL);
+
+    expect(saveTokenSpy).toHaveBeenCalledWith(SERVER_URL, NEW_TOKEN, undefined);
   });
 });

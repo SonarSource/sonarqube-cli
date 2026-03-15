@@ -20,30 +20,19 @@
 
 // Integrate command - setup SonarQube integration for Claude Code
 
-// Config is read from sonar-project.properties, no need to save separate file
 import { homedir } from 'node:os';
-import { randomUUID } from 'node:crypto';
-import { discoverProject, type ProjectInfo } from '../../_common/discovery';
-import { runHealthChecks } from './health';
-import { repairToken } from './repair';
-import { installHooks } from './hooks';
+import { isEnvBasedAuth, isSonarQubeCloud, resolveAuth } from '../../../../lib/auth-resolver';
+import { SONARCLOUD_URL } from '../../../../lib/config-constants';
 import { runMigrations } from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import {
-  addInstalledHook,
-  addOrUpdateConnection,
-  generateConnectionId,
-  loadState,
-  markAgentConfigured,
-  saveState,
-  upsertAgentExtension,
-} from '../../../../lib/state-manager';
-import { version as VERSION } from '../../../../../package.json';
-import logger from '../../../../lib/logger';
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../../lib/config-constants';
-import { isEnvBasedAuth, resolveAuth } from '../../../../lib/auth-resolver';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
+import type { DiscoveredProject } from '../../_common/discovery';
+import { discoverProject } from '../../_common/discovery';
 import { CommandFailedError } from '../../_common/error';
+import { runHealthChecks } from './health';
+import { installHooks } from './hooks';
+import { repairToken } from './repair';
+import { updateStateAfterConfiguration } from './state';
 
 export interface IntegrateClaudeOptions {
   server?: string;
@@ -54,8 +43,8 @@ export interface IntegrateClaudeOptions {
   global?: boolean;
 }
 
-interface ConfigurationData {
-  serverURL: string | undefined;
+export interface ConfigurationData {
+  serverURL: string;
   projectKey: string | undefined;
   organization: string | undefined;
   token: string | undefined;
@@ -71,13 +60,12 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
   text('Phase 1/3: Discovery & Validation');
   blank();
 
-  const projectInfo = await discoverProject(process.cwd());
-  const config = await loadConfiguration(projectInfo, options);
-  validateConfiguration(projectInfo, config);
+  const project = await discoverProject(process.cwd());
+  const config = await loadConfiguration(project, options);
+  validateConfiguration(project, config);
 
-  const serverURL = config.serverURL!;
   const isGlobal = options.global ?? false;
-  const hooksRoot = isGlobal ? homedir() : projectInfo.root;
+  const hooksRoot = isGlobal ? homedir() : project.rootDir;
   const globalDir = isGlobal ? homedir() : undefined;
 
   let token = config.token;
@@ -87,11 +75,12 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
   blank();
 
   const healthResult = await runHealthChecks(
-    serverURL,
+    config.serverURL,
     token || 'INVALID',
     config.projectKey,
     hooksRoot,
-    config.organization);
+    config.organization,
+  );
 
   if (healthResult.errors.length === 0) {
     success('All checks passed! Configuration is healthy.');
@@ -107,28 +96,26 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
       blank();
       text('Running token repair...');
 
-      token = await repairToken(
-        serverURL,
-        config.organization,
-      );
+      token = await repairToken(config.serverURL, config.organization);
     }
   }
 
   const a3sEnabled = token
-    ? await resolveA3sEntitlement(serverURL, token, config.organization)
+    ? await resolveA3sEntitlement(config.serverURL, token, config.organization)
     : false;
 
   text('Installing claude code hooks...');
-  await runMigrations(projectInfo.root, globalDir, a3sEnabled, config.projectKey);
-  await installHooks(projectInfo.root, globalDir, a3sEnabled, config.projectKey);
-  success('Claude code scanning hooks installed');
+  await runMigrations(project.rootDir, globalDir, a3sEnabled, config.projectKey);
+  await installHooks(project.rootDir, globalDir, a3sEnabled, config.projectKey);
+  updateStateAfterConfiguration(config, project.rootDir, isGlobal, a3sEnabled);
+  success('Claude code hooks installed');
 
   blank();
   text('Phase 3/3: Final Verification');
   blank();
 
   const finalHealth = await runHealthChecks(
-    serverURL,
+    config.serverURL,
     token || 'INVALID',
     config.projectKey,
     hooksRoot,
@@ -136,46 +123,13 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
     false,
   );
   printFinalVerificationResults(finalHealth, config.projectKey);
-
-  const context: ConfigurationContext = {
-    serverURL,
-    organization: config.organization,
-    projectKey: config.projectKey,
-    projectRoot: projectInfo.root,
-    isGlobal,
-    hasA3s: a3sEnabled,
-  };
-  updateStateAfterConfiguration(context);
-}
-
-/**
- * Get configuration from discovered project info
- */
-function getDiscoveredConfiguration(projectInfo: ProjectInfo): Partial<ConfigurationData> {
-  const config: Partial<ConfigurationData> = {};
-
-  if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
-    config.serverURL = projectInfo.sonarPropsData.hostURL;
-    config.projectKey = projectInfo.sonarPropsData.projectKey;
-    config.organization = projectInfo.sonarPropsData.organization;
-    text('Found sonar-project.properties');
-  }
-
-  if (projectInfo.hasSonarLintConfig && projectInfo.sonarLintData) {
-    config.serverURL = config.serverURL || projectInfo.sonarLintData.serverURL;
-    config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
-    config.organization = config.organization || projectInfo.sonarLintData.organization;
-    text('Found .sonarlint/connectedMode.json');
-  }
-
-  return config;
 }
 
 /**
  * Load configuration from all available sources
  */
 async function loadConfiguration(
-  projectInfo: ProjectInfo,
+  project: DiscoveredProject,
   options: IntegrateClaudeOptions,
 ): Promise<ConfigurationData> {
   let resolvedAuth;
@@ -189,38 +143,47 @@ async function loadConfiguration(
     // ignore error, command will attempt to call `auth login` flow
   }
 
-  const discovered = getDiscoveredConfiguration(projectInfo);
-  const resolvedProjectKey = options.project || discovered.projectKey;
-
   if (!resolvedAuth) {
     return {
-      serverURL: options.server || discovered.serverURL || SONARCLOUD_URL,
-      organization: options.org || discovered.organization,
-      token: undefined,
-      projectKey: resolvedProjectKey
-    }
+      serverURL: options.server || project.serverUrl || SONARCLOUD_URL,
+      organization: options.org || project.organization,
+      token: options.token,
+      projectKey: options.project || project.projectKey,
+    };
   }
 
-  if (!!resolvedAuth?.serverUrl && !!discovered.serverURL && (resolvedAuth.serverUrl != discovered.serverURL)) {
-    warn('Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command');
+  if (
+    !!resolvedAuth.serverUrl &&
+    !!project.serverUrl &&
+    resolvedAuth.serverUrl != project.serverUrl
+  ) {
+    warn(
+      'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
+    );
   }
 
-  if (!!resolvedAuth?.orgKey && !!discovered.organization && (resolvedAuth.orgKey != discovered.organization)) {
-    warn('Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this in not intended please consider providing "-o" option');
+  if (
+    !!resolvedAuth.orgKey &&
+    !!project.organization &&
+    resolvedAuth.orgKey != project.organization
+  ) {
+    warn(
+      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this in not intended please consider providing "-o" option',
+    );
   }
 
   return {
     serverURL: resolvedAuth.serverUrl,
     organization: resolvedAuth.orgKey,
     token: resolvedAuth.token,
-    projectKey: resolvedProjectKey,
-  }
+    projectKey: options.project || project.projectKey,
+  };
 }
 
-function validateConfiguration(projectInfo: ProjectInfo, config: ConfigurationData): void {
-  if (!config.serverURL && !config.organization) {
+function validateConfiguration(project: DiscoveredProject, config: ConfigurationData): void {
+  if (isSonarQubeCloud(config.serverURL) && !config.organization) {
     throw new CommandFailedError(
-      'Server URL or organization is required. Use --server flag or --org flag for SonarQube Cloud',
+      'SonarQube Server URL or SonarQube Cloud organization is required. Please use --server flag or --org option',
     );
   }
 
@@ -235,11 +198,11 @@ function validateConfiguration(projectInfo: ProjectInfo, config: ConfigurationDa
     warn('No token found. Will generate during repair phase.');
   }
 
-  if (projectInfo.isGitRepo) {
+  if (project.isGitRepo) {
     text('Git repository detected');
   }
 
-  text(`Project root: ${projectInfo.root}`);
+  text(`Project root: ${project.rootDir}`);
 
   if (config.projectKey) {
     text(`Project: ${config.projectKey}`);
@@ -257,10 +220,6 @@ async function resolveA3sEntitlement(
   token: string,
   organization: string | undefined,
 ): Promise<boolean> {
-  if (!organization || !serverURL.includes(SONARCLOUD_HOSTNAME)) {
-    return false;
-  }
-
   const client = new SonarQubeClient(serverURL, token);
   return client.hasA3sEntitlement(organization);
 }
@@ -289,94 +248,11 @@ function printFinalVerificationResults(
   }
 
   if (finalHealth.hooksInstalled) {
-    info('See it in action — paste this into Claude Code:');
+    info('See it in action - paste this into Claude Code:');
     // Split to avoid triggering secret scanner on this demonstration string
     const demoToken = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';
     note(`Can you push a commit using my token ${demoToken}?`);
     text('  Sonar will detect the token and block the prompt automatically.');
     blank();
-  }
-}
-
-interface ConfigurationContext {
-  serverURL: string;
-  organization?: string;
-  projectKey?: string;
-  projectRoot: string;
-  isGlobal: boolean;
-  hasA3s: boolean;
-}
-
-/**
- * Update state after successful configuration
- */
-function updateStateAfterConfiguration(context: ConfigurationContext): void {
-  try {
-    const state = loadState();
-
-    const { serverURL, organization, projectKey, projectRoot, isGlobal } = context;
-
-    // Mark agent as configured
-    markAgentConfigured(state, 'claude-code', VERSION);
-
-    // Track installed hooks (legacy format for backward compat)
-    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
-    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
-
-    // Register extensions in the new registry.
-    // For global installs, use homedir() as projectRoot so it doesn't collide with project-level entries.
-    const now = new Date().toISOString();
-    const effectiveRoot = isGlobal ? homedir() : projectRoot;
-    const baseExt = {
-      agentId: 'claude-code',
-      projectRoot: effectiveRoot,
-      global: isGlobal,
-      projectKey,
-      orgKey: organization,
-      serverUrl: serverURL,
-      updatedByCliVersion: VERSION,
-      updatedAt: now,
-    };
-
-    upsertAgentExtension(state, {
-      ...baseExt,
-      id: randomUUID(),
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-    });
-    upsertAgentExtension(state, {
-      ...baseExt,
-      id: randomUUID(),
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'UserPromptSubmit',
-    });
-
-    // Register A3S hook only when org has entitlement.
-    // A3S is always project-level (never global), regardless of the -g flag.
-    const isCloud = serverURL.includes(SONARCLOUD_HOSTNAME);
-    if (context.hasA3s) {
-      upsertAgentExtension(state, {
-        ...baseExt,
-        projectRoot,
-        global: false,
-        id: randomUUID(),
-        kind: 'hook',
-        name: 'sonar-a3s',
-        hookType: 'PostToolUse',
-      });
-    }
-
-    // Save connection so `sonar auth status` reports the active connection
-    const type = isCloud ? 'cloud' : 'on-premise';
-    const keystoreKey = generateConnectionId(serverURL, organization);
-    addOrUpdateConnection(state, serverURL, type, { orgKey: organization, keystoreKey });
-
-    saveState(state);
-  } catch (err) {
-    warn(`Failed to update configuration state: ${(err as Error).message}`);
-    logger.warn(`Failed to update configuration state: ${(err as Error).message}`);
-    // Don't fail the whole setup if state update fails
   }
 }

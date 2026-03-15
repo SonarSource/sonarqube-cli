@@ -21,6 +21,7 @@
 // SonarQube API HTTP client
 
 import { version as VERSION } from '../../package.json';
+import { isSonarQubeCloud } from '../lib/auth-resolver';
 import { SONARCLOUD_API_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '../lib/config-constants.js';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
@@ -172,9 +173,16 @@ export class SonarQubeClient {
   /**
    * Convenience: resolve org UUID then check A3S entitlement in one call.
    */
-  async hasA3sEntitlement(organizationKey: string): Promise<boolean> {
+  async hasA3sEntitlement(organizationKey?: string): Promise<boolean> {
+    if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
+      return false;
+    }
+
     const uuid = await this.getOrganizationId(organizationKey);
-    if (!uuid) return false;
+    if (!uuid) {
+      return false;
+    }
+
     return this.checkA3sEntitlement(uuid);
   }
 

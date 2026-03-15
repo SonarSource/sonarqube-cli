@@ -20,7 +20,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
-import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '../../src/lib/config-constants.js';
+import {
+  SONARCLOUD_API_URL,
+  SONARCLOUD_URL,
+  SONARCLOUD_US_URL,
+} from '../../src/lib/config-constants.js';
 import { version as VERSION } from '../../package.json';
 
 // ---------------------------------------------------------------------------
@@ -255,47 +259,46 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // checkA3sEntitlement
-  // -------------------------------------------------------------------------
-
-  describe('checkA3sEntitlement', () => {
-    it('hits api.sonarcloud.io /a3s-analysis/org-config/{uuid}', async () => {
-      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: true });
-      await client.checkA3sEntitlement('test-uuid');
-      const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.hostname).toBe('api.sonarcloud.io');
-      expect(url.pathname).toBe('/a3s-analysis/org-config/test-uuid');
-    });
-
-    it('returns true when eligible and enabled are both true', async () => {
-      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: true });
-      expect(await client.checkA3sEntitlement('test-uuid')).toBe(true);
-    });
-
-    it('returns false when eligible is false', async () => {
-      fetchSpy = mockFetch({ id: 'uuid', enabled: true, eligible: false });
-      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
-    });
-
-    it('returns false when enabled is false', async () => {
-      fetchSpy = mockFetch({ id: 'uuid', enabled: false, eligible: true });
-      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
-    });
-
-    it('returns false on API error (404)', async () => {
-      fetchSpy = mockFetch({}, false, 404);
-      expect(await client.checkA3sEntitlement('test-uuid')).toBe(false);
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // hasA3sEntitlement
   // -------------------------------------------------------------------------
 
   describe('hasA3sEntitlement', () => {
-    it('returns true when org has valid UUID and entitlement is active', async () => {
-      // First call: getOrganizationId → [{ uuidV4: 'org-uuid' }]
-      // Second call: checkA3sEntitlement → { enabled: true, eligible: true }
+    let cloudClient: SonarQubeClient;
+
+    beforeEach(() => {
+      cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+    });
+
+    it('returns false when organizationKey is not provided', async () => {
+      fetchSpy = mockFetch({});
+      expect(await cloudClient.hasA3sEntitlement(undefined)).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns false when organizationKey is empty string', async () => {
+      fetchSpy = mockFetch({});
+      expect(await cloudClient.hasA3sEntitlement('')).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns false when server is not SonarQube Cloud', async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = mockFetch({});
+      expect(await serverClient.hasA3sEntitlement('my-org')).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns false when org UUID cannot be resolved (API error)', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await cloudClient.hasA3sEntitlement('unknown-org')).toBe(false);
+    });
+
+    it('returns false when org UUID list is empty', async () => {
+      fetchSpy = mockFetch([]);
+      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+    });
+
+    it('returns true when org UUID is resolved and entitlement is enabled and eligible', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -308,12 +311,93 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
         } as Response);
 
-      expect(await client.hasA3sEntitlement('my-org')).toBe(true);
+      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(true);
     });
 
-    it('returns false when org UUID cannot be resolved', async () => {
-      fetchSpy = mockFetch({}, false, 404);
-      expect(await client.hasA3sEntitlement('unknown-org')).toBe(false);
+    it('returns false when entitlement is enabled but not eligible', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: false }),
+        } as Response);
+
+      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+    });
+
+    it('returns false when entitlement is eligible but not enabled', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', enabled: false, eligible: true }),
+        } as Response);
+
+      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+    });
+
+    it('returns false when the entitlement check fails with an API error', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          statusText: 'Forbidden',
+          json: () => Promise.resolve({}),
+        } as Response);
+
+      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+    });
+
+    it('passes the resolved UUID to the entitlement check', async () => {
+      const targetUuid = 'specific-uuid-abc';
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: targetUuid }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: targetUuid, enabled: true, eligible: true }),
+        } as Response);
+
+      await cloudClient.hasA3sEntitlement('my-org');
+
+      const entitlementUrl = new URL((fetchSpy.mock.calls[1][0] as URL).toString());
+      expect(entitlementUrl.pathname).toBe(`/a3s-analysis/org-config/${targetUuid}`);
+    });
+
+    it('returns true for SonarQube Cloud US', async () => {
+      const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
+        } as Response);
+
+      expect(await usClient.hasA3sEntitlement('my-org')).toBe(true);
     });
   });
 
