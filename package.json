@@ -55,7 +55,8 @@
     "commander": "^12.1.0",
     "keytar": "^7.9.0",
     "openpgp": "^5.11.2",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "js-yaml": "^4.1.1"
   },
   "devDependencies": {
     "@sonar/scan": "^4.3.0",
@@ -72,6 +73,7 @@
     "istanbul-reports": "3.2.0",
     "js-yaml": "^4.1.1",
     "lcov-result-merger": "5.0.1",
+    "@types/js-yaml": "^4.0.9",
     "lint-staged": "16.2.7",
     "plop": "^4.0.5",
     "prettier": "^3.8.1",

@@ -72,12 +72,12 @@ function parsePreCommitConfig(raw: unknown): PreCommitConfig {
   return { repos: list };
 }
 
-function isLocalHookEntry(h: unknown): h is PreCommitHookEntry {
+function isLocalHookEntry(hookEntry: unknown): hookEntry is PreCommitHookEntry {
   return (
-    typeof h === 'object' &&
-    h !== null &&
-    'id' in h &&
-    (h as PreCommitHookEntry).id === PRE_COMMIT_SONAR_HOOK_ID
+    typeof hookEntry === 'object' &&
+    hookEntry !== null &&
+    'id' in hookEntry &&
+    (hookEntry as PreCommitHookEntry).id === PRE_COMMIT_SONAR_HOOK_ID
   );
 }
 
@@ -132,15 +132,18 @@ export async function runPreCommitInstall(root: string, hook: GitHookType): Prom
 export function hasSonarHookInPreCommitConfig(root: string): boolean {
   const configPath = join(root, PRE_COMMIT_CONFIG_FILE);
   if (!existsSync(configPath)) return false;
+
   try {
-    const config = parsePreCommitConfig(yaml.load(readFileSync(configPath, 'utf-8')));
-    for (const repo of config.repos) {
-      const r = repo as { repo?: string; hooks?: unknown[] };
-      if (r.repo !== 'local' || !Array.isArray(r.hooks)) continue;
-      if (r.hooks.some(isLocalHookEntry)) return true;
-    }
+    const yamlContent = readFileSync(configPath, 'utf-8');
+    const config = parsePreCommitConfig(yaml.load(yamlContent)) as { repos?: PreCommitRepo[] };
+
+    return (
+      config.repos?.some(
+        (repo) =>
+          repo.repo === 'local' && Array.isArray(repo.hooks) && repo.hooks.some(isLocalHookEntry),
+      ) ?? false
+    );
   } catch {
-    // ignore
+    return false;
   }
-  return false;
 }

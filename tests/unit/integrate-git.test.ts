@@ -18,363 +18,432 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for sonar integrate git
-
-import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { integrateGit } from '../../src/cli/commands/integrate/git';
-import * as discovery from '../../src/cli/commands/_common/discovery';
-import * as installSecrets from '../../src/cli/commands/install/secrets';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
+import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 import {
-  setMockUi,
-  getMockUiCalls,
-  clearMockUiCalls,
-  queueMockResponse,
-  clearMockResponses,
-} from '../../src/ui';
-import { CommandFailedError } from '../../src/cli/commands/_common/error';
+  isGitHookType,
+  hasMarker,
+  resolveGitHooksDir,
+  resolveHookType,
+  detectSonarHookInstallation as detectHookInstallation,
+  showPostInstallInfo,
+  showInstallationStatus,
+} from '../../src/cli/commands/integrate/git';
+import { HOOK_MARKER } from '../../src/cli/commands/integrate/git/git-shell-fragments';
+import { PRE_COMMIT_CONFIG_FILE } from '../../src/cli/commands/integrate/git/git-precommit-framework';
+import { setMockUi, queueMockResponse, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock';
+import * as processLib from '../../src/lib/process.js';
 
-const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
+const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 
-// resolveAuth reads SONAR_CLI_TOKEN + SONAR_CLI_SERVER from the environment before
-// touching the keychain. Setting both makes tests hermetic on any machine.
-const AUTH_ENV = { SONAR_CLI_TOKEN: 'fake-test-token', SONAR_CLI_SERVER: 'https://sonarcloud.io' };
+/** Simulate `git config core.hooksPath` returning "not set" (exit code 1). */
+const NO_HOOKS_PATH = { exitCode: 1, stdout: '', stderr: '' };
 
-function setAuthEnv(): void {
-  process.env['SONAR_CLI_TOKEN'] = AUTH_ENV.SONAR_CLI_TOKEN;
-  process.env['SONAR_CLI_SERVER'] = AUTH_ENV.SONAR_CLI_SERVER;
-}
-
-function clearAuthEnv(): void {
-  delete process.env['SONAR_CLI_TOKEN'];
-  delete process.env['SONAR_CLI_SERVER'];
-  process.env['SONAR_CLI_DISABLE_KEYCHAIN'] = 'true';
-}
-
-function restoreAuthEnv(): void {
-  delete process.env['SONAR_CLI_DISABLE_KEYCHAIN'];
-}
-
-function createTempRepo(): string {
-  const base = join(process.cwd(), 'tests', 'unit', '.integrate-git-repos');
-  const root = join(base, `repo-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  mkdirSync(root, { recursive: true });
-  const hooksDir = join(root, '.git', 'hooks');
-  mkdirSync(hooksDir, { recursive: true });
-  return root;
-}
-
-const FAKE_PROJECT_INFO_NO_REPO = {
-  root: '/some/cwd',
-  name: 'cwd',
-  isGitRepo: false,
-  gitRemote: '',
-  hasSonarProps: false,
-  sonarPropsData: null,
-  hasSonarLintConfig: false,
-  sonarLintData: null,
-};
-
-// ─── Authentication ───────────────────────────────────────────────────────────
-
-describe('integrateGit: authentication', () => {
-  let discoverSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    clearMockResponses();
-    clearAuthEnv();
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(FAKE_PROJECT_INFO_NO_REPO);
-  });
-
-  afterEach(() => {
-    discoverSpy?.mockRestore();
-    clearAuthEnv();
-    restoreAuthEnv();
-    setMockUi(false);
-  });
-
-  it('throws when not authenticated', async () => {
-    try {
-      await integrateGit({ nonInteractive: true });
-      expect.fail('integrateGit should have thrown');
-    } catch (e) {
-      expect((e as Error).message).toMatch(/sonar auth login/);
-    }
+describe('isGitHookType', () => {
+  it('returns true for valid hook types and false otherwise', () => {
+    expect(isGitHookType('pre-commit')).toBe(true);
+    expect(isGitHookType('pre-push')).toBe(true);
+    expect(isGitHookType('commit-msg')).toBe(false);
+    expect(isGitHookType('')).toBe(false);
   });
 });
 
-// ─── Discovery ────────────────────────────────────────────────────────────────
+describe('hasMarker', () => {
+  it('returns true only when the file exists and contains the marker', () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    const withMarker = join(TEMP_DIR, 'with-marker');
+    const withoutMarker = join(TEMP_DIR, 'without-marker');
+    writeFileSync(withMarker, `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+    writeFileSync(withoutMarker, '#!/bin/sh\necho hello\n');
 
-describe('integrateGit: discovery', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    clearMockResponses();
-    setAuthEnv();
+    expect(hasMarker(withMarker)).toBe(true);
+    expect(hasMarker(withoutMarker)).toBe(false);
+    expect(hasMarker(join(TEMP_DIR, 'nonexistent'))).toBe(false);
+
+    rmSync(TEMP_DIR, { recursive: true, force: true });
   });
+});
 
-  afterEach(() => {
-    clearAuthEnv();
-    setMockUi(false);
-  });
+describe('resolveGitHooksDir', () => {
+  it('returns <root>/.git/hooks when .git is a directory and core.hooksPath is not set', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
 
-  it('throws when not in a git repository', async () => {
-    const discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(
-      FAKE_PROJECT_INFO_NO_REPO,
-    );
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
-      try {
-        await integrateGit({});
-      } catch (e) {
-        expect(e).toBeInstanceOf(CommandFailedError);
-        expect((e as Error).message).toMatch(/No git repository found/);
-        return;
-      }
-      expect.fail('integrateGit should have thrown');
+      const result = await resolveGitHooksDir(TEMP_DIR);
+      expect(result).toBe(join(TEMP_DIR, '.git', 'hooks'));
     } finally {
-      discoverSpy.mockRestore();
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('returns core.hooksPath when it is configured', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0,
+      stdout: '.husky\n',
+      stderr: '',
+    });
+
+    try {
+      const result = await resolveGitHooksDir(TEMP_DIR);
+      expect(result).toBe(join(TEMP_DIR, '.husky'));
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('throws CommandFailedError when git rev-parse exits with non-zero code', () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /some/real/.git/worktrees/foo\n');
+
+    // Both git config and git rev-parse return non-zero → falls through to rev-parse error
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 128,
+      stdout: '',
+      stderr: 'fatal: not a git repository',
+    });
+
+    try {
+      expect(resolveGitHooksDir(TEMP_DIR)).rejects.toThrow(
+        'Could not resolve git hooks directory (exit code 128)',
+      );
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('returns absolute path from git rev-parse as-is when it starts with /', async () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /abs/.git/worktrees/foo\n');
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess')
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '/abs/.git/worktrees/foo/hooks\n',
+        stderr: '',
+      }); // git rev-parse
+
+    try {
+      const result = await resolveGitHooksDir(TEMP_DIR);
+      expect(result).toBe('/abs/.git/worktrees/foo/hooks');
+      expect(isAbsolute(result)).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('joins relative path from git rev-parse with root when it does not start with /', async () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: .git/worktrees/foo\n');
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess')
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '.git/worktrees/foo/hooks\n', stderr: '' }); // git rev-parse
+
+    try {
+      const result = await resolveGitHooksDir(TEMP_DIR);
+      expect(result).toBe(join(TEMP_DIR, '.git/worktrees/foo/hooks'));
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('returns the path from git rev-parse when .git is a file (worktree)', async () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /some/real/.git/worktrees/foo\n');
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess')
+      .mockResolvedValueOnce(NO_HOOKS_PATH) // git config core.hooksPath → not set
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '/some/real/.git/worktrees/foo/hooks\n',
+        stderr: '',
+      }); // git rev-parse
+
+    try {
+      const result = await resolveGitHooksDir(TEMP_DIR);
+      expect(result).toBe('/some/real/.git/worktrees/foo/hooks');
+      expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-path', 'hooks'], {
+        cwd: TEMP_DIR,
+      });
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
     }
   });
 });
 
-// ─── Interactive flow ─────────────────────────────────────────────────────────
+describe('detectHookInstallation', () => {
+  it('sets gitPreCommit and gitPrePush when hooks are in .git/hooks', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
 
-describe('integrateGit: interactive flow', () => {
-  let discoverSpy: ReturnType<typeof spyOn>;
-  let installSpy: ReturnType<typeof spyOn>;
-  let repoRoot: string;
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
 
+    try {
+      const result = await detectHookInstallation(TEMP_DIR);
+      expect(result.gitPreCommit).toBe(true);
+      expect(result.gitPrePush).toBe(true);
+      expect(result.huskyPreCommit).toBe(false);
+      expect(result.huskyPrePush).toBe(false);
+      expect(result.preCommitConfig).toBe(false);
+      expect(result.hooksDir).toBe(join(TEMP_DIR, '.git', 'hooks'));
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('returns all false when no hooks are installed', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+
+    try {
+      const result = await detectHookInstallation(TEMP_DIR);
+      expect(result.gitPreCommit).toBe(false);
+      expect(result.gitPrePush).toBe(false);
+      expect(result.huskyPreCommit).toBe(false);
+      expect(result.huskyPrePush).toBe(false);
+      expect(result.preCommitConfig).toBe(false);
+      expect(result.hooksDir).toBe(join(TEMP_DIR, '.git', 'hooks'));
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('returns gitPreCommit and gitPrePush false when hook files exist but have no marker', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\necho hello\n');
+    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-push'), '#!/bin/sh\necho hello\n');
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+
+    try {
+      const result = await detectHookInstallation(TEMP_DIR);
+      expect(result.gitPreCommit).toBe(false);
+      expect(result.gitPrePush).toBe(false);
+      expect(result.huskyPreCommit).toBe(false);
+      expect(result.huskyPrePush).toBe(false);
+      expect(result.preCommitConfig).toBe(false);
+      expect(result.hooksDir).toBe(join(TEMP_DIR, '.git', 'hooks'));
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('sets huskyPreCommit and huskyPrePush when husky is used', async () => {
+    mkdirSync(join(TEMP_DIR, '.husky'), { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.husky', 'pre-commit'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+    writeFileSync(join(TEMP_DIR, '.husky', 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0,
+      stdout: '.husky\n',
+      stderr: '',
+    });
+
+    try {
+      const result = await detectHookInstallation(TEMP_DIR);
+      expect(result.huskyPreCommit).toBe(true);
+      expect(result.huskyPrePush).toBe(true);
+      expect(result.gitPreCommit).toBe(false);
+      expect(result.gitPrePush).toBe(false);
+      expect(result.preCommitConfig).toBe(false);
+      expect(result.hooksDir).toBe(join(TEMP_DIR, '.husky'));
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('sets preCommitConfig true when .pre-commit-config.yaml contains sonar-secrets hook', async () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      'repos:\n  - repo: local\n    hooks:\n      - id: sonar-secrets\n        name: Sonar secrets scan\n        entry: sonar analyze secrets\n        language: system\n',
+    );
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+
+    try {
+      const result = await detectHookInstallation(TEMP_DIR);
+      expect(result.preCommitConfig).toBe(true);
+      expect(result.gitPreCommit).toBe(false);
+      expect(result.gitPrePush).toBe(false);
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('sets preCommitConfig false when .pre-commit-config.yaml exists but has no sonar-secrets hook', async () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      'repos:\n  - repo: local\n    hooks:\n      - id: some-other-hook\n        name: Some other hook\n        entry: echo hello\n        language: system\n',
+    );
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+
+    try {
+      const result = await detectHookInstallation(TEMP_DIR);
+      expect(result.preCommitConfig).toBe(false);
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('resolveHookType', () => {
+  it('returns pre-commit when --hook pre-commit is passed', async () => {
+    const result = await resolveHookType({ hook: 'pre-commit' });
+    expect(result).toBe('pre-commit');
+  });
+
+  it('returns pre-push when --hook pre-push is passed', async () => {
+    const result = await resolveHookType({ hook: 'pre-push' });
+    expect(result).toBe('pre-push');
+  });
+
+  it('returns pre-commit when the user selects it from the prompt', async () => {
+    setMockUi(true);
+    queueMockResponse('pre-commit');
+    try {
+      const result = await resolveHookType({});
+      expect(result).toBe('pre-commit');
+    } finally {
+      setMockUi(false);
+    }
+  });
+
+  it('returns pre-push when the user selects it from the prompt', async () => {
+    setMockUi(true);
+    queueMockResponse('pre-push');
+    try {
+      const result = await resolveHookType({});
+      expect(result).toBe('pre-push');
+    } finally {
+      setMockUi(false);
+    }
+  });
+
+  it('throws CommandFailedError when the user cancels the prompt', () => {
+    setMockUi(true);
+    queueMockResponse(null);
+    try {
+      expect(resolveHookType({})).rejects.toThrow('Installation cancelled');
+    } finally {
+      setMockUi(false);
+    }
+  });
+});
+
+describe('showPostInstallInfo', () => {
   beforeEach(() => {
     setMockUi(true);
     clearMockUiCalls();
-    clearMockResponses();
-    setAuthEnv();
-    repoRoot = createTempRepo();
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
-      ...FAKE_PROJECT_INFO_NO_REPO,
-      root: repoRoot,
-      isGitRepo: true,
-    });
-    installSpy = spyOn(installSecrets, 'performSecretInstall').mockResolvedValue(
-      join(repoRoot, 'fake', 'sonar-secrets'),
-    );
   });
 
   afterEach(() => {
-    discoverSpy?.mockRestore();
-    installSpy?.mockRestore();
-    clearAuthEnv();
     setMockUi(false);
-    if (repoRoot) rmSync(repoRoot, { recursive: true, force: true });
   });
 
-  it('uses confirmPrompt and selectPrompt when interactive', async () => {
-    queueMockResponse(true); // Install here?
-    queueMockResponse('pre-commit'); // hook type (value for selectPrompt)
-
-    await integrateGit({});
-
+  it('prints staged files message for pre-commit', () => {
+    showPostInstallInfo('pre-commit');
     const calls = getMockUiCalls();
-    expect(calls.some((c) => c.method === 'confirmPrompt' && c.args[0] === 'Install here?')).toBe(
-      true,
-    );
     expect(
-      calls.some(
-        (c) =>
-          c.method === 'selectPrompt' && c.args[0] === 'Install hook for pre-commit or pre-push?',
-      ),
+      calls.some((c) => c.method === 'text' && String(c.args[0]).includes('staged files')),
     ).toBe(true);
   });
 
-  it('writes pre-commit hook script with marker and sonar analyze secrets', async () => {
-    queueMockResponse(true);
-    queueMockResponse('pre-commit');
-
-    await integrateGit({});
-
-    const hookPath = join(repoRoot, '.git', 'hooks', 'pre-commit');
-    expect(existsSync(hookPath)).toBe(true);
-    const content = readFileSync(hookPath, 'utf-8');
-    expect(content).toContain(HOOK_MARKER);
-    expect(content).toContain('analyze secrets');
-    expect(content).toContain('git diff --cached --name-only --diff-filter=ACMR');
-  });
-
-  it('writes pre-push hook script when user selects pre-push', async () => {
-    queueMockResponse(true);
-    queueMockResponse('pre-push');
-
-    await integrateGit({});
-
-    const hookPath = join(repoRoot, '.git', 'hooks', 'pre-push');
-    expect(existsSync(hookPath)).toBe(true);
-    const content = readFileSync(hookPath, 'utf-8');
-    expect(content).toContain(HOOK_MARKER);
-    expect(content).toContain('analyze secrets');
-    expect(content).toContain('while read -r local_ref local_sha remote_ref remote_sha');
-  });
-});
-
-// ─── Non-interactive and --hook ───────────────────────────────────────────────
-
-describe('integrateGit: non-interactive and --hook', () => {
-  let discoverSpy: ReturnType<typeof spyOn>;
-  let installSpy: ReturnType<typeof spyOn>;
-  let repoRoot: string;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    clearMockResponses();
-    setAuthEnv();
-    repoRoot = createTempRepo();
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
-      ...FAKE_PROJECT_INFO_NO_REPO,
-      root: repoRoot,
-      isGitRepo: true,
-    });
-    installSpy = spyOn(installSecrets, 'performSecretInstall').mockResolvedValue(
-      join(repoRoot, 'fake', 'sonar-secrets'),
-    );
-  });
-
-  afterEach(() => {
-    discoverSpy?.mockRestore();
-    installSpy?.mockRestore();
-    clearAuthEnv();
-    setMockUi(false);
-    if (repoRoot) rmSync(repoRoot, { recursive: true, force: true });
-  });
-
-  it('skips confirm and uses default pre-commit with --non-interactive', async () => {
-    await integrateGit({ nonInteractive: true });
-
+  it('prints committed files message for pre-push', () => {
+    showPostInstallInfo('pre-push');
     const calls = getMockUiCalls();
-    expect(calls.some((c) => c.method === 'confirmPrompt')).toBe(false);
-    expect(calls.some((c) => c.method === 'selectPrompt')).toBe(false);
-    const hookPath = join(repoRoot, '.git', 'hooks', 'pre-commit');
-    expect(existsSync(hookPath)).toBe(true);
-  });
-
-  it('uses --hook pre-push when provided', async () => {
-    await integrateGit({ nonInteractive: true, hook: 'pre-push' });
-
-    const hookPath = join(repoRoot, '.git', 'hooks', 'pre-push');
-    expect(existsSync(hookPath)).toBe(true);
-    const content = readFileSync(hookPath, 'utf-8');
-    expect(content).toContain(HOOK_MARKER);
+    expect(
+      calls.some((c) => c.method === 'text' && String(c.args[0]).includes('committed files')),
+    ).toBe(true);
   });
 });
 
-// ─── Overwrite behavior ───────────────────────────────────────────────────────
-
-describe('integrateGit: overwrite behavior', () => {
-  let discoverSpy: ReturnType<typeof spyOn>;
-  let installSpy: ReturnType<typeof spyOn>;
-  let repoRoot: string;
-
+describe('showInstallationStatus', () => {
   beforeEach(() => {
     setMockUi(true);
     clearMockUiCalls();
-    clearMockResponses();
-    setAuthEnv();
-    repoRoot = createTempRepo();
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
-      ...FAKE_PROJECT_INFO_NO_REPO,
-      root: repoRoot,
-      isGitRepo: true,
-    });
-    installSpy = spyOn(installSecrets, 'performSecretInstall').mockResolvedValue(
-      join(repoRoot, 'fake', 'sonar-secrets'),
-    );
   });
 
   afterEach(() => {
-    discoverSpy?.mockRestore();
-    installSpy?.mockRestore();
-    clearAuthEnv();
     setMockUi(false);
-    if (repoRoot) rmSync(repoRoot, { recursive: true, force: true });
   });
 
-  it('refuses to overwrite existing hook without marker when --force is false', async () => {
-    const hookPath = join(repoRoot, '.git', 'hooks', 'pre-commit');
-    writeFileSync(hookPath, '#!/bin/sh\necho "other hook"\n', { mode: 0o755 });
-
-    let threw = false;
+  it('prints pre-commit hook active when gitPreCommit is set', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
     try {
-      await integrateGit({ nonInteractive: true });
-    } catch (e) {
-      threw = true;
-      expect(e).toBeInstanceOf(CommandFailedError);
-      expect((e as Error).message).toMatch(/Use --force/);
+      await showInstallationStatus(TEMP_DIR);
+      const calls = getMockUiCalls();
+      expect(
+        calls.some(
+          (c) => c.method === 'info' && String(c.args[0]).includes('pre-commit hook active'),
+        ),
+      ).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
     }
-    expect(threw).toBe(true);
-
-    const content = readFileSync(hookPath, 'utf-8');
-    expect(content).toBe('#!/bin/sh\necho "other hook"\n');
   });
 
-  it('overwrites existing hook without marker when --force is true', async () => {
-    const hookPath = join(repoRoot, '.git', 'hooks', 'pre-commit');
-    writeFileSync(hookPath, '#!/bin/sh\necho "other hook"\n', { mode: 0o755 });
-
-    await integrateGit({ nonInteractive: true, force: true });
-
-    const content = readFileSync(hookPath, 'utf-8');
-    expect(content).toContain(HOOK_MARKER);
-    expect(content).toContain('analyze secrets');
+  it('prints pre-push hook active when gitPrePush is set', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    try {
+      await showInstallationStatus(TEMP_DIR);
+      const calls = getMockUiCalls();
+      expect(
+        calls.some(
+          (c) => c.method === 'info' && String(c.args[0]).includes('pre-push hook active'),
+        ),
+      ).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
   });
 
-  it('overwrites existing hook with marker (idempotent reinstall)', async () => {
-    const hookPath = join(repoRoot, '.git', 'hooks', 'pre-commit');
-    const ourContent = `#!/bin/sh\n# ${HOOK_MARKER}\nsonar analyze secrets -- "$@"\n`;
-    writeFileSync(hookPath, ourContent, { mode: 0o755 });
-
-    await integrateGit({ nonInteractive: true });
-
-    const content = readFileSync(hookPath, 'utf-8');
-    expect(content).toContain(HOOK_MARKER);
-    expect(content).toContain('git diff --cached');
-  });
-});
-
-// ─── User cancels ─────────────────────────────────────────────────────────────
-
-describe('integrateGit: user cancels', () => {
-  let discoverSpy: ReturnType<typeof spyOn>;
-  let repoRoot: string;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-    clearMockResponses();
-    setAuthEnv();
-    repoRoot = createTempRepo();
-    discoverSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
-      ...FAKE_PROJECT_INFO_NO_REPO,
-      root: repoRoot,
-      isGitRepo: true,
-    });
-  });
-
-  afterEach(() => {
-    discoverSpy?.mockRestore();
-    clearAuthEnv();
-    setMockUi(false);
-    if (repoRoot) rmSync(repoRoot, { recursive: true, force: true });
-  });
-
-  it('returns without installing when user confirms No', async () => {
-    queueMockResponse(false); // Install here? No
-
-    await integrateGit({});
-
-    const calls = getMockUiCalls();
-    expect(calls.some((c) => c.method === 'text' && c.args[0] === 'Cancelled')).toBe(true);
+  it('prints pre-commit framework active when preCommitConfig is set', async () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      'repos:\n  - repo: local\n    hooks:\n      - id: sonar-secrets\n        name: Sonar secrets scan\n        entry: sonar analyze secrets\n        language: system\n',
+    );
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    try {
+      await showInstallationStatus(TEMP_DIR);
+      const calls = getMockUiCalls();
+      expect(
+        calls.some(
+          (c) => c.method === 'info' && String(c.args[0]).includes('pre-commit framework'),
+        ),
+      ).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
   });
 });

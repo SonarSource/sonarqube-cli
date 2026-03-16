@@ -21,7 +21,7 @@
 // Integrate command - install git hooks for secrets scanning
 
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import logger from '../../../../lib/logger';
 import { resolveAuth } from '../../../../lib/auth-resolver';
@@ -52,7 +52,7 @@ import {
 
 export type GitHookType = 'pre-commit' | 'pre-push';
 
-function isGitHookType(s: string): s is GitHookType {
+export function isGitHookType(s: string): s is GitHookType {
   return s === 'pre-commit' || s === 'pre-push';
 }
 
@@ -67,7 +67,7 @@ export interface IntegrateGitOptions {
 // Hook detection
 // ---------------------------------------------------------------------------
 
-function hasMarker(filePath: string): boolean {
+export function hasMarker(filePath: string): boolean {
   return existsSync(filePath) && readFileSync(filePath, 'utf-8').includes(HOOK_MARKER);
 }
 
@@ -77,9 +77,20 @@ interface HookInstallation {
   huskyPrePush: boolean;
   gitPreCommit: boolean;
   gitPrePush: boolean;
+  hooksDir: string;
 }
 
-async function resolveGitHooksDir(root: string): Promise<string> {
+export async function resolveGitHooksDir(root: string): Promise<string> {
+  // core.hooksPath takes precedence over everything — it's what git actually uses to find hooks.
+  // Husky sets this to .husky; other tools (e.g. lefthook) may point elsewhere.
+  const configResult = await spawnProcess('git', ['config', 'core.hooksPath'], { cwd: root });
+  if (configResult.exitCode === 0) {
+    const configured = configResult.stdout.trim();
+    if (configured) {
+      return isAbsolute(configured) ? configured : join(root, configured);
+    }
+  }
+
   const dotGit = join(root, '.git');
   try {
     // Standard repo: .git is a directory — hooks live directly inside it, no subprocess needed
@@ -98,22 +109,24 @@ async function resolveGitHooksDir(root: string): Promise<string> {
     throw new CommandFailedError(errorMessage);
   }
   const resolved = result.stdout.trim();
-  return resolved.startsWith('/') ? resolved : join(root, resolved);
+  return isAbsolute(resolved) ? resolved : join(root, resolved);
 }
 
-async function detectHookInstallation(root: string): Promise<HookInstallation> {
+export async function detectSonarHookInstallation(root: string): Promise<HookInstallation> {
   let hooksDir: string;
   try {
     hooksDir = await resolveGitHooksDir(root);
   } catch {
     hooksDir = join(root, '.git', 'hooks');
   }
+  const isHusky = hooksDir.startsWith(join(root, '.husky'));
   return {
     preCommitConfig: hasSonarHookInPreCommitConfig(root),
-    huskyPreCommit: hasMarker(join(root, '.husky', 'pre-commit')),
-    huskyPrePush: hasMarker(join(root, '.husky', 'pre-push')),
-    gitPreCommit: hasMarker(join(hooksDir, 'pre-commit')),
-    gitPrePush: hasMarker(join(hooksDir, 'pre-push')),
+    huskyPreCommit: isHusky && hasMarker(join(hooksDir, 'pre-commit')),
+    huskyPrePush: isHusky && hasMarker(join(hooksDir, 'pre-push')),
+    gitPreCommit: !isHusky && hasMarker(join(hooksDir, 'pre-commit')),
+    gitPrePush: !isHusky && hasMarker(join(hooksDir, 'pre-push')),
+    hooksDir,
   };
 }
 
@@ -121,10 +134,7 @@ async function detectHookInstallation(root: string): Promise<HookInstallation> {
 // Shared interaction helpers
 // ---------------------------------------------------------------------------
 
-async function resolveHookType(
-  options: IntegrateGitOptions,
-  huskyHints?: { preCommit: boolean; prePush: boolean },
-): Promise<GitHookType> {
+export async function resolveHookType(options: IntegrateGitOptions): Promise<GitHookType> {
   if (options.nonInteractive || options.hook !== undefined) {
     const rawHook = options.hook ?? 'pre-commit';
     if (!isGitHookType(rawHook)) {
@@ -132,16 +142,19 @@ async function resolveHookType(
     }
     return rawHook;
   }
-  const choice = await selectPrompt<GitHookType>('Install hook for pre-commit or pre-push?', [
-    {
-      value: 'pre-commit' as const,
-      label: `pre-commit (scan staged files)${huskyHints?.preCommit ? ' — Husky detected' : ''}`,
-    },
-    {
-      value: 'pre-push' as const,
-      label: `pre-push (scan files in pushed commits)${huskyHints?.prePush ? ' — Husky detected' : ''}`,
-    },
-  ]);
+  const choice = await selectPrompt<GitHookType>(
+    'Would you like to install the pre-commit or pre-push hook?',
+    [
+      {
+        value: 'pre-commit' as const,
+        label: 'pre-commit (scan staged files)',
+      },
+      {
+        value: 'pre-push' as const,
+        label: 'pre-push (scan files in unpushed commits)',
+      },
+    ],
+  );
   if (choice === null) {
     error('Installation cancelled');
     throw new CommandFailedError('Installation cancelled');
@@ -150,18 +163,12 @@ async function resolveHookType(
 }
 
 async function ensureSonarSecrets(): Promise<void> {
-  try {
-    await performSecretInstall({});
-  } catch (err) {
-    if ((err as Error).message !== 'Installation skipped - already up to date') {
-      throw err;
-    }
-  }
+  await performSecretInstall({});
   info('sonar-secrets is installed');
   blank();
 }
 
-function showPostInstallInfo(hook: GitHookType): void {
+export function showPostInstallInfo(hook: GitHookType): void {
   blank();
   text(
     hook === 'pre-commit'
@@ -172,18 +179,14 @@ function showPostInstallInfo(hook: GitHookType): void {
   blank();
 }
 
-async function showInstallationStatus(root: string): Promise<void> {
-  const installed = await detectHookInstallation(root);
+export async function showInstallationStatus(root: string): Promise<void> {
+  const installed = await detectSonarHookInstallation(root);
   if (installed.preCommitConfig) {
     info(`Status: hook active via pre-commit framework (${PRE_COMMIT_CONFIG_FILE})`);
-  } else if (installed.huskyPreCommit) {
-    info('Status: pre-commit hook active (.husky/pre-commit)');
-  } else if (installed.huskyPrePush) {
-    info('Status: pre-push hook active (.husky/pre-push)');
-  } else if (installed.gitPreCommit) {
-    info('Status: pre-commit hook active (.git/hooks/pre-commit)');
-  } else if (installed.gitPrePush) {
-    info('Status: pre-push hook active (.git/hooks/pre-push)');
+  } else if (installed.huskyPreCommit || installed.gitPreCommit) {
+    info(`Status: pre-commit hook active (${join(installed.hooksDir, 'pre-commit')})`);
+  } else if (installed.huskyPrePush || installed.gitPrePush) {
+    info(`Status: pre-push hook active (${join(installed.hooksDir, 'pre-push')})`);
   }
   blank();
 }
@@ -337,24 +340,18 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   }
   blank();
 
-  const huskyPreCommitPath = join(projectInfo.root, '.husky', 'pre-commit');
-  const huskyPrePushPath = join(projectInfo.root, '.husky', 'pre-push');
-  const huskyPreCommitExists = existsSync(huskyPreCommitPath);
-  const huskyPrePushExists = existsSync(huskyPrePushPath);
+  const installed = await detectSonarHookInstallation(projectInfo.root);
+  const isHusky = installed.hooksDir.startsWith(join(projectInfo.root, '.husky'));
+  const usePreCommitConfig = existsSync(join(projectInfo.root, PRE_COMMIT_CONFIG_FILE));
 
-  const hook = await resolveHookType(options, {
-    preCommit: huskyPreCommitExists,
-    prePush: huskyPrePushExists,
-  });
+  const hook = await resolveHookType(options);
   text(`Hook: ${hook}`);
   blank();
 
   await ensureSonarSecrets();
 
-  const huskyHookPath = hook === 'pre-commit' ? huskyPreCommitPath : huskyPrePushPath;
-  const huskyHookExists = hook === 'pre-commit' ? huskyPreCommitExists : huskyPrePushExists;
-  const usePreCommitConfig = existsSync(join(projectInfo.root, PRE_COMMIT_CONFIG_FILE));
-  const useHusky = !usePreCommitConfig && huskyHookExists;
+  const huskyHookPath = join(projectInfo.root, '.husky', hook);
+  const useHusky = isHusky && !usePreCommitConfig;
 
   if (usePreCommitConfig) {
     await installViaPreCommitFramework(projectInfo.root, hook);
@@ -374,7 +371,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
 // ---------------------------------------------------------------------------
 
 /** Fake SonarQube token used only by the test command to verify the hook blocks the commit. Not a real secret. */
-const TEST_SECRET_CONTENT = `const API_KEY = "sqp_1aa323ae0689cd4a1abd062a2ad0a224ae8a1d13";`;
+const TEST_SECRET_CONTENT = `const API_KEY = "123";`;
 
 const TEST_FILE_NAME = 'sonar-hook-verify.js';
 
@@ -393,7 +390,7 @@ export async function integrateGitTest(): Promise<void> {
     throw new CommandFailedError(errorMessage);
   }
 
-  const installed = await detectHookInstallation(projectInfo.root);
+  const installed = await detectSonarHookInstallation(projectInfo.root);
   if (!installed.preCommitConfig && !installed.huskyPreCommit && !installed.gitPreCommit) {
     const errorMessage = 'Pre-commit hook not found. Install with: sonar integrate git';
     error(errorMessage);
