@@ -286,9 +286,23 @@ cat .env | sonar analyze secrets --stdin
 
 ---
 
-#### `sonar analyze a3s`
+#### `sonar analyze sqaa`
 
-Run A3S server-side analysis on a file (SonarQube Cloud only)
+Run SQAA server-side analysis on a file (SonarQube Cloud only)
+
+**Options:**
+
+| Option      | Type   | Required | Description                                              | Default |
+| ----------- | ------ | -------- | -------------------------------------------------------- | ------- |
+| `--file`    | string | Yes      | File path to analyze                                     | -       |
+| `--branch`  | string | No       | Branch name for analysis context                         | -       |
+| `--project` | string | No       | SonarCloud project key (overrides auto-detected project) | -       |
+
+---
+
+### `sonar verify`
+
+Analyze a file for issues
 
 **Options:**
 
