@@ -31,8 +31,7 @@ import { authStatus } from './commands/auth/status';
 import { installSecrets, type InstallSecretsOptions } from './commands/install/secrets';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
-import { analyzeA3s, type AnalyzeA3sOptions } from './commands/analyze/a3s';
-import { analyzeFile } from './commands/analyze/analyze';
+import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
@@ -160,7 +159,9 @@ auth
 const analyze = COMMAND_TREE.command('analyze')
   .description('Analyze code for security issues')
   .enablePositionalOptions()
-  .allowUnknownOption();
+  .action(function (this: Command) {
+    this.outputHelp();
+  });
 
 analyze
   .command('secrets')
@@ -174,27 +175,23 @@ analyze
   );
 
 analyze
-  .command('a3s')
-  .description('Run A3S server-side analysis on a file (SonarQube Cloud only)')
+  .command('sqaa')
+  .description('Run SQAA server-side analysis on a file (SonarQube Cloud only)')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
   .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
-  .action((options: AnalyzeA3sOptions, cmd: Command) => runCommand(() => analyzeA3s(options, cmd)));
+  .action((options: AnalyzeSqaaOptions, cmd: Command) =>
+    runCommand(() => analyzeSqaa(options, cmd)),
+  );
 
-// Full pipeline: secrets → A3S. Options are parsed manually because `analyze` also has
-// subcommands that use the same --file/--branch option names.
-analyze.addHelpText(
-  'after',
-  '\nOptions (full pipeline):\n  --file <file>      File path to analyze (secrets + A3S)\n  --branch <branch>  Branch name for A3S analysis context',
-);
-analyze.action(function (this: Command) {
-  const args = this.args;
-  const fileIdx = args.indexOf('--file');
-  const file = fileIdx >= 0 ? args[fileIdx + 1] : undefined;
-  const branchIdx = args.indexOf('--branch');
-  const branch = branchIdx >= 0 ? args[branchIdx + 1] : undefined;
-  return runCommand(() => analyzeFile(file!, branch));
-});
+COMMAND_TREE.command('verify')
+  .description('Analyze a file for issues')
+  .requiredOption('--file <file>', 'File path to analyze')
+  .option('--branch <branch>', 'Branch name for analysis context')
+  .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
+  .action((options: AnalyzeSqaaOptions, cmd: Command) =>
+    runCommand(() => analyzeSqaa(options, cmd)),
+  );
 
 // Configure things related to the CLI
 const configure = COMMAND_TREE.command('config').description('Configure CLI settings');

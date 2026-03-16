@@ -29,23 +29,23 @@ import type { A3sIssue } from '../../../sonarqube/client';
 import { loadState, findExtensionsByProject } from '../../../lib/state-manager';
 import type { HookExtension } from '../../../lib/state';
 
-export interface AnalyzeA3sOptions {
+export interface AnalyzeSqaaOptions {
   file: string;
   branch?: string;
   project?: string;
 }
 
-export async function analyzeA3s(options: AnalyzeA3sOptions, command?: Command): Promise<void> {
+export async function analyzeSqaa(options: AnalyzeSqaaOptions, command?: Command): Promise<void> {
   const { file, branch, project } = options;
 
   if (!existsSync(file)) {
     throw new InvalidOptionError(`File not found: ${file}`);
   }
 
-  await runA3sAnalysis(file, branch, project, command);
+  await runSqaaAnalysis(file, branch, project, command);
 }
 
-export async function runA3sAnalysis(
+export async function runSqaaAnalysis(
   file: string,
   branch?: string,
   explicitProject?: string,
@@ -54,16 +54,16 @@ export async function runA3sAnalysis(
   const auth = await resolveCloudAuth(explicitProject);
   if (!auth) return;
 
-  const projectKey = explicitProject ?? resolveA3sProjectKey(command);
+  const projectKey = explicitProject ?? resolveSqaaProjectKey(command);
   if (!projectKey) return;
 
-  const fileContent = readA3sFileContent(file);
-  await callA3sApiAndDisplay(auth, projectKey, file, fileContent, branch);
+  const fileContent = readSqaaFileContent(file);
+  await callSqaaApiAndDisplay(auth, projectKey, file, fileContent, branch);
 }
 
 /**
  * Resolve auth and validate that the connection is SonarQube Cloud.
- * Returns null when A3S should be silently skipped (no auth / on-premise without --project).
+ * Returns null when SQAA should be silently skipped (no auth / on-premise without --project).
  * Throws CommandFailedError when --project is set but the connection is not Cloud.
  */
 async function resolveCloudAuth(
@@ -73,17 +73,17 @@ async function resolveCloudAuth(
   try {
     auth = await resolveAuth({});
   } catch {
-    logger.debug('A3S analysis skipped: failed to resolve auth');
+    logger.debug('SQAA analysis skipped: failed to resolve auth');
     return null;
   }
 
   if (!auth.token || !auth.orgKey || auth.connectionType === 'on-premise') {
     if (explicitProject) {
       throw new CommandFailedError(
-        'A3S analysis requires a SonarQube Cloud connection. Run: sonar auth login',
+        'SQAA analysis requires a SonarQube Cloud connection. Run: sonar auth login',
       );
     }
-    logger.debug('A3S analysis skipped: no auth, missing orgKey, or on-premise server');
+    logger.debug('SQAA analysis skipped: no auth, missing orgKey, or on-premise server');
     return null;
   }
 
@@ -92,36 +92,36 @@ async function resolveCloudAuth(
 
 /**
  * Look up the project key for the current directory from the agentExtensions registry.
- * Returns null when A3S should be silently skipped.
+ * Returns null when SQAA should be silently skipped.
  */
-function resolveA3sProjectKey(command?: Command): string | null {
+function resolveSqaaProjectKey(command?: Command): string | null {
   try {
     const state = loadState();
     const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
-    const a3sExt = extensions.find(
+    const sqaaExt = extensions.find(
       (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-a3s',
     );
 
-    if (!a3sExt?.projectKey) {
-      logger.debug('A3S analysis skipped: no project key found in extensions registry');
+    if (!sqaaExt?.projectKey) {
+      logger.debug('SQAA analysis skipped: no project key found in extensions registry');
       if (process.stdin.isTTY) {
         command?.outputHelp();
       }
       return null;
     }
 
-    return a3sExt.projectKey;
+    return sqaaExt.projectKey;
   } catch {
-    logger.debug('A3S analysis skipped: failed to resolve extensions');
+    logger.debug('SQAA analysis skipped: failed to resolve extensions');
     return null;
   }
 }
 
 /**
- * Read file content for A3S analysis.
+ * Read file content for SQAA analysis.
  * Throws CommandFailedError when the file cannot be read.
  */
-function readA3sFileContent(file: string): string {
+function readSqaaFileContent(file: string): string {
   try {
     return readFileSync(file, 'utf-8');
   } catch (err) {
@@ -130,10 +130,10 @@ function readA3sFileContent(file: string): string {
 }
 
 /**
- * Call the A3S API and display the results.
+ * Call the SQAA API and display the results.
  * Throws CommandFailedError on API failure.
  */
-async function callA3sApiAndDisplay(
+async function callSqaaApiAndDisplay(
   auth: { serverUrl: string; token: string; orgKey: string },
   projectKey: string,
   file: string,
@@ -144,7 +144,7 @@ async function callA3sApiAndDisplay(
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
   blank();
-  text('Running A3S analysis...');
+  text('Running SQAA analysis...');
 
   try {
     const response = await client.analyzeFile({
@@ -155,27 +155,27 @@ async function callA3sApiAndDisplay(
       fileContent,
     });
 
-    displayA3sResults(response.issues, response.errors);
+    displaySqaaResults(response.issues, response.errors);
   } catch (err) {
-    logger.error(`A3S analysis failed: ${(err as Error).message}`);
+    logger.error(`SQAA analysis failed: ${(err as Error).message}`);
     blank();
-    error('A3S analysis failed.');
+    error('SQAA analysis failed.');
     text(`  ${(err as Error).message}`);
     blank();
-    throw new CommandFailedError('A3S analysis failed');
+    throw new CommandFailedError('SQAA analysis failed');
   }
 }
 
-function displayA3sResults(
+function displaySqaaResults(
   issues: A3sIssue[],
   errors?: Array<{ code: string; message: string }> | null,
 ): void {
   blank();
 
   if (issues.length === 0) {
-    success('A3S analysis completed — no issues found.');
+    success('SQAA analysis completed — no issues found.');
   } else {
-    error(`A3S analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
+    error(`SQAA analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
     blank();
     issues.forEach((issue, idx) => {
       const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
@@ -186,7 +186,7 @@ function displayA3sResults(
 
   if (errors && errors.length > 0) {
     blank();
-    error('A3S analysis returned errors:');
+    error('SQAA analysis returned errors:');
     errors.forEach((e) => {
       text(`  [${e.code}] ${e.message}`);
     });

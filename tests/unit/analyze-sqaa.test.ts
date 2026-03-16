@@ -18,18 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for analyzeA3s and analyzeFile (full pipeline) commands
+// Unit tests for analyzeSqaa command
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 import * as stateManager from '../../src/lib/state-manager.js';
 import * as authResolver from '../../src/lib/auth-resolver.js';
-import * as processLib from '../../src/lib/process.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { analyzeA3s } from '../../src/cli/commands/analyze/a3s';
-import { analyzeFile } from '../../src/cli/commands/analyze/analyze';
+import { analyzeSqaa } from '../../src/cli/commands/analyze/sqaa';
 import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
@@ -114,40 +112,40 @@ afterEach(() => {
   analyzeFileSpy.mockRestore();
 });
 
-// ─── analyzeA3s ──────────────────────────────────────────────────────────────
+// ─── analyzeSqaa ─────────────────────────────────────────────────────────────
 
-describe('analyzeA3s: input validation', () => {
+describe('analyzeSqaa: input validation', () => {
   it('throws InvalidOptionError when file does not exist', () => {
     existsSpy.mockReturnValue(false);
 
-    expect(analyzeA3s({ file: 'nonexistent.ts' })).rejects.toThrow(InvalidOptionError);
-    expect(analyzeA3s({ file: 'nonexistent.ts' })).rejects.toThrow('File not found');
+    expect(analyzeSqaa({ file: 'nonexistent.ts' })).rejects.toThrow(InvalidOptionError);
+    expect(analyzeSqaa({ file: 'nonexistent.ts' })).rejects.toThrow('File not found');
   });
 });
 
-describe('analyzeA3s: auth resolution', () => {
-  it('skips A3S when resolveAuth throws (no auth configured)', async () => {
+describe('analyzeSqaa: auth resolution', () => {
+  it('skips SQAA when resolveAuth throws (no auth configured)', async () => {
     resolveAuthSpy.mockRejectedValue(new Error('No token'));
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
-  it('skips A3S when token is missing from resolved auth', async () => {
+  it('skips SQAA when token is missing from resolved auth', async () => {
     resolveAuthSpy.mockResolvedValue({ token: '', serverUrl: SONARCLOUD_URL, orgKey: TEST_ORG });
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
-  it('skips A3S when orgKey is missing from resolved auth', async () => {
+  it('skips SQAA when orgKey is missing from resolved auth', async () => {
     resolveAuthSpy.mockResolvedValue({ token: TEST_TOKEN, serverUrl: SONARCLOUD_URL });
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
-  it('skips A3S for on-premise server connection', async () => {
+  it('skips SQAA for on-premise server connection', async () => {
     resolveAuthSpy.mockResolvedValue({
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
@@ -155,19 +153,19 @@ describe('analyzeA3s: auth resolution', () => {
       connectionType: 'on-premise',
     });
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
-  it('skips A3S when no extension found in registry for this project', async () => {
+  it('skips SQAA when no extension found in registry for this project', async () => {
     loadStateSpy.mockReturnValue(makeCloudStateNoExt());
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
 
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
-  it('skips A3S when extension has no projectKey', async () => {
+  it('skips SQAA when extension has no projectKey', async () => {
     const state = getDefaultState('test');
     stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
       orgKey: TEST_ORG,
@@ -189,14 +187,14 @@ describe('analyzeA3s: auth resolution', () => {
     });
     loadStateSpy.mockReturnValue(state);
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 });
 
-describe('analyzeA3s: API call and result display', () => {
+describe('analyzeSqaa: API call and result display', () => {
   it('calls client.analyzeFile with correct parameters', async () => {
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
     const request = analyzeFileSpy.mock.calls[0][0];
@@ -207,7 +205,7 @@ describe('analyzeA3s: API call and result display', () => {
   });
 
   it('does not send branchName in request when no branch is provided', async () => {
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
 
     const request = analyzeFileSpy.mock.calls[0][0];
     // branchName: null causes a 400 from the real API — must be omitted entirely
@@ -215,7 +213,7 @@ describe('analyzeA3s: API call and result display', () => {
   });
 
   it('passes branch to client when --branch option is provided', async () => {
-    await analyzeA3s({ file: 'src/index.ts', branch: 'feature/my-branch' });
+    await analyzeSqaa({ file: 'src/index.ts', branch: 'feature/my-branch' });
 
     const request = analyzeFileSpy.mock.calls[0][0];
     expect(request.branchName).toBe('feature/my-branch');
@@ -224,7 +222,7 @@ describe('analyzeA3s: API call and result display', () => {
   it('displays success message when no issues found', async () => {
     analyzeFileSpy.mockResolvedValue({ id: 'a1', issues: [], errors: null });
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
 
     const output = getMockUiCalls().map((c) => String(c.args[0]));
     expect(output.some((m) => m.toLowerCase().includes('no issues found'))).toBe(true);
@@ -248,7 +246,7 @@ describe('analyzeA3s: API call and result display', () => {
       errors: null,
     });
 
-    await analyzeA3s({ file: 'main.py' });
+    await analyzeSqaa({ file: 'main.py' });
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -264,10 +262,10 @@ describe('analyzeA3s: API call and result display', () => {
     analyzeFileSpy.mockResolvedValue({
       id: 'a1',
       issues: [],
-      errors: [{ code: 'NOT_ENTITLED', message: 'Organization not entitled to A3S' }],
+      errors: [{ code: 'NOT_ENTITLED', message: 'Organization not entitled to SQAA' }],
     });
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -289,7 +287,7 @@ describe('analyzeA3s: API call and result display', () => {
       errors: [{ code: 'PARSE_ERROR', message: "'NonExistentHeader.h' file not found" }],
     });
 
-    await analyzeA3s({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' });
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -300,27 +298,27 @@ describe('analyzeA3s: API call and result display', () => {
     expect(output).toContain('NonExistentHeader.h');
   });
 
-  it('throws CommandFailedError when A3S API call fails', () => {
+  it('throws CommandFailedError when SQAA API call fails', () => {
     analyzeFileSpy.mockRejectedValue(new Error('Network error'));
 
-    expect(analyzeA3s({ file: 'src/index.ts' })).rejects.toThrow('A3S analysis failed');
+    expect(analyzeSqaa({ file: 'src/index.ts' })).rejects.toThrow('SQAA analysis failed');
   });
 });
 
-// ─── analyzeA3s: explicit --project option ───────────────────────────────────
+// ─── analyzeSqaa: explicit --project option ──────────────────────────────────
 
-describe('analyzeA3s: explicit --project option', () => {
+describe('analyzeSqaa: explicit --project option', () => {
   it('uses provided project key directly without consulting extensions registry', async () => {
     loadStateSpy.mockReturnValue(makeCloudStateNoExt());
 
-    await analyzeA3s({ file: 'src/index.ts', project: 'explicit-project' });
+    await analyzeSqaa({ file: 'src/index.ts', project: 'explicit-project' });
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
     expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('explicit-project');
   });
 
   it('uses provided project key even when extension has a different project key', async () => {
-    await analyzeA3s({ file: 'src/index.ts', project: 'override-project' });
+    await analyzeSqaa({ file: 'src/index.ts', project: 'override-project' });
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
     expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('override-project');
@@ -329,7 +327,7 @@ describe('analyzeA3s: explicit --project option', () => {
   it('throws CommandFailedError with auth hint when --project given but no auth', () => {
     resolveAuthSpy.mockResolvedValue({ token: '', serverUrl: SONARCLOUD_URL, orgKey: TEST_ORG });
 
-    expect(analyzeA3s({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
+    expect(analyzeSqaa({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
       CommandFailedError,
     );
   });
@@ -342,82 +340,8 @@ describe('analyzeA3s: explicit --project option', () => {
       connectionType: 'on-premise',
     });
 
-    expect(analyzeA3s({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
+    expect(analyzeSqaa({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
       CommandFailedError,
     );
-  });
-});
-
-// ─── analyzeFile (full pipeline) ─────────────────────────────────────────────
-
-describe('analyzeFile: input validation', () => {
-  it('throws InvalidOptionError with "--file is required" when no file is given', () => {
-    // Simulates CLI calling analyzeFile without --file (manual arg parsing yields undefined)
-    expect(analyzeFile(undefined as unknown as string)).rejects.toThrow('--file is required');
-  });
-
-  it('throws InvalidOptionError when file does not exist', () => {
-    existsSpy.mockReturnValue(false);
-
-    expect(analyzeFile('nonexistent.ts')).rejects.toThrow(InvalidOptionError);
-  });
-
-  it('throws CommandFailedError when file cannot be read', () => {
-    readFileSpy.mockImplementation(() => {
-      throw new Error('EACCES: permission denied');
-    });
-
-    expect(analyzeFile('src/index.ts')).rejects.toThrow('Failed to read file');
-  });
-});
-
-describe('analyzeFile: secrets scan gate', () => {
-  let spawnSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0,
-      stdout: '{}',
-      stderr: '',
-    });
-    // Make binary appear installed
-    existsSpy.mockImplementation((p: unknown) => {
-      const path = String(p);
-      if (path.includes('sonar-secrets')) return true;
-      return true; // target file exists too
-    });
-  });
-
-  afterEach(() => {
-    spawnSpy.mockRestore();
-  });
-
-  it('warns and returns early without calling A3S when secrets are detected', async () => {
-    spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
-
-    await analyzeFile('src/index.ts');
-
-    const output = getMockUiCalls()
-      .map((c) => String(c.args[0]))
-      .join('\n');
-    expect(output.toLowerCase()).toContain('secrets detected');
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
-  });
-
-  it('proceeds to A3S when secrets scan passes (exit 0)', async () => {
-    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '{}', stderr: '' });
-
-    await analyzeFile('src/index.ts');
-
-    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('proceeds to A3S when secrets scan errors (non-blocking)', async () => {
-    spawnSpy.mockRejectedValue(new Error('binary crashed'));
-
-    await analyzeFile('src/index.ts');
-
-    // Secrets scan error is non-blocking — A3S should still run
-    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
   });
 });
