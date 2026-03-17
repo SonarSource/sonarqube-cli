@@ -24,6 +24,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { spawnProcess } from '../../../../lib/process';
+import { CommandFailedError } from '../../_common/error';
+import { error, success } from '../../../../ui';
 import type { GitHookType } from '.';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
@@ -49,30 +51,28 @@ interface PreCommitConfig {
   [key: string]: unknown;
 }
 
-function buildSonarPreCommitHook(hook: GitHookType): PreCommitHookEntry {
+function buildSonarPreCommitHook(stage: GitHookType): PreCommitHookEntry {
   const base: PreCommitHookEntry = {
     id: PRE_COMMIT_SONAR_HOOK_ID,
     name: 'Sonar secrets scan',
-    entry: 'sonar analyze secrets',
+    entry: 'sonar analyze secrets --',
     language: 'system',
     pass_filenames: true,
+    stages: [stage],
   };
-  if (hook === 'pre-push') {
-    base.stages = ['push'];
-  }
   return base;
 }
 
 function parsePreCommitConfig(raw: unknown): PreCommitConfig {
-  if (!raw || typeof raw !== 'object' || !('repos' in raw)) {
+  if (!raw || typeof raw !== 'object') {
     return { repos: [] };
   }
-  const repos = (raw as { repos: unknown }).repos;
-  const list = Array.isArray(repos) ? (repos as PreCommitRepo[]) : [];
-  return { repos: list };
+  const obj = raw as Record<string, unknown>;
+  const repos = Array.isArray(obj.repos) ? (obj.repos as PreCommitRepo[]) : [];
+  return { ...obj, repos };
 }
 
-function isLocalHookEntry(hookEntry: unknown): hookEntry is PreCommitHookEntry {
+function isSonarHookEntry(hookEntry: unknown): hookEntry is PreCommitHookEntry {
   return (
     typeof hookEntry === 'object' &&
     hookEntry !== null &&
@@ -81,32 +81,34 @@ function isLocalHookEntry(hookEntry: unknown): hookEntry is PreCommitHookEntry {
   );
 }
 
-/** Upsert the sonar-secrets hook into .pre-commit-config.yaml. */
-export function ensurePreCommitConfig(root: string, hook: GitHookType): void {
-  const configPath = join(root, PRE_COMMIT_CONFIG_FILE);
+function findExistingSonarHook(configPath: string): {
+  config: PreCommitConfig;
+  repo: { hooks: unknown[] } | undefined;
+  index: number;
+} {
   let config: PreCommitConfig;
   try {
     config = parsePreCommitConfig(yaml.load(readFileSync(configPath, 'utf-8')));
   } catch {
     config = { repos: [] };
   }
+  const repo = config.repos.find((r) => r.repo === 'local' && Array.isArray(r.hooks)) as
+    | { hooks: unknown[] }
+    | undefined;
+  return { config, repo, index: repo ? repo.hooks.findIndex(isSonarHookEntry) : -1 };
+}
 
-  const sonarHook = buildSonarPreCommitHook(hook);
-  let found = false;
-  for (const repo of config.repos) {
-    const r = repo as { repo?: string; hooks?: unknown[] };
-    if (r.repo !== 'local' || !Array.isArray(r.hooks)) continue;
-    const idx = r.hooks.findIndex(isLocalHookEntry);
-    if (idx >= 0) {
-      r.hooks[idx] = sonarHook;
-      found = true;
-      break;
-    }
-  }
-  if (!found) {
+/** Upsert the sonar-secrets hook into .pre-commit-config.yaml. */
+export function upsertPreCommitConfig(root: string, stage: GitHookType): void {
+  const configPath = join(root, PRE_COMMIT_CONFIG_FILE);
+  const sonarHook = buildSonarPreCommitHook(stage);
+  const { config, repo, index } = findExistingSonarHook(configPath);
+  if (repo) {
+    const idx = index >= 0 ? index : repo.hooks.length;
+    repo.hooks[idx] = sonarHook;
+  } else {
     config.repos.push({ repo: 'local', hooks: [sonarHook] });
   }
-
   writeFileSync(configPath, yaml.dump(config, { lineWidth: -1 }), 'utf-8');
 }
 
@@ -132,18 +134,18 @@ export async function runPreCommitInstall(root: string, hook: GitHookType): Prom
 export function hasSonarHookInPreCommitConfig(root: string): boolean {
   const configPath = join(root, PRE_COMMIT_CONFIG_FILE);
   if (!existsSync(configPath)) return false;
+  const { repo, index } = findExistingSonarHook(configPath);
+  return repo !== undefined && index >= 0;
+}
 
+export async function installViaPreCommitFramework(root: string, hook: GitHookType): Promise<void> {
+  upsertPreCommitConfig(root, hook);
   try {
-    const yamlContent = readFileSync(configPath, 'utf-8');
-    const config = parsePreCommitConfig(yaml.load(yamlContent)) as { repos?: PreCommitRepo[] };
-
-    return (
-      config.repos?.some(
-        (repo) =>
-          repo.repo === 'local' && Array.isArray(repo.hooks) && repo.hooks.some(isLocalHookEntry),
-      ) ?? false
-    );
+    await runPreCommitInstall(root, hook);
   } catch {
-    return false;
+    const errorMessage = `Updated ${PRE_COMMIT_CONFIG_FILE} but pre-commit commands failed. Install the pre-commit framework (e.g. pip install pre-commit) and run: pre-commit uninstall && pre-commit clean && pre-commit install${hook === 'pre-push' ? ' && pre-commit install --hook-type pre-push' : ''}`;
+    error(errorMessage);
+    throw new CommandFailedError(errorMessage);
   }
+  success(`${hook} hook installed (pre-commit framework: added to ${PRE_COMMIT_CONFIG_FILE}).`);
 }

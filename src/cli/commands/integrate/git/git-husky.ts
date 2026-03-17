@@ -26,11 +26,17 @@ import type { GitHookType } from '.';
 
 export async function installViaHusky(huskyHookPath: string, hook: GitHookType): Promise<void> {
   const fs = await import('node:fs/promises');
-  const content = await fs.readFile(huskyHookPath, 'utf-8');
+  let content: string;
+  try {
+    content = await fs.readFile(huskyHookPath, 'utf-8');
+  } catch {
+    content = '';
+  }
   if (content.includes(HOOK_MARKER)) {
     info(`Secrets check already present in .husky/${hook}.`);
     return;
   }
-  await fs.writeFile(huskyHookPath, content.trimEnd() + getHuskySnippet(hook), 'utf-8');
+  const newContent = content ? content.trimEnd() + getHuskySnippet(hook) : getHuskySnippet(hook);
+  await fs.writeFile(huskyHookPath, newContent, { encoding: 'utf-8', mode: 0o755 });
   success(`${hook} hook installed (Husky detected: added to .husky/${hook}).`);
 }

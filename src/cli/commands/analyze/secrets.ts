@@ -313,7 +313,7 @@ function handleScanFailure(
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
     error(`Secrets found (${scanDurationMs}ms)`);
     logger.error(`Secrets found, exit code: ${exitCode}`);
-    throw new CommandFailedError('Secrets found', exitCode);
+    throw new CommandFailedError(`Secrets found (${scanDurationMs}ms)`, exitCode);
   }
 
   error(`Scan error (exit code ${exitCode}, ${scanDurationMs}ms)`);

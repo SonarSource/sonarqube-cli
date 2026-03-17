@@ -186,6 +186,43 @@ Setup SonarQube integration for Claude Code. This will install secrets scanning 
 
 ---
 
+#### `sonar integrate git`
+
+Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).
+
+**Options:**
+
+| Option              | Type    | Required | Description                                                                                  | Default |
+| ------------------- | ------- | -------- | -------------------------------------------------------------------------------------------- | ------- |
+| `--hook`            | string  | No       | Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits) | -       |
+| `--force`           | boolean | No       | Overwrite existing hook if it is not from sonar integrate git                                | -       |
+| `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                                            | -       |
+| `--global`          | boolean | No       | Install hook globally for all repositories (sets git config --global core.hooksPath)         | -       |
+
+**Examples:**
+
+Install a pre-commit hook that scans staged files for secrets (interactive)
+```bash
+sonar integrate git
+```
+
+Install a pre-push hook that scans committed files for secrets before pushing
+```bash
+sonar integrate git --hook pre-push
+```
+
+Install a staged-file secrets hook globally for all repositories (sets git config --global core.hooksPath)
+```bash
+sonar integrate git --global
+```
+
+Non-interactive: install a pre-push secrets hook globally for all repositories
+```bash
+sonar integrate git --hook pre-push --global --non-interactive
+```
+
+---
+
 ### `sonar list`
 
 List Sonar resources

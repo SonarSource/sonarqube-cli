@@ -97,10 +97,6 @@ export const EXAMPLES: Record<string, Example[]> = {
       command: 'sonar integrate git --hook pre-push --global --non-interactive',
       description: 'Non-interactive: install a pre-push secrets hook globally for all repositories',
     },
-    {
-      command: 'sonar integrate git test',
-      description: 'Verify the hook blocks a commit whose staged files contain a secret',
-    },
   ],
   'sonar list issues': [
     { command: 'sonar list issues -p my-project', description: 'List issues in a project' },

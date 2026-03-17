@@ -30,11 +30,7 @@ import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { installSecrets, type InstallSecretsOptions } from './commands/install/secrets';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
-import {
-  integrateGit,
-  integrateGitTest,
-  type IntegrateGitOptions,
-} from './commands/integrate/git/index';
+import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git/index';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
@@ -98,7 +94,7 @@ integrateCommand
   )
   .authenticatedAction((auth, options: IntegrateClaudeOptions) => integrateClaude(options, auth));
 
-const integrateGitCommand = integrateCommand
+integrateCommand
   .command('git')
   .description(
     'Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).',
@@ -114,13 +110,6 @@ const integrateGitCommand = integrateCommand
     'Install hook globally for all repositories (sets git config --global core.hooksPath)',
   )
   .action((options: IntegrateGitOptions) => runCommand(() => integrateGit(options)));
-
-integrateGitCommand
-  .command('test')
-  .description(
-    'Run a quick test to verify the secrets hook blocks a commit whose staged files contain a secret (creates and removes a test file).',
-  )
-  .action(() => runCommand(() => integrateGitTest()));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');

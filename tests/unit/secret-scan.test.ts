@@ -259,9 +259,11 @@ describe('secretCheckCommand: scan failures', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'], FAKE_AUTH })).rejects.toThrow(
-        new CommandFailedError('Secrets found', 51),
-      );
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } catch (e) {
+      expect(e).toBeInstanceOf(CommandFailedError);
+      expect((e as CommandFailedError).message).toContain('Secrets found');
+      expect((e as CommandFailedError).exitCode).toBe(51);
     } finally {
       existsSpy.mockRestore();
     }
@@ -269,7 +271,7 @@ describe('secretCheckCommand: scan failures', () => {
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
       .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('Secrets found'))).toBe(true);
+    expect(errors.some((m) => m.includes('Secrets found (0ms)'))).toBe(true);
   });
 
   it('throws when binary exits 1 (error, not secrets found)', () => {

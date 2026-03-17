@@ -15,6 +15,7 @@
       "devDependencies": {
         "@sonar/scan": "^4.3.0",
         "@types/bun": "^1.3.9",
+        "@types/js-yaml": "^4.0.9",
         "@typescript-eslint/eslint-plugin": "^8.56.1",
         "@typescript-eslint/parser": "^8.56.1",
         "ajv": "^8.18.0",
@@ -129,6 +130,8 @@
     "@types/inquirer": ["@types/inquirer@9.0.9", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/inquirer/-/inquirer-9.0.9.tgz", { "dependencies": { "@types/through": "*", "rxjs": "^7.2.0" } }, "sha512-/mWx5136gts2Z2e5izdoRCo46lPp5TMs9R15GTSsgg/XnZyxDWVqoVU3R9lWnccKpqwsJLvRoxbCjoJtZB7DSw=="],
 
     "@types/json-schema": ["@types/json-schema@7.0.15", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/json-schema/-/json-schema-7.0.15.tgz", {}, "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA=="],
+
+    "@types/js-yaml": ["@types/js-yaml@4.0.9", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/js-yaml/-/js-yaml-4.0.9.tgz", {}, "sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg=="],
 
     "@types/liftoff": ["@types/liftoff@4.0.3", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/liftoff/-/liftoff-4.0.3.tgz", { "dependencies": { "@types/fined": "*", "@types/node": "*" } }, "sha512-UgbL2kR5pLrWICvr8+fuSg0u43LY250q7ZMkC+XKC3E+rs/YBDEnQIzsnhU5dYsLlwMi3R75UvCL87pObP1sxw=="],
 

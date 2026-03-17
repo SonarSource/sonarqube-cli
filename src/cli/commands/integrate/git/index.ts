@@ -20,8 +20,9 @@
 
 // Integrate command - install git hooks for secrets scanning
 
-import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { platform } from 'node:os';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import logger from '../../../../lib/logger';
 import { resolveAuth } from '../../../../lib/auth-resolver';
@@ -45,10 +46,11 @@ import { HOOK_MARKER, getHookScript } from './git-shell-fragments';
 import { installViaHusky } from './git-husky';
 import {
   PRE_COMMIT_CONFIG_FILE,
-  ensurePreCommitConfig,
   hasSonarHookInPreCommitConfig,
-  runPreCommitInstall,
+  installViaPreCommitFramework,
 } from './git-precommit-framework';
+
+const toForwardSlash = (p: string) => p.replaceAll('\\', '/');
 
 export type GitHookType = 'pre-commit' | 'pre-push';
 
@@ -83,8 +85,13 @@ interface HookInstallation {
 export async function resolveGitHooksDir(root: string): Promise<string> {
   // core.hooksPath takes precedence over everything — it's what git actually uses to find hooks.
   // Husky sets this to .husky; other tools (e.g. lefthook) may point elsewhere.
-  const configResult = await spawnProcess('git', ['config', 'core.hooksPath'], { cwd: root });
-  if (configResult.exitCode === 0) {
+  let configResult;
+  try {
+    configResult = await spawnProcess('git', ['config', 'core.hooksPath'], { cwd: root });
+  } catch {
+    configResult = null;
+  }
+  if (configResult?.exitCode === 0) {
     const configured = configResult.stdout.trim();
     if (configured) {
       return isAbsolute(configured) ? configured : join(root, configured);
@@ -101,7 +108,14 @@ export async function resolveGitHooksDir(root: string): Promise<string> {
     // .git doesn't exist; fall through to git rev-parse
   }
   // Worktree or submodule: .git is a file pointer — ask git for the real hooks path
-  const result = await spawnProcess('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root });
+  let result;
+  try {
+    result = await spawnProcess('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root });
+  } catch {
+    const errorMessage = 'git is not installed or not on PATH';
+    error(errorMessage);
+    throw new CommandFailedError(errorMessage);
+  }
   if (result.exitCode !== 0) {
     const detail = [result.stderr, result.stdout].filter(Boolean).join('\n');
     const errorMessage = `Could not resolve git hooks directory (exit code ${result.exitCode}) ${detail}`;
@@ -119,7 +133,7 @@ export async function detectSonarHookInstallation(root: string): Promise<HookIns
   } catch {
     hooksDir = join(root, '.git', 'hooks');
   }
-  const isHusky = hooksDir.startsWith(join(root, '.husky'));
+  const isHusky = toForwardSlash(hooksDir).startsWith(toForwardSlash(join(root, '.husky')));
   return {
     preCommitConfig: hasSonarHookInPreCommitConfig(root),
     huskyPreCommit: isHusky && hasMarker(join(hooksDir, 'pre-commit')),
@@ -179,6 +193,29 @@ export function showPostInstallInfo(hook: GitHookType): void {
   blank();
 }
 
+const VERIFY_FILE_NAME = 'sonar-hook-verify.js';
+const VERIFY_SECRET_CONTENT = `const API_KEY = "sqp_b4556a16fa2d28519d2451a911d2e073024010bc";`;
+
+export function showVerificationGuide(hook: GitHookType): void {
+  blank();
+  note(
+    [
+      'To verify the hook works:',
+      `  1. Create a file named ${VERIFY_FILE_NAME} containing:`,
+      `       ${VERIFY_SECRET_CONTENT}`,
+      hook === 'pre-commit'
+        ? `  2. Stage it:      git add ${VERIFY_FILE_NAME}`
+        : `  2. Commit it:     git add ${VERIFY_FILE_NAME} && git commit -m "verify"`,
+      hook === 'pre-commit'
+        ? '  3. Try to commit: git commit -m "verify"'
+        : '  3. Try to push:   git push',
+      '  4. The hook should block the operation and report the secret.',
+      `  5. Delete the file: ${platform() === 'win32' ? 'del' : 'rm'} ${VERIFY_FILE_NAME}`,
+    ].join('\n'),
+    'Verify the hook works',
+  );
+}
+
 export async function showInstallationStatus(root: string): Promise<void> {
   const installed = await detectSonarHookInstallation(root);
   if (installed.preCommitConfig) {
@@ -195,33 +232,21 @@ export async function showInstallationStatus(root: string): Promise<void> {
 // Install strategies
 // ---------------------------------------------------------------------------
 
-async function installViaPreCommitFramework(root: string, hook: GitHookType): Promise<void> {
-  ensurePreCommitConfig(root, hook);
-  try {
-    await runPreCommitInstall(root, hook);
-  } catch {
-    const errorMessage = `Updated ${PRE_COMMIT_CONFIG_FILE} but pre-commit commands failed. Install the pre-commit framework (e.g. pip install pre-commit) and run: pre-commit uninstall && pre-commit clean && pre-commit install${hook === 'pre-push' ? ' && pre-commit install --hook-type pre-push' : ''}`;
-    error(errorMessage);
-    throw new CommandFailedError(errorMessage);
-  }
-  success(`${hook} hook installed (pre-commit framework: added to ${PRE_COMMIT_CONFIG_FILE}).`);
-}
-
-async function installViaGitHooks(root: string, hook: GitHookType, force?: boolean): Promise<void> {
-  const fs = await import('node:fs/promises');
-  const hooksDir = await resolveGitHooksDir(root);
-  if (!existsSync(hooksDir)) {
-    error(`Git hooks directory not found: ${hooksDir}`);
-    throw new CommandFailedError(`Git hooks directory not found: ${hooksDir}`);
-  }
+async function installViaGitHooks(
+  hooksDir: string,
+  hook: GitHookType,
+  force?: boolean,
+): Promise<void> {
+  mkdirSync(hooksDir, { recursive: true });
   const hookPath = join(hooksDir, hook);
+  const fs = await import('node:fs/promises');
   if (existsSync(hookPath)) {
     const existing = await fs.readFile(hookPath, 'utf-8');
     if (!existing.includes(HOOK_MARKER) && !force) {
-      warn(`A different ${hook} hook already exists.`);
+      warn(`A different ${hook} hook already exists at ${hookPath}.`);
       text('  Use --force to replace it, or add the secrets check manually.');
       throw new CommandFailedError(
-        `Refusing to overwrite existing ${hook} hook. Use --force to replace.`,
+        `Refusing to overwrite existing ${hook} hook at ${hookPath}. Use --force to replace.`,
       );
     }
   }
@@ -236,10 +261,10 @@ async function installViaGitHooks(root: string, hook: GitHookType, force?: boole
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   warn('Global hook installation');
   text('  Git prioritizes local repository settings over global ones.');
-  text('  If a project uses Husky or has a local core.hooksPath set,');
+  text('  If a project has a local core.hooksPath set,');
   text('  this global hook will NOT run in that project.');
   blank();
-  text('  To enable the global hook in such a project, unset its local path:');
+  text('  To enable the global hook in such a project, you will need to unset its local path:');
   text('    git config --unset core.hooksPath');
   blank();
   text('  This will set git config --global core.hooksPath to:');
@@ -248,13 +273,9 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
 
   if (!options.nonInteractive) {
     const confirmed = await confirmPrompt('Proceed with global installation?');
-    if (confirmed === false) {
-      text('Cancelled');
-      return;
-    }
-    if (confirmed === null) {
+    if (confirmed === false || confirmed === null) {
       error('Installation cancelled');
-      throw new CommandFailedError('Installation cancelled');
+      return;
     }
   }
   blank();
@@ -265,28 +286,21 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
 
   await ensureSonarSecrets();
 
-  mkdirSync(GLOBAL_HOOKS_DIR, { recursive: true });
-  const hookPath = join(GLOBAL_HOOKS_DIR, hook);
-  const fs = await import('node:fs/promises');
-  if (existsSync(hookPath)) {
-    const existing = await fs.readFile(hookPath, 'utf-8');
-    if (!existing.includes(HOOK_MARKER) && !options.force) {
-      warn(`A different ${hook} hook already exists at ${hookPath}.`);
-      text('  Use --force to replace it.');
-      throw new CommandFailedError(
-        `Refusing to overwrite existing ${hook} hook. Use --force to replace.`,
-      );
-    }
+  await installViaGitHooks(GLOBAL_HOOKS_DIR, hook, options.force);
+
+  let gitResult;
+  try {
+    gitResult = await spawnProcess('git', [
+      'config',
+      '--global',
+      'core.hooksPath',
+      toForwardSlash(GLOBAL_HOOKS_DIR),
+    ]);
+  } catch {
+    const msg = 'git is not installed or not on PATH';
+    error(msg);
+    throw new CommandFailedError(msg);
   }
-
-  await fs.writeFile(hookPath, getHookScript(hook), { mode: 0o755 });
-
-  const gitResult = await spawnProcess('git', [
-    'config',
-    '--global',
-    'core.hooksPath',
-    GLOBAL_HOOKS_DIR,
-  ]);
   if (gitResult.exitCode !== 0) {
     const detail = [gitResult.stderr, gitResult.stdout].filter(Boolean).join('\n');
     const msg = `git config --global core.hooksPath failed (exit code ${gitResult.exitCode}): ${detail}`;
@@ -295,10 +309,10 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
     throw new CommandFailedError(msg);
   }
 
-  success(`${hook} hook installed globally at ${hookPath}`);
+  success(`${hook} hook installed globally at ${join(GLOBAL_HOOKS_DIR, hook)}`);
   success(`git config --global core.hooksPath set to: ${GLOBAL_HOOKS_DIR}`);
   showPostInstallInfo(hook);
-  note('Run: sonar integrate git test', 'Verify the hook works');
+  showVerificationGuide(hook);
 }
 
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
@@ -324,25 +338,23 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
     throw new CommandFailedError(errorMessage);
   }
 
-  text(`We will install the hook in this repository: ${projectInfo.root}`);
+  text(`We will install the hook in this repository: ${projectInfo.rootDir}`);
   blank();
 
   if (!options.nonInteractive) {
     const confirmed = await confirmPrompt('Install here?');
-    if (confirmed === false) {
-      text('Cancelled');
-      return;
-    }
-    if (confirmed === null) {
+    if (confirmed === false || confirmed === null) {
       error('Installation cancelled');
       throw new CommandFailedError('Installation cancelled');
     }
   }
   blank();
 
-  const installed = await detectSonarHookInstallation(projectInfo.root);
-  const isHusky = installed.hooksDir.startsWith(join(projectInfo.root, '.husky'));
-  const usePreCommitConfig = existsSync(join(projectInfo.root, PRE_COMMIT_CONFIG_FILE));
+  const installation = await detectSonarHookInstallation(projectInfo.rootDir);
+  const useHusky = toForwardSlash(installation.hooksDir).startsWith(
+    toForwardSlash(join(projectInfo.rootDir, '.husky')),
+  );
+  const usePreCommitConfig = existsSync(join(projectInfo.rootDir, PRE_COMMIT_CONFIG_FILE));
 
   const hook = await resolveHookType(options);
   text(`Hook: ${hook}`);
@@ -350,110 +362,17 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
 
   await ensureSonarSecrets();
 
-  const huskyHookPath = join(projectInfo.root, '.husky', hook);
-  const useHusky = isHusky && !usePreCommitConfig;
+  const huskyHookPath = join(projectInfo.rootDir, '.husky', hook);
 
   if (usePreCommitConfig) {
-    await installViaPreCommitFramework(projectInfo.root, hook);
+    await installViaPreCommitFramework(projectInfo.rootDir, hook);
   } else if (useHusky) {
     await installViaHusky(huskyHookPath, hook);
   } else {
-    await installViaGitHooks(projectInfo.root, hook, options.force);
+    await installViaGitHooks(installation.hooksDir, hook, options.force);
   }
 
   showPostInstallInfo(hook);
-  await showInstallationStatus(projectInfo.root);
-  note('Run: sonar integrate git test', 'Verify the hook works');
-}
-
-// ---------------------------------------------------------------------------
-// Test command
-// ---------------------------------------------------------------------------
-
-/** Fake SonarQube token used only by the test command to verify the hook blocks the commit. Not a real secret. */
-const TEST_SECRET_CONTENT = `const API_KEY = "123";`;
-
-const TEST_FILE_NAME = 'sonar-hook-verify.js';
-
-/**
- * Run an automated test: create a file with a fake secret, attempt commit, expect hook to block it.
- */
-export async function integrateGitTest(): Promise<void> {
-  intro('Test secrets hook');
-  blank();
-
-  const projectInfo = await discoverProject(process.cwd());
-  if (!projectInfo.isGitRepo) {
-    const errorMessage =
-      'No git repository found. Run this command from inside a git repository, or use --global to install a global hook.';
-    error(errorMessage);
-    throw new CommandFailedError(errorMessage);
-  }
-
-  const installed = await detectSonarHookInstallation(projectInfo.root);
-  if (!installed.preCommitConfig && !installed.huskyPreCommit && !installed.gitPreCommit) {
-    const errorMessage = 'Pre-commit hook not found. Install with: sonar integrate git';
-    error(errorMessage);
-    throw new CommandFailedError(errorMessage);
-  }
-
-  const testFilePath = join(projectInfo.root, TEST_FILE_NAME);
-
-  try {
-    writeFileSync(testFilePath, TEST_SECRET_CONTENT, 'utf-8');
-  } catch (err) {
-    const errorMessage = `Could not create test file ${TEST_FILE_NAME}: ${(err as Error).message}`;
-    error(errorMessage);
-    throw new CommandFailedError(errorMessage);
-  }
-
-  const cleanup = async (): Promise<void> => {
-    try {
-      await spawnProcess('git', ['reset', 'HEAD', '--', TEST_FILE_NAME], {
-        cwd: projectInfo.root,
-      });
-    } catch {
-      // ignore
-    }
-    try {
-      if (existsSync(testFilePath)) {
-        unlinkSync(testFilePath);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
-  try {
-    await spawnProcess('git', ['add', TEST_FILE_NAME], { cwd: projectInfo.root });
-
-    text('Running: git commit (hook output will appear below)...');
-    blank();
-
-    const commitResult = await spawnProcess('git', ['commit', '-m', 'Test: verify secrets hook'], {
-      cwd: projectInfo.root,
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
-
-    blank();
-
-    if (commitResult.exitCode === 0) {
-      // The commit went through — undo it so the repo is left in a clean state
-      try {
-        await spawnProcess('git', ['reset', '--mixed', 'HEAD^'], { cwd: projectInfo.root });
-      } catch {
-        // ignore reset failure; cleanup() will still try to unlink
-      }
-      await cleanup();
-      const errorMessage =
-        'Hook test failed: the commit succeeded but the hook should have blocked it (file contained a fake secret).';
-      error(errorMessage);
-      throw new CommandFailedError(errorMessage);
-    }
-
-    success('Hook test passed: the commit was blocked as expected.');
-  } finally {
-    await cleanup();
-  }
+  await showInstallationStatus(projectInfo.rootDir);
+  showVerificationGuide(hook);
 }
