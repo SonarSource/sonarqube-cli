@@ -49,6 +49,8 @@ import {
   installViaPreCommitFramework,
 } from './git-precommit-framework';
 
+const toForwardSlash = (p: string) => p.replaceAll('\\', '/');
+
 export type GitHookType = 'pre-commit' | 'pre-push';
 
 export function isGitHookType(s: string): s is GitHookType {
@@ -191,6 +193,7 @@ export async function installViaGitHooks(
 ): Promise<void> {
   mkdirSync(hooksDir, { recursive: true });
   const hookPath = join(hooksDir, hook);
+  const fs = await import('node:fs/promises');
   if (existsSync(hookPath)) {
     const existing = await fs.readFile(hookPath, 'utf-8');
     if (!existing.includes(HOOK_MARKER) && !force) {
