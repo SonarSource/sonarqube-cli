@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 import {
@@ -29,11 +29,18 @@ import {
   detectSonarHookInstallation as detectHookInstallation,
   showPostInstallInfo,
   showInstallationStatus,
+  installViaGitHooks,
+  integrateGit,
 } from '../../src/cli/commands/integrate/git';
 import { HOOK_MARKER } from '../../src/cli/commands/integrate/git/git-shell-fragments';
 import { PRE_COMMIT_CONFIG_FILE } from '../../src/cli/commands/integrate/git/git-precommit-framework';
 import { setMockUi, queueMockResponse, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock';
 import * as processLib from '../../src/lib/process.js';
+import * as authResolver from '../../src/lib/auth-resolver';
+import * as discovery from '../../src/cli/commands/_common/discovery';
+import * as secretsInstall from '../../src/cli/commands/install/secrets';
+import * as huskyModule from '../../src/cli/commands/integrate/git/git-husky';
+import * as preCommitModule from '../../src/cli/commands/integrate/git/git-precommit-framework';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 
@@ -441,6 +448,156 @@ describe('showInstallationStatus', () => {
           (c) => c.method === 'info' && String(c.args[0]).includes('pre-commit framework'),
         ),
       ).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('installViaGitHooks', () => {
+  beforeEach(() => setMockUi(true));
+  afterEach(() => {
+    setMockUi(false);
+    rmSync(TEMP_DIR, { recursive: true, force: true });
+  });
+
+  it('creates the hook file when none exists', async () => {
+    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
+    await installViaGitHooks(hooksDir, 'pre-commit');
+    expect(existsSync(join(hooksDir, 'pre-commit'))).toBe(true);
+    expect(readFileSync(join(hooksDir, 'pre-commit'), 'utf-8')).toContain(HOOK_MARKER);
+  });
+
+  it('throws CommandFailedError when a non-sonar hook exists and force is not set', () => {
+    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
+    mkdirSync(hooksDir, { recursive: true });
+    writeFileSync(join(hooksDir, 'pre-commit'), '#!/bin/sh\necho hello\n');
+    expect(installViaGitHooks(hooksDir, 'pre-commit')).rejects.toThrow(
+      'Refusing to overwrite existing pre-commit hook',
+    );
+  });
+
+  it('overwrites a non-sonar hook when force=true', async () => {
+    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
+    mkdirSync(hooksDir, { recursive: true });
+    writeFileSync(join(hooksDir, 'pre-commit'), '#!/bin/sh\necho hello\n');
+    await installViaGitHooks(hooksDir, 'pre-commit', true);
+    expect(readFileSync(join(hooksDir, 'pre-commit'), 'utf-8')).toContain(HOOK_MARKER);
+  });
+
+  it('overwrites an existing sonar hook without force', async () => {
+    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
+    mkdirSync(hooksDir, { recursive: true });
+    writeFileSync(join(hooksDir, 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\nold content\n`);
+    await installViaGitHooks(hooksDir, 'pre-push');
+    const content = readFileSync(join(hooksDir, 'pre-push'), 'utf-8');
+    expect(content).toContain(HOOK_MARKER);
+    expect(content).not.toContain('old content');
+  });
+});
+
+describe('integrateGit', () => {
+  let resolveAuthSpy: ReturnType<typeof spyOn>;
+  let discoverProjectSpy: ReturnType<typeof spyOn>;
+  let performSecretInstallSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
+    discoverProjectSpy = spyOn(discovery, 'discoverProject');
+    performSecretInstallSpy = spyOn(secretsInstall, 'performSecretInstall').mockResolvedValue(
+      '/usr/local/bin/sonar-secrets',
+    );
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+    resolveAuthSpy.mockRestore();
+    discoverProjectSpy.mockRestore();
+    performSecretInstallSpy.mockRestore();
+  });
+
+  it('throws CommandFailedError when auth is not available', () => {
+    resolveAuthSpy.mockRejectedValue(new Error('no token'));
+    expect(integrateGit({ nonInteractive: true })).rejects.toThrow('Not authenticated');
+  });
+
+  it('throws CommandFailedError when not inside a git repository', () => {
+    resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
+    discoverProjectSpy.mockResolvedValue({ rootDir: '/not-a-repo', isGitRepo: false });
+    expect(integrateGit({ nonInteractive: true })).rejects.toThrow('No git repository found');
+  });
+
+  it('asks for confirmation showing the repository path when a git repo is found', async () => {
+    resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
+    discoverProjectSpy.mockResolvedValue({ rootDir: '/my/project', isGitRepo: true });
+    queueMockResponse(null); // user cancels at the confirm prompt
+    try {
+      await integrateGit({});
+    } catch {
+      // expected cancellation
+    }
+    expect(
+      getMockUiCalls().some(
+        (c) =>
+          c.method === 'text' &&
+          String(c.args[0]).includes('We will install the hook in this repository: /my/project'),
+      ),
+    ).toBe(true);
+  });
+
+  it('calls installViaHusky when core.hooksPath points to .husky', async () => {
+    mkdirSync(join(TEMP_DIR, '.husky'), { recursive: true });
+    resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
+    discoverProjectSpy.mockResolvedValue({ rootDir: TEMP_DIR, isGitRepo: true });
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0,
+      stdout: '.husky\n',
+      stderr: '',
+    });
+    const huskySpy = spyOn(huskyModule, 'installViaHusky').mockResolvedValue(undefined);
+    try {
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' });
+      expect(huskySpy).toHaveBeenCalledTimes(1);
+    } finally {
+      spawnSpy.mockRestore();
+      huskySpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('calls installViaPreCommitFramework when .pre-commit-config.yaml is present', async () => {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      'repos:\n  - repo: local\n    hooks:\n      - id: some-other-hook\n        entry: echo hello\n        language: system\n',
+    );
+    resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
+    discoverProjectSpy.mockResolvedValue({ rootDir: TEMP_DIR, isGitRepo: true });
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    const preCommitSpy = spyOn(preCommitModule, 'installViaPreCommitFramework').mockResolvedValue(
+      undefined,
+    );
+    try {
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' });
+      expect(preCommitSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      spawnSpy.mockRestore();
+      preCommitSpy.mockRestore();
+      rmSync(TEMP_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('calls installViaGitHooks (native) when no husky or pre-commit config is present', async () => {
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+    resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
+    discoverProjectSpy.mockResolvedValue({ rootDir: TEMP_DIR, isGitRepo: true });
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    try {
+      await integrateGit({ nonInteractive: true, hook: 'pre-commit' });
+      expect(existsSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'))).toBe(true);
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });

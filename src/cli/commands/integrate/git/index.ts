@@ -232,7 +232,7 @@ export async function showInstallationStatus(root: string): Promise<void> {
 // Install strategies
 // ---------------------------------------------------------------------------
 
-async function installViaGitHooks(
+export async function installViaGitHooks(
   hooksDir: string,
   hook: GitHookType,
   force?: boolean,
