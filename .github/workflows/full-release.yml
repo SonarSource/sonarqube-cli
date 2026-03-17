@@ -61,6 +61,18 @@ jobs:
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: 2025.9.12
+      - name: Get released version
+        id: released-version
+        run: |
+          git fetch --tags
+          RELEASED_VERSION=$(git tag --merged HEAD --sort=-version:refname | head -1)
+          echo "RELEASED_VERSION=${RELEASED_VERSION}" >> $GITHUB_OUTPUT
+      - name: Update install scripts version
+        env:
+          RELEASED_VERSION: ${{ steps.released-version.outputs.RELEASED_VERSION }}
+        run: |
+          sed -i "s/version=\"[^\"]*\"/version=\"${RELEASED_VERSION}\"/" user-scripts/install.sh
+          sed -i "s/\$SonarVersion = \"[^\"]*\"/\$SonarVersion = \"${RELEASED_VERSION}\"/" user-scripts/install.ps1
       - name: bump-version
         env:
           NEW_VERSION: ${{ needs.release.outputs.new-version }}
