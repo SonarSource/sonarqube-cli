@@ -20,7 +20,7 @@
 
 // Issues command - search for SonarQube issues
 
-import { resolveAuth } from '../../../lib/auth-resolver';
+import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../../sonarqube/projects';
@@ -28,7 +28,6 @@ import { InvalidOptionError } from '../_common/error';
 
 export interface ListProjectsOptions {
   query?: string;
-  org?: string;
   pageSize: number;
   page: number;
 }
@@ -36,7 +35,10 @@ export interface ListProjectsOptions {
 /**
  * Projects search command handler
  */
-export async function listProjects(options: ListProjectsOptions): Promise<void> {
+export async function listProjects(
+  options: ListProjectsOptions,
+  auth: ResolvedAuth,
+): Promise<void> {
   const pageSize = options.pageSize;
   if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
     throw new InvalidOptionError(
@@ -49,15 +51,14 @@ export async function listProjects(options: ListProjectsOptions): Promise<void> 
     throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
-  const resolvedAuth = await resolveAuth({ org: options.org });
-  const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const projectsClient = new ProjectsClient(client);
 
   const result = await projectsClient.searchProjects({
     q: options.query,
     ps: pageSize,
     p: options.page,
-    organization: resolvedAuth.orgKey,
+    organization: auth.orgKey,
   });
 
   const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;

@@ -81,6 +81,18 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Convenience: sets up both an active connection and a keychain token in one call.
+   * Infers the connection type: 'cloud' when org is provided, 'on-premise' otherwise.
+   */
+  withAuth(serverUrl: string, token: string, org?: string): this {
+    return this.withActiveConnection(
+      serverUrl,
+      org ? 'cloud' : 'on-premise',
+      org,
+    ).withKeychainToken(serverUrl, token, org);
+  }
+
+  /**
    * Ensures sonar-secrets is available inside the isolated test environment.
    * Copies the mock binary from tests/integration/resources/sonar-secrets
    * into <tempDir>/bin/sonar-secrets.

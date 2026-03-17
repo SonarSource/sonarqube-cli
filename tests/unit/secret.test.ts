@@ -36,10 +36,17 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { saveToken } from '../../src/lib/keychain.js';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 import type { PlatformInfo } from '../../src/lib/install-types.js';
 import { analyzeSecrets } from '../../src/cli/commands/analyze/secrets';
+import type { ResolvedAuth } from '../../src/lib/auth-resolver.js';
+
+const FAKE_AUTH: ResolvedAuth = {
+  token: 'mock-token',
+  serverUrl: 'https://sonarcloud.io',
+  orgKey: 'test-org',
+  connectionType: 'cloud',
+};
 
 // =============================================================================
 // SECTION 1: Platform Detection and Binary Naming (no setup)
@@ -199,7 +206,7 @@ describe('secretCheckCommand', () => {
   });
 
   it('throws InvalidOptionError when called without paths or --stdin', () => {
-    expect(analyzeSecrets({})).rejects.toThrow(InvalidOptionError);
+    expect(analyzeSecrets({}, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
   });
 
   it('throws CommandFailedError with install hint when sonar-secrets binary is missing', async () => {
@@ -207,7 +214,7 @@ describe('secretCheckCommand', () => {
 
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -221,32 +228,21 @@ describe('secretCheckCommand', () => {
   });
 
   it('throws InvalidOptionError when paths and --stdin are both provided', () => {
-    expect(analyzeSecrets({ paths: ['some-file.ts'], stdin: true })).rejects.toThrow(
+    expect(analyzeSecrets({ paths: ['some-file.ts'], stdin: true }, FAKE_AUTH)).rejects.toThrow(
       InvalidOptionError,
     );
   });
 
-  it('throws InvalidOptionError with path-not-found message when path does not exist', async () => {
-    // Set up state with an active connection
-    const state = getDefaultState('test');
-    stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
-      orgKey: 'test-org',
-      keystoreKey: 'sonarcloud.io:test-org',
-    });
-    loadStateSpy.mockReturnValue(state);
-
-    // Provide a token in the mock keychain
-    await saveToken('https://sonarcloud.io', 'mock-token', 'test-org');
-
+  it('throws InvalidOptionError with path-not-found message when path does not exist', () => {
     // Make binary existence check pass, file existence check fail
     const existsSyncSpy = spyOn(fs, 'existsSync').mockImplementation((p) =>
       String(p).includes('sonar-secrets'),
     );
 
     try {
-      expect(analyzeSecrets({ paths: ['/nonexistent/does-not-exist.ts'] })).rejects.toThrow(
-        'Path not found',
-      );
+      expect(
+        analyzeSecrets({ paths: ['/nonexistent/does-not-exist.ts'] }, FAKE_AUTH),
+      ).rejects.toThrow('Path not found');
     } finally {
       existsSyncSpy.mockRestore();
     }

@@ -66,6 +66,9 @@ describe('analyze sqaa', () => {
   it(
     'exits with code 1 when file does not exist',
     async () => {
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
       const result = await harness.run('analyze sqaa --file nonexistent.ts');
 
       expect(result.exitCode).toBe(1);
@@ -75,13 +78,16 @@ describe('analyze sqaa', () => {
   );
 
   it(
-    'exits with code 0 and skips silently when no active connection',
+    'exits with code 1 and prompts to authenticate when no active connection',
     async () => {
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
       const result = await harness.run('analyze sqaa --file src/index.ts');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        '❌ Not authenticated. Run: sonar auth login',
+      );
     },
     { timeout: 15000 },
   );
@@ -90,11 +96,7 @@ describe('analyze sqaa', () => {
     'exits with code 0 and skips SQAA for on-premise server',
     async () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
-
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl(), 'on-premise')
-        .withKeychainToken(server.baseUrl(), VALID_TOKEN);
+      harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -120,10 +122,7 @@ describe('analyze sqaa', () => {
         .start();
 
       // Connection exists but no withA3sExtension() → no projectKey in registry → skip
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl(), 'cloud', TEST_ORG)
-        .withKeychainToken(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -149,8 +148,7 @@ describe('analyze sqaa', () => {
 
       harness
         .state()
-        .withActiveConnection(server.baseUrl(), 'cloud', TEST_ORG)
-        .withKeychainToken(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
         .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
@@ -183,8 +181,7 @@ describe('analyze sqaa', () => {
 
       harness
         .state()
-        .withActiveConnection(server.baseUrl(), 'cloud', TEST_ORG)
-        .withKeychainToken(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
         .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('main.py', 'def foo():\n  pass\n');
@@ -215,8 +212,7 @@ describe('analyze sqaa', () => {
 
       harness
         .state()
-        .withActiveConnection(server.baseUrl(), 'cloud', TEST_ORG)
-        .withKeychainToken(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
         .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
@@ -246,6 +242,9 @@ describe('verify', () => {
   it(
     'exits with code 1 when file does not exist',
     async () => {
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
       const result = await harness.run('verify --file nonexistent.ts');
 
       expect(result.exitCode).toBe(1);
@@ -265,8 +264,7 @@ describe('verify', () => {
 
       harness
         .state()
-        .withActiveConnection(server.baseUrl(), 'cloud', TEST_ORG)
-        .withKeychainToken(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
         .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');

@@ -20,7 +20,7 @@
 
 // Issues command - search for SonarQube issues
 
-import { resolveAuth } from '../../../lib/auth-resolver';
+import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { IssuesClient } from '../../../sonarqube/issues';
 import { encode as encodeToToon } from '@toon-format/toon';
@@ -36,7 +36,6 @@ const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 
 export interface ListIssuesOptions {
   project?: string;
-  org?: string;
   severity?: string;
   type?: string;
   status?: string;
@@ -53,7 +52,7 @@ export interface ListIssuesOptions {
 /**
  * Issues search command handler
  */
-export async function listIssues(options: ListIssuesOptions): Promise<void> {
+export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth): Promise<void> {
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
     throw new InvalidOptionError(
@@ -86,13 +85,12 @@ export async function listIssues(options: ListIssuesOptions): Promise<void> {
     throw new InvalidOptionError('--project is required');
   }
 
-  const resolvedAuth = await resolveAuth({ org: options.org });
-  const client = new SonarQubeClient(resolvedAuth.serverUrl, resolvedAuth.token);
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const issuesClient = new IssuesClient(client);
 
   const params: IssuesSearchParams = {
     projects: options.project,
-    organization: resolvedAuth.orgKey,
+    organization: auth.orgKey,
     severities: options.severity?.toUpperCase(),
     types: options.type,
     statuses: options.status,

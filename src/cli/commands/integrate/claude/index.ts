@@ -21,8 +21,8 @@
 // Integrate command - setup SonarQube integration for Claude Code
 
 import { homedir } from 'node:os';
-import { isEnvBasedAuth, isSonarQubeCloud, resolveAuth } from '../../../../lib/auth-resolver';
-import { SONARCLOUD_URL } from '../../../../lib/config-constants';
+import { isEnvBasedAuth, isSonarQubeCloud } from '../../../../lib/auth-resolver';
+import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { runMigrations } from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
@@ -35,10 +35,7 @@ import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
 
 export interface IntegrateClaudeOptions {
-  server?: string;
   project?: string;
-  token?: string;
-  org?: string;
   nonInteractive?: boolean;
   global?: boolean;
 }
@@ -47,13 +44,16 @@ export interface ConfigurationData {
   serverURL: string;
   projectKey: string | undefined;
   organization: string | undefined;
-  token: string | undefined;
+  token: string;
 }
 
 /**
  * Integrate command handler
  */
-export async function integrateClaude(options: IntegrateClaudeOptions): Promise<void> {
+export async function integrateClaude(
+  options: IntegrateClaudeOptions,
+  auth: ResolvedAuth,
+): Promise<void> {
   intro(`SonarQube Integration Setup for Claude`);
 
   blank();
@@ -61,7 +61,7 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
   blank();
 
   const project = await discoverProject(process.cwd());
-  const config = await loadConfiguration(project, options);
+  const config = loadConfiguration(project, options, auth);
   validateConfiguration(project, config);
 
   const isGlobal = options.global ?? false;
@@ -76,7 +76,7 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
 
   const healthResult = await runHealthChecks(
     config.serverURL,
-    token || 'INVALID',
+    token,
     config.projectKey,
     hooksRoot,
     config.organization,
@@ -100,9 +100,7 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
     }
   }
 
-  const a3sEnabled = token
-    ? await resolveA3sEntitlement(config.serverURL, token, config.organization)
-    : false;
+  const a3sEnabled = await resolveA3sEntitlement(config.serverURL, token, config.organization);
 
   text('Installing claude code hooks...');
   await runMigrations(project.rootDir, globalDir, a3sEnabled, config.projectKey);
@@ -116,7 +114,7 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
 
   const finalHealth = await runHealthChecks(
     config.serverURL,
-    token || 'INVALID',
+    token,
     config.projectKey,
     hooksRoot,
     config.organization,
@@ -126,64 +124,37 @@ export async function integrateClaude(options: IntegrateClaudeOptions): Promise<
 }
 
 /**
- * Load configuration from all available sources
+ * Load configuration from auth and discovered project
  */
-async function loadConfiguration(
+function loadConfiguration(
   project: DiscoveredProject,
   options: IntegrateClaudeOptions,
-): Promise<ConfigurationData> {
-  let resolvedAuth;
-  try {
-    resolvedAuth = await resolveAuth({
-      server: options.server,
-      org: options.org,
-      token: options.token,
-    });
-  } catch {
-    // ignore error, command will attempt to call `auth login` flow
-  }
-
-  if (!resolvedAuth) {
-    return {
-      serverURL: options.server || project.serverUrl || SONARCLOUD_URL,
-      organization: options.org || project.organization,
-      token: options.token,
-      projectKey: options.project || project.projectKey,
-    };
-  }
-
-  if (
-    !!resolvedAuth.serverUrl &&
-    !!project.serverUrl &&
-    resolvedAuth.serverUrl != project.serverUrl
-  ) {
+  auth: ResolvedAuth,
+): ConfigurationData {
+  if (!!auth.serverUrl && !!project.serverUrl && auth.serverUrl != project.serverUrl) {
     warn(
       'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
     );
   }
 
-  if (
-    !!resolvedAuth.orgKey &&
-    !!project.organization &&
-    resolvedAuth.orgKey != project.organization
-  ) {
+  if (!!auth.orgKey && !!project.organization && auth.orgKey != project.organization) {
     warn(
-      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this in not intended please consider providing "-o" option',
+      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
     );
   }
 
   return {
-    serverURL: resolvedAuth.serverUrl,
-    organization: resolvedAuth.orgKey,
-    token: resolvedAuth.token,
+    serverURL: auth.serverUrl,
+    organization: auth.orgKey,
     projectKey: options.project || project.projectKey,
+    token: auth.token,
   };
 }
 
 function validateConfiguration(project: DiscoveredProject, config: ConfigurationData): void {
   if (isSonarQubeCloud(config.serverURL) && !config.organization) {
     throw new CommandFailedError(
-      'SonarQube Server URL or SonarQube Cloud organization is required. Please use --server flag or --org option',
+      'SonarQube Cloud requires an organization. Please run "sonar auth logout" and re-authenticate with an organization.',
     );
   }
 
@@ -192,10 +163,6 @@ function validateConfiguration(project: DiscoveredProject, config: Configuration
 
   if (config.organization) {
     text(`Organization: ${config.organization}`);
-  }
-
-  if (!config.token) {
-    warn('No token found. Will generate during repair phase.');
   }
 
   if (project.isGitRepo) {

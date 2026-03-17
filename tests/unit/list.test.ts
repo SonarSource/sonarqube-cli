@@ -33,7 +33,7 @@ import type {
 import { listIssues } from '../../src/cli/commands/list/issues';
 import { setMockUi } from '../../src/ui';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../src/sonarqube/projects';
-import * as authResolver from '../../src/lib/auth-resolver.js';
+import type { ResolvedAuth } from '../../src/lib/auth-resolver.js';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;
@@ -389,9 +389,7 @@ describe('IssuesClient', () => {
 });
 
 describe('issuesSearchCommand', () => {
-  let resolveAuthSpy: ReturnType<typeof spyOn>;
-
-  const mockAuth = {
+  const mockAuth: ResolvedAuth = {
     token: 'test-token',
     serverUrl: 'https://sonarcloud.io',
     orgKey: 'test-org',
@@ -407,71 +405,45 @@ describe('issuesSearchCommand', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(mockAuth);
   });
 
   afterEach(() => {
     setMockUi(false);
-    resolveAuthSpy.mockRestore();
-  });
-
-  it('calls resolveAuth', async () => {
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
-
-    try {
-      await listIssues({ project: 'my-project', page: 1, pageSize: 500 });
-      expect(resolveAuthSpy).toHaveBeenCalledWith({ org: undefined });
-    } finally {
-      getSpy.mockRestore();
-    }
-  });
-
-  it('passes --org to resolveAuth', async () => {
-    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
-
-    try {
-      await listIssues({ project: 'my-project', org: 'my-org', page: 1, pageSize: 500 });
-      expect(resolveAuthSpy).toHaveBeenCalledWith({ org: 'my-org' });
-    } finally {
-      getSpy.mockRestore();
-    }
-  });
-
-  it('propagates auth errors', () => {
-    resolveAuthSpy.mockRejectedValue(new Error('Not authenticated. Run: sonar auth login'));
-
-    expect(listIssues({ project: 'proj', page: 1, pageSize: 500 })).rejects.toThrow(
-      'sonar auth login',
-    );
   });
 
   it('throws when --project is missing', () => {
-    expect(listIssues({ page: 1, pageSize: 500 })).rejects.toThrow('--project is required');
-  });
-
-  it('throws when --format is invalid', () => {
-    expect(listIssues({ project: 'proj', format: 'xml', page: 1, pageSize: 500 })).rejects.toThrow(
-      'xml',
+    expect(listIssues({ page: 1, pageSize: 500 }, mockAuth)).rejects.toThrow(
+      '--project is required',
     );
   });
 
+  it('throws when --format is invalid', () => {
+    expect(
+      listIssues({ project: 'proj', format: 'xml', page: 1, pageSize: 500 }, mockAuth),
+    ).rejects.toThrow('xml');
+  });
+
   it('throws when --page is 0', () => {
-    expect(listIssues({ project: 'proj', page: 0, pageSize: 500 })).rejects.toThrow('page');
+    expect(listIssues({ project: 'proj', page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
+      'page',
+    );
   });
 
   it('throws when --page-size is 0', () => {
-    expect(listIssues({ project: 'proj', page: 1, pageSize: 0 })).rejects.toThrow('page-size');
-  });
-
-  it('throws when --page-size exceeds maximum', () => {
-    expect(listIssues({ project: 'proj', page: 1, pageSize: MAX_PAGE_SIZE + 1 })).rejects.toThrow(
+    expect(listIssues({ project: 'proj', page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
       'page-size',
     );
   });
 
+  it('throws when --page-size exceeds maximum', () => {
+    expect(
+      listIssues({ project: 'proj', page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockAuth),
+    ).rejects.toThrow('page-size');
+  });
+
   it('throws when --severity is invalid', () => {
     expect(
-      listIssues({ project: 'proj', severity: 'EXTREME', page: 1, pageSize: 500 }),
+      listIssues({ project: 'proj', severity: 'EXTREME', page: 1, pageSize: 500 }, mockAuth),
     ).rejects.toThrow('EXTREME');
   });
 
@@ -485,7 +457,10 @@ describe('issuesSearchCommand', () => {
     );
 
     try {
-      await listIssues({ project: 'my-project', severity: 'major', page: 1, pageSize: 500 });
+      await listIssues(
+        { project: 'my-project', severity: 'major', page: 1, pageSize: 500 },
+        mockAuth,
+      );
       expect(capturedSeverities).toBe('MAJOR');
     } finally {
       getSpy.mockRestore();
@@ -496,7 +471,7 @@ describe('issuesSearchCommand', () => {
     const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(emptyApiResponse);
 
     try {
-      await listIssues({ project: 'my-project', page: 1, pageSize: 500 });
+      await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockAuth);
     } finally {
       getSpy.mockRestore();
     }

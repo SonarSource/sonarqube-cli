@@ -32,11 +32,12 @@ bun run test:coverage     # Full merged lcov report (unit + integration, slow)
 
 Each command lives in `src/cli/commands/`. The command tree is defined in `src/cli/command-tree.ts` and the entry point is `src/index.ts`.
 
-To add a new command: add it to `src/cli/command-tree.ts` and implement the logic in a new file under `src/cli/commands/`.
+To add a new command: add it to `src/cli/command-tree.ts` and implement the logic in a new folder under `src/cli/commands/`.
+Please declare commands using the type defined in `src/cli/commands/_common/sonar-command.ts`.
+By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
 
 ## Error handling
 
-Use `runCommand()` from `src/lib/run-command.ts` to wrap command handlers — it provides consistent error handling and exit codes. Never handle errors manually in command handlers.
 Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
 
 ## State and auth
@@ -50,8 +51,8 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 Please try to create integration tests in priority. If the test is too complicated to set up, write unit tests.
 Try to get inspiration from other tests to follow the same structure.
 
-- Unit tests: `tests/unit/` — run with `bun run test:unit`
-- Integration tests: `tests/integration/` — require env vars. They are using a harness to help set up tests and make assertions.
+- Unit tests: `tests/unit/` — run with `bun test:unit`
+- Integration tests: `tests/integration/` — require env vars. They are using a harness to help set up tests and make assertions. Run with `bun test:integration`.
 - The UI module has a built-in mock system (`src/ui/mock.ts`) — use it instead of mocking stdout directly.
 
 ## Documentation

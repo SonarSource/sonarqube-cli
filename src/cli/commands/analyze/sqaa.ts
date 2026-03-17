@@ -20,7 +20,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import type { Command } from 'commander';
-import { resolveAuth } from '../../../lib/auth-resolver';
+import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { blank, error, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
@@ -35,55 +35,53 @@ export interface AnalyzeSqaaOptions {
   project?: string;
 }
 
-export async function analyzeSqaa(options: AnalyzeSqaaOptions, command?: Command): Promise<void> {
+export async function analyzeSqaa(
+  options: AnalyzeSqaaOptions,
+  auth: ResolvedAuth,
+  command?: Command,
+): Promise<void> {
   const { file, branch, project } = options;
 
   if (!existsSync(file)) {
     throw new InvalidOptionError(`File not found: ${file}`);
   }
 
-  await runSqaaAnalysis(file, branch, project, command);
+  await runSqaaAnalysis(file, auth, branch, project, command);
 }
 
 export async function runSqaaAnalysis(
   file: string,
+  auth: ResolvedAuth,
   branch?: string,
   explicitProject?: string,
   command?: Command,
 ): Promise<void> {
-  const auth = await resolveCloudAuth(explicitProject);
-  if (!auth) return;
+  const cloudAuth = resolveCloudAuth(auth, explicitProject);
+  if (!cloudAuth) return;
 
   const projectKey = explicitProject ?? resolveSqaaProjectKey(command);
   if (!projectKey) return;
 
   const fileContent = readSqaaFileContent(file);
-  await callSqaaApiAndDisplay(auth, projectKey, file, fileContent, branch);
+  await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch);
 }
 
 /**
- * Resolve auth and validate that the connection is SonarQube Cloud.
- * Returns null when SQAA should be silently skipped (no auth / on-premise without --project).
+ * Validate that the resolved auth is for SonarQube Cloud.
+ * Returns null when SQAA should be silently skipped (on-premise or missing orgKey without --project).
  * Throws CommandFailedError when --project is set but the connection is not Cloud.
  */
-async function resolveCloudAuth(
+function resolveCloudAuth(
+  auth: ResolvedAuth,
   explicitProject: string | undefined,
-): Promise<{ serverUrl: string; token: string; orgKey: string } | null> {
-  let auth;
-  try {
-    auth = await resolveAuth({});
-  } catch {
-    logger.debug('SQAA analysis skipped: failed to resolve auth');
-    return null;
-  }
-
+): { serverUrl: string; token: string; orgKey: string } | null {
   if (!auth.token || !auth.orgKey || auth.connectionType === 'on-premise') {
     if (explicitProject) {
       throw new CommandFailedError(
         'SQAA analysis requires a SonarQube Cloud connection. Run: sonar auth login',
       );
     }
-    logger.debug('SQAA analysis skipped: no auth, missing orgKey, or on-premise server');
+    logger.debug('SQAA analysis skipped: missing orgKey or on-premise server');
     return null;
   }
 

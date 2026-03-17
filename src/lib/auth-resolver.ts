@@ -20,7 +20,7 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_US_HOSTNAME } from './config-constants';
+import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL, SONARCLOUD_US_HOSTNAME } from './config-constants';
 import { getToken } from './keychain.js';
 import { loadState, getActiveConnection } from './state-manager.js';
 import { warn } from '../ui';
@@ -28,10 +28,11 @@ import logger from './logger.js';
 
 export const ENV_TOKEN = 'SONAR_CLI_TOKEN';
 export const ENV_SERVER = 'SONAR_CLI_SERVER';
+export const ENV_ORG = 'SONAR_CLI_ORG';
 
 export interface ResolvedAuth {
   token: string;
-  serverUrl: string;
+  serverUrl?: string;
   orgKey?: string;
   /** Type of the active connection; undefined when resolved from env vars alone */
   connectionType?: 'cloud' | 'on-premise';
@@ -41,40 +42,62 @@ export interface ResolvedAuth {
  * Resolve authentication from env vars, CLI options, state file, or keychain.
  *
  * Priority:
- *   1. Both SONAR_CLI_TOKEN + SONAR_CLI_SERVER → return immediately
+ *   1. Either SONAR_CLI_TOKEN + SONAR_CLI_SERVER or SONAR_CLI_TOKEN + SONAR_CLI_ORG  → return immediately
  *   2. Partial env vars → warn + ignore both, fall back
- *   3. options.token provided → use it with resolved server
- *   4. Active connection from state file → server + orgKey
- *   5. Keychain lookup → token
- *   6. Throw descriptive error
+ *   3. Active connection from state file → server + orgKey
+ *   4. Keychain lookup → token
+ *   5. Throw descriptive error
  */
-export async function resolveAuth(options: {
-  token?: string;
-  server?: string;
-  org?: string;
-}): Promise<ResolvedAuth> {
+export async function resolveAuth(): Promise<ResolvedAuth | null> {
+  return resolveFromEnv() ?? (await resolveFromState());
+}
+
+function resolveFromEnv(): ResolvedAuth | null {
   const envToken = process.env[ENV_TOKEN];
   const envServer = process.env[ENV_SERVER];
+  const envOrg = process.env[ENV_ORG];
 
-  // 1. Both env vars present → use them immediately
+  // 1. Both SONAR_CLI_TOKEN + SONAR_CLI_SERVER env vars present → use them immediately
   if (envToken && envServer) {
     logger.debug('Using environment variable authentication');
     return {
       token: envToken,
       serverUrl: envServer,
-      orgKey: options.org,
     };
   }
 
-  // 2. Partial env vars → warn and ignore both
-  if (envToken || envServer) {
-    const missing = envToken ? ENV_SERVER : ENV_TOKEN;
-    warn(
-      `${missing} is not set. Both ${ENV_TOKEN} and ${ENV_SERVER} are required for environment variable authentication. Falling back to saved credentials.`,
-    );
+  // 2. Both SONAR_CLI_TOKEN + SONAR_CLI_ORG env vars present → use them immediately
+  if (envToken && envOrg) {
+    logger.debug('Using environment variable authentication');
+    return {
+      token: envToken,
+      serverUrl: SONARCLOUD_URL,
+      orgKey: envOrg,
+    };
   }
 
-  // Resolve active connection from state
+  // 3. Partial env vars → warn and ignore both
+  if (envToken) {
+    warn(
+      `${ENV_TOKEN} is set, but either ${ENV_SERVER} or ${ENV_ORG} are required for environment variable authentication. Falling back to saved credentials.`,
+    );
+  } else if (envServer || envOrg) {
+    const setEnv = envServer ? ENV_SERVER : ENV_ORG;
+    warn(
+      `${setEnv} is set, but ${ENV_TOKEN} is required for environment variable authentication. Falling back to saved credentials.`,
+    );
+  }
+  return null;
+}
+
+export function isEnvBasedAuth(): boolean {
+  return (
+    !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]) ||
+    !!(process.env[ENV_TOKEN] && process.env[ENV_ORG])
+  );
+}
+
+export async function resolveFromState(): Promise<ResolvedAuth | null> {
   let connection: { serverUrl: string; orgKey?: string; type?: 'cloud' | 'on-premise' } | undefined;
   try {
     const state = loadState();
@@ -86,36 +109,20 @@ export async function resolveAuth(options: {
     logger.debug(`Failed to load state: ${(err as Error).message}`);
   }
 
-  // Resolve serverUrl: options.server > connection.serverUrl
-  const serverUrl = options.server ?? connection?.serverUrl;
+  const serverUrl = connection?.serverUrl;
   if (!serverUrl) {
-    throw new Error(
-      `No server URL found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`,
-    );
+    return null;
   }
 
-  // Resolve orgKey: options.org > connection.orgKey
-  const orgKey = options.org ?? connection?.orgKey;
+  const orgKey = connection?.orgKey;
   const connectionType = connection?.type;
 
-  // 3. options.token provided → no keychain lookup needed
-  if (options.token) {
-    return { token: options.token, serverUrl, orgKey, connectionType };
-  }
-
-  // 4 & 5. Look up token in keychain
+  // Look up token in keychain
   const token = await getToken(serverUrl, orgKey);
   if (token) {
     return { token, serverUrl, orgKey, connectionType };
   }
-
-  throw new Error(
-    `No authentication token found. Set ${ENV_TOKEN} + ${ENV_SERVER}, or run: sonar auth login`,
-  );
-}
-
-export function isEnvBasedAuth(): boolean {
-  return !!(process.env[ENV_TOKEN] && process.env[ENV_SERVER]);
+  return null;
 }
 
 export function isSonarQubeCloud(serverUrl: string): boolean {

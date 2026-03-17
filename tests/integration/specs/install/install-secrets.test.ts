@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar install secrets` — NO AUTH required
+// Integration tests for `sonar install secrets`
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { TestHarness } from '../../harness';
@@ -35,8 +35,22 @@ describe('install secrets (download)', () => {
   });
 
   it(
+    'exits with code 1 and prompts to authenticate when no auth is configured',
+    async () => {
+      const result = await harness.run('install secrets');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        '❌ Not authenticated. Run: sonar auth login',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with error when the binaries server returns 404',
     async () => {
+      harness.withAuth('http://localhost:19999', 'fake-token');
       await harness.newFakeBinariesServer().noArtifacts().start();
 
       const result = await harness.run('install secrets');
@@ -51,6 +65,7 @@ describe('install secrets (download)', () => {
   it(
     'downloads and installs the binary from the mock binaries server',
     async () => {
+      harness.withAuth('http://localhost:19999', 'fake-token');
       const fakeBinariesServer = await harness.newFakeBinariesServer().start();
 
       const result = await harness.run('install secrets');
@@ -84,6 +99,7 @@ describe('install secrets --status', () => {
   it(
     'reports not installed when sonar-secrets binary is absent',
     async () => {
+      harness.withAuth('http://localhost:19999', 'fake-token');
       // No withSecretsBinaryInstalled() — binary is not present
       const result = await harness.run('install secrets --status');
 
@@ -96,6 +112,7 @@ describe('install secrets --status', () => {
   it(
     'reports installed when sonar-secrets binary is present',
     async () => {
+      harness.withAuth('http://localhost:19999', 'fake-token');
       harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('install secrets --status');

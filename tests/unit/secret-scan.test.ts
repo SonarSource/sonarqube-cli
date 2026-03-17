@@ -29,27 +29,20 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { saveToken } from '../../src/lib/keychain.js';
-import { createMockKeytar } from './helpers/mock-keytar.js';
 import { analyzeSecrets } from '../../src/cli/commands/analyze/secrets';
 import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/_common/error.js';
+import type { ResolvedAuth } from '../../src/lib/auth-resolver.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';
 const TEST_TOKEN = 'squ_test_token';
 
-const keytarHandle = createMockKeytar();
-
-// Helper: state with an active connection and a token saved in keychain
-async function setupAuthenticatedState(): Promise<void> {
-  const state = getDefaultState('test');
-  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
-    orgKey: TEST_ORG,
-    keystoreKey: `sonarcloud.io:${TEST_ORG}`,
-  });
-  loadStateSpy.mockReturnValue(state);
-  await saveToken(SONARCLOUD_URL, TEST_TOKEN, TEST_ORG);
-}
+const FAKE_AUTH: ResolvedAuth = {
+  token: TEST_TOKEN,
+  serverUrl: SONARCLOUD_URL,
+  orgKey: TEST_ORG,
+  connectionType: 'cloud',
+};
 
 // Helper: make binary exist, file exist (or not), by controlling existsSync
 function mockBinaryExists(fileAlsoExists = true) {
@@ -64,7 +57,6 @@ let loadStateSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  keytarHandle.setup();
   setMockUi(true);
   clearMockUiCalls();
   loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -77,17 +69,15 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  keytarHandle.teardown();
   loadStateSpy.mockRestore();
   spawnSpy.mockRestore();
   setMockUi(false);
 });
 
-// ─── Auth-optional paths ──────────────────────────────────────────────────────
+// ─── Auth forwarding paths ────────────────────────────────────────────────────
 
-describe('secretCheckCommand: runs without authentication', () => {
-  it('runs scan without auth when no connection is configured', async () => {
-    // Default state has no connections — scan should still proceed
+describe('secretCheckCommand: auth forwarding', () => {
+  it('runs scan when auth is provided', async () => {
     spawnSpy.mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({ issues: [] }),
@@ -95,14 +85,13 @@ describe('secretCheckCommand: runs without authentication', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
   });
 
-  it('passes auth env vars to binary when active connection is configured', async () => {
-    await setupAuthenticatedState();
+  it('passes auth env vars to binary', async () => {
     spawnSpy.mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({ issues: [] }),
@@ -110,7 +99,7 @@ describe('secretCheckCommand: runs without authentication', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
@@ -128,7 +117,7 @@ describe('secretCheckCommand: runs without authentication', () => {
     });
     const existsSpy = mockBinaryExists();
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
@@ -145,7 +134,7 @@ describe('secretCheckCommand: runs without authentication', () => {
     });
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts', 'src/lib/auth.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts', 'src/lib/auth.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
@@ -159,7 +148,6 @@ describe('secretCheckCommand: runs without authentication', () => {
 
 describe('secretCheckCommand: successful scan', () => {
   it('succeeds when scan returns exit code 0 with empty issues list', async () => {
-    await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({ issues: [] }),
@@ -168,7 +156,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
@@ -180,7 +168,6 @@ describe('secretCheckCommand: successful scan', () => {
   });
 
   it('succeeds and displays issue details when scan returns issues with line and severity', async () => {
-    await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({
@@ -194,7 +181,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
@@ -213,7 +200,6 @@ describe('secretCheckCommand: successful scan', () => {
   });
 
   it('succeeds and prints raw stdout when scan output is not valid JSON', async () => {
-    await setupAuthenticatedState();
     const rawOutput = 'No issues found (plain text output)';
     spawnSpy.mockResolvedValue({
       exitCode: 0,
@@ -223,7 +209,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
@@ -235,7 +221,6 @@ describe('secretCheckCommand: successful scan', () => {
   });
 
   it('succeeds and shows "No issues detected" when JSON has no issues field', async () => {
-    await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({ status: 'clean' }),
@@ -244,7 +229,7 @@ describe('secretCheckCommand: successful scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } finally {
       existsSpy.mockRestore();
     }
@@ -260,7 +245,7 @@ describe('secretCheckCommand: successful scan', () => {
 
 describe('secretCheckCommand: input validation', () => {
   it('throws InvalidOptionError when paths array is empty', () => {
-    expect(analyzeSecrets({ paths: [] })).rejects.toThrow(
+    expect(analyzeSecrets({ paths: [] }, FAKE_AUTH)).rejects.toThrow(
       new InvalidOptionError('Either provide file/directory paths or --stdin'),
     );
   });
@@ -269,13 +254,12 @@ describe('secretCheckCommand: input validation', () => {
 // ─── Failed scan paths ────────────────────────────────────────────────────────
 
 describe('secretCheckCommand: scan failures', () => {
-  it('throws when binary exits 51 (secrets found)', async () => {
-    await setupAuthenticatedState();
+  it('throws when binary exits 51 (secrets found)', () => {
     spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 51', 51),
       );
     } finally {
@@ -288,13 +272,12 @@ describe('secretCheckCommand: scan failures', () => {
     expect(errors.some((m) => m.includes('Scan found secrets'))).toBe(true);
   });
 
-  it('throws when binary exits 1 (error, not secrets found)', async () => {
-    await setupAuthenticatedState();
+  it('throws when binary exits 1 (error, not secrets found)', () => {
     spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'unexpected error' });
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 1', 1),
       );
     } finally {
@@ -302,14 +285,13 @@ describe('secretCheckCommand: scan failures', () => {
     }
   });
 
-  it('displays stderr when scan fails with error output', async () => {
-    await setupAuthenticatedState();
+  it('displays stderr when scan fails with error output', () => {
     const stderrMsg = 'Connection refused to auth server';
     spawnSpy.mockResolvedValue({ exitCode: 2, stdout: '', stderr: stderrMsg });
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 2', 2),
       );
     } finally {
@@ -322,14 +304,13 @@ describe('secretCheckCommand: scan failures', () => {
     expect(prints.some((m) => m.includes(stderrMsg))).toBe(true);
   });
 
-  it('displays stdout when scan fails without stderr', async () => {
-    await setupAuthenticatedState();
+  it('displays stdout when scan fails without stderr', () => {
     const stdoutMsg = '{"error":"auth_failed"}';
     spawnSpy.mockResolvedValue({ exitCode: 2, stdout: stdoutMsg, stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(
+      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
         new CommandFailedError('Scan failed with exit code: 2', 2),
       );
     } finally {
@@ -347,13 +328,12 @@ describe('secretCheckCommand: scan failures', () => {
 
 describe('secretCheckCommand: scan error handling', () => {
   it('shows timeout hint and exits 1 when scan times out', async () => {
-    await setupAuthenticatedState();
     spawnSpy.mockRejectedValue(new Error('Scan timed out after 30000ms'));
 
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -367,13 +347,12 @@ describe('secretCheckCommand: scan error handling', () => {
   });
 
   it('shows reinstall hint and exits 1 when binary is not executable (ENOENT)', async () => {
-    await setupAuthenticatedState();
     spawnSpy.mockRejectedValue(new Error('spawn ENOENT: no such file or directory'));
 
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -387,13 +366,12 @@ describe('secretCheckCommand: scan error handling', () => {
   });
 
   it('shows generic status check hint and exits 1 for unexpected errors', async () => {
-    await setupAuthenticatedState();
     spawnSpy.mockRejectedValue(new Error('Something unexpected went wrong'));
 
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
     try {
-      await analyzeSecrets({ paths: ['src/index.ts'] });
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } catch (err) {
       caughtError = err;
     } finally {
@@ -430,7 +408,6 @@ async function withMockStdin(content: string, fn: () => Promise<void>): Promise<
 
 describe('secretCheckCommand: stdin scan', () => {
   it('succeeds when stdin scan succeeds with no issues', async () => {
-    await setupAuthenticatedState();
     spawnSpy.mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({ issues: [] }),
@@ -439,20 +416,21 @@ describe('secretCheckCommand: stdin scan', () => {
 
     const existsSpy = mockBinaryExists(true);
     try {
-      await withMockStdin('const x = 1;\n', () => analyzeSecrets({ stdin: true }));
+      await withMockStdin('const x = 1;\n', () => analyzeSecrets({ stdin: true }, FAKE_AUTH));
     } finally {
       existsSpy.mockRestore();
     }
   });
 
-  it('throws when binary exits 51 during stdin scan (secrets found)', async () => {
-    await setupAuthenticatedState();
+  it('throws when binary exits 51 during stdin scan (secrets found)', () => {
     spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: 'secret found' });
 
     const existsSpy = mockBinaryExists(true);
     try {
       expect(
-        withMockStdin('const secret = "abc123";\n', () => analyzeSecrets({ stdin: true })),
+        withMockStdin('const secret = "abc123";\n', () =>
+          analyzeSecrets({ stdin: true }, FAKE_AUTH),
+        ),
       ).rejects.toThrow(CommandFailedError);
     } finally {
       existsSpy.mockRestore();
@@ -463,13 +441,14 @@ describe('secretCheckCommand: stdin scan', () => {
 // ─── CommandFailedError propagation ──────────────────────────────────────────
 
 describe('secretCheckCommand: throws CommandFailedError for scan failures', () => {
-  it('rejects with CommandFailedError when binary exits with non-zero code', async () => {
-    await setupAuthenticatedState();
+  it('rejects with CommandFailedError when binary exits with non-zero code', () => {
     spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] })).rejects.toThrow(CommandFailedError);
+      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
+        CommandFailedError,
+      );
     } finally {
       existsSpy.mockRestore();
     }

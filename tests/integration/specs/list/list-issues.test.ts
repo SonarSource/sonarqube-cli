@@ -46,10 +46,7 @@ describe('list issues', () => {
             .withIssue({ ruleKey: 'java:S5678', message: 'Another issue', severity: 'CRITICAL' }),
         )
         .start();
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'test-token');
+      harness.withAuth(server.baseUrl(), 'test-token');
 
       const result = await harness.run(`list issues --project my-project`);
 
@@ -69,10 +66,7 @@ describe('list issues', () => {
         .withAuthToken('test-token')
         .withProject('empty-project')
         .start();
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'test-token');
+      harness.withAuth(server.baseUrl(), 'test-token');
 
       const result = await harness.run(`list issues --project empty-project`);
 
@@ -92,9 +86,9 @@ describe('list issues', () => {
         .withProject('my-project')
         .start();
 
-      const result = await harness.run(
-        `list issues --project my-project --server ${server.baseUrl()} --token wrong-token`,
-      );
+      harness.withAuth(server.baseUrl(), 'wrong-token');
+
+      const result = await harness.run('list issues --project my-project');
 
       expect(result.exitCode).toBe(1);
     },
@@ -113,10 +107,7 @@ describe('list issues', () => {
             .withIssue({ ruleKey: 'java:S9999', message: 'Blocker issue', severity: 'BLOCKER' }),
         )
         .start();
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'test-token');
+      harness.withAuth(server.baseUrl(), 'test-token');
 
       const result = await harness.run(`list issues --project my-project --severity BLOCKER`);
 
@@ -136,10 +127,7 @@ describe('list issues', () => {
         .withAuthToken('my-token')
         .withProject('test-project')
         .start();
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'my-token');
+      harness.withAuth(server.baseUrl(), 'my-token');
 
       await harness.run(`list issues --project test-project`);
 
@@ -155,13 +143,29 @@ describe('list issues', () => {
   );
 
   it(
-    'exits with code 1 when --project is missing',
+    'exits with code 1 and prompts to authenticate when no auth is configured',
     async () => {
-      const result = await harness.run(
-        'list issues --server http://localhost:9999 --token test-token',
-      );
+      // --project must be supplied so Commander passes control to authenticated()
+      const result = await harness.run('list issues --project my-project');
 
       expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        '❌ Not authenticated. Run: sonar auth login',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 when --project is missing',
+    async () => {
+      // Commander enforces the requiredOption before the action handler runs — no auth needed
+      const result = await harness.run('list issues');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "required option '-p, --project <project>' not specified",
+      );
     },
     { timeout: 15000 },
   );
@@ -169,10 +173,9 @@ describe('list issues', () => {
   it(
     'exits with code 1 when server is unreachable',
     async () => {
-      const result = await harness.run(
-        'list issues --project my-project --server http://127.0.0.1:19999 --token test-token',
-        { timeoutMs: 10000 },
-      );
+      harness.withAuth('http://127.0.0.1:19999', 'test-token');
+
+      const result = await harness.run('list issues --project my-project', { timeoutMs: 10000 });
 
       expect(result.exitCode).toBe(1);
     },
@@ -189,10 +192,7 @@ describe('list issues', () => {
           p.withIssue({ ruleKey: 'ts:S1000', message: 'TypeScript issue', severity: 'MINOR' }),
         )
         .start();
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'tok');
+      harness.withAuth(server.baseUrl(), 'tok');
 
       const result = await harness.run(`list issues --project proj`);
 
@@ -220,6 +220,7 @@ describe('list issues — argument validation', () => {
   it(
     'exits with code 1 when --page-size is not a number',
     async () => {
+      // Commander rejects non-integer before the action handler runs — no auth needed
       const result = await harness.run('list issues --project my-project --page-size abc');
 
       expect(result.exitCode).toBe(1);
@@ -233,6 +234,9 @@ describe('list issues — argument validation', () => {
   it(
     'exits with code 1 when --page-size is less than 1',
     async () => {
+      // Validation runs inside the handler — auth must pass first
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
       const result = await harness.run('list issues --project my-project --page-size 0');
 
       expect(result.exitCode).toBe(1);
@@ -246,6 +250,9 @@ describe('list issues — argument validation', () => {
   it(
     'exits with code 1 when --page-size is greater than 500',
     async () => {
+      // Validation runs inside the handler — auth must pass first
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
       const result = await harness.run('list issues --project my-project --page-size 501');
 
       expect(result.exitCode).toBe(1);
@@ -257,6 +264,9 @@ describe('list issues — argument validation', () => {
   it(
     'exits with code 1 when --format is not a recognised value',
     async () => {
+      // Validation runs inside the handler — auth must pass first
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
       const result = await harness.run('list issues --project my-project --format xml');
 
       expect(result.exitCode).toBe(1);
@@ -268,6 +278,9 @@ describe('list issues — argument validation', () => {
   it(
     'exits with code 1 when --severity is not a recognised value',
     async () => {
+      // Validation runs inside the handler — auth must pass first
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
       const result = await harness.run('list issues --project my-project --severity UNKNOWN');
 
       expect(result.exitCode).toBe(1);

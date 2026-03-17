@@ -19,9 +19,9 @@
  */
 
 import { version as VERSION } from '../../package.json';
-import { Command, Option } from 'commander';
-import { runCommand } from '../lib/run-command';
+import { type Command, Option } from 'commander';
 import { blue } from '../ui/colors.js';
+import { SonarCommand } from './commands/_common/sonar-command.js';
 import { listIssues, type ListIssuesOptions } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
@@ -57,7 +57,7 @@ function getHelpBanner(): string {
   ].join('\n');
 }
 
-export const COMMAND_TREE = new Command();
+export const COMMAND_TREE = new SonarCommand();
 
 COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
@@ -73,7 +73,7 @@ install
   .description('Install sonar-secrets binary from https://binaries.sonarsource.com')
   .option('--force', 'Force reinstall even if already installed')
   .option('--status', 'Check installation status instead of installing')
-  .action((options: InstallSecretsOptions) => runCommand(() => installSecrets(options)));
+  .authenticatedAction((_auth, options: InstallSecretsOptions) => installSecrets(options));
 
 // Setup SonarQube integration for AI coding agent
 const integrateCommand = COMMAND_TREE.command('integrate').description(
@@ -85,16 +85,13 @@ integrateCommand
   .description(
     'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.',
   )
-  .option('-s, --server <server>', 'SonarQube server URL')
   .option('-p, --project <project>', 'Project key')
-  .option('-t, --token <token>', 'Existing authentication token')
-  .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option(
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .action((options: IntegrateClaudeOptions) => runCommand(() => integrateClaude(options)));
+  .authenticatedAction((auth, options: IntegrateClaudeOptions) => integrateClaude(options, auth));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');
@@ -107,23 +104,21 @@ list
   .command('issues')
   .description('Search for issues in SonarQube')
   .requiredOption('-p, --project <project>', 'Project key')
-  .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
   .option('--severity <severity>', 'Filter by severity')
   .option('--format <format>', 'Output format', 'json')
   .option('--branch <branch>', 'Branch name')
   .option('--pull-request <pull-request>', 'Pull request ID')
   .addOption(pageSizeOption)
   .addOption(pageOption)
-  .action((options: ListIssuesOptions) => runCommand(() => listIssues(options)));
+  .authenticatedAction((auth, options: ListIssuesOptions) => listIssues(options, auth));
 
 list
   .command('projects')
   .description('Search for projects in SonarQube')
-  .option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
   .addOption(pageOption)
   .addOption(pageSizeOption)
-  .action((options: ListProjectsOptions) => runCommand(() => listProjects(options)));
+  .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
 
 // Manage authentication tokens and credentials
 const auth = COMMAND_TREE.command('auth').description(
@@ -136,30 +131,30 @@ auth
   .option('-s, --server <server>', 'SonarQube URL (default is SonarQube https://sonarcloud.io)')
   .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
-  .action((options: AuthLoginOptions) => runCommand(() => authLogin(options)));
+  .anonymousAction((options: AuthLoginOptions) => authLogin(options));
 
 auth
   .command('logout')
   .description('Remove authentication token from keychain')
   .option('-s, --server <server>', 'SonarQube server URL')
   .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-  .action((options: AuthLogoutOptions) => runCommand(() => authLogout(options)));
+  .anonymousAction((options: AuthLogoutOptions) => authLogout(options));
 
 auth
   .command('purge')
   .description('Remove all authentication tokens from keychain')
-  .action(() => runCommand(() => authPurge()));
+  .anonymousAction(() => authPurge());
 
 auth
   .command('status')
   .description('Show active authentication connection with token verification')
-  .action(() => runCommand(() => authStatus()));
+  .anonymousAction(() => authStatus());
 
 // Analyze code for security issues
 const analyze = COMMAND_TREE.command('analyze')
   .description('Analyze code for security issues')
   .enablePositionalOptions()
-  .action(function (this: Command) {
+  .anonymousAction(function (this: Command) {
     this.outputHelp();
   });
 
@@ -168,10 +163,8 @@ analyze
   .description('Scan files or stdin for hardcoded secrets')
   .argument('[paths...]', 'File or directory paths to scan for secrets')
   .option('--stdin', 'Read from standard input instead of paths')
-  .action((paths: string[], options: AnalyzeSecretsOptions) =>
-    runCommand(() =>
-      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }),
-    ),
+  .authenticatedAction((auth, paths: string[], options: AnalyzeSecretsOptions) =>
+    analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, auth),
   );
 
 analyze
@@ -180,8 +173,8 @@ analyze
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
   .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
-  .action((options: AnalyzeSqaaOptions, cmd: Command) =>
-    runCommand(() => analyzeSqaa(options, cmd)),
+  .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
+    analyzeSqaa(options, auth, cmd),
   );
 
 COMMAND_TREE.command('verify')
@@ -189,8 +182,8 @@ COMMAND_TREE.command('verify')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
   .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
-  .action((options: AnalyzeSqaaOptions, cmd: Command) =>
-    runCommand(() => analyzeSqaa(options, cmd)),
+  .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
+    analyzeSqaa(options, auth, cmd),
   );
 
 // Configure things related to the CLI
@@ -201,18 +194,18 @@ configure
   .description('Configure telemetry settings')
   .option('--enabled', 'Enable collection of anonymous usage statistics')
   .option('--disabled', 'Disable collection of anonymous usage statistics')
-  .action((options: ConfigureTelemetryOptions) => runCommand(() => configureTelemetry(options)));
+  .anonymousAction((options: ConfigureTelemetryOptions) => configureTelemetry(options));
 
 // Update the CLI to the latest version
 COMMAND_TREE.command('self-update')
   .description('Update sonar CLI to the latest version')
   .option('--status', 'Check for a newer version without installing')
   .option('--force', 'Install the latest version even if already up to date')
-  .action((options: SelfUpdateOptions) => runCommand(() => selfUpdate(options)));
+  .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
-  COMMAND_TREE.command('flush-telemetry', { hidden: true }).action(flushTelemetry);
+  COMMAND_TREE.command('flush-telemetry', { hidden: true }).anonymousAction(flushTelemetry);
 }
 
 // Collect a telemetry event after every command action.

@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { spawnProcess } from '../../../lib/process';
 import type { SpawnResult } from '../../../lib/process';
 import { buildLocalBinaryName, detectPlatform } from '../../../lib/platform-detector';
-import { resolveAuth } from '../../../lib/auth-resolver';
+import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { blank, error, print, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
@@ -33,8 +33,11 @@ export interface AnalyzeSecretsOptions {
   stdin?: boolean;
 }
 
-export async function analyzeSecrets(options: AnalyzeSecretsOptions): Promise<void> {
-  return handleCheckCommand(options).catch(handleScanError);
+export async function analyzeSecrets(
+  options: AnalyzeSecretsOptions,
+  auth: ResolvedAuth,
+): Promise<void> {
+  return handleCheckCommand(options, auth).catch(handleScanError);
 }
 
 // Env var names expected by the sonar-secrets binary
@@ -44,8 +47,11 @@ const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 const SCAN_TIMEOUT_MS = 30000;
 const STDIN_READ_TIMEOUT_MS = 5000;
 
-async function handleCheckCommand(options: AnalyzeSecretsOptions): Promise<void> {
-  const scanEnv = await setupScanEnvironment(options);
+async function handleCheckCommand(
+  options: AnalyzeSecretsOptions,
+  auth: ResolvedAuth,
+): Promise<void> {
+  const scanEnv = setupScanEnvironment(options, auth);
   const scanStartTime = Date.now();
   const { binaryPath, authUrl, authToken } = scanEnv;
 
@@ -62,25 +68,15 @@ interface ScanEnvironment {
   authToken?: string;
 }
 
-async function setupScanEnvironment(options: {
-  paths?: string[];
-  stdin?: boolean;
-}): Promise<ScanEnvironment> {
+function setupScanEnvironment(
+  options: { paths?: string[]; stdin?: boolean },
+  auth: ResolvedAuth,
+): ScanEnvironment {
   validateScanOptions(options);
 
   const binaryPath = setupBinaryPath();
 
-  let authUrl: string | undefined;
-  let authToken: string | undefined;
-  try {
-    const auth = await resolveAuth({});
-    authUrl = auth.serverUrl;
-    authToken = auth.token;
-  } catch {
-    // Auth resolution failure is non-fatal — binary works without auth
-  }
-
-  return { binaryPath, authUrl, authToken };
+  return { binaryPath, authUrl: auth.serverUrl, authToken: auth.token };
 }
 
 function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): void {

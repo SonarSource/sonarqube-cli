@@ -36,12 +36,14 @@ describe('list issues — auth scenarios', () => {
   });
 
   it(
-    'exits with code 1 and reports missing server when no auth is configured',
+    'exits with code 1 and prompts to authenticate when no auth is configured',
     async () => {
       const result = await harness.run('list issues --project my-project');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('No server URL found');
+      expect(result.stdout + result.stderr).toContain(
+        '❌ Not authenticated. Run: sonar auth login',
+      );
     },
     { timeout: 15000 },
   );

@@ -41,19 +41,20 @@ describe('integrate claude', () => {
   // --- Without --non-interactive (auth succeeds, no repair triggered) ---
 
   it(
-    'performs full integration with valid --token and URL from sonar-project.properties',
+    'performs full integration with auth from state and URL from sonar-project.properties',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --token test-token --non-interactive');
+      const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.claude', 'settings.json')).toBe(true);
@@ -97,14 +98,14 @@ describe('integrate claude', () => {
   );
 
   it(
-    'uses keychain token for full integration when no --token flag is provided',
+    'uses keychain token for full integration',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('keychain-token')
         .withProject('keychain-project')
         .start();
-      harness.state().withKeychainToken(server.baseUrl(), 'keychain-token');
+      harness.withAuth(server.baseUrl(), 'keychain-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=keychain-project'].join('\n'),
@@ -122,6 +123,7 @@ describe('integrate claude', () => {
     'installs secrets-only hooks when sonar-project.properties has URL but no project key',
     async () => {
       const server = await harness.newFakeServer().start();
+      harness.withAuth(server.baseUrl(), 'some-token');
       harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}`);
 
       const result = await harness.run('integrate claude --non-interactive');
@@ -143,7 +145,7 @@ describe('integrate claude', () => {
   // --- Without --non-interactive (interactive browser auth via browserToken) ---
 
   it(
-    'performs full integration via browser auth when no token is initially available',
+    'triggers browser auth repair when stored token fails health check',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -151,6 +153,8 @@ describe('integrate claude', () => {
         .withProject('browser-project')
         .start();
 
+      // Set up auth with an invalid token so health check fails and repair is triggered
+      harness.withAuth(server.baseUrl(), 'initial-invalid-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=browser-project'].join('\n'),
@@ -174,12 +178,13 @@ describe('integrate claude', () => {
         .withAuthToken('valid-browser-token')
         .withProject('repair-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'invalid-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=repair-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --token invalid-token', {
+      const result = await harness.run('integrate claude', {
         browserToken: 'valid-browser-token',
       });
 
@@ -199,12 +204,13 @@ describe('integrate claude', () => {
         .withAuthToken('valid-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'wrong-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --token wrong-token --non-interactive');
+      const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(
@@ -221,13 +227,14 @@ describe('integrate claude', () => {
   );
 
   it(
-    'installs hooks when no token and --non-interactive',
+    'installs hooks in degraded mode when token is invalid and --non-interactive',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('some-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'wrong-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -298,6 +305,7 @@ describe('integrate claude', () => {
         .withAuthToken('some-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'some-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -315,17 +323,16 @@ describe('integrate claude', () => {
   );
 
   it(
-    'uses --server flag URL and overrides sonar-project.properties URL',
+    'uses auth server URL and makes requests to the server',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(
-        `integrate claude --token test-token --server ${server.baseUrl()} --non-interactive`,
-      );
+      const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
       const requests = server.getRecordedRequests();
@@ -335,17 +342,16 @@ describe('integrate claude', () => {
   );
 
   it(
-    'performs full integration using --token, --server, and --project flags without sonar-project.properties',
+    'performs full integration using --project flag without sonar-project.properties',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('flag-token')
         .withProject('flag-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'flag-token');
 
-      const result = await harness.run(
-        `integrate claude --token flag-token --server ${server.baseUrl()} --project flag-project --non-interactive`,
-      );
+      const result = await harness.run(`integrate claude --project flag-project --non-interactive`);
 
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.claude', 'settings.json')).toBe(true);
@@ -361,12 +367,13 @@ describe('integrate claude', () => {
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --token test-token --non-interactive');
+      const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
       const claudeSettingsFile = harness.cwd.file('.claude', 'settings.json');
@@ -385,12 +392,13 @@ describe('integrate claude', () => {
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      await harness.run('integrate claude --token test-token --non-interactive');
+      await harness.run('integrate claude --non-interactive');
 
       const preToolScriptFile = harness.cwd.file(
         '.claude',
@@ -412,12 +420,13 @@ describe('integrate claude', () => {
         .withAuthToken('test-token')
         .withProject('my-project')
         .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      await harness.run('integrate claude --token test-token --non-interactive');
+      await harness.run('integrate claude --non-interactive');
 
       const promptScriptContent = harness.cwd
         .file('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'prompt-secrets.sh')
@@ -426,6 +435,19 @@ describe('integrate claude', () => {
       expect(promptScriptContent).not.toContain('sonar analyze --file');
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'exits with code 1 and prompts to authenticate when no auth is configured',
+    async () => {
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        '❌ Not authenticated. Run: sonar auth login',
+      );
+    },
+    { timeout: 15000 },
   );
 });
 
@@ -456,16 +478,14 @@ describe('integrate claude — A3S entitlement guard', () => {
       // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
       // and getOrganizationId / checkA3sEntitlement hit the same fake server
       const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      const result = await harness.run(
-        `integrate claude --token cloud-token --server ${serverUrl} --org my-org --project my-project --non-interactive`,
-        {
-          extraEnv: {
-            SONAR_CLI_SONARCLOUD_URL: serverUrl,
-            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
-          },
+      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+        extraEnv: {
+          SONAR_CLI_SONARCLOUD_URL: serverUrl,
+          SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
         },
-      );
+      });
 
       expect(result.exitCode).toBe(0);
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
@@ -488,16 +508,14 @@ describe('integrate claude — A3S entitlement guard', () => {
         .start();
 
       const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      const result = await harness.run(
-        `integrate claude --token cloud-token --server ${serverUrl} --org my-org --non-interactive`,
-        {
-          extraEnv: {
-            SONAR_CLI_SONARCLOUD_URL: serverUrl,
-            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
-          },
+      const result = await harness.run(`integrate claude --non-interactive`, {
+        extraEnv: {
+          SONAR_CLI_SONARCLOUD_URL: serverUrl,
+          SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
         },
-      );
+      });
 
       expect(result.exitCode).toBe(0);
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
@@ -520,9 +538,10 @@ describe('integrate claude — A3S entitlement guard', () => {
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
       const result = await harness.run(
-        `integrate claude -g --token cloud-token --server ${serverUrl} --org my-org --project my-project --non-interactive`,
+        `integrate claude -g --project my-project --non-interactive`,
         {
           extraEnv: {
             SONAR_CLI_SONARCLOUD_URL: serverUrl,
@@ -569,12 +588,13 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
+        harness.withAuth(server.baseUrl(), 'tok');
         harness.cwd.writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        const result = await harness.run('integrate claude --token tok --non-interactive');
+        const result = await harness.run('integrate claude --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists('.claude', 'settings.json')).toBe(true);
@@ -603,6 +623,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     it(
       'does not touch the global dir when running without -g',
       async () => {
+        harness.withAuth('http://localhost:19999', 'fake-token');
         await harness.run('integrate claude --non-interactive');
 
         // Global dir must be completely untouched
@@ -619,12 +640,13 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
+        harness.withAuth(server.baseUrl(), 'tok');
         harness.cwd.writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        await harness.run('integrate claude --token tok --non-interactive');
+        await harness.run('integrate claude --non-interactive');
 
         const settings = harness.cwd.file('.claude', 'settings.json').asJson();
         const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
@@ -651,12 +673,13 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
+        harness.withAuth(server.baseUrl(), 'tok');
         harness.cwd.writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        const result = await harness.run('integrate claude -g --token tok --non-interactive');
+        const result = await harness.run('integrate claude -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.userHome.exists('.claude', 'settings.json')).toBe(true);
@@ -690,13 +713,13 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
-
+        harness.withAuth(server.baseUrl(), 'tok');
         harness.cwd.writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        await harness.run('integrate claude -g --token tok --non-interactive');
+        await harness.run('integrate claude -g --non-interactive');
 
         // Project-level .claude/ must NOT be created
         expect(harness.cwd.exists('.claude')).toBe(false);
@@ -712,6 +735,7 @@ describe('integrate claude — file placement (local vs global)', () => {
           .withAuthToken('tok')
           .withProject('proj')
           .start();
+        harness.withAuth(server.baseUrl(), 'tok');
         harness.cwd.writeFile(
           'sonar-project.properties',
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
@@ -806,8 +830,9 @@ describe('integrate claude — file placement (local vs global)', () => {
             ],
           }),
         );
+        harness.state().withKeychainToken(server.baseUrl(), 'tok');
 
-        const result = await harness.run('integrate claude -g --token tok --non-interactive');
+        const result = await harness.run('integrate claude -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
 
@@ -904,6 +929,7 @@ describe('integrate claude — legacy state without agentExtensions', () => {
           2,
         ),
       );
+      harness.state().withKeychainToken(serverUrl, 'test-token');
 
       // Old hook scripts — use the deprecated `sonar analyze --file` command
       const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
@@ -937,9 +963,7 @@ describe('integrate claude — legacy state without agentExtensions', () => {
         ),
       );
 
-      const result = await harness.run(
-        `integrate claude --token test-token --server ${serverUrl} --project my-project --non-interactive`,
-      );
+      const result = await harness.run(`integrate claude --project my-project --non-interactive`);
 
       expect(result.exitCode).toBe(0);
 

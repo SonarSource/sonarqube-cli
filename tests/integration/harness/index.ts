@@ -82,6 +82,16 @@ export class TestHarness {
   }
 
   /**
+   * Convenience: sets up both an active connection and a keychain token in one call.
+   * Infers the connection type: 'cloud' when org is provided, 'on-premise' otherwise.
+   * Equivalent to harness.state().withAuth(serverUrl, token, org).
+   */
+  withAuth(serverUrl: string, token: string, org?: string): this {
+    this.state().withAuth(serverUrl, token, org);
+    return this;
+  }
+
+  /**
    * Creates a new FakeSonarQubeServerBuilder. Call .start() on the result to get a
    * running server. The server is stopped automatically when dispose() is called.
    */

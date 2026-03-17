@@ -30,7 +30,7 @@ import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
 import * as repair from '../../src/cli/commands/integrate/claude/repair';
 import * as state from '../../src/cli/commands/integrate/claude/state';
 import * as authResolver from '../../src/lib/auth-resolver';
-import { ResolvedAuth } from '../../src/lib/auth-resolver';
+import type { ResolvedAuth } from '../../src/lib/auth-resolver';
 import * as migration from '../../src/lib/migration';
 import { getDefaultState } from '../../src/lib/state';
 import * as stateManager from '../../src/lib/state-manager';
@@ -64,7 +64,6 @@ describe('integrateCommand', () => {
   let hasA3sEntitlementSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['hasA3sEntitlement'], (...args: any[]) => any>
   >;
-  let resolveAuthSpy: Mock<Extract<(typeof authResolver)['resolveAuth'], (...args: any[]) => any>>;
   let isEnvBasedAuthSpy: Mock<
     Extract<(typeof authResolver)['isEnvBasedAuth'], (...args: any[]) => any>
   >;
@@ -90,7 +89,6 @@ describe('integrateCommand', () => {
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
 
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
     isEnvBasedAuthSpy = spyOn(authResolver, 'isEnvBasedAuth');
     runHealthChecksSpy = spyOn(health, 'runHealthChecks');
     discoverProjectSpy = spyOn(discovery, 'discoverProject');
@@ -109,7 +107,6 @@ describe('integrateCommand', () => {
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     hasA3sEntitlementSpy.mockRestore();
-    resolveAuthSpy.mockRestore();
     isEnvBasedAuthSpy.mockRestore();
     runHealthChecksSpy.mockRestore();
     discoverProjectSpy.mockRestore();
@@ -120,9 +117,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows intro message', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const introText = getMockUiCalls().find(
       (c) => c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude',
@@ -131,9 +126,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows phase 1 text', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const phaseText = getMockUiCalls().find(
       (c) => c.method === 'text' && String(c.args[0]) === 'Phase 1/3: Discovery & Validation',
@@ -141,82 +134,28 @@ describe('integrateCommand', () => {
     expect(phaseText).toBeDefined();
   });
 
-  it('server defaults to SonarQube Cloud EU when organization is provided but no server', async () => {
-    mockNoAuth();
+  it('uses auth server for health checks', async () => {
     mockDiscoveredProject({});
 
-    await integrateClaude({ org: 'my-org' });
+    await integrateClaude({}, SERVER_AUTH);
 
     const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[0]).toBe('https://sonarcloud.io');
-  });
-
-  it('server option overrides default server', async () => {
-    mockNoAuth();
-    mockDiscoveredProject({});
-
-    await integrateClaude({ server: 'https://example-sonarqube.com' });
-
-    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[0]).toBe('https://example-sonarqube.com');
-  });
-
-  it('server option overrides discovered server', async () => {
-    mockNoAuth();
-    mockDiscoveredProject({ serverUrl: 'https://discovered-sonarqube.com' });
-
-    await integrateClaude({ server: 'https://example-sonarqube.com' });
-
-    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[0]).toBe('https://example-sonarqube.com');
-  });
-
-  it('server option overrides auth server', async () => {
-    mockDiscoveredProject({ serverUrl: 'https://non-considered-sonarqube.com' });
-
-    await integrateClaude({ server: 'https://example-sonarqube.com' });
-
-    const resolveAuthCall = resolveAuthSpy.mock.calls.at(0) as Parameters<
-      typeof authResolver.resolveAuth
-    >;
-    expect(resolveAuthCall[0].server).toBe('https://example-sonarqube.com');
+    expect(lastHealthCheckCall[0]).toBe(SERVER_AUTH.serverUrl);
   });
 
   it('auth server overrides discovered server', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
     mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
 
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
     expect(lastHealthCheckCall[0]).toBe(SERVER_AUTH.serverUrl);
-  });
-
-  it('auth server overrides default server', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-    mockDiscoveredProject({});
-
-    await integrateClaude({});
-
-    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[0]).toBe(SERVER_AUTH.serverUrl);
-  });
-
-  it('discovered server overrides default server', async () => {
-    mockNoAuth();
-    mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
-
-    await integrateClaude({});
-
-    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[0]).toBe('https://example-sonarqube.com');
   });
 
   it('shows warning when resolved server does not match discovered server', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
     mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
 
-    await integrateClaude({});
+    await integrateClaude({}, CLOUD_AUTH);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('Server URL mismatch'),
@@ -224,52 +163,19 @@ describe('integrateCommand', () => {
     expect(warnText).toBeDefined();
   });
 
-  it('organization defaults to discovered organization when no auth provided', async () => {
-    mockNoAuth();
-    mockDiscoveredProject({ organization: 'an-org' });
-
-    await integrateClaude({});
-
-    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[4]).toBe('an-org');
-  });
-
-  it('organization option overrides discovered organization', async () => {
-    mockNoAuth();
-    mockDiscoveredProject({ organization: 'an-org' });
-
-    await integrateClaude({ org: 'override-org' });
-
-    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[4]).toBe('override-org');
-  });
-
-  it('organization option overrides auth organization', async () => {
-    mockDiscoveredProject({ organization: 'not-considered-org' });
-
-    await integrateClaude({ org: 'override-org' });
-
-    const resolveAuthCall = resolveAuthSpy.mock.calls.at(0) as Parameters<
-      typeof authResolver.resolveAuth
-    >;
-    expect(resolveAuthCall[0].org).toBe('override-org');
-  });
-
   it('auth organization overrides discovered organization', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
     mockDiscoveredProject({ organization: 'an-org' });
 
-    await integrateClaude({});
+    await integrateClaude({}, CLOUD_AUTH);
 
     const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
     expect(lastHealthCheckCall[4]).toBe(CLOUD_AUTH.orgKey);
   });
 
   it('shows warning when resolved organization does not match discovered organization', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
     mockDiscoveredProject({ organization: 'an-org' });
 
-    await integrateClaude({});
+    await integrateClaude({}, CLOUD_AUTH);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('organization mismatch'),
@@ -278,55 +184,35 @@ describe('integrateCommand', () => {
   });
 
   it('validates organization is provided when server is SonarQube Cloud', () => {
-    mockNoAuth();
     mockDiscoveredProject({});
+    const cloudAuthNoOrg: ResolvedAuth = {
+      token: 'test-token',
+      serverUrl: 'https://sonarcloud.io',
+    };
 
-    expect(() => integrateClaude({})).toThrow(CommandFailedError);
-  });
-
-  it('token defaults to token option when no auth provided', async () => {
-    mockNoAuth();
-    mockDiscoveredProject({});
-
-    await integrateClaude({ token: 'a-token', org: 'an-org' });
-
-    const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
-    expect(lastHealthCheckCall[1]).toBe('a-token');
-  });
-
-  it('token option overrides auth token', async () => {
-    await integrateClaude({ token: 'a-token', org: 'an-org' });
-
-    const resolveAuthCall = resolveAuthSpy.mock.calls.at(0) as Parameters<
-      typeof authResolver.resolveAuth
-    >;
-    expect(resolveAuthCall[0].token).toBe('a-token');
+    expect(integrateClaude({}, cloudAuthNoOrg)).rejects.toThrow(CommandFailedError);
   });
 
   it('project key defaults to discovered project key', async () => {
-    mockNoAuth();
     mockDiscoveredProject({ projectKey: 'project' });
 
-    await integrateClaude({ org: 'an-org' });
+    await integrateClaude({}, SERVER_AUTH);
 
     const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
     expect(lastHealthCheckCall[2]).toBe('project');
   });
 
   it('project key overrides discovered project key', async () => {
-    mockNoAuth();
     mockDiscoveredProject({ projectKey: 'project' });
 
-    await integrateClaude({ project: 'override-project', org: 'an-org' });
+    await integrateClaude({ project: 'override-project' }, SERVER_AUTH);
 
     const lastHealthCheckCall = runHealthChecksSpy.mock.calls.at(-1)!;
     expect(lastHealthCheckCall[2]).toBe('override-project');
   });
 
   it('shows phase 2 text', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const phaseText = getMockUiCalls().find(
       (c) => c.method === 'text' && String(c.args[0]) === 'Phase 2/3: Health Check & Repair',
@@ -335,9 +221,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows success message on heath check success', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const successText = getMockUiCalls().find(
       (c) =>
@@ -348,7 +232,6 @@ describe('integrateCommand', () => {
   });
 
   it('shows warning message when heath check fails', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
     repairTokenSpy.mockResolvedValue('repaired-token');
     mockHealthCheckOnce({
       tokenValid: false,
@@ -356,7 +239,7 @@ describe('integrateCommand', () => {
     });
     mockHealthCheck();
 
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('Found 3 issue(s):'),
@@ -365,7 +248,6 @@ describe('integrateCommand', () => {
   });
 
   it('shows heath check failures in detail', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
     repairTokenSpy.mockResolvedValue('repaired-token');
     mockHealthCheckOnce({
       tokenValid: false,
@@ -373,7 +255,7 @@ describe('integrateCommand', () => {
     });
     mockHealthCheck();
 
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const healthText = getMockUiCalls()
       .filter((c) => c.method === 'text' && String(c.args[0]).includes('HealthError'))
@@ -382,24 +264,23 @@ describe('integrateCommand', () => {
     expect(healthText).toEqual(['  - HealthError1', '  - HealthError2', '  - HealthError3']);
   });
 
-  it('attempts repair when no token', async () => {
+  it('attempts repair when health check shows token is invalid', async () => {
     repairTokenSpy.mockResolvedValue('repaired-token');
     mockHealthCheckOnce({ tokenValid: false, errors: ['Token is invalid'] });
     mockHealthCheck();
 
-    await integrateClaude({ org: 'an-org' });
+    await integrateClaude({}, CLOUD_AUTH);
 
     expect(repairTokenSpy).toHaveBeenCalledTimes(1);
-    expect(repairTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'an-org');
+    expect(repairTokenSpy).toHaveBeenCalledWith(CLOUD_AUTH.serverUrl, CLOUD_AUTH.orgKey);
   });
 
   it('attempts repair when health fails for token', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
     repairTokenSpy.mockResolvedValue('repaired-token');
     mockHealthCheckOnce({ tokenValid: false, errors: ['Token is invalid'] });
     mockHealthCheck();
 
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     expect(repairTokenSpy).toHaveBeenCalledTimes(1);
     expect(repairTokenSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, undefined);
@@ -413,12 +294,12 @@ describe('integrateCommand', () => {
       errors: ['Token is invalid'],
     });
 
-    await integrateClaude({ nonInteractive: true, org: 'an-org' });
+    await integrateClaude({ nonInteractive: true }, CLOUD_AUTH);
 
     expect(repairTokenSpy).not.toBeCalled();
   });
 
-  it('does not repair token when env variable based auth provided', async () => {
+  it('does not repair token when auth is env-based', async () => {
     repairTokenSpy.mockResolvedValue('repaired-token');
     runHealthChecksSpy.mockResolvedValue({
       ...CLEAN_HEALTH,
@@ -427,35 +308,24 @@ describe('integrateCommand', () => {
     });
     isEnvBasedAuthSpy.mockReturnValue(true);
 
-    await integrateClaude({ org: 'an-org' });
+    await integrateClaude({}, CLOUD_AUTH);
 
     expect(repairTokenSpy).not.toBeCalled();
   });
 
-  it('checks A3S entitlement when token is provided', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
+  it('checks A3S entitlement', async () => {
     hasA3sEntitlementSpy.mockResolvedValue(true);
 
-    await integrateClaude({});
+    await integrateClaude({}, CLOUD_AUTH);
 
     expect(hasA3sEntitlementSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('skips A3S entitlement when token is not provided', async () => {
-    mockNoAuth();
-    hasA3sEntitlementSpy.mockResolvedValue(true);
-
-    await integrateClaude({ org: 'an-org' });
-
-    expect(hasA3sEntitlementSpy).not.toBeCalled();
-  });
-
   it('runs migration, installs hooks and updates state when health check succeeds', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockA3sEntitlement(true);
 
-    await integrateClaude({});
+    await integrateClaude({}, CLOUD_AUTH);
 
     assertMigrationHookInstallationAndStateUpdateRan(
       'a-project',
@@ -467,11 +337,10 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration, installs hooks and updates state when global option and health check succeeds', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockA3sEntitlement(true);
 
-    await integrateClaude({ global: true });
+    await integrateClaude({ global: true }, CLOUD_AUTH);
 
     assertMigrationHookInstallationAndStateUpdateRan(
       'a-project',
@@ -483,12 +352,11 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration, installs hooks and updates state when health check fails', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     mockA3sEntitlement(true);
     mockHealthCheck({ organizationAccessible: false, errors: ['Organization not accessible'] });
 
-    await integrateClaude({});
+    await integrateClaude({}, CLOUD_AUTH);
 
     assertMigrationHookInstallationAndStateUpdateRan(
       'a-project',
@@ -500,11 +368,10 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration, installs hooks and updates state when project key is missing', async () => {
-    resolveAuthSpy.mockResolvedValue(CLOUD_AUTH);
     mockDiscoveredProject({ rootDir: '/projectB/root' });
     mockA3sEntitlement(false);
 
-    await integrateClaude({});
+    await integrateClaude({}, CLOUD_AUTH);
 
     assertMigrationHookInstallationAndStateUpdateRan(
       undefined,
@@ -516,9 +383,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows phase 3 text', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const phaseText = getMockUiCalls().find(
       (c) => c.method === 'text' && String(c.args[0]) === 'Phase 3/3: Final Verification',
@@ -527,9 +392,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows outro message', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const phaseText = getMockUiCalls().find(
       (c) => c.method === 'outro' && String(c.args[0]) === 'Setup complete!',
@@ -538,12 +401,11 @@ describe('integrateCommand', () => {
   });
 
   it('shows warning message when final heath check fails', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
     repairTokenSpy.mockResolvedValue('repaired-token');
     mockHealthCheckOnce({ errors: ['HealthError1', 'HealthError2', 'HealthError3'] });
     mockHealthCheck({ errors: ['RemainingHealthError1', 'RemainingHealthError3'] });
 
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const warnText = getMockUiCalls().find(
       (c) => c.method === 'warn' && String(c.args[0]).includes('Some issues remain:'),
@@ -552,12 +414,11 @@ describe('integrateCommand', () => {
   });
 
   it('shows final heath check failures in detail', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
     repairTokenSpy.mockResolvedValue('repaired-token');
     mockHealthCheckOnce({ errors: ['HealthError1', 'HealthError2', 'HealthError3'] });
     mockHealthCheck({ errors: ['RemainingHealthError1', 'RemainingHealthError3'] });
 
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const healthText = getMockUiCalls()
       .filter((c) => c.method === 'text' && String(c.args[0]).includes('RemainingHealthError'))
@@ -567,9 +428,7 @@ describe('integrateCommand', () => {
   });
 
   it('shows secrets hook example when hooks installed', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
-
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const infoText = getMockUiCalls().find(
       (c) =>
@@ -586,10 +445,9 @@ describe('integrateCommand', () => {
   });
 
   it('skips secrets hook example when hooks not installed', async () => {
-    resolveAuthSpy.mockResolvedValue(SERVER_AUTH);
     mockHealthCheck({ hooksInstalled: false });
 
-    await integrateClaude({});
+    await integrateClaude({}, SERVER_AUTH);
 
     const infoText = getMockUiCalls().find(
       (c) =>
@@ -604,12 +462,6 @@ describe('integrateCommand', () => {
     );
     expect(exampleText).not.toBeDefined();
   });
-
-  function mockNoAuth() {
-    resolveAuthSpy.mockImplementation(() => {
-      throw new Error('No auth');
-    });
-  }
 
   function mockDiscoveredProject(project: Partial<DiscoveredProject>) {
     discoverProjectSpy.mockResolvedValue({

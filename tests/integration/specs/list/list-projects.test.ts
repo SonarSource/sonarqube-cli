@@ -19,9 +19,6 @@
  */
 
 // Integration tests for `list projects` — requires state connection + keychain token
-//
-// Note: `list projects` reads auth directly from state+keychain (not `resolveAuth`),
-// so env vars SONAR_CLI_TOKEN/SONAR_CLI_SERVER are NOT used here.
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { TestHarness } from '../../harness';
@@ -38,18 +35,20 @@ describe('list projects', () => {
   });
 
   it(
-    'exits with code 1 and reports missing connection when no state exists',
+    'exits with code 1 and prompts to authenticate when no auth is configured',
     async () => {
       const result = await harness.run('list projects');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('No server URL found');
+      expect(result.stdout + result.stderr).toContain(
+        '❌ Not authenticated. Run: sonar auth login',
+      );
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 1 and reports missing token when connection exists but no keychain token',
+    'exits with code 1 and prompts to authenticate when connection exists but no keychain token',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('some-token').start();
 
@@ -59,7 +58,9 @@ describe('list projects', () => {
       const result = await harness.run('list projects');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('No authentication token found');
+      expect(result.stdout + result.stderr).toContain(
+        '❌ Not authenticated. Run: sonar auth login',
+      );
     },
     { timeout: 15000 },
   );
@@ -74,10 +75,7 @@ describe('list projects', () => {
         .withProject('proj-b')
         .start();
 
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'valid-token');
+      harness.withAuth(server.baseUrl(), 'valid-token');
 
       const result = await harness.run('list projects');
 
@@ -101,10 +99,7 @@ describe('list projects', () => {
         .withProject('some-project')
         .start();
 
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'wrong-token');
+      harness.withAuth(server.baseUrl(), 'wrong-token');
 
       const result = await harness.run('list projects');
 
@@ -117,6 +112,7 @@ describe('list projects', () => {
   it(
     'exits with code 1 when --page-size is not a number',
     async () => {
+      // Commander rejects non-integer before the action handler runs — no auth needed
       const result = await harness.run('list projects --page-size abc');
 
       expect(result.exitCode).toBe(1);
@@ -130,6 +126,9 @@ describe('list projects', () => {
   it(
     'exits with code 1 when --page-size is 0',
     async () => {
+      // Validation runs inside the handler — auth must pass first
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
       const result = await harness.run('list projects --page-size 0');
 
       expect(result.exitCode).toBe(1);
@@ -143,6 +142,9 @@ describe('list projects', () => {
   it(
     'exits with code 1 when --page-size exceeds 500',
     async () => {
+      // Validation runs inside the handler — auth must pass first
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
       const result = await harness.run('list projects --page-size 501');
 
       expect(result.exitCode).toBe(1);

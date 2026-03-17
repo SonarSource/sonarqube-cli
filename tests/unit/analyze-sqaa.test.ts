@@ -24,7 +24,6 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 import * as stateManager from '../../src/lib/state-manager.js';
-import * as authResolver from '../../src/lib/auth-resolver.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { analyzeSqaa } from '../../src/cli/commands/analyze/sqaa';
@@ -45,7 +44,6 @@ const FAKE_AUTH: import('../../src/lib/auth-resolver.js').ResolvedAuth = {
 };
 
 let loadStateSpy: ReturnType<typeof spyOn>;
-let resolveAuthSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let analyzeFileSpy: ReturnType<typeof spyOn>;
@@ -91,8 +89,6 @@ beforeEach(() => {
   loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeCloudState());
   spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
 
-  resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
-
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
 
@@ -106,7 +102,6 @@ beforeEach(() => {
 afterEach(() => {
   setMockUi(false);
   loadStateSpy.mockRestore();
-  resolveAuthSpy.mockRestore();
   existsSpy.mockRestore();
   readFileSpy.mockRestore();
   analyzeFileSpy.mockRestore();
@@ -118,49 +113,42 @@ describe('analyzeSqaa: input validation', () => {
   it('throws InvalidOptionError when file does not exist', () => {
     existsSpy.mockReturnValue(false);
 
-    expect(analyzeSqaa({ file: 'nonexistent.ts' })).rejects.toThrow(InvalidOptionError);
-    expect(analyzeSqaa({ file: 'nonexistent.ts' })).rejects.toThrow('File not found');
+    expect(analyzeSqaa({ file: 'nonexistent.ts' }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
+    expect(analyzeSqaa({ file: 'nonexistent.ts' }, FAKE_AUTH)).rejects.toThrow('File not found');
   });
 });
 
 describe('analyzeSqaa: auth resolution', () => {
-  it('skips SQAA when resolveAuth throws (no auth configured)', async () => {
-    resolveAuthSpy.mockRejectedValue(new Error('No token'));
+  it('skips SQAA when token is missing from auth', async () => {
+    const noTokenAuth = { ...FAKE_AUTH, token: '' };
 
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, noTokenAuth);
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
-  it('skips SQAA when token is missing from resolved auth', async () => {
-    resolveAuthSpy.mockResolvedValue({ token: '', serverUrl: SONARCLOUD_URL, orgKey: TEST_ORG });
+  it('skips SQAA when orgKey is missing from auth', async () => {
+    const noOrgAuth = { ...FAKE_AUTH, orgKey: undefined };
 
-    await analyzeSqaa({ file: 'src/index.ts' });
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
-  });
-
-  it('skips SQAA when orgKey is missing from resolved auth', async () => {
-    resolveAuthSpy.mockResolvedValue({ token: TEST_TOKEN, serverUrl: SONARCLOUD_URL });
-
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, noOrgAuth as typeof FAKE_AUTH);
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
   it('skips SQAA for on-premise server connection', async () => {
-    resolveAuthSpy.mockResolvedValue({
+    const onPremiseAuth = {
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
       orgKey: TEST_ORG,
-      connectionType: 'on-premise',
-    });
+      connectionType: 'on-premise' as const,
+    };
 
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, onPremiseAuth);
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
   it('skips SQAA when no extension found in registry for this project', async () => {
     loadStateSpy.mockReturnValue(makeCloudStateNoExt());
 
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
@@ -187,14 +175,14 @@ describe('analyzeSqaa: auth resolution', () => {
     });
     loadStateSpy.mockReturnValue(state);
 
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 });
 
 describe('analyzeSqaa: API call and result display', () => {
   it('calls client.analyzeFile with correct parameters', async () => {
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
     const request = analyzeFileSpy.mock.calls[0][0];
@@ -205,7 +193,7 @@ describe('analyzeSqaa: API call and result display', () => {
   });
 
   it('does not send branchName in request when no branch is provided', async () => {
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
     const request = analyzeFileSpy.mock.calls[0][0];
     // branchName: null causes a 400 from the real API — must be omitted entirely
@@ -213,7 +201,7 @@ describe('analyzeSqaa: API call and result display', () => {
   });
 
   it('passes branch to client when --branch option is provided', async () => {
-    await analyzeSqaa({ file: 'src/index.ts', branch: 'feature/my-branch' });
+    await analyzeSqaa({ file: 'src/index.ts', branch: 'feature/my-branch' }, FAKE_AUTH);
 
     const request = analyzeFileSpy.mock.calls[0][0];
     expect(request.branchName).toBe('feature/my-branch');
@@ -222,7 +210,7 @@ describe('analyzeSqaa: API call and result display', () => {
   it('displays success message when no issues found', async () => {
     analyzeFileSpy.mockResolvedValue({ id: 'a1', issues: [], errors: null });
 
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
     const output = getMockUiCalls().map((c) => String(c.args[0]));
     expect(output.some((m) => m.toLowerCase().includes('no issues found'))).toBe(true);
@@ -246,7 +234,7 @@ describe('analyzeSqaa: API call and result display', () => {
       errors: null,
     });
 
-    await analyzeSqaa({ file: 'main.py' });
+    await analyzeSqaa({ file: 'main.py' }, FAKE_AUTH);
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -265,7 +253,7 @@ describe('analyzeSqaa: API call and result display', () => {
       errors: [{ code: 'NOT_ENTITLED', message: 'Organization not entitled to SQAA' }],
     });
 
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -287,7 +275,7 @@ describe('analyzeSqaa: API call and result display', () => {
       errors: [{ code: 'PARSE_ERROR', message: "'NonExistentHeader.h' file not found" }],
     });
 
-    await analyzeSqaa({ file: 'src/index.ts' });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
@@ -301,7 +289,9 @@ describe('analyzeSqaa: API call and result display', () => {
   it('throws CommandFailedError when SQAA API call fails', () => {
     analyzeFileSpy.mockRejectedValue(new Error('Network error'));
 
-    expect(analyzeSqaa({ file: 'src/index.ts' })).rejects.toThrow('SQAA analysis failed');
+    expect(analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH)).rejects.toThrow(
+      'SQAA analysis failed',
+    );
   });
 });
 
@@ -311,37 +301,37 @@ describe('analyzeSqaa: explicit --project option', () => {
   it('uses provided project key directly without consulting extensions registry', async () => {
     loadStateSpy.mockReturnValue(makeCloudStateNoExt());
 
-    await analyzeSqaa({ file: 'src/index.ts', project: 'explicit-project' });
+    await analyzeSqaa({ file: 'src/index.ts', project: 'explicit-project' }, FAKE_AUTH);
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
     expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('explicit-project');
   });
 
   it('uses provided project key even when extension has a different project key', async () => {
-    await analyzeSqaa({ file: 'src/index.ts', project: 'override-project' });
+    await analyzeSqaa({ file: 'src/index.ts', project: 'override-project' }, FAKE_AUTH);
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
     expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('override-project');
   });
 
-  it('throws CommandFailedError with auth hint when --project given but no auth', () => {
-    resolveAuthSpy.mockResolvedValue({ token: '', serverUrl: SONARCLOUD_URL, orgKey: TEST_ORG });
+  it('throws CommandFailedError with auth hint when --project given but token is empty', () => {
+    const noTokenAuth = { ...FAKE_AUTH, token: '' };
 
-    expect(analyzeSqaa({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
-      CommandFailedError,
-    );
+    expect(
+      analyzeSqaa({ file: 'src/index.ts', project: 'my-project' }, noTokenAuth),
+    ).rejects.toThrow(CommandFailedError);
   });
 
   it('throws CommandFailedError when --project given but on-premise server', () => {
-    resolveAuthSpy.mockResolvedValue({
+    const onPremiseAuth = {
       token: TEST_TOKEN,
       serverUrl: 'https://mysonar.company.com',
       orgKey: TEST_ORG,
-      connectionType: 'on-premise',
-    });
+      connectionType: 'on-premise' as const,
+    };
 
-    expect(analyzeSqaa({ file: 'src/index.ts', project: 'my-project' })).rejects.toThrow(
-      CommandFailedError,
-    );
+    expect(
+      analyzeSqaa({ file: 'src/index.ts', project: 'my-project' }, onPremiseAuth),
+    ).rejects.toThrow(CommandFailedError);
   });
 });

@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { MAX_PAGE_SIZE } from '../../src/sonarqube/projects.js';
 import { listProjects, ListProjectsOptions } from '../../src/cli/commands/list/projects';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
-import * as authResolver from '../../src/lib/auth-resolver.js';
+import type { ResolvedAuth } from '../../src/lib/auth-resolver.js';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import type { ProjectsSearchResponse } from '../../src/lib/types.js';
 
@@ -15,7 +15,7 @@ const DEFAULT_OPTIONS: ListProjectsOptions = {
   pageSize: 500,
 };
 
-const mockAuth = {
+const mockAuth: ResolvedAuth = {
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
 };
@@ -38,54 +38,33 @@ afterEach(() => {
 });
 
 describe('projectsSearchCommand', () => {
-  let resolveAuthSpy: ReturnType<typeof spyOn>;
   let getSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(mockAuth);
     getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(
       makeProjectsResponse([]) as unknown as never,
     );
   });
 
   afterEach(() => {
-    resolveAuthSpy.mockRestore();
     getSpy.mockRestore();
-  });
-
-  it('calls resolveAuth', async () => {
-    await listProjects(DEFAULT_OPTIONS);
-
-    expect(resolveAuthSpy).toHaveBeenCalledWith({ org: undefined });
-  });
-
-  it('passes --org to resolveAuth', async () => {
-    await listProjects({ ...DEFAULT_OPTIONS, org: 'my-org' });
-
-    expect(resolveAuthSpy).toHaveBeenCalledWith({ org: 'my-org' });
-  });
-
-  it('propagates auth errors', () => {
-    resolveAuthSpy.mockRejectedValue(new Error('Not authenticated. Run: sonar auth login'));
-
-    expect(listProjects(DEFAULT_OPTIONS)).rejects.toThrow('sonar auth login');
   });
 
   describe('error conditions', () => {
     it('throws when page size is not positive', () => {
-      expect(listProjects({ page: 1, pageSize: 0 })).rejects.toThrow(
+      expect(listProjects({ page: 1, pageSize: 0 }, mockAuth)).rejects.toThrow(
         `Invalid --page-size option: '0'. Must be an integer between 1 and 500`,
       );
     });
 
     it('throws when page is not positive', () => {
-      expect(listProjects({ page: 0, pageSize: 500 })).rejects.toThrow(
+      expect(listProjects({ page: 0, pageSize: 500 }, mockAuth)).rejects.toThrow(
         `Invalid --page option: '0'. Must be an integer >= 1`,
       );
     });
 
     it('throws when page size exceeds the maximum', () => {
-      expect(listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 })).rejects.toThrow(
+      expect(listProjects({ page: 1, pageSize: MAX_PAGE_SIZE + 1 }, mockAuth)).rejects.toThrow(
         `Invalid --page-size option: '${MAX_PAGE_SIZE + 1}'. Must be an integer between 1 and 500`,
       );
     });
@@ -93,7 +72,7 @@ describe('projectsSearchCommand', () => {
     it('propagates API errors', () => {
       getSpy.mockRejectedValue(new Error('SonarQube API error: 401 Unauthorized'));
 
-      expect(listProjects(DEFAULT_OPTIONS)).rejects.toThrow(
+      expect(listProjects(DEFAULT_OPTIONS, mockAuth)).rejects.toThrow(
         'SonarQube API error: 401 Unauthorized',
       );
     });
@@ -103,7 +82,7 @@ describe('projectsSearchCommand', () => {
     it('prints JSON with empty projects array when no results', async () => {
       clearMockUiCalls();
 
-      await listProjects(DEFAULT_OPTIONS);
+      await listProjects(DEFAULT_OPTIONS, mockAuth);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -123,7 +102,7 @@ describe('projectsSearchCommand', () => {
         ]) as unknown as never,
       );
 
-      await listProjects(DEFAULT_OPTIONS);
+      await listProjects(DEFAULT_OPTIONS, mockAuth);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -140,7 +119,7 @@ describe('projectsSearchCommand', () => {
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5) as unknown as never,
       );
 
-      await listProjects({ pageSize: 1, page: 1 });
+      await listProjects({ pageSize: 1, page: 1 }, mockAuth);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -154,7 +133,7 @@ describe('projectsSearchCommand', () => {
         makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2) as unknown as never,
       );
 
-      await listProjects({ pageSize: 1, page: 2 });
+      await listProjects({ pageSize: 1, page: 2 }, mockAuth);
 
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
@@ -169,7 +148,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ query: 'my-project', ...DEFAULT_OPTIONS });
+      await listProjects({ query: 'my-project', ...DEFAULT_OPTIONS }, mockAuth);
 
       expect(capturedParams?.q).toBe('my-project');
     });
@@ -181,7 +160,7 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ page: 3, pageSize: 500 });
+      await listProjects({ page: 3, pageSize: 500 }, mockAuth);
 
       expect(capturedParams?.p).toBe(3);
     });
@@ -193,17 +172,17 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects({ page: 1, pageSize: 50 });
+      await listProjects({ page: 1, pageSize: 50 }, mockAuth);
 
       expect(capturedParams?.ps).toBe(50);
     });
 
     it('passes organization key for SonarCloud connections', async () => {
-      resolveAuthSpy.mockResolvedValue({
+      const cloudAuth: ResolvedAuth = {
         token: 'cloud-token',
         serverUrl: 'https://sonarcloud.io',
         orgKey: 'my-org',
-      });
+      };
 
       let capturedParams: Record<string, unknown> | undefined;
       getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
@@ -211,19 +190,24 @@ describe('projectsSearchCommand', () => {
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS);
+      await listProjects(DEFAULT_OPTIONS, cloudAuth);
 
       expect(capturedParams?.organization).toBe('my-org');
     });
 
     it('does not pass organization key for on-premise connections', async () => {
+      const onPremAuth: ResolvedAuth = {
+        token: 'test-token',
+        serverUrl: 'https://sonar.example.com',
+      };
+
       let capturedParams: Record<string, unknown> | undefined;
       getSpy.mockImplementation((_endpoint: string, params?: Record<string, unknown>) => {
         capturedParams = params;
         return makeProjectsResponse([]);
       });
 
-      await listProjects(DEFAULT_OPTIONS);
+      await listProjects(DEFAULT_OPTIONS, onPremAuth);
 
       expect(capturedParams?.organization).toBeUndefined();
     });
