@@ -49,7 +49,7 @@ $SonarVersion = "0.6.0.579"
 Write-Host "Latest version: $SonarVersion"
 
 $Filename     = "sonarqube-cli-$SonarVersion-$Platform.exe"
-$Url          = "$BaseUrl/$Filename"
+$Url          = "$BaseUrl/$SonarVersion/windows/$Filename"
 $Dest         = Join-Path $InstallDir $BinaryName
 
 $TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())

@@ -12,20 +12,23 @@ trap cleanup EXIT
 
 BASE_URL="https://binaries.sonarsource.com/Distribution/sonarqube-cli"
 
-detect_platform() {
+detect_os() {
   local os
   os="$(uname -s)"
   case "$os" in
-    Linux*)
-      echo "linux-x86-64"
-      ;;
-    Darwin*)
-      echo "macos-arm64"
-      ;;
+    Linux*)  echo "linux" ;;
+    Darwin*) echo "mac" ;;
     *)
       echo "Unsupported operating system: $os" >&2
       exit 1
       ;;
+  esac
+}
+
+detect_platform() {
+  case "$(detect_os)" in
+    linux) echo "linux-x86-64" ;;
+    mac)   echo "macos-arm64" ;;
   esac
 }
 
@@ -73,8 +76,11 @@ main() {
   version="0.6.0.579"
   echo "Latest version: $version"
 
+  local os
+  os="$(detect_os)"
+
   local filename="sonarqube-cli-${version}-${platform}.exe"
-  local url="$BASE_URL/$filename"
+  local url="$BASE_URL/$version/$os/$filename"
   local dest="$INSTALL_DIR/$BINARY_NAME"
   TMP_DIR="$(mktemp -d)"
 
