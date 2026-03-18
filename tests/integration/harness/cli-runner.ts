@@ -69,7 +69,7 @@ export async function runCli(
   const args = tokenize(command);
   const hasStdin = options.stdin !== undefined || (options.stdinChunks?.length ?? 0) > 0;
   const proc = Bun.spawn([binaryPath, ...args], {
-    env: spawnEnv,
+    env,
     stdout: 'pipe',
     stderr: 'pipe',
     stdin: hasStdin ? 'pipe' : 'ignore',
