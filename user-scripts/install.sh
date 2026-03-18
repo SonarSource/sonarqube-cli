@@ -17,7 +17,7 @@ detect_os() {
   os="$(uname -s)"
   case "$os" in
     Linux*)  echo "linux" ;;
-    Darwin*) echo "mac" ;;
+    Darwin*) echo "macos" ;;
     *)
       echo "Unsupported operating system: $os" >&2
       exit 1
@@ -28,7 +28,7 @@ detect_os() {
 detect_platform() {
   case "$(detect_os)" in
     linux) echo "linux-x86-64" ;;
-    mac)   echo "macos-arm64" ;;
+    macos)   echo "macos-arm64" ;;
   esac
 }
 
