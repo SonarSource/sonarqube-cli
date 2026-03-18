@@ -27,7 +27,7 @@ export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate gi
 
 // ─── Shared block ─────────────────────────────────────────────────────────────
 // Used inside `while read ... done` in both native and Husky pre-push scripts.
-// filesVar: shell variable name to assign results to ('files' in native, 'FILES' in Husky).
+// filesVar: shell variable name to assign results to.
 // Indented 4 spaces to sit inside `while` + `if [ remote_sha = 0000... ]`.
 function newBranchPushBlock(filesVar: string): string {
   return (
@@ -45,41 +45,73 @@ function newBranchPushBlock(filesVar: string): string {
   );
 }
 
+// ─── Binary resolution blocks ──────────────────────────────────────────────────
+// The only material difference between native and Husky variants.
+// Husky injects node_modules/.bin into PATH — strip it before looking up sonar.
+
+type BinBlock = () => string;
+
+function nativeBinBlock(): string {
+  return (
+    `SONAR_BIN=$(command -v sonar 2>/dev/null)\n` +
+    `[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }`
+  );
+}
+
+function huskyBinBlock(): string {
+  return (
+    `CLEAN_PATH=$(echo "$PATH" | tr ':' '\\n' | grep -v node_modules | tr '\\n' ':' | sed 's/:$//')\n` +
+    `SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null)\n` +
+    `[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }`
+  );
+}
+
+// ─── Shared script templates ───────────────────────────────────────────────────
+// Accept a binBlock function (native or Husky) to produce the correct resolver.
+
+function preCommitBody(filesVar: string, binBlock: BinBlock): string {
+  return (
+    `${filesVar}=$(git diff --cached --name-only --diff-filter=ACMR)\n` +
+    `[ -z "$${filesVar}" ] && exit 0\n` +
+    `${binBlock()}\n` +
+    `echo "$${filesVar}" | tr '\\n' '\\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1\n`
+  );
+}
+
+function prePushBody(filesVar: string, binBlock: BinBlock): string {
+  return (
+    `${binBlock()}\n` +
+    `# For each ref being pushed, scan files in the new commits\n` +
+    `while read -r local_ref local_sha remote_ref remote_sha; do\n` +
+    `  # Branch deletion — nothing to scan\n` +
+    `  [ "$local_sha" = '0000000000000000000000000000000000000000' ] && continue\n` +
+    `  if [ "$remote_sha" = '0000000000000000000000000000000000000000' ]; then\n` +
+    `${newBranchPushBlock(filesVar)}\n` +
+    `  else\n` +
+    `    ${filesVar}=$(git diff --name-only --diff-filter=ACMR "$remote_sha" "$local_sha")\n` +
+    `  fi\n` +
+    `  [ -z "$${filesVar}" ] && continue\n` +
+    `  echo "$${filesVar}" | tr '\\n' '\\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1\n` +
+    `done\n` +
+    `exit 0\n`
+  );
+}
+
 // ─── Native .git/hooks/ scripts ───────────────────────────────────────────────
 // Standalone files written to .git/hooks/pre-commit or .git/hooks/pre-push.
-// Use plain PATH lookup — git does not inject node_modules/.bin, so no filtering needed.
+// Use plain PATH lookup — git does not inject node_modules/.bin.
 
 export function getPreCommitHookScript(): string {
-  return String.raw`#!/bin/sh
-# ${HOOK_MARKER}
-# Staged files (added/copy/modified, not deleted)
-files=$(git diff --cached --name-only --diff-filter=ACMR)
-[ -z "$files" ] && exit 0
-SONAR_BIN=$(command -v sonar 2>/dev/null)
-[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
-echo "$files" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets --
-`;
+  return (
+    `#!/bin/sh\n` +
+    `# ${HOOK_MARKER}\n` +
+    `# Staged files (added/copy/modified, not deleted)\n` +
+    preCommitBody('FILES', nativeBinBlock)
+  );
 }
 
 export function getPrePushHookScript(): string {
-  return String.raw`#!/bin/sh
-# ${HOOK_MARKER}
-SONAR_BIN=$(command -v sonar 2>/dev/null)
-[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
-# For each ref being pushed, scan files in the new commits
-while read -r local_ref local_sha remote_ref remote_sha; do
-  # Branch deletion — nothing to scan
-  [ "$local_sha" = '0000000000000000000000000000000000000000' ] && continue
-  if [ "$remote_sha" = '0000000000000000000000000000000000000000' ]; then
-${newBranchPushBlock('files')}
-  else
-    files=$(git diff --name-only --diff-filter=ACMR "$remote_sha" "$local_sha")
-  fi
-  [ -z "$files" ] && continue
-  echo "$files" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1
-done
-exit 0
-`;
+  return `#!/bin/sh\n# ${HOOK_MARKER}\n` + prePushBody('FILES', nativeBinBlock);
 }
 
 export function getHookScript(hook: GitHookType): string {
@@ -92,37 +124,11 @@ export function getHookScript(hook: GitHookType): string {
 // looking up `sonar` to avoid accidentally running a project-local package.
 
 export function getHuskyPreCommitSnippet(): string {
-  return String.raw`
-# ${HOOK_MARKER}
-FILES=$(git diff --cached --name-only --diff-filter=ACMR)
-if [ -n "$FILES" ]; then
-  CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')
-  SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null)
-  [ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
-  echo "$FILES" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1
-fi
-`;
+  return `\n# ${HOOK_MARKER}\n` + preCommitBody('FILES', huskyBinBlock);
 }
 
 export function getHuskyPrePushSnippet(): string {
-  return String.raw`
-# ${HOOK_MARKER}
-while read -r local_ref local_sha remote_ref remote_sha; do
-  # Branch deletion — nothing to scan
-  [ "$local_sha" = '0000000000000000000000000000000000000000' ] && continue
-  if [ "$remote_sha" = '0000000000000000000000000000000000000000' ]; then
-${newBranchPushBlock('FILES')}
-  else
-    FILES=$(git diff --name-only --diff-filter=ACMR "$remote_sha" "$local_sha")
-  fi
-  if [ -n "$FILES" ]; then
-    CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')
-    SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null)
-    [ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
-    echo "$FILES" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1
-  fi
-done
-`;
+  return `\n# ${HOOK_MARKER}\n` + prePushBody('FILES', huskyBinBlock);
 }
 
 export function getHuskySnippet(hook: GitHookType): string {
