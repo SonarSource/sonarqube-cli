@@ -32,6 +32,13 @@ export interface RunOptions {
   timeoutMs?: number;
   stdin?: string;
   /**
+   * Writes stdin in separate chunks with a 300 ms delay between each. Use
+   * this when the CLI shows multiple sequential interactive prompts: sending
+   * all bytes at once causes readline to buffer and discard later bytes before
+   * the next prompt has started listening.
+   */
+  stdinChunks?: string[];
+  /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
    * port (pattern: `port=\d+`), then delivers this token via GET request to
    * the loopback server. Use this to test interactive browser-auth flows.

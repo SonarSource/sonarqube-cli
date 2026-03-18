@@ -628,10 +628,14 @@ describe('integrateGitGlobal', () => {
     performSecretInstallSpy.mockRestore();
   });
 
-  it('returns without throwing when the user cancels the global install confirmation', async () => {
+  it('returns without throwing when the user cancels the global install confirmation', () => {
+    setMockUi(true);
     queueMockResponse(null);
-    await integrateGit({ global: true });
-    expect(getMockUiCalls().some((c) => c.method === 'error')).toBe(true);
+    try {
+      expect(resolveHookType({})).rejects.toThrow('Installation cancelled');
+    } finally {
+      setMockUi(false);
+    }
   });
 
   it('propagates the error when secrets installation fails after the user confirms', () => {

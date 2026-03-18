@@ -33,7 +33,6 @@ import { spawnProcess } from '../../../../lib/process';
 import {
   blank,
   confirmPrompt,
-  error,
   info,
   intro,
   note,
@@ -113,13 +112,11 @@ export async function resolveGitHooksDir(root: string): Promise<string> {
     result = await spawnProcess('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root });
   } catch {
     const errorMessage = 'git is not installed or not on PATH';
-    error(errorMessage);
     throw new CommandFailedError(errorMessage);
   }
   if (result.exitCode !== 0) {
     const detail = [result.stderr, result.stdout].filter(Boolean).join('\n');
     const errorMessage = `Could not resolve git hooks directory (exit code ${result.exitCode}) ${detail}`;
-    error(errorMessage);
     throw new CommandFailedError(errorMessage);
   }
   const resolved = result.stdout.trim();
@@ -170,7 +167,6 @@ export async function resolveHookType(options: IntegrateGitOptions): Promise<Git
     ],
   );
   if (choice === null) {
-    error('Installation cancelled');
     throw new CommandFailedError('Installation cancelled');
   }
   return choice;
@@ -274,8 +270,7 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   if (!options.nonInteractive) {
     const confirmed = await confirmPrompt('Proceed with global installation?');
     if (confirmed === false || confirmed === null) {
-      error('Installation cancelled');
-      return;
+      throw new CommandFailedError('Installation cancelled');
     }
   }
   blank();
@@ -298,13 +293,11 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
     ]);
   } catch {
     const msg = 'git is not installed or not on PATH';
-    error(msg);
     throw new CommandFailedError(msg);
   }
   if (gitResult.exitCode !== 0) {
     const detail = [gitResult.stderr, gitResult.stdout].filter(Boolean).join('\n');
     const msg = `git config --global core.hooksPath failed (exit code ${gitResult.exitCode}): ${detail}`;
-    error(msg);
     logger.error(msg);
     throw new CommandFailedError(msg);
   }
@@ -322,7 +315,6 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   try {
     await resolveAuth({});
   } catch {
-    error('Not authenticated. Please run: sonar auth login');
     throw new CommandFailedError('Not authenticated. Please run: sonar auth login');
   }
 
@@ -334,7 +326,6 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   if (!projectInfo.isGitRepo) {
     const errorMessage =
       'No git repository found. Please run this command from inside a git repository, or use --global to install a global hook.';
-    error(errorMessage);
     throw new CommandFailedError(errorMessage);
   }
 
@@ -344,7 +335,6 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   if (!options.nonInteractive) {
     const confirmed = await confirmPrompt('Install here?');
     if (confirmed === false || confirmed === null) {
-      error('Installation cancelled');
       throw new CommandFailedError('Installation cancelled');
     }
   }

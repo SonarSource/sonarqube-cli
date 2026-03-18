@@ -50,23 +50,19 @@ function newBranchPushBlock(filesVar: string): string {
 // Use plain PATH lookup — git does not inject node_modules/.bin, so no filtering needed.
 
 export function getPreCommitHookScript(): string {
-  return `#!/bin/sh
+  return String.raw`#!/bin/sh
 # ${HOOK_MARKER}
 # Staged files (added/copy/modified, not deleted)
 files=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$files" ] && exit 0
 SONAR_BIN=$(command -v sonar 2>/dev/null)
 [ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
-# One arg per line (handles spaces in filenames)
-IFS='
-'
-set -- $files
-exec "$SONAR_BIN" analyze secrets -- "$@"
+echo "$files" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets --
 `;
 }
 
 export function getPrePushHookScript(): string {
-  return `#!/bin/sh
+  return String.raw`#!/bin/sh
 # ${HOOK_MARKER}
 SONAR_BIN=$(command -v sonar 2>/dev/null)
 [ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
@@ -80,10 +76,7 @@ ${newBranchPushBlock('files')}
     files=$(git diff --name-only --diff-filter=ACMR "$remote_sha" "$local_sha")
   fi
   [ -z "$files" ] && continue
-  IFS='
-'
-  set -- $files
-  "$SONAR_BIN" analyze secrets -- "$@" || exit 1
+  echo "$files" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1
 done
 exit 0
 `;
@@ -103,7 +96,7 @@ export function getHuskyPreCommitSnippet(): string {
 # ${HOOK_MARKER}
 FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 if [ -n "$FILES" ]; then
-  CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':')
+  CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')
   SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null)
   [ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
   echo "$FILES" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1
@@ -123,7 +116,7 @@ ${newBranchPushBlock('FILES')}
     FILES=$(git diff --name-only --diff-filter=ACMR "$remote_sha" "$local_sha")
   fi
   if [ -n "$FILES" ]; then
-    CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':')
+    CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')
     SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null)
     [ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
     echo "$FILES" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1

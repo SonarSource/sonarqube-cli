@@ -40,10 +40,18 @@ function getBinaryPath(coverageMode: boolean): string {
   return binaryPath;
 }
 
+const STDIN_CHUNK_DELAY_MS = 300;
+
 export async function runCli(
   command: string,
   env: Record<string, string>,
-  options: { stdin?: string; timeoutMs?: number; cwd: string; browserToken?: string },
+  options: {
+    stdin?: string;
+    stdinChunks?: string[];
+    timeoutMs?: number;
+    cwd: string;
+    browserToken?: string;
+  },
 ): Promise<CliResult> {
   const coverageMode = process.env.SONAR_CLI_USE_COVERAGE === '1';
   const binaryPath = getBinaryPath(coverageMode);
@@ -59,11 +67,12 @@ export async function runCli(
   }
 
   const args = tokenize(command);
+  const hasStdin = options.stdin !== undefined || (options.stdinChunks?.length ?? 0) > 0;
   const proc = Bun.spawn([binaryPath, ...args], {
-    env: spawnEnv,
+    env,
     stdout: 'pipe',
     stderr: 'pipe',
-    stdin: options.stdin ? 'pipe' : 'ignore',
+    stdin: hasStdin ? 'pipe' : 'ignore',
     cwd: options.cwd,
   });
 
@@ -72,6 +81,20 @@ export async function runCli(
     const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
     sink.write(new TextEncoder().encode(options.stdin));
     sink.end();
+  }
+
+  if (options.stdinChunks !== undefined && proc.stdin) {
+    const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
+    const encoder = new TextEncoder();
+    // Write each chunk with a delay so readline in the CLI process finishes
+    // handling one prompt before the next chunk arrives for the next prompt.
+    await (async () => {
+      for (const chunk of options.stdinChunks!) {
+        await new Promise((r) => setTimeout(r, STDIN_CHUNK_DELAY_MS));
+        sink.write(encoder.encode(chunk));
+      }
+      sink.end();
+    })();
   }
 
   let timedOut = false;

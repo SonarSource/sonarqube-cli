@@ -180,6 +180,7 @@ export class TestHarness {
 
     return runCli(command, env, {
       stdin: options?.stdin,
+      stdinChunks: options?.stdinChunks,
       timeoutMs: options?.timeoutMs,
       cwd: this.cwd.path,
       browserToken: options?.browserToken,
