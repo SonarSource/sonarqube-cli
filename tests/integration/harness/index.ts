@@ -133,7 +133,8 @@ export class TestHarness {
    * Runs the CLI binary with the given command string.
    *
    * Before spawning, applies the configured environment (writes state.json + copies binary).
-   * Automatically injects SONAR_CLI_DISABLE_KEYCHAIN=true.
+   * Sets SONAR_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain where the harness
+   * has written tokens (via withKeychainToken()); avoids touching the system keychain.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
     // Apply environment to tempDir before each run

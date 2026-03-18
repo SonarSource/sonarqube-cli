@@ -786,21 +786,26 @@ describe('integrateGitGlobal', () => {
     resolveSecretsBinarySpy.mockRestore();
   });
 
-  it('returns without throwing when the user cancels the global install confirmation', () => {
-    setMockUi(true);
+  it('throws CommandFailedError when the user cancels the global install confirmation', async () => {
     queueMockResponse(null);
+    let caughtMessage = '';
     try {
-      expect(resolveHookType({})).rejects.toThrow('Installation cancelled');
-    } finally {
-      setMockUi(false);
+      await integrateGit({ global: true, nonInteractive: false, hook: 'pre-commit' });
+    } catch (e) {
+      caughtMessage = e instanceof Error ? e.message : '';
     }
+    expect(caughtMessage).toBe('Installation cancelled');
   });
 
-  it('propagates the error when secrets installation fails after the user confirms', () => {
+  it('propagates the error when secrets installation fails after the user confirms', async () => {
     resolveSecretsBinarySpy.mockRejectedValue(new Error('download failed'));
-    expect(
-      integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }),
-    ).rejects.toThrow('download failed');
+    let caughtMessage = '';
+    try {
+      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' });
+    } catch (e) {
+      caughtMessage = e instanceof Error ? e.message : '';
+    }
+    expect(caughtMessage).toBe('download failed');
   });
 
   it('shows success messages when the full global installation succeeds', async () => {

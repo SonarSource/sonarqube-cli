@@ -27,7 +27,6 @@ import type { CliResult } from './types.js';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const DEFAULT_BINARY = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');
-
 const DEFAULT_TIMEOUT_MS = 30000;
 
 function getBinaryPath(coverageMode: boolean): string {
