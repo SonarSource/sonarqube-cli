@@ -16,7 +16,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "sourceMap": true,
-    "types": ["node", "bun"]
+    "types": ["node", "bun", "js-yaml"]
   },
   "include": [
     "src/**/*"
