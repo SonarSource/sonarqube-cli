@@ -500,14 +500,14 @@ describe('installViaGitHooks', () => {
 
 describe('integrateGit', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
-  let discoverProjectSpy: ReturnType<typeof spyOn>;
+  let findGitRootSpy: ReturnType<typeof spyOn>;
   let performSecretInstallSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
     clearMockUiCalls();
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
-    discoverProjectSpy = spyOn(discovery, 'discoverProject');
+    findGitRootSpy = spyOn(discovery, 'findGitRoot');
     performSecretInstallSpy = spyOn(secretsInstall, 'performSecretInstall').mockResolvedValue(
       '/usr/local/bin/sonar-secrets',
     );
@@ -516,24 +516,19 @@ describe('integrateGit', () => {
   afterEach(() => {
     setMockUi(false);
     resolveAuthSpy.mockRestore();
-    discoverProjectSpy.mockRestore();
+    findGitRootSpy.mockRestore();
     performSecretInstallSpy.mockRestore();
-  });
-
-  it('throws CommandFailedError when auth is not available', () => {
-    resolveAuthSpy.mockRejectedValue(new Error('no token'));
-    expect(integrateGit({ nonInteractive: true })).rejects.toThrow('Not authenticated');
   });
 
   it('throws CommandFailedError when not inside a git repository', () => {
     resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
-    discoverProjectSpy.mockResolvedValue({ rootDir: '/not-a-repo', isGitRepo: false });
+    findGitRootSpy.mockReturnValue({ gitRoot: '/not-a-repo', isGit: false });
     expect(integrateGit({ nonInteractive: true })).rejects.toThrow('No git repository found');
   });
 
   it('asks for confirmation showing the repository path when a git repo is found', async () => {
     resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
-    discoverProjectSpy.mockResolvedValue({ rootDir: '/my/project', isGitRepo: true });
+    findGitRootSpy.mockReturnValue({ gitRoot: '/my/project', isGit: true });
     queueMockResponse(null); // user cancels at the confirm prompt
     try {
       await integrateGit({});
@@ -552,7 +547,7 @@ describe('integrateGit', () => {
   it('calls installViaHusky when core.hooksPath points to .husky', async () => {
     mkdirSync(join(TEMP_DIR, '.husky'), { recursive: true });
     resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
-    discoverProjectSpy.mockResolvedValue({ rootDir: TEMP_DIR, isGitRepo: true });
+    findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
       stdout: '.husky\n',
@@ -576,7 +571,7 @@ describe('integrateGit', () => {
       'repos:\n  - repo: local\n    hooks:\n      - id: some-other-hook\n        entry: echo hello\n        language: system\n',
     );
     resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
-    discoverProjectSpy.mockResolvedValue({ rootDir: TEMP_DIR, isGitRepo: true });
+    findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
     const preCommitSpy = spyOn(preCommitModule, 'installViaPreCommitFramework').mockResolvedValue(
       undefined,
@@ -594,7 +589,7 @@ describe('integrateGit', () => {
   it('calls installViaGitHooks (native) when no husky or pre-commit config is present', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
     resolveAuthSpy.mockResolvedValue({ token: 'tok', serverUrl: 'https://sonar.example.com' });
-    discoverProjectSpy.mockResolvedValue({ rootDir: TEMP_DIR, isGitRepo: true });
+    findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
     try {
       await integrateGit({ nonInteractive: true, hook: 'pre-commit' });
@@ -699,7 +694,8 @@ describe('integrateGitGlobal', () => {
       } catch (e) {
         caughtMessage = e instanceof Error ? e.message : '';
       }
-      expect(caughtMessage).toContain('git is not installed or not on PATH');
+      expect(caughtMessage).toContain('Failed to run git');
+      expect(caughtMessage).toContain('ENOENT');
     } finally {
       spawnSpy.mockRestore();
       rmSync(join(GLOBAL_HOOKS_DIR, 'pre-commit'), { force: true });

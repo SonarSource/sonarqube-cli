@@ -162,7 +162,7 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
   return config;
 }
 
-function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {
+export function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {
   let dir = startDir;
 
   for (;;) {

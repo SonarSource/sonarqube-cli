@@ -23,20 +23,25 @@
 import { info, success } from '../../../../ui';
 import { HOOK_MARKER, getHuskySnippet } from './git-shell-fragments';
 import type { GitHookType } from '.';
+import { readFile, writeFile } from 'node:fs/promises';
 
 export async function installViaHusky(huskyHookPath: string, hook: GitHookType): Promise<void> {
-  const fs = await import('node:fs/promises');
   let content: string;
   try {
-    content = await fs.readFile(huskyHookPath, 'utf-8');
-  } catch {
-    content = '';
+    content = await readFile(huskyHookPath, 'utf-8');
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === 'ENOENT') {
+      content = '';
+    } else {
+      throw error;
+    }
   }
   if (content.includes(HOOK_MARKER)) {
     info(`Secrets check already present in .husky/${hook}.`);
     return;
   }
   const newContent = content ? content.trimEnd() + getHuskySnippet(hook) : getHuskySnippet(hook);
-  await fs.writeFile(huskyHookPath, newContent, { encoding: 'utf-8', mode: 0o755 });
+  await writeFile(huskyHookPath, newContent, { encoding: 'utf-8', mode: 0o755 });
   success(`${hook} hook installed (Husky detected: added to .husky/${hook}).`);
 }

@@ -109,7 +109,7 @@ integrateCommand
     '--global',
     'Install hook globally for all repositories (sets git config --global core.hooksPath)',
   )
-  .action((options: IntegrateGitOptions) => runCommand(() => integrateGit(options)));
+  .authenticatedAction((auth, options: IntegrateGitOptions) => integrateGit(options, auth));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');

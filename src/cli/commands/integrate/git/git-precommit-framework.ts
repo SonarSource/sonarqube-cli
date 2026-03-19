@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { spawnProcess } from '../../../../lib/process';
 import { CommandFailedError } from '../../_common/error';
-import { error, success } from '../../../../ui';
+import { success } from '../../../../ui';
 import type { GitHookType } from '.';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
@@ -113,10 +113,18 @@ export function upsertPreCommitConfig(root: string, stage: GitHookType): void {
 }
 
 async function runPreCommitCommand(args: string[], cwd: string): Promise<void> {
-  const result = await spawnProcess('pre-commit', args, { cwd });
+  let result;
+  try {
+    result = await spawnProcess('pre-commit', args, { cwd });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CommandFailedError(`Failed to run pre-commit [${message}]`);
+  }
   if (result.exitCode !== 0) {
     const detail = [result.stderr, result.stdout].filter(Boolean).join('\n');
-    throw new Error(`pre-commit ${args.join(' ')} failed (exit code ${result.exitCode}) ${detail}`);
+    throw new CommandFailedError(
+      `pre-commit ${args.join(' ')} failed (exit code ${result.exitCode}) ${detail}`,
+    );
   }
 }
 
@@ -144,7 +152,6 @@ export async function installViaPreCommitFramework(root: string, hook: GitHookTy
     await runPreCommitInstall(root, hook);
   } catch {
     const errorMessage = `Updated ${PRE_COMMIT_CONFIG_FILE} but pre-commit commands failed. Install the pre-commit framework (e.g. pip install pre-commit) and run: pre-commit uninstall && pre-commit clean && pre-commit install${hook === 'pre-push' ? ' && pre-commit install --hook-type pre-push' : ''}`;
-    error(errorMessage);
     throw new CommandFailedError(errorMessage);
   }
   success(`${hook} hook installed (pre-commit framework: added to ${PRE_COMMIT_CONFIG_FILE}).`);

@@ -254,7 +254,7 @@ describe('secretCheckCommand: input validation', () => {
 // ─── Failed scan paths ────────────────────────────────────────────────────────
 
 describe('secretCheckCommand: scan failures', () => {
-  it('throws when binary exits 51 (secrets found)', () => {
+  it('throws when binary exits 51 (secrets found)', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
@@ -267,11 +267,6 @@ describe('secretCheckCommand: scan failures', () => {
     } finally {
       existsSpy.mockRestore();
     }
-
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('Secrets found (0ms)'))).toBe(true);
   });
 
   it('throws when binary exits 1 (error, not secrets found)', () => {

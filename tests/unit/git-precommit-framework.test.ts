@@ -22,6 +22,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 import yaml from 'js-yaml';
+import { CommandFailedError } from '../../src/cli/commands/_common/error';
 import {
   PRE_COMMIT_CONFIG_FILE,
   hasSonarHookInPreCommitConfig,
@@ -344,7 +345,7 @@ describe('installViaPreCommitFramework', () => {
     }
   });
 
-  it('shows an error message and throws CommandFailedError when pre-commit commands fail', async () => {
+  it('throws CommandFailedError when pre-commit commands fail', async () => {
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
 
     try {
@@ -355,7 +356,7 @@ describe('installViaPreCommitFramework', () => {
         caughtError = e;
       }
       expect(caughtError).toBeDefined();
-      expect(getMockUiCalls().some((c) => c.method === 'error')).toBe(true);
+      expect(caughtError).toBeInstanceOf(CommandFailedError);
     } finally {
       spawnSpy.mockRestore();
     }
