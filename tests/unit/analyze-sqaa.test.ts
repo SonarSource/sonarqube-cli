@@ -119,13 +119,6 @@ describe('analyzeSqaa: input validation', () => {
 });
 
 describe('analyzeSqaa: auth resolution', () => {
-  it('skips SQAA when token is missing from auth', async () => {
-    const noTokenAuth = { ...FAKE_AUTH, token: '' };
-
-    await analyzeSqaa({ file: 'src/index.ts' }, noTokenAuth);
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
-  });
-
   it('skips SQAA when orgKey is missing from auth', async () => {
     const noOrgAuth = { ...FAKE_AUTH, orgKey: undefined };
 
@@ -312,14 +305,6 @@ describe('analyzeSqaa: explicit --project option', () => {
 
     expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
     expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('override-project');
-  });
-
-  it('throws CommandFailedError with auth hint when --project given but token is empty', () => {
-    const noTokenAuth = { ...FAKE_AUTH, token: '' };
-
-    expect(
-      analyzeSqaa({ file: 'src/index.ts', project: 'my-project' }, noTokenAuth),
-    ).rejects.toThrow(CommandFailedError);
   });
 
   it('throws CommandFailedError when --project given but on-premise server', () => {

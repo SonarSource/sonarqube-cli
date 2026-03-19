@@ -32,10 +32,9 @@ export const ENV_ORG = 'SONAR_CLI_ORG';
 
 export interface ResolvedAuth {
   token: string;
-  serverUrl?: string;
+  serverUrl: string;
   orgKey?: string;
-  /** Type of the active connection; undefined when resolved from env vars alone */
-  connectionType?: 'cloud' | 'on-premise';
+  connectionType: 'cloud' | 'on-premise';
 }
 
 /**
@@ -63,6 +62,7 @@ function resolveFromEnv(): ResolvedAuth | null {
     return {
       token: envToken,
       serverUrl: envServer,
+      connectionType: 'on-premise',
     };
   }
 
@@ -73,6 +73,7 @@ function resolveFromEnv(): ResolvedAuth | null {
       token: envToken,
       serverUrl: SONARCLOUD_URL,
       orgKey: envOrg,
+      connectionType: 'cloud',
     };
   }
 
@@ -98,24 +99,26 @@ export function isEnvBasedAuth(): boolean {
 }
 
 export async function resolveFromState(): Promise<ResolvedAuth | null> {
-  let connection: { serverUrl: string; orgKey?: string; type?: 'cloud' | 'on-premise' } | undefined;
+  let connection: { serverUrl: string; orgKey?: string; type: 'cloud' | 'on-premise' };
   try {
     const state = loadState();
     const active = getActiveConnection(state);
-    if (active) {
-      connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };
+    if (!active) {
+      return null;
     }
+    connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };
   } catch (err) {
     logger.debug(`Failed to load state: ${(err as Error).message}`);
+    return null;
   }
 
-  const serverUrl = connection?.serverUrl;
+  const serverUrl = connection.serverUrl;
   if (!serverUrl) {
     return null;
   }
 
-  const orgKey = connection?.orgKey;
-  const connectionType = connection?.type;
+  const orgKey = connection.orgKey;
+  const connectionType = connection.type;
 
   // Look up token in keychain
   const token = await getToken(serverUrl, orgKey);

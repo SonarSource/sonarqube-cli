@@ -75,7 +75,7 @@ function resolveCloudAuth(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
 ): { serverUrl: string; token: string; orgKey: string } | null {
-  if (!auth.token || !auth.orgKey || auth.connectionType === 'on-premise') {
+  if (auth.connectionType != 'cloud' || auth.orgKey == null) {
     if (explicitProject) {
       throw new CommandFailedError(
         'SQAA analysis requires a SonarQube Cloud connection. Run: sonar auth login',
