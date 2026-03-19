@@ -26,7 +26,7 @@ import { CommandFailedError } from './error';
 import { spawnProcess } from '../../../lib/process';
 
 const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
-export const toForwardSlash = (p: string) => p.replaceAll('\\', '/');
+export const toForwardSlash = (p: string): string => p.replaceAll('\\', '/');
 
 /**
  * Resolves the directory git uses for hooks (core.hooksPath or .git/hooks).
