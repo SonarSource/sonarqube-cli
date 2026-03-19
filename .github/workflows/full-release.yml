@@ -71,7 +71,7 @@ jobs:
         env:
           RELEASED_VERSION: ${{ steps.released-version.outputs.RELEASED_VERSION }}
         run: |
-          sed -i "s/version=\"[^\"]*\"/version=\"${RELEASED_VERSION}\"/" user-scripts/install.sh
+          sed -i "s/version=\"[0-9][^\"]*\"/version=\"${RELEASED_VERSION}\"/" user-scripts/install.sh
           sed -i "s/\$SonarVersion = \"[^\"]*\"/\$SonarVersion = \"${RELEASED_VERSION}\"/" user-scripts/install.ps1
       - name: bump-version
         env:
