@@ -174,6 +174,7 @@ export function showVerificationGuide(hook: GitHookType): void {
         : '  3. Try to push:   git push',
       '  4. The hook should block the operation and report the secret.',
       `  5. Delete the file: ${platform() === 'win32' ? 'del' : 'rm'} ${VERIFY_FILE_NAME}`,
+      `  To skip hooks when needed, run ${hook === 'pre-commit' ? 'git commit' : 'git push'} with the --no-verify flag.`,
     ].join('\n'),
     'Verify the hook works',
   );

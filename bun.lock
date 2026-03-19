@@ -133,10 +133,6 @@
 
     "@types/json-schema": ["@types/json-schema@7.0.15", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/json-schema/-/json-schema-7.0.15.tgz", {}, "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA=="],
 
-    "@types/js-yaml": ["@types/js-yaml@4.0.9", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/js-yaml/-/js-yaml-4.0.9.tgz", {}, "sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg=="],
-
-    "@types/json-schema": ["@types/json-schema@7.0.15", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/json-schema/-/json-schema-7.0.15.tgz", {}, "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA=="],
-
     "@types/liftoff": ["@types/liftoff@4.0.3", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/liftoff/-/liftoff-4.0.3.tgz", { "dependencies": { "@types/fined": "*", "@types/node": "*" } }, "sha512-UgbL2kR5pLrWICvr8+fuSg0u43LY250q7ZMkC+XKC3E+rs/YBDEnQIzsnhU5dYsLlwMi3R75UvCL87pObP1sxw=="],
 
     "@types/node": ["@types/node@20.19.33", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/node/-/node-20.19.33.tgz", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-Rs1bVAIdBs5gbTIKza/tgpMuG1k3U/UMJLWecIMxNdJFDMzcM5LOiLVRYh3PilWEYDIeUDv7bpiHPLPsbydGcw=="],
