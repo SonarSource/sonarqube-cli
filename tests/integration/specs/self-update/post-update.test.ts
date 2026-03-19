@@ -22,8 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { TestHarness } from '../harness';
-import { version as CURRENT_VERSION } from '../../../package.json';
+import { TestHarness } from '../../harness';
+import { version as CURRENT_VERSION } from '../../../../package.json';
 
 describe('post-update migration', () => {
   let harness: TestHarness;

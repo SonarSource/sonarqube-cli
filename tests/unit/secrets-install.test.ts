@@ -21,7 +21,7 @@
 // Unit tests for resolveSecretsBinary (sonar-secrets binary download and setup)
 
 import { mock, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
@@ -32,8 +32,9 @@ import {
   SONARSOURCE_BINARIES_URL,
   SONAR_SECRETS_DIST_PREFIX,
 } from '../../src/lib/config-constants.js';
-import { buildLocalBinaryName, detectPlatform } from '../../src/lib/platform-detector.js';
+import { detectPlatform } from '../../src/lib/platform-detector.js';
 import { SONAR_SECRETS_VERSION } from '../../src/lib/signatures.js';
+import { buildLocalBinaryName } from '../../src/cli/commands/_common/install/secrets';
 
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),
@@ -111,84 +112,27 @@ describe('resolveSecretsBinary: happy path', () => {
     expect(result.freshlyInstalled).toBe(false);
     expect(downloadBinarySpy).not.toHaveBeenCalled();
   });
-});
 
-// =============================================================================
-// SECTION: resolveSecretsBinary — version check paths
-// =============================================================================
-
-describe('resolveSecretsBinary: version check paths', () => {
-  let spawnSpy: ReturnType<typeof spyOn>;
-  let downloadBinarySpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    spawnSpy?.mockRestore();
-    downloadBinarySpy?.mockRestore();
-    setMockUi(false);
-  });
-
-  it('shows "Updating..." and triggers fresh download when installed version differs from pinned', async () => {
-    // Arrange: binary exists but at an old version
-    const tempBinDir = join(tmpdir(), `sonar-outdated-${Date.now()}`);
-    mkdirSync(tempBinDir, { recursive: true });
-    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 0,
-      stdout: 'sonar-secrets 1.0.0\n',
-      stderr: '',
-    });
-    // Abort at download to keep test fast
-    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockRejectedValue(
-      new Error('abort install'),
+  it('removes old versioned binaries after a successful install', async () => {
+    // Arrange: two stale binaries for the current platform
+    const platform = detectPlatform();
+    const oldBinary1 = join(
+      tempBinDir,
+      `sonar-secrets-0.0.0.1-${platform.os}-${platform.arch}${platform.extension}`,
     );
-
-    let caughtError: unknown;
-    try {
-      await resolveSecretsBinary({}, { binDir: tempBinDir });
-    } catch (err) {
-      caughtError = err;
-    } finally {
-      rmSync(tempBinDir, { recursive: true, force: true });
-    }
-
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
-    expect(caughtError).toBeDefined();
-    expect(texts.some((m) => m.includes('Updating'))).toBe(true);
-  });
-
-  it('triggers fresh install when existing binary fails version check', async () => {
-    // Arrange: binary exists but --version returns non-zero (binary is broken)
-    const tempBinDir = join(tmpdir(), `sonar-vcheckfail-${Date.now()}`);
-    mkdirSync(tempBinDir, { recursive: true });
-    writeFileSync(join(tempBinDir, buildLocalBinaryName(detectPlatform())), '');
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
-      exitCode: 1,
-      stdout: '',
-      stderr: '',
-    });
-    // Abort at download to keep test fast
-    downloadBinarySpy = spyOn(releases, 'downloadBinary').mockRejectedValue(
-      new Error('abort install'),
+    const oldBinary2 = join(
+      tempBinDir,
+      `sonar-secrets-1.2.3.4-${platform.os}-${platform.arch}${platform.extension}`,
     );
+    writeFileSync(oldBinary1, '');
+    writeFileSync(oldBinary2, '');
 
-    let caughtError: unknown;
-    try {
-      await resolveSecretsBinary({}, { binDir: tempBinDir });
-    } catch (err) {
-      caughtError = err;
-    } finally {
-      rmSync(tempBinDir, { recursive: true, force: true });
-    }
+    await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
 
-    expect(caughtError).toBeDefined();
-    expect(downloadBinarySpy).toHaveBeenCalledTimes(1);
+    expect(existsSync(oldBinary1)).toBe(false);
+    expect(existsSync(oldBinary2)).toBe(false);
+    // New versioned binary is present
+    expect(readdirSync(tempBinDir).filter((f) => f.startsWith('sonar-secrets-'))).toHaveLength(1);
   });
 });
 
@@ -300,5 +244,28 @@ describe('resolveSecretsBinary: error paths', () => {
       .map((c) => String(c.args[0]));
     expect(result.freshlyInstalled).toBe(true);
     expect(warns.some((m) => m.includes('Failed to update state'))).toBe(true);
+  });
+
+  describe('buildLocalBinaryName', () => {
+    it('should include version in the name for linux', () => {
+      const platform = { os: 'linux', arch: 'x86-64', extension: '' };
+      expect(buildLocalBinaryName(platform)).toBe(
+        `sonar-secrets-${SONAR_SECRETS_VERSION}-linux-x86-64`,
+      );
+    });
+
+    it('should include version and .exe extension for windows', () => {
+      const platform = { os: 'windows', arch: 'x86-64', extension: '.exe' };
+      expect(buildLocalBinaryName(platform)).toBe(
+        `sonar-secrets-${SONAR_SECRETS_VERSION}-windows-x86-64.exe`,
+      );
+    });
+
+    it('should include version for macos arm64', () => {
+      const platform = { os: 'macos', arch: 'arm64', extension: '' };
+      expect(buildLocalBinaryName(platform)).toBe(
+        `sonar-secrets-${SONAR_SECRETS_VERSION}-macos-arm64`,
+      );
+    });
   });
 });

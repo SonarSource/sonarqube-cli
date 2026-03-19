@@ -53,11 +53,3 @@ export function detectPlatform(): PlatformInfo {
     extension,
   };
 }
-
-/**
- * Build local binary filename (without version)
- * Format: sonar-secrets[.exe]
- */
-export function buildLocalBinaryName(platformInfo: PlatformInfo): string {
-  return `sonar-secrets${platformInfo.extension}`;
-}

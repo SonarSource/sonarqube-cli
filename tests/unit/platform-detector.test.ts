@@ -19,41 +19,9 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { detectPlatform, buildLocalBinaryName } from '../../src/lib/platform-detector';
+import { detectPlatform } from '../../src/lib/platform-detector';
 
 describe('platform-detector', () => {
-  describe('buildLocalBinaryName', () => {
-    it('should return sonar-secrets for unix platforms', () => {
-      const platform = {
-        os: 'linux',
-        arch: 'x86-64',
-        extension: '',
-      };
-      const result = buildLocalBinaryName(platform);
-      expect(result).toBe('sonar-secrets');
-    });
-
-    it('should return sonar-secrets.exe for windows', () => {
-      const platform = {
-        os: 'windows',
-        arch: 'x86-64',
-        extension: '.exe',
-      };
-      const result = buildLocalBinaryName(platform);
-      expect(result).toBe('sonar-secrets.exe');
-    });
-
-    it('should return sonar-secrets for macos', () => {
-      const platform = {
-        os: 'macos',
-        arch: 'arm64',
-        extension: '',
-      };
-      const result = buildLocalBinaryName(platform);
-      expect(result).toBe('sonar-secrets');
-    });
-  });
-
   describe('detectPlatform', () => {
     it('should detect current platform', () => {
       const platform = detectPlatform();

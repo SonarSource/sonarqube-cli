@@ -26,6 +26,8 @@ import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { TestHarness } from '../../harness';
 import { version as CURRENT_VERSION } from '../../../../package.json';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
 
 describe('integrate claude', () => {
   let harness: TestHarness;
@@ -1326,7 +1328,9 @@ describe('integrate claude — sonar-secrets auto-install', () => {
       const result = await harness.run('integrate claude --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(true);
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        true,
+      );
     },
     { timeout: 30000 },
   );

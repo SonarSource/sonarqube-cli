@@ -25,6 +25,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { TestHarness } from '../../harness';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -138,7 +140,9 @@ describe('analyze secrets', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Scan completed successfully');
-      expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(true);
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        true,
+      );
     },
     { timeout: 30000 },
   );

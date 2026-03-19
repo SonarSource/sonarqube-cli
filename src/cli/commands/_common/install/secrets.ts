@@ -18,11 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnProcess } from '../../../../lib/process';
 import { BIN_DIR } from '../../../../lib/config-constants';
-import { buildLocalBinaryName, detectPlatform } from '../../../../lib/platform-detector';
+import { detectPlatform } from '../../../../lib/platform-detector';
 import {
   buildDownloadUrl,
   downloadBinary,
@@ -36,12 +36,15 @@ import {
 import { loadState, saveState } from '../../../../lib/state-manager';
 import { version as VERSION } from '../../../../../package.json';
 import logger from '../../../../lib/logger';
-import type { PlatformInfo } from '../../../../lib/install-types';
-import { SECRETS_BINARY_NAME } from '../../../../lib/install-types';
+import {
+  type PlatformInfo,
+  SECRETS_BINARY_NAME,
+  buildPlatformSuffix,
+} from '../../../../lib/install-types';
 import { text, warn, withSpinner, print, success } from '../../../../ui';
 import { CommandFailedError } from '../error';
 
-type DownloadResult = { skipped: boolean };
+type DownloadResult = { skipped: boolean; binaryPath: string };
 type SecretsBinaryResult = { binaryPath: string; freshlyInstalled: boolean };
 
 const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
@@ -63,28 +66,22 @@ export async function resolveSecretsBinary(
   options: { force?: boolean },
   { binDir }: { binDir?: string } = {},
 ): Promise<SecretsBinaryResult> {
-  const platform = detectPlatform();
-  const resolvedBinDir = ensureBinDirectory(binDir);
-  const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
-
-  const { skipped } = await downloadAndInstall(options, platform, binaryPath);
+  const { skipped, binaryPath } = await downloadAndInstall(options, binDir);
   return { binaryPath, freshlyInstalled: !skipped };
 }
 
 async function downloadAndInstall(
   options: { force?: boolean },
-  platform: PlatformInfo,
-  binaryPath: string,
+  binDir?: string,
 ): Promise<DownloadResult> {
+  const platform = detectPlatform();
+  const resolvedBinDir = ensureBinDirectory(binDir);
+  const binaryName = buildLocalBinaryName(platform);
+  const binaryPath = join(resolvedBinDir, binaryName);
   // Check existing installation
-  if (!options.force) {
-    const skipStatus = await withSpinner('Checking sonar-secrets', () =>
-      checkExistingInstallation(binaryPath),
-    );
-    if (skipStatus) {
-      text(`  sonar-secrets ${SONAR_SECRETS_VERSION} is already installed (latest)`);
-      return { skipped: true };
-    }
+  if (!options.force && isInstalled(binaryPath)) {
+    text(`  sonar-secrets ${SONAR_SECRETS_VERSION} is already installed (latest)`);
+    return { skipped: true, binaryPath };
   }
 
   // Download pinned version
@@ -118,7 +115,8 @@ async function downloadAndInstall(
   print(`  sonar-secrets ${installedVersion}`);
 
   recordInstallationInState(installedVersion, binaryPath);
-  return { skipped: false };
+  cleanupOldVersionBinaries(resolvedBinDir, binaryName);
+  return { skipped: false, binaryPath };
 }
 
 function ensureBinDirectory(dir?: string): string {
@@ -187,23 +185,35 @@ function recordInstallationInState(version: string, path: string): void {
   }
 }
 
-async function checkExistingInstallation(binaryPath: string): Promise<boolean> {
-  if (!existsSync(binaryPath)) {
-    return false;
+/**
+ * The binary path already encodes the version, so existence means it's the right version.
+ */
+function isInstalled(binaryPath: string): boolean {
+  return existsSync(binaryPath);
+}
+
+/**
+ * Delete sonar-secrets binaries for this platform that are not the current version.
+ */
+function cleanupOldVersionBinaries(binDir: string, currentBinaryName: string): void {
+  try {
+    const oldFiles = readdirSync(binDir).filter(
+      (f) => f.startsWith('sonar-secrets-') && f !== currentBinaryName,
+    );
+    for (const file of oldFiles) {
+      rmSync(join(binDir, file), { force: true });
+      logger.debug(`Removed old sonar-secrets binary: ${file}`);
+    }
+  } catch (err) {
+    logger.debug(`Failed to clean up old sonar-secrets binaries: ${(err as Error).message}`);
   }
+}
 
-  const existingVersion = await checkInstalledVersion(binaryPath);
-  if (!existingVersion) {
-    return false;
-  }
-
-  const pinnedVersion = SONAR_SECRETS_VERSION;
-
-  if (existingVersion === pinnedVersion) {
-    return true;
-  }
-
-  warn(`Version mismatch: ${existingVersion} ≠ ${pinnedVersion}`);
-  text('  Updating...\n');
-  return false;
+/**
+ * Build local binary filename with version embedded.
+ * Format: sonar-secrets-{version}-{os}-{arch}[.exe]
+ * Example: sonar-secrets-2.41.0.10709-linux-x86-64
+ */
+export function buildLocalBinaryName(platformInfo: PlatformInfo): string {
+  return `sonar-secrets-${SONAR_SECRETS_VERSION}${buildPlatformSuffix(platformInfo)}`;
 }

@@ -35,6 +35,7 @@ import { getDefaultState } from '../../../src/lib/state.js';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
 import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
+import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
 
 /** Mirrors the account-key logic in src/lib/keychain.ts */
 function toKeychainAccount(serverURL: string, org?: string): string {
@@ -161,8 +162,8 @@ export class EnvironmentBuilder {
         installed: [
           {
             name: 'sonar-secrets',
-            version: 'integration-test',
-            path: resolveSecretsBinarySource(),
+            version: SONAR_SECRETS_VERSION,
+            path: buildLocalBinaryName(detectPlatform()),
             installedAt: new Date().toISOString(),
             installedByCliVersion: 'integration-test',
           },
@@ -223,7 +224,8 @@ export class EnvironmentBuilder {
     mkdirSync(binDir, { recursive: true });
 
     const source = resolveSecretsBinarySource();
-    const destPath = join(binDir, 'sonar-secrets');
+    const versionedName = buildLocalBinaryName(detectPlatform());
+    const destPath = join(binDir, versionedName);
     if (!existsSync(destPath)) {
       if (!existsSync(source)) {
         throw new Error(

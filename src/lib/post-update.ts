@@ -22,7 +22,7 @@ import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { version as CURRENT_VERSION } from '../../package.json';
-import { STATE_FILE } from './config-constants';
+import { STATE_FILE } from './config-constants.js';
 import logger from './logger';
 import { loadState, saveState } from './state-manager';
 import { isNewerVersion } from './version';
@@ -33,6 +33,9 @@ import {
   OBSOLETE_A3S_MARKER,
 } from './migration.js';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
+import { SECRETS_BINARY_NAME } from './install-types.js';
+import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
+import type { CliState } from './state.js';
 
 /**
  * Runs any actions that need to happen once after the CLI has been updated.
@@ -69,6 +72,26 @@ export async function runPostUpdateActions(): Promise<void> {
 
 async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
   await migrateClaudeCodeHooks();
+  await updateSecretsBinaryIfNeeded();
+}
+
+/**
+ * Update the sonar-secrets binary if it is already installed but targets a different version
+ * than the one bundled with this CLI release.
+ */
+export async function updateSecretsBinaryIfNeeded(): Promise<void> {
+  const state = loadState();
+
+  if (!hasPreviousInstallation(state)) {
+    logger.debug('sonar-secrets not installed — skipping binary update');
+    return;
+  }
+
+  await installSecretsBinary();
+}
+
+function hasPreviousInstallation(state: CliState): boolean {
+  return (state.tools?.installed ?? []).some((t) => t.name === SECRETS_BINARY_NAME);
 }
 
 /**

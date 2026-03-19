@@ -24,7 +24,12 @@ import * as stateManager from '../../src/lib/state-manager';
 import * as versionLib from '../../src/lib/version';
 import * as migration from '../../src/lib/migration';
 import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
-import { runPostUpdateActions, migrateClaudeCodeHooks } from '../../src/lib/post-update';
+import * as secretsInstall from '../../src/cli/commands/_common/install/secrets';
+import {
+  runPostUpdateActions,
+  migrateClaudeCodeHooks,
+  updateSecretsBinaryIfNeeded,
+} from '../../src/lib/post-update';
 import { getDefaultState } from '../../src/lib/state';
 import type { CliState, HookExtension } from '../../src/lib/state';
 import { version as CURRENT_VERSION } from '../../package.json';
@@ -71,6 +76,9 @@ describe('runPostUpdateActions', () => {
     Extract<(typeof migration)['removeObsoleteHookArtifacts'], (...args: any[]) => any>
   >;
   let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
+  let installSecretsBinarySpy: Mock<
+    Extract<(typeof secretsInstall)['installSecretsBinary'], (...args: any[]) => any>
+  >;
 
   beforeEach(() => {
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
@@ -83,6 +91,9 @@ describe('runPostUpdateActions', () => {
       'removeObsoleteHookArtifacts',
     ).mockResolvedValue(undefined);
     installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
+    installSecretsBinarySpy = spyOn(secretsInstall, 'installSecretsBinary').mockResolvedValue(
+      '/fake/bin/sonar-secrets',
+    );
   });
 
   afterEach(() => {
@@ -93,6 +104,7 @@ describe('runPostUpdateActions', () => {
     migrateHookScriptsSpy.mockRestore();
     removeObsoleteHookArtifactsSpy.mockRestore();
     installHooksSpy.mockRestore();
+    installSecretsBinarySpy.mockRestore();
   });
 
   it('does nothing when state file does not exist', async () => {
@@ -353,5 +365,60 @@ describe('migrateClaudeCodeHooks', () => {
       '/proj/beta',
       migration.OBSOLETE_A3S_MARKER,
     );
+  });
+});
+
+describe('updateSecretsBinaryIfNeeded', () => {
+  let loadStateSpy: Mock<Extract<(typeof stateManager)['loadState'], (...args: any[]) => any>>;
+  let installSecretsBinarySpy: Mock<
+    Extract<(typeof secretsInstall)['installSecretsBinary'], (...args: any[]) => any>
+  >;
+
+  function makeStateWithSecrets(): CliState {
+    const state = makeState();
+    state.tools = {
+      installed: [
+        {
+          name: 'sonar-secrets',
+          version: '0.0.0.1',
+          path: '/fake/bin/sonar-secrets-0.0.0.1-linux-x86-64',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          installedByCliVersion: '1.0.0',
+        },
+      ],
+    };
+    return state;
+  }
+
+  beforeEach(() => {
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeStateWithSecrets());
+    installSecretsBinarySpy = spyOn(secretsInstall, 'installSecretsBinary').mockResolvedValue(
+      '/fake/bin/sonar-secrets',
+    );
+  });
+
+  afterEach(() => {
+    loadStateSpy.mockRestore();
+    installSecretsBinarySpy.mockRestore();
+  });
+
+  it('does nothing when no previous binary is recorded in state', async () => {
+    loadStateSpy.mockReturnValue(makeState()); // tools.installed is empty
+
+    await updateSecretsBinaryIfNeeded();
+
+    expect(installSecretsBinarySpy).not.toHaveBeenCalled();
+  });
+
+  it('calls installSecretsBinary when a previous installation is recorded in state', async () => {
+    await updateSecretsBinaryIfNeeded();
+
+    expect(installSecretsBinarySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates errors from installSecretsBinary to the caller', () => {
+    installSecretsBinarySpy.mockRejectedValue(new Error('download failed'));
+
+    expect(updateSecretsBinaryIfNeeded()).rejects.toThrow('download failed');
   });
 });
