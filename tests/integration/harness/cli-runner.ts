@@ -39,6 +39,11 @@ function getBinaryPath(coverageMode: boolean): string {
   return binaryPath;
 }
 
+/** Same executable `runCli` uses (coverage binary when `SONAR_CLI_USE_COVERAGE=1`). */
+export function getCliBinaryPath(): string {
+  return getBinaryPath(process.env.SONAR_CLI_USE_COVERAGE === '1');
+}
+
 const STDIN_CHUNK_DELAY_MS = 300;
 
 export async function runCli(
