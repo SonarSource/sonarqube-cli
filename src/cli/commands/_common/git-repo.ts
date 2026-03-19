@@ -24,8 +24,7 @@ import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { CommandFailedError } from './error';
 import { spawnProcess } from '../../../lib/process';
-
-const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
+import { PRE_COMMIT_CONFIG_FILE } from '../integrate/git/git-precommit-framework';
 export const toForwardSlash = (p: string): string => p.replaceAll('\\', '/');
 
 /**

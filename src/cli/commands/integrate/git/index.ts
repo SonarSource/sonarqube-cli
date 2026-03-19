@@ -103,13 +103,24 @@ export async function detectSonarHookInstallation(root: string): Promise<HookIns
 // Shared interaction helpers
 // ---------------------------------------------------------------------------
 
+/** Rejects invalid `--hook` when it is set */
+export function validateHookOption(hook: string | undefined): void {
+  if (hook !== undefined && !isGitHookType(hook)) {
+    throw new InvalidOptionError('--hook must be pre-commit or pre-push');
+  }
+}
+
+/**
+ * Returns explicit `--hook`, or `pre-commit` when non-interactive with no hook, or prompts.
+ * Call `validateHookOption` first for CLI-driven options.
+ */
 export async function resolveHookType(options: IntegrateGitOptions): Promise<GitHookType> {
-  if (options.nonInteractive || options.hook !== undefined) {
-    const rawHook = options.hook ?? 'pre-commit';
-    if (!isGitHookType(rawHook)) {
-      throw new InvalidOptionError('--hook must be pre-commit or pre-push');
-    }
-    return rawHook;
+  if (options.hook !== undefined) {
+    validateHookOption(options.hook);
+    return options.hook;
+  }
+  if (options.nonInteractive) {
+    return 'pre-commit';
   }
   const choice = await selectPrompt<GitHookType>(
     'Would you like to install the pre-commit or pre-push hook?',
@@ -263,6 +274,8 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
 }
 
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
+  validateHookOption(options.hook);
+
   intro('SonarQube Git integration (secrets scanning)');
   blank();
 

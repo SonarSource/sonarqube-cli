@@ -31,7 +31,9 @@ import {
   showInstallationStatus,
   installViaGitHooks,
   integrateGit,
+  type IntegrateGitOptions,
 } from '../../src/cli/commands/integrate/git';
+import { InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 import { HOOK_MARKER } from '../../src/cli/commands/integrate/git/git-shell-fragments';
 import { PRE_COMMIT_CONFIG_FILE } from '../../src/cli/commands/integrate/git/git-precommit-framework';
 import { setMockUi, queueMockResponse, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock';
@@ -334,6 +336,11 @@ describe('resolveHookType', () => {
     expect(result).toBe('pre-push');
   });
 
+  it('defaults to pre-commit when non-interactive and hook is omitted', async () => {
+    const result = await resolveHookType({ nonInteractive: true });
+    expect(result).toBe('pre-commit');
+  });
+
   it('returns pre-commit when the user selects it from the prompt', async () => {
     setMockUi(true);
     queueMockResponse('pre-commit');
@@ -524,6 +531,28 @@ describe('integrateGit', () => {
     resolveAuthSpy.mockRestore();
     findGitRootSpy.mockRestore();
     installSecretsBinarySpy.mockRestore();
+  });
+
+  it('throws InvalidOptionError when --hook is invalid before git checks', async () => {
+    try {
+      await integrateGit({ nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions);
+    } catch (error) {
+      expect(error).toBeInstanceOf(InvalidOptionError);
+      expect(error.message).toBe('--hook must be pre-commit or pre-push');
+    }
+  });
+
+  it('throws InvalidOptionError for invalid --hook on global install before other work', async () => {
+    try {
+      await integrateGit({
+        global: true,
+        nonInteractive: true,
+        hook: 'typo',
+      } as unknown as IntegrateGitOptions);
+    } catch (error) {
+      expect(error).toBeInstanceOf(InvalidOptionError);
+      expect(error.message).toBe('--hook must be pre-commit or pre-push');
+    }
   });
 
   it('throws CommandFailedError when not inside a git repository', () => {
