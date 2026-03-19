@@ -56,24 +56,24 @@ function resolveFromEnv(): ResolvedAuth | null {
   const envServer = process.env[ENV_SERVER];
   const envOrg = process.env[ENV_ORG];
 
-  // 1. Both SONAR_CLI_TOKEN + SONAR_CLI_SERVER env vars present → use them immediately
+  // 1. Both SONAR_CLI_TOKEN + SONAR_CLI_ORG present → assume SQC, but get serverUrl from env in case of SQC US
+  if (envToken && envOrg) {
+    logger.debug('Using environment variable authentication (SQC)');
+    return {
+      token: envToken,
+      serverUrl: envServer ?? SONARCLOUD_URL,
+      orgKey: envOrg,
+      connectionType: 'cloud',
+    };
+  }
+
+  // 2. Both SONAR_CLI_TOKEN + SONAR_CLI_SERVER env vars present → use them immediately
   if (envToken && envServer) {
-    logger.debug('Using environment variable authentication');
+    logger.debug('Using environment variable authentication (SQS)');
     return {
       token: envToken,
       serverUrl: envServer,
       connectionType: 'on-premise',
-    };
-  }
-
-  // 2. Both SONAR_CLI_TOKEN + SONAR_CLI_ORG env vars present → use them immediately
-  if (envToken && envOrg) {
-    logger.debug('Using environment variable authentication');
-    return {
-      token: envToken,
-      serverUrl: SONARCLOUD_URL,
-      orgKey: envOrg,
-      connectionType: 'cloud',
     };
   }
 
