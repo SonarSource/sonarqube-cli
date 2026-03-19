@@ -70,7 +70,7 @@ export async function installSecrets(
 /**
  * Core install logic for sonar-secrets binary download and setup
  */
-async function performSecretInstall(
+export async function performSecretInstall(
   options: { force?: boolean },
   { binDir }: { binDir?: string } = {},
 ): Promise<string> {
