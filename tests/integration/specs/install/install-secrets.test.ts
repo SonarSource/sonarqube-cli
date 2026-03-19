@@ -102,6 +102,32 @@ describe('install secrets (download)', () => {
   );
 });
 
+describe('install secrets (network)', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'downloads and installs sonar-secrets binary from binaries.sonarsource.com',
+    async () => {
+      harness.withAuth('http://localhost:19999', 'fake-token');
+      // No fake binaries server: the CLI hits the real binaries.sonarsource.com
+
+      const result = await harness.run('install secrets');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(true);
+    },
+    { timeout: 120000 },
+  );
+});
+
 describe('install secrets --status', () => {
   let harness: TestHarness;
 
