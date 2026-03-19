@@ -22,21 +22,22 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import type { CliResult } from './types.js';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const DEFAULT_BINARY = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');
-const BINARY_PATH = process.env.SONAR_CLI_BINARY ?? DEFAULT_BINARY;
+
 const DEFAULT_TIMEOUT_MS = 30000;
 
-export function assertBinaryExists(): void {
-  if (!existsSync(BINARY_PATH)) {
+function getBinaryPath(coverageMode: boolean): string {
+  const binaryPath = coverageMode ? COVERAGE_BINARY : DEFAULT_BINARY;
+  if (!existsSync(binaryPath)) {
     throw new Error(
-      `CLI binary not found at: ${BINARY_PATH}\n` +
-        `Run 'npm run build:binary' to build it first.\n` +
-        `Or set SONAR_CLI_BINARY env var to point to a different path.`,
+      `CLI binary not found at: ${binaryPath}\n` + `Run 'bun run build:binary' to build it first.`,
     );
   }
+  return binaryPath;
 }
 
 export async function runCli(
@@ -44,15 +45,22 @@ export async function runCli(
   env: Record<string, string>,
   options: { stdin?: string; timeoutMs?: number; cwd: string; browserToken?: string },
 ): Promise<CliResult> {
-  assertBinaryExists();
-
+  const coverageMode = process.env.SONAR_CLI_USE_COVERAGE === '1';
+  const binaryPath = getBinaryPath(coverageMode);
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const startTime = Date.now();
   mkdirSync(options.cwd, { recursive: true });
 
+  const spawnEnv = { ...env };
+  if (coverageMode) {
+    mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    spawnEnv.COVERAGE_OUTPUT_FILE = join(COVERAGE_RAW_DIR, `coverage-${unique}.json`);
+  }
+
   const args = tokenize(command);
-  const proc = Bun.spawn([BINARY_PATH, ...args], {
-    env,
+  const proc = Bun.spawn([binaryPath, ...args], {
+    env: spawnEnv,
     stdout: 'pipe',
     stderr: 'pipe',
     stdin: options.stdin ? 'pipe' : 'ignore',

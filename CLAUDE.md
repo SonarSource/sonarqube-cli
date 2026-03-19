@@ -4,13 +4,22 @@ A CLI tool (`sonar`) that integrates SonarQube Server and Cloud into developer w
 
 # Running checks
 
+Use the package.json scripts for full test runs.
+
 ```bash
-bun run lint          # ESLint (TypeScript-aware, includes import sort)
-bun run lint:fix      # Auto-fix safe issues
-bun run typecheck     # tsc --noEmit
-bun test              # Unit tests
-bun run test:all      # Unit + integration + script tests
+bun run lint              # ESLint (TypeScript-aware, includes import sort)
+bun run lint:fix          # Auto-fix safe issues
+bun run typecheck         # tsc --noEmit
+bun run test:unit         # All unit tests
+bun run test:integration  # All integration tests, no coverage (local development)
+bun run test:all          # Unit + integration
+bun run test:coverage     # Full merged lcov report (unit + integration, slow)
 ```
+
+### Running a single test file
+
+- **Unit**: `bun test <file>` — no setup needed.
+- **Integration**: run `bun run pretest:integration` once first (builds binary, sets up resources), then `bun test <file>` as many times as needed.
 
 # Writing code
 
@@ -41,7 +50,7 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 Please try to create integration tests in priority. If the test is too complicated to set up, write unit tests.
 Try to get inspiration from other tests to follow the same structure.
 
-- Unit tests: `tests/unit/` — run with `bun test`
+- Unit tests: `tests/unit/` — run with `bun run test:unit`
 - Integration tests: `tests/integration/` — require env vars. They are using a harness to help set up tests and make assertions.
 - The UI module has a built-in mock system (`src/ui/mock.ts`) — use it instead of mocking stdout directly.
 

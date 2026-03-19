@@ -8,6 +8,7 @@ dist/
 .claude/
 .idea/
 plan.md
-coverage/
+/coverage/
+tests/coverage/reports/
 tests/integration/resources/sonar-secrets*
 .eslintcache
