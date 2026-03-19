@@ -70,7 +70,7 @@ export async function installSecrets(
 /**
  * Core install logic for sonar-secrets binary download and setup
  */
-export async function performSecretInstall(
+async function performSecretInstall(
   options: { force?: boolean },
   { binDir }: { binDir?: string } = {},
 ): Promise<string> {
@@ -142,10 +142,9 @@ async function performInstallation(
 /**
  * Status command: sonar secret status
  */
-async function installSecretsStatus({ binDir }: { binDir?: string } = {}): Promise<void> {
+async function installSecretsStatus(): Promise<void> {
   const platform = detectPlatform();
-  const resolvedBinDir = binDir ?? BIN_DIR;
-  const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
+  const binaryPath = join(BIN_DIR, buildLocalBinaryName(platform));
 
   text('\nChecking sonar-secrets installation status\n');
 

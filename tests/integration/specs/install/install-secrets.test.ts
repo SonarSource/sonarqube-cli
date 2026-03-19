@@ -21,6 +21,8 @@
 // Integration tests for `sonar install secrets`
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { chmodSync } from 'node:fs';
+import { join } from 'node:path';
 import { TestHarness } from '../../harness';
 
 describe('install secrets (download)', () => {
@@ -83,6 +85,21 @@ describe('install secrets (download)', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'skips download and reports already installed when binary is at pinned version',
+    async () => {
+      harness.withAuth('http://localhost:19999', 'fake-token');
+      harness.state().withSecretsBinaryInstalled();
+      // No fake binaries server: download must NOT be triggered
+
+      const result = await harness.run('install secrets');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('already installed (latest)');
+    },
+    { timeout: 30000 },
+  );
 });
 
 describe('install secrets --status', () => {
@@ -119,6 +136,27 @@ describe('install secrets --status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Installed');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports binary not working when executable exists but always exits with error code',
+    async () => {
+      if (process.platform === 'win32') return; // shell script approach does not apply on Windows
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
+      // Write a broken binary (a shell script that always fails) at the expected path
+      const binDir = harness.cliHome.dir('bin');
+      binDir.writeFile('sonar-secrets', '#!/bin/sh\nexit 1\n');
+      chmodSync(join(binDir.path, 'sonar-secrets'), 0o755);
+
+      const result = await harness.run('install secrets --status');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'Binary is installed but could not be called',
+      );
     },
     { timeout: 15000 },
   );
