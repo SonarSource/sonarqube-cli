@@ -53,6 +53,7 @@ Try to get inspiration from other tests to follow the same structure.
 
 - Unit tests: `tests/unit/` — run with `bun test:unit`
 - Integration tests: `tests/integration/` — require env vars. They are using a harness to help set up tests and make assertions. Run with `bun test:integration`.
+- E2E tests: `tests/e2e/` — end-to-end tests to verify full integration with external systems. Run with `bun test ./tests/e2e/`.
 - The UI module has a built-in mock system (`src/ui/mock.ts`) — use it instead of mocking stdout directly.
 
 ## Documentation

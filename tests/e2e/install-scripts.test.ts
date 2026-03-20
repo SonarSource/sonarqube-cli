@@ -25,9 +25,9 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const scriptDir = join(import.meta.dir, '../../../../user-scripts');
+const scriptDir = join(import.meta.dir, '../../user-scripts');
 
-describe('install.sh (network)', () => {
+describe.if(process.platform !== 'win32')('install.sh (network)', () => {
   let tempHome: string;
 
   beforeEach(() => {
