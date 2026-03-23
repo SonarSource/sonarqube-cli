@@ -27,7 +27,6 @@ The authentication step is optional. With authentication, more types of secrets 
 
 ```
 sonar auth login
-sonar install secrets
 sonar integrate claude -g
 ```
 

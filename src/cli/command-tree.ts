@@ -28,7 +28,6 @@ import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout, type AuthLogoutOptions } from './commands/auth/logout';
 import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
-import { installSecrets, type InstallSecretsOptions } from './commands/install/secrets';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git/index';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
@@ -66,16 +65,6 @@ COMMAND_TREE.name('sonar')
   .addHelpText('beforeAll', getHelpBanner())
   .enablePositionalOptions();
 
-// Install Sonar tools
-const install = COMMAND_TREE.command('install').description('Install Sonar tools');
-
-install
-  .command('secrets')
-  .description('Install sonar-secrets binary from https://binaries.sonarsource.com')
-  .option('--force', 'Force reinstall even if already installed')
-  .option('--status', 'Check installation status instead of installing')
-  .authenticatedAction((_auth, options: InstallSecretsOptions) => installSecrets(options));
-
 // Setup SonarQube integration for AI coding agent
 const integrateCommand = COMMAND_TREE.command('integrate').description(
   'Setup SonarQube integration for AI coding agents, git and others.',
@@ -109,7 +98,7 @@ integrateCommand
     '--global',
     'Install hook globally for all repositories (sets git config --global core.hooksPath)',
   )
-  .authenticatedAction((auth, options: IntegrateGitOptions) => integrateGit(options, auth));
+  .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List Sonar resources');

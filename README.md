@@ -27,7 +27,6 @@ The authentication step is optional. With authentication, more types of secrets 
 
 ```
 sonar auth login
-sonar install secrets
 sonar integrate claude -g
 ```
 
@@ -119,40 +118,6 @@ sonar auth status
 
 ---
 
-### `sonar install`
-
-Install Sonar tools
-
-#### `sonar install secrets`
-
-Install sonar-secrets binary from https://binaries.sonarsource.com
-
-**Options:**
-
-| Option     | Type    | Required | Description                                     | Default |
-| ---------- | ------- | -------- | ----------------------------------------------- | ------- |
-| `--force`  | boolean | No       | Force reinstall even if already installed       | -       |
-| `--status` | boolean | No       | Check installation status instead of installing | -       |
-
-**Examples:**
-
-Install latest sonar-secrets binary
-```bash
-sonar install secrets
-```
-
-Reinstall sonar-secrets (overwrite existing)
-```bash
-sonar install secrets --force
-```
-
-Check if sonar-secrets is installed and up to date
-```bash
-sonar install secrets --status
-```
-
----
-
 ### `sonar integrate`
 
 Setup SonarQube integration for AI coding agents, git and others.
@@ -177,10 +142,7 @@ Setup SonarQube integration for Claude Code. This will install secrets scanning 
 
 | Option              | Type    | Required | Description                                                                 | Default |
 | ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ------- |
-| `--server`, `-s`    | string  | No       | SonarQube server URL                                                        | -       |
 | `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
-| `--token`, `-t`     | string  | No       | Existing authentication token                                               | -       |
-| `--org`, `-o`       | string  | No       | Organization key (for SonarQube Cloud)                                      | -       |
 | `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
 | `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
 
@@ -233,16 +195,15 @@ Search for issues in SonarQube
 
 **Options:**
 
-| Option            | Type   | Required | Description                            | Default |
-| ----------------- | ------ | -------- | -------------------------------------- | ------- |
-| `--project`, `-p` | string | Yes      | Project key                            | -       |
-| `--org`, `-o`     | string | No       | Organization key (for SonarQube Cloud) | -       |
-| `--severity`      | string | No       | Filter by severity                     | -       |
-| `--format`        | string | No       | Output format                          | `json`  |
-| `--branch`        | string | No       | Branch name                            | -       |
-| `--pull-request`  | string | No       | Pull request ID                        | -       |
-| `--page-size`     | number | No       | Page size (1-500)                      | `500`   |
-| `--page`          | number | No       | Page number                            | `1`     |
+| Option            | Type   | Required | Description        | Default |
+| ----------------- | ------ | -------- | ------------------ | ------- |
+| `--project`, `-p` | string | Yes      | Project key        | -       |
+| `--severity`      | string | No       | Filter by severity | -       |
+| `--format`        | string | No       | Output format      | `json`  |
+| `--branch`        | string | No       | Branch name        | -       |
+| `--pull-request`  | string | No       | Pull request ID    | -       |
+| `--page-size`     | number | No       | Page size (1-500)  | `500`   |
+| `--page`          | number | No       | Page number        | `1`     |
 
 **Examples:**
 
@@ -266,7 +227,6 @@ Search for projects in SonarQube
 
 | Option          | Type   | Required | Description                                    | Default |
 | --------------- | ------ | -------- | ---------------------------------------------- | ------- |
-| `--org`, `-o`   | string | No       | Organization key (for SonarQube Cloud)         | -       |
 | `--query`, `-q` | string | No       | Search query to filter projects by name or key | -       |
 | `--page`        | number | No       | Page number                                    | `1`     |
 | `--page-size`   | number | No       | Page size (1-500)                              | `500`   |

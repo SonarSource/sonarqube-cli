@@ -57,17 +57,6 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Show current server connection and token status',
     },
   ],
-  'sonar install secrets': [
-    { command: 'sonar install secrets', description: 'Install latest sonar-secrets binary' },
-    {
-      command: 'sonar install secrets --force',
-      description: 'Reinstall sonar-secrets (overwrite existing)',
-    },
-    {
-      command: 'sonar install secrets --status',
-      description: 'Check if sonar-secrets is installed and up to date',
-    },
-  ],
   'sonar integrate': [
     {
       command: 'sonar integrate claude -s https://sonarcloud.io -p my-project',

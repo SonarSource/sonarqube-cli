@@ -38,7 +38,7 @@ import { setMockUi, queueMockResponse, getMockUiCalls, clearMockUiCalls } from '
 import * as processLib from '../../src/lib/process.js';
 import * as authResolver from '../../src/lib/auth-resolver';
 import * as discovery from '../../src/cli/commands/_common/discovery';
-import * as secretsInstall from '../../src/cli/commands/install/secrets';
+import * as secretsInstall from '../../src/cli/commands/_common/install/secrets';
 import * as huskyModule from '../../src/cli/commands/integrate/git/git-husky';
 import * as preCommitModule from '../../src/cli/commands/integrate/git/git-precommit-framework';
 import { GLOBAL_HOOKS_DIR } from '../../src/lib/config-constants';
