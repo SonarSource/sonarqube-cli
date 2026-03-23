@@ -80,8 +80,8 @@ describe('integrateCommand', () => {
   let updateStateAfterConfigurationSpy: Mock<
     Extract<(typeof state)['updateStateAfterConfiguration'], (...args: any[]) => any>
   >;
-  let performSecretInstallSpy: Mock<
-    Extract<(typeof installSecrets)['performSecretInstall'], (...args: any[]) => any>
+  let resolveSecretsBinarySpy: Mock<
+    Extract<(typeof installSecrets)['resolveSecretsBinary'], (...args: any[]) => any>
   >;
 
   beforeEach(() => {
@@ -101,7 +101,7 @@ describe('integrateCommand', () => {
     runMigrationsSpy = spyOn(migration, 'runMigrations');
     updateStateAfterConfigurationSpy = spyOn(state, 'updateStateAfterConfiguration');
 
-    performSecretInstallSpy = spyOn(installSecrets, 'performSecretInstall').mockResolvedValue({
+    resolveSecretsBinarySpy = spyOn(installSecrets, 'resolveSecretsBinary').mockResolvedValue({
       binaryPath: '/fake/path/sonar-secrets',
       freshlyInstalled: false,
     });
@@ -123,7 +123,7 @@ describe('integrateCommand', () => {
     installHooksSpy.mockRestore();
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
-    performSecretInstallSpy.mockRestore();
+    resolveSecretsBinarySpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -455,7 +455,7 @@ describe('integrateCommand', () => {
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
-    performSecretInstallSpy.mockRejectedValue(new Error('Network error'));
+    resolveSecretsBinarySpy.mockRejectedValue(new Error('Network error'));
 
     let error: unknown;
     try {

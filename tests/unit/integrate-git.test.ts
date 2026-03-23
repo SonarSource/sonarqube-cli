@@ -501,14 +501,14 @@ describe('installViaGitHooks', () => {
 describe('integrateGit', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let findGitRootSpy: ReturnType<typeof spyOn>;
-  let performSecretInstallSpy: ReturnType<typeof spyOn>;
+  let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
     clearMockUiCalls();
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth');
     findGitRootSpy = spyOn(discovery, 'findGitRoot');
-    performSecretInstallSpy = spyOn(secretsInstall, 'performSecretInstall').mockResolvedValue(
+    resolveSecretsBinarySpy = spyOn(secretsInstall, 'resolveSecretsBinary').mockResolvedValue(
       '/usr/local/bin/sonar-secrets',
     );
   });
@@ -517,7 +517,7 @@ describe('integrateGit', () => {
     setMockUi(false);
     resolveAuthSpy.mockRestore();
     findGitRootSpy.mockRestore();
-    performSecretInstallSpy.mockRestore();
+    resolveSecretsBinarySpy.mockRestore();
   });
 
   it('throws CommandFailedError when not inside a git repository', () => {
@@ -603,7 +603,7 @@ describe('integrateGit', () => {
 
 describe('integrateGitGlobal', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
-  let performSecretInstallSpy: ReturnType<typeof spyOn>;
+  let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -612,7 +612,7 @@ describe('integrateGitGlobal', () => {
       token: 'tok',
       serverUrl: 'https://sonar.example.com',
     });
-    performSecretInstallSpy = spyOn(secretsInstall, 'performSecretInstall').mockResolvedValue(
+    resolveSecretsBinarySpy = spyOn(secretsInstall, 'resolveSecretsBinary').mockResolvedValue(
       '/usr/local/bin/sonar-secrets',
     );
   });
@@ -620,7 +620,7 @@ describe('integrateGitGlobal', () => {
   afterEach(() => {
     setMockUi(false);
     resolveAuthSpy.mockRestore();
-    performSecretInstallSpy.mockRestore();
+    resolveSecretsBinarySpy.mockRestore();
   });
 
   it('returns without throwing when the user cancels the global install confirmation', () => {
@@ -634,7 +634,7 @@ describe('integrateGitGlobal', () => {
   });
 
   it('propagates the error when secrets installation fails after the user confirms', () => {
-    performSecretInstallSpy.mockRejectedValue(new Error('download failed'));
+    resolveSecretsBinarySpy.mockRejectedValue(new Error('download failed'));
     expect(
       integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' }),
     ).rejects.toThrow('download failed');

@@ -28,6 +28,7 @@ import * as fs from 'node:fs';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as stateManager from '../../src/lib/state-manager.js';
+import * as installSecrets from '../../src/cli/commands/_common/install/secrets';
 import { getDefaultState } from '../../src/lib/state.js';
 import { analyzeSecrets } from '../../src/cli/commands/analyze/secrets';
 import { CommandFailedError, InvalidOptionError } from '../../src/cli/commands/_common/error.js';
@@ -55,6 +56,7 @@ function mockBinaryExists(fileAlsoExists = true) {
 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
+let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
   setMockUi(true);
@@ -66,11 +68,16 @@ beforeEach(() => {
     stdout: '{}',
     stderr: '',
   });
+  resolveSecretsBinarySpy = spyOn(installSecrets, 'resolveSecretsBinary').mockResolvedValue({
+    binaryPath: '/fake/bin/sonar-secrets',
+    freshlyInstalled: false,
+  });
 });
 
 afterEach(() => {
   loadStateSpy.mockRestore();
   spawnSpy.mockRestore();
+  resolveSecretsBinarySpy.mockRestore();
   setMockUi(false);
 });
 

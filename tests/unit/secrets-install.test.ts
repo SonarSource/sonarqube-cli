@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for performSecretInstall (sonar-secrets binary download and setup)
+// Unit tests for resolveSecretsBinary (sonar-secrets binary download and setup)
 
 import { mock, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -46,13 +46,13 @@ void mock.module('../../src/lib/sonarsource-releases.js', () => ({
     `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-${version}-${platform.os}-${platform.arch}.exe`,
 }));
 
-const { performSecretInstall } = await import('../../src/cli/commands/_common/install/secrets.js');
+const { resolveSecretsBinary } = await import('../../src/cli/commands/_common/install/secrets.js');
 
 // =============================================================================
-// SECTION: performSecretInstall — happy path
+// SECTION: resolveSecretsBinary — happy path
 // =============================================================================
 
-describe('performSecretInstall: happy path', () => {
+describe('resolveSecretsBinary: happy path', () => {
   let downloadBinarySpy: ReturnType<typeof spyOn>;
   let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
   let spawnSpy: ReturnType<typeof spyOn>;
@@ -94,7 +94,7 @@ describe('performSecretInstall: happy path', () => {
   });
 
   it('returns freshlyInstalled: true and binaryPath when install succeeds', async () => {
-    const result = await performSecretInstall({ force: true }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
 
     expect(result.freshlyInstalled).toBe(true);
     expect(result.binaryPath).toContain('sonar-secrets');
@@ -106,7 +106,7 @@ describe('performSecretInstall: happy path', () => {
     const binaryPath = join(tempBinDir, buildLocalBinaryName(detectPlatform()));
     writeFileSync(binaryPath, '');
 
-    const result = await performSecretInstall({ force: false }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary({ force: false }, { binDir: tempBinDir });
 
     expect(result.freshlyInstalled).toBe(false);
     expect(downloadBinarySpy).not.toHaveBeenCalled();
@@ -114,10 +114,10 @@ describe('performSecretInstall: happy path', () => {
 });
 
 // =============================================================================
-// SECTION: performSecretInstall — version check paths
+// SECTION: resolveSecretsBinary — version check paths
 // =============================================================================
 
-describe('performSecretInstall: version check paths', () => {
+describe('resolveSecretsBinary: version check paths', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
   let downloadBinarySpy: ReturnType<typeof spyOn>;
 
@@ -149,7 +149,7 @@ describe('performSecretInstall: version check paths', () => {
 
     let caughtError: unknown;
     try {
-      await performSecretInstall({}, { binDir: tempBinDir });
+      await resolveSecretsBinary({}, { binDir: tempBinDir });
     } catch (err) {
       caughtError = err;
     } finally {
@@ -180,7 +180,7 @@ describe('performSecretInstall: version check paths', () => {
 
     let caughtError: unknown;
     try {
-      await performSecretInstall({}, { binDir: tempBinDir });
+      await resolveSecretsBinary({}, { binDir: tempBinDir });
     } catch (err) {
       caughtError = err;
     } finally {
@@ -193,10 +193,10 @@ describe('performSecretInstall: version check paths', () => {
 });
 
 // =============================================================================
-// SECTION: performSecretInstall — error paths
+// SECTION: resolveSecretsBinary — error paths
 // =============================================================================
 
-describe('performSecretInstall: error paths', () => {
+describe('resolveSecretsBinary: error paths', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
   let downloadBinarySpy: ReturnType<typeof spyOn>;
   let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
@@ -234,7 +234,7 @@ describe('performSecretInstall: error paths', () => {
 
     let error: unknown;
     try {
-      await performSecretInstall({ force: true }, { binDir: tempBinDir });
+      await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
     } catch (err) {
       error = err;
     }
@@ -261,7 +261,7 @@ describe('performSecretInstall: error paths', () => {
 
     let caughtError: unknown;
     try {
-      await performSecretInstall({ force: true }, { binDir: tempBinDir });
+      await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
     } catch (err) {
       caughtError = err;
     }
@@ -292,7 +292,7 @@ describe('performSecretInstall: error paths', () => {
     });
 
     // Act: should not throw despite state error
-    const result = await performSecretInstall({ force: true }, { binDir: tempBinDir });
+    const result = await resolveSecretsBinary({ force: true }, { binDir: tempBinDir });
 
     // Assert: install succeeded; user is warned but not blocked
     const warns = getMockUiCalls()

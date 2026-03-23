@@ -29,7 +29,7 @@ import { blank, info, intro, note, outro, success, text, warn } from '../../../.
 import type { DiscoveredProject } from '../../_common/discovery';
 import { discoverProject } from '../../_common/discovery';
 import { CommandFailedError } from '../../_common/error';
-import { performSecretInstall } from '../../_common/install/secrets';
+import { installSecretsBinary } from '../../_common/install/secrets';
 import { runHealthChecks } from './health';
 import { installHooks } from './hooks';
 import { repairToken } from './repair';
@@ -71,10 +71,7 @@ export async function integrateClaude(
 
   let token = config.token;
 
-  const { binaryPath, freshlyInstalled } = await performSecretInstall({ force: false });
-  if (freshlyInstalled) {
-    success(`sonar-secrets installed at ${binaryPath}`);
-  }
+  await installSecretsBinary();
 
   blank();
   text('Phase 2/3: Health Check & Repair');

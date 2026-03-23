@@ -128,18 +128,34 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'exits with code 1 and reports binary not installed when binary is absent',
+    'auto-installs sonar-secrets and scans when binary is absent',
     async () => {
-      // No withSecretsBinaryInstalled() — binary absent
+      await harness.newFakeBinariesServer().start();
       harness.withAuth(FAKE_SERVER, 'fake-token');
-      harness.cwd.writeFile('file.js', CLEAN_CONTENT);
+      harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
 
-      const result = await harness.run('analyze secrets file.js');
+      const result = await harness.run('analyze secrets clean.js');
 
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('sonar-secrets is not installed');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Scan completed successfully');
+      expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(true);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
+  );
+
+  it(
+    'aborts when sonar-secrets download fails',
+    async () => {
+      await harness.newFakeBinariesServer().noArtifacts().start();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
+
+      const result = await harness.run('analyze secrets clean.js');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(false);
+    },
+    { timeout: 30000 },
   );
 
   it(

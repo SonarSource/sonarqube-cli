@@ -26,7 +26,7 @@ import { platform } from 'node:os';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { findGitRoot } from '../../_common/discovery';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
-import { performSecretInstall } from '../../_common/install/secrets';
+import { installSecretsBinary } from '../../_common/install/secrets';
 import { spawnProcess } from '../../../../lib/process';
 import * as fs from 'node:fs/promises';
 import {
@@ -131,8 +131,7 @@ export async function resolveHookType(options: IntegrateGitOptions): Promise<Git
 }
 
 async function ensureSonarSecrets(): Promise<void> {
-  await performSecretInstall({});
-  info('sonar-secrets is installed');
+  await installSecretsBinary();
   blank();
 }
 

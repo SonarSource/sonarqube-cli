@@ -38,45 +38,58 @@ import { version as VERSION } from '../../../../../package.json';
 import logger from '../../../../lib/logger';
 import type { PlatformInfo } from '../../../../lib/install-types';
 import { SECRETS_BINARY_NAME } from '../../../../lib/install-types';
-import { text, warn, withSpinner, print } from '../../../../ui';
+import { text, warn, withSpinner, print, success } from '../../../../ui';
 import { CommandFailedError } from '../error';
+
+type DownloadResult = { skipped: boolean };
+type SecretsBinaryResult = { binaryPath: string; freshlyInstalled: boolean };
 
 const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
 const VERSION_REGEX_MAX_SEGMENT = 20;
 
 /**
- * Core install logic for sonar-secrets binary download and setup
+ * Install sonar-secrets binary if not already present, and report success if freshly installed.
+ * Use this in commands where the user implicitly consents to installation by running the command.
  */
-export async function performSecretInstall(
+export async function installSecretsBinary(): Promise<void> {
+  const { binaryPath, freshlyInstalled } = await resolveSecretsBinary({});
+  if (freshlyInstalled) {
+    success(`sonar-secrets installed at ${binaryPath}`);
+  }
+}
+
+export async function resolveSecretsBinary(
   options: { force?: boolean },
   { binDir }: { binDir?: string } = {},
-): Promise<{ binaryPath: string; freshlyInstalled: boolean }> {
+): Promise<SecretsBinaryResult> {
   const platform = detectPlatform();
   const resolvedBinDir = ensureBinDirectory(binDir);
   const binaryPath = join(resolvedBinDir, buildLocalBinaryName(platform));
 
-  text(`Platform: ${platform.os}-${platform.arch}`);
-
-  const { skipped } = await performInstallation(options, platform, binaryPath);
+  const { skipped } = await downloadAndInstall(options, platform, binaryPath);
   return { binaryPath, freshlyInstalled: !skipped };
 }
 
-async function performInstallation(
+async function downloadAndInstall(
   options: { force?: boolean },
   platform: PlatformInfo,
   binaryPath: string,
-): Promise<{ skipped: boolean }> {
+): Promise<DownloadResult> {
   // Check existing installation
   if (!options.force) {
-    const skipStatus = await checkExistingInstallation(binaryPath);
+    const skipStatus = await withSpinner('Checking sonar-secrets', () =>
+      checkExistingInstallation(binaryPath),
+    );
     if (skipStatus) {
+      text(`  sonar-secrets ${SONAR_SECRETS_VERSION} is already installed (latest)`);
       return { skipped: true };
     }
   }
 
   // Download pinned version
   const version = SONAR_SECRETS_VERSION;
-  print(`  Version: ${version}`);
+  text(`Installing sonar-secrets ${version}`);
+  text(`  Platform: ${platform.os}-${platform.arch}`);
 
   const downloadUrl = buildDownloadUrl(version, platform);
   await withSpinner(`Downloading sonar-secrets ${version}`, () =>
@@ -186,7 +199,6 @@ async function checkExistingInstallation(binaryPath: string): Promise<boolean> {
   const pinnedVersion = SONAR_SECRETS_VERSION;
 
   if (existingVersion === pinnedVersion) {
-    text(`sonar-secrets ${existingVersion} is already installed (latest)`);
     return true;
   }
 

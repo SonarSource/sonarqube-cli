@@ -27,6 +27,7 @@ import logger from '../../../lib/logger';
 import { blank, error, print, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { BIN_DIR } from '../../../lib/config-constants';
+import { installSecretsBinary } from '../_common/install/secrets';
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
@@ -51,7 +52,9 @@ async function handleCheckCommand(
   options: AnalyzeSecretsOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  const scanEnv = setupScanEnvironment(options, auth);
+  validateScanOptions(options);
+  await installSecretsBinary();
+  const scanEnv = setupScanEnvironment(auth);
   const scanStartTime = Date.now();
   const { binaryPath, authUrl, authToken } = scanEnv;
 
@@ -68,14 +71,8 @@ interface ScanEnvironment {
   authToken?: string;
 }
 
-function setupScanEnvironment(
-  options: { paths?: string[]; stdin?: boolean },
-  auth: ResolvedAuth,
-): ScanEnvironment {
-  validateScanOptions(options);
-
+function setupScanEnvironment(auth: ResolvedAuth): ScanEnvironment {
   const binaryPath = setupBinaryPath();
-
   return { binaryPath, authUrl: auth.serverUrl, authToken: auth.token };
 }
 
@@ -92,11 +89,7 @@ function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): vo
 
 function setupBinaryPath(): string {
   const platform = detectPlatform();
-  const binaryPath = join(BIN_DIR, buildLocalBinaryName(platform));
-
-  validateCheckCommandEnvironment(binaryPath);
-
-  return binaryPath;
+  return join(BIN_DIR, buildLocalBinaryName(platform));
 }
 
 async function performStdinScan(
@@ -141,12 +134,6 @@ async function performPathsScan(
     handleScanSuccess(result, scanDurationMs);
   } else {
     handleScanFailure(result, scanDurationMs, exitCode);
-  }
-}
-
-function validateCheckCommandEnvironment(binaryPath: string): void {
-  if (!existsSync(binaryPath)) {
-    throw new CommandFailedError('sonar-secrets is not installed\n  Run: sonar integrate');
   }
 }
 
