@@ -32,6 +32,7 @@ describe('integrate claude', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    await harness.newFakeBinariesServer().start();
   });
 
   afterEach(async () => {
@@ -124,6 +125,7 @@ describe('integrate claude', () => {
     async () => {
       const server = await harness.newFakeServer().start();
       harness.withAuth(server.baseUrl(), 'some-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}`);
 
       const result = await harness.run('integrate claude --non-interactive');
@@ -155,6 +157,7 @@ describe('integrate claude', () => {
 
       // Set up auth with an invalid token so health check fails and repair is triggered
       harness.withAuth(server.baseUrl(), 'initial-invalid-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=browser-project'].join('\n'),
@@ -179,6 +182,7 @@ describe('integrate claude', () => {
         .withProject('repair-project')
         .start();
       harness.withAuth(server.baseUrl(), 'invalid-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=repair-project'].join('\n'),
@@ -205,6 +209,7 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
       harness.withAuth(server.baseUrl(), 'wrong-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -235,6 +240,7 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
       harness.withAuth(server.baseUrl(), 'wrong-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -267,6 +273,7 @@ describe('integrate claude', () => {
         .withAuthToken('valid-token') // server only accepts 'valid-token'
         .withProject('my-project')
         .start();
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -306,6 +313,7 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
       harness.withAuth(server.baseUrl(), 'some-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -331,6 +339,7 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
+      harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('integrate claude --non-interactive');
 
@@ -368,6 +377,7 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -393,6 +403,7 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -421,6 +432,7 @@ describe('integrate claude', () => {
         .withProject('my-project')
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
@@ -458,6 +470,7 @@ describe('integrate claude — A3S entitlement guard', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
   });
 
   afterEach(async () => {
@@ -571,6 +584,7 @@ describe('integrate claude — file placement (local vs global)', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
   });
 
   afterEach(async () => {
@@ -873,6 +887,7 @@ describe('integrate claude — legacy state without agentExtensions', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
   });
 
   afterEach(async () => {
@@ -1114,5 +1129,89 @@ describe('integrate — argument validation', () => {
       expect(result.stdout + result.stderr).toContain("error: unknown command 'gemini'");
     },
     { timeout: 15000 },
+  );
+});
+
+// ─── sonar-secrets auto-install ───────────────────────────────────────────────
+
+describe('integrate claude — sonar-secrets auto-install', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'downloads and installs sonar-secrets when binary is not present',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      await harness.newFakeBinariesServer().start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'aborts integration when sonar-secrets download fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      await harness.newFakeBinariesServer().noArtifacts().start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips download when sonar-secrets is already installed at the correct version',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.state().withSecretsBinaryInstalled();
+      const fakeBinariesServer = await harness.newFakeBinariesServer().start();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(fakeBinariesServer.getRecordedRequests()).toHaveLength(0);
+    },
+    { timeout: 30000 },
   );
 });

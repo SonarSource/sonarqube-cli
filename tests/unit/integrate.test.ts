@@ -31,6 +31,7 @@ import * as repair from '../../src/cli/commands/integrate/claude/repair';
 import * as state from '../../src/cli/commands/integrate/claude/state';
 import * as authResolver from '../../src/lib/auth-resolver';
 import type { ResolvedAuth } from '../../src/lib/auth-resolver';
+import * as installSecrets from '../../src/cli/commands/_common/install/secrets';
 import * as migration from '../../src/lib/migration';
 import { getDefaultState } from '../../src/lib/state';
 import * as stateManager from '../../src/lib/state-manager';
@@ -79,6 +80,9 @@ describe('integrateCommand', () => {
   let updateStateAfterConfigurationSpy: Mock<
     Extract<(typeof state)['updateStateAfterConfiguration'], (...args: any[]) => any>
   >;
+  let performSecretInstallSpy: Mock<
+    Extract<(typeof installSecrets)['performSecretInstall'], (...args: any[]) => any>
+  >;
 
   beforeEach(() => {
     setMockUi(true);
@@ -97,6 +101,11 @@ describe('integrateCommand', () => {
     runMigrationsSpy = spyOn(migration, 'runMigrations');
     updateStateAfterConfigurationSpy = spyOn(state, 'updateStateAfterConfiguration');
 
+    performSecretInstallSpy = spyOn(installSecrets, 'performSecretInstall').mockResolvedValue({
+      binaryPath: '/fake/path/sonar-secrets',
+      freshlyInstalled: false,
+    });
+
     mockDiscoveredProject({}); // Default mock to prevent tests from reading the real filesystem. Individual tests are overriding this with specific project data as needed.
     mockHealthCheck(); // Default mock to healthy checks. Individual tests are overriding this with specific health data as needed.
   });
@@ -114,6 +123,7 @@ describe('integrateCommand', () => {
     installHooksSpy.mockRestore();
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
+    performSecretInstallSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -442,6 +452,20 @@ describe('integrateCommand', () => {
         String(c.args[0]).search(/Can you push a commit using my token \w+/) > -1,
     );
     expect(exampleText).toBeDefined();
+  });
+
+  it('aborts integration when sonar-secrets installation fails', async () => {
+    performSecretInstallSpy.mockRejectedValue(new Error('Network error'));
+
+    let error: unknown;
+    try {
+      await integrateClaude({}, SERVER_AUTH);
+    } catch (err) {
+      error = err;
+    }
+
+    expect((error as Error).message).toBe('Network error');
+    expect(installHooksSpy).not.toHaveBeenCalled();
   });
 
   it('skips secrets hook example when hooks not installed', async () => {

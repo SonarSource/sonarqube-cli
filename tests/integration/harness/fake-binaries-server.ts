@@ -19,7 +19,7 @@
  */
 
 // Lightweight in-process fake binaries server (Bun.serve).
-// Simulates binaries.sonarsource.com so that `sonar install secrets` can be exercised
+// Simulates binaries.sonarsource.com so that sonar-secrets auto-install can be exercised
 // without real network calls. Serves versioned artifacts from tests/integration/resources/
 // — downloaded by setup-integration-resources.ts — and returns 404 for unknown paths.
 
