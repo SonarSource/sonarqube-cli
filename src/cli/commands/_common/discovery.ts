@@ -20,8 +20,8 @@
 
 // Discovery module - discovers project information
 
-import { existsSync, statSync } from 'node:fs';
-import { join, dirname, basename } from 'node:path';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { join, dirname, basename, resolve } from 'node:path';
 import { spawnProcess } from '../../../lib/process';
 import logger from '../../../lib/logger';
 import { print, text } from '../../../ui';
@@ -112,10 +112,25 @@ export async function discoverOrganization(): Promise<string | null> {
 /**
  * Discover project information from the current directory
  */
+/**
+ * Returns the canonical, fully-resolved path for a directory.
+ * On Windows, realpathSync resolves the filesystem-authoritative casing
+ * (e.g. "c:\Users\..." → "C:\Users\..."), preventing duplicate keys when
+ * the same directory is represented with different cases or separators.
+ * Falls back to path.resolve() if the path doesn't exist yet.
+ */
+function canonicalizePath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+}
+
 export async function discoverProjectInfo(startDir: string): Promise<ProjectInfo> {
   const { gitRoot, isGit } = findGitRoot(startDir);
 
-  const projectRoot = isGit ? gitRoot : startDir;
+  const projectRoot = canonicalizePath(isGit ? gitRoot : startDir);
   const projectName = basename(projectRoot);
 
   let gitRemote = '';

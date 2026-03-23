@@ -36,6 +36,7 @@ import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { runHealthChecks } from './health';
 import { installHooks } from './hooks';
+import { setupMcpServer } from './mcp';
 import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
 
@@ -115,6 +116,8 @@ export async function integrateClaude(
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
   updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled);
   success('Claude code hooks installed');
+
+  await setupMcpServer('claude', project.rootDir, isGlobal, auth);
 
   blank();
   text('Phase 3/3: Final Verification');

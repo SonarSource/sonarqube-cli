@@ -32,6 +32,7 @@ import * as state from '../../src/cli/commands/integrate/claude/state';
 import * as authResolver from '../../src/lib/auth-resolver';
 import type { ResolvedAuth } from '../../src/lib/auth-resolver';
 import * as installSecrets from '../../src/cli/commands/_common/install/secrets';
+import * as mcp from '../../src/cli/commands/integrate/claude/mcp';
 import * as migration from '../../src/lib/migration';
 import { getDefaultState } from '../../src/lib/state';
 import * as stateManager from '../../src/lib/state-manager';
@@ -51,12 +52,14 @@ const CLEAN_HEALTH: HealthCheckResult = {
 const SERVER_AUTH: ResolvedAuth = {
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
+  connectionType: 'on-premise',
 };
 
 const CLOUD_AUTH: ResolvedAuth = {
   token: 'test-token',
   orgKey: 'cloud-org',
   serverUrl: 'https://sonarcloud.io',
+  connectionType: 'cloud',
 };
 
 describe('integrateCommand', () => {
@@ -83,12 +86,14 @@ describe('integrateCommand', () => {
   let resolveSecretsBinarySpy: Mock<
     Extract<(typeof installSecrets)['resolveSecretsBinary'], (...args: any[]) => any>
   >;
+  let setupMcpServerSpy: Mock<Extract<(typeof mcp)['setupMcpServer'], (...args: any[]) => any>>;
 
   beforeEach(() => {
     setMockUi(true);
 
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
     hasSqaaEntitlementSpy.mockResolvedValue(false);
+    setupMcpServerSpy = spyOn(mcp, 'setupMcpServer').mockResolvedValue(undefined);
 
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
@@ -124,6 +129,7 @@ describe('integrateCommand', () => {
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
     resolveSecretsBinarySpy.mockRestore();
+    setupMcpServerSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -198,6 +204,7 @@ describe('integrateCommand', () => {
     const cloudAuthNoOrg: ResolvedAuth = {
       token: 'test-token',
       serverUrl: 'https://sonarcloud.io',
+      connectionType: 'cloud',
     };
 
     expect(integrateClaude({}, cloudAuthNoOrg)).rejects.toThrow(CommandFailedError);

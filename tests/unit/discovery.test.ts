@@ -21,7 +21,7 @@
 // Discovery module tests
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { discoverProject, discoverProjectInfo } from '../../src/cli/commands/_common/discovery';
@@ -133,7 +133,7 @@ it('discovery: detects git repository when .git dir present', async () => {
   try {
     const info = await discoverProjectInfo(testDir);
     expect(info.isGitRepo).toBe(true);
-    expect(info.root).toBe(testDir);
+    expect(info.root).toBe(realpathSync(testDir));
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -286,7 +286,7 @@ describe('discoverProject', () => {
 
   it('returns current dir as rootDir when not in a git repo', async () => {
     const result = await discoverProject(testDir);
-    expect(result.rootDir).toBe(testDir);
+    expect(result.rootDir).toBe(realpathSync(testDir));
   });
 
   it('returns isGitRepo false when no .git directory is present', async () => {
@@ -298,7 +298,7 @@ describe('discoverProject', () => {
     mkdirSync(join(testDir, '.git'));
     const result = await discoverProject(testDir);
     expect(result.isGitRepo).toBe(true);
-    expect(result.rootDir).toBe(testDir);
+    expect(result.rootDir).toBe(realpathSync(testDir));
   });
 
   it('returns no serverUrl, projectKey, or organization when no config files are present', async () => {
