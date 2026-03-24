@@ -117,7 +117,7 @@ export async function integrateClaude(
   updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled);
   success('Claude code hooks installed');
 
-  await setupMcpServer('claude', project.rootDir, isGlobal, auth);
+  await setupMcpServer('claude', project.rootDir, isGlobal, auth, project.projectKey);
 
   blank();
   text('Phase 3/3: Final Verification');

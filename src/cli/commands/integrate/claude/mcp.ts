@@ -33,29 +33,30 @@ export async function setupMcpServer(
   projectRoot: string,
   isGlobal: boolean,
   auth: ResolvedAuth,
+  discoveredProjectKey: string | undefined,
 ): Promise<void> {
-  info('Setting up MCP server...');
+  info('Setting up SonarQube MCP Server...');
   const dockerAvailable = await isDockerAvailable();
   if (!dockerAvailable) {
     error(
-      'Docker is required to configure the SonarQube MCP server. Please ensure Docker is installed and the daemon is running.',
+      'Docker is required to configure the SonarQube MCP Server. Please ensure Docker is installed and the daemon is running.',
     );
-    warn('Skipping MCP server configuration.');
+    warn('Skipping SonarQube MCP Server configuration.');
     return;
   }
 
   const targetFile = getMcpConfigFilePath(agent);
-  const serverConfig = getMcpServerConfig(auth, isGlobal, projectRoot);
+  const serverConfig = getMcpServerConfig(auth, isGlobal, projectRoot, discoveredProjectKey);
 
   try {
     await writeMcpServerEntry(targetFile, serverConfig, isGlobal, projectRoot);
   } catch (e: unknown) {
     if (e instanceof Error) {
-      error(`Failed to configure MCP server in ${targetFile}: ${e.message}`);
+      error(`Failed to configure SonarQube MCP Server in ${targetFile}: ${e.message}`);
     }
     return;
   }
-  success(`MCP server configured in ${targetFile}`);
+  success(`SonarQube MCP Server configured in ${targetFile}`);
 }
 
 export async function writeMcpServerEntry(
@@ -100,6 +101,7 @@ export function getMcpServerConfig(
   auth: ResolvedAuth,
   isGlobal: boolean,
   projectRoot: string,
+  discoveredProjectKey: string | undefined,
 ): object {
   const { token, orgKey: org, serverUrl } = auth;
 
@@ -122,6 +124,10 @@ export function getMcpServerConfig(
   }
 
   if (!isGlobal) {
+    if (discoveredProjectKey) {
+      args.push('-e', 'SONARQUBE_PROJECT_KEY');
+      env.SONARQUBE_PROJECT_KEY = discoveredProjectKey;
+    }
     args.push('-v', `${projectRoot}:/app/mcp-workspace:ro`);
   }
 

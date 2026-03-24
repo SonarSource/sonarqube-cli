@@ -52,7 +52,7 @@ const CLOUD_US_AUTH: ResolvedAuth = {
 
 describe('getMcpServerConfig', () => {
   it('returns a docker command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, true, '/fake/project');
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, true, '/fake/project', undefined);
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -73,7 +73,7 @@ describe('getMcpServerConfig', () => {
 
   it('returns a docker command with SONARQUBE_ORG for cloud (sonarcloud.io)', () => {
     const auth: ResolvedAuth = { ...CLOUD_AUTH, orgKey: 'my-org' };
-    const config = getMcpServerConfig(auth, true, '/fake/project');
+    const config = getMcpServerConfig(auth, true, '/fake/project', undefined);
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -100,7 +100,7 @@ describe('getMcpServerConfig', () => {
 
   it('returns a docker command with SONARQUBE_ORG for cloud US (sonarqube.us)', () => {
     const auth: ResolvedAuth = { ...CLOUD_US_AUTH, orgKey: 'my-org' };
-    const config = getMcpServerConfig(auth, true, '/fake/project');
+    const config = getMcpServerConfig(auth, true, '/fake/project', undefined);
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -126,7 +126,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('returns a docker command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project');
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', undefined);
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -144,6 +144,34 @@ describe('getMcpServerConfig', () => {
         'mcp/sonarqube',
       ],
       env: { SONARQUBE_TOKEN: 'squ_test', SONARQUBE_URL: 'https://sonarqube.example.com' },
+    });
+  });
+
+  it('returns a docker command with SONARQUBE_PROJECT_KEY for non-global config with project key', () => {
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', 'my-project');
+    expect(config).toEqual({
+      command: 'docker',
+      args: [
+        'run',
+        '--init',
+        '--pull=always',
+        '-i',
+        '--rm',
+        '-e',
+        'SONARQUBE_TOKEN',
+        '-e',
+        'SONARQUBE_URL',
+        '-e',
+        'SONARQUBE_PROJECT_KEY',
+        '-v',
+        '/fake/project:/app/mcp-workspace:ro',
+        'mcp/sonarqube',
+      ],
+      env: {
+        SONARQUBE_TOKEN: 'squ_test',
+        SONARQUBE_URL: 'https://sonarqube.example.com',
+        SONARQUBE_PROJECT_KEY: 'my-project',
+      },
     });
   });
 });
@@ -222,11 +250,13 @@ describe('setupMcpServer', () => {
     setMockUi(true);
     dockerSpy = spyOn(toolDetector, 'isDockerAvailable').mockResolvedValue(false);
 
-    await setupMcpServer('claude', '/fake/project', false, CLOUD_AUTH);
+    await setupMcpServer('claude', '/fake/project', false, CLOUD_AUTH, undefined);
 
     const messages = getMockUiCalls().map((c) => String(c.args[0]));
     expect(messages.some((m) => m.includes('Docker is required'))).toBe(true);
-    expect(messages.some((m) => m.includes('Skipping MCP server configuration'))).toBe(true);
+    expect(messages.some((m) => m.includes('Skipping SonarQube MCP Server configuration'))).toBe(
+      true,
+    );
   });
 
   it('logs an error when writing the MCP entry fails', async () => {
@@ -237,7 +267,7 @@ describe('setupMcpServer', () => {
       'writeMcpServerEntry',
     ).mockRejectedValue(new Error('disk full'));
 
-    await setupMcpServer('claude', '/fake/project', false, ON_PREMISE_AUTH);
+    await setupMcpServer('claude', '/fake/project', false, ON_PREMISE_AUTH, undefined);
 
     const errors = getMockUiCalls()
       .filter((c) => c.method === 'error')
