@@ -18,15 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { spawnProcess } from '../../../lib/process';
 import type { SpawnResult } from '../../../lib/process';
-import { buildLocalBinaryName, detectPlatform } from '../../../lib/platform-detector';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { blank, error, print, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
-import { BIN_DIR } from '../../../lib/config-constants';
 import { installSecretsBinary } from '../_common/install/secrets';
 
 export interface AnalyzeSecretsOptions {
@@ -53,10 +50,9 @@ async function handleCheckCommand(
   auth: ResolvedAuth,
 ): Promise<void> {
   validateScanOptions(options);
-  await installSecretsBinary();
-  const scanEnv = setupScanEnvironment(auth);
+  const binaryPath = await installSecretsBinary();
+  const { authUrl, authToken } = setupScanEnvironment(binaryPath, auth);
   const scanStartTime = Date.now();
-  const { binaryPath, authUrl, authToken } = scanEnv;
 
   if (options.stdin) {
     await performStdinScan(binaryPath, authUrl, authToken, scanStartTime);
@@ -71,8 +67,7 @@ interface ScanEnvironment {
   authToken?: string;
 }
 
-function setupScanEnvironment(auth: ResolvedAuth): ScanEnvironment {
-  const binaryPath = setupBinaryPath();
+function setupScanEnvironment(binaryPath: string, auth: ResolvedAuth): ScanEnvironment {
   return { binaryPath, authUrl: auth.serverUrl, authToken: auth.token };
 }
 
@@ -85,11 +80,6 @@ function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): vo
   if (hasPaths && options.stdin) {
     throw new InvalidOptionError('Cannot use both paths and --stdin');
   }
-}
-
-function setupBinaryPath(): string {
-  const platform = detectPlatform();
-  return join(BIN_DIR, buildLocalBinaryName(platform));
 }
 
 async function performStdinScan(

@@ -51,11 +51,12 @@ const VERSION_REGEX_MAX_SEGMENT = 20;
  * Install sonar-secrets binary if not already present, and report success if freshly installed.
  * Use this in commands where the user implicitly consents to installation by running the command.
  */
-export async function installSecretsBinary(): Promise<void> {
+export async function installSecretsBinary(): Promise<string> {
   const { binaryPath, freshlyInstalled } = await resolveSecretsBinary({});
   if (freshlyInstalled) {
     success(`sonar-secrets installed at ${binaryPath}`);
   }
+  return binaryPath;
 }
 
 export async function resolveSecretsBinary(
