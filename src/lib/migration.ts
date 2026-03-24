@@ -23,7 +23,8 @@
 // It should eventually become part of a dedicated post-update mechanism that
 // runs automatically after CLI upgrades, to be implemented in a future iteration.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import logger from './logger';
@@ -34,15 +35,104 @@ import {
   upsertAgentExtension,
   getActiveConnection,
 } from './state-manager';
-import type { HookExtension } from './state';
+import type { CliState, HookExtension } from './state';
 import { installHooks } from '../cli/commands/integrate/claude/hooks';
 import { version as CURRENT_VERSION } from '../../package.json';
 
-// Version that introduced the new hook architecture (separate secrets/A3S hooks)
+// Version that introduced the new hook architecture (separate secrets/SQAA hooks)
 const NEW_HOOK_ARCH_VERSION = CURRENT_VERSION;
 
 // Version known to have the CLI-105 state deduplication bug
 const CLI_105_AFFECTED_VERSION = '0.5.1';
+
+export const OBSOLETE_A3S_MARKER = 'sonar-a3s';
+const CLAUDE_CONFIG_DIR = '.claude';
+const HOOKS_DIR = 'hooks';
+
+interface HookEntry {
+  command: string;
+  [key: string]: unknown;
+}
+interface HookConfig {
+  hooks: HookEntry[];
+  [key: string]: unknown;
+}
+interface AgentSettings {
+  hooks?: Record<string, HookConfig[] | undefined>;
+  [key: string]: unknown;
+}
+
+async function readObsoleteSettings(settingsPath: string): Promise<AgentSettings | undefined> {
+  if (!existsSync(settingsPath)) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(await readFile(settingsPath, 'utf-8')) as AgentSettings;
+  } catch {
+    return undefined;
+  }
+}
+
+async function removeObsoleteSettingsEntries(installDir: string, marker: string): Promise<void> {
+  const settingsPath = join(installDir, CLAUDE_CONFIG_DIR, 'settings.json');
+  const settings = await readObsoleteSettings(settingsPath);
+  if (!settings?.hooks) {
+    return;
+  }
+  let changed = false;
+  for (const eventType of Object.keys(settings.hooks)) {
+    const entries = settings.hooks[eventType];
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+    const filtered = entries.filter(
+      (e) => !(Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(marker))),
+    );
+    if (filtered.length !== entries.length) {
+      settings.hooks[eventType] = filtered;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+  }
+}
+
+function deleteObsoleteHookDir(installDir: string, marker: string): void {
+  const obsoleteDir = join(installDir, CLAUDE_CONFIG_DIR, HOOKS_DIR, marker);
+  if (existsSync(obsoleteDir)) {
+    rmSync(obsoleteDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Remove obsolete hook entries from the settings.json and delete the hook script directory.
+ * Does NOT touch state.json — callers are responsible for filtering state in-place.
+ */
+export async function removeObsoleteHookArtifacts(
+  installDir: string,
+  marker: string,
+): Promise<void> {
+  try {
+    await removeObsoleteSettingsEntries(installDir, marker);
+    deleteObsoleteHookDir(installDir, marker);
+  } catch (err) {
+    logger.debug(
+      `Failed to remove obsolete hook artifacts for ${marker}: ${(err as Error).message}`,
+    );
+  }
+}
+
+/**
+ * Remove obsolete hook entries from an in-memory state object.
+ * Mutates state in place — caller is responsible for saving.
+ */
+export function cleanObsoleteFromState(state: CliState, marker: string): void {
+  state.agents['claude-code'].hooks.installed = state.agents['claude-code'].hooks.installed.filter(
+    (h) => h.name !== marker,
+  );
+  state.agentExtensions = state.agentExtensions.filter((e) => e.name !== marker);
+}
 
 /**
  * Run all pending config migrations for Claude Code agent.
@@ -51,7 +141,7 @@ const CLI_105_AFFECTED_VERSION = '0.5.1';
 export async function runMigrations(
   projectRoot: string,
   globalDir?: string,
-  installA3s = false,
+  installSqaa = false,
   projectKey?: string,
 ): Promise<void> {
   try {
@@ -90,13 +180,20 @@ export async function runMigrations(
     migrateHookScripts(projectRoot, globalDir);
 
     // Install new PostToolUse hook
-    await installHooks(projectRoot, globalDir, installA3s, projectKey);
+    await installHooks(projectRoot, globalDir, installSqaa, projectKey);
+
+    // Clean up obsolete sonar-a3s artifacts (settings.json entries + hook dir on disk)
+    await removeObsoleteHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
 
     // Register PostToolUse hook in state (legacy format for backward compat)
-    addInstalledHook(state, 'claude-code', 'sonar-a3s', 'PostToolUse');
+    addInstalledHook(state, 'claude-code', 'sonar-sqaa', 'PostToolUse');
 
     // Populate agentExtensions registry from old hooks.installed (if not yet migrated)
     migrateToExtensionsRegistry(state, projectRoot, globalDir);
+
+    // Remove obsolete sonar-a3s entries from the in-memory state object before saving.
+    // Must happen after migrateToExtensionsRegistry to avoid re-migrating stale entries.
+    cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
 
     // Mark migration complete
     state.agents['claude-code'].configuredByCliVersion = CURRENT_VERSION;
@@ -111,7 +208,7 @@ export async function runMigrations(
 
 /**
  * Convert old hooks.installed entries to the new agentExtensions registry.
- * Also registers the sonar-a3s PostToolUse hook if the active connection is cloud.
+ * Also registers the sonar-sqaa PostToolUse hook if the active connection is cloud.
  * Idempotent: skips if extensions for this agent+project already exist.
  */
 function migrateToExtensionsRegistry(
@@ -140,7 +237,7 @@ function migrateToExtensionsRegistry(
   };
 
   // Migrate entries from old hooks.installed that don't yet have a registry entry.
-  // sonar-a3s is always project-level (never global), regardless of the -g flag.
+  // sonar-sqaa is always project-level (never global), regardless of the -g flag.
   const oldHooks = state.agents['claude-code'].hooks.installed;
   for (const hook of oldHooks) {
     const alreadyMigrated = existingExtensions.some(
@@ -148,11 +245,11 @@ function migrateToExtensionsRegistry(
         e.kind === 'hook' && e.name === hook.name && e.hookType === hook.type,
     );
     if (!alreadyMigrated) {
-      const isA3s = hook.name === 'sonar-a3s';
+      const isSqaa = hook.name === 'sonar-sqaa';
       upsertAgentExtension(state, {
         ...baseExt,
-        projectRoot: isA3s ? projectRoot : effectiveProjectRoot,
-        global: isA3s ? false : isGlobal,
+        projectRoot: isSqaa ? projectRoot : effectiveProjectRoot,
+        global: isSqaa ? false : isGlobal,
         id: randomUUID(),
         kind: 'hook',
         name: hook.name,
@@ -161,8 +258,8 @@ function migrateToExtensionsRegistry(
     }
   }
 
-  // Add the new sonar-a3s PostToolUse extension for cloud connections.
-  // A3S is always project-level (never global), regardless of the -g flag.
+  // Add the new sonar-sqaa PostToolUse extension for cloud connections.
+  // SQAA is always project-level (never global), regardless of the -g flag.
   const isCloud = connection?.type === 'cloud';
   if (isCloud) {
     upsertAgentExtension(state, {
@@ -171,7 +268,7 @@ function migrateToExtensionsRegistry(
       global: false,
       id: randomUUID(),
       kind: 'hook',
-      name: 'sonar-a3s',
+      name: 'sonar-sqaa',
       hookType: 'PostToolUse',
     });
   }

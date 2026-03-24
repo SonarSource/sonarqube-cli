@@ -30,8 +30,8 @@ import {
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
-  getA3sPostToolTemplateUnix,
-  getA3sPostToolTemplateWindows,
+  getSqaaPostToolTemplateUnix,
+  getSqaaPostToolTemplateWindows,
 } from './hook-templates';
 
 const HOOKS_DIR = 'hooks';
@@ -173,13 +173,13 @@ export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
 
 /**
  * Install all hooks (cross-platform).
- * Secrets hooks install to globalDir (if provided), A3S hook installs to projectRoot.
- * A3S hook is only installed when installA3s is true (requires cloud connection + entitlement).
+ * Secrets hooks install to globalDir (if provided), SQAA hook installs to projectRoot.
+ * SQAA hook is only installed when installSqaa is true (requires cloud connection + entitlement).
  */
 export async function installHooks(
   projectRoot: string,
   globalDir?: string,
-  installA3s = false,
+  installSqaa = false,
   projectKey?: string,
 ): Promise<void> {
   const secretsDir = globalDir ?? projectRoot;
@@ -206,16 +206,16 @@ export async function installHooks(
       scriptContentUnix: getSecretPromptTemplateUnix(),
       scriptContentWindows: getSecretPromptTemplateWindows(),
     });
-    if (installA3s && projectKey) {
+    if (installSqaa && projectKey) {
       await installHook({
         installDir: projectRoot,
         scope: 'project',
         agent: 'claude',
         eventType: 'PostToolUse',
         matcher: 'Edit|Write',
-        scriptPath: 'sonar-a3s/build-scripts/posttool-a3s',
-        scriptContentUnix: getA3sPostToolTemplateUnix(projectKey),
-        scriptContentWindows: getA3sPostToolTemplateWindows(projectKey),
+        scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
+        scriptContentUnix: getSqaaPostToolTemplateUnix(projectKey),
+        scriptContentWindows: getSqaaPostToolTemplateWindows(projectKey),
       });
     }
   } catch (error) {

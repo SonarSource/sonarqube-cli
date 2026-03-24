@@ -259,10 +259,10 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // hasA3sEntitlement
+  // hasSqaaEntitlement
   // -------------------------------------------------------------------------
 
-  describe('hasA3sEntitlement', () => {
+  describe('hasSqaaEntitlement', () => {
     let cloudClient: SonarQubeClient;
 
     beforeEach(() => {
@@ -271,31 +271,31 @@ describe('SonarQubeClient', () => {
 
     it('returns false when organizationKey is not provided', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasA3sEntitlement(undefined)).toBe(false);
+      expect(await cloudClient.hasSqaaEntitlement(undefined)).toBe(false);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns false when organizationKey is empty string', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasA3sEntitlement('')).toBe(false);
+      expect(await cloudClient.hasSqaaEntitlement('')).toBe(false);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns false when server is not SonarQube Cloud', async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
       fetchSpy = mockFetch({});
-      expect(await serverClient.hasA3sEntitlement('my-org')).toBe(false);
+      expect(await serverClient.hasSqaaEntitlement('my-org')).toBe(false);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('returns false when org UUID cannot be resolved (API error)', async () => {
       fetchSpy = mockFetch({}, false, 404);
-      expect(await cloudClient.hasA3sEntitlement('unknown-org')).toBe(false);
+      expect(await cloudClient.hasSqaaEntitlement('unknown-org')).toBe(false);
     });
 
     it('returns false when org UUID list is empty', async () => {
       fetchSpy = mockFetch([]);
-      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe(false);
     });
 
     it('returns true when org UUID is resolved and entitlement is enabled and eligible', async () => {
@@ -311,7 +311,7 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
         } as Response);
 
-      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(true);
+      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe(true);
     });
 
     it('returns false when entitlement is enabled but not eligible', async () => {
@@ -327,7 +327,7 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: false }),
         } as Response);
 
-      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe(false);
     });
 
     it('returns false when entitlement is eligible but not enabled', async () => {
@@ -343,7 +343,7 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', enabled: false, eligible: true }),
         } as Response);
 
-      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe(false);
     });
 
     it('returns false when the entitlement check fails with an API error', async () => {
@@ -360,7 +360,7 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({}),
         } as Response);
 
-      expect(await cloudClient.hasA3sEntitlement('my-org')).toBe(false);
+      expect(await cloudClient.hasSqaaEntitlement('my-org')).toBe(false);
     });
 
     it('passes the resolved UUID to the entitlement check', async () => {
@@ -377,7 +377,7 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: targetUuid, enabled: true, eligible: true }),
         } as Response);
 
-      await cloudClient.hasA3sEntitlement('my-org');
+      await cloudClient.hasSqaaEntitlement('my-org');
 
       const entitlementUrl = new URL((fetchSpy.mock.calls[1][0] as URL).toString());
       expect(entitlementUrl.pathname).toBe(`/a3s-analysis/org-config/${targetUuid}`);
@@ -397,7 +397,7 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', enabled: true, eligible: true }),
         } as Response);
 
-      expect(await usClient.hasA3sEntitlement('my-org')).toBe(true);
+      expect(await usClient.hasSqaaEntitlement('my-org')).toBe(true);
     });
   });
 

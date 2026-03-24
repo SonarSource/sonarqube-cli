@@ -153,12 +153,12 @@ exit 0
 }
 
 /**
- * Unix template for A3S PostToolUse hook (bash)
- * Runs after Edit/Write — analyzes the modified file with A3S.
+ * Unix template for SQAA PostToolUse hook (bash)
+ * Runs after Edit/Write — analyzes the modified file with SQAA.
  */
-export function getA3sPostToolTemplateUnix(projectKey: string): string {
+export function getSqaaPostToolTemplateUnix(projectKey: string): string {
   return String.raw`#!/bin/bash
-# PostToolUse hook: Run A3S analysis on edited/written files
+# PostToolUse hook: Run SQAA analysis on edited/written files
 
 if ! command -v sonar &> /dev/null; then
   exit 0
@@ -178,8 +178,8 @@ if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
 fi
 
-# Capture A3S analysis output and pass it to Claude via additionalContext
-output=$(sonar analyze a3s --file "$file_path" --project ${projectKey} 2>/dev/null)
+# Capture SQAA analysis output and pass it to Claude via additionalContext
+output=$(sonar analyze sqaa --file "$file_path" --project ${projectKey} 2>/dev/null)
 
 # JSON-escape the output using awk (no external runtimes required)
 escaped=$(printf '%s' "$output" | awk 'BEGIN{ORS=""} {gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); if(NR>1) printf "\\n"; print}')
@@ -191,9 +191,9 @@ exit 0
 }
 
 /**
- * Windows template for A3S PostToolUse hook (PowerShell)
+ * Windows template for SQAA PostToolUse hook (PowerShell)
  */
-export function getA3sPostToolTemplateWindows(projectKey: string): string {
+export function getSqaaPostToolTemplateWindows(projectKey: string): string {
   return String.raw`param(
     [Parameter(ValueFromPipeline = $true)]
     [string]$InputData
@@ -217,7 +217,7 @@ if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
 }
 
 try {
-    $output = & sonar analyze a3s --file $filePath --project ${projectKey} 2>$null | Out-String
+    $output = & sonar analyze sqaa --file $filePath --project ${projectKey} 2>$null | Out-String
     $result = @{
         hookSpecificOutput = @{
             hookEventName   = "PostToolUse"

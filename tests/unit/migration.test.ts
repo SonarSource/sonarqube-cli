@@ -139,7 +139,7 @@ describe('runMigrations — migration execution', () => {
     expect(installHooksSpy).toHaveBeenCalledWith('/some/project', '/global/dir', false, undefined);
   });
 
-  it('registers sonar-a3s PostToolUse hook in state', async () => {
+  it('registers sonar-sqaa PostToolUse hook in state', async () => {
     loadStateSpy.mockReturnValue(makeConfiguredState(OLD_VERSION));
 
     await runMigrations('/some/project');
@@ -147,7 +147,7 @@ describe('runMigrations — migration execution', () => {
     expect(addInstalledHookSpy).toHaveBeenCalledWith(
       expect.anything(),
       'claude-code',
-      'sonar-a3s',
+      'sonar-sqaa',
       'PostToolUse',
     );
   });
@@ -187,7 +187,7 @@ describe('runMigrations — migration execution', () => {
     await runMigrations('/some/project');
   });
 
-  it('populates agentExtensions registry with sonar-a3s for cloud connections', async () => {
+  it('populates agentExtensions registry with sonar-sqaa for cloud connections', async () => {
     const state = makeConfiguredState(OLD_VERSION);
     // Directly populate hooks.installed to simulate pre-registry state
     // (addInstalledHook is mocked in beforeEach so we must mutate directly)
@@ -203,12 +203,12 @@ describe('runMigrations — migration execution', () => {
 
     await runMigrations('/some/project');
 
-    const a3sExts = state.agentExtensions.filter(
+    const sqaaExts = state.agentExtensions.filter(
       (e): e is HookExtension =>
-        e.kind === 'hook' && e.name === 'sonar-a3s' && e.hookType === 'PostToolUse',
+        e.kind === 'hook' && e.name === 'sonar-sqaa' && e.hookType === 'PostToolUse',
     );
-    expect(a3sExts.length).toBeGreaterThan(0);
-    expect(a3sExts[0].projectRoot).toBe('/some/project');
+    expect(sqaaExts.length).toBeGreaterThan(0);
+    expect(sqaaExts[0].projectRoot).toBe('/some/project');
   });
 
   it('migrates old hooks.installed entries to agentExtensions', async () => {
@@ -461,6 +461,16 @@ describe('runMigrations — hook script rewriting', () => {
     // Should complete without throwing despite the read error
     expect(runMigrations(testDir)).resolves.toBeUndefined();
   });
+
+  it('deletes the obsolete sonar-a3s hook directory from projectRoot', async () => {
+    const a3sDir = join(testDir, '.claude', 'hooks', 'sonar-a3s', 'build-scripts');
+    mkdirSync(a3sDir, { recursive: true });
+
+    await runMigrations(testDir);
+
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-a3s'))).toBe(false);
+  });
 });
 
 describe('runMigrations — already-migrated extensions not duplicated', () => {
@@ -492,7 +502,7 @@ describe('runMigrations — already-migrated extensions not duplicated', () => {
     state.agents['claude-code'].configured = true;
     state.agents['claude-code'].configuredByCliVersion = OLD_VERSION;
 
-    // Pre-populate agentExtensions with the sonar-a3s entry for this project
+    // Pre-populate agentExtensions with the sonar-sqaa entry for this project
     stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
       orgKey: 'my-org',
       keystoreKey: 'sonarcloud.io:my-org',
@@ -507,7 +517,7 @@ describe('runMigrations — already-migrated extensions not duplicated', () => {
       updatedByCliVersion: OLD_VERSION,
       updatedAt: new Date().toISOString(),
       kind: 'hook',
-      name: 'sonar-a3s',
+      name: 'sonar-sqaa',
       hookType: 'PostToolUse',
     });
 
@@ -515,11 +525,118 @@ describe('runMigrations — already-migrated extensions not duplicated', () => {
 
     await runMigrations('/some/project');
 
-    // The sonar-a3s PostToolUse entry should still be present exactly once
-    const a3sExts = state.agentExtensions.filter(
+    // The sonar-sqaa PostToolUse entry should still be present exactly once
+    const sqaaExts = state.agentExtensions.filter(
       (e): e is import('../../src/lib/state.js').HookExtension =>
-        e.kind === 'hook' && e.name === 'sonar-a3s' && e.hookType === 'PostToolUse',
+        e.kind === 'hook' && e.name === 'sonar-sqaa' && e.hookType === 'PostToolUse',
     );
-    expect(a3sExts.length).toBe(1);
+    expect(sqaaExts.length).toBe(1);
+  });
+});
+
+describe('runMigrations — sonar-a3s state cleanup', () => {
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
+  let addInstalledHookSpy: ReturnType<typeof spyOn>;
+  let installHooksSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
+      () => undefined,
+    );
+    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    addInstalledHookSpy.mockRestore();
+    installHooksSpy.mockRestore();
+  });
+
+  it('removes sonar-a3s from legacy hooks.installed', async () => {
+    const state = makeConfiguredState(OLD_VERSION);
+    state.agents['claude-code'].hooks.installed.push({
+      name: 'sonar-a3s',
+      type: 'PostToolUse',
+      installedAt: new Date().toISOString(),
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await runMigrations('/some/project');
+
+    expect(state.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
+      false,
+    );
+  });
+
+  it('removes sonar-a3s from agentExtensions', async () => {
+    const state = makeConfiguredState(OLD_VERSION);
+    stateManager.upsertAgentExtension(state, {
+      id: 'a3s-ext',
+      agentId: 'claude-code',
+      projectRoot: '/some/project',
+      global: false,
+      kind: 'hook',
+      name: 'sonar-a3s',
+      hookType: 'PostToolUse',
+      updatedByCliVersion: OLD_VERSION,
+      updatedAt: new Date().toISOString(),
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await runMigrations('/some/project');
+
+    expect(state.agentExtensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
+  });
+
+  it('does not remove unrelated entries from legacy hooks.installed', async () => {
+    const state = makeConfiguredState(OLD_VERSION);
+    state.agents['claude-code'].hooks.installed.push(
+      { name: 'sonar-a3s', type: 'PostToolUse', installedAt: new Date().toISOString() },
+      { name: 'sonar-secrets', type: 'PreToolUse', installedAt: new Date().toISOString() },
+    );
+    loadStateSpy.mockReturnValue(state);
+
+    await runMigrations('/some/project');
+
+    expect(
+      state.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-secrets'),
+    ).toBe(true);
+  });
+
+  it('does not remove unrelated entries from agentExtensions', async () => {
+    const state = makeConfiguredState(OLD_VERSION);
+    stateManager.upsertAgentExtension(state, {
+      id: 'a3s-ext',
+      agentId: 'claude-code',
+      projectRoot: '/some/project',
+      global: false,
+      kind: 'hook',
+      name: 'sonar-a3s',
+      hookType: 'PostToolUse',
+      updatedByCliVersion: OLD_VERSION,
+      updatedAt: new Date().toISOString(),
+    });
+    stateManager.upsertAgentExtension(state, {
+      id: 'secrets-ext',
+      agentId: 'claude-code',
+      projectRoot: '/some/project',
+      global: false,
+      kind: 'hook',
+      name: 'sonar-secrets',
+      hookType: 'PreToolUse',
+      updatedByCliVersion: OLD_VERSION,
+      updatedAt: new Date().toISOString(),
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await runMigrations('/some/project');
+
+    expect(state.agentExtensions.some((e) => e.name === 'sonar-secrets')).toBe(true);
   });
 });

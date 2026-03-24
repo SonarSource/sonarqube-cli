@@ -48,7 +48,7 @@ let existsSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let analyzeFileSpy: ReturnType<typeof spyOn>;
 
-/** Cloud state WITH a sonar-a3s extension entry for the current project root */
+/** Cloud state WITH a sonar-sqaa extension entry for the current project root */
 function makeCloudState() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
@@ -66,7 +66,7 @@ function makeCloudState() {
     updatedByCliVersion: '1.0.0',
     updatedAt: new Date().toISOString(),
     kind: 'hook',
-    name: 'sonar-a3s',
+    name: 'sonar-sqaa',
     hookType: 'PostToolUse',
   });
   return state;
@@ -163,7 +163,7 @@ describe('analyzeSqaa: auth resolution', () => {
       updatedByCliVersion: '1.0.0',
       updatedAt: new Date().toISOString(),
       kind: 'hook',
-      name: 'sonar-a3s',
+      name: 'sonar-sqaa',
       hookType: 'PostToolUse',
     });
     loadStateSpy.mockReturnValue(state);

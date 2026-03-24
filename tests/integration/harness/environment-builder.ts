@@ -53,7 +53,7 @@ function resolveSecretsBinarySource(): string {
   return join(import.meta.dir, '..', 'resources', filename);
 }
 
-interface A3sExtensionConfig {
+interface SqaaExtensionConfig {
   projectRoot: string;
   projectKey: string;
   orgKey?: string;
@@ -67,7 +67,7 @@ export class EnvironmentBuilder {
   private _installSecretsBinary = false;
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
-  private readonly a3sExtensions: A3sExtensionConfig[] = [];
+  private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
 
   withActiveConnection(
     url: string,
@@ -121,16 +121,16 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Registers a sonar-a3s PostToolUse extension for a project.
-   * Required for `analyze a3s` and `analyze` (full pipeline) to run A3S.
+   * Registers a sonar-sqaa PostToolUse extension for a project.
+   * Required for `analyze sqaa` and `analyze` (full pipeline) to run SQAA.
    */
-  withA3sExtension(
+  withSqaaExtension(
     projectRoot: string,
     projectKey: string,
     orgKey?: string,
     serverUrl?: string,
   ): this {
-    this.a3sExtensions.push({ projectRoot, projectKey, orgKey, serverUrl });
+    this.sqaaExtensions.push({ projectRoot, projectKey, orgKey, serverUrl });
     return this;
   }
 
@@ -170,7 +170,7 @@ export class EnvironmentBuilder {
       };
     }
 
-    for (const ext of this.a3sExtensions) {
+    for (const ext of this.sqaaExtensions) {
       // Resolve symlinks so the stored path matches process.cwd() in the CLI subprocess
       // (e.g. /var/folders/... → /private/var/folders/... on macOS)
       let resolvedRoot: string;
@@ -190,7 +190,7 @@ export class EnvironmentBuilder {
         updatedByCliVersion: 'integration-test',
         updatedAt: new Date().toISOString(),
         kind: 'hook',
-        name: 'sonar-a3s',
+        name: 'sonar-sqaa',
         hookType: 'PostToolUse',
       });
     }

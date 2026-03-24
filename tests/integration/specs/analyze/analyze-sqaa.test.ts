@@ -118,10 +118,10 @@ describe('analyze sqaa', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(VALID_TOKEN)
-        .withA3sResponse({ issues: [] })
+        .withSqaaResponse({ issues: [] })
         .start();
 
-      // Connection exists but no withA3sExtension() → no projectKey in registry → skip
+      // Connection exists but no withSqaaExtension() → no projectKey in registry → skip
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
@@ -143,13 +143,13 @@ describe('analyze sqaa', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(VALID_TOKEN)
-        .withA3sResponse({ issues: [] })
+        .withSqaaResponse({ issues: [] })
         .start();
 
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -171,7 +171,7 @@ describe('analyze sqaa', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(VALID_TOKEN)
-        .withA3sResponse({
+        .withSqaaResponse({
           issues: [
             { rule: 'python:S1234', message: 'Refactor this method', startLine: 5 },
             { rule: 'python:S5678', message: 'Remove this unused variable' },
@@ -182,7 +182,7 @@ describe('analyze sqaa', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('main.py', 'def foo():\n  pass\n');
 
@@ -204,7 +204,7 @@ describe('analyze sqaa', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(VALID_TOKEN)
-        .withA3sResponse({
+        .withSqaaResponse({
           issues: [],
           errors: [{ code: 'NOT_ENTITLED', message: 'Organization is not entitled to SQAA' }],
         })
@@ -213,7 +213,7 @@ describe('analyze sqaa', () => {
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
@@ -259,13 +259,13 @@ describe('verify', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(VALID_TOKEN)
-        .withA3sResponse({ issues: [] })
+        .withSqaaResponse({ issues: [] })
         .start();
 
       harness
         .state()
         .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withA3sExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 

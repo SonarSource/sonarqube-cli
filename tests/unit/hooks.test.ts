@@ -187,22 +187,22 @@ describe('installHooks', () => {
     expect(getScriptPathFor('prompt-secrets')).toBeDefined();
   });
 
-  it('does not write the posttool-a3s script when installA3s is false', async () => {
+  it('does not write the posttool-sqaa script when installSqaa is false', async () => {
     await installHooks(PROJECT_ROOT, undefined, false);
 
-    expect(getScriptPathFor('posttool-a3s')).toBeUndefined();
+    expect(getScriptPathFor('posttool-sqaa')).toBeUndefined();
   });
 
-  it('does not write the posttool-a3s script when projectKey is not provided', async () => {
+  it('does not write the posttool-sqaa script when projectKey is not provided', async () => {
     await installHooks(PROJECT_ROOT, undefined, true);
 
-    expect(getScriptPathFor('posttool-a3s')).toBeUndefined();
+    expect(getScriptPathFor('posttool-sqaa')).toBeUndefined();
   });
 
-  it('writes the posttool-a3s script when installA3s is true and projectKey is provided', async () => {
+  it('writes the posttool-sqaa script when installSqaa is true and projectKey is provided', async () => {
     await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
 
-    expect(getScriptPathFor('posttool-a3s')).toBeDefined();
+    expect(getScriptPathFor('posttool-sqaa')).toBeDefined();
   });
 
   it('installs secrets scripts to globalDir when globalDir is provided', async () => {
@@ -217,12 +217,12 @@ describe('installHooks', () => {
     expect(normPath(getScriptPathFor('pretool-secrets') ?? '')).toContain(PROJECT_ROOT);
   });
 
-  it('installs A3S script to projectRoot even when globalDir is set', async () => {
+  it('installs SQAA script to projectRoot even when globalDir is set', async () => {
     await installHooks(PROJECT_ROOT, GLOBAL_DIR, true, PROJECT_KEY);
 
-    const a3sPath = normPath(getScriptPathFor('posttool-a3s') ?? '');
-    expect(a3sPath).toContain(PROJECT_ROOT);
-    expect(a3sPath).not.toContain(GLOBAL_DIR);
+    const sqaaPath = normPath(getScriptPathFor('posttool-sqaa') ?? '');
+    expect(sqaaPath).toContain(PROJECT_ROOT);
+    expect(sqaaPath).not.toContain(GLOBAL_DIR);
   });
 
   it('writes a PreToolUse hook entry with Read matcher', async () => {
@@ -239,7 +239,7 @@ describe('installHooks', () => {
     expect(settings?.hooks?.UserPromptSubmit?.[0]?.matcher).toBe('*');
   });
 
-  it('writes a PostToolUse hook entry with Edit|Write matcher when A3S is enabled', async () => {
+  it('writes a PostToolUse hook entry with Edit|Write matcher when SQAA is enabled', async () => {
     await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
 
     const settings = getSettingsWriteFor('PostToolUse');
@@ -262,7 +262,7 @@ describe('installHooks', () => {
     expect(normPath(String(command))).toContain(GLOBAL_DIR);
   });
 
-  it('uses a relative command path for the A3S hook regardless of globalDir', async () => {
+  it('uses a relative command path for the SQAA hook regardless of globalDir', async () => {
     await installHooks(PROJECT_ROOT, GLOBAL_DIR, true, PROJECT_KEY);
 
     const settings = getSettingsWriteFor('PostToolUse');
@@ -304,7 +304,7 @@ describe('installHooks', () => {
     expect(settings?.hooks?.PreToolUse).toHaveLength(1);
   });
 
-  it('preserves existing non-sonar PostToolUse entries when adding A3S hook', async () => {
+  it('preserves existing non-sonar PostToolUse entries when adding SQAA hook', async () => {
     existsSyncSpy.mockReturnValue(true);
     const existing = {
       hooks: {
@@ -328,10 +328,10 @@ describe('installHooks', () => {
     expect(getScriptWriteFor('pretool-secrets')).toContain('sonar analyze secrets');
   });
 
-  it('posttool-a3s script contains the projectKey', async () => {
+  it('posttool-sqaa script contains the projectKey', async () => {
     await installHooks(PROJECT_ROOT, undefined, true, PROJECT_KEY);
 
-    expect(getScriptWriteFor('posttool-a3s')).toContain(PROJECT_KEY);
+    expect(getScriptWriteFor('posttool-sqaa')).toContain(PROJECT_KEY);
   });
 
   it('writes a .sh script on Unix platforms', async () => {

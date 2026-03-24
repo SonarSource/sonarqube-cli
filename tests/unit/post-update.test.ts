@@ -67,6 +67,9 @@ describe('runPostUpdateActions', () => {
   let migrateHookScriptsSpy: Mock<
     Extract<(typeof migration)['migrateHookScripts'], (...args: any[]) => any>
   >;
+  let removeObsoleteHookArtifactsSpy: Mock<
+    Extract<(typeof migration)['removeObsoleteHookArtifacts'], (...args: any[]) => any>
+  >;
   let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
 
   beforeEach(() => {
@@ -75,6 +78,10 @@ describe('runPostUpdateActions', () => {
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
     isNewerVersionSpy = spyOn(versionLib, 'isNewerVersion').mockReturnValue(true);
     migrateHookScriptsSpy = spyOn(migration, 'migrateHookScripts').mockImplementation(() => {});
+    removeObsoleteHookArtifactsSpy = spyOn(
+      migration,
+      'removeObsoleteHookArtifacts',
+    ).mockResolvedValue(undefined);
     installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
   });
 
@@ -84,6 +91,7 @@ describe('runPostUpdateActions', () => {
     saveStateSpy.mockRestore();
     isNewerVersionSpy.mockRestore();
     migrateHookScriptsSpy.mockRestore();
+    removeObsoleteHookArtifactsSpy.mockRestore();
     installHooksSpy.mockRestore();
   });
 
@@ -142,6 +150,23 @@ describe('runPostUpdateActions', () => {
 
     expect(saveStateSpy).not.toHaveBeenCalled();
   });
+
+  it('removes sonar-a3s entries from state on upgrade', async () => {
+    const state = makeState();
+    state.agents['claude-code'].hooks.installed.push({
+      name: 'sonar-a3s',
+      type: 'PostToolUse',
+      installedAt: new Date().toISOString(),
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await runPostUpdateActions();
+
+    const saved = saveStateSpy.mock.calls[0][0];
+    expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
+      false,
+    );
+  });
 });
 
 describe('migrateClaudeCodeHooks', () => {
@@ -150,12 +175,19 @@ describe('migrateClaudeCodeHooks', () => {
   let migrateHookScriptsSpy: Mock<
     Extract<(typeof migration)['migrateHookScripts'], (...args: any[]) => any>
   >;
+  let removeObsoleteHookArtifactsSpy: Mock<
+    Extract<(typeof migration)['removeObsoleteHookArtifacts'], (...args: any[]) => any>
+  >;
   let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
 
   beforeEach(() => {
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeState());
     migrateHookScriptsSpy = spyOn(migration, 'migrateHookScripts').mockImplementation(() => {});
+    removeObsoleteHookArtifactsSpy = spyOn(
+      migration,
+      'removeObsoleteHookArtifacts',
+    ).mockResolvedValue(undefined);
     installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
   });
 
@@ -163,6 +195,7 @@ describe('migrateClaudeCodeHooks', () => {
     existsSyncSpy.mockRestore();
     loadStateSpy.mockRestore();
     migrateHookScriptsSpy.mockRestore();
+    removeObsoleteHookArtifactsSpy.mockRestore();
     installHooksSpy.mockRestore();
   });
 
@@ -300,5 +333,25 @@ describe('migrateClaudeCodeHooks', () => {
     const actual = await migrateClaudeCodeHooks(homedirFn);
 
     expect(actual).toBeUndefined();
+  });
+
+  it('calls removeObsoleteHookArtifacts once per location with the sonar-a3s marker', async () => {
+    const state = makeStateWithExtensions([
+      makeExtension('/proj/alpha', false),
+      makeExtension('/proj/beta', false),
+    ]);
+    loadStateSpy.mockReturnValue(state);
+
+    await migrateClaudeCodeHooks(homedirFn);
+
+    expect(removeObsoleteHookArtifactsSpy).toHaveBeenCalledTimes(2);
+    expect(removeObsoleteHookArtifactsSpy).toHaveBeenCalledWith(
+      '/proj/alpha',
+      migration.OBSOLETE_A3S_MARKER,
+    );
+    expect(removeObsoleteHookArtifactsSpy).toHaveBeenCalledWith(
+      '/proj/beta',
+      migration.OBSOLETE_A3S_MARKER,
+    );
   });
 });

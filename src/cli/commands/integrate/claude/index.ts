@@ -23,7 +23,11 @@
 import { homedir } from 'node:os';
 import { isEnvBasedAuth, isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import { runMigrations } from '../../../../lib/migration';
+import {
+  runMigrations,
+  removeObsoleteHookArtifacts,
+  OBSOLETE_A3S_MARKER,
+} from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import type { DiscoveredProject } from '../../_common/discovery';
@@ -103,12 +107,13 @@ export async function integrateClaude(
     }
   }
 
-  const a3sEnabled = await resolveA3sEntitlement(config.serverURL, token, config.organization);
+  const sqaaEnabled = await resolveSqaaEntitlement(config.serverURL, token, config.organization);
 
   text('Installing claude code hooks...');
-  await runMigrations(project.rootDir, globalDir, a3sEnabled, config.projectKey);
-  await installHooks(project.rootDir, globalDir, a3sEnabled, config.projectKey);
-  updateStateAfterConfiguration(config, project.rootDir, isGlobal, a3sEnabled);
+  await runMigrations(project.rootDir, globalDir, sqaaEnabled, config.projectKey);
+  await installHooks(project.rootDir, globalDir, sqaaEnabled, config.projectKey);
+  await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
+  updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled);
   success('Claude code hooks installed');
 
   blank();
@@ -182,16 +187,16 @@ function validateConfiguration(project: DiscoveredProject, config: Configuration
 }
 
 /**
- * Check if the organization has A3S entitlement.
+ * Check if the organization has SQAA entitlement.
  * Returns false for on-premise, missing org, or failed API call.
  */
-async function resolveA3sEntitlement(
+async function resolveSqaaEntitlement(
   serverURL: string,
   token: string,
   organization: string | undefined,
 ): Promise<boolean> {
   const client = new SonarQubeClient(serverURL, token);
-  return client.hasA3sEntitlement(organization);
+  return client.hasSqaaEntitlement(organization);
 }
 
 /**

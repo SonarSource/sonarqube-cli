@@ -62,8 +62,8 @@ const CLOUD_AUTH: ResolvedAuth = {
 describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
-  let hasA3sEntitlementSpy: Mock<
-    Extract<(typeof SonarQubeClient.prototype)['hasA3sEntitlement'], (...args: any[]) => any>
+  let hasSqaaEntitlementSpy: Mock<
+    Extract<(typeof SonarQubeClient.prototype)['hasSqaaEntitlement'], (...args: any[]) => any>
   >;
   let isEnvBasedAuthSpy: Mock<
     Extract<(typeof authResolver)['isEnvBasedAuth'], (...args: any[]) => any>
@@ -87,8 +87,8 @@ describe('integrateCommand', () => {
   beforeEach(() => {
     setMockUi(true);
 
-    hasA3sEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasA3sEntitlement');
-    hasA3sEntitlementSpy.mockResolvedValue(false);
+    hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
+    hasSqaaEntitlementSpy.mockResolvedValue(false);
 
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
@@ -115,7 +115,7 @@ describe('integrateCommand', () => {
     setMockUi(false);
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
-    hasA3sEntitlementSpy.mockRestore();
+    hasSqaaEntitlementSpy.mockRestore();
     isEnvBasedAuthSpy.mockRestore();
     runHealthChecksSpy.mockRestore();
     discoverProjectSpy.mockRestore();
@@ -323,17 +323,17 @@ describe('integrateCommand', () => {
     expect(repairTokenSpy).not.toBeCalled();
   });
 
-  it('checks A3S entitlement', async () => {
-    hasA3sEntitlementSpy.mockResolvedValue(true);
+  it('checks SQAA entitlement', async () => {
+    hasSqaaEntitlementSpy.mockResolvedValue(true);
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    expect(hasA3sEntitlementSpy).toHaveBeenCalledTimes(1);
+    expect(hasSqaaEntitlementSpy).toHaveBeenCalledTimes(1);
   });
 
   it('runs migration, installs hooks and updates state when health check succeeds', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    mockA3sEntitlement(true);
+    mockSqaaEntitlement(true);
 
     await integrateClaude({}, CLOUD_AUTH);
 
@@ -348,7 +348,7 @@ describe('integrateCommand', () => {
 
   it('runs migration, installs hooks and updates state when global option and health check succeeds', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    mockA3sEntitlement(true);
+    mockSqaaEntitlement(true);
 
     await integrateClaude({ global: true }, CLOUD_AUTH);
 
@@ -363,7 +363,7 @@ describe('integrateCommand', () => {
 
   it('runs migration, installs hooks and updates state when health check fails', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
-    mockA3sEntitlement(true);
+    mockSqaaEntitlement(true);
     mockHealthCheck({ organizationAccessible: false, errors: ['Organization not accessible'] });
 
     await integrateClaude({}, CLOUD_AUTH);
@@ -379,7 +379,7 @@ describe('integrateCommand', () => {
 
   it('runs migration, installs hooks and updates state when project key is missing', async () => {
     mockDiscoveredProject({ rootDir: '/projectB/root' });
-    mockA3sEntitlement(false);
+    mockSqaaEntitlement(false);
 
     await integrateClaude({}, CLOUD_AUTH);
 
@@ -505,8 +505,8 @@ describe('integrateCommand', () => {
     runHealthChecksSpy.mockResolvedValueOnce({ ...CLEAN_HEALTH, ...health });
   }
 
-  function mockA3sEntitlement(hasEntitlement: boolean) {
-    hasA3sEntitlementSpy.mockResolvedValue(hasEntitlement);
+  function mockSqaaEntitlement(hasEntitlement: boolean) {
+    hasSqaaEntitlementSpy.mockResolvedValue(hasEntitlement);
   }
 
   function assertMigrationHookInstallationAndStateUpdateRan(
@@ -514,23 +514,28 @@ describe('integrateCommand', () => {
     projectRootDir: string,
     globalDir: string | undefined,
     isGlobal: boolean,
-    a3sEnabled: boolean,
+    sqaaEnabled: boolean,
   ): void {
     expect(runMigrationsSpy).toHaveBeenCalledTimes(1);
     expect(runMigrationsSpy).toHaveBeenCalledWith(
       projectRootDir,
       globalDir,
-      a3sEnabled,
+      sqaaEnabled,
       projectKey,
     );
     expect(installHooksSpy).toHaveBeenCalledTimes(1);
-    expect(installHooksSpy).toHaveBeenCalledWith(projectRootDir, globalDir, a3sEnabled, projectKey);
+    expect(installHooksSpy).toHaveBeenCalledWith(
+      projectRootDir,
+      globalDir,
+      sqaaEnabled,
+      projectKey,
+    );
     expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
     expect(updateStateAfterConfigurationSpy).toHaveBeenCalledWith(
       expect.anything(),
       projectRootDir,
       isGlobal,
-      a3sEnabled,
+      sqaaEnabled,
     );
   }
 });

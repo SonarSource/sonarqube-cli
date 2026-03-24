@@ -34,14 +34,14 @@ export interface IssueConfig {
   line?: number;
 }
 
-export interface A3sIssueConfig {
+export interface SqaaIssueConfig {
   rule: string;
   message: string;
   startLine?: number;
 }
 
-export interface A3sResponseConfig {
-  issues?: A3sIssueConfig[];
+export interface SqaaResponseConfig {
+  issues?: SqaaIssueConfig[];
   errors?: Array<{ code: string; message: string }>;
 }
 
@@ -110,8 +110,8 @@ export class FakeSonarQubeServerBuilder {
   private systemStatus: 'UP' | 'DOWN' = 'UP';
   private memberOrganizations: Array<{ key: string; name: string }> = [];
   private memberOrganizationsTotal?: number;
-  private a3sResponse?: A3sResponseConfig;
-  private a3sEntitlementOrgs: Map<string, { uuid: string; eligible: boolean; enabled: boolean }> =
+  private sqaaResponse?: SqaaResponseConfig;
+  private sqaaEntitlementOrgs: Map<string, { uuid: string; eligible: boolean; enabled: boolean }> =
     new Map();
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
@@ -136,17 +136,17 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  withA3sResponse(response: A3sResponseConfig = {}): this {
-    this.a3sResponse = response;
+  withSqaaResponse(response: SqaaResponseConfig = {}): this {
+    this.sqaaResponse = response;
     return this;
   }
 
-  withA3sEntitlement(
+  withSqaaEntitlement(
     orgKey: string,
     uuid: string,
     options: { eligible?: boolean; enabled?: boolean } = {},
   ): this {
-    this.a3sEntitlementOrgs.set(orgKey, {
+    this.sqaaEntitlementOrgs.set(orgKey, {
       uuid,
       eligible: options.eligible ?? true,
       enabled: options.enabled ?? true,
@@ -161,8 +161,8 @@ export class FakeSonarQubeServerBuilder {
     const memberOrganizations = this.memberOrganizations;
     const memberOrganizationsTotal =
       this.memberOrganizationsTotal ?? this.memberOrganizations.length;
-    const a3sResponse = this.a3sResponse;
-    const a3sEntitlementOrgs = this.a3sEntitlementOrgs;
+    const sqaaResponse = this.sqaaResponse;
+    const sqaaEntitlementOrgs = this.sqaaEntitlementOrgs;
     const requests: RecordedRequest[] = [];
 
     const server = Bun.serve({
@@ -323,7 +323,7 @@ export class FakeSonarQubeServerBuilder {
 
         if (path === '/organizations/organizations') {
           const orgKey = query.organizationKey;
-          const entitlement = orgKey ? a3sEntitlementOrgs.get(orgKey) : undefined;
+          const entitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
           if (!entitlement) {
             return new Response(JSON.stringify([]), {
               headers: { 'Content-Type': 'application/json' },
@@ -338,7 +338,7 @@ export class FakeSonarQubeServerBuilder {
         const orgConfigMatch = /^\/a3s-analysis\/org-config\/(.+)$/.exec(path);
         if (orgConfigMatch) {
           const uuid = orgConfigMatch[1];
-          const entitlement = [...a3sEntitlementOrgs.values()].find((e) => e.uuid === uuid);
+          const entitlement = [...sqaaEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
               status: 404,
@@ -356,14 +356,14 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
-          if (!a3sResponse) {
+          if (!sqaaResponse) {
             return new Response(
-              JSON.stringify({ errors: [{ msg: 'A3S endpoint not configured' }] }),
+              JSON.stringify({ errors: [{ msg: 'SQAA endpoint not configured' }] }),
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
 
-          const issues = (a3sResponse.issues ?? []).map((i) => ({
+          const issues = (sqaaResponse.issues ?? []).map((i) => ({
             rule: i.rule,
             message: i.message,
             textRange: i.startLine
@@ -373,9 +373,9 @@ export class FakeSonarQubeServerBuilder {
 
           return new Response(
             JSON.stringify({
-              id: `a3s-analysis-${Date.now()}`,
+              id: `sqaa-analysis-${Date.now()}`,
               issues,
-              errors: a3sResponse.errors ?? null,
+              errors: sqaaResponse.errors ?? null,
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

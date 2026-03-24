@@ -154,10 +154,10 @@ export class SonarQubeClient {
   }
 
   /**
-   * Check if an organization has A3S entitlement.
+   * Check if an organization has SQAA entitlement.
    * Returns true only when both eligible and enabled are true.
    */
-  async checkA3sEntitlement(organizationUuid: string): Promise<boolean> {
+  async checkSqaaEntitlement(organizationUuid: string): Promise<boolean> {
     try {
       const result = await this.get<{ id: string; enabled: boolean; eligible: boolean }>(
         `/a3s-analysis/org-config/${organizationUuid}`,
@@ -171,9 +171,9 @@ export class SonarQubeClient {
   }
 
   /**
-   * Convenience: resolve org UUID then check A3S entitlement in one call.
+   * Convenience: resolve org UUID then check SQAA entitlement in one call.
    */
-  async hasA3sEntitlement(organizationKey?: string): Promise<boolean> {
+  async hasSqaaEntitlement(organizationKey?: string): Promise<boolean> {
     if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
       return false;
     }
@@ -183,7 +183,7 @@ export class SonarQubeClient {
       return false;
     }
 
-    return this.checkA3sEntitlement(uuid);
+    return this.checkSqaaEntitlement(uuid);
   }
 
   async listUserOrganizations(): Promise<{
@@ -247,11 +247,11 @@ export class SonarQubeClient {
   }
 
   /**
-   * Run A3S server-side analysis on a single file.
+   * Run SQAA server-side analysis on a single file.
    * SonarQube Cloud only — endpoint lives on api.sonarcloud.io.
    */
-  async analyzeFile(request: A3sAnalysisRequest): Promise<A3sAnalysisResponse> {
-    return await this.post<A3sAnalysisResponse>(
+  async analyzeFile(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
+    return await this.post<SqaaAnalysisResponse>(
       '/a3s-analysis/analyses',
       request,
       SONARCLOUD_API_URL,
@@ -259,7 +259,7 @@ export class SonarQubeClient {
   }
 }
 
-export interface A3sAnalysisRequest {
+export interface SqaaAnalysisRequest {
   organizationKey: string;
   projectKey: string;
   branchName?: string;
@@ -268,18 +268,18 @@ export interface A3sAnalysisRequest {
   fileScope?: 'MAIN' | 'TEST';
 }
 
-export interface A3sAnalysisResponse {
+export interface SqaaAnalysisResponse {
   id: string;
-  issues: A3sIssue[];
+  issues: SqaaIssue[];
   patchResult?: {
-    newIssues: A3sIssue[];
-    matchedIssues: A3sIssue[];
+    newIssues: SqaaIssue[];
+    matchedIssues: SqaaIssue[];
     closedIssues: string[];
   } | null;
   errors?: Array<{ code: string; message: string }> | null;
 }
 
-export interface A3sIssue {
+export interface SqaaIssue {
   id: string;
   filePath?: string | null;
   message: string;

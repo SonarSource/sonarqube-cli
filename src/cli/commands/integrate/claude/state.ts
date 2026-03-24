@@ -42,7 +42,7 @@ export function updateStateAfterConfiguration(
   config: ConfigurationData,
   projectRoot: string,
   isGlobal: boolean,
-  a3sEnabled: boolean,
+  sqaaEnabled: boolean,
 ): void {
   try {
     const state = loadState();
@@ -85,14 +85,14 @@ export function updateStateAfterConfiguration(
     });
 
     const isCloud = isSonarQubeCloud(config.serverURL);
-    if (a3sEnabled) {
+    if (sqaaEnabled) {
       upsertAgentExtension(state, {
         ...baseExt,
         projectRoot,
         global: false,
         id: randomUUID(),
         kind: 'hook',
-        name: 'sonar-a3s',
+        name: 'sonar-sqaa',
         hookType: 'PostToolUse',
       });
     }

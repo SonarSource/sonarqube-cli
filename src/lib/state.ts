@@ -129,7 +129,7 @@ export interface BaseAgentExtension {
  */
 export interface HookExtension extends BaseAgentExtension {
   kind: 'hook';
-  /** Hook script name (e.g. 'sonar-secrets', 'sonar-a3s') */
+  /** Hook script name (e.g. 'sonar-secrets', 'sonar-sqaa') */
   name: string;
   /** Claude Code hook type */
   hookType: HookType;

@@ -26,8 +26,8 @@ import {
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
-  getA3sPostToolTemplateUnix,
-  getA3sPostToolTemplateWindows,
+  getSqaaPostToolTemplateUnix,
+  getSqaaPostToolTemplateWindows,
 } from '../../src/cli/commands/integrate/claude/hook-templates';
 
 describe('Secret Scanning Hook Templates', () => {
@@ -65,18 +65,18 @@ describe('Secret Scanning Hook Templates', () => {
   });
 });
 
-describe('A3S PostToolUse Hook Templates', () => {
-  it('PostTool Unix hook: bash shebang, sonar analyze a3s command, handles Edit and Write tools', () => {
-    const template = getA3sPostToolTemplateUnix();
+describe('SQAA PostToolUse Hook Templates', () => {
+  it('PostTool Unix hook: bash shebang, sonar analyze sqaa command, handles Edit and Write tools', () => {
+    const template = getSqaaPostToolTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar analyze a3s --file')).toBe(true);
+    expect(template.includes('sonar analyze sqaa --file')).toBe(true);
     expect(template.includes('"Edit"')).toBe(true);
     expect(template.includes('"Write"')).toBe(true);
   });
 
   it('PostTool Unix hook: non-blocking (never blocks file operations)', () => {
-    const template = getA3sPostToolTemplateUnix();
+    const template = getSqaaPostToolTemplateUnix();
 
     // Must not emit permissionDecision — PostToolUse is informational only
     expect(template.includes('permissionDecision')).toBe(false);
@@ -84,17 +84,17 @@ describe('A3S PostToolUse Hook Templates', () => {
     expect(template.includes('|| true') || template.includes('2>/dev/null')).toBe(true);
   });
 
-  it('PostTool Windows hook: PowerShell, sonar analyze a3s command, handles Edit and Write tools', () => {
-    const template = getA3sPostToolTemplateWindows();
+  it('PostTool Windows hook: PowerShell, sonar analyze sqaa command, handles Edit and Write tools', () => {
+    const template = getSqaaPostToolTemplateWindows();
 
     expect(typeof template).toBe('string');
-    expect(template.includes('sonar analyze a3s')).toBe(true);
+    expect(template.includes('sonar analyze sqaa')).toBe(true);
     expect(template.includes('"Edit"') || template.includes('-ne "Edit"')).toBe(true);
     expect(template.includes('"Write"') || template.includes('-ne "Write"')).toBe(true);
   });
 
   it('PostTool Windows hook: non-blocking (never blocks file operations)', () => {
-    const template = getA3sPostToolTemplateWindows();
+    const template = getSqaaPostToolTemplateWindows();
 
     expect(template.includes('permissionDecision')).toBe(false);
   });
@@ -107,8 +107,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getA3sPostToolTemplateUnix(),
-      getA3sPostToolTemplateWindows(),
+      getSqaaPostToolTemplateUnix(),
+      getSqaaPostToolTemplateWindows(),
     ];
 
     const uniqueContents = new Set(templates);
@@ -127,8 +127,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getA3sPostToolTemplateUnix(),
-      getA3sPostToolTemplateWindows(),
+      getSqaaPostToolTemplateUnix(),
+      getSqaaPostToolTemplateWindows(),
     ];
 
     templates.forEach((template) => {
@@ -136,12 +136,12 @@ describe('Template Integrity', () => {
     });
   });
 
-  it('A3S templates use sonar analyze a3s, secrets templates use sonar analyze', () => {
-    expect(getA3sPostToolTemplateUnix().includes('sonar analyze a3s')).toBe(true);
-    expect(getA3sPostToolTemplateWindows().includes('sonar analyze a3s')).toBe(true);
+  it('SQAA templates use sonar analyze sqaa, secrets templates use sonar analyze', () => {
+    expect(getSqaaPostToolTemplateUnix().includes('sonar analyze sqaa')).toBe(true);
+    expect(getSqaaPostToolTemplateWindows().includes('sonar analyze sqaa')).toBe(true);
 
-    // Secrets templates should NOT call sonar analyze a3s
-    expect(getSecretPreToolTemplateUnix().includes('sonar analyze a3s')).toBe(false);
-    expect(getSecretPromptTemplateUnix().includes('sonar analyze a3s')).toBe(false);
+    // Secrets templates should NOT call sonar analyze sqaa
+    expect(getSecretPreToolTemplateUnix().includes('sonar analyze sqaa')).toBe(false);
+    expect(getSecretPromptTemplateUnix().includes('sonar analyze sqaa')).toBe(false);
   });
 });

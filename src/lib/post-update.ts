@@ -26,7 +26,12 @@ import { STATE_FILE } from './config-constants';
 import logger from './logger';
 import { loadState, saveState } from './state-manager';
 import { isNewerVersion } from './version';
-import { migrateHookScripts } from './migration.js';
+import {
+  migrateHookScripts,
+  cleanObsoleteFromState,
+  removeObsoleteHookArtifacts,
+  OBSOLETE_A3S_MARKER,
+} from './migration.js';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
 
 /**
@@ -55,6 +60,7 @@ export async function runPostUpdateActions(): Promise<void> {
   try {
     await runActions(previousVersion, CURRENT_VERSION);
     state.config.cliVersion = CURRENT_VERSION;
+    cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
     saveState(state);
   } catch (error) {
     logger.debug(`Post-update actions failed: ${(error as Error).message}`);
@@ -75,9 +81,9 @@ async function runActions(_previousVersion: string, _currentVersion: string): Pr
  *    Project-level hooks without registry entries cannot be discovered — user must
  *    re-run `sonar integrate claude` once to populate the registry.
  *
- * installA3s is always false here: A3S entitlement check requires a token which
+ * installSqaa is always false here: SQAA entitlement check requires a token which
  * is not available during post-update. User re-runs `sonar integrate claude` to
- * get the A3S hook installed.
+ * get the SQAA hook installed.
  *
  * @param homedirFn - Injectable for tests; defaults to os.homedir()
  */
@@ -111,6 +117,7 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
     try {
       migrateHookScripts(projectRoot, globalDir);
       await installHooks(projectRoot, globalDir, false);
+      await removeObsoleteHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
       logger.debug(`Migrated Claude Code hooks for: ${globalDir ?? projectRoot}`);
     } catch (err) {
       logger.debug(

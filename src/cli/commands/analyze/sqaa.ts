@@ -25,7 +25,7 @@ import logger from '../../../lib/logger';
 import { blank, error, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import type { A3sIssue } from '../../../sonarqube/client';
+import type { SqaaIssue } from '../../../sonarqube/client';
 import { loadState, findExtensionsByProject } from '../../../lib/state-manager';
 import type { HookExtension } from '../../../lib/state';
 
@@ -97,7 +97,7 @@ function resolveSqaaProjectKey(command?: Command): string | null {
     const state = loadState();
     const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
     const sqaaExt = extensions.find(
-      (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-a3s',
+      (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-sqaa',
     );
 
     if (!sqaaExt?.projectKey) {
@@ -160,7 +160,7 @@ async function callSqaaApiAndDisplay(
 }
 
 function displaySqaaResults(
-  issues: A3sIssue[],
+  issues: SqaaIssue[],
   errors?: Array<{ code: string; message: string }> | null,
 ): void {
   blank();
