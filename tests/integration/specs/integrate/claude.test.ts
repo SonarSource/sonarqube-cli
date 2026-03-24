@@ -643,6 +643,101 @@ describe('integrate claude — SQAA entitlement guard', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'removes sonar-a3s entries from state.json when SQAA hooks are installed via migration',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+
+      // Simulate an old install: sonar-a3s is the PostToolUse hook, no sonar-sqaa yet
+      const staleState = {
+        version: '1.0',
+        lastUpdated: new Date().toISOString(),
+        auth: {
+          isAuthenticated: true,
+          connections: [
+            {
+              id: 'test-conn',
+              type: 'cloud',
+              serverUrl,
+              orgKey: 'my-org',
+              authenticatedAt: new Date().toISOString(),
+              keystoreKey: `sonarqube-cli:${serverUrl}:my-org`,
+            },
+          ],
+          activeConnectionId: 'test-conn',
+        },
+        agents: {
+          'claude-code': {
+            configured: true,
+            configuredByCliVersion: '0.5.0',
+            hooks: {
+              installed: [
+                { name: 'sonar-a3s', type: 'PostToolUse', installedAt: new Date().toISOString() },
+                {
+                  name: 'sonar-secrets',
+                  type: 'PreToolUse',
+                  installedAt: new Date().toISOString(),
+                },
+              ],
+            },
+            skills: { installed: [] },
+          },
+        },
+        config: { cliVersion: CURRENT_VERSION },
+        telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
+        agentExtensions: [
+          {
+            id: randomUUID(),
+            agentId: 'claude-code',
+            projectRoot: harness.cwd.path,
+            global: false,
+            kind: 'hook',
+            name: 'sonar-a3s',
+            hookType: 'PostToolUse',
+            updatedByCliVersion: '0.5.0',
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      };
+
+      harness
+        .state()
+        .withRawState(JSON.stringify(staleState))
+        .withKeychainToken(serverUrl, 'cloud-token', 'my-org');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${serverUrl}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+        extraEnv: {
+          SONAR_CLI_SONARCLOUD_URL: serverUrl,
+          SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+
+      const state = harness.stateJsonFile.asJson();
+      const extensions = state.agentExtensions as Array<{ name: string }>;
+      const hooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
+        name: string;
+      }>;
+
+      expect(extensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
+      expect(hooks.some((h) => h.name === 'sonar-a3s')).toBe(false);
+      expect(extensions.some((e) => e.name === 'sonar-sqaa')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
 });
 
 // ─── Local vs Global file placement ──────────────────────────────────────────
