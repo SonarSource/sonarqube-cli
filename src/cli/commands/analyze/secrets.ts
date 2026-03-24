@@ -308,7 +308,8 @@ function handleScanError(err: unknown): void {
     details =
       '\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.';
   } else if (errorMessage.includes('ENOENT')) {
-    details = '\nThe binary file was not found or is not executable.\nRun: sonar integrate';
+    details =
+      '\nThe secrets analyzer binary was not found or is not executable.\nRun: sonar integrate';
   } else {
     details = '\nRun: sonar integrate';
   }

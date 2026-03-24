@@ -132,7 +132,6 @@ export async function resolveHookType(options: IntegrateGitOptions): Promise<Git
 
 async function ensureSonarSecrets(): Promise<void> {
   await installSecretsBinary();
-  blank();
 }
 
 export function showPostInstallInfo(hook: GitHookType): void {
