@@ -365,7 +365,7 @@ describe('secretCheckCommand: scan error handling', () => {
 
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as CommandFailedError).message).toBe(
-      'Error: spawn ENOENT: no such file or directory\n\nThe binary file was not found or is not executable.\nRun: sonar integrate\n',
+      'Error: spawn ENOENT: no such file or directory\n\nThe secrets analyzer binary was not found or is not executable.\nRun: sonar integrate\n',
     );
   });
 
