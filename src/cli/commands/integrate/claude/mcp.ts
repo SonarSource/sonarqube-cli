@@ -27,6 +27,7 @@ import { dirname, join } from 'node:path';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isDockerAvailable } from '../../../../lib/tool-detector';
 import { error, info, success, warn } from '../../../../ui';
+import { normalizePath } from '../../../../lib/fs-utils';
 
 export async function setupMcpServer(
   agent: string,
@@ -78,11 +79,12 @@ export async function writeMcpServerEntry(
     const mcpServers = (existing.mcpServers as Record<string, unknown> | undefined) ?? {};
     existing.mcpServers = { ...mcpServers, sonarqube: serverConfig };
   } else {
+    const projectKey = normalizePath(projectRoot);
     const projects = (existing.projects as Record<string, unknown> | undefined) ?? {};
-    const projectEntry = (projects[projectRoot] as Record<string, unknown> | undefined) ?? {};
+    const projectEntry = (projects[projectKey] as Record<string, unknown> | undefined) ?? {};
     const mcpServers = (projectEntry.mcpServers as Record<string, unknown> | undefined) ?? {};
     projectEntry.mcpServers = { ...mcpServers, sonarqube: serverConfig };
-    projects[projectRoot] = projectEntry;
+    projects[projectKey] = projectEntry;
     existing.projects = projects;
   }
 
@@ -124,11 +126,12 @@ export function getMcpServerConfig(
   }
 
   if (!isGlobal) {
+    const hostPath = normalizePath(projectRoot);
     if (discoveredProjectKey) {
       args.push('-e', 'SONARQUBE_PROJECT_KEY');
       env.SONARQUBE_PROJECT_KEY = discoveredProjectKey;
     }
-    args.push('-v', `${projectRoot}:/app/mcp-workspace:ro`);
+    args.push('-v', `${hostPath}:/app/mcp-workspace:ro`);
   }
 
   args.push('mcp/sonarqube');

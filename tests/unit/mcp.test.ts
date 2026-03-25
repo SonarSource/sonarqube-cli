@@ -125,6 +125,19 @@ describe('getMcpServerConfig', () => {
     });
   });
 
+  it('uses forward slashes in the docker -v host path on Windows-style roots', () => {
+    const config = getMcpServerConfig(
+      ON_PREMISE_AUTH,
+      false,
+      String.raw`C:\Users\tdd\source\repos\sonarlint-core`,
+      undefined,
+    );
+    const args = (config as { args: string[] }).args;
+    const vIndex = args.indexOf('-v');
+    expect(vIndex).toBeGreaterThan(-1);
+    expect(args[vIndex + 1]).toBe('C:/Users/tdd/source/repos/sonarlint-core:/app/mcp-workspace:ro');
+  });
+
   it('returns a docker command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
     const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', undefined);
     expect(config).toEqual({
@@ -220,6 +233,16 @@ describe('writeMcpServerEntry', () => {
     >;
     expect(mcpServers['other']).toEqual({ command: 'npx', args: ['other-mcp'] });
     expect(mcpServers['sonarqube']).toEqual(serverConfig);
+  });
+
+  it('writes projects keys with forward slashes when projectRoot uses backslashes', async () => {
+    const winRoot = String.raw`C:\Users\tdd\source\repos\sonarlint-core`;
+    const serverConfig = { command: 'docker', args: ['run', 'mcp/sonarqube'] };
+    await writeMcpServerEntry(tmpFile, serverConfig, false, winRoot);
+
+    const written = JSON.parse(readFileSync(tmpFile, 'utf-8')) as Record<string, unknown>;
+    const projects = written.projects as Record<string, unknown>;
+    expect(Object.keys(projects)).toEqual(['C:/Users/tdd/source/repos/sonarlint-core']);
   });
 
   it('merges sonarqube entry into existing global mcpServers without overwriting other entries', async () => {
