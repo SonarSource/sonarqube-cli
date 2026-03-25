@@ -40,7 +40,7 @@ import {
   text,
   warn,
 } from '../../../../ui';
-import { GitRepo, resolveGitHooksDir, toForwardSlash } from '../../_common/git-repo';
+import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { HOOK_MARKER, getHookScript } from './git-shell-fragments';
 import { installViaHusky } from './git-husky';
 import {
@@ -48,6 +48,7 @@ import {
   hasSonarHookInPreCommitConfig,
   installViaPreCommitFramework,
 } from './git-precommit-framework';
+import { normalizePath } from '../../../../lib/fs-utils';
 
 export type GitHookType = 'pre-commit' | 'pre-push';
 
@@ -88,7 +89,7 @@ export async function detectSonarHookInstallation(root: string): Promise<HookIns
   } catch {
     hooksDir = join(root, '.git', 'hooks');
   }
-  const isHusky = toForwardSlash(hooksDir).startsWith(toForwardSlash(join(root, '.husky')));
+  const isHusky = normalizePath(hooksDir).startsWith(normalizePath(join(root, '.husky')));
   return {
     preCommitConfig: hasSonarHookInPreCommitConfig(root),
     huskyPreCommit: isHusky && hasMarker(join(hooksDir, 'pre-commit')),
@@ -111,12 +112,10 @@ export function validateHookOption(hook: string | undefined): void {
 }
 
 /**
- * Returns explicit `--hook`, or `pre-commit` when non-interactive with no hook, or prompts.
- * Call `validateHookOption` first for CLI-driven options.
+ * Validates and returns explicit `--hook`, or `pre-commit` when non-interactive with no hook, or prompts to select.
  */
 export async function resolveHookType(options: IntegrateGitOptions): Promise<GitHookType> {
   if (options.hook !== undefined) {
-    validateHookOption(options.hook);
     return options.hook;
   }
   if (options.nonInteractive) {
@@ -222,6 +221,8 @@ export async function installViaGitHooks(
 // ---------------------------------------------------------------------------
 
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
+  validateHookOption(options.hook);
+
   warn('Global hook installation');
   text('  Git prioritizes local repository settings over global ones.');
   text('  If a project has a local core.hooksPath set,');
@@ -256,7 +257,7 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
       'config',
       '--global',
       'core.hooksPath',
-      toForwardSlash(GLOBAL_HOOKS_DIR),
+      normalizePath(GLOBAL_HOOKS_DIR),
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -37,7 +37,6 @@ import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/c
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
-import type { ResolvedAuth } from '../lib/auth-resolver';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 const HELP_BANNER_WIDTH = 28;
