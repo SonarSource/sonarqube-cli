@@ -124,6 +124,56 @@ jobs:
       - name: Build binary for ${{ matrix.os }}
         run: bun build src/index.ts --compile --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
 
+      - name: Fetch Apple Developer Certificate secrets (macOS only)
+        id: apple-secrets
+        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/sign/sonarqube-cli CERTIFICATE | CERTIFICATE;
+            development/kv/data/sign/sonarqube-cli CSC_KEY_PASSWORD | CSC_KEY_PASSWORD;
+            development/kv/data/sign/sonarqube-cli APPLE_TEAM_ID | APPLE_TEAM_ID;
+            development/kv/data/sign/sonarqube-cli APPLE_ID | APPLE_ID;
+            development/kv/data/sign/sonarqube-cli APPLE_APP_SPECIFIC_PASSWORD | APPLE_APP_SPECIFIC_PASSWORD;
+
+      - name: Code-sign and notarize binary (macOS only)
+        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        env:
+          CERTIFICATE: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CSC_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_TEAM_ID }}
+          APPLE_ID: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          echo "$CERTIFICATE" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import /tmp/certificate.p12 -k build.keychain -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          rm /tmp/certificate.p12
+
+          codesign \
+            --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" \
+            --options runtime \
+            --timestamp \
+            dist/${{ steps.artifact.outputs.name }}
+          codesign --verify --verbose dist/${{ steps.artifact.outputs.name }}
+
+          zip /tmp/notarize.zip dist/${{ steps.artifact.outputs.name }}
+          xcrun notarytool submit /tmp/notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          rm /tmp/notarize.zip
+
+      - name: Clean up build keychain
+        if: always() && matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        run: |
+          security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+          security delete-keychain build.keychain 2>/dev/null || true
+
       - name: Sign binary
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
