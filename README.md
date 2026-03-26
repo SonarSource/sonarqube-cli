@@ -69,25 +69,13 @@ sonar auth login -s https://my-sonarqube.io --with-token squ_def456
 
 #### `sonar auth logout`
 
-Remove authentication token from keychain
-
-**Options:**
-
-| Option           | Type   | Required | Description                                                     | Default |
-| ---------------- | ------ | -------- | --------------------------------------------------------------- | ------- |
-| `--server`, `-s` | string | No       | SonarQube server URL                                            | -       |
-| `--org`, `-o`    | string | No       | SonarQube Cloud organization key (required for SonarQube Cloud) | -       |
+Remove active connection token from keychain
 
 **Examples:**
 
-Remove token for SonarQube Cloud organization
+Remove active connection token from keychain
 ```bash
-sonar auth logout -o my-org
-```
-
-Remove token for custom SonarQube server
-```bash
-sonar auth logout -s https://my-sonarqube.io
+sonar auth logout
 ```
 
 ---

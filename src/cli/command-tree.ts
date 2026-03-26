@@ -25,7 +25,7 @@ import { SonarCommand } from './commands/_common/sonar-command.js';
 import { listIssues, type ListIssuesOptions } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
-import { authLogout, type AuthLogoutOptions } from './commands/auth/logout';
+import { authLogout } from './commands/auth/logout';
 import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
@@ -142,10 +142,8 @@ auth
 
 auth
   .command('logout')
-  .description('Remove authentication token from keychain')
-  .option('-s, --server <server>', 'SonarQube server URL')
-  .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-  .anonymousAction((options: AuthLogoutOptions) => authLogout(options));
+  .description('Remove active connection token from keychain')
+  .authenticatedAction((auth) => authLogout(auth));
 
 auth
   .command('purge')

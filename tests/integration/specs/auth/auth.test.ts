@@ -273,10 +273,10 @@ describe('auth logout', () => {
         .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), 'logout-token');
 
-      const result = await harness.run(`auth logout --server ${server.baseUrl()}`);
+      const result = await harness.run(`auth logout`);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Logged out');
+      expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
 
       // Verify token was removed from keychain
       expect(harness.keychainJsonFile.exists()).toBe(true);
@@ -284,20 +284,22 @@ describe('auth logout', () => {
         tokens: Record<string, string>;
       };
       expect(Object.values(keychain.tokens)).not.toContain('logout-token');
+      expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
+      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits gracefully when no token exists for the server',
+    'fails when no token exists for the server',
     async () => {
       const server = await harness.newFakeServer().start();
-      // No token in keychain — nothing to logout
+      harness.state().withActiveConnection(server.baseUrl());
 
-      const result = await harness.run(`auth logout --server ${server.baseUrl()}`);
+      const result = await harness.run(`auth logout`);
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('No token found');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(`Not authenticated. Run: sonar auth login`);
     },
     { timeout: 15000 },
   );

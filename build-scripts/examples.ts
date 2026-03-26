@@ -40,12 +40,8 @@ export const EXAMPLES: Record<string, Example[]> = {
   ],
   'sonar auth logout': [
     {
-      command: 'sonar auth logout -o my-org',
-      description: 'Remove token for SonarQube Cloud organization',
-    },
-    {
-      command: 'sonar auth logout -s https://my-sonarqube.io',
-      description: 'Remove token for custom SonarQube server',
+      command: 'sonar auth logout',
+      description: 'Remove active connection token from keychain',
     },
   ],
   'sonar auth purge': [

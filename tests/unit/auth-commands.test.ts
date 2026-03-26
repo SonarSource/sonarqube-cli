@@ -29,10 +29,11 @@ import { authPurge } from '../../src/cli/commands/auth/purge';
 import { authStatus } from '../../src/cli/commands/auth/status';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as discovery from '../../src/cli/commands/_common/discovery';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
+import { setMockUi } from '../../src/ui';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
+import { ResolvedAuth } from '../../src/lib/auth-resolver.js';
 
 const keytarHandle = createMockKeytar();
 
@@ -40,6 +41,19 @@ describe('authLogoutCommand', () => {
   let loadStateSpy: any;
 
   let saveStateSpy: any;
+
+  const FAKE_SQS_AUTH: ResolvedAuth = {
+    token: 'fake-token',
+    serverUrl: 'https://sonar.example.com',
+    connectionType: 'on-premise',
+  };
+
+  const FAKE_SQC_AUTH: ResolvedAuth = {
+    serverUrl: 'https://sonarcloud.io',
+    token: 'fake-token',
+    orgKey: 'test-org',
+    connectionType: 'cloud',
+  };
 
   beforeEach(() => {
     keytarHandle.setup();
@@ -55,52 +69,40 @@ describe('authLogoutCommand', () => {
     setMockUi(false);
   });
 
-  it('throws when SonarCloud server used without org', () => {
-    expect(authLogout({ server: 'https://sonarcloud.io' })).rejects.toThrow();
-  });
-
-  it('logs info and exits 0 when no token found for on-premise server', async () => {
-    clearMockUiCalls();
-
-    await authLogout({ server: 'https://sonar.example.com' });
-
-    const calls = getMockUiCalls();
-    const printCalls = calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(printCalls.some((m) => m.includes('No token found'))).toBe(true);
-  });
-
   it('deletes on-premise token from keychain on logout', async () => {
-    await saveToken('https://sonar.example.com', 'test-token-xyz');
-    expect(await getToken('https://sonar.example.com')).toBe('test-token-xyz');
+    await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
+    expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBe(FAKE_SQS_AUTH.token);
 
-    await authLogout({ server: 'https://sonar.example.com' });
+    await authLogout(FAKE_SQS_AUTH);
 
-    expect(await getToken('https://sonar.example.com')).toBeNull();
+    expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBeNull();
   });
 
   it('deletes SonarCloud token when org provided', async () => {
-    await saveToken('https://sonarcloud.io', 'cloud-token-abc', 'my-org');
-    expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('cloud-token-abc');
+    await saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
+    expect(await getToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.orgKey)).toBe(FAKE_SQC_AUTH.token);
 
-    await authLogout({ server: 'https://sonarcloud.io', org: 'my-org' });
+    await authLogout(FAKE_SQC_AUTH);
 
-    expect(await getToken('https://sonarcloud.io', 'my-org')).toBeNull();
+    expect(await getToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.orgKey)).toBeNull();
   });
 
   it('does not delete other org tokens when logging out from one org', async () => {
-    await saveToken('https://sonarcloud.io', 'token-org1', 'org1');
-    await saveToken('https://sonarcloud.io', 'token-org2', 'org2');
+    await saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
+    await saveToken(FAKE_SQC_AUTH.serverUrl, 'token-org2', 'org2');
 
-    await authLogout({ server: 'https://sonarcloud.io', org: 'org1' });
+    await authLogout(FAKE_SQC_AUTH);
 
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
-    expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token-org2');
+    expect(await getToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.orgKey)).toBeNull();
+    expect(await getToken(FAKE_SQC_AUTH.serverUrl, 'org2')).toBe('token-org2');
   });
 
   it('accepts on-premise server with org (org is optional for on-premise)', async () => {
-    await saveToken('https://sonar.example.com', 'onprem-token');
+    await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
 
-    await authLogout({ server: 'https://sonar.example.com', org: 'some-org' });
+    await authLogout(FAKE_SQS_AUTH);
+
+    expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBeNull();
   });
 });
 
