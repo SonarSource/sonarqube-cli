@@ -39,9 +39,9 @@ function getBinaryPath(coverageMode: boolean): string {
   return binaryPath;
 }
 
-/** Same executable `runCli` uses (coverage binary when `SONAR_CLI_USE_COVERAGE=1`). */
+/** Same executable `runCli` uses (coverage binary when `SONARQUBE_CLI_USE_COVERAGE=1`). */
 export function getCliBinaryPath(): string {
-  return getBinaryPath(process.env.SONAR_CLI_USE_COVERAGE === '1');
+  return getBinaryPath(process.env.SONARQUBE_CLI_USE_COVERAGE === '1');
 }
 
 const STDIN_CHUNK_DELAY_MS = 300;
@@ -57,7 +57,7 @@ export async function runCli(
     browserToken?: string;
   },
 ): Promise<CliResult> {
-  const coverageMode = process.env.SONAR_CLI_USE_COVERAGE === '1';
+  const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
   const binaryPath = getBinaryPath(coverageMode);
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const startTime = Date.now();

@@ -73,7 +73,7 @@ describe('integrate claude', () => {
   );
 
   it(
-    'uses SONAR_CLI_TOKEN + SONAR_CLI_SERVER env vars for full integration',
+    'uses SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER env vars for full integration',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -82,13 +82,13 @@ describe('integrate claude', () => {
         .start();
 
       // sonar-project.properties has only the project key — no sonar.host.url,
-      // so the server URL must come exclusively from SONAR_CLI_SERVER env var
+      // so the server URL must come exclusively from SONARQUBE_CLI_SERVER env var
       harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=env-project');
 
       const result = await harness.run('integrate claude --non-interactive', {
         extraEnv: {
-          SONAR_CLI_TOKEN: 'env-token',
-          SONAR_CLI_SERVER: server.baseUrl(),
+          SONARQUBE_CLI_TOKEN: 'env-token',
+          SONARQUBE_CLI_SERVER: server.baseUrl(),
         },
       });
 
@@ -265,7 +265,7 @@ describe('integrate claude', () => {
   it(
     'does not open browser when env vars are set but token is invalid (env vars imply non-interactive)',
     async () => {
-      // Regression test: when SONAR_CLI_TOKEN + SONAR_CLI_SERVER are set but the token is
+      // Regression test: when SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER are set but the token is
       // rejected by the server, the command must NOT open a browser — env vars imply CI/automated
       // context. Without the fix this test hangs (browser auth is triggered, loopback server waits).
       const server = await harness
@@ -283,8 +283,8 @@ describe('integrate claude', () => {
         'integrate claude', // no --non-interactive flag
         {
           extraEnv: {
-            SONAR_CLI_TOKEN: 'invalid-token', // rejected by server → tokenValid = false
-            SONAR_CLI_SERVER: server.baseUrl(),
+            SONARQUBE_CLI_TOKEN: 'invalid-token', // rejected by server → tokenValid = false
+            SONARQUBE_CLI_SERVER: server.baseUrl(),
             // no browserToken: if browser auth is triggered the test times out
           },
         },
@@ -305,7 +305,7 @@ describe('integrate claude', () => {
   );
 
   it(
-    'warns about missing SONAR_CLI_SERVER when only SONAR_CLI_TOKEN is set',
+    'warns about missing SONARQUBE_CLI_SERVER when only SONARQUBE_CLI_TOKEN is set',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -320,12 +320,12 @@ describe('integrate claude', () => {
       );
 
       const result = await harness.run('integrate claude --non-interactive', {
-        extraEnv: { SONAR_CLI_TOKEN: 'some-token' },
+        extraEnv: { SONARQUBE_CLI_TOKEN: 'some-token' },
       });
 
       expect(result.exitCode).toBe(0);
       // warn() outputs to stderr
-      expect(result.stderr).toContain('SONAR_CLI_SERVER');
+      expect(result.stderr).toContain('SONARQUBE_CLI_SERVER');
     },
     { timeout: 30000 },
   );
@@ -495,8 +495,8 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
         extraEnv: {
-          SONAR_CLI_SONARCLOUD_URL: serverUrl,
-          SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
 
@@ -525,8 +525,8 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       const result = await harness.run(`integrate claude --non-interactive`, {
         extraEnv: {
-          SONAR_CLI_SONARCLOUD_URL: serverUrl,
-          SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
 
@@ -557,8 +557,8 @@ describe('integrate claude — SQAA entitlement guard', () => {
         `integrate claude -g --project my-project --non-interactive`,
         {
           extraEnv: {
-            SONAR_CLI_SONARCLOUD_URL: serverUrl,
-            SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
           },
         },
       );
@@ -626,8 +626,8 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
         extraEnv: {
-          SONAR_CLI_SONARCLOUD_URL: serverUrl,
-          SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
 
@@ -719,8 +719,8 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
         extraEnv: {
-          SONAR_CLI_SONARCLOUD_URL: serverUrl,
-          SONAR_CLI_SONARCLOUD_API_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
 

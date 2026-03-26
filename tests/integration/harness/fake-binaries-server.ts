@@ -40,7 +40,7 @@ export class FakeBinariesServer {
     this.requests = requests;
   }
 
-  /** Base URL to pass as SONAR_CLI_BINARIES_URL. */
+  /** Base URL to pass as SONARQUBE_CLI_BINARIES_URL. */
   baseUrl(): string {
     return `http://127.0.0.1:${this.server.port}`;
   }

@@ -195,10 +195,10 @@ describe('resolveAuth', () => {
   // ─── ENV_TOKEN / ENV_SERVER constants ─────────────────────────────────
 
   it('exports ENV_TOKEN constant', () => {
-    expect(ENV_TOKEN).toBe('SONAR_CLI_TOKEN');
+    expect(ENV_TOKEN).toBe('SONARQUBE_CLI_TOKEN');
   });
 
   it('exports ENV_SERVER constant', () => {
-    expect(ENV_SERVER).toBe('SONAR_CLI_SERVER');
+    expect(ENV_SERVER).toBe('SONARQUBE_CLI_SERVER');
   });
 });

@@ -189,7 +189,7 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'forwards auth to binary when SONAR_CLI_TOKEN + SONAR_CLI_SERVER are set',
+    'forwards auth to binary when SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER are set',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
@@ -200,8 +200,8 @@ describe('analyze secrets', () => {
 
       const result = await harness.run('analyze secrets secrets.js', {
         extraEnv: {
-          SONAR_CLI_TOKEN: VALID_TOKEN,
-          SONAR_CLI_SERVER: server.baseUrl(),
+          SONARQUBE_CLI_TOKEN: VALID_TOKEN,
+          SONARQUBE_CLI_SERVER: server.baseUrl(),
           SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true',
         },
       });

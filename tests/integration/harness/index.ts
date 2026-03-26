@@ -133,7 +133,7 @@ export class TestHarness {
    * Runs the CLI binary with the given command string.
    *
    * Before spawning, applies the configured environment (writes state.json + copies binary).
-   * Sets SONAR_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain where the harness
+   * Sets SONARQUBE_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain where the harness
    * has written tokens (via withKeychainToken()); avoids touching the system keychain.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
@@ -158,21 +158,21 @@ export class TestHarness {
 
     const activeBinariesServer = this.binariesServers.at(-1);
     const fakeBinariesEnv: Record<string, string> = activeBinariesServer
-      ? { SONAR_CLI_BINARIES_URL: activeBinariesServer.baseUrl() }
+      ? { SONARQUBE_CLI_BINARIES_URL: activeBinariesServer.baseUrl() }
       : {};
 
     // Redirect SonarCloud API calls to the active fake server so that
     // integration tests don't hit api.sonarcloud.io (e.g. for SQAA analysis)
     const activeFakeServer = this.servers.at(-1);
     const fakeSonarcloudApiEnv: Record<string, string> = activeFakeServer
-      ? { SONAR_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
+      ? { SONARQUBE_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
       : {};
 
     const env: Record<string, string> = {
       ...systemVars,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
-      SONAR_CLI_KEYCHAIN_FILE: this.keychainJsonFile.path,
+      SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile.path,
       CI: 'true',
       ...this._extraEnv,
       ...(options?.extraEnv ?? {}),

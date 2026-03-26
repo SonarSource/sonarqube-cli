@@ -26,9 +26,9 @@ import { loadState, getActiveConnection } from './state-manager.js';
 import { warn } from '../ui';
 import logger from './logger.js';
 
-export const ENV_TOKEN = 'SONAR_CLI_TOKEN';
-export const ENV_SERVER = 'SONAR_CLI_SERVER';
-export const ENV_ORG = 'SONAR_CLI_ORG';
+export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
+export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';
+export const ENV_ORG = 'SONARQUBE_CLI_ORG';
 
 export interface ResolvedAuth {
   token: string;
@@ -41,7 +41,7 @@ export interface ResolvedAuth {
  * Resolve authentication from env vars, CLI options, state file, or keychain.
  *
  * Priority:
- *   1. Either SONAR_CLI_TOKEN + SONAR_CLI_SERVER or SONAR_CLI_TOKEN + SONAR_CLI_ORG  → return immediately
+ *   1. Either SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER or SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_ORG  → return immediately
  *   2. Partial env vars → warn + ignore both, fall back
  *   3. Active connection from state file → server + orgKey
  *   4. Keychain lookup → token
@@ -56,7 +56,7 @@ function resolveFromEnv(): ResolvedAuth | null {
   const envServer = process.env[ENV_SERVER];
   const envOrg = process.env[ENV_ORG];
 
-  // 1. Both SONAR_CLI_TOKEN + SONAR_CLI_ORG present → assume SQC, but get serverUrl from env in case of SQC US
+  // 1. Both SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_ORG present → assume SQC, but get serverUrl from env in case of SQC US
   if (envToken && envOrg) {
     logger.debug('Using environment variable authentication (SQC)');
     return {
@@ -67,7 +67,7 @@ function resolveFromEnv(): ResolvedAuth | null {
     };
   }
 
-  // 2. Both SONAR_CLI_TOKEN + SONAR_CLI_SERVER env vars present → use them immediately
+  // 2. Both SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER env vars present → use them immediately
   if (envToken && envServer) {
     logger.debug('Using environment variable authentication (SQS)');
     return {

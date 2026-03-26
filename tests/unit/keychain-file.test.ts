@@ -19,7 +19,7 @@
  */
 
 /**
- * Unit tests for file-based keychain (SONAR_CLI_KEYCHAIN_FILE).
+ * Unit tests for file-based keychain (SONARQUBE_CLI_KEYCHAIN_FILE).
  * Exercises createFileKeytar, generateKeychainAccount, and all public API
  * functions through the real implementation — no keytar mocking needed.
  */
@@ -48,11 +48,11 @@ describe('File-based keychain', () => {
     mkdirSync(testDir, { recursive: true });
     keychainFile = join(testDir, 'keychain.json');
 
-    savedKeychainFile = process.env.SONAR_CLI_KEYCHAIN_FILE;
-    savedDisableKeychain = process.env.SONAR_CLI_DISABLE_KEYCHAIN;
+    savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    savedDisableKeychain = process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
 
-    process.env.SONAR_CLI_KEYCHAIN_FILE = keychainFile;
-    delete process.env.SONAR_CLI_DISABLE_KEYCHAIN;
+    process.env.SONARQUBE_CLI_KEYCHAIN_FILE = keychainFile;
+    delete process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
 
     clearTokenCache();
   });
@@ -61,15 +61,15 @@ describe('File-based keychain', () => {
     rmSync(testDir, { recursive: true, force: true });
 
     if (savedKeychainFile === undefined) {
-      delete process.env.SONAR_CLI_KEYCHAIN_FILE;
+      delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     } else {
-      process.env.SONAR_CLI_KEYCHAIN_FILE = savedKeychainFile;
+      process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
     }
 
     if (savedDisableKeychain === undefined) {
-      delete process.env.SONAR_CLI_DISABLE_KEYCHAIN;
+      delete process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
     } else {
-      process.env.SONAR_CLI_DISABLE_KEYCHAIN = savedDisableKeychain;
+      process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN = savedDisableKeychain;
     }
 
     clearTokenCache();

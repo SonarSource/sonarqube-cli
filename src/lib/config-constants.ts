@@ -67,9 +67,9 @@ export const GLOBAL_HOOKS_DIR = join(CLI_DIR, 'hooks');
 // Sonarsource binaries
 // ---------------------------------------------------------------------------
 
-/** Base URL for downloading SonarSource binaries. Override via SONAR_CLI_BINARIES_URL for test environments. */
+/** Base URL for downloading SonarSource binaries. Override via SONARQUBE_CLI_BINARIES_URL for test environments. */
 export const SONARSOURCE_BINARIES_URL =
-  process.env.SONAR_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
+  process.env.SONARQUBE_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
 export const UPDATE_SCRIPT_BASE_URL =
   'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
@@ -78,14 +78,15 @@ export const UPDATE_SCRIPT_BASE_URL =
 // SonarCloud
 // ---------------------------------------------------------------------------
 
-export const SONARCLOUD_URL = process.env.SONAR_CLI_SONARCLOUD_URL ?? 'https://sonarcloud.io';
-export const SONARCLOUD_US_URL = process.env.SONAR_CLI_SONARCLOUD_US_URL ?? 'https://sonarqube.us';
+export const SONARCLOUD_URL = process.env.SONARQUBE_CLI_SONARCLOUD_URL ?? 'https://sonarcloud.io';
+export const SONARCLOUD_US_URL =
+  process.env.SONARQUBE_CLI_SONARCLOUD_US_URL ?? 'https://sonarqube.us';
 export const SONARCLOUD_HOSTNAME = new URL(SONARCLOUD_URL).hostname;
 export const SONARCLOUD_US_HOSTNAME = new URL(SONARCLOUD_US_URL).hostname;
 export const SONARCLOUD_API_URL =
-  process.env.SONAR_CLI_SONARCLOUD_API_URL ?? 'https://api.sonarcloud.io';
+  process.env.SONARQUBE_CLI_SONARCLOUD_API_URL ?? 'https://api.sonarcloud.io';
 export const SONARCLOUD_US_API_URL =
-  process.env.SONAR_CLI_SONARCLOUD_US_API_URL ?? 'https://api.sonarqube.us';
+  process.env.SONARQUBE_CLI_SONARCLOUD_US_API_URL ?? 'https://api.sonarqube.us';
 
 // ---------------------------------------------------------------------------
 // Auth loopback server

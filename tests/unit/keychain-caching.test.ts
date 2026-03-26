@@ -306,19 +306,19 @@ describe('Keychain token caching', () => {
   });
 });
 
-describe('SONAR_CLI_DISABLE_KEYCHAIN', () => {
-  it('returns null token when SONAR_CLI_DISABLE_KEYCHAIN is set to true', async () => {
-    const saved = process.env['SONAR_CLI_DISABLE_KEYCHAIN'];
-    process.env['SONAR_CLI_DISABLE_KEYCHAIN'] = 'true';
+describe('SONARQUBE_CLI_DISABLE_KEYCHAIN', () => {
+  it('returns null token when SONARQUBE_CLI_DISABLE_KEYCHAIN is set to true', async () => {
+    const saved = process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'];
+    process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'] = 'true';
     try {
       clearTokenCache();
       const token = await getToken('https://sonarcloud.io', 'myorg');
       expect(token).toBeNull();
     } finally {
       if (saved === undefined) {
-        delete process.env['SONAR_CLI_DISABLE_KEYCHAIN'];
+        delete process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'];
       } else {
-        process.env['SONAR_CLI_DISABLE_KEYCHAIN'] = saved;
+        process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'] = saved;
       }
       clearTokenCache();
     }

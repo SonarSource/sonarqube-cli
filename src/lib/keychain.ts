@@ -94,12 +94,12 @@ export function clearTokenCache(): void {
 }
 
 async function getKeytar() {
-  const keychainFile = process.env.SONAR_CLI_KEYCHAIN_FILE;
+  const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
   if (keychainFile) {
     return createFileKeytar(keychainFile);
   }
 
-  if (process.env.SONAR_CLI_DISABLE_KEYCHAIN === 'true') {
+  if (process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN === 'true') {
     return noOpKeytar;
   }
   try {
