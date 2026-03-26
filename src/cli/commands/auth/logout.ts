@@ -19,20 +19,31 @@
  */
 
 import { deleteToken } from '../../../cli/commands/_common/token';
-import { generateConnectionId, loadState, saveState } from '../../../lib/state-manager';
-import { success } from '../../../ui';
-import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import {
+  generateConnectionId,
+  getActiveConnection,
+  loadState,
+  saveState,
+} from '../../../lib/state-manager';
+import { print, success } from '../../../ui';
 
 /**
  * Logout command - remove token from keychain
  */
-export async function authLogout(auth: ResolvedAuth): Promise<void> {
-  const server = auth.serverUrl;
-  const org = auth.orgKey;
+export async function authLogout(): Promise<void> {
+  const state = loadState();
+  const active = getActiveConnection(state);
+
+  if (!state.auth.isAuthenticated || active === undefined || state.auth.connections.length === 0) {
+    print('You are already logged out.');
+    return;
+  }
+
+  const server = active.serverUrl;
+  const org = active.orgKey;
 
   await deleteToken(server, org);
 
-  const state = loadState();
   const connectionId = generateConnectionId(server, org);
   state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
 
@@ -42,6 +53,7 @@ export async function authLogout(auth: ResolvedAuth): Promise<void> {
 
   saveState(state);
 
-  const displayServerLogout = auth.connectionType === 'cloud' ? `${server} (${org})` : server;
+  const displayServerLogout =
+    active.type === 'cloud' && org !== undefined ? `${server} (${org})` : server;
   success(`Logged out from: ${displayServerLogout}`);
 }

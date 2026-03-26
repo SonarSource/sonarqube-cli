@@ -143,7 +143,7 @@ auth
 auth
   .command('logout')
   .description('Remove active connection token from keychain')
-  .authenticatedAction((auth) => authLogout(auth));
+  .anonymousAction(() => authLogout());
 
 auth
   .command('purge')

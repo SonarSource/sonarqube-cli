@@ -32,10 +32,34 @@ import * as discovery from '../../src/cli/commands/_common/discovery';
 import { setMockUi } from '../../src/ui';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 import * as stateManager from '../../src/lib/state-manager.js';
+import type { AuthConnection } from '../../src/lib/state.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { ResolvedAuth } from '../../src/lib/auth-resolver.js';
 
 const keytarHandle = createMockKeytar();
+
+function cliStateWithLoggedInConnection(auth: ResolvedAuth): ReturnType<typeof getDefaultState> {
+  const base = getDefaultState('test');
+  const connectionId = stateManager.generateConnectionId(auth.serverUrl, auth.orgKey);
+  const connection: AuthConnection = {
+    id: connectionId,
+    type: auth.connectionType === 'cloud' ? 'cloud' : 'on-premise',
+    serverUrl: auth.serverUrl,
+    authenticatedAt: new Date().toISOString(),
+    keystoreKey: 'test',
+  };
+  if (auth.orgKey !== undefined) {
+    connection.orgKey = auth.orgKey;
+  }
+  return {
+    ...base,
+    auth: {
+      isAuthenticated: true,
+      connections: [connection],
+      activeConnectionId: connectionId,
+    },
+  };
+}
 
 describe('authLogoutCommand', () => {
   let loadStateSpy: any;
@@ -58,7 +82,9 @@ describe('authLogoutCommand', () => {
   beforeEach(() => {
     keytarHandle.setup();
     setMockUi(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
+    loadStateSpy = spyOn(stateManager, 'loadState').mockImplementation(() =>
+      cliStateWithLoggedInConnection(FAKE_SQS_AUTH),
+    );
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   });
 
@@ -70,39 +96,55 @@ describe('authLogoutCommand', () => {
   });
 
   it('deletes on-premise token from keychain on logout', async () => {
+    loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQS_AUTH));
     await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
     expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBe(FAKE_SQS_AUTH.token);
 
-    await authLogout(FAKE_SQS_AUTH);
+    await authLogout();
 
     expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBeNull();
   });
 
   it('deletes SonarCloud token when org provided', async () => {
+    loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQC_AUTH));
     await saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
     expect(await getToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.orgKey)).toBe(FAKE_SQC_AUTH.token);
 
-    await authLogout(FAKE_SQC_AUTH);
+    await authLogout();
 
     expect(await getToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.orgKey)).toBeNull();
   });
 
   it('does not delete other org tokens when logging out from one org', async () => {
+    loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQC_AUTH));
     await saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
     await saveToken(FAKE_SQC_AUTH.serverUrl, 'token-org2', 'org2');
 
-    await authLogout(FAKE_SQC_AUTH);
+    await authLogout();
 
     expect(await getToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.orgKey)).toBeNull();
     expect(await getToken(FAKE_SQC_AUTH.serverUrl, 'org2')).toBe('token-org2');
   });
 
   it('accepts on-premise server with org (org is optional for on-premise)', async () => {
+    loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQS_AUTH));
     await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
 
-    await authLogout(FAKE_SQS_AUTH);
+    await authLogout();
 
     expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBeNull();
+  });
+
+  it('does not touch keychain when state has no active session', async () => {
+    loadStateSpy.mockReturnValue(getDefaultState('test'));
+    const deleteSpy = spyOn(token, 'deleteToken').mockResolvedValue(undefined);
+    await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
+
+    await authLogout();
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBe(FAKE_SQS_AUTH.token);
+    deleteSpy.mockRestore();
   });
 });
 

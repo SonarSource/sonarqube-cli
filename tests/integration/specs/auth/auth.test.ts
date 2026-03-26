@@ -291,15 +291,28 @@ describe('auth logout', () => {
   );
 
   it(
-    'fails when no token exists for the server',
+    'clears state when a connection exists but the keychain has no token',
     async () => {
       const server = await harness.newFakeServer().start();
       harness.state().withActiveConnection(server.baseUrl());
 
       const result = await harness.run(`auth logout`);
 
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain(`Not authenticated. Run: sonar auth login`);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+      expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
+      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports already logged out when there is no saved connection',
+    async () => {
+      const result = await harness.run(`auth logout`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('You are already logged out.');
     },
     { timeout: 15000 },
   );
