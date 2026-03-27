@@ -19,9 +19,9 @@
  */
 
 import { version as VERSION } from '../../package.json';
-import { type Command, Option } from 'commander';
-import { blue } from '../ui/colors.js';
+import { type Command, Help, Option } from 'commander';
 import { SonarCommand } from './commands/_common/sonar-command.js';
+import { getCustomRootHelp } from './root-help.js';
 import { listIssues, type ListIssuesOptions } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
@@ -39,31 +39,24 @@ import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
-const HELP_BANNER_WIDTH = 28;
-
-function getHelpBanner(): string {
-  const versionText = `v${VERSION}`;
-  const text = `SonarQube CLI  ${versionText}`;
-  // Center the text: add spaces so the line fills HELP_BANNER_WIDTH, split evenly left/right
-  const totalSpaces = Math.max(0, HELP_BANNER_WIDTH - text.length);
-  const spacesLeft = Math.floor(totalSpaces / 2);
-  const spacesRight = totalSpaces - spacesLeft;
-  const line = `│ ${' '.repeat(spacesLeft)}SonarQube CLI  ${blue(versionText)}${' '.repeat(spacesRight)} │`;
-  return [
-    `┌${'─'.repeat(HELP_BANNER_WIDTH + 2)}┐`,
-    line,
-    `└${'─'.repeat(HELP_BANNER_WIDTH + 2)}┘`,
-    '',
-  ].join('\n');
-}
 
 export const COMMAND_TREE = new SonarCommand();
 
 COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
   .version(VERSION, '-v, --version', 'display version for command')
-  .addHelpText('beforeAll', getHelpBanner())
-  .enablePositionalOptions();
+  .enablePositionalOptions()
+  .configureHelp({
+    formatHelp: (cmd, helper) => {
+      if (!cmd.parent) {
+        return getCustomRootHelp();
+      }
+      return Help.prototype.formatHelp.call(helper, cmd, helper);
+    },
+  })
+  .anonymousAction(function (this: Command) {
+    this.outputHelp();
+  });
 
 // Setup SonarQube integration for AI coding agent
 const integrateCommand = COMMAND_TREE.command('integrate').description(

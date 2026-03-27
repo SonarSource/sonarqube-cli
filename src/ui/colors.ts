@@ -30,6 +30,12 @@ function c(fn: (s: string) => string): ColorFn {
   return (s: string) => (isTTY ? fn(s) : s);
 }
 
+const SOFT_BLUE = 153; // #8FCAEA
+
+function ansi256(n: number): ColorFn {
+  return (s: string) => (isTTY ? `\x1b[38;5;${n}m${s}\x1b[0m` : s);
+}
+
 export const green = c(pc.green);
 export const red = c(pc.red);
 export const yellow = c(pc.yellow);
@@ -37,8 +43,10 @@ export const cyan = c(pc.cyan);
 export const gray = c(pc.gray);
 export const bold = c(pc.bold);
 export const dim = c(pc.dim);
+export const underline = c(pc.underline);
 export const white = c(pc.white);
 export const blue = c(pc.blue);
+export const softBlue = ansi256(SOFT_BLUE);
 
 export const STATUS_COLORS: Record<StepStatus, ColorFn> = {
   done: green,
