@@ -22,8 +22,18 @@
 
 // Main CLI entry point
 
+import * as Sentry from '@sentry/bun';
 import { COMMAND_TREE } from './cli/command-tree';
 import * as postUpdate from './lib/post-update';
+import { loadState } from './lib/state-manager';
+import { initSentry } from './lib/sentry';
+
+const SENTRY_FLUSH_TIMEOUT = 2000;
+
+const state = loadState();
+initSentry(state);
 
 await postUpdate.runPostUpdateActions();
-COMMAND_TREE.parse();
+
+await COMMAND_TREE.parseAsync(process.argv);
+await Sentry.flush(SENTRY_FLUSH_TIMEOUT);

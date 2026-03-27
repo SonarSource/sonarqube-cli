@@ -89,6 +89,14 @@ export const SONARCLOUD_US_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_US_API_URL ?? 'https://api.sonarqube.us';
 
 // ---------------------------------------------------------------------------
+// Sentry
+// ---------------------------------------------------------------------------
+
+/** DSN for Sentry error reporting. */
+export const SENTRY_DSN =
+  'https://cff421c13bc1b079963fd6dfa5bf80e5@o1316750.ingest.us.sentry.io/4511110855000064';
+
+// ---------------------------------------------------------------------------
 // Auth loopback server
 //
 // Port range used by the SonarLint protocol. SonarQube/SonarCloud validates

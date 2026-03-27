@@ -23,6 +23,7 @@
     "gen:docs": "bun run build-scripts/generate-docs.ts",
     "version:build_number": "bun build-scripts/set-build-number.ts",
     "fetch:signatures": "bun build-scripts/fetch-signatures.js",
+    "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --release=\"${PROJECT_VERSION}\" dist/*.map",
     "prepare": "husky"
   },
   "externalBinaries": {
@@ -56,7 +57,8 @@
     "keytar": "^7.9.0",
     "openpgp": "^5.11.2",
     "picocolors": "^1.1.1",
-    "js-yaml": "^4.1.1"
+    "js-yaml": "^4.1.1",
+    "@sentry/bun": "^10.46.0"
   },
   "devDependencies": {
     "@sonar/scan": "^4.3.0",
@@ -77,7 +79,8 @@
     "plop": "^4.0.5",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.56.1",
+    "@sentry/cli": "3.3.4"
   },
   "lint-staged": {
     "*.ts": [

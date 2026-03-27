@@ -373,6 +373,22 @@ Update sonar CLI to the latest version
 
 See [State Management](./docs/state-management.md) for more information.
 
+## Data collection
+
+The SonarQube CLI collects anonymous usage data and error reports to help improve the product.
+
+**Telemetry:** Anonymous command usage statistics are sent to SonarSource.
+
+**Error reporting:** Unhandled exceptions are reported to [Sentry](https://sentry.io) to help us identify and fix crashes.
+
+Both are enabled by default and share the same opt-out toggle. To disable all data collection:
+
+```bash
+sonar config telemetry --disabled
+```
+
+No personally identifiable information is transmitted. File paths in error reports are anonymized by replacing your home directory with `~`.
+
 ## Contributing
 
 Please be aware that we are not actively looking for feature contributions. The truth is that it's extremely difficult for someone outside
