@@ -1,0 +1,125 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) 2026 SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Shared SonarQube API checks for integrate health (Claude, Codex, …)
+
+import { validateToken } from '../../_common/token';
+import { SonarQubeClient } from '../../../../sonarqube/client';
+import logger from '../../../../lib/logger';
+import { text } from '../../../../ui';
+
+export interface SonarQubeHealthBooleans {
+  tokenValid: boolean;
+  serverAvailable: boolean;
+  projectAccessible: boolean;
+  organizationAccessible: boolean;
+  qualityProfilesAccessible: boolean;
+}
+
+export async function logAndValidate(
+  message: string,
+  validator: () => Promise<boolean>,
+  errorMsg: string,
+  errors: string[],
+  verbose: boolean,
+): Promise<boolean> {
+  if (verbose) text(message);
+  try {
+    const result = await validator();
+    if (!result) errors.push(errorMsg);
+    return result;
+  } catch (error) {
+    logger.debug(`Validation failed: ${(error as Error).message}`);
+    errors.push(errorMsg);
+    return false;
+  }
+}
+
+/**
+ * Token, server, project, org, and quality-profile checks (no agent hook layout).
+ */
+export async function runSonarQubeConnectivityChecks(
+  serverURL: string,
+  token: string,
+  projectKey: string | undefined,
+  organization: string | undefined,
+  verbose: boolean,
+  errors: string[],
+): Promise<SonarQubeHealthBooleans> {
+  const client = new SonarQubeClient(serverURL, token);
+
+  const tokenValid = await logAndValidate(
+    'Validating token...',
+    () => validateToken(serverURL, token),
+    'Token is invalid',
+    errors,
+    verbose,
+  );
+
+  const serverAvailable = await logAndValidate(
+    'Checking server availability...',
+    async () => {
+      await client.getSystemStatus();
+      return true;
+    },
+    'Server unavailable',
+    errors,
+    verbose,
+  );
+
+  const projectAccessible = projectKey
+    ? await logAndValidate(
+        'Verifying project access...',
+        () => client.checkComponent(projectKey),
+        `Project not accessible: ${projectKey}`,
+        errors,
+        verbose,
+      )
+    : true;
+
+  let organizationAccessible = true;
+  if (organization) {
+    organizationAccessible = await logAndValidate(
+      'Verifying organization access...',
+      () => client.checkOrganization(organization),
+      `Organization not accessible: ${organization}`,
+      errors,
+      verbose,
+    );
+  }
+
+  const qualityProfilesAccessible = projectKey
+    ? await logAndValidate(
+        'Verifying quality profiles access...',
+        () => client.checkQualityProfiles(projectKey, organization),
+        `Quality profiles not accessible for project: ${projectKey}`,
+        errors,
+        verbose,
+      )
+    : true;
+
+  return {
+    tokenValid,
+    serverAvailable,
+    projectAccessible,
+    organizationAccessible,
+    qualityProfilesAccessible,
+  };
+}

@@ -18,7 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar integrate claude`
+// Integration tests for `sonar integrate codex`
+//
+// Layout targets OpenAI Codex docs:
+// - Hooks: https://developers.openai.com/codex/hooks (hooks.json next to config, [features] codex_hooks)
+// - MCP: https://developers.openai.com/codex/mcp ([mcp_servers.<name>] STDIO shape)
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { realpathSync } from 'node:fs';
@@ -28,19 +32,18 @@ import { TestHarness } from '../../harness';
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
-import {
-  CLAUDE_AGENT_DIR_NAME,
-  CLAUDE_HOOKS_DIR_NAME,
-  CLAUDE_SETTINGS_FILE,
-  CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
-} from '../../../../src/lib/config-constants';
+import { CODEX_AGENT_DIR_NAME } from '../../../../src/lib/config-constants';
+import { hasSonarqubeMcpBlockInToml } from '../../../../src/cli/commands/integrate/codex/codex-config';
 
-const claudeSettingsRelPath = `${CLAUDE_AGENT_DIR_NAME}/${CLAUDE_SETTINGS_FILE}`;
-const claudeSecretsPretoolRelPath = `${CLAUDE_AGENT_DIR_NAME}/${CLAUDE_HOOKS_DIR_NAME}/${CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME}/build-scripts/pretool-secrets.sh`;
-const claudeSecretsPromptRelPath = `${CLAUDE_AGENT_DIR_NAME}/${CLAUDE_HOOKS_DIR_NAME}/${CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME}/build-scripts/prompt-secrets.sh`;
-const claudeA3sPosttoolRelPath = `${CLAUDE_AGENT_DIR_NAME}/${CLAUDE_HOOKS_DIR_NAME}/sonar-a3s/build-scripts/posttool-a3s.sh`;
+const CODEX_HOOKS_DIR_NAME = 'hooks';
+const CODEX_CONFIG_FILE = 'config.toml';
+const CODEX_SONAR_SECRETS_HOOKS_DIR_NAME = 'sonar-secrets';
+const codexHooksJsonRelPath = `${CODEX_AGENT_DIR_NAME}/hooks.json`;
+const codexSecretsPretoolRelPath = `${CODEX_AGENT_DIR_NAME}/${CODEX_HOOKS_DIR_NAME}/${CODEX_SONAR_SECRETS_HOOKS_DIR_NAME}/build-scripts/pretool-secrets.sh`;
+const codexSecretsPromptRelPath = `${CODEX_AGENT_DIR_NAME}/${CODEX_HOOKS_DIR_NAME}/${CODEX_SONAR_SECRETS_HOOKS_DIR_NAME}/build-scripts/prompt-secrets.sh`;
+const codexA3sPosttoolRelPath = `${CODEX_AGENT_DIR_NAME}/${CODEX_HOOKS_DIR_NAME}/sonar-a3s/build-scripts/posttool-a3s.sh`;
 
-describe('integrate claude', () => {
+describe('integrate codex', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -68,15 +71,16 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
       expect(
         harness.cwd.exists(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
-          CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
+          CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
           'build-scripts',
           'pretool-secrets.sh',
         ),
@@ -98,7 +102,7 @@ describe('integrate claude', () => {
       // so the server URL must come exclusively from SONARQUBE_CLI_SERVER env var
       harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=env-project');
 
-      const result = await harness.run('integrate claude --non-interactive', {
+      const result = await harness.run('integrate codex --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_TOKEN: 'env-token',
           SONARQUBE_CLI_SERVER: server.baseUrl(),
@@ -106,7 +110,8 @@ describe('integrate claude', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -125,10 +130,11 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=keychain-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -141,14 +147,14 @@ describe('integrate claude', () => {
       harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}`);
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(
         harness.cwd.exists(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
-          CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
+          CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
           'build-scripts',
           'pretool-secrets.sh',
         ),
@@ -176,12 +182,13 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=browser-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude', {
+      const result = await harness.run('integrate codex', {
         browserToken: 'browser-token',
       });
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -201,12 +208,13 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=repair-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude', {
+      const result = await harness.run('integrate codex', {
         browserToken: 'valid-browser-token',
       });
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -228,14 +236,14 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(
         harness.cwd.exists(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
-          CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
+          CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
           'build-scripts',
           'pretool-secrets.sh',
         ),
@@ -259,14 +267,14 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(
         harness.cwd.exists(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
-          CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
+          CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
           'build-scripts',
           'pretool-secrets.sh',
         ),
@@ -293,7 +301,7 @@ describe('integrate claude', () => {
       );
 
       const result = await harness.run(
-        'integrate claude', // no --non-interactive flag
+        'integrate codex', // no --non-interactive flag
         {
           extraEnv: {
             SONARQUBE_CLI_TOKEN: 'invalid-token', // rejected by server → tokenValid = false
@@ -306,9 +314,9 @@ describe('integrate claude', () => {
       expect(result.exitCode).toBe(0);
       expect(
         harness.cwd.exists(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
-          CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
+          CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
           'build-scripts',
           'pretool-secrets.sh',
         ),
@@ -332,7 +340,7 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive', {
+      const result = await harness.run('integrate codex --non-interactive', {
         extraEnv: { SONARQUBE_CLI_TOKEN: 'some-token' },
       });
 
@@ -354,7 +362,7 @@ describe('integrate claude', () => {
       harness.withAuth(server.baseUrl(), 'test-token');
       harness.state().withSecretsBinaryInstalled();
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
       const requests = server.getRecordedRequests();
@@ -373,10 +381,14 @@ describe('integrate claude', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'flag-token');
 
-      const result = await harness.run(`integrate claude --project flag-project --non-interactive`);
+      const result = await harness.run(`integrate codex --project flag-project --non-interactive`);
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
+      expect(harness.cwd.file(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE).asText()).toContain(
+        'SONARQUBE_PROJECT_KEY = "flag-project"',
+      );
     },
     { timeout: 30000 },
   );
@@ -396,13 +408,13 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      const claudeSettingsFile = harness.cwd.file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE);
-      expect(claudeSettingsFile.exists()).toBe(true);
-      const settings = claudeSettingsFile.asJson();
-      expect(settings.hooks?.PreToolUse).toBeDefined();
+      const codexHooksFile = harness.cwd.file(CODEX_AGENT_DIR_NAME, 'hooks.json');
+      expect(codexHooksFile.exists()).toBe(true);
+      const hooksJson = codexHooksFile.asJson();
+      expect(hooksJson.hooks?.PreToolUse).toBeDefined();
     },
     { timeout: 30000 },
   );
@@ -422,12 +434,12 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      await harness.run('integrate claude --non-interactive');
+      await harness.run('integrate codex --non-interactive');
 
       const preToolScriptFile = harness.cwd.file(
-        CLAUDE_AGENT_DIR_NAME,
-        CLAUDE_HOOKS_DIR_NAME,
-        CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+        CODEX_AGENT_DIR_NAME,
+        CODEX_HOOKS_DIR_NAME,
+        CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
         'build-scripts',
         'pretool-secrets.sh',
       );
@@ -451,13 +463,13 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      await harness.run('integrate claude --non-interactive');
+      await harness.run('integrate codex --non-interactive');
 
       const promptScriptContent = harness.cwd
         .file(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
-          CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
+          CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
           'build-scripts',
           'prompt-secrets.sh',
         )
@@ -471,7 +483,7 @@ describe('integrate claude', () => {
   it(
     'exits with code 1 and prompts to authenticate when no auth is configured',
     async () => {
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
@@ -482,9 +494,109 @@ describe('integrate claude', () => {
   );
 });
 
+// ─── OpenAI Codex docs (hooks + MCP) ───────────────────────────────────────────
+
+describe('integrate codex — OpenAI Codex hooks & MCP docs', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    await harness.newFakeBinariesServer().start();
+    harness.state().withSecretsBinaryInstalled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'writes hooks.json + config.toml consistent with developers.openai.com/codex/hooks and /mcp',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${serverUrl}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      const result = await harness.run(`integrate codex --project my-project --non-interactive`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+
+      // hooks.json next to .codex/config.toml (https://developers.openai.com/codex/hooks)
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+
+      const settings = harness.cwd.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson() as {
+        hooks?: Record<
+          string,
+          Array<{
+            matcher: string;
+            hooks: Array<{
+              type: string;
+              command: string;
+              timeout?: number;
+              statusMessage?: string;
+            }>;
+          }>
+        >;
+      };
+
+      // PreToolUse / PostToolUse: matcher filters tool_name; runtime currently only emits Bash.
+      const pre = settings.hooks?.PreToolUse?.[0];
+      expect(pre?.matcher).toBe('Bash');
+      const preHook = pre?.hooks?.[0];
+      expect(preHook?.type).toBe('command');
+      expect(typeof preHook?.timeout).toBe('number');
+      expect(isAbsolute(preHook?.command ?? '')).toBe(true);
+
+      const postGroups = settings.hooks?.PostToolUse ?? [];
+      const sqaaGroup = postGroups.find((g) =>
+        g.hooks.some((h) => h.command.includes('sonar-sqaa')),
+      );
+      expect(sqaaGroup?.matcher).toBe('Bash');
+      const sqaaHook = sqaaGroup?.hooks.find((h) => h.command.includes('sonar-sqaa'));
+      expect(sqaaHook?.type).toBe('command');
+      expect(typeof sqaaHook?.timeout).toBe('number');
+      expect(isAbsolute(sqaaHook?.command ?? '')).toBe(true);
+
+      // UserPromptSubmit: matcher is ignored at runtime; we still use "*" to match all prompts.
+      const ups = settings.hooks?.UserPromptSubmit?.[0];
+      expect(ups?.hooks?.[0]?.type).toBe('command');
+      expect(isAbsolute(ups?.hooks?.[0]?.command ?? '')).toBe(true);
+
+      const toml = harness.cwd.file(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE).asText();
+      // Hooks require [features] codex_hooks = true (same page).
+      expect(toml).toContain('codex_hooks = true');
+
+      // STDIO MCP server tables (https://developers.openai.com/codex/mcp) when Docker wrote MCP.
+      if (hasSonarqubeMcpBlockInToml(toml)) {
+        expect(toml).toMatch(/^\[mcp_servers\.sonarqube\]\s*$/m);
+        expect(toml).toMatch(/^command\s*=\s*"/m);
+        expect(toml).toMatch(/^args\s*=\s*\[/m);
+        expect(toml).toContain('[mcp_servers.sonarqube.env]');
+        expect(toml).toContain('SONARQUBE_PROJECT_KEY = "my-project"');
+      }
+    },
+    { timeout: 30000 },
+  );
+});
+
 // ─── SQAA entitlement guard ────────────────────────────────────────────────────
 
-describe('integrate claude — SQAA entitlement guard', () => {
+describe('integrate codex — SQAA entitlement guard', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -512,7 +624,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+      const result = await harness.run(`integrate codex --project my-project --non-interactive`, {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -520,12 +632,12 @@ describe('integrate claude — SQAA entitlement guard', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const settings = harness.cwd.file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE).asJson();
+      const settings = harness.cwd.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
       expect(
         harness.cwd.exists(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
           'sonar-sqaa',
           'build-scripts',
           'posttool-sqaa.sh',
@@ -548,7 +660,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      const result = await harness.run(`integrate claude --non-interactive`, {
+      const result = await harness.run(`integrate codex --non-interactive`, {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -556,12 +668,12 @@ describe('integrate claude — SQAA entitlement guard', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const settings = harness.cwd.file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE).asJson();
+      const settings = harness.cwd.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeUndefined();
       expect(
         harness.cwd.exists(
-          CLAUDE_AGENT_DIR_NAME,
-          CLAUDE_HOOKS_DIR_NAME,
+          CODEX_AGENT_DIR_NAME,
+          CODEX_HOOKS_DIR_NAME,
           'sonar-sqaa',
           'build-scripts',
           'posttool-sqaa.sh',
@@ -585,7 +697,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
       const result = await harness.run(
-        `integrate claude -g --project my-project --non-interactive`,
+        `integrate codex -g --project my-project --non-interactive`,
         {
           extraEnv: {
             SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
@@ -621,18 +733,18 @@ describe('integrate claude — SQAA entitlement guard', () => {
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
       // Simulate pre-existing sonar-a3s hook from an older install, plus a third-party hook
-      harness.cwd.writeFile(claudeA3sPosttoolRelPath, '#!/bin/bash\necho old');
+      harness.cwd.writeFile(codexA3sPosttoolRelPath, '#!/bin/bash\necho old');
       harness.cwd.writeFile(
-        claudeSettingsRelPath,
+        codexHooksJsonRelPath,
         JSON.stringify({
           hooks: {
             PostToolUse: [
               {
-                matcher: 'Edit|Write',
+                matcher: 'Bash',
                 hooks: [
                   {
                     type: 'command',
-                    command: claudeA3sPosttoolRelPath,
+                    command: codexA3sPosttoolRelPath,
                     timeout: 60,
                   },
                 ],
@@ -642,7 +754,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
                 hooks: [
                   {
                     type: 'command',
-                    command: `${CLAUDE_AGENT_DIR_NAME}/hooks/some-other-tool/run.sh`,
+                    command: `${CODEX_AGENT_DIR_NAME}/hooks/some-other-tool/run.sh`,
                     timeout: 30,
                   },
                 ],
@@ -652,7 +764,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         }),
       );
 
-      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+      const result = await harness.run(`integrate codex --project my-project --non-interactive`, {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -660,14 +772,14 @@ describe('integrate claude — SQAA entitlement guard', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const settings = harness.cwd.file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE).asJson();
+      const settings = harness.cwd.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson();
       const postToolUseCommands = (
         settings.hooks?.PostToolUse as Array<{ hooks: Array<{ command: string }> }>
       )?.flatMap((e) => e.hooks.map((h) => h.command));
       expect(postToolUseCommands?.some((c: string) => c.includes('sonar-a3s'))).toBe(false);
       expect(postToolUseCommands?.some((c: string) => c.includes('sonar-sqaa'))).toBe(true);
       expect(postToolUseCommands?.some((c: string) => c.includes('some-other-tool'))).toBe(true);
-      expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_HOOKS_DIR_NAME, 'sonar-a3s')).toBe(
+      expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_HOOKS_DIR_NAME, 'sonar-a3s')).toBe(
         false,
       );
     },
@@ -705,7 +817,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
           activeConnectionId: 'test-conn',
         },
         agents: {
-          'claude-code': {
+          codex: {
             configured: true,
             configuredByCliVersion: '0.5.0',
             hooks: {
@@ -726,7 +838,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         agentExtensions: [
           {
             id: randomUUID(),
-            agentId: 'claude-code',
+            agentId: 'codex',
             projectRoot: harness.cwd.path,
             global: false,
             kind: 'hook',
@@ -747,7 +859,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         [`sonar.host.url=${serverUrl}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+      const result = await harness.run(`integrate codex --project my-project --non-interactive`, {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -758,7 +870,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       const state = harness.stateJsonFile.asJson();
       const extensions = state.agentExtensions as Array<{ name: string }>;
-      const hooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
+      const hooks = (state.agents?.['codex']?.hooks?.installed ?? []) as Array<{
         name: string;
       }>;
 
@@ -772,7 +884,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
 // ─── Local vs Global file placement ──────────────────────────────────────────
 
-describe('integrate claude — file placement (local vs global)', () => {
+describe('integrate codex — file placement (local vs global)', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -788,7 +900,7 @@ describe('integrate claude — file placement (local vs global)', () => {
 
   describe('project-level hooks (no -g flag)', () => {
     it(
-      'writes hook scripts and settings.json inside projectDir/.claude/',
+      'writes hook scripts, hooks.json, and config.toml inside projectDir/.codex/',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -801,24 +913,25 @@ describe('integrate claude — file placement (local vs global)', () => {
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        const result = await harness.run('integrate claude --non-interactive');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+        expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+        expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
         expect(
           harness.cwd.exists(
-            CLAUDE_AGENT_DIR_NAME,
-            CLAUDE_HOOKS_DIR_NAME,
-            CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+            CODEX_AGENT_DIR_NAME,
+            CODEX_HOOKS_DIR_NAME,
+            CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
             'build-scripts',
             'pretool-secrets.sh',
           ),
         ).toBe(true);
         expect(
           harness.cwd.exists(
-            CLAUDE_AGENT_DIR_NAME,
-            CLAUDE_HOOKS_DIR_NAME,
-            CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+            CODEX_AGENT_DIR_NAME,
+            CODEX_HOOKS_DIR_NAME,
+            CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
             'build-scripts',
             'prompt-secrets.sh',
           ),
@@ -831,16 +944,16 @@ describe('integrate claude — file placement (local vs global)', () => {
       'does not touch the global dir when running without -g',
       async () => {
         harness.withAuth('http://localhost:19999', 'fake-token');
-        await harness.run('integrate claude --non-interactive');
+        await harness.run('integrate codex --non-interactive');
 
         // Global dir must be completely untouched
-        expect(harness.userHome.exists(CLAUDE_AGENT_DIR_NAME)).toBe(false);
+        expect(harness.userHome.exists(CODEX_AGENT_DIR_NAME)).toBe(false);
       },
       { timeout: 30000 },
     );
 
     it(
-      'registers hook commands with relative paths in settings.json',
+      'registers hook commands with absolute paths in project .codex/hooks.json',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -853,17 +966,17 @@ describe('integrate claude — file placement (local vs global)', () => {
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        await harness.run('integrate claude --non-interactive');
+        await harness.run('integrate codex --non-interactive');
 
-        const settings = harness.cwd.file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE).asJson();
+        const settings = harness.cwd.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson();
         const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
         const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
 
-        // Must be relative (not absolute) so they resolve from the project root
-        expect(isAbsolute(preToolCmd)).toBe(false);
-        expect(preToolCmd.startsWith(CLAUDE_AGENT_DIR_NAME)).toBe(true);
-        expect(isAbsolute(promptCmd)).toBe(false);
-        expect(promptCmd.startsWith(CLAUDE_AGENT_DIR_NAME)).toBe(true);
+        const projectRoot = realpathSync(harness.cwd.path);
+        expect(isAbsolute(preToolCmd)).toBe(true);
+        expect(preToolCmd.startsWith(projectRoot)).toBe(true);
+        expect(isAbsolute(promptCmd)).toBe(true);
+        expect(promptCmd.startsWith(projectRoot)).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -873,7 +986,7 @@ describe('integrate claude — file placement (local vs global)', () => {
 
   describe('global hooks (-g flag)', () => {
     it(
-      'writes hook scripts and settings.json to $HOME/.claude/',
+      'writes hook scripts, hooks.json, and config.toml to $HOME/.codex/',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -886,24 +999,25 @@ describe('integrate claude — file placement (local vs global)', () => {
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        const result = await harness.run('integrate claude -g --non-interactive');
+        const result = await harness.run('integrate codex -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.exists(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)).toBe(true);
+        expect(harness.userHome.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
+        expect(harness.userHome.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
         expect(
           harness.userHome.exists(
-            CLAUDE_AGENT_DIR_NAME,
-            CLAUDE_HOOKS_DIR_NAME,
-            CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+            CODEX_AGENT_DIR_NAME,
+            CODEX_HOOKS_DIR_NAME,
+            CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
             'build-scripts',
             'pretool-secrets.sh',
           ),
         ).toBe(true);
         expect(
           harness.userHome.exists(
-            CLAUDE_AGENT_DIR_NAME,
-            CLAUDE_HOOKS_DIR_NAME,
-            CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+            CODEX_AGENT_DIR_NAME,
+            CODEX_HOOKS_DIR_NAME,
+            CODEX_SONAR_SECRETS_HOOKS_DIR_NAME,
             'build-scripts',
             'prompt-secrets.sh',
           ),
@@ -913,7 +1027,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'does not create .claude/ inside the project directory when -g is set',
+      'does not create .codex/ inside the project directory when -g is set',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -926,10 +1040,10 @@ describe('integrate claude — file placement (local vs global)', () => {
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        await harness.run('integrate claude -g --non-interactive');
+        await harness.run('integrate codex -g --non-interactive');
 
-        // Project-level .claude/ must NOT be created
-        expect(harness.cwd.exists(CLAUDE_AGENT_DIR_NAME)).toBe(false);
+        // Project-level .codex/ must NOT be created
+        expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME)).toBe(false);
       },
       { timeout: 30000 },
     );
@@ -948,11 +1062,9 @@ describe('integrate claude — file placement (local vs global)', () => {
           [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
         );
 
-        await harness.run('integrate claude -g --non-interactive');
+        await harness.run('integrate codex -g --non-interactive');
 
-        const settings = harness.userHome
-          .file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE)
-          .asJson();
+        const settings = harness.userHome.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson();
         const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
         const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
 
@@ -998,7 +1110,7 @@ describe('integrate claude — file placement (local vs global)', () => {
               activeConnectionId: 'conn-1',
             },
             agents: {
-              'claude-code': {
+              codex: {
                 configured: true,
                 configuredByCliVersion: CURRENT_VERSION,
                 hooks: {
@@ -1014,7 +1126,7 @@ describe('integrate claude — file placement (local vs global)', () => {
             agentExtensions: [
               {
                 id: randomUUID(),
-                agentId: 'claude-code',
+                agentId: 'codex',
                 projectRoot,
                 global: false,
                 serverUrl: server.baseUrl(),
@@ -1026,7 +1138,7 @@ describe('integrate claude — file placement (local vs global)', () => {
               },
               {
                 id: randomUUID(),
-                agentId: 'claude-code',
+                agentId: 'codex',
                 projectRoot,
                 global: false,
                 serverUrl: server.baseUrl(),
@@ -1041,7 +1153,7 @@ describe('integrate claude — file placement (local vs global)', () => {
         );
         harness.state().withKeychainToken(server.baseUrl(), 'tok');
 
-        const result = await harness.run('integrate claude -g --non-interactive');
+        const result = await harness.run('integrate codex -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
 
@@ -1077,7 +1189,7 @@ describe('integrate claude — file placement (local vs global)', () => {
 
 // ─── Legacy state migration ────────────────────────────────────────────────────
 
-describe('integrate claude — legacy state without agentExtensions', () => {
+describe('integrate codex — legacy state without agentExtensions', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1100,7 +1212,7 @@ describe('integrate claude — legacy state without agentExtensions', () => {
 
       const serverUrl = server.baseUrl();
 
-      // Old state: claude-code was configured by v0.4.0 (pre-registry), hooks.installed populated,
+      // Old state: codex was configured by v0.4.0 (pre-registry), hooks.installed populated,
       // no agentExtensions field
       harness.state().withRawState(
         JSON.stringify(
@@ -1121,7 +1233,7 @@ describe('integrate claude — legacy state without agentExtensions', () => {
               activeConnectionId: 'conn-1',
             },
             agents: {
-              'claude-code': {
+              codex: {
                 configured: true,
                 configuredByCliVersion: '0.4.0',
                 hooks: {
@@ -1143,25 +1255,25 @@ describe('integrate claude — legacy state without agentExtensions', () => {
 
       // Old hook scripts — use the deprecated `sonar analyze --file` command
       const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
-      harness.cwd.writeFile(claudeSecretsPretoolRelPath, oldScript);
-      harness.cwd.writeFile(claudeSecretsPromptRelPath, oldScript);
+      harness.cwd.writeFile(codexSecretsPretoolRelPath, oldScript);
+      harness.cwd.writeFile(codexSecretsPromptRelPath, oldScript);
 
-      // Old settings.json — hook entries referencing those scripts
+      // Old hooks.json — hook entries referencing those scripts
       harness.cwd.writeFile(
-        claudeSettingsRelPath,
+        codexHooksJsonRelPath,
         JSON.stringify(
           {
             hooks: {
               PreToolUse: [
                 {
-                  matcher: 'Read',
-                  hooks: [{ type: 'command', command: claudeSecretsPretoolRelPath, timeout: 60 }],
+                  matcher: 'Bash',
+                  hooks: [{ type: 'command', command: codexSecretsPretoolRelPath, timeout: 60 }],
                 },
               ],
               UserPromptSubmit: [
                 {
                   matcher: '*',
-                  hooks: [{ type: 'command', command: claudeSecretsPromptRelPath, timeout: 60 }],
+                  hooks: [{ type: 'command', command: codexSecretsPromptRelPath, timeout: 60 }],
                 },
               ],
             },
@@ -1171,30 +1283,32 @@ describe('integrate claude — legacy state without agentExtensions', () => {
         ),
       );
 
-      const result = await harness.run(`integrate claude --project my-project --non-interactive`);
+      const result = await harness.run(`integrate codex --project my-project --non-interactive`);
 
       expect(result.exitCode).toBe(0);
 
       // Hook scripts must be rewritten to use the new subcommand
-      const pretoolContent = harness.cwd.file(claudeSecretsPretoolRelPath).asText();
+      const pretoolContent = harness.cwd.file(codexSecretsPretoolRelPath).asText();
       expect(pretoolContent).toContain('analyze secrets');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
-      // settings.json must have correctly structured hook entries (relative paths, project-level)
-      const settings = harness.cwd.file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE).asJson();
+      // hooks.json must use absolute hook commands and Bash PreToolUse matcher (Codex)
+      const settings = harness.cwd.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson();
       const preToolEntry = settings.hooks?.PreToolUse?.[0];
       const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
-      expect(preToolEntry?.matcher).toBe('Read');
+      expect(preToolEntry?.matcher).toBe('Bash');
       expect(preToolEntry?.hooks?.[0]).toEqual({
         type: 'command',
-        command: claudeSecretsPretoolRelPath,
+        command: realpathSync(harness.cwd.file(codexSecretsPretoolRelPath).path),
         timeout: 60,
+        statusMessage: 'Sonar: scanning Bash command for secrets',
       });
       expect(promptEntry?.matcher).toBe('*');
       expect(promptEntry?.hooks?.[0]).toEqual({
         type: 'command',
-        command: claudeSecretsPromptRelPath,
+        command: realpathSync(harness.cwd.file(codexSecretsPromptRelPath).path),
         timeout: 60,
+        statusMessage: 'Sonar: scanning prompt for secrets',
       });
     },
     { timeout: 30000 },
@@ -1225,14 +1339,15 @@ describe('post-update migration — hook script rewrite on CLI upgrade', () => {
             config: { cliVersion: '0.4.0' },
             auth: { isAuthenticated: false, connections: [], activeConnectionId: null },
             agents: {
-              'claude-code': {
+              codex: {
                 configured: true,
                 configuredByCliVersion: '0.4.0',
                 hooks: { installed: [] },
+                skills: { installed: [] },
               },
             },
             tools: { installed: [] },
-            telemetry: { enabled: false },
+            telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
           },
           null,
           2,
@@ -1241,25 +1356,25 @@ describe('post-update migration — hook script rewrite on CLI upgrade', () => {
 
       // Old global hook scripts in homedir (pre-registry fallback location)
       const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
-      harness.userHome.writeFile(claudeSecretsPretoolRelPath, oldScript);
-      harness.userHome.writeFile(claudeSecretsPromptRelPath, oldScript);
+      harness.userHome.writeFile(codexSecretsPretoolRelPath, oldScript);
+      harness.userHome.writeFile(codexSecretsPromptRelPath, oldScript);
 
-      // Old settings.json in homedir — hook entries referencing those scripts
+      // Old hooks.json in homedir — hook entries referencing those scripts
       harness.userHome.writeFile(
-        claudeSettingsRelPath,
+        codexHooksJsonRelPath,
         JSON.stringify(
           {
             hooks: {
               PreToolUse: [
                 {
-                  matcher: 'Read',
-                  hooks: [{ type: 'command', command: claudeSecretsPretoolRelPath, timeout: 60 }],
+                  matcher: 'Bash',
+                  hooks: [{ type: 'command', command: codexSecretsPretoolRelPath, timeout: 60 }],
                 },
               ],
               UserPromptSubmit: [
                 {
                   matcher: '*',
-                  hooks: [{ type: 'command', command: claudeSecretsPromptRelPath, timeout: 60 }],
+                  hooks: [{ type: 'command', command: codexSecretsPromptRelPath, timeout: 60 }],
                 },
               ],
             },
@@ -1275,26 +1390,34 @@ describe('post-update migration — hook script rewrite on CLI upgrade', () => {
       expect(result.exitCode).toBe(0);
 
       // Scripts must be rewritten with the new subcommand
-      const pretoolContent = harness.userHome.file(claudeSecretsPretoolRelPath).asText();
+      const pretoolContent = harness.userHome.file(codexSecretsPretoolRelPath).asText();
       expect(pretoolContent).toContain('analyze secrets');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
-      // settings.json must have correctly structured hook entries (absolute paths, global)
-      const settings = harness.userHome.file(CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE).asJson();
+      // hooks.json must have absolute hook commands and Bash PreToolUse matcher (global Codex)
+      const settings = harness.userHome.file(CODEX_AGENT_DIR_NAME, 'hooks.json').asJson();
       const preToolEntry = settings.hooks?.PreToolUse?.[0];
       const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
-      expect(preToolEntry?.matcher).toBe('Read');
-      expect(preToolEntry?.hooks?.[0]).toEqual({
+      expect(preToolEntry?.matcher).toBe('Bash');
+      const preHook = preToolEntry?.hooks?.[0] as { command?: string } | undefined;
+      expect(preHook).toMatchObject({
         type: 'command',
-        command: harness.userHome.file(claudeSecretsPretoolRelPath).path,
         timeout: 60,
+        statusMessage: 'Sonar: scanning Bash command for secrets',
       });
+      expect(realpathSync(String(preHook?.command))).toBe(
+        realpathSync(harness.userHome.file(codexSecretsPretoolRelPath).path),
+      );
       expect(promptEntry?.matcher).toBe('*');
-      expect(promptEntry?.hooks?.[0]).toEqual({
+      const promptHook = promptEntry?.hooks?.[0] as { command?: string } | undefined;
+      expect(promptHook).toMatchObject({
         type: 'command',
-        command: harness.userHome.file(claudeSecretsPromptRelPath).path,
         timeout: 60,
+        statusMessage: 'Sonar: scanning prompt for secrets',
       });
+      expect(realpathSync(String(promptHook?.command))).toBe(
+        realpathSync(harness.userHome.file(codexSecretsPromptRelPath).path),
+      );
     },
     { timeout: 30000 },
   );
@@ -1325,7 +1448,7 @@ describe('integrate — argument validation', () => {
 
 // ─── sonar-secrets auto-install ───────────────────────────────────────────────
 
-describe('integrate claude — sonar-secrets auto-install', () => {
+describe('integrate codex — sonar-secrets auto-install', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1351,7 +1474,7 @@ describe('integrate claude — sonar-secrets auto-install', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
@@ -1376,7 +1499,7 @@ describe('integrate claude — sonar-secrets auto-install', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).not.toBe(0);
       expect(harness.cliHome.file('bin', 'sonar-secrets').exists()).toBe(false);
@@ -1400,7 +1523,7 @@ describe('integrate claude — sonar-secrets auto-install', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate codex --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(fakeBinariesServer.getRecordedRequests()).toHaveLength(0);

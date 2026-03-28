@@ -18,13 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Health check orchestrator - validates configuration
+// Health check orchestrator for Claude Code integration
 
-import { validateToken } from '../../_common/token';
-import { SonarQubeClient } from '../../../../sonarqube/client';
+import { logAndValidate, runSonarQubeConnectivityChecks } from '../_common/integrate-health-core';
 import { areHooksInstalled } from './hooks';
-import logger from '../../../../lib/logger';
-import { text } from '../../../../ui';
 
 export interface HealthCheckResult {
   tokenValid: boolean;
@@ -36,27 +33,8 @@ export interface HealthCheckResult {
   errors: string[];
 }
 
-async function logAndValidate(
-  message: string,
-  validator: () => Promise<boolean>,
-  errorMsg: string,
-  errors: string[],
-  verbose: boolean,
-): Promise<boolean> {
-  if (verbose) text(message);
-  try {
-    const result = await validator();
-    if (!result) errors.push(errorMsg);
-    return result;
-  } catch (error) {
-    logger.debug(`Validation failed: ${(error as Error).message}`);
-    errors.push(errorMsg);
-    return false;
-  }
-}
-
 /**
- * Run health checks
+ * Run health checks for Claude Code (SonarQube API + Claude hook layout under hooksRoot).
  */
 export async function runHealthChecks(
   serverURL: string,
@@ -66,58 +44,16 @@ export async function runHealthChecks(
   organization?: string,
   verbose = true,
 ): Promise<HealthCheckResult> {
-  const client = new SonarQubeClient(serverURL, token);
   const errors: string[] = [];
 
-  const tokenValid = await logAndValidate(
-    'Validating token...',
-    () => validateToken(serverURL, token),
-    'Token is invalid',
-    errors,
+  const connectivity = await runSonarQubeConnectivityChecks(
+    serverURL,
+    token,
+    projectKey,
+    organization,
     verbose,
-  );
-
-  const serverAvailable = await logAndValidate(
-    'Checking server availability...',
-    async () => {
-      await client.getSystemStatus();
-      return true;
-    },
-    'Server unavailable',
     errors,
-    verbose,
   );
-
-  const projectAccessible = projectKey
-    ? await logAndValidate(
-        'Verifying project access...',
-        () => client.checkComponent(projectKey),
-        `Project not accessible: ${projectKey}`,
-        errors,
-        verbose,
-      )
-    : true;
-
-  let organizationAccessible = true;
-  if (organization) {
-    organizationAccessible = await logAndValidate(
-      'Verifying organization access...',
-      () => client.checkOrganization(organization),
-      `Organization not accessible: ${organization}`,
-      errors,
-      verbose,
-    );
-  }
-
-  const qualityProfilesAccessible = projectKey
-    ? await logAndValidate(
-        'Verifying quality profiles access...',
-        () => client.checkQualityProfiles(projectKey, organization),
-        `Quality profiles not accessible for project: ${projectKey}`,
-        errors,
-        verbose,
-      )
-    : true;
 
   const hooksInstalled = await logAndValidate(
     'Checking hooks installation...',
@@ -128,11 +64,7 @@ export async function runHealthChecks(
   );
 
   return {
-    tokenValid,
-    serverAvailable,
-    projectAccessible,
-    organizationAccessible,
-    qualityProfilesAccessible,
+    ...connectivity,
     hooksInstalled,
     errors,
   };

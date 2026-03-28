@@ -24,10 +24,12 @@ import * as stateManager from '../../src/lib/state-manager';
 import * as versionLib from '../../src/lib/version';
 import * as migration from '../../src/lib/migration';
 import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
+import * as codexHooks from '../../src/cli/commands/integrate/codex/hooks';
 import * as secretsInstall from '../../src/cli/commands/_common/install/secrets';
 import {
   runPostUpdateActions,
   migrateClaudeCodeHooks,
+  migrateCodexHooks,
   updateSecretsBinaryIfNeeded,
 } from '../../src/lib/post-update';
 import { getDefaultState } from '../../src/lib/state';
@@ -76,6 +78,15 @@ describe('runPostUpdateActions', () => {
     Extract<(typeof migration)['removeObsoleteHookArtifacts'], (...args: any[]) => any>
   >;
   let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
+  let migrateCodexHookScriptsSpy: Mock<
+    Extract<(typeof migration)['migrateCodexHookScripts'], (...args: any[]) => any>
+  >;
+  let removeObsoleteCodexHookArtifactsSpy: Mock<
+    Extract<(typeof migration)['removeObsoleteCodexHookArtifacts'], (...args: any[]) => any>
+  >;
+  let installCodexHooksSpy: Mock<
+    Extract<(typeof codexHooks)['installCodexHooks'], (...args: any[]) => any>
+  >;
   let installSecretsBinarySpy: Mock<
     Extract<(typeof secretsInstall)['installSecretsBinary'], (...args: any[]) => any>
   >;
@@ -91,6 +102,17 @@ describe('runPostUpdateActions', () => {
       'removeObsoleteHookArtifacts',
     ).mockResolvedValue(undefined);
     installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
+    migrateCodexHookScriptsSpy = spyOn(migration, 'migrateCodexHookScripts').mockImplementation(
+      () => {},
+    );
+    removeObsoleteCodexHookArtifactsSpy = spyOn(
+      migration,
+      'removeObsoleteCodexHookArtifacts',
+    ).mockResolvedValue(undefined);
+    installCodexHooksSpy = spyOn(codexHooks, 'installCodexHooks').mockResolvedValue({
+      secretsHooksInstalled: true,
+      sqaaHookInstalled: false,
+    });
     installSecretsBinarySpy = spyOn(secretsInstall, 'installSecretsBinary').mockResolvedValue(
       '/fake/bin/sonar-secrets',
     );
@@ -104,6 +126,9 @@ describe('runPostUpdateActions', () => {
     migrateHookScriptsSpy.mockRestore();
     removeObsoleteHookArtifactsSpy.mockRestore();
     installHooksSpy.mockRestore();
+    migrateCodexHookScriptsSpy.mockRestore();
+    removeObsoleteCodexHookArtifactsSpy.mockRestore();
+    installCodexHooksSpy.mockRestore();
     installSecretsBinarySpy.mockRestore();
   });
 
@@ -178,6 +203,31 @@ describe('runPostUpdateActions', () => {
     expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
       false,
     );
+  });
+
+  it('removes sonar-a3s entries from codex agent state on upgrade', async () => {
+    const state = makeState();
+    state.agents.codex = {
+      configured: true,
+      configuredAt: new Date().toISOString(),
+      configuredByCliVersion: '1.0.0',
+      hooks: {
+        installed: [
+          {
+            name: 'sonar-a3s',
+            type: 'PostToolUse',
+            installedAt: new Date().toISOString(),
+          },
+        ],
+      },
+      skills: { installed: [] },
+    };
+    loadStateSpy.mockReturnValue(state);
+
+    await runPostUpdateActions();
+
+    const saved = saveStateSpy.mock.calls[0][0];
+    expect(saved.agents.codex.hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(false);
   });
 });
 
@@ -365,6 +415,102 @@ describe('migrateClaudeCodeHooks', () => {
       '/proj/beta',
       migration.OBSOLETE_A3S_MARKER,
     );
+  });
+});
+
+describe('migrateCodexHooks', () => {
+  let existsSyncSpy: Mock<Extract<(typeof fs)['existsSync'], (...args: any[]) => any>>;
+  let loadStateSpy: Mock<Extract<(typeof stateManager)['loadState'], (...args: any[]) => any>>;
+  let migrateCodexHookScriptsSpy: Mock<
+    Extract<(typeof migration)['migrateCodexHookScripts'], (...args: any[]) => any>
+  >;
+  let removeObsoleteCodexHookArtifactsSpy: Mock<
+    Extract<(typeof migration)['removeObsoleteCodexHookArtifacts'], (...args: any[]) => any>
+  >;
+  let installCodexHooksSpy: Mock<
+    Extract<(typeof codexHooks)['installCodexHooks'], (...args: any[]) => any>
+  >;
+
+  function makeCodexExtension(projectRoot: string, global: boolean): HookExtension {
+    return {
+      id: 'test-codex-id',
+      agentId: 'codex',
+      kind: 'hook',
+      name: 'sonar-secrets',
+      hookType: 'PreToolUse',
+      projectRoot,
+      global,
+      updatedByCliVersion: '1.0.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+  }
+
+  function makeStateWithCodexExtensions(extensions: HookExtension[], configured = true): CliState {
+    const state = getDefaultState('1.0.0');
+    state.agents.codex = {
+      configured,
+      configuredAt: new Date().toISOString(),
+      configuredByCliVersion: '1.0.0',
+      hooks: { installed: [] },
+      skills: { installed: [] },
+    };
+    state.agentExtensions = extensions;
+    return state;
+  }
+
+  beforeEach(() => {
+    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
+      makeStateWithCodexExtensions([]),
+    );
+    migrateCodexHookScriptsSpy = spyOn(migration, 'migrateCodexHookScripts').mockImplementation(
+      () => {},
+    );
+    removeObsoleteCodexHookArtifactsSpy = spyOn(
+      migration,
+      'removeObsoleteCodexHookArtifacts',
+    ).mockResolvedValue(undefined);
+    installCodexHooksSpy = spyOn(codexHooks, 'installCodexHooks').mockResolvedValue({
+      secretsHooksInstalled: true,
+      sqaaHookInstalled: false,
+    });
+  });
+
+  afterEach(() => {
+    existsSyncSpy.mockRestore();
+    loadStateSpy.mockRestore();
+    migrateCodexHookScriptsSpy.mockRestore();
+    removeObsoleteCodexHookArtifactsSpy.mockRestore();
+    installCodexHooksSpy.mockRestore();
+  });
+
+  it('does not install hooks when agent is not configured and registry is empty', async () => {
+    const state = getDefaultState('1.0.0');
+    loadStateSpy.mockReturnValue(state);
+
+    await migrateCodexHooks(homedirFn);
+
+    expect(installCodexHooksSpy).not.toHaveBeenCalled();
+  });
+
+  it('installs hooks for each codex extension in the registry', async () => {
+    const state = makeStateWithCodexExtensions([makeCodexExtension('/proj/root', false)]);
+    loadStateSpy.mockReturnValue(state);
+
+    await migrateCodexHooks(homedirFn);
+
+    expect(installCodexHooksSpy).toHaveBeenCalledTimes(1);
+    expect(installCodexHooksSpy).toHaveBeenCalledWith('/proj/root', undefined, false);
+  });
+
+  it('falls back to global migration when registry is empty, codex configured, and global hooks dir exists', async () => {
+    const state = makeStateWithCodexExtensions([]);
+    loadStateSpy.mockReturnValue(state);
+    existsSyncSpy.mockReturnValue(true);
+
+    await migrateCodexHooks(homedirFn);
+
+    expect(installCodexHooksSpy).toHaveBeenCalledWith(FAKE_HOME, FAKE_HOME, false);
   });
 });
 

@@ -29,6 +29,7 @@ import { authLogout } from './commands/auth/logout';
 import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
+import { integrateCodex, type IntegrateCodexOptions } from './commands/integrate/codex';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git/index';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
@@ -82,6 +83,16 @@ integrateCommand
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
   .authenticatedAction((auth, options: IntegrateClaudeOptions) => integrateClaude(options, auth));
+
+integrateCommand
+  .command('codex')
+  .description(
+    'Setup SonarQube integration for OpenAI Codex. This will install secrets scanning hooks, and configure SonarQube MCP Server.',
+  )
+  .option('-p, --project <project>', 'Project key')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option('-g, --global', 'Install hooks and MCP to ~/.codex instead of project directory')
+  .authenticatedAction((auth, options: IntegrateCodexOptions) => integrateCodex(options, auth));
 
 integrateCommand
   .command('git')

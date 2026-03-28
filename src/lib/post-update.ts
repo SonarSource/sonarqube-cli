@@ -19,20 +19,26 @@
  */
 
 import * as fs from 'node:fs';
-import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { version as CURRENT_VERSION } from '../../package.json';
-import { STATE_FILE } from './config-constants.js';
+import {
+  claudeSonarSecretsHooksPath,
+  codexSonarSecretsHooksPath,
+  STATE_FILE,
+} from './config-constants.js';
 import logger from './logger';
 import { loadState, saveState } from './state-manager';
 import { isNewerVersion } from './version';
 import {
   migrateHookScripts,
+  migrateCodexHookScripts,
   cleanObsoleteFromState,
   removeObsoleteHookArtifacts,
+  removeObsoleteCodexHookArtifacts,
   OBSOLETE_A3S_MARKER,
 } from './migration.js';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
+import { installCodexHooks } from '../cli/commands/integrate/codex/hooks.js';
 import { SECRETS_BINARY_NAME } from './install-types.js';
 import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
 import type { CliState } from './state.js';
@@ -72,6 +78,7 @@ export async function runPostUpdateActions(): Promise<void> {
 
 async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
   await migrateClaudeCodeHooks();
+  await migrateCodexHooks();
   await updateSecretsBinaryIfNeeded();
 }
 
@@ -128,9 +135,9 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
       seen.add(key);
       locations.push({ projectRoot: ext.projectRoot, globalDir });
     }
-  } else if (state.agents['claude-code'].configured) {
+  } else if (Object.hasOwn(state.agents, 'claude-code') && state.agents['claude-code'].configured) {
     // Pre-registry fallback: check for global hooks in homedir
-    const globalHooksDir = join(homedirFn(), '.claude', 'hooks', 'sonar-secrets');
+    const globalHooksDir = claudeSonarSecretsHooksPath(homedirFn());
     if (fs.existsSync(globalHooksDir)) {
       locations.push({ projectRoot: homedirFn(), globalDir: homedirFn() });
     }
@@ -145,6 +152,55 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
     } catch (err) {
       logger.debug(
         `Hook migration failed for ${globalDir ?? projectRoot}: ${(err as Error).message}`,
+      );
+    }
+  }
+}
+
+/**
+ * Migrate OpenAI Codex hook scripts and reinstall secrets hooks for all known locations.
+ *
+ * installSqaa is always false here (no token during post-update); user re-runs
+ * `sonar integrate codex` for SQAA.
+ *
+ * @param homedirFn - Injectable for tests; defaults to os.homedir()
+ */
+export async function migrateCodexHooks(homedirFn: () => string = homedir): Promise<void> {
+  const state = loadState();
+
+  type Location = { projectRoot: string; globalDir: string | undefined };
+  const locations: Location[] = [];
+
+  const extensions = state.agentExtensions.filter((e) => e.agentId === 'codex');
+
+  if (extensions.length > 0) {
+    const seen = new Set<string>();
+    for (const ext of extensions) {
+      const globalDir = ext.global ? homedirFn() : undefined;
+      const key = `${ext.projectRoot}|${globalDir ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      locations.push({ projectRoot: ext.projectRoot, globalDir });
+    }
+  } else if (
+    // eslint-disable-next-line @typescript-eslint/dot-notation -- optional agent key on disk
+    (state.agents['codex'] as { configured?: boolean } | undefined)?.configured
+  ) {
+    const globalHooksDir = codexSonarSecretsHooksPath(homedirFn());
+    if (fs.existsSync(globalHooksDir)) {
+      locations.push({ projectRoot: homedirFn(), globalDir: homedirFn() });
+    }
+  }
+
+  for (const { projectRoot, globalDir } of locations) {
+    try {
+      migrateCodexHookScripts(projectRoot, globalDir);
+      await installCodexHooks(projectRoot, globalDir, false);
+      await removeObsoleteCodexHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
+      logger.debug(`Migrated Codex hooks for: ${globalDir ?? projectRoot}`);
+    } catch (err) {
+      logger.debug(
+        `Codex hook migration failed for ${globalDir ?? projectRoot}: ${(err as Error).message}`,
       );
     }
   }

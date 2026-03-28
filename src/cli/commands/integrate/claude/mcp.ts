@@ -22,12 +22,13 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { CLAUDE_MCP_CONFIG_FILE } from '../../../../lib/config-constants';
 import { isDockerAvailable } from '../../../../lib/tool-detector';
 import { error, info, success, warn } from '../../../../ui';
 import { normalizePath } from '../../../../lib/fs-utils';
+import { buildSonarMcpDockerSpec } from '../_common/sonar-mcp-docker-spec';
 
 export async function setupMcpServer(
   agent: string,
@@ -94,7 +95,7 @@ export async function writeMcpServerEntry(
 
 export function getMcpConfigFilePath(agent: string): string {
   if (agent === 'claude') {
-    return join(homedir(), '.claude.json');
+    return CLAUDE_MCP_CONFIG_FILE;
   }
   throw new Error(`Unsupported agent: ${agent}`);
 }
@@ -105,36 +106,5 @@ export function getMcpServerConfig(
   projectRoot: string,
   discoveredProjectKey: string | undefined,
 ): object {
-  const { token, orgKey: org, serverUrl } = auth;
-
-  const args = [
-    'run',
-    '--init',
-    '--pull=always',
-    '-i',
-    '--rm',
-    '-e',
-    'SONARQUBE_TOKEN',
-    '-e',
-    'SONARQUBE_URL',
-  ];
-  const env: Record<string, string> = { SONARQUBE_TOKEN: token, SONARQUBE_URL: serverUrl };
-
-  if (auth.connectionType === 'cloud') {
-    args.push('-e', 'SONARQUBE_ORG');
-    env.SONARQUBE_ORG = org ?? '';
-  }
-
-  if (!isGlobal) {
-    const hostPath = normalizePath(projectRoot);
-    if (discoveredProjectKey) {
-      args.push('-e', 'SONARQUBE_PROJECT_KEY');
-      env.SONARQUBE_PROJECT_KEY = discoveredProjectKey;
-    }
-    args.push('-v', `${hostPath}:/app/mcp-workspace:ro`);
-  }
-
-  args.push('mcp/sonarqube');
-
-  return { command: 'docker', args, env };
+  return buildSonarMcpDockerSpec(auth, isGlobal, projectRoot, discoveredProjectKey);
 }

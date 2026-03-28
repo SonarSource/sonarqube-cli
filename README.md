@@ -21,14 +21,28 @@ curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/
 irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 ```
 
-## Setup steps for Claude Code integration
-Below is an example of a setup which will work for SonarQube Cloud.
-The authentication step is optional. With authentication, more types of secrets can be detected.
+## Setup steps for AI coding agents
 
-```
+Examples below work with SonarQube Cloud. 
+**Docker** is required for the SonarQube MCP server used by both integrations.
+
+### Claude Code
+
+```bash
 sonar auth login
 sonar integrate claude -g
 ```
+
+Use `sonar integrate claude -g` to install hooks and SonarQube MCP config under `~/.claude/` instead of the project. See [Claude Code hooks](https://code.claude.com/docs/en/hooks#hooks-reference).
+
+### OpenAI Codex
+
+```bash
+sonar auth login
+sonar integrate codex
+```
+
+Use `sonar integrate codex -g` to install MCP and hooks under `~/.codex/` instead of the project. See [Codex MCP](https://developers.openai.com/codex/mcp) and [Codex hooks](https://developers.openai.com/codex/hooks).
 
 ## Commands
 
@@ -112,19 +126,35 @@ Setup SonarQube integration for AI coding agents, git and others.
 
 **Examples:**
 
-Integrate Claude Code with interactive setup
+_Claude Code — interactive setup with explicit server and project_
+
 ```bash
 sonar integrate claude -s https://sonarcloud.io -p my-project
 ```
 
-Integrate globally and install hooks to ~/.claude which will be available for all projects
+_Claude Code — global hooks and config in `~/.claude` for all projects_
+
 ```bash
 sonar integrate claude -g
 ```
 
+_OpenAI Codex — project-scoped `.codex/` (default)_
+
+```bash
+sonar integrate codex -s https://sonarcloud.io -p my-project
+```
+
+_OpenAI Codex — user-level `~/.codex/`_
+
+```bash
+sonar integrate codex -g
+```
+
 #### `sonar integrate claude`
 
-Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.
+Sets up SonarQube integration for **Claude Code**: installs **sonar-secrets** scanning hooks and configures the **SonarQube MCP Server** (Docker required for MCP). By default hooks and agent config are under `<project>/.claude/`; use `--global` / `-g` for `~/.claude/`.
+
+Final verification confirms hooks are installed (expected layout under `.claude/`). The agent UI may still show model refusals separately from hook blocking.
 
 **Options:**
 
@@ -133,6 +163,28 @@ Setup SonarQube integration for Claude Code. This will install secrets scanning 
 | `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
 | `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
 | `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
+
+---
+
+#### `sonar integrate codex`
+
+Sets up SonarQube integration for **OpenAI Codex**.
+
+- **MCP:** Writes the SonarQube MCP server into `config.toml` under `<project>/.codex/` by default. **Docker** is required for MCP. See [Codex MCP](https://developers.openai.com/codex/mcp).
+- **Hooks:** Installs **sonar-secrets** hooks (`hooks.json` plus scripts under `.codex/hooks/sonar-secrets/`), including a **PreToolUse** hook for Bash commands and **UserPromptSubmit** for prompts — see [Codex hooks](https://developers.openai.com/codex/hooks).
+- **Scope:** Project-based install is the default; `--global` / `-g` installs MCP and hooks under `~/.codex/` instead.
+- **`codex_hooks`:** When hooks are installed, integrate enables `[features] codex_hooks = true` in the relevant `config.toml`. If `~/.codex/config.toml` already exists, project-scoped integrate also sets `codex_hooks` there so Codex’s merged session config turns on the hook engine.
+- **Platform:** Codex command hooks are not supported on **Windows** (per Codex).
+
+Final verification confirms hooks and MCP config (expected files under `.codex/`). The agent UI may still show model refusals separately from hook blocking.
+
+**Options:**
+
+| Option                 | Type    | Required | Description                                                                                         | Default |
+| ---------------------- | ------- | -------- | --------------------------------------------------------------------------------------------------- | ------- |
+| `--project`, `-p`      | string  | No       | Project key                                                                                         | -       |
+| `--non-interactive`  | boolean | No       | Non-interactive mode (no prompts)                                                                   | -       |
+| `--global`, `-g`       | boolean | No       | Install hooks and MCP to `~/.codex` instead of project directory                                    | -       |
 
 ---
 

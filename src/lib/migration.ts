@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Auto-migration for Claude Code hooks configuration.
+// Auto-migration for Claude Code and OpenAI Codex hooks configuration.
 // This migration logic is invoked explicitly from the integrate command.
 // It should eventually become part of a dedicated post-update mechanism that
 // runs automatically after CLI upgrades, to be implemented in a future iteration.
@@ -27,6 +27,14 @@ import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {
+  claudeHooksDirPath,
+  claudeSettingsJsonPath,
+  claudeSonarSecretsBuildScriptsPath,
+  codexHooksDirPath,
+  codexHooksJsonPath,
+  codexSonarSecretsBuildScriptsPath,
+} from './config-constants';
 import logger from './logger';
 import {
   loadState,
@@ -35,8 +43,9 @@ import {
   upsertAgentExtension,
   getActiveConnection,
 } from './state-manager';
-import type { CliState, HookExtension } from './state';
+import type { AgentConfig, CliState, HookExtension } from './state';
 import { installHooks } from '../cli/commands/integrate/claude/hooks';
+import { installCodexHooks } from '../cli/commands/integrate/codex/hooks';
 import { version as CURRENT_VERSION } from '../../package.json';
 
 // Version that introduced the new hook architecture (separate secrets/SQAA hooks)
@@ -46,8 +55,6 @@ const NEW_HOOK_ARCH_VERSION = CURRENT_VERSION;
 const CLI_105_AFFECTED_VERSION = '0.5.1';
 
 export const OBSOLETE_A3S_MARKER = 'sonar-a3s';
-const CLAUDE_CONFIG_DIR = '.claude';
-const HOOKS_DIR = 'hooks';
 
 interface HookEntry {
   command: string;
@@ -58,6 +65,11 @@ interface HookConfig {
   [key: string]: unknown;
 }
 interface AgentSettings {
+  hooks?: Record<string, HookConfig[] | undefined>;
+  [key: string]: unknown;
+}
+
+interface CodexHooksFile {
   hooks?: Record<string, HookConfig[] | undefined>;
   [key: string]: unknown;
 }
@@ -74,7 +86,7 @@ async function readObsoleteSettings(settingsPath: string): Promise<AgentSettings
 }
 
 async function removeObsoleteSettingsEntries(installDir: string, marker: string): Promise<void> {
-  const settingsPath = join(installDir, CLAUDE_CONFIG_DIR, 'settings.json');
+  const settingsPath = claudeSettingsJsonPath(installDir);
   const settings = await readObsoleteSettings(settingsPath);
   if (!settings?.hooks) {
     return;
@@ -99,7 +111,7 @@ async function removeObsoleteSettingsEntries(installDir: string, marker: string)
 }
 
 function deleteObsoleteHookDir(installDir: string, marker: string): void {
-  const obsoleteDir = join(installDir, CLAUDE_CONFIG_DIR, HOOKS_DIR, marker);
+  const obsoleteDir = join(claudeHooksDirPath(installDir), marker);
   if (existsSync(obsoleteDir)) {
     rmSync(obsoleteDir, { recursive: true, force: true });
   }
@@ -123,14 +135,80 @@ export async function removeObsoleteHookArtifacts(
   }
 }
 
+function deleteObsoleteCodexHookDir(installDir: string, marker: string): void {
+  const obsoleteDir = join(codexHooksDirPath(installDir), marker);
+  if (existsSync(obsoleteDir)) {
+    rmSync(obsoleteDir, { recursive: true, force: true });
+  }
+}
+
+async function removeObsoleteCodexHooksEntries(installDir: string, marker: string): Promise<void> {
+  const hooksPath = codexHooksJsonPath(installDir);
+  if (!existsSync(hooksPath)) {
+    return;
+  }
+  try {
+    const settings = JSON.parse(await readFile(hooksPath, 'utf-8')) as CodexHooksFile;
+    if (!settings.hooks) {
+      return;
+    }
+    let changed = false;
+    for (const eventType of Object.keys(settings.hooks)) {
+      const entries = settings.hooks[eventType];
+      if (!Array.isArray(entries)) {
+        continue;
+      }
+      const filtered = entries.filter(
+        (e) => !(Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(marker))),
+      );
+      if (filtered.length !== entries.length) {
+        settings.hooks[eventType] = filtered;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await writeFile(hooksPath, JSON.stringify(settings, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    logger.debug(
+      `Failed to remove obsolete Codex hook entries for ${marker}: ${(err as Error).message}`,
+    );
+  }
+}
+
+/**
+ * Remove obsolete hook entries from `.codex/hooks.json` and delete the hook script directory.
+ */
+export async function removeObsoleteCodexHookArtifacts(
+  installDir: string,
+  marker: string,
+): Promise<void> {
+  try {
+    await removeObsoleteCodexHooksEntries(installDir, marker);
+    deleteObsoleteCodexHookDir(installDir, marker);
+  } catch (err) {
+    logger.debug(
+      `Failed to remove obsolete Codex hook artifacts for ${marker}: ${(err as Error).message}`,
+    );
+  }
+}
+
 /**
  * Remove obsolete hook entries from an in-memory state object.
  * Mutates state in place — caller is responsible for saving.
  */
 export function cleanObsoleteFromState(state: CliState, marker: string): void {
-  state.agents['claude-code'].hooks.installed = state.agents['claude-code'].hooks.installed.filter(
-    (h) => h.name !== marker,
-  );
+  // Parsed state may omit an agent key (e.g. codex-only JSON from tests or partial files).
+  const claudeAgent = state.agents['claude-code'] as AgentConfig | undefined;
+  if (claudeAgent) {
+    claudeAgent.hooks.installed = claudeAgent.hooks.installed.filter((h) => h.name !== marker);
+  }
+  // Parsed state may omit `codex`; bracket access keeps optional semantics for ESLint/TS.
+  // eslint-disable-next-line @typescript-eslint/dot-notation -- dynamic agent key
+  const codexAgent = state.agents['codex'] as AgentConfig | undefined;
+  if (codexAgent) {
+    codexAgent.hooks.installed = codexAgent.hooks.installed.filter((h) => h.name !== marker);
+  }
   state.agentExtensions = state.agentExtensions.filter((e) => e.name !== marker);
 }
 
@@ -207,6 +285,65 @@ export async function runMigrations(
 }
 
 /**
+ * Run all pending config migrations for OpenAI Codex agent.
+ * Mirrors `runMigrations` for Claude Code.
+ */
+export async function runCodexMigrations(
+  projectRoot: string,
+  globalDir?: string,
+  installSqaa = false,
+  projectKey?: string,
+): Promise<void> {
+  try {
+    const state = loadState();
+    // eslint-disable-next-line @typescript-eslint/dot-notation -- dynamic agent key
+    const agentConfig = state.agents['codex'] as AgentConfig | undefined;
+
+    if (!agentConfig?.configured) {
+      return;
+    }
+
+    const installedVersion = agentConfig.configuredByCliVersion;
+    if (!installedVersion) {
+      return;
+    }
+
+    if (installedVersion === NEW_HOOK_ARCH_VERSION) {
+      return;
+    }
+
+    logger.debug(`Migrating Codex hooks from v${installedVersion} to v${NEW_HOOK_ARCH_VERSION}`);
+
+    migrateCodexHookScripts(projectRoot, globalDir);
+
+    const { sqaaHookInstalled } = await installCodexHooks(
+      projectRoot,
+      globalDir,
+      installSqaa,
+      projectKey,
+    );
+
+    await removeObsoleteCodexHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
+
+    if (sqaaHookInstalled) {
+      addInstalledHook(state, 'codex', 'sonar-sqaa', 'PostToolUse');
+    }
+
+    migrateToCodexExtensionsRegistry(state, projectRoot, globalDir, sqaaHookInstalled);
+
+    cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
+
+    agentConfig.configuredByCliVersion = CURRENT_VERSION;
+    agentConfig.migratedAt = new Date().toISOString();
+
+    saveState(state);
+    logger.debug('Codex hook migration completed successfully');
+  } catch (err) {
+    logger.warn(`Codex hook migration failed (non-blocking): ${(err as Error).message}`);
+  }
+}
+
+/**
  * Convert old hooks.installed entries to the new agentExtensions registry.
  * Also registers the sonar-sqaa PostToolUse hook if the active connection is cloud.
  * Idempotent: skips if extensions for this agent+project already exist.
@@ -240,6 +377,9 @@ function migrateToExtensionsRegistry(
   // sonar-sqaa is always project-level (never global), regardless of the -g flag.
   const oldHooks = state.agents['claude-code'].hooks.installed;
   for (const hook of oldHooks) {
+    if (hook.name === OBSOLETE_A3S_MARKER) {
+      continue;
+    }
     const alreadyMigrated = existingExtensions.some(
       (e): e is HookExtension =>
         e.kind === 'hook' && e.name === hook.name && e.hookType === hook.type,
@@ -274,13 +414,79 @@ function migrateToExtensionsRegistry(
   }
 }
 
+function migrateToCodexExtensionsRegistry(
+  state: ReturnType<typeof loadState>,
+  projectRoot: string,
+  globalDir: string | undefined,
+  sqaaHookInstalled: boolean,
+): void {
+  const isGlobal = globalDir !== undefined;
+  const effectiveProjectRoot = globalDir ?? projectRoot;
+  const existingExtensions = state.agentExtensions.filter(
+    (e) => e.agentId === 'codex' && e.projectRoot === effectiveProjectRoot,
+  );
+
+  const connection = getActiveConnection(state);
+  const now = new Date().toISOString();
+
+  const baseExt = {
+    agentId: 'codex' as const,
+    projectRoot: effectiveProjectRoot,
+    global: isGlobal,
+    orgKey: connection?.orgKey,
+    serverUrl: connection?.serverUrl,
+    updatedByCliVersion: CURRENT_VERSION,
+    updatedAt: now,
+  };
+
+  // eslint-disable-next-line @typescript-eslint/dot-notation -- dynamic agent key
+  const codexCfg = state.agents['codex'] as AgentConfig | undefined;
+  if (!codexCfg) {
+    return;
+  }
+  const oldHooks = codexCfg.hooks.installed;
+  for (const hook of oldHooks) {
+    if (hook.name === OBSOLETE_A3S_MARKER) {
+      continue;
+    }
+    const alreadyMigrated = existingExtensions.some(
+      (e): e is HookExtension =>
+        e.kind === 'hook' && e.name === hook.name && e.hookType === hook.type,
+    );
+    if (!alreadyMigrated) {
+      const isSqaa = hook.name === 'sonar-sqaa';
+      upsertAgentExtension(state, {
+        ...baseExt,
+        projectRoot: isSqaa ? projectRoot : effectiveProjectRoot,
+        global: isSqaa ? false : isGlobal,
+        id: randomUUID(),
+        kind: 'hook',
+        name: hook.name,
+        hookType: hook.type,
+      });
+    }
+  }
+
+  if (sqaaHookInstalled) {
+    upsertAgentExtension(state, {
+      ...baseExt,
+      projectRoot,
+      global: false,
+      id: randomUUID(),
+      kind: 'hook',
+      name: 'sonar-sqaa',
+      hookType: 'PostToolUse',
+    });
+  }
+}
+
 /**
  * Rewrite old hook scripts that called `sonar analyze --file` to use specific subcommands.
  * Also called from post-update.ts for automatic migration after CLI upgrades.
  */
 export function migrateHookScripts(projectRoot: string, globalDir?: string): void {
   const baseDir = globalDir ?? projectRoot;
-  const secretsDir = join(baseDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts');
+  const secretsDir = claudeSonarSecretsBuildScriptsPath(baseDir);
 
   const scripts = [
     'pretool-secrets.sh',
@@ -307,6 +513,40 @@ export function migrateHookScripts(projectRoot: string, globalDir?: string): voi
       }
     } catch (err) {
       logger.debug(`Failed to migrate script ${script}: ${(err as Error).message}`);
+    }
+  }
+}
+
+/**
+ * Rewrite legacy Codex hook scripts under `.codex/hooks/sonar-secrets/build-scripts/`.
+ */
+export function migrateCodexHookScripts(projectRoot: string, globalDir?: string): void {
+  const baseDir = globalDir ?? projectRoot;
+  const secretsDir = codexSonarSecretsBuildScriptsPath(baseDir);
+
+  const scripts = [
+    'pretool-secrets.sh',
+    'prompt-secrets.sh',
+    'pretool-secrets.ps1',
+    'prompt-secrets.ps1',
+  ];
+
+  for (const script of scripts) {
+    const scriptPath = join(secretsDir, script);
+    if (!existsSync(scriptPath)) {
+      continue;
+    }
+
+    try {
+      const content = readFileSync(scriptPath, 'utf-8');
+      const migrated = content.replaceAll('sonar analyze --file', 'sonar analyze secrets');
+
+      if (migrated !== content) {
+        writeFileSync(scriptPath, migrated, 'utf-8');
+        logger.debug(`Migrated Codex hook script: ${script}`);
+      }
+    } catch (err) {
+      logger.debug(`Failed to migrate Codex script ${script}: ${(err as Error).message}`);
     }
   }
 }

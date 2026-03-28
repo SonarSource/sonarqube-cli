@@ -1,3 +1,11 @@
 {
-  "eslint.workingDirectories": [{ "mode": "auto" }]
+  "eslint.workingDirectories": [
+    {
+      "mode": "auto"
+    }
+  ],
+  "sonarlint.connectedMode.project": {
+    "connectionId": "sonarsource",
+    "projectKey": "SonarSource_sonarqube-cli"
+  }
 }

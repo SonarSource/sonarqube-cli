@@ -27,9 +27,19 @@ import { tmpdir, homedir } from 'node:os';
 import { setMockUi } from '../../src/ui';
 import * as stateManager from '../../src/lib/state-manager.js';
 import * as hooks from '../../src/cli/commands/integrate/claude/hooks';
+import * as codexHooks from '../../src/cli/commands/integrate/codex/hooks';
 import { getDefaultState } from '../../src/lib/state.js';
-import type { HookExtension } from '../../src/lib/state.js';
-import { runMigrations } from '../../src/lib/migration';
+import type { CliState, HookExtension } from '../../src/lib/state.js';
+import {
+  claudeHooksDirPath,
+  claudeSonarSecretsBuildScriptsPath,
+} from '../../src/lib/config-constants';
+import {
+  cleanObsoleteFromState,
+  OBSOLETE_A3S_MARKER,
+  runMigrations,
+  runCodexMigrations,
+} from '../../src/lib/migration';
 import { version as CURRENT_VERSION } from '../../package.json';
 
 const OLD_VERSION = '0.4.0';
@@ -267,12 +277,96 @@ describe('runMigrations — migration execution', () => {
     await runMigrations('/some/project');
 
     const projectExts = state.agentExtensions.filter(
-      (e) =>
+      (e): e is HookExtension =>
+        e.kind === 'hook' &&
         e.name === 'sonar-secrets' &&
         e.hookType === 'PreToolUse' &&
         e.projectRoot === '/some/project',
     );
     expect(projectExts.length).toBe(1);
+  });
+});
+
+describe('runCodexMigrations — SQAA state guards', () => {
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
+  let addInstalledHookSpy: ReturnType<typeof spyOn>;
+  let installCodexHooksSpy: ReturnType<typeof spyOn>;
+
+  function makeConfiguredCodexState(version: string) {
+    const state = getDefaultState('test');
+    state.agents.codex = {
+      configured: true,
+      configuredAt: new Date().toISOString(),
+      configuredByCliVersion: version,
+      hooks: { installed: [] },
+      skills: { installed: [] },
+    };
+    return state;
+  }
+
+  beforeEach(() => {
+    setMockUi(true);
+    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
+      makeConfiguredCodexState(OLD_VERSION),
+    );
+    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
+      () => undefined,
+    );
+    installCodexHooksSpy = spyOn(codexHooks, 'installCodexHooks').mockResolvedValue({
+      secretsHooksInstalled: true,
+      sqaaHookInstalled: false,
+    });
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    addInstalledHookSpy.mockRestore();
+    installCodexHooksSpy.mockRestore();
+  });
+
+  it('does not register sonar-sqaa when SQAA hook was not installed during migration', async () => {
+    const state = makeConfiguredCodexState(OLD_VERSION);
+    stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+      keystoreKey: 'sonarcloud.io:my-org',
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await runCodexMigrations('/some/project', undefined, true, 'my-project');
+
+    expect(
+      addInstalledHookSpy.mock.calls.some(
+        (call: unknown[]) => call[1] === 'codex' && call[2] === 'sonar-sqaa',
+      ),
+    ).toBe(false);
+    expect(state.agentExtensions.some((e) => e.name === 'sonar-sqaa')).toBe(false);
+  });
+
+  it('registers sonar-sqaa when SQAA hook was installed during migration', async () => {
+    const state = makeConfiguredCodexState(OLD_VERSION);
+    stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+      orgKey: 'my-org',
+      keystoreKey: 'sonarcloud.io:my-org',
+    });
+    loadStateSpy.mockReturnValue(state);
+    installCodexHooksSpy.mockResolvedValue({
+      secretsHooksInstalled: true,
+      sqaaHookInstalled: true,
+    });
+
+    await runCodexMigrations('/some/project', undefined, true, 'my-project');
+
+    expect(addInstalledHookSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      'codex',
+      'sonar-sqaa',
+      'PostToolUse',
+    );
+    expect(state.agentExtensions.some((e) => e.name === 'sonar-sqaa')).toBe(true);
   });
 });
 
@@ -393,7 +487,7 @@ describe('runMigrations — hook script rewriting', () => {
   });
 
   function writeOldScript(filename: string, content: string): string {
-    const dir = join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts');
+    const dir = claudeSonarSecretsBuildScriptsPath(testDir);
     mkdirSync(dir, { recursive: true });
     const path = join(dir, filename);
     writeFileSync(path, content, 'utf-8');
@@ -453,7 +547,7 @@ describe('runMigrations — hook script rewriting', () => {
   it('logs debug and continues when a hook script cannot be read (read error)', () => {
     // Create a directory where the script path exists but is itself a directory
     // (causes readFileSync to throw EISDIR), exercising the catch branch
-    const secretsDir = join(testDir, '.claude', 'hooks', 'sonar-secrets', 'build-scripts');
+    const secretsDir = claudeSonarSecretsBuildScriptsPath(testDir);
     mkdirSync(secretsDir, { recursive: true });
     // Create a subdirectory with the same name as a script — readFileSync will throw
     mkdirSync(join(secretsDir, 'pretool-secrets.sh'), { recursive: true });
@@ -463,13 +557,13 @@ describe('runMigrations — hook script rewriting', () => {
   });
 
   it('deletes the obsolete sonar-a3s hook directory from projectRoot', async () => {
-    const a3sDir = join(testDir, '.claude', 'hooks', 'sonar-a3s', 'build-scripts');
+    const a3sDir = join(claudeHooksDirPath(testDir), 'sonar-a3s', 'build-scripts');
     mkdirSync(a3sDir, { recursive: true });
 
     await runMigrations(testDir);
 
     const { existsSync } = await import('node:fs');
-    expect(existsSync(join(testDir, '.claude', 'hooks', 'sonar-a3s'))).toBe(false);
+    expect(existsSync(join(claudeHooksDirPath(testDir), 'sonar-a3s'))).toBe(false);
   });
 });
 
@@ -638,5 +732,43 @@ describe('runMigrations — sonar-a3s state cleanup', () => {
     await runMigrations('/some/project');
 
     expect(state.agentExtensions.some((e) => e.name === 'sonar-secrets')).toBe(true);
+  });
+});
+
+describe('cleanObsoleteFromState — partial agents object', () => {
+  it('does not throw when claude-code is missing (codex-only persisted state)', () => {
+    const state = getDefaultState('test');
+    state.agents = {
+      codex: {
+        configured: true,
+        hooks: {
+          installed: [
+            {
+              name: 'sonar-a3s',
+              type: 'PostToolUse',
+              installedAt: new Date().toISOString(),
+            },
+          ],
+        },
+        skills: { installed: [] },
+      },
+    } as unknown as CliState['agents'];
+    state.agentExtensions = [
+      {
+        id: 'ext-a3s',
+        agentId: 'codex',
+        projectRoot: '/proj',
+        global: false,
+        kind: 'hook',
+        name: 'sonar-a3s',
+        hookType: 'PostToolUse',
+        updatedByCliVersion: '0.5.0',
+        updatedAt: new Date().toISOString(),
+      },
+    ];
+
+    expect(() => cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER)).not.toThrow();
+    expect(state.agents['codex'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(false);
+    expect(state.agentExtensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
   });
 });

@@ -32,6 +32,10 @@ bun run test:coverage     # Full merged lcov report (unit + integration, slow)
 
 Each command lives in `src/cli/commands/`. The command tree is defined in `src/cli/command-tree.ts` and the entry point is `src/index.ts`.
 
+- **`sonar integrate claude` (Claude Code):** Installs SonarQube MCP and Sonar hooks: **sonar-secrets**, plus project-scoped **sonar-sqaa** when eligible. Writes to `<project>/.claude/` unless `-g` / `--global` (`~/.claude/`). Docker is required for MCP.
+
+- **`sonar integrate codex` (OpenAI Codex):** Installs SonarQube MCP and Sonar hooks: **sonar-secrets**, plus project-scoped **sonar-sqaa** when eligible. Writes to `<project>/.codex/` unless `-g` / `--global` (`~/.codex/`). Docker is required for MCP. Codex hooks are not supported on Windows. Project installs may set `[features] codex_hooks = true` in `~/.codex/config.toml` when that file exists.
+
 To add a new command: add it to `src/cli/command-tree.ts` and implement the logic in a new folder under `src/cli/commands/`.
 Please declare commands using the type defined in `src/cli/commands/_common/sonar-command.ts`.
 By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
@@ -52,7 +56,7 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 Please try to create integration tests in priority. If the test is too complicated to set up, write unit tests.
 Try to get inspiration from other tests to follow the same structure.
 
-- Unit tests: `tests/unit/` — run with `bun test:unit`
+- Unit tests: `tests/unit/` — run with `bun test:unit`. Prefer one file per CLI command where it fits: e.g. `integrate-claude.test.ts` (`sonar integrate claude`), `integrate-codex.test.ts` (`sonar integrate codex`), `integrate-git.test.ts` (`sonar integrate git`).
 - Integration tests: `tests/integration/` — require env vars. They are using a harness to help set up tests and make assertions. Run with `bun test:integration`.
 - E2E tests: `tests/e2e/` — end-to-end tests to verify full integration with external systems. Run with `bun test ./tests/e2e/`.
 - The UI module has a built-in mock system (`src/ui/mock.ts`) — use it instead of mocking stdout directly.

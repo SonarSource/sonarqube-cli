@@ -21,18 +21,20 @@
 // Integrate command - setup SonarQube integration for Claude Code
 
 import { homedir } from 'node:os';
-import { isEnvBasedAuth, isSonarQubeCloud } from '../../../../lib/auth-resolver';
+import { isEnvBasedAuth } from '../../../../lib/auth-resolver';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import {
   runMigrations,
   removeObsoleteHookArtifacts,
   OBSOLETE_A3S_MARKER,
 } from '../../../../lib/migration';
-import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
-import type { DiscoveredProject } from '../../_common/discovery';
+import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import { discoverProject } from '../../_common/discovery';
-import { CommandFailedError } from '../../_common/error';
+import {
+  loadIntegrateConfiguration,
+  validateIntegrateConfiguration,
+} from '../_common/integrate-configuration';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { runHealthChecks } from './health';
 import { installHooks } from './hooks';
@@ -46,12 +48,7 @@ export interface IntegrateClaudeOptions {
   global?: boolean;
 }
 
-export interface ConfigurationData {
-  serverURL: string;
-  projectKey: string | undefined;
-  organization: string | undefined;
-  token: string;
-}
+export type { ConfigurationData } from '../_common/integrate-configuration';
 
 /**
  * Integrate command handler
@@ -67,8 +64,8 @@ export async function integrateClaude(
   blank();
 
   const project = await discoverProject(process.cwd());
-  const config = loadConfiguration(project, options, auth);
-  validateConfiguration(project, config);
+  const config = loadIntegrateConfiguration(project, options, auth);
+  validateIntegrateConfiguration(project, config);
 
   const isGlobal = options.global ?? false;
   const hooksRoot = isGlobal ? homedir() : project.rootDir;
@@ -88,6 +85,7 @@ export async function integrateClaude(
     config.projectKey,
     hooksRoot,
     config.organization,
+    true,
   );
 
   if (healthResult.errors.length === 0) {
@@ -132,74 +130,6 @@ export async function integrateClaude(
     false,
   );
   printFinalVerificationResults(finalHealth, config.projectKey);
-}
-
-/**
- * Load configuration from auth and discovered project
- */
-function loadConfiguration(
-  project: DiscoveredProject,
-  options: IntegrateClaudeOptions,
-  auth: ResolvedAuth,
-): ConfigurationData {
-  if (!!auth.serverUrl && !!project.serverUrl && auth.serverUrl != project.serverUrl) {
-    warn(
-      'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
-
-  if (!!auth.orgKey && !!project.organization && auth.orgKey != project.organization) {
-    warn(
-      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
-
-  return {
-    serverURL: auth.serverUrl,
-    organization: auth.orgKey,
-    projectKey: options.project || project.projectKey,
-    token: auth.token,
-  };
-}
-
-function validateConfiguration(project: DiscoveredProject, config: ConfigurationData): void {
-  if (isSonarQubeCloud(config.serverURL) && !config.organization) {
-    throw new CommandFailedError(
-      'SonarQube Cloud requires an organization. Please run "sonar auth logout" and re-authenticate with an organization.',
-    );
-  }
-
-  blank();
-  text(`Server: ${config.serverURL}`);
-
-  if (config.organization) {
-    text(`Organization: ${config.organization}`);
-  }
-
-  if (project.isGitRepo) {
-    text('Git repository detected');
-  }
-
-  text(`Project root: ${project.rootDir}`);
-
-  if (config.projectKey) {
-    text(`Project: ${config.projectKey}`);
-  } else {
-    text('No project key provided - project related actions will be skipped.');
-  }
-}
-
-/**
- * Check if the organization has SQAA entitlement.
- * Returns false for on-premise, missing org, or failed API call.
- */
-async function resolveSqaaEntitlement(
-  serverURL: string,
-  token: string,
-  organization: string | undefined,
-): Promise<boolean> {
-  const client = new SonarQubeClient(serverURL, token);
-  return client.hasSqaaEntitlement(organization);
 }
 
 /**

@@ -24,23 +24,23 @@ import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { dirname, basename, join } from 'node:path';
 import * as nodeOs from 'node:os';
+import {
+  CLAUDE_AGENT_DIR_NAME,
+  CLAUDE_HOOKS_DIR_NAME,
+  CLAUDE_SETTINGS_FILE,
+  CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME,
+} from '../../../../lib/config-constants';
 import logger from '../../../../lib/logger';
 import {
   getSecretPreToolTemplateUnix,
-  getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
-  getSecretPromptTemplateWindows,
   getSqaaPostToolTemplateUnix,
+} from '../_common/unix-agent-hook-templates';
+import {
+  getSecretPreToolTemplateWindows,
+  getSecretPromptTemplateWindows,
   getSqaaPostToolTemplateWindows,
 } from './hook-templates';
-
-const HOOKS_DIR = 'hooks';
-const SETTINGS_FILE = 'settings.json';
-const SONAR_SECRETS_MARKER = 'sonar-secrets';
-
-const AGENT_CONFIG_DIR: Record<string, string> = {
-  claude: '.claude',
-};
 
 interface HookConfig {
   matcher: string;
@@ -98,7 +98,6 @@ async function installHook(params: HookInstallParams): Promise<void> {
   const {
     installDir,
     scope,
-    agent,
     eventType,
     matcher,
     scriptPath,
@@ -109,10 +108,10 @@ async function installHook(params: HookInstallParams): Promise<void> {
 
   const isWindows = getPlatform() === 'windows';
   const scriptExt = getScriptExtension();
-  const configDir = AGENT_CONFIG_DIR[agent];
+  const configDir = CLAUDE_AGENT_DIR_NAME;
 
   // Write script file
-  const fullScriptDir = join(installDir, configDir, HOOKS_DIR, dirname(scriptPath));
+  const fullScriptDir = join(installDir, configDir, CLAUDE_HOOKS_DIR_NAME, dirname(scriptPath));
   nodeFs.mkdirSync(fullScriptDir, { recursive: true });
   const fullScriptPath = join(fullScriptDir, `${basename(scriptPath)}${scriptExt}`);
   await fsPromises.writeFile(
@@ -122,7 +121,7 @@ async function installHook(params: HookInstallParams): Promise<void> {
   );
 
   // Global: absolute path; project: relative to installDir (portable when project is moved)
-  const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${scriptExt}`);
+  const relativePath = join(configDir, CLAUDE_HOOKS_DIR_NAME, `${scriptPath}${scriptExt}`);
   const commandPath = scope === 'global' ? fullScriptPath : relativePath;
   const command = isWindows
     ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
@@ -132,7 +131,7 @@ async function installHook(params: HookInstallParams): Promise<void> {
   const marker = scriptPath.split('/')[0];
 
   // Update settings.json
-  const settingsPath = join(installDir, configDir, SETTINGS_FILE);
+  const settingsPath = join(installDir, configDir, CLAUDE_SETTINGS_FILE);
   let settings: AgentSettings = { hooks: {} };
   if (nodeFs.existsSync(settingsPath)) {
     const data = await fsPromises.readFile(settingsPath, 'utf-8');
@@ -148,7 +147,7 @@ async function installHook(params: HookInstallParams): Promise<void> {
  * The hooksRoot parameter is the directory whose agent config settings.json file is inspected.
  */
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
-  const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR.claude, SETTINGS_FILE);
+  const settingsPath = join(hooksRoot, CLAUDE_AGENT_DIR_NAME, CLAUDE_SETTINGS_FILE);
 
   if (!nodeFs.existsSync(settingsPath)) {
     return false;
@@ -163,7 +162,8 @@ export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
       Array.isArray(settings.hooks.PreToolUse) &&
       settings.hooks.PreToolUse.some(
         (e) =>
-          Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER)),
+          Array.isArray(e.hooks) &&
+          e.hooks.some((h) => h.command.includes(CLAUDE_SONAR_SECRETS_HOOKS_DIR_NAME)),
       ),
     );
   } catch {

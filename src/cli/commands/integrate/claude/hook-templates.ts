@@ -18,48 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Hook script templates for Claude Code integration
+// Hook script templates for Claude Code integration (Windows; Unix shared in _common)
 
-/**
- * Unix template for sonar-secrets PreToolUse hook (bash)
-1 */
-export function getSecretPreToolTemplateUnix(): string {
-  return String.raw`#!/bin/bash
-# PreToolUse hook: Scan files before reading to prevent secret leakage
-# Blocks file reads if secrets are detected
-
-if ! command -v sonar &> /dev/null; then
-  exit 0
-fi
-
-# Read JSON from stdin and extract fields using sed (handles both compact and pretty-printed JSON)
-stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ "$tool_name" != "Read" ]]; then
-  exit 0
-fi
-
-file_path=$(echo "$stdin_data" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
-  exit 0
-fi
-
-# Scan file for secrets
-sonar analyze secrets "$file_path" > /dev/null 2>&1
-exit_code=$?
-
-if [[ $exit_code -eq 51 ]]; then
-  # Secrets found - deny file read
-  reason="Sonar detected secrets in file: $file_path"
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"$reason\"}}"
-  exit 0
-fi
-
-exit 0
-`;
-}
+export {
+  getSecretPreToolTemplateUnix,
+  getSecretPromptTemplateUnix,
+  getSqaaPostToolTemplateUnix,
+} from '../_common/unix-agent-hook-templates';
 
 /**
  * Windows template for sonar-secrets PreToolUse hook (PowerShell)
@@ -105,86 +70,6 @@ if ($exitCode -eq 51) {
     } | ConvertTo-Json
     Write-Host $response
 }
-
-exit 0
-`;
-}
-
-/**
- * Unix template for sonar-secrets UserPromptSubmit hook (bash)
- */
-export function getSecretPromptTemplateUnix(): string {
-  return String.raw`#!/bin/bash
-# UserPromptSubmit hook: Scan prompt for secrets before sending
-
-if ! command -v sonar &> /dev/null; then
-  exit 0
-fi
-
-# Read JSON from stdin
-stdin_data=$(cat)
-
-# Extract prompt field using sed
-prompt=$(echo "$stdin_data" | sed -n 's/.*"prompt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ -z "$prompt" ]]; then
-  exit 0
-fi
-
-# Create temporary file with prompt content (stdin is already occupied by hook input)
-temp_file=$(mktemp -t 'sonarqube-cli-hook.XXXXXX')
-trap "rm -f $temp_file" EXIT
-
-echo -n "$prompt" > "$temp_file"
-
-# Scan prompt for secrets (using file instead of stdin pipe)
-sonar analyze secrets "$temp_file" > /dev/null 2>&1
-exit_code=$?
-
-if [[ $exit_code -eq 51 ]]; then
-  # Secrets found - block prompt
-  reason="Sonar detected secrets in prompt"
-  echo "{\"decision\":\"block\",\"reason\":\"$reason\"}"
-  exit 0
-fi
-
-exit 0
-`;
-}
-
-/**
- * Unix template for SQAA PostToolUse hook (bash)
- * Runs after Edit/Write — analyzes the modified file with SQAA.
- */
-export function getSqaaPostToolTemplateUnix(projectKey: string): string {
-  return String.raw`#!/bin/bash
-# PostToolUse hook: Run SQAA analysis on edited/written files
-
-if ! command -v sonar &> /dev/null; then
-  exit 0
-fi
-
-# Read JSON from stdin and extract fields using sed (handles both compact and pretty-printed JSON)
-stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ "$tool_name" != "Edit" ]] && [[ "$tool_name" != "Write" ]]; then
-  exit 0
-fi
-
-file_path=$(echo "$stdin_data" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
-  exit 0
-fi
-
-# Capture SQAA analysis output and pass it to Claude via additionalContext
-output=$(sonar analyze sqaa --file "$file_path" --project ${projectKey} 2>/dev/null)
-
-# JSON-escape the output using awk (no external runtimes required)
-escaped=$(printf '%s' "$output" | awk 'BEGIN{ORS=""} {gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); if(NR>1) printf "\\n"; print}')
-
-printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$escaped"
 
 exit 0
 `;
@@ -249,6 +134,9 @@ try {
 }
 
 $prompt = $input.prompt
+if ([string]::IsNullOrEmpty($prompt) -and $null -ne $input.payload) {
+    $prompt = $input.payload.prompt
+}
 
 if ([string]::IsNullOrEmpty($prompt)) {
     exit 0
