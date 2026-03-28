@@ -52,11 +52,11 @@ function sedFirstCapturedJsonStringField(fieldName: string): string {
 function sqaaHookOutputJsonEscapeAwk(): string {
   const tab = '\t';
   const cr = '\r';
-  // Split gsub(/"/, ...) so we avoid unnecessary `\"` escapes (typescript:S6535); keep same awk source as legacy template literals.
+  // Split gsub(/"/, ...) so we avoid unnecessary `\"` escapes (typescript:S6535).
   return (
-    `BEGIN{ORS=""} {gsub(/\\/, "\\\\"); gsub(/"/, "\\` +
+    String.raw`BEGIN{ORS=""} {gsub(/\\/, "\\\\"); gsub(/"/, "\\` +
     `"` +
-    `"); gsub(/${tab}/, "\\t"); gsub(/${cr}/, "\\r"); if(NR>1) printf "\\n"; print}`
+    String.raw`"); gsub(/${tab}/, "\\t"); gsub(/${cr}/, "\\r"); if(NR>1) printf "\\n"; print}`
   );
 }
 
