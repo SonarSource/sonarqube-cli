@@ -53,11 +53,7 @@ function sqaaHookOutputJsonEscapeAwk(): string {
   const tab = '\t';
   const cr = '\r';
   // Split gsub(/"/, ...) so we avoid unnecessary `\"` escapes (typescript:S6535); keep same awk source as legacy template literals.
-  return (
-    `BEGIN{ORS=""} {gsub(/\\/, "\\\\"); gsub(/"/, "\\` +
-    `"` +
-    `"); gsub(/${tab}/, "\\t"); gsub(/${cr}/, "\\r"); if(NR>1) printf "\\n"; print}`
-  );
+  return String.raw`BEGIN{ORS=""} {gsub(/\/, "\\"); gsub(/"/, "\""); gsub(/${tab}/, "\t"); gsub(/${cr}/, "\r"); if(NR>1) printf "\n"; print}`;
 }
 
 /** Unix template for sonar-secrets PreToolUse hook (bash) */
