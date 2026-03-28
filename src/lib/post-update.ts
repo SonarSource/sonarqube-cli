@@ -101,6 +101,43 @@ function hasPreviousInstallation(state: CliState): boolean {
   return (state.tools?.installed ?? []).some((t) => t.name === SECRETS_BINARY_NAME);
 }
 
+type ClaudeHookMigrationLocation = { projectRoot: string; globalDir: string | undefined };
+
+function dedupeClaudeExtensionLocations(
+  extensions: ReadonlyArray<{ projectRoot: string; global: boolean }>,
+  homedirFn: () => string,
+): ClaudeHookMigrationLocation[] {
+  const seen = new Set<string>();
+  const locations: ClaudeHookMigrationLocation[] = [];
+  for (const ext of extensions) {
+    const globalDir = ext.global ? homedirFn() : undefined;
+    const key = `${ext.projectRoot}|${globalDir ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    locations.push({ projectRoot: ext.projectRoot, globalDir });
+  }
+  return locations;
+}
+
+function collectClaudeHookMigrationLocations(
+  state: CliState,
+  homedirFn: () => string,
+): ClaudeHookMigrationLocation[] {
+  const extensions = state.agentExtensions.filter((e) => e.agentId === 'claude-code');
+  if (extensions.length > 0) {
+    return dedupeClaudeExtensionLocations(extensions, homedirFn);
+  }
+
+  if (Object.hasOwn(state.agents, 'claude-code') && state.agents['claude-code'].configured) {
+    const globalHooksDir = claudeSonarSecretsHooksPath(homedirFn());
+    if (fs.existsSync(globalHooksDir)) {
+      return [{ projectRoot: homedirFn(), globalDir: homedirFn() }];
+    }
+  }
+
+  return [];
+}
+
 /**
  * Migrate Claude Code hook scripts and reinstall secrets hooks for all known locations.
  *
@@ -119,29 +156,7 @@ function hasPreviousInstallation(state: CliState): boolean {
  */
 export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir): Promise<void> {
   const state = loadState();
-
-  type Location = { projectRoot: string; globalDir: string | undefined };
-  const locations: Location[] = [];
-
-  const extensions = state.agentExtensions.filter((e) => e.agentId === 'claude-code');
-
-  if (extensions.length > 0) {
-    // New format: use registry entries, deduplicate by (projectRoot, globalDir)
-    const seen = new Set<string>();
-    for (const ext of extensions) {
-      const globalDir = ext.global ? homedirFn() : undefined;
-      const key = `${ext.projectRoot}|${globalDir ?? ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      locations.push({ projectRoot: ext.projectRoot, globalDir });
-    }
-  } else if (Object.hasOwn(state.agents, 'claude-code') && state.agents['claude-code'].configured) {
-    // Pre-registry fallback: check for global hooks in homedir
-    const globalHooksDir = claudeSonarSecretsHooksPath(homedirFn());
-    if (fs.existsSync(globalHooksDir)) {
-      locations.push({ projectRoot: homedirFn(), globalDir: homedirFn() });
-    }
-  }
+  const locations = collectClaudeHookMigrationLocations(state, homedirFn);
 
   for (const { projectRoot, globalDir } of locations) {
     try {
@@ -157,6 +172,28 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
   }
 }
 
+function collectCodexHookMigrationLocations(
+  state: CliState,
+  homedirFn: () => string,
+): ClaudeHookMigrationLocation[] {
+  const extensions = state.agentExtensions.filter((e) => e.agentId === 'codex');
+  if (extensions.length > 0) {
+    return dedupeClaudeExtensionLocations(extensions, homedirFn);
+  }
+
+  if (
+    // eslint-disable-next-line @typescript-eslint/dot-notation -- optional agent key on disk
+    (state.agents['codex'] as { configured?: boolean } | undefined)?.configured
+  ) {
+    const globalHooksDir = codexSonarSecretsHooksPath(homedirFn());
+    if (fs.existsSync(globalHooksDir)) {
+      return [{ projectRoot: homedirFn(), globalDir: homedirFn() }];
+    }
+  }
+
+  return [];
+}
+
 /**
  * Migrate OpenAI Codex hook scripts and reinstall secrets hooks for all known locations.
  *
@@ -167,30 +204,7 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
  */
 export async function migrateCodexHooks(homedirFn: () => string = homedir): Promise<void> {
   const state = loadState();
-
-  type Location = { projectRoot: string; globalDir: string | undefined };
-  const locations: Location[] = [];
-
-  const extensions = state.agentExtensions.filter((e) => e.agentId === 'codex');
-
-  if (extensions.length > 0) {
-    const seen = new Set<string>();
-    for (const ext of extensions) {
-      const globalDir = ext.global ? homedirFn() : undefined;
-      const key = `${ext.projectRoot}|${globalDir ?? ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      locations.push({ projectRoot: ext.projectRoot, globalDir });
-    }
-  } else if (
-    // eslint-disable-next-line @typescript-eslint/dot-notation -- optional agent key on disk
-    (state.agents['codex'] as { configured?: boolean } | undefined)?.configured
-  ) {
-    const globalHooksDir = codexSonarSecretsHooksPath(homedirFn());
-    if (fs.existsSync(globalHooksDir)) {
-      locations.push({ projectRoot: homedirFn(), globalDir: homedirFn() });
-    }
-  }
+  const locations = collectCodexHookMigrationLocations(state, homedirFn);
 
   for (const { projectRoot, globalDir } of locations) {
     try {

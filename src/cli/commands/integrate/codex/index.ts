@@ -46,7 +46,7 @@ import {
   writeCodexTomlIntegration,
 } from './codex-config';
 import { installCodexHooks, isCodexHooksSupportedOnPlatform } from './hooks';
-import { runCodexHealthChecks } from './health';
+import { runCodexHealthChecks, type CodexHealthCheckResult } from './health';
 import { updateStateAfterCodexConfiguration } from './state';
 
 export interface IntegrateCodexOptions {
@@ -54,6 +54,188 @@ export interface IntegrateCodexOptions {
   nonInteractive?: boolean;
   /** When true, install hooks and MCP under ~/.codex (default: project .codex only, same as integrate claude). */
   global?: boolean;
+}
+
+type DiscoveredProject = Awaited<ReturnType<typeof discoverProject>>;
+type IntegrateConfig = ReturnType<typeof loadIntegrateConfiguration>;
+
+async function resolveTokenAfterInitialHealth(
+  options: IntegrateCodexOptions,
+  healthResult: CodexHealthCheckResult,
+  config: IntegrateConfig,
+): Promise<string> {
+  let token = config.token;
+
+  if (healthResult.errors.length === 0) {
+    success('All checks passed! Configuration is healthy.');
+    return token;
+  }
+
+  warn(`Found ${healthResult.errors.length} issue(s):`);
+  for (const msg of healthResult.errors) {
+    text(`  - ${msg}`);
+  }
+
+  const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
+  if (!isNonInteractive && !healthResult.tokenValid) {
+    blank();
+    text('Running token repair...');
+    token = await repairToken(config.serverURL, config.organization);
+  }
+  return token;
+}
+
+function printFinalVerificationSummary(
+  finalHealth: CodexHealthCheckResult,
+  config: IntegrateConfig,
+): void {
+  if (finalHealth.tokenValid) text('Token valid');
+  if (finalHealth.serverAvailable) text('Server available');
+  if (config.projectKey && finalHealth.projectAccessible) text('Project accessible');
+  if (finalHealth.organizationAccessible) text('Organization accessible');
+  if (config.projectKey && finalHealth.qualityProfilesAccessible)
+    text('Quality profiles accessible');
+  if (finalHealth.mcpConfigured) text('Codex MCP configured in config.toml');
+  if (finalHealth.hooksInstalled) text('Hooks installed');
+}
+
+function printRemainingVerificationIssues(finalHealth: CodexHealthCheckResult): void {
+  if (finalHealth.errors.length === 0) {
+    return;
+  }
+  warn('Some issues remain:');
+  for (const msg of finalHealth.errors) {
+    text(`  - ${msg}`);
+  }
+}
+
+interface RunCodexConfigureParams {
+  project: DiscoveredProject;
+  auth: ResolvedAuth;
+  isGlobal: boolean;
+  hooksSupported: boolean;
+  configTomlPath: string;
+  sqaaEnabled: boolean;
+  globalDir: string | undefined;
+  projectKey: string | undefined;
+}
+
+async function tryInstallCodexHooks(
+  hooksSupported: boolean,
+  projectRoot: string,
+  globalDir: string | undefined,
+  sqaaEnabled: boolean,
+  projectKey: string | undefined,
+): Promise<{ secretsHooksInstalled: boolean; sqaaHookInstalled: boolean }> {
+  let secretsHooksInstalled = false;
+  let sqaaHookInstalled = false;
+
+  if (!hooksSupported) {
+    warn('Codex hooks are not supported on Windows; skipping secrets hooks.');
+    return { secretsHooksInstalled, sqaaHookInstalled };
+  }
+
+  text('Installing Codex hooks...');
+  await runCodexMigrations(projectRoot, globalDir, sqaaEnabled, projectKey);
+  ({ secretsHooksInstalled, sqaaHookInstalled } = await installCodexHooks(
+    projectRoot,
+    globalDir,
+    sqaaEnabled,
+    projectKey,
+  ));
+  await removeObsoleteCodexHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
+  if (secretsHooksInstalled || sqaaHookInstalled) {
+    success('Codex hooks installed');
+  } else {
+    warn('No Codex hooks were installed.');
+  }
+  return { secretsHooksInstalled, sqaaHookInstalled };
+}
+
+async function mergeCodexHookFeatureLayers(
+  isGlobal: boolean,
+  hooksSupported: boolean,
+  projectRoot: string,
+  secretsHooksInstalled: boolean,
+  sqaaHookInstalled: boolean,
+): Promise<void> {
+  const hooksOn = secretsHooksInstalled || sqaaHookInstalled;
+  if (!isGlobal && hooksOn) {
+    const mergedUser = await mergeCodexHooksFeatureUserLayerIfPresent();
+    if (mergedUser) {
+      info(
+        'Enabled [features] codex_hooks in ~/.codex/config.toml so merged session config matches project hooks.',
+      );
+    }
+  }
+
+  if (hooksSupported && hooksOn) {
+    const mergedProject = await mergeCodexHooksFeatureProjectLayerIfPresent(projectRoot);
+    if (mergedProject && isGlobal) {
+      info(
+        'Updated project .codex/config.toml: [features] codex_hooks = true (project layer overrides ~/.codex in Codex; hooks stay off if this stays false).',
+      );
+    }
+  }
+}
+
+async function runCodexConfigure(params: RunCodexConfigureParams): Promise<{
+  dockerAvailable: boolean;
+  secretsHooksInstalled: boolean;
+  sqaaHookInstalled: boolean;
+}> {
+  const {
+    project,
+    auth,
+    isGlobal,
+    hooksSupported,
+    configTomlPath,
+    sqaaEnabled,
+    globalDir,
+    projectKey,
+  } = params;
+
+  const { secretsHooksInstalled, sqaaHookInstalled } = await tryInstallCodexHooks(
+    hooksSupported,
+    project.rootDir,
+    globalDir,
+    sqaaEnabled,
+    projectKey,
+  );
+
+  const dockerAvailable = await isDockerAvailable();
+
+  if (dockerAvailable) {
+    info('Configuring SonarQube MCP Server in Codex config.toml...');
+  } else {
+    warn(
+      'Docker is required for the SonarQube MCP Server. Install Docker and re-run sonar integrate codex.',
+    );
+  }
+
+  await writeCodexTomlIntegration({
+    configFilePath: configTomlPath,
+    auth,
+    isGlobal,
+    projectRoot: project.rootDir,
+    projectKey,
+    includeMcp: dockerAvailable,
+    includeHooksFeature: secretsHooksInstalled || sqaaHookInstalled,
+  });
+
+  if (dockerAvailable) {
+    success(`Codex MCP config written to ${configTomlPath}`);
+  }
+
+  await mergeCodexHookFeatureLayers(
+    isGlobal,
+    hooksSupported,
+    project.rootDir,
+    secretsHooksInstalled,
+    sqaaHookInstalled,
+  );
+
+  return { dockerAvailable, secretsHooksInstalled, sqaaHookInstalled };
 }
 
 export async function integrateCodex(
@@ -87,11 +269,9 @@ export async function integrateCodex(
   text('Phase 2/3: Health Check & Repair');
   blank();
 
-  let token = config.token;
-
   const healthResult = await runCodexHealthChecks({
     serverURL: config.serverURL,
-    token,
+    token: config.token,
     projectKey: config.projectKey,
     organization: config.organization,
     verbose: true,
@@ -99,27 +279,12 @@ export async function integrateCodex(
     verifyHooks: false,
   });
 
-  if (healthResult.errors.length === 0) {
-    success('All checks passed! Configuration is healthy.');
-  } else {
-    warn(`Found ${healthResult.errors.length} issue(s):`);
-    for (const msg of healthResult.errors) {
-      text(`  - ${msg}`);
-    }
-
-    const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
-
-    if (!isNonInteractive && !healthResult.tokenValid) {
-      blank();
-      text('Running token repair...');
-      token = await repairToken(config.serverURL, config.organization);
-    }
-  }
+  const token = await resolveTokenAfterInitialHealth(options, healthResult, config);
 
   const sqaaEnabled = await resolveSqaaEntitlement(config.serverURL, token, config.organization);
   const globalDir = isGlobal ? homedir() : undefined;
 
-  const { dockerAvailable, secretsHooksInstalled, sqaaHookInstalled } = await runCodexConfigure(
+  const { dockerAvailable, secretsHooksInstalled, sqaaHookInstalled } = await runCodexConfigure({
     project,
     auth,
     isGlobal,
@@ -127,8 +292,8 @@ export async function integrateCodex(
     configTomlPath,
     sqaaEnabled,
     globalDir,
-    config.projectKey,
-  );
+    projectKey: config.projectKey,
+  });
 
   updateStateAfterCodexConfiguration(
     config,
@@ -154,23 +319,11 @@ export async function integrateCodex(
     hooksRoot,
   });
 
-  if (finalHealth.tokenValid) text('Token valid');
-  if (finalHealth.serverAvailable) text('Server available');
-  if (config.projectKey && finalHealth.projectAccessible) text('Project accessible');
-  if (finalHealth.organizationAccessible) text('Organization accessible');
-  if (config.projectKey && finalHealth.qualityProfilesAccessible)
-    text('Quality profiles accessible');
-  if (finalHealth.mcpConfigured) text('Codex MCP configured in config.toml');
-  if (finalHealth.hooksInstalled) text('Hooks installed');
+  printFinalVerificationSummary(finalHealth, config);
 
   outro('Codex setup complete!', 'success');
 
-  if (finalHealth.errors.length > 0) {
-    warn('Some issues remain:');
-    for (const msg of finalHealth.errors) {
-      text(`  - ${msg}`);
-    }
-  }
+  printRemainingVerificationIssues(finalHealth);
 
   info(
     'Restart Codex CLI or the Codex app so MCP and hooks are picked up. Hooks require [features] codex_hooks = true in the active config.toml (integrate sets this when secrets hooks are installed).',
@@ -184,85 +337,4 @@ export async function integrateCodex(
     text('  Sonar will detect the token and block the prompt automatically.');
     blank();
   }
-}
-
-async function runCodexConfigure(
-  project: Awaited<ReturnType<typeof discoverProject>>,
-  auth: ResolvedAuth,
-  isGlobal: boolean,
-  hooksSupported: boolean,
-  configTomlPath: string,
-  sqaaEnabled: boolean,
-  globalDir: string | undefined,
-  projectKey: string | undefined,
-): Promise<{
-  dockerAvailable: boolean;
-  secretsHooksInstalled: boolean;
-  sqaaHookInstalled: boolean;
-}> {
-  let secretsHooksInstalled = false;
-  let sqaaHookInstalled = false;
-
-  if (hooksSupported) {
-    text('Installing Codex hooks...');
-    await runCodexMigrations(project.rootDir, globalDir, sqaaEnabled, projectKey);
-    ({ secretsHooksInstalled, sqaaHookInstalled } = await installCodexHooks(
-      project.rootDir,
-      globalDir,
-      sqaaEnabled,
-      projectKey,
-    ));
-    await removeObsoleteCodexHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
-    if (secretsHooksInstalled || sqaaHookInstalled) {
-      success('Codex hooks installed');
-    } else {
-      warn('No Codex hooks were installed.');
-    }
-  } else {
-    warn('Codex hooks are not supported on Windows; skipping secrets hooks.');
-  }
-
-  const dockerAvailable = await isDockerAvailable();
-
-  if (dockerAvailable) {
-    info('Configuring SonarQube MCP Server in Codex config.toml...');
-  } else {
-    warn(
-      'Docker is required for the SonarQube MCP Server. Install Docker and re-run sonar integrate codex.',
-    );
-  }
-
-  await writeCodexTomlIntegration({
-    configFilePath: configTomlPath,
-    auth,
-    isGlobal,
-    projectRoot: project.rootDir,
-    projectKey,
-    includeMcp: dockerAvailable,
-    includeHooksFeature: secretsHooksInstalled || sqaaHookInstalled,
-  });
-
-  if (dockerAvailable) {
-    success(`Codex MCP config written to ${configTomlPath}`);
-  }
-
-  if (!isGlobal && (secretsHooksInstalled || sqaaHookInstalled)) {
-    const mergedUser = await mergeCodexHooksFeatureUserLayerIfPresent();
-    if (mergedUser) {
-      info(
-        'Enabled [features] codex_hooks in ~/.codex/config.toml so merged session config matches project hooks.',
-      );
-    }
-  }
-
-  if (hooksSupported && (secretsHooksInstalled || sqaaHookInstalled)) {
-    const mergedProject = await mergeCodexHooksFeatureProjectLayerIfPresent(project.rootDir);
-    if (mergedProject && isGlobal) {
-      info(
-        'Updated project .codex/config.toml: [features] codex_hooks = true (project layer overrides ~/.codex in Codex; hooks stay off if this stays false).',
-      );
-    }
-  }
-
-  return { dockerAvailable, secretsHooksInstalled, sqaaHookInstalled };
 }

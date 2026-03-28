@@ -32,7 +32,8 @@ import { buildSonarMcpDockerSpec } from '../_common/sonar-mcp-docker-spec';
 import type { SonarMcpDockerServerSpec } from '../_common/sonar-mcp-docker-spec';
 
 function tomlDoubleQuotedString(s: string): string {
-  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  const escaped = s.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
+  return `"${escaped}"`;
 }
 
 function tomlStringArray(arr: string[]): string {
