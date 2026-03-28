@@ -208,7 +208,7 @@ while IFS= read -r rel_path; do
     break
   fi
 
-  output=$("$SONAR" analyze sqaa --file "$abs_path" --project ${projectKey} 2>/dev/null || true)
+  output=$("$SONAR" analyze sqaa --file "$abs_path" --project "${projectKey}" 2>/dev/null || true)
   if [[ -z "$output" ]]; then
     continue
   fi

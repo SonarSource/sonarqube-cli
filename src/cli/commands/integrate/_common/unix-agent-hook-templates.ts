@@ -189,9 +189,9 @@ if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
   exit 0
 fi
 
-output=$("$SONAR" analyze sqaa --file "$file_path" --project ` +
+output=$("$SONAR" analyze sqaa --file "$file_path" --project "` +
     projectKey +
-    String.raw` 2>/dev/null)
+    String.raw`" 2>/dev/null)
 
 escaped=$(printf '%s' "$output" | awk '` +
     awkEsc +
