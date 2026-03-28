@@ -22,7 +22,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import {
@@ -49,6 +48,11 @@ import { getDefaultState } from '../../src/lib/state';
 import * as stateManager from '../../src/lib/state-manager';
 
 describe('sonar integrate codex', () => {
+  const decodeSpawnOutput = (output: ArrayBufferView | null | undefined): string =>
+    output
+      ? Buffer.from(output.buffer, output.byteOffset, output.byteLength).toString('utf-8')
+      : '';
+
   describe('stripMcpServersSonarqubeBlock', () => {
     it('removes mcp_servers.sonarqube and .env sections', () => {
       const input = `[other]
@@ -221,6 +225,7 @@ x = 1
       const repoDir = join(root, 'repo');
       const sonarBinDir = join(homeDir, '.local', 'share', 'sonarqube-cli', 'bin');
       const scriptPath = join(root, 'posttool-sqaa.sh');
+      const payloadPath = join(root, 'payload.json');
       const sourceFile = join(repoDir, 'src', 'example.ts');
 
       try {
@@ -234,8 +239,13 @@ x = 1
         );
         writeFileSync(scriptPath, getCodexSqaaPostToolTemplateUnix('my-project'), { mode: 0o755 });
 
-        const gitInit = spawnSync('git', ['init'], { cwd: repoDir, encoding: 'utf-8' });
-        expect(gitInit.status).toBe(0);
+        const gitInit = Bun.spawnSync({
+          cmd: ['git', 'init'],
+          cwd: repoDir,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        });
+        expect(gitInit.exitCode).toBe(0);
 
         const payload = JSON.stringify({
           tool_name: 'Bash',
@@ -244,22 +254,25 @@ x = 1
             command: "printf 'export const example = 2;\\n' > src/example.ts",
           },
         });
+        writeFileSync(payloadPath, payload);
 
-        const result = spawnSync('bash', [scriptPath], {
+        const result = Bun.spawnSync({
+          cmd: ['bash', '-lc', '"$0" < "$1"', scriptPath, payloadPath],
           cwd: repoDir,
-          encoding: 'utf-8',
-          input: payload,
+          stdout: 'pipe',
+          stderr: 'pipe',
           env: {
             ...process.env,
             HOME: homeDir,
             PATH: process.env.PATH ?? '',
           },
         });
+        const stdout = decodeSpawnOutput(result.stdout);
 
-        expect(result.status).toBe(0);
-        expect(result.stdout).toContain('"hookEventName":"PostToolUse"');
-        expect(result.stdout).toContain('src/example.ts');
-        expect(result.stdout).toContain('SQAA OK');
+        expect(result.exitCode).toBe(0);
+        expect(stdout).toContain('"hookEventName":"PostToolUse"');
+        expect(stdout).toContain('src/example.ts');
+        expect(stdout).toContain('SQAA OK');
       } finally {
         rmSync(root, { recursive: true, force: true });
       }

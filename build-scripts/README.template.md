@@ -21,14 +21,11 @@ curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/
 irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 ```
 
-## Setup steps for Claude Code integration
-Below is an example of a setup which will work for SonarQube Cloud.
-The authentication step is optional. With authentication, more types of secrets can be detected.
+## AI coding assistants
 
-```
-sonar auth login
-sonar integrate claude -g
-```
+Install SonarQube MCP and hooks with `sonar integrate claude` (Claude Code) or `sonar integrate codex` (OpenAI Codex). By default, files are written under the current project (for example `.claude/` or `.codex/`); use `-g` / `--global` for a user-wide install. Before integrating run `sonar auth login` first so more kinds of secrets can be detected.
+
+**Contributors and AI coding agents working in this repository** should follow **[AGENTS.md](./AGENTS.md)** for setup, checks, formatting, and how integrate commands behave. This README is for users of the published CLI; it does not replace the agent guide.
 
 ## Commands
 

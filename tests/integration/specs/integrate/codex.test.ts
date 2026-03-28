@@ -386,9 +386,17 @@ describe('integrate codex', () => {
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE)).toBe(true);
       expect(harness.cwd.exists(CODEX_AGENT_DIR_NAME, 'hooks.json')).toBe(true);
-      expect(harness.cwd.file(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE).asText()).toContain(
-        'SONARQUBE_PROJECT_KEY = "flag-project"',
-      );
+
+      const toml = harness.cwd.file(CODEX_AGENT_DIR_NAME, CODEX_CONFIG_FILE).asText();
+      expect(toml).toContain('codex_hooks = true');
+      if (hasSonarqubeMcpBlockInToml(toml)) {
+        expect(toml).toContain('SONARQUBE_PROJECT_KEY = "flag-project"');
+      }
+
+      const componentShow = server
+        .getRecordedRequests()
+        .find((r) => r.path === '/api/components/show' && r.query.component === 'flag-project');
+      expect(componentShow).toBeDefined();
     },
     { timeout: 30000 },
   );

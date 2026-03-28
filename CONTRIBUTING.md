@@ -26,11 +26,7 @@ Output goes to `dist/`.
 bun run build:binary
 ```
 
-Produces `dist/sonarqube-cli` using Bun's single-file compiler. To install it locally:
-
-```bash
-bun run setup
-```
+Produces `dist/sonarqube-cli` using Bun's single-file compiler. Run it directly (for example `./dist/sonarqube-cli --help`). To hack on the CLI without rebuilding the binary, use `bun run dev`, which runs `src/index.ts`.
 
 ## Checks
 
@@ -45,26 +41,28 @@ bun run lint:fix
 
 # TypeScript type checking
 bun run typecheck
+
+# Formatting (Prettier)
+bun run format:check
 ```
 
 ## Testing
 
 ```bash
 # Unit tests
-bun test
+bun run test:unit
 
-# Unit tests with coverage
+# Unit tests with coverage (also runs integration with coverage — slower)
 bun run test:coverage
 
-# Script tests
-bun run test:scripts
-
 # Integration tests (require env vars — see below)
-bun run test:integration
+bun run test:integration   # runs pretest:integration first (binary + resources)
 
-# All tests
+# All tests (unit, then integration)
 bun run test:all
 ```
+
+To run a single integration test file with `bun test <path>`, run `bun run pretest:integration` once first so the binary and resources exist. Unit tests can use `bun test <path>` without that step.
 
 ### Integration tests
 
