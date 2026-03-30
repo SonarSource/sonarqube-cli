@@ -30,7 +30,7 @@ import type { CliState } from './state.js';
  * Must be called before any other code that may throw.
  */
 export function initSentry(state: CliState): void {
-  if (!state.telemetry.enabled) return;
+  if (!state.telemetry.enabled || process.env.SONARQUBE_CLI_DISABLE_SENTRY) return;
 
   const environment = process.env.SONARSOURCE_DOGFOODING === '1' ? 'dogfood' : 'production';
 

@@ -11,7 +11,7 @@
     "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
     "postbuild:binary": "bun build-scripts/codesign-local.ts",
     "dev": "bun run src/index.ts",
-    "test:unit": "bun test ./tests/unit/",
+    "test:unit": "SONARQUBE_CLI_DISABLE_SENTRY=1 bun test ./tests/unit/",
     "pretest:integration": "bun build:binary && bun build-scripts/setup-integration-resources.ts",
     "test:integration": "bun test ./tests/integration/",
     "test:all": "bun run test:unit && bun run test:integration",

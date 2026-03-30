@@ -64,6 +64,7 @@ beforeEach(() => {
   initSpy = spyOn(Sentry, 'init').mockImplementation(() => undefined);
   setUserSpy = spyOn(Sentry, 'setUser').mockImplementation(() => {});
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
+  delete process.env['SONARQUBE_CLI_DISABLE_SENTRY'];
 });
 
 afterEach(() => {
@@ -71,6 +72,7 @@ afterEach(() => {
   setUserSpy.mockRestore();
   getUserIdSpy.mockRestore();
   delete process.env['SONARSOURCE_DOGFOODING'];
+  process.env['SONARQUBE_CLI_DISABLE_SENTRY'] = '1';
 });
 
 describe('initSentry', () => {

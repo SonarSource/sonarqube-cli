@@ -63,7 +63,7 @@ export async function runCli(
   const startTime = Date.now();
   mkdirSync(options.cwd, { recursive: true });
 
-  const spawnEnv = { ...env };
+  const spawnEnv = { ...env, SONARQUBE_CLI_DISABLE_SENTRY: '1' };
   if (coverageMode) {
     mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
     const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
