@@ -96,7 +96,6 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
             development/kv/data/sign key | GPG_SIGNING_KEY;
             development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
-            development/kv/data/sentry/sq-ide-upload token | SENTRY_AUTH_TOKEN;
 
       - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
@@ -123,7 +122,7 @@ jobs:
         run: bun run fetch:signatures
 
       - name: Build binary for ${{ matrix.os }}
-        run: bun build src/index.ts --compile --sourcemap=external --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
+        run: bun build src/index.ts --compile --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
 
       - name: Fetch Apple Developer Certificate secrets (macOS only)
         id: apple-secrets
@@ -189,20 +188,6 @@ jobs:
             dist/${{ steps.artifact.outputs.name }}
             dist/${{ steps.artifact.outputs.name }}.asc
 
-      - name: List dist/ dir content
-        run: ls dist/
-
-      - name: Upload source maps to Sentry
-        if: github.ref_name == github.event.repository.default_branch
-        env:
-          SENTRY_AUTH_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: sonar-x0
-          SENTRY_PROJECT: sonarqube-cli
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: bun run sentry:upload-sourcemaps
-
   publish-binaries:
     name: Publish Binaries to Artifactory
     runs-on: github-ubuntu-latest-s
@@ -212,6 +197,10 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
 
       - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
@@ -225,6 +214,21 @@ jobs:
           secrets: |
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
+            development/kv/data/sentry/sq-ide-upload token | SENTRY_AUTH_TOKEN;
+
+      - name: Cache Bun dependencies
+        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
+        with:
+          path: |
+            ~/.bun
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}
+
+      - name: Install dependencies
+        env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+        run: bun ci
 
       - name: Download linux binary
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
@@ -275,6 +279,19 @@ jobs:
             --module="org.sonarsource.cli:${PROJECT}:${PROJECT_VERSION}"
           jf rt build-collect-env "${PROJECT}" "${BUILD_NUMBER}"
           jf rt build-publish "${PROJECT}" "${BUILD_NUMBER}"
+
+      - name: Upload source maps to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: sonar-x0
+          SENTRY_PROJECT: sonarqube-cli
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+        # source maps are not generated with single-file executable, need to rebuild the binary
+        run: |
+          bun build src/index.ts --outdir ./dist --sourcemap=external --target=bun
+          bun run sentry:upload-sourcemaps
 
   test-and-scan:
     name: Run Tests and Scan with SonarQube
