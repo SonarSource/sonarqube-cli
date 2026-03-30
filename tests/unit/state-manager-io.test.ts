@@ -19,32 +19,11 @@
  */
 
 // Tests for loadState/saveState filesystem I/O and new-agent initialization
-// mock.module redirects state paths to a temporary directory
+// SONARQUBE_CLI_DIR env var redirects state paths to a temporary directory
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterAll, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-const testCliDir = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
-const testStateFile = join(testCliDir, 'state.json');
-
-void mock.module('../../src/lib/config-constants.js', () => ({
-  APP_NAME: 'sonarqube-cli',
-  CLI_DIR: testCliDir,
-  STATE_FILE: testStateFile,
-  LOG_DIR: join(testCliDir, 'logs'),
-  LOG_FILE: join(testCliDir, 'logs/sonarqube-cli.log'),
-  BIN_DIR: join(testCliDir, 'bin'),
-  SONARSOURCE_BINARIES_URL: 'https://binaries.sonarsource.com',
-  SONAR_SECRETS_DIST_PREFIX: 'CommercialDistribution/sonar-secrets',
-  SONARCLOUD_HOSTNAME: 'sonarcloud.io',
-  SONARCLOUD_URL: 'https://sonarcloud.io',
-  SONARCLOUD_API_URL: 'https://api.sonarcloud.io',
-  AUTH_PORT_START: 64120,
-  AUTH_PORT_COUNT: 11,
-}));
-
-import { mock } from 'bun:test';
 import { existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import {
   loadState,
@@ -53,6 +32,15 @@ import {
   addInstalledHook,
 } from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
+
+const testCliDir = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
+const testStateFile = join(testCliDir, 'state.json');
+
+process.env.SONARQUBE_CLI_DIR = testCliDir;
+
+afterAll(() => {
+  delete process.env.SONARQUBE_CLI_DIR;
+});
 
 function cleanup(): void {
   if (existsSync(testCliDir)) {

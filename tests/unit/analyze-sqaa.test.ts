@@ -44,6 +44,7 @@ const FAKE_AUTH: import('../../src/lib/auth-resolver.js').ResolvedAuth = {
 };
 
 let loadStateSpy: ReturnType<typeof spyOn>;
+let saveStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let analyzeFileSpy: ReturnType<typeof spyOn>;
@@ -87,7 +88,7 @@ beforeEach(() => {
   clearMockUiCalls();
 
   loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeCloudState());
-  spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+  saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
 
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
@@ -102,6 +103,7 @@ beforeEach(() => {
 afterEach(() => {
   setMockUi(false);
   loadStateSpy.mockRestore();
+  saveStateSpy.mockRestore();
   existsSpy.mockRestore();
   readFileSpy.mockRestore();
   analyzeFileSpy.mockRestore();

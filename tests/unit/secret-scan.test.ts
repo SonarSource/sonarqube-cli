@@ -55,6 +55,7 @@ function mockBinaryExists(fileAlsoExists = true) {
 }
 
 let loadStateSpy: ReturnType<typeof spyOn>;
+let saveStateSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
 
@@ -62,7 +63,7 @@ beforeEach(() => {
   setMockUi(true);
   clearMockUiCalls();
   loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-  spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+  saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
     exitCode: 0,
     stdout: '{}',
@@ -76,6 +77,7 @@ beforeEach(() => {
 
 afterEach(() => {
   loadStateSpy.mockRestore();
+  saveStateSpy.mockRestore();
   spawnSpy.mockRestore();
   resolveSecretsBinarySpy.mockRestore();
   setMockUi(false);

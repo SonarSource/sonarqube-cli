@@ -34,15 +34,24 @@ import {
   type CloudRegion,
   getDefaultState,
 } from './state.js';
-import { CLI_DIR, STATE_FILE } from './config-constants.js';
+import { join } from 'node:path';
+import { CLI_DIR } from './config-constants.js';
 import { version as VERSION } from '../../package.json';
+
+function getCliDir(): string {
+  return process.env.SONARQUBE_CLI_DIR ?? CLI_DIR;
+}
+
+function getStateFile(): string {
+  return join(getCliDir(), 'state.json');
+}
 
 /**
  * Ensure state directory exists
  */
 function ensureStateDir(): void {
-  if (!fs.existsSync(CLI_DIR)) {
-    fs.mkdirSync(CLI_DIR, { recursive: true });
+  if (!fs.existsSync(getCliDir())) {
+    fs.mkdirSync(getCliDir(), { recursive: true });
   }
 }
 
@@ -52,17 +61,17 @@ function ensureStateDir(): void {
 export function loadState(cliVersion?: string): CliState {
   ensureStateDir();
 
-  if (!fs.existsSync(STATE_FILE)) {
+  if (!fs.existsSync(getStateFile())) {
     return getDefaultState(cliVersion ?? VERSION);
   }
 
   try {
-    const content = fs.readFileSync(STATE_FILE, 'utf-8');
+    const content = fs.readFileSync(getStateFile(), 'utf-8');
     const state = JSON.parse(content) as CliState;
     migrateState(state);
     return state;
   } catch (error) {
-    logger.debug(`Failed to load state from ${STATE_FILE}: ${(error as Error).message}`);
+    logger.debug(`Failed to load state from ${getStateFile()}: ${(error as Error).message}`);
     return getDefaultState(cliVersion ?? VERSION);
   }
 }
@@ -94,9 +103,9 @@ export function saveState(state: CliState): void {
   state.lastUpdated = new Date().toISOString();
 
   try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
+    fs.writeFileSync(getStateFile(), JSON.stringify(state, null, 2), 'utf-8');
   } catch (error) {
-    throw new Error(`Failed to save state to ${STATE_FILE}: ${String(error)}`);
+    throw new Error(`Failed to save state to ${getStateFile()}: ${String(error)}`);
   }
 }
 
