@@ -189,6 +189,9 @@ jobs:
             dist/${{ steps.artifact.outputs.name }}
             dist/${{ steps.artifact.outputs.name }}.asc
 
+      - name: List dist/ dir content
+        run: ls dist/
+
       - name: Upload source maps to Sentry
         if: github.ref_name == github.event.repository.default_branch
         env:
