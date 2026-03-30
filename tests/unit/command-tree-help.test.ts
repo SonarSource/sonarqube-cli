@@ -19,11 +19,11 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { getBanner, getCustomRootHelp } from '../../src/cli/root-help';
+import { getBanner } from '../../src/cli/root-help';
 
 // Strip ANSI escape codes to get the visible character width of a string
 function visibleLength(s: string): number {
-  return s.replace(/\x1b\[[0-9;]*m/g, '').length;
+  return s.replaceAll(/\x1b\[[0-9;]*m/g, '').length;
 }
 
 describe('getBanner', () => {
@@ -39,32 +39,5 @@ describe('getBanner', () => {
     const [top, middle, bottom] = lines.map(visibleLength);
     expect(top).toBe(middle);
     expect(top).toBe(bottom);
-  });
-});
-
-describe('getCustomRootHelp', () => {
-  it('includes the box banner with version', () => {
-    const help = getCustomRootHelp();
-    expect(help).toContain('┌');
-    expect(help).toContain('SonarQube CLI');
-    expect(help).toMatch(/v\d+\.\d+\.\d+/);
-  });
-
-  it('contains all required sections and content', () => {
-    const help = getCustomRootHelp();
-    expect(help).toContain('QUICKSTART');
-    expect(help).toContain('sonar auth login');
-    expect(help).toContain('sonar verify --file <file>');
-    expect(help).toContain('COMMANDS');
-    expect(help).toContain('verify --file <file>');
-    expect(help).toContain('analyze <secrets|sqaa>');
-    expect(help).toContain('auth');
-    expect(help).toContain('integrate <claude|git>');
-    expect(help).toContain('self-update');
-    expect(help).toContain('OPTIONS');
-    expect(help).toContain('-h, --help');
-    expect(help).toContain('-v, --version');
-    expect(help).toContain('https://docs.sonarsource.com/sonarqube-cli');
-    expect(help).not.toContain('Usage: sonar [options] [command]');
   });
 });

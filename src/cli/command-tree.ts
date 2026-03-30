@@ -21,7 +21,7 @@
 import { version as VERSION } from '../../package.json';
 import { type Command, Help, Option } from 'commander';
 import { SonarCommand } from './commands/_common/sonar-command.js';
-import { getCustomRootHelp } from './root-help.js';
+import { getBanner, getCustomRootHelp } from './root-help.js';
 import { listIssues, type ListIssuesOptions } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
@@ -51,7 +51,7 @@ COMMAND_TREE.name('sonar')
       if (!cmd.parent) {
         return getCustomRootHelp();
       }
-      return Help.prototype.formatHelp.call(helper, cmd, helper);
+      return getBanner(VERSION) + '\n' + Help.prototype.formatHelp.call(helper, cmd, helper);
     },
   })
   .anonymousAction(function (this: Command) {
