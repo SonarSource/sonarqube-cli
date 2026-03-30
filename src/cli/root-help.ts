@@ -19,6 +19,7 @@
  */
 
 import { version as VERSION } from '../../package.json';
+import { DOCS_URL } from '../lib/config-constants.js';
 import { softBlue, underline } from '../ui/colors.js';
 
 const BANNER_PREFIX = '    SonarQube CLI  ';
@@ -59,7 +60,7 @@ export function getCustomRootHelp(): string {
     `    ${softBlue('-h, --help')}              Display help for a specific command`,
     `    ${softBlue('-v, --version')}           Show current version`,
     '',
-    `  Read documentation: ${underline(softBlue('https://docs.sonarsource.com/sonarqube-cli'))}`,
+    `  Read documentation: ${underline(softBlue(DOCS_URL))}`,
     '',
   ].join('\n');
 }

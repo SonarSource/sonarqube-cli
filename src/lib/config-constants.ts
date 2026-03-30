@@ -89,6 +89,12 @@ export const SONARCLOUD_US_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_US_API_URL ?? 'https://api.sonarqube.us';
 
 // ---------------------------------------------------------------------------
+// Documentation
+// ---------------------------------------------------------------------------
+
+export const DOCS_URL = 'https://docs.sonarsource.com/sonarqube-cli';
+
+// ---------------------------------------------------------------------------
 // Sentry
 // ---------------------------------------------------------------------------
 
