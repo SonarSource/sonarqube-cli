@@ -73,7 +73,7 @@ main() {
   local version
   #echo "Fetching latest version..."
   #version="$(resolve_latest_version)"
-  version="0.7.0.711"
+  version="0.8.1.798"
   echo "Latest version: $version"
 
   local os
