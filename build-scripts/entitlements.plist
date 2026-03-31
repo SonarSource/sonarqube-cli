@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Allows loading unsigned native addons (e.g. keytar.node) in the Hardened Runtime.
+      Required because keytar uses a native Node.js addon that is not signed.
+      See: https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.disable-library-validation
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
