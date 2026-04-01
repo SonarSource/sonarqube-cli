@@ -58,6 +58,8 @@ jobs:
       pull-requests: write # write for peter-evans/create-pull-request
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ inputs.branch }}
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: 2025.9.12
@@ -71,7 +73,14 @@ jobs:
         env:
           NEW_VERSION: ${{ needs.release.outputs.new-version }}
         run: |
-          mise exec node@latest -- npm version --no-git-tag-version ${NEW_VERSION}.0
+          if [[ "${NEW_VERSION}" =~ ^([0-9]+)\.([0-9]+)\.([1-9][0-9]*)$ ]]; then
+            # Bugfix release: new-version has non-zero patch (e.g. "0.8.2"), bump to next minor instead
+            FULL_VERSION="${BASH_REMATCH[1]}.$((BASH_REMATCH[2] + 1)).0"
+          else
+            # Minor release: new-version is major.minor (e.g. "0.9"), just append patch
+            FULL_VERSION="${NEW_VERSION}.0"
+          fi
+          mise exec node@latest -- npm version --no-git-tag-version ${FULL_VERSION}
       - uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
         with:
           author: ${{ github.actor }} <${{ github.actor }}>
@@ -80,7 +89,7 @@ jobs:
           branch: bot/bump-project-version
           branch-suffix: timestamp
           delete-branch: true
-          base: master
+          base: ${{ inputs.branch }}
           draft: true # so that we don't actually need to re-open the PR and just make it ready for review
           reviewers: ${{ github.actor }}
           body: Bump the version for the new iteration. Created by release automation.
