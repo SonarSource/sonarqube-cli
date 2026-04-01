@@ -52,7 +52,7 @@ const CLOUD_US_AUTH: ResolvedAuth = {
 
 describe('getMcpServerConfig', () => {
   it('returns a docker command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, true, '/fake/project', undefined);
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, true, '/fake/project', undefined, 'docker');
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -71,9 +71,29 @@ describe('getMcpServerConfig', () => {
     });
   });
 
+  it('returns a podman command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, true, '/fake/project', undefined, 'podman');
+    expect(config).toEqual({
+      command: 'podman',
+      args: [
+        'run',
+        '--init',
+        '--pull=always',
+        '-i',
+        '--rm',
+        '-e',
+        'SONARQUBE_TOKEN',
+        '-e',
+        'SONARQUBE_URL',
+        'mcp/sonarqube',
+      ],
+      env: { SONARQUBE_TOKEN: 'squ_test', SONARQUBE_URL: 'https://sonarqube.example.com' },
+    });
+  });
+
   it('returns a docker command with SONARQUBE_ORG for cloud (sonarcloud.io)', () => {
     const auth: ResolvedAuth = { ...CLOUD_AUTH, orgKey: 'my-org' };
-    const config = getMcpServerConfig(auth, true, '/fake/project', undefined);
+    const config = getMcpServerConfig(auth, true, '/fake/project', undefined, 'docker');
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -100,7 +120,7 @@ describe('getMcpServerConfig', () => {
 
   it('returns a docker command with SONARQUBE_ORG for cloud US (sonarqube.us)', () => {
     const auth: ResolvedAuth = { ...CLOUD_US_AUTH, orgKey: 'my-org' };
-    const config = getMcpServerConfig(auth, true, '/fake/project', undefined);
+    const config = getMcpServerConfig(auth, true, '/fake/project', undefined, 'docker');
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -125,12 +145,13 @@ describe('getMcpServerConfig', () => {
     });
   });
 
-  it('uses forward slashes in the docker -v host path on Windows-style roots', () => {
+  it('uses forward slashes in the -v host path on Windows-style roots', () => {
     const config = getMcpServerConfig(
       ON_PREMISE_AUTH,
       false,
       String.raw`C:\Users\tdd\source\repos\sonarlint-core`,
       undefined,
+      'docker',
     );
     const args = (config as { args: string[] }).args;
     const vIndex = args.indexOf('-v');
@@ -139,7 +160,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('returns a docker command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', undefined);
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', undefined, 'docker');
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -160,8 +181,36 @@ describe('getMcpServerConfig', () => {
     });
   });
 
+  it('returns a podman command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', undefined, 'podman');
+    expect(config).toEqual({
+      command: 'podman',
+      args: [
+        'run',
+        '--init',
+        '--pull=always',
+        '-i',
+        '--rm',
+        '-e',
+        'SONARQUBE_TOKEN',
+        '-e',
+        'SONARQUBE_URL',
+        '-v',
+        '/fake/project:/app/mcp-workspace:ro',
+        'mcp/sonarqube',
+      ],
+      env: { SONARQUBE_TOKEN: 'squ_test', SONARQUBE_URL: 'https://sonarqube.example.com' },
+    });
+  });
+
   it('returns a docker command with SONARQUBE_PROJECT_KEY for non-global config with project key', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', 'my-project');
+    const config = getMcpServerConfig(
+      ON_PREMISE_AUTH,
+      false,
+      '/fake/project',
+      'my-project',
+      'docker',
+    );
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -260,31 +309,75 @@ describe('writeMcpServerEntry', () => {
 });
 
 describe('setupMcpServer', () => {
-  let dockerSpy: ReturnType<typeof spyOn>;
+  let runtimeSpy: ReturnType<typeof spyOn>;
   let writeSpy: ReturnType<typeof spyOn>;
 
   afterEach(() => {
-    dockerSpy.mockRestore();
+    runtimeSpy.mockRestore();
     writeSpy?.mockRestore();
     setMockUi(false);
   });
 
-  it('skips MCP configuration and prints an error when docker is unavailable for cloud auth', async () => {
+  it('skips MCP configuration and prints an error when no container runtime is available', async () => {
     setMockUi(true);
-    dockerSpy = spyOn(toolDetector, 'isDockerAvailable').mockResolvedValue(false);
+    runtimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue(null);
 
     await setupMcpServer('claude', '/fake/project', false, CLOUD_AUTH, undefined);
 
     const messages = getMockUiCalls().map((c) => String(c.args[0]));
-    expect(messages.some((m) => m.includes('Docker is required'))).toBe(true);
+    expect(messages.some((m) => m.includes('container runtime (Docker/Podman/Nerdctl)'))).toBe(
+      true,
+    );
     expect(messages.some((m) => m.includes('Skipping SonarQube MCP Server configuration'))).toBe(
       true,
     );
   });
 
+  it('uses docker command when docker runtime is detected', async () => {
+    setMockUi(true);
+    runtimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
+    writeSpy = spyOn(
+      await import('../../src/cli/commands/integrate/claude/mcp'),
+      'writeMcpServerEntry',
+    ).mockResolvedValue(undefined);
+
+    await setupMcpServer('claude', '/fake/project', true, ON_PREMISE_AUTH, undefined);
+
+    const config = (writeSpy.mock.calls[0] as unknown[])[1] as { command: string };
+    expect(config.command).toBe('docker');
+  });
+
+  it('uses podman command when podman runtime is detected', async () => {
+    setMockUi(true);
+    runtimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('podman');
+    writeSpy = spyOn(
+      await import('../../src/cli/commands/integrate/claude/mcp'),
+      'writeMcpServerEntry',
+    ).mockResolvedValue(undefined);
+
+    await setupMcpServer('claude', '/fake/project', true, ON_PREMISE_AUTH, undefined);
+
+    const config = (writeSpy.mock.calls[0] as unknown[])[1] as { command: string };
+    expect(config.command).toBe('podman');
+  });
+
+  it('uses nerdctl command when nerdctl runtime is detected', async () => {
+    setMockUi(true);
+    runtimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('nerdctl');
+    writeSpy = spyOn(
+      await import('../../src/cli/commands/integrate/claude/mcp'),
+      'writeMcpServerEntry',
+    ).mockResolvedValue(undefined);
+
+    await setupMcpServer('claude', '/fake/project', true, ON_PREMISE_AUTH, undefined);
+
+    const config = (writeSpy.mock.calls[0] as unknown[])[1] as { command: string };
+    expect(config.command).toBe('nerdctl');
+  });
+
   it('logs an error when writing the MCP entry fails', async () => {
     setMockUi(true);
-    dockerSpy = spyOn(toolDetector, 'isDockerAvailable').mockResolvedValue(true);
+    runtimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue('docker');
     writeSpy = spyOn(
       await import('../../src/cli/commands/integrate/claude/mcp'),
       'writeMcpServerEntry',
