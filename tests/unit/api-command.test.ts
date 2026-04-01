@@ -19,345 +19,191 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { apiCommand, resolveBaseUrl } from '../../src/cli/commands/api.js';
-import * as discovery from '../../src/cli/commands/_common/discovery.js';
-import * as apiRequestModule from '../../src/lib/api-request.js';
-import { setMockUi, getMockUiCalls } from '../../src/ui/index.js';
 import type { ResolvedAuth } from '../../src/lib/auth-resolver.js';
-import type { ApiResponse } from '../../src/lib/api-request.js';
-import type { DiscoveredProject } from '../../src/cli/commands/_common/discovery.js';
+import { SonarQubeClient } from '../../src/sonarqube/client.js';
+import { apiCommand } from '../../src/cli/commands/api/api.js';
+import { InvalidOptionError } from '../../src/cli/commands/_common/error.js';
+import * as discovery from '../../src/cli/commands/_common/discovery.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 
-const mockAuth: ResolvedAuth = {
-  token: 'test-token',
-  serverUrl: 'https://sonar.example.com',
-  orgKey: 'my-org',
+const TEST_SERVER = 'https://sonar.example.com';
+const TEST_ORG = 'test-org';
+const TEST_PROJECT = 'test-project';
+
+const FAKE_AUTH: ResolvedAuth = {
+  token: 'squ_test_token',
+  serverUrl: TEST_SERVER,
+  orgKey: TEST_ORG,
   connectionType: 'on-premise',
 };
 
-function makeApiResponse(overrides: Partial<ApiResponse> = {}): ApiResponse {
-  return {
-    status: 200,
-    statusText: 'OK',
-    body: '{"result":"ok"}',
-    headers: new Headers(),
-    ...overrides,
-  };
-}
-
-function makeDiscoveredProject(overrides: Partial<DiscoveredProject> = {}): DiscoveredProject {
-  return {
-    rootDir: '/tmp/project',
-    isGitRepo: false,
-    ...overrides,
-  };
-}
+let discoverProjectSpy: ReturnType<typeof spyOn>;
+let genericRequestSpy: ReturnType<typeof spyOn>;
 
 describe('apiCommand', () => {
-  let discoverProjectSpy: ReturnType<typeof spyOn>;
-  let apiRequestSpy: ReturnType<typeof spyOn>;
-
   beforeEach(() => {
     setMockUi(true);
+    clearMockUiCalls();
 
-    discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(
-      makeDiscoveredProject({
-        serverUrl: 'https://sonar.example.com',
-        projectKey: 'my-project',
-        organization: 'my-org',
-      }),
+    discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
+      rootDir: '/fake/dir',
+      isGitRepo: true,
+      projectKey: TEST_PROJECT,
+      organization: TEST_ORG,
+    });
+
+    genericRequestSpy = spyOn(SonarQubeClient.prototype, 'genericRequest').mockResolvedValue(
+      '{"status":"UP"}',
     );
-
-    apiRequestSpy = spyOn(apiRequestModule, 'apiRequest').mockResolvedValue(makeApiResponse());
   });
 
   afterEach(() => {
     setMockUi(false);
     discoverProjectSpy.mockRestore();
-    apiRequestSpy.mockRestore();
+    genericRequestSpy.mockRestore();
   });
 
-  describe('input validation', () => {
-    it('rejects invalid HTTP method', () => {
-      expect(apiCommand(mockAuth, 'PUT', '/api/test', {})).rejects.toThrow(
-        "Invalid HTTP method 'PUT'",
-      );
-    });
-
-    it('rejects endpoint not starting with /', () => {
-      expect(apiCommand(mockAuth, 'get', 'api/test', {})).rejects.toThrow(
-        "Endpoint must start with '/'",
-      );
-    });
-
-    it('rejects --data for GET requests', () => {
-      expect(apiCommand(mockAuth, 'get', '/api/test', { data: '{"key":"val"}' })).rejects.toThrow(
-        '--data is only valid for POST and PATCH',
-      );
-    });
-
-    it('rejects --data for DELETE requests', () => {
-      expect(
-        apiCommand(mockAuth, 'delete', '/api/test', { data: '{"key":"val"}' }),
-      ).rejects.toThrow('--data is only valid for POST and PATCH');
-    });
-
-    it('rejects invalid JSON in --data', () => {
-      expect(apiCommand(mockAuth, 'post', '/api/test', { data: 'not-json' })).rejects.toThrow(
-        '--data must be valid JSON',
-      );
-    });
-  });
-
-  describe('successful requests', () => {
-    it('makes GET request and prints body', async () => {
-      await apiCommand(mockAuth, 'get', '/api/system/status', {});
-
-      expect(apiRequestSpy).toHaveBeenCalledTimes(1);
-      const [method, url, token] = apiRequestSpy.mock.calls[0] as [string, string, string];
-      expect(method).toBe('GET');
-      expect(url).toBe('https://sonar.example.com/api/system/status');
-      expect(token).toBe('test-token');
-
-      const printCalls = getMockUiCalls().filter((c) => c.method === 'print');
-      expect(printCalls).toHaveLength(1);
-      expect(printCalls[0].args[0]).toBe('{"result":"ok"}');
-    });
-
-    it('sends POST with --data body', async () => {
-      const data = '{"name":"test"}';
-      await apiCommand(mockAuth, 'post', '/api/create', { data });
-
-      const [method, , , body] = apiRequestSpy.mock.calls[0] as [string, string, string, string];
-      expect(method).toBe('POST');
-      expect(body).toBe(data);
-    });
-
-    it('sends PATCH with --data body', async () => {
-      const data = '{"name":"updated"}';
-      await apiCommand(mockAuth, 'patch', '/api/update', { data });
-
-      const [method, , , body] = apiRequestSpy.mock.calls[0] as [string, string, string, string];
-      expect(method).toBe('PATCH');
-      expect(body).toBe(data);
-    });
-
-    it('accepts case-insensitive method names', async () => {
-      await apiCommand(mockAuth, 'GET', '/api/test', {});
-
-      const [method] = apiRequestSpy.mock.calls[0] as [string];
-      expect(method).toBe('GET');
-    });
-
-    it('accepts DELETE method', async () => {
-      await apiCommand(mockAuth, 'delete', '/api/item/123', {});
-
-      const [method] = apiRequestSpy.mock.calls[0] as [string];
-      expect(method).toBe('DELETE');
-    });
-  });
-
-  describe('template substitution', () => {
-    it('substitutes {organization} from auth', async () => {
-      await apiCommand(mockAuth, 'get', '/api/issues/search?organization={organization}', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toContain('organization=my-org');
-    });
-
-    it('substitutes {project} from discovered project', async () => {
-      await apiCommand(mockAuth, 'get', '/api/issues/search?project={project}', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toContain('project=my-project');
-    });
-
-    it('passes through endpoint with no templates', async () => {
-      await apiCommand(mockAuth, 'get', '/api/system/status', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toBe('https://sonar.example.com/api/system/status');
-    });
-  });
-
-  describe('error responses', () => {
-    it('prints body and throws on non-2xx response', async () => {
-      apiRequestSpy.mockResolvedValue(
-        makeApiResponse({
-          status: 401,
-          statusText: 'Unauthorized',
-          body: '{"errors":[{"msg":"Unauthorized"}]}',
-        }),
-      );
-
-      try {
-        await apiCommand(mockAuth, 'get', '/api/test', {});
-        expect(true).toBe(false); // should not reach here
-      } catch (err) {
-        expect((err as Error).message).toBe('HTTP 401 Unauthorized');
-      }
-
-      const printCalls = getMockUiCalls().filter((c) => c.method === 'print');
-      expect(printCalls).toHaveLength(1);
-      expect(printCalls[0].args[0]).toBe('{"errors":[{"msg":"Unauthorized"}]}');
-    });
-
-    it('does not print when body is empty on error', async () => {
-      apiRequestSpy.mockResolvedValue(
-        makeApiResponse({
-          status: 404,
-          statusText: 'Not Found',
-          body: '',
-        }),
-      );
-
-      try {
-        await apiCommand(mockAuth, 'get', '/api/missing', {});
-        expect(true).toBe(false); // should not reach here
-      } catch (err) {
-        expect((err as Error).message).toBe('HTTP 404 Not Found');
-      }
-
-      const printCalls = getMockUiCalls().filter((c) => c.method === 'print');
-      expect(printCalls).toHaveLength(0);
-    });
-  });
-
-  describe('project discovery failure', () => {
-    it('works without project template when discovery fails', async () => {
-      discoverProjectSpy.mockRejectedValue(new Error('no git root'));
-
-      await apiCommand(mockAuth, 'get', '/api/system/status', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toBe('https://sonar.example.com/api/system/status');
-    });
-
-    it('fails if project template is used but discovery fails', () => {
-      discoverProjectSpy.mockRejectedValue(new Error('no git root'));
-
-      expect(
-        apiCommand(mockAuth, 'get', '/api/issues/search?project={project}', {}),
-      ).rejects.toThrow('Unknown template variable {project}');
-    });
-  });
-
-  describe('content type detection', () => {
-    it('uses form encoding for v1 API endpoints', async () => {
-      const data = '{"name":"test-token"}';
-      await apiCommand(mockAuth, 'post', '/api/user_tokens/generate', { data });
-
-      const [, , , , contentType] = apiRequestSpy.mock.calls[0] as [
-        string,
-        string,
-        string,
-        string,
-        string,
-      ];
-      expect(contentType).toBe('form');
-    });
-
-    it('uses JSON encoding for v2 API endpoints', async () => {
-      const data = '{"name":"test"}';
-      await apiCommand(mockAuth, 'post', '/api/v2/dop-translation/bound-projects', { data });
-
-      const [, , , , contentType] = apiRequestSpy.mock.calls[0] as [
-        string,
-        string,
-        string,
-        string,
-        string,
-      ];
-      expect(contentType).toBe('json');
-    });
-
-    it('does not pass data for GET requests regardless of endpoint version', async () => {
-      await apiCommand(mockAuth, 'get', '/api/system/status', {});
-
-      const [, , , body] = apiRequestSpy.mock.calls[0] as [
-        string,
-        string,
-        string,
-        string | undefined,
-      ];
-      expect(body).toBeUndefined();
-    });
-  });
-
-  describe('SonarCloud URL routing', () => {
-    const cloudAuth: ResolvedAuth = {
-      token: 'test-token',
-      serverUrl: 'https://sonarcloud.io',
-      orgKey: 'my-org',
-      connectionType: 'cloud',
-    };
-
-    it('uses sonarcloud.io for /api endpoints on SonarCloud', async () => {
-      await apiCommand(cloudAuth, 'get', '/api/issues/search', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toBe('https://sonarcloud.io/api/issues/search');
-    });
-
-    it('uses api.sonarcloud.io for non-/api endpoints on SonarCloud', async () => {
-      await apiCommand(cloudAuth, 'get', '/monitoring/metrics', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toBe('https://api.sonarcloud.io/monitoring/metrics');
-    });
-
-    it('does not reroute non-SonarCloud servers', async () => {
-      await apiCommand(mockAuth, 'get', '/monitoring/metrics', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toBe('https://sonar.example.com/monitoring/metrics');
-    });
-  });
-
-  describe('trailing slash handling', () => {
-    it('strips trailing slash from server URL', async () => {
-      const authWithSlash: ResolvedAuth = {
-        token: 'test-token',
-        serverUrl: 'https://sonar.example.com/',
-        orgKey: undefined,
-        connectionType: 'on-premise',
-      };
-
-      await apiCommand(authWithSlash, 'get', '/api/system/status', {});
-
-      const [, url] = apiRequestSpy.mock.calls[0] as [string, string];
-      expect(url).toBe('https://sonar.example.com/api/system/status');
-    });
-  });
-});
-
-describe('resolveBaseUrl', () => {
-  it('returns sonarcloud.io for /api endpoints on SonarCloud', () => {
-    expect(resolveBaseUrl('https://sonarcloud.io', '/api/issues/search')).toBe(
-      'https://sonarcloud.io',
+  it('throws InvalidOptionError for invalid HTTP method', () => {
+    expect(apiCommand(FAKE_AUTH, 'TRACE', '/api/system/status', {})).rejects.toBeInstanceOf(
+      InvalidOptionError,
+    );
+    expect(apiCommand(FAKE_AUTH, 'TRACE', '/api/system/status', {})).rejects.toThrow(
+      "Invalid HTTP method 'TRACE'",
     );
   });
 
-  it('returns api.sonarcloud.io for non-/api endpoints on SonarCloud', () => {
-    expect(resolveBaseUrl('https://sonarcloud.io', '/monitoring/metrics')).toBe(
-      'https://api.sonarcloud.io',
+  it('throws InvalidOptionError when endpoint does not start with /', () => {
+    expect(apiCommand(FAKE_AUTH, 'get', 'api/system/status', {})).rejects.toBeInstanceOf(
+      InvalidOptionError,
+    );
+    expect(apiCommand(FAKE_AUTH, 'get', 'api/system/status', {})).rejects.toThrow(
+      "Endpoint must start with '/'",
     );
   });
 
-  it('returns sonarcloud.io for /api/v2 endpoints on SonarCloud', () => {
-    expect(resolveBaseUrl('https://sonarcloud.io', '/api/v2/projects')).toBe(
-      'https://sonarcloud.io',
-    );
+  it('throws InvalidOptionError when --data is used with GET', () => {
+    expect(
+      apiCommand(FAKE_AUTH, 'get', '/api/system/status', { data: '{"k":"v"}' }),
+    ).rejects.toThrow('--data is only valid for');
   });
 
-  it('strips trailing slash for non-SonarCloud servers', () => {
-    expect(resolveBaseUrl('https://mysonar.example.com/', '/api/test')).toBe(
-      'https://mysonar.example.com',
-    );
+  it('throws InvalidOptionError when --data is used with DELETE', () => {
+    expect(
+      apiCommand(FAKE_AUTH, 'delete', '/api/system/status', { data: '{"k":"v"}' }),
+    ).rejects.toThrow('--data is only valid for');
   });
 
-  it('returns server URL as-is for non-SonarCloud servers', () => {
-    expect(resolveBaseUrl('https://mysonar.example.com', '/monitoring/metrics')).toBe(
-      'https://mysonar.example.com',
-    );
+  it('throws InvalidOptionError when --data is not valid JSON', () => {
+    expect(
+      apiCommand(FAKE_AUTH, 'post', '/api/system/status', { data: 'not-json' }),
+    ).rejects.toThrow('--data must be valid JSON');
+  });
+
+  it('makes a GET request and prints the response', async () => {
+    await apiCommand(FAKE_AUTH, 'get', '/api/system/status', {});
+
+    expect(genericRequestSpy).toHaveBeenCalledTimes(1);
+    const [method, endpoint, data, contentType] = genericRequestSpy.mock.calls[0];
+    expect(method).toBe('GET');
+    expect(endpoint).toContain('/api/system/status');
+    expect(data).toBeUndefined();
+    expect(contentType).toBe('form');
+
+    const output = getMockUiCalls().filter((c) => c.method === 'print');
+    expect(output.some((c) => String(c.args[0]).includes('UP'))).toBe(true);
+  });
+
+  it('uppercases the method', async () => {
+    await apiCommand(FAKE_AUTH, 'post', '/api/system/status', { data: '{"k":"v"}' });
+
+    const [method] = genericRequestSpy.mock.calls[0];
+    expect(method).toBe('POST');
+  });
+
+  it('sends POST request with --data body', async () => {
+    const body = '{"key":"value"}';
+    await apiCommand(FAKE_AUTH, 'post', '/api/issues/search', { data: body });
+
+    const [, , data] = genericRequestSpy.mock.calls[0];
+    expect(data).toBe(body);
+  });
+
+  it('uses json content type for /api/v2/ endpoints', async () => {
+    await apiCommand(FAKE_AUTH, 'get', '/api/v2/issues/search', {});
+
+    const [, , , contentType] = genericRequestSpy.mock.calls[0];
+    expect(contentType).toBe('json');
+  });
+
+  it('uses form content type for /api/ endpoints', async () => {
+    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search', {});
+
+    const [, , , contentType] = genericRequestSpy.mock.calls[0];
+    expect(contentType).toBe('form');
+  });
+
+  it('resolves template variables from options', async () => {
+    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?project={project}', {
+      project: 'custom-project',
+    });
+
+    const [, endpoint] = genericRequestSpy.mock.calls[0];
+    expect(endpoint).toContain('custom-project');
+  });
+
+  it('falls back to discovered project context for template variables', async () => {
+    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?project={project}', {});
+
+    const [, endpoint] = genericRequestSpy.mock.calls[0];
+    expect(endpoint).toContain(TEST_PROJECT);
+  });
+
+  it('uses org from options over discovered context', async () => {
+    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?organization={organization}', {
+      org: 'override-org',
+    });
+
+    const [, endpoint] = genericRequestSpy.mock.calls[0];
+    expect(endpoint).toContain('override-org');
+  });
+
+  it('makes a DELETE request without data', async () => {
+    await apiCommand(FAKE_AUTH, 'delete', '/api/authentication/validate', {});
+
+    expect(genericRequestSpy).toHaveBeenCalledTimes(1);
+    const [method, , data] = genericRequestSpy.mock.calls[0];
+    expect(method).toBe('DELETE');
+    expect(data).toBeUndefined();
+  });
+
+  it('falls back to auth.orgKey when discovery returns no organization', async () => {
+    discoverProjectSpy.mockResolvedValue({
+      rootDir: '/fake/dir',
+      isGitRepo: true,
+      projectKey: TEST_PROJECT,
+      organization: undefined,
+    });
+
+    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?organization={organization}', {});
+
+    const [, endpoint] = genericRequestSpy.mock.calls[0];
+    expect(endpoint).toContain(TEST_ORG);
+  });
+
+  it('passes the resolved endpoint to genericRequest', async () => {
+    await apiCommand(FAKE_AUTH, 'get', '/api/system/status', {});
+
+    const [, endpoint] = genericRequestSpy.mock.calls[0];
+    expect(endpoint).toBe('/api/system/status');
+  });
+
+  it('passes valid JSON data through to genericRequest for PUT', async () => {
+    const body = '{"key":"val"}';
+    await apiCommand(FAKE_AUTH, 'put', '/api/v2/settings/set', { data: body });
+
+    const [method, , data, contentType] = genericRequestSpy.mock.calls[0];
+    expect(method).toBe('PUT');
+    expect(data).toBe(body);
+    expect(contentType).toBe('json');
   });
 });

@@ -20,7 +20,14 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL, SONARCLOUD_US_HOSTNAME } from './config-constants';
+import {
+  SONARCLOUD_API_URL,
+  SONARCLOUD_HOSTNAME,
+  SONARCLOUD_URL,
+  SONARCLOUD_US_API_URL,
+  SONARCLOUD_US_HOSTNAME,
+  SONARCLOUD_US_URL,
+} from './config-constants';
 import { getToken } from './keychain.js';
 import { loadState, getActiveConnection } from './state-manager.js';
 import { warn } from '../ui';
@@ -126,6 +133,26 @@ export async function resolveFromState(): Promise<ResolvedAuth | null> {
     return { token, serverUrl, orgKey, connectionType };
   }
   return null;
+}
+
+/**
+ * Determine the base URL for a request based on its endpoint.
+ * SonarCloud uses separate hosts:
+ * - sonarcloud.io for /api/... endpoints
+ * - api.sonarcloud.io for all other endpoints
+ */
+export function resolveFromEndpoint(serverUrl: string, endpoint: string): string {
+  const normalized = serverUrl.replace(/\/$/, '');
+  if (isSonarQubeCloud(serverUrl)) {
+    const isUS = new URL(serverUrl).hostname === SONARCLOUD_US_HOSTNAME;
+
+    if (endpoint.startsWith('/api')) {
+      return isUS ? SONARCLOUD_US_URL : SONARCLOUD_URL;
+    }
+
+    return isUS ? SONARCLOUD_US_API_URL : SONARCLOUD_API_URL;
+  }
+  return normalized;
 }
 
 export function isSonarQubeCloud(serverUrl: string): boolean {

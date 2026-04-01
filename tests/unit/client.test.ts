@@ -26,6 +26,7 @@ import {
   SONARCLOUD_US_URL,
 } from '../../src/lib/config-constants.js';
 import { version as VERSION } from '../../package.json';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -479,6 +480,127 @@ describe('SonarQubeClient', () => {
     it('returns false on error', async () => {
       fetchSpy = mockFetch({}, false, 403);
       expect(await client.checkQualityProfiles('my-project')).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // genericRequest
+  // -------------------------------------------------------------------------
+
+  describe('genericRequest', () => {
+    beforeEach(() => {
+      setMockUi(true);
+      clearMockUiCalls();
+    });
+
+    afterEach(() => {
+      setMockUi(false);
+    });
+
+    it('makes a GET request and returns response text', async () => {
+      fetchSpy = mockFetch({ status: 'UP' });
+      const result = await client.genericRequest('GET', '/api/system/status');
+      expect(result).toBe('{"status":"UP"}');
+
+      const url = (fetchSpy.mock.calls[0][0] as string).toString();
+      expect(url).toBe(`${SERVER_URL}/api/system/status`);
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.method).toBe('GET');
+      expect(init.body).toBeUndefined();
+    });
+
+    it('sends POST with JSON body when contentType is json', async () => {
+      fetchSpy = mockFetch({ ok: true });
+      const data = '{"key":"value"}';
+      await client.genericRequest('POST', '/api/v2/issues', data, 'json');
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe(data);
+      expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    });
+
+    it('sends POST with form-encoded body when contentType is form', async () => {
+      fetchSpy = mockFetch({ ok: true });
+      const data = '{"component":"my-project","severity":"MAJOR"}';
+      await client.genericRequest('POST', '/api/issues/do_transition', data, 'form');
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.body).toBe('component=my-project&severity=MAJOR');
+      expect((init.headers as Record<string, string>)['Content-Type']).toBe(
+        'application/x-www-form-urlencoded',
+      );
+    });
+
+    it('sends PATCH with JSON body', async () => {
+      fetchSpy = mockFetch({ ok: true });
+      const data = '{"name":"updated"}';
+      await client.genericRequest('PATCH', '/api/v2/projects', data, 'json');
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.method).toBe('PATCH');
+      expect(init.body).toBe(data);
+    });
+
+    it('does not send body for PUT even when data is provided', async () => {
+      fetchSpy = mockFetch({ ok: true });
+      // PUT is not in the POST/PATCH body-sending branch
+      await client.genericRequest('PUT', '/api/v2/settings', '{"k":"v"}', 'json');
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.method).toBe('PUT');
+      expect(init.body).toBeUndefined();
+    });
+
+    it('does not send body for DELETE', async () => {
+      fetchSpy = mockFetch({ ok: true });
+      await client.genericRequest('DELETE', '/api/v2/tokens/revoke');
+
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.method).toBe('DELETE');
+      expect(init.body).toBeUndefined();
+    });
+
+    it('prints debug output when debug is true', async () => {
+      fetchSpy = mockFetch({ status: 'UP' });
+      await client.genericRequest('GET', '/api/system/status', undefined, 'json', true);
+
+      const output = getMockUiCalls().filter((c) => c.method === 'print');
+      const messages = output.map((c) => String(c.args[0]));
+      expect(messages.some((m) => m.includes('request method: GET'))).toBe(true);
+      expect(messages.some((m) => m.includes('request url:'))).toBe(true);
+      expect(messages.some((m) => m.includes('response status:'))).toBe(true);
+    });
+
+    it('does not print debug output when debug is false', async () => {
+      fetchSpy = mockFetch({ status: 'UP' });
+      await client.genericRequest('GET', '/api/system/status');
+
+      const output = getMockUiCalls().filter((c) => c.method === 'print');
+      const messages = output.map((c) => String(c.args[0]));
+      expect(messages.some((m) => m.includes('request method:'))).toBe(false);
+    });
+
+    it('throws on non-ok POST response', () => {
+      fetchSpy = mockFetch({ message: 'Bad request' }, false, 400);
+      expect(
+        client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
+      ).rejects.toThrow('400');
+    });
+
+    it('throws access denied on GET 403', () => {
+      fetchSpy = mockFetch({}, false, 403);
+      expect(client.genericRequest('GET', '/api/system/status')).rejects.toThrow('Access denied');
+    });
+
+    it('resolves SonarCloud endpoint correctly', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ ok: true });
+      await cloudClient.genericRequest('GET', '/api/v2/issues');
+
+      const url = (fetchSpy.mock.calls[0][0] as string).toString();
+      expect(url).toBe(`${SONARCLOUD_URL}/api/v2/issues`);
     });
   });
 

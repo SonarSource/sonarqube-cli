@@ -24,7 +24,7 @@ import { existsSync, realpathSync, statSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnProcess } from '../../../lib/process';
 import logger from '../../../lib/logger';
-import { print, text } from '../../../ui';
+import { print } from '../../../ui';
 
 export interface ProjectInfo {
   root: string;
@@ -161,14 +161,14 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
   };
 
   if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
-    text('Found sonar-project.properties');
+    print('Found sonar-project.properties', process.stderr);
     config.serverUrl = projectInfo.sonarPropsData.hostURL;
     config.projectKey = projectInfo.sonarPropsData.projectKey;
     config.organization = projectInfo.sonarPropsData.organization;
   }
 
   if (projectInfo.hasSonarLintConfig && projectInfo.sonarLintData) {
-    text('Found .sonarlint/connectedMode.json');
+    print('Found .sonarlint/connectedMode.json', process.stderr);
     config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
     config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
     config.organization = config.organization || projectInfo.sonarLintData.organization;

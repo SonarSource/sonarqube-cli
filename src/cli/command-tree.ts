@@ -37,7 +37,8 @@ import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/c
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
-import { apiCommand, ApiCommandOptions } from './commands/api';
+import { apiCommand, type ApiCommandOptions } from './commands/api/api';
+import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -59,17 +60,26 @@ COMMAND_TREE.name('sonar')
     this.outputHelp();
   });
 
-COMMAND_TREE.command('api')
-.description('Make authenticated API requests to SonarQube')
-.argument('<method>', 'HTTP method (get, post, patch, delete)')
-.argument('<endpoint>', 'API endpoint path (e.g. /api/issues/search?ps=100)')
-.option('-s, --server <server>', 'SonarQube server URL')
-.option('-t, --token <token>', 'Authentication token')
-.option('-o, --org <org>', 'Organization key (for SonarQube Cloud)')
-.option('-d, --data <data>', 'JSON request body (for POST/PATCH)')
-.authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>
-  apiCommand(auth, method, endpoint, options)
+const projectOption = new Option(
+  '-p, --project <project>',
+  'SonarCloud project key (overrides auto-detected project)',
 );
+
+COMMAND_TREE.command('api')
+  .argument(
+    '<method>',
+    `HTTP method (${GENERIC_HTTP_METHODS.map((m) => m.toLowerCase()).join(', ')})`,
+  )
+  .argument('<endpoint>', 'API endpoint path (e.g. /api/issues/search?ps=100)')
+  .option('-d, --data <data>', 'JSON request body')
+  .addOption(projectOption)
+  .option('-o, --org <org>', 'SonarQube Cloud organization key (default is configured from auth)')
+  .option('-s, --server <server>', 'Override SonarQube URL (default is configured from auth)')
+  .option('-v, --verbose', 'Verbose output for debugging.')
+  .description('Make authenticated API requests to SonarQube')
+  .authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>
+    apiCommand(auth, method, endpoint, options),
+  );
 
 // Setup SonarQube integration for AI coding agent
 const integrateCommand = COMMAND_TREE.command('integrate').description(
@@ -81,7 +91,7 @@ integrateCommand
   .description(
     'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.',
   )
-  .option('-p, --project <project>', 'Project key')
+  .addOption(projectOption)
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option(
     '-g, --global',
@@ -183,7 +193,7 @@ analyze
   .description('Run SQAA server-side analysis on a file (SonarQube Cloud only)')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
-  .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
+  .addOption(projectOption)
   .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
     analyzeSqaa(options, auth, cmd),
   );
@@ -192,7 +202,7 @@ COMMAND_TREE.command('verify')
   .description('Analyze a file for issues')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
-  .option('--project <project>', 'SonarCloud project key (overrides auto-detected project)')
+  .addOption(projectOption)
   .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
     analyzeSqaa(options, auth, cmd),
   );

@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { resolveUrlTemplate } from '../../src/lib/url-template.js';
+import { resolveUrlTemplate } from '../../src/cli/commands/api/api.js';
 
 describe('resolveUrlTemplate', () => {
   it('replaces a single variable', () => {
@@ -77,5 +77,13 @@ describe('resolveUrlTemplate', () => {
       project: 'my-proj',
     });
     expect(result).toBe('/api/my-proj/issues?project=my-proj');
+  });
+
+  it('throws when a known variable has an undefined value', () => {
+    expect(() =>
+      resolveUrlTemplate('/api/issues/search?project={project}', {
+        project: undefined,
+      }),
+    ).toThrow('could not be resolved from context');
   });
 });

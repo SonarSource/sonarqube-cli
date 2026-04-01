@@ -348,7 +348,7 @@ describe('discoverProject', () => {
     );
     await discoverProject(testDir);
     const msg = getMockUiCalls().find(
-      (c) => c.method === 'text' && String(c.args[0]) === 'Found sonar-project.properties',
+      (c) => c.method === 'print' && String(c.args[0]) === 'Found sonar-project.properties',
     );
     expect(msg).toBeDefined();
   });
@@ -395,7 +395,7 @@ describe('discoverProject', () => {
     );
     await discoverProject(testDir);
     const msg = getMockUiCalls().find(
-      (c) => c.method === 'text' && String(c.args[0]) === 'Found .sonarlint/connectedMode.json',
+      (c) => c.method === 'print' && String(c.args[0]) === 'Found .sonarlint/connectedMode.json',
     );
     expect(msg).toBeDefined();
   });
@@ -472,10 +472,10 @@ describe('discoverProject', () => {
       JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
     );
     await discoverProject(testDir);
-    const textCalls = getMockUiCalls()
-      .filter((c) => c.method === 'text')
+    const printCalls = getMockUiCalls()
+      .filter((c) => c.method === 'print')
       .map((c) => String(c.args[0]));
-    expect(textCalls).toContain('Found sonar-project.properties');
-    expect(textCalls).toContain('Found .sonarlint/connectedMode.json');
+    expect(printCalls).toContain('Found sonar-project.properties');
+    expect(printCalls).toContain('Found .sonarlint/connectedMode.json');
   });
 });

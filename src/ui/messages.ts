@@ -78,13 +78,13 @@ export function text(message: string, color?: ColorFn): void {
   write(process.stdout, formatted);
 }
 
-// Raw stdout — no color, no prefix — safe for piping: sonar issues search | jq
-export function print(message: string): void {
+// Raw stream output — no color, no prefix — safe for piping: sonar issues search | jq
+export function print(message: string, stream: NodeJS.WriteStream = process.stdout): void {
   if (isMockActive()) {
     recordCall('print', message);
     return;
   }
-  process.stdout.write(message + (message.endsWith('\n') ? '' : '\n'));
+  stream.write(message + (message.endsWith('\n') ? '' : '\n'));
 }
 
 // Newline separator
