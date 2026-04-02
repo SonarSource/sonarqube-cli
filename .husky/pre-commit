@@ -1,8 +1,9 @@
 npx lint-staged
+
 # Sonar secrets scan - installed by sonar integrate git
 FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$FILES" ] && exit 0
 CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')
-SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null)
+SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null || :)
 [ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }
 echo "$FILES" | tr '\n' '\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1

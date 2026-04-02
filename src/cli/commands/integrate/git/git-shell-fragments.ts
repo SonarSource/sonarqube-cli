@@ -59,7 +59,8 @@ type BinBlock = () => string;
 
 function nativeBinBlock(): string {
   return (
-    `SONAR_BIN=$(command -v sonar 2>/dev/null)\n` +
+    // `|| :` avoids exiting under `sh -e` when `command -v` fails (missing sonar).
+    `SONAR_BIN=$(command -v sonar 2>/dev/null || :)\n` +
     `[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }`
   );
 }
@@ -67,7 +68,7 @@ function nativeBinBlock(): string {
 function huskyBinBlock(): string {
   return (
     `CLEAN_PATH=$(echo "$PATH" | tr ':' '\\n' | grep -v node_modules | tr '\\n' ':' | sed 's/:$//')\n` +
-    `SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null)\n` +
+    `SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null || :)\n` +
     `[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }`
   );
 }

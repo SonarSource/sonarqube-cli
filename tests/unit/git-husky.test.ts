@@ -27,10 +27,22 @@ import {
   getHuskyPreCommitSnippet,
   getHuskyPrePushSnippet,
 } from '../../src/cli/commands/integrate/git/git-shell-fragments';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock';
+import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-husky-tmp');
 const HOOK_PATH = join(TEMP_DIR, 'pre-commit');
+
+// Simulating failure from `command -v sonar`
+const MINIMAL_SH_PATH = '/usr/bin:/bin';
+
+// Run a script with `sh -e`, same idea as Husky’s hook wrapper.
+function shEc(script: string) {
+  return Bun.spawnSync(['sh', '-ec', script], {
+    env: { ...process.env, PATH: MINIMAL_SH_PATH },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+}
 
 describe('installViaHusky', () => {
   beforeEach(() => {
@@ -91,5 +103,37 @@ describe('installViaHusky', () => {
     expect(readFileSync(HOOK_PATH, 'utf-8')).toBe(before);
     expect(getMockUiCalls().some((c) => c.method === 'info')).toBe(true);
     expect(getMockUiCalls().some((c) => c.method === 'success')).toBe(false);
+  });
+});
+
+describe('git-shell-fragments (sonar resolution)', () => {
+  it.each([
+    [
+      'native',
+      'SONAR_BIN=$(command -v sonar 2>/dev/null || :); ' +
+        '[ -z "$SONAR_BIN" ] && { echo skip-secrets-scan; exit 0; }; ' +
+        'exit 99',
+    ],
+    [
+      'husky CLEAN_PATH',
+      String.raw`CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//'); ` +
+        'SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null || :); ' +
+        '[ -z "$SONAR_BIN" ] && { echo skip-secrets-scan; exit 0; }; ' +
+        'exit 99',
+    ],
+  ])('under sh -e, missing sonar skips (%s)', (_, script) => {
+    const r = shEc(script);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.toString()).toContain('skip-secrets-scan');
+  });
+
+  it('regression: sonar lookup without || : aborts under sh -e before empty check', () => {
+    const script =
+      'SONAR_BIN=$(command -v sonar 2>/dev/null); ' +
+      '[ -z "$SONAR_BIN" ] && { echo skip-secrets-scan; exit 0; }; ' +
+      'exit 99';
+    const r = shEc(script);
+    expect(r.stdout.toString()).not.toContain('skip-secrets-scan');
+    expect(r.exitCode).not.toBe(0);
   });
 });
