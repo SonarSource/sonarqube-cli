@@ -31,6 +31,7 @@ const HTTP_STATUS_FORBIDDEN = 403;
 const HTTP_STATUS_NOT_FOUND = 404;
 
 export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const;
+export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
 export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 
 export class SonarQubeClient {
@@ -93,7 +94,7 @@ export class SonarQubeClient {
     const headers = this.commonHeaders(contentType);
     let requestBody: string | undefined;
 
-    if (data && (method === 'POST' || method === 'PATCH')) {
+    if (data && METHODS_WITH_BODY.has(method)) {
       if (contentType === 'form') {
         const parsed = JSON.parse(data) as Record<string, unknown>;
         const params = new URLSearchParams();

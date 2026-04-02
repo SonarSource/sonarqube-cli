@@ -74,7 +74,6 @@ COMMAND_TREE.command('api')
   .option('-d, --data <data>', 'JSON request body')
   .addOption(projectOption)
   .option('-o, --org <org>', 'SonarQube Cloud organization key (default is configured from auth)')
-  .option('-s, --server <server>', 'Override SonarQube URL (default is configured from auth)')
   .option('-v, --verbose', 'Verbose output for debugging.')
   .description('Make authenticated API requests to SonarQube')
   .authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>

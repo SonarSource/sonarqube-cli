@@ -543,14 +543,13 @@ describe('SonarQubeClient', () => {
       expect(init.body).toBe(data);
     });
 
-    it('does not send body for PUT even when data is provided', async () => {
+    it('sends PUT with JSON body', async () => {
       fetchSpy = mockFetch({ ok: true });
-      // PUT is not in the POST/PATCH body-sending branch
       await client.genericRequest('PUT', '/api/v2/settings', '{"k":"v"}', 'json');
 
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.method).toBe('PUT');
-      expect(init.body).toBeUndefined();
+      expect(init.body).toBe('{"k":"v"}');
     });
 
     it('does not send body for DELETE', async () => {

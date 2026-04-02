@@ -19,13 +19,17 @@
  */
 
 import { type ResolvedAuth } from '../../../lib/auth-resolver.js';
-import { GENERIC_HTTP_METHODS, type HttpMethod, SonarQubeClient } from '../../../sonarqube/client';
+import {
+  GENERIC_HTTP_METHODS,
+  METHODS_WITH_BODY,
+  type HttpMethod,
+  SonarQubeClient,
+} from '../../../sonarqube/client';
 import { print } from '../../../ui/index.js';
 import { discoverProject } from '../_common/discovery.js';
 import { InvalidOptionError } from '../_common/error.js';
 
 const VALID_METHODS = new Set<string>(GENERIC_HTTP_METHODS);
-const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
 
 export interface ApiCommandOptions {
   data?: string;
