@@ -45,6 +45,7 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.
 - Tokens are stored in the system keychain via `src/lib/keychain.ts` — never store tokens in plain files.
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.
+- Caller-agent hints (Cursor vs Claude Code) from the environment: `src/lib/agent-detector.ts` (`detectCallerAgent`, etc.).
 - `sonar auth logout` relies on state: if there is no active connection or `isAuthenticated` is false, it only reports that you are already logged out (no keychain changes).
 
 ## Tests
