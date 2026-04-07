@@ -23,13 +23,17 @@
 
 import { describe, it, expect, afterEach } from 'bun:test';
 
-import { createRequestHandler } from '../../src/cli/commands/_common/token';
-import { startLoopbackServer, type LoopbackServerResult } from '../../src/lib/loopback-server.js';
+import { createRequestHandler } from '../../../src/cli/commands/_common/token.js';
+import {
+  startLoopbackServer,
+  type LoopbackServerResult,
+} from '../../../src/lib/loopback-server.js';
 
 const LOOPBACK_HOST = '127.0.0.1';
 const HTTP_SCHEME = 'http';
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
+const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const MAX_POST_BODY_BYTES = 4096;
 // DNS rebinding test origins (intentionally non-loopback, must be http for origin validation)
@@ -69,23 +73,13 @@ describe('Auth: security features via real HTTP', () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store');
   });
 
-  it('should include all security headers on GET response', async () => {
-    const handler = createRequestHandler(() => {});
-    server = await startLoopbackServer(handler);
-
-    const response = await fetch(`${serverUrl(server.port)}/?token=squ_test`);
-
-    expect(response.headers.get('X-Frame-Options')).toBe('DENY');
-    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
-    expect(response.headers.get('Cache-Control')).toBe('no-store');
-  });
-
-  it('should include security headers on unexpected method response', async () => {
+  it('should include security headers on unsupported method response (405)', async () => {
     const handler = createRequestHandler(() => {});
     server = await startLoopbackServer(handler);
 
     const response = await fetch(serverUrl(server.port), { method: 'PUT', body: 'x' });
 
+    expect(response.status).toBe(HTTP_STATUS_METHOD_NOT_ALLOWED);
     expect(response.headers.get('X-Frame-Options')).toBe('DENY');
     expect(response.headers.get('Cache-Control')).toBe('no-store');
   });
@@ -97,7 +91,8 @@ describe('Auth: security features via real HTTP', () => {
     server = await startLoopbackServer(handler);
 
     const response = await fetch(serverUrl(server.port), {
-      method: 'GET',
+      method: 'POST',
+      body: JSON.stringify({ token: 'squ_test' }),
       headers: { Origin: EXTERNAL_ORIGIN },
     });
 
@@ -121,7 +116,9 @@ describe('Auth: security features via real HTTP', () => {
     const handler = createRequestHandler(() => {});
     server = await startLoopbackServer(handler);
 
-    const response = await fetch(`${serverUrl(server.port)}/?token=squ_ok`, {
+    const response = await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: JSON.stringify({ token: 'squ_ok' }),
       headers: { Origin: `${HTTP_SCHEME}://localhost:${server.port}` },
     });
 
@@ -132,7 +129,9 @@ describe('Auth: security features via real HTTP', () => {
     const handler = createRequestHandler(() => {});
     server = await startLoopbackServer(handler);
 
-    const response = await fetch(`${serverUrl(server.port)}/?token=squ_ok`, {
+    const response = await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: JSON.stringify({ token: 'squ_ok' }),
       headers: { Origin: serverUrl(server.port) },
     });
 
@@ -147,7 +146,10 @@ describe('Auth: security features via real HTTP', () => {
     });
     server = await startLoopbackServer(handler);
 
-    const response = await fetch(`${serverUrl(server.port)}/?token=squ_no_origin`);
+    const response = await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: JSON.stringify({ token: 'squ_no_origin' }),
+    });
 
     expect(response.status).toBe(HTTP_STATUS_OK);
     expect(receivedToken).toBe('squ_no_origin');
@@ -174,7 +176,9 @@ describe('Auth: security features via real HTTP', () => {
     });
     server = await startLoopbackServer(handler);
 
-    const response = await fetch(`${serverUrl(server.port)}/?token=squ_host_ok`, {
+    const response = await fetch(serverUrl(server.port), {
+      method: 'POST',
+      body: JSON.stringify({ token: 'squ_host_ok' }),
       headers: { Host: `${LOOPBACK_HOST}:${server.port}` },
     });
 

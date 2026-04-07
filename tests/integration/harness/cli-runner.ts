@@ -71,7 +71,7 @@ export async function runCli(
   const spawnEnv = { ...env, SONARQUBE_CLI_DISABLE_SENTRY: '1' };
   if (coverageMode) {
     mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const unique = `${Date.now()}-${crypto.randomUUID()}`;
     spawnEnv.COVERAGE_OUTPUT_FILE = join(COVERAGE_RAW_DIR, `coverage-${unique}.json`);
   }
 
@@ -98,7 +98,7 @@ export async function runCli(
     // Write each chunk with a delay so readline in the CLI process finishes
     // handling one prompt before the next chunk arrives for the next prompt.
     await (async () => {
-      for (const chunk of options.stdinChunks!) {
+      for (const chunk of options.stdinChunks) {
         await new Promise((r) => setTimeout(r, STDIN_CHUNK_DELAY_MS));
         sink.write(encoder.encode(chunk));
       }
@@ -137,8 +137,26 @@ export async function runCli(
 }
 
 /**
+ * Extracts the loopback port from accumulated stdout and POSTs the token to it.
+ * Returns true if the token was delivered, false if the port was not found yet.
+ */
+function tryDeliverToken(accumulated: string, token: string): boolean {
+  const match = /[?&]port=(\d+)/.exec(accumulated);
+  if (!match) return false;
+  const port = match[1];
+  fetch(`http://127.0.0.1:${port}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  }).catch(() => {
+    /* loopback server may close before response completes */
+  });
+  return true;
+}
+
+/**
  * Reads stdout incrementally. When the loopback auth port appears in the output
- * (pattern: `port=NNNNN`), delivers the token via GET to the loopback server.
+ * (pattern: `port=NNNNN`), delivers the token via POST to the loopback server.
  * Returns the full accumulated stdout once the stream ends.
  */
 async function streamStdoutAndDeliverToken(
@@ -158,14 +176,7 @@ async function streamStdoutAndDeliverToken(
       accumulated += decoder.decode(value, { stream: true });
 
       if (!tokenDelivered) {
-        const match = accumulated.match(/[?&]port=(\d+)/);
-        if (match) {
-          tokenDelivered = true;
-          const port = match[1];
-          fetch(`http://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`).catch(() => {
-            /* loopback server may close before response completes */
-          });
-        }
+        tokenDelivered = tryDeliverToken(accumulated, token);
       }
     }
   } finally {

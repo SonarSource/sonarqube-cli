@@ -72,7 +72,29 @@ describe('auth login', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'exits with code 1 when organization is not found on SonarCloud',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run('auth login --with-token my-token --org nonexistent-org', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'Organization "nonexistent-org" not found or not accessible',
+      );
+    },
+    { timeout: 15000 },
+  );
 });
+
+const LARGE_ORG_TOTAL = 200;
 
 describe('auth login — organization selection', () => {
   let harness: TestHarness;
@@ -206,7 +228,7 @@ describe('auth login — organization selection', () => {
       .withOrganizations(
         Array.from({ length: 10 }, (_, i) => ({ key: `org-${i}`, name: `Org ${i}` })),
       )
-      .withOrganizationTotal(200)
+      .withOrganizationTotal(LARGE_ORG_TOTAL)
       .start();
 
     const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
@@ -220,7 +242,7 @@ describe('auth login — organization selection', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      'Showing first 10 of 200 organizations. Use manual entry to select a different organization.',
+      `Showing first 10 of ${LARGE_ORG_TOTAL} organizations. Use manual entry to select a different organization.`,
     );
     expect(result.stdout).toContain(`Authentication successful for: ${server.baseUrl()} (org-2)`);
   });
@@ -250,6 +272,31 @@ describe('auth login — organization selection', () => {
     );
     expect(result.stdout).not.toContain('Waiting for authorization...');
   });
+
+  it(
+    'uses organization from sonar-project.properties when --org is not specified',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.organization=my-org\n');
+
+      const result = await harness.run('auth login', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('my-org');
+    },
+    { timeout: 15000 },
+  );
 });
 
 describe('auth logout', () => {
@@ -313,6 +360,28 @@ describe('auth logout', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('You are already logged out.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not remove a second org token when logging out from the active org',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('token-org1').start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud', 'org1')
+        .withKeychainToken(server.baseUrl(), 'token-org1', 'org1')
+        .withKeychainToken(server.baseUrl(), 'token-org2', 'org2');
+
+      const result = await harness.run('auth logout');
+
+      expect(result.exitCode).toBe(0);
+
+      const keychain = harness.keychainJsonFile.asJson() as { tokens: Record<string, string> };
+      expect(Object.values(keychain.tokens)).not.toContain('token-org1');
+      expect(Object.values(keychain.tokens)).toContain('token-org2');
     },
     { timeout: 15000 },
   );

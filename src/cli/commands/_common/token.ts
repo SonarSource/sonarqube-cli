@@ -35,11 +35,9 @@ import { warn, print, pressEnterKeyPrompt, isMockActive } from '../../../ui';
 import { blue } from '../../../ui/colors';
 
 const HTTP_STATUS_OK = 200;
+const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const MAX_POST_BODY_BYTES = 4096;
-const SUCCESS_HTML_TITLE = 'Sonar CLI Authentication';
-const SUCCESS_HTML_MESSAGE = 'Authentication Successful';
-const SUCCESS_HTML_DESCRIPTION = 'You can close this window and return to the terminal.';
 
 /**
  * Get token from keychain
@@ -92,27 +90,6 @@ export function extractTokenFromPostBody(body: string): string | undefined {
 }
 
 /**
- * Extract token from GET query parameters
- */
-export function extractTokenFromQuery(
-  host: string | undefined,
-  url: string | undefined,
-): string | undefined {
-  if (!host || !url) return undefined;
-  try {
-    const fullUrl = new URL(`http://${host}${url}`);
-    const token = fullUrl.searchParams.get('token');
-    // Token must be a non-empty string
-    if (token && token.length > 0) {
-      return token;
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Build authentication URL from server URL and port
  */
 export function buildAuthURL(serverURL: string, port: number): string {
@@ -122,57 +99,6 @@ export function buildAuthURL(serverURL: string, port: number): string {
   }
   // temporarily fallback to SQS and IDE auth page, should be fixed soon
   return `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
-}
-
-/**
- * Get success HTML page
- */
-export function getSuccessHTML(): string {
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>${SUCCESS_HTML_TITLE}</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      background: #f5f5f5;
-    }
-    .container {
-      background: white;
-      padding: 40px;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      text-align: center;
-    }
-    .success {
-      color: #52c41a;
-      font-size: 48px;
-      margin-bottom: 20px;
-    }
-    h1 {
-      color: #333;
-      margin-bottom: 10px;
-    }
-    p {
-      color: #666;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="success">✓</div>
-    <h1>${SUCCESS_HTML_MESSAGE}</h1>
-    <p>${SUCCESS_HTML_DESCRIPTION}</p>
-  </div>
-</body>
-</html>
-`;
 }
 
 /**
@@ -199,8 +125,8 @@ export function sendSuccessResponse(
   extractedToken?: string,
   onToken?: (token: string) => void,
 ): void {
-  res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/html' });
-  res.end(getSuccessHTML());
+  res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
+  res.end('OK');
   if (extractedToken && onToken) {
     onToken(extractedToken);
   }
@@ -237,29 +163,15 @@ export function handlePostRequest(
 }
 
 /**
- * Handle GET request - extract token from query parameters
- */
-export function handleGetRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  onToken: (token: string) => void,
-): void {
-  const extractedToken = extractTokenFromQuery(req.headers.host, req.url);
-  sendSuccessResponse(res, extractedToken ?? undefined, onToken);
-}
-
-/**
  * Create request handler for loopback server
  */
 export function createRequestHandler(onToken: (token: string) => void) {
   return (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === 'POST') {
       handlePostRequest(req, res, onToken);
-    } else if (req.method === 'GET') {
-      handleGetRequest(req, res, onToken);
     } else {
-      res.writeHead(HTTP_STATUS_OK);
-      res.end('OK');
+      res.writeHead(HTTP_STATUS_METHOD_NOT_ALLOWED);
+      res.end('Method Not Allowed');
     }
   };
 }

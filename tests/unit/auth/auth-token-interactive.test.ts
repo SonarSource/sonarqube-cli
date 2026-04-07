@@ -46,11 +46,21 @@ const rlMock = {
   },
 };
 
-void mock.module('node:readline', () => ({
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
+mock.module('node:readline', () => ({
   createInterface: () => rlMock,
 }));
 
-import { waitForTokenInteractive } from '../../src/cli/commands/_common/token';
+const mockOpenBrowser = mock((_url: string) => Promise.resolve());
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
+mock.module('../../../src/lib/browser.js', () => ({
+  openBrowser: mockOpenBrowser,
+}));
+
+import {
+  waitForTokenInteractive,
+  openBrowserWithFallback,
+} from '../../../src/cli/commands/_common/token';
 
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 
@@ -85,9 +95,7 @@ describe('waitForTokenInteractive: printed messages', () => {
   it('prints the waiting message when started', async () => {
     const p = waitForTokenInteractive(new Promise<string>(() => {}));
     await Promise.resolve();
-    const out = (spies.writeSpy as ReturnType<typeof spyOn>).mock.calls
-      .map((c) => (c[0] as string).toString())
-      .join('');
+    const out = spies.writeSpy.mock.calls.map((c) => (c[0] as string).toString()).join('');
     expect(out).toContain('Waiting for authorization');
     expect(out).toContain('paste token and press Enter');
     questionCallback?.('dummy');
@@ -189,5 +197,43 @@ describe('waitForTokenInteractive: user input', () => {
 
     resolveServer('squ_server_fallback');
     expect(await resultPromise).toBe('squ_server_fallback');
+  });
+});
+
+// ─── openBrowserWithFallback ──────────────────────────────────────────────────
+
+describe('openBrowserWithFallback', () => {
+  let savedCI: string | undefined;
+
+  beforeEach(() => {
+    mockOpenBrowser.mockClear();
+    savedCI = process.env['CI'];
+    delete process.env['CI'];
+  });
+
+  afterEach(() => {
+    if (savedCI !== undefined) {
+      process.env['CI'] = savedCI;
+    }
+  });
+
+  it('calls openBrowser with the auth URL', async () => {
+    await openBrowserWithFallback('https://sonarcloud.io/test');
+    expect(mockOpenBrowser).toHaveBeenCalledWith('https://sonarcloud.io/test');
+  });
+
+  it('does not throw when browser opening fails', () => {
+    mockOpenBrowser.mockImplementationOnce(() => Promise.reject(new Error('No browser found')));
+    expect(openBrowserWithFallback('https://sonarcloud.io/test')).resolves.toBeUndefined();
+  });
+
+  it('skips browser when CI=true', async () => {
+    process.env['CI'] = 'true';
+    try {
+      await openBrowserWithFallback('https://sonarcloud.io/test');
+      expect(mockOpenBrowser).not.toHaveBeenCalled();
+    } finally {
+      delete process.env['CI'];
+    }
   });
 });

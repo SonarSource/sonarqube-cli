@@ -26,11 +26,11 @@ import {
   ENV_TOKEN,
   ENV_SERVER,
   resolveFromEndpoint,
-} from '../../src/lib/auth-resolver.js';
-import * as stateManager from '../../src/lib/state-manager.js';
-import { getDefaultState } from '../../src/lib/state.js';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
-import { createMockKeytar } from './helpers/mock-keytar.js';
+} from '../../../src/lib/auth-resolver.js';
+import * as stateManager from '../../../src/lib/state-manager.js';
+import { getDefaultState } from '../../../src/lib/state.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui/index.js';
+import { createMockKeytar } from '../helpers/mock-keytar.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const FAKE_TOKEN = 'squ_test_token_abc123';
