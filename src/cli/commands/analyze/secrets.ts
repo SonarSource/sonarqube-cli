@@ -64,6 +64,23 @@ export async function runSecretsBinary(
   });
 }
 
+/**
+ * Run sonar-secrets binary on arbitrary text via stdin (--input mode). Returns the full spawn result.
+ */
+export async function runSecretsBinaryOnText(
+  binaryPath: string,
+  text: string,
+  auth: ResolvedAuth,
+): Promise<SpawnResult> {
+  return spawnWithTimeout(binaryPath, ['--input'], {
+    stdin: 'pipe',
+    stdinData: text,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: buildAuthEnv(auth),
+  });
+}
+
 function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
   return { [BINARY_AUTH_URL_ENV]: auth.serverUrl, [BINARY_AUTH_TOKEN_ENV]: auth.token };
 }
