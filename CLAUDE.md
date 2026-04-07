@@ -51,7 +51,7 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 
 ## Tests
 
-Please try to create integration tests in priority. If the test is too complicated to set up, write unit tests.
+Always prefer end-to-end integration tests. Unit tests are a last resort — only when e2e is genuinely impractical (e.g. the dependency cannot be controlled or isolated at all).
 Try to get inspiration from other tests to follow the same structure.
 
 - Unit tests: `tests/unit/` — run with `bun test:unit`
