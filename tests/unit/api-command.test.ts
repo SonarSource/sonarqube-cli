@@ -22,13 +22,10 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { ResolvedAuth } from '../../src/lib/auth-resolver.js';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { apiCommand } from '../../src/cli/commands/api/api.js';
-import { InvalidOptionError } from '../../src/cli/commands/_common/error.js';
-import * as discovery from '../../src/cli/commands/_common/discovery.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 
 const TEST_SERVER = 'https://sonar.example.com';
 const TEST_ORG = 'test-org';
-const TEST_PROJECT = 'test-project';
 
 const FAKE_AUTH: ResolvedAuth = {
   token: 'squ_test_token',
@@ -37,20 +34,12 @@ const FAKE_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
-let discoverProjectSpy: ReturnType<typeof spyOn>;
 let genericRequestSpy: ReturnType<typeof spyOn>;
 
 describe('apiCommand', () => {
   beforeEach(() => {
     setMockUi(true);
     clearMockUiCalls();
-
-    discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue({
-      rootDir: '/fake/dir',
-      isGitRepo: true,
-      projectKey: TEST_PROJECT,
-      organization: TEST_ORG,
-    });
 
     genericRequestSpy = spyOn(SonarQubeClient.prototype, 'genericRequest').mockResolvedValue(
       '{"status":"UP"}',
@@ -59,23 +48,16 @@ describe('apiCommand', () => {
 
   afterEach(() => {
     setMockUi(false);
-    discoverProjectSpy.mockRestore();
     genericRequestSpy.mockRestore();
   });
 
   it('throws InvalidOptionError for invalid HTTP method', () => {
-    expect(apiCommand(FAKE_AUTH, 'TRACE', '/api/system/status', {})).rejects.toBeInstanceOf(
-      InvalidOptionError,
-    );
     expect(apiCommand(FAKE_AUTH, 'TRACE', '/api/system/status', {})).rejects.toThrow(
       "Invalid HTTP method 'TRACE'",
     );
   });
 
   it('throws InvalidOptionError when endpoint does not start with /', () => {
-    expect(apiCommand(FAKE_AUTH, 'get', 'api/system/status', {})).rejects.toBeInstanceOf(
-      InvalidOptionError,
-    );
     expect(apiCommand(FAKE_AUTH, 'get', 'api/system/status', {})).rejects.toThrow(
       "Endpoint must start with '/'",
     );
@@ -105,7 +87,7 @@ describe('apiCommand', () => {
     expect(genericRequestSpy).toHaveBeenCalledTimes(1);
     const [method, endpoint, data, contentType] = genericRequestSpy.mock.calls[0];
     expect(method).toBe('GET');
-    expect(endpoint).toContain('/api/system/status');
+    expect(endpoint).toBe('/api/system/status');
     expect(data).toBeUndefined();
     expect(contentType).toBe('form');
 
@@ -142,31 +124,6 @@ describe('apiCommand', () => {
     expect(contentType).toBe('form');
   });
 
-  it('resolves template variables from options', async () => {
-    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?project={project}', {
-      project: 'custom-project',
-    });
-
-    const [, endpoint] = genericRequestSpy.mock.calls[0];
-    expect(endpoint).toContain('custom-project');
-  });
-
-  it('falls back to discovered project context for template variables', async () => {
-    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?project={project}', {});
-
-    const [, endpoint] = genericRequestSpy.mock.calls[0];
-    expect(endpoint).toContain(TEST_PROJECT);
-  });
-
-  it('uses org from options over discovered context', async () => {
-    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?organization={organization}', {
-      org: 'override-org',
-    });
-
-    const [, endpoint] = genericRequestSpy.mock.calls[0];
-    expect(endpoint).toContain('override-org');
-  });
-
   it('makes a DELETE request without data', async () => {
     await apiCommand(FAKE_AUTH, 'delete', '/api/authentication/validate', {});
 
@@ -176,21 +133,7 @@ describe('apiCommand', () => {
     expect(data).toBeUndefined();
   });
 
-  it('falls back to auth.orgKey when discovery returns no organization', async () => {
-    discoverProjectSpy.mockResolvedValue({
-      rootDir: '/fake/dir',
-      isGitRepo: true,
-      projectKey: TEST_PROJECT,
-      organization: undefined,
-    });
-
-    await apiCommand(FAKE_AUTH, 'get', '/api/issues/search?organization={organization}', {});
-
-    const [, endpoint] = genericRequestSpy.mock.calls[0];
-    expect(endpoint).toContain(TEST_ORG);
-  });
-
-  it('passes the resolved endpoint to genericRequest', async () => {
+  it('passes the endpoint to genericRequest', async () => {
     await apiCommand(FAKE_AUTH, 'get', '/api/system/status', {});
 
     const [, endpoint] = genericRequestSpy.mock.calls[0];

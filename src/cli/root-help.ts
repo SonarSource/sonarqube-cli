@@ -50,6 +50,7 @@ export function getCustomRootHelp(): string {
     `    ${softBlue('verify --file <file>')}    Run a comprehensive scan on a single file`,
     `    ${softBlue('analyze <secrets|sqaa>')}  Run targeted scans for specific workflows (secrets/code quality)`,
     `    ${softBlue('list')}                    List SonarQube issues and projects`,
+    `    ${softBlue('api <method> <endpoint>')} Make authenticated requests to any SonarQube API`,
     '',
     `    ${softBlue('auth')}                    Manage authentication tokens and credentials`,
     `    ${softBlue('integrate <claude|git>')}  Setup SonarQube integration for AI Agents (Claude Code) and Git hooks`,

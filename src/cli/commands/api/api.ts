@@ -26,16 +26,32 @@ import {
   SonarQubeClient,
 } from '../../../sonarqube/client';
 import { print } from '../../../ui/index.js';
-import { discoverProject } from '../_common/discovery.js';
 import { InvalidOptionError } from '../_common/error.js';
+import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '../../../lib/config-constants.js';
 
 const VALID_METHODS = new Set<string>(GENERIC_HTTP_METHODS);
 
 export interface ApiCommandOptions {
   data?: string;
-  org?: string;
-  project?: string;
   verbose?: boolean;
+}
+
+export function apiExtraHelpText(): string {
+  return `
+Examples:
+  sonar api get "/api/favorites/search"
+  sonar api post "/api/user_tokens/generate" --data '{"name":"my-new-token"}'
+  sonar api get "/api/rules/search?organization=org-name"
+  sonar api post "/api/issues/do_transition" --data '{"comment":"comment text","issue":"issue-id","transition":"accept"}'
+
+API Usage Documentation:
+  SonarQube Cloud:  ${CLOUD_API_DOCS_URL}
+  SonarQube Server: ${SERVER_API_DOCS_URL}
+
+V1 and V2 switching:
+  Both cloud and server have V1 and V2 versions of their APIs.
+  This tool automatically switches its behavior based on the endpoint path you choose.
+`;
 }
 
 export async function apiCommand(
@@ -74,48 +90,16 @@ export async function apiCommand(
     }
   }
 
-  const projectContext = await discoverProject(process.cwd());
-
-  const resolvedEndpoint = resolveUrlTemplate(endpoint, {
-    project: options.project || projectContext.projectKey,
-    organization: options.org || projectContext.organization || auth.orgKey,
-  });
-
-  const contentType = resolvedEndpoint.startsWith('/api/v2/') ? 'json' : 'form';
+  const contentType = endpoint.startsWith('/api/v2/') ? 'json' : 'form';
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
   const response = await client.genericRequest(
     upperMethod,
-    resolvedEndpoint,
+    endpoint,
     options.data,
     contentType,
     options.verbose,
   );
   print(response);
-}
-
-/**
- * Replace `{key}` placeholders in a URL string with values from a context map.
- * Values are URI-encoded. Throws if a placeholder has no matching context key.
- */
-export function resolveUrlTemplate(
-  template: string,
-  context: Record<string, string | undefined>,
-): string {
-  return template.replaceAll(/\{(\w+)\}/g, (_match, key: string) => {
-    if (!(key in context)) {
-      const available = Object.keys(context).join(', ');
-      throw new Error(
-        `Unknown template variable {${key}}. Available variables: ${available || '(none)'}`,
-      );
-    }
-    if (!context[key]) {
-      // Ideally the CLI would be able to tell you the provenance of the variables it found
-      throw new Error(
-        `Template variable {${key}} could not be resolved from context. Please provide it directly.`,
-      );
-    }
-    return encodeURIComponent(context[key]);
-  });
 }

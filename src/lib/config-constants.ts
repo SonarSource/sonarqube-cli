@@ -93,6 +93,9 @@ export const SONARCLOUD_US_API_URL =
 // ---------------------------------------------------------------------------
 
 export const DOCS_URL = 'https://docs.sonarsource.com/sonarqube-cli';
+export const CLOUD_API_DOCS_URL = 'https://docs.sonarsource.com/sonarqube-cloud/appendices/web-api';
+export const SERVER_API_DOCS_URL =
+  'https://docs.sonarsource.com/sonarqube-server/extension-guide/web-api';
 
 // ---------------------------------------------------------------------------
 // Sentry

@@ -37,7 +37,7 @@ import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/c
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
-import { apiCommand, type ApiCommandOptions } from './commands/api/api';
+import { apiCommand, apiExtraHelpText, type ApiCommandOptions } from './commands/api/api';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
@@ -70,12 +70,17 @@ COMMAND_TREE.command('api')
     '<method>',
     `HTTP method (${GENERIC_HTTP_METHODS.map((m) => m.toLowerCase()).join(', ')})`,
   )
-  .argument('<endpoint>', 'API endpoint path (e.g. /api/issues/search?ps=100)')
-  .option('-d, --data <data>', 'JSON request body')
-  .addOption(projectOption)
-  .option('-o, --org <org>', 'SonarQube Cloud organization key (default is configured from auth)')
+  .argument(
+    '<endpoint>',
+    'API endpoint path. Must start with "/", and can contain query parameters.',
+  )
+  .option(
+    '-d, --data <data>',
+    'JSON string for request body. The tool will automatically format as either form data or JSON body.',
+  )
   .option('-v, --verbose', 'Verbose output for debugging.')
   .description('Make authenticated API requests to SonarQube')
+  .addHelpText('after', apiExtraHelpText())
   .authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>
     apiCommand(auth, method, endpoint, options),
   );

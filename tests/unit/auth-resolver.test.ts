@@ -29,7 +29,7 @@ import {
 } from '../../src/lib/auth-resolver.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import { getDefaultState } from '../../src/lib/state.js';
-import { setMockUi } from '../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../src/ui';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
@@ -42,6 +42,7 @@ describe('resolveAuth', () => {
   beforeEach(() => {
     keytarHandle.setup();
     setMockUi(true);
+    clearMockUiCalls();
     // Ensure env vars are clean
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
@@ -109,6 +110,8 @@ describe('resolveAuth', () => {
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
         });
+        const warnings = getMockUiCalls().filter((c) => c.method === 'warn');
+        expect(warnings.some((c) => String(c.args[0]).includes(ENV_TOKEN))).toBe(true);
       } finally {
         loadStateSpy.mockRestore();
       }
@@ -139,6 +142,8 @@ describe('resolveAuth', () => {
           token: FAKE_TOKEN,
           serverUrl: SONARCLOUD_URL,
         });
+        const warnings = getMockUiCalls().filter((c) => c.method === 'warn');
+        expect(warnings.some((c) => String(c.args[0]).includes(ENV_SERVER))).toBe(true);
       } finally {
         loadStateSpy.mockRestore();
       }
