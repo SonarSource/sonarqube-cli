@@ -19,7 +19,7 @@
  */
 import { existsSync } from 'node:fs';
 import { spawnProcess } from '../../../lib/process';
-import type { SpawnResult } from '../../../lib/process';
+import type { SpawnOptions, SpawnResult, StdioMode } from '../../../lib/process';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { blank, error, print, success, text } from '../../../ui';
@@ -43,7 +43,57 @@ const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
 const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
 const SCAN_TIMEOUT_MS = 30000;
-const STDIN_READ_TIMEOUT_MS = 5000;
+
+export const EXIT_CODE_SECRETS_FOUND = 51;
+
+/**
+ * Run sonar-secrets binary on the given files. Returns the full spawn result.
+ * Kills the child process on timeout.
+ */
+export async function runSecretsBinary(
+  binaryPath: string,
+  files: string[],
+  auth: ResolvedAuth,
+  stdin: StdioMode = 'pipe',
+): Promise<SpawnResult> {
+  return spawnWithTimeout(binaryPath, ['--non-interactive', ...files], {
+    stdin,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: buildAuthEnv(auth),
+  });
+}
+
+function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
+  return { [BINARY_AUTH_URL_ENV]: auth.serverUrl, [BINARY_AUTH_TOKEN_ENV]: auth.token };
+}
+
+async function spawnWithTimeout(
+  binaryPath: string,
+  args: string[],
+  options: SpawnOptions,
+): Promise<SpawnResult> {
+  let killChild: (() => void) | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      spawnProcess(binaryPath, args, {
+        ...options,
+        onSpawn: (kill) => {
+          killChild = kill;
+        },
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          killChild?.();
+          reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`));
+        }, SCAN_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 async function handleCheckCommand(
   options: AnalyzeSecretsOptions,
@@ -51,24 +101,16 @@ async function handleCheckCommand(
 ): Promise<void> {
   validateScanOptions(options);
   const binaryPath = await installSecretsBinary();
-  const { authUrl, authToken } = setupScanEnvironment(binaryPath, auth);
   const scanStartTime = Date.now();
 
   if (options.stdin) {
-    await performStdinScan(binaryPath, authUrl, authToken, scanStartTime);
+    reportScanResult(
+      await runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+      scanStartTime,
+    );
   } else {
-    await performPathsScan(binaryPath, options.paths ?? [], authUrl, authToken, scanStartTime);
+    await performPathsScan(binaryPath, options.paths ?? [], auth, scanStartTime);
   }
-}
-
-interface ScanEnvironment {
-  binaryPath: string;
-  authUrl?: string;
-  authToken?: string;
-}
-
-function setupScanEnvironment(binaryPath: string, auth: ResolvedAuth): ScanEnvironment {
-  return { binaryPath, authUrl: auth.serverUrl, authToken: auth.token };
 }
 
 function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): void {
@@ -82,28 +124,10 @@ function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): vo
   }
 }
 
-async function performStdinScan(
-  binaryPath: string,
-  authUrl: string | undefined,
-  authToken: string | undefined,
-  scanStartTime: number,
-): Promise<void> {
-  const result = await runScanFromStdin(binaryPath, authUrl, authToken);
-  const scanDurationMs = Date.now() - scanStartTime;
-
-  const exitCode = result.exitCode ?? 1;
-  if (exitCode === 0) {
-    handleScanSuccess(result, scanDurationMs);
-  } else {
-    handleScanFailure(result, scanDurationMs, exitCode);
-  }
-}
-
 async function performPathsScan(
   binaryPath: string,
   paths: string[],
-  authUrl: string | undefined,
-  authToken: string | undefined,
+  auth: ResolvedAuth,
   scanStartTime: number,
 ): Promise<void> {
   if (paths.length === 0) {
@@ -116,9 +140,12 @@ async function performPathsScan(
     }
   }
 
-  const result = await runScan(binaryPath, paths, authUrl, authToken);
-  const scanDurationMs = Date.now() - scanStartTime;
+  const result = await runSecretsBinary(binaryPath, paths, auth);
+  reportScanResult(result, scanStartTime);
+}
 
+function reportScanResult(result: SpawnResult, scanStartTime: number): void {
+  const scanDurationMs = Date.now() - scanStartTime;
   const exitCode = result.exitCode ?? 1;
   if (exitCode === 0) {
     handleScanSuccess(result, scanDurationMs);
@@ -127,122 +154,19 @@ async function performPathsScan(
   }
 }
 
-async function runScan(
-  binaryPath: string,
-  paths: string[],
-  authUrl: string | undefined,
-  authToken: string | undefined,
-): Promise<SpawnResult> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      spawnProcess(binaryPath, ['--non-interactive', ...paths], {
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env: {
-          ...(authUrl && authToken
-            ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
-            : {}),
-        },
-      }),
-      new Promise<never>((_resolve, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`));
-        }, SCAN_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function runScanFromStdin(
-  binaryPath: string,
-  authUrl: string | undefined,
-  authToken: string | undefined,
-): Promise<SpawnResult> {
-  const { writeFileSync, unlinkSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const pathModule = await import('node:path');
-  const pathJoin = (...args: string[]) => pathModule.join(...args);
-
-  const stdinData = await readStdin();
-
-  const tempFile = pathJoin(tmpdir(), `sonar-secrets-scan-${Date.now()}.tmp`);
-
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    writeFileSync(tempFile, stdinData);
-
-    return await Promise.race([
-      spawnProcess(binaryPath, [tempFile], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env: {
-          ...(authUrl && authToken
-            ? { [BINARY_AUTH_URL_ENV]: authUrl, [BINARY_AUTH_TOKEN_ENV]: authToken }
-            : {}),
-        },
-      }),
-      new Promise<never>((_resolve, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`));
-        }, SCAN_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeoutId);
-    try {
-      unlinkSync(tempFile);
-    } catch {
-      // Ignore cleanup errors
-    }
-  }
-}
-
-async function readStdin(): Promise<string> {
-  return Promise.race([
-    new Promise<string>((resolve, reject) => {
-      const chunks: Buffer[] = [];
-
-      process.stdin.on('data', (chunk: Buffer) => {
-        chunks.push(chunk);
-      });
-
-      process.stdin.on('end', () => {
-        const content = Buffer.concat(chunks).toString('utf-8');
-        resolve(content);
-      });
-
-      process.stdin.on('error', (err) => {
-        reject(err);
-      });
-    }),
-    new Promise<never>((_resolve, reject) =>
-      setTimeout(() => {
-        reject(new Error(`stdin read timeout after ${STDIN_READ_TIMEOUT_MS}ms`));
-      }, STDIN_READ_TIMEOUT_MS),
-    ),
-  ]);
-}
-
 function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): void {
+  blank();
+  success('Scan completed successfully');
   try {
     const scanResult = JSON.parse(result.stdout);
-    blank();
-    success('Scan completed successfully');
     text(`  Duration: ${scanDurationMs}ms`);
     displayScanResults(scanResult);
-    blank();
   } catch (parseError) {
     logger.debug(`Failed to parse JSON output: ${(parseError as Error).message}`);
     blank();
-    success('Scan completed successfully');
-    blank();
     print(result.stdout);
-    blank();
   }
+  blank();
 }
 
 function displayScanResults(scanResult: {
@@ -270,8 +194,6 @@ function displayScanResults(scanResult: {
   });
 }
 
-const EXIT_CODE_SECRETS_FOUND = 51;
-
 function handleScanFailure(
   result: { exitCode: number | null; stderr: string; stdout: string },
   scanDurationMs: number,
@@ -293,11 +215,7 @@ function handleScanFailure(
 }
 
 function handleScanError(err: unknown): void {
-  if (err instanceof InvalidOptionError) {
-    throw err;
-  }
-
-  if (err instanceof CommandFailedError) {
+  if (err instanceof InvalidOptionError || err instanceof CommandFailedError) {
     throw err;
   }
 

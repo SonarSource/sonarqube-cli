@@ -217,3 +217,13 @@ function cleanupOldVersionBinaries(binDir: string, currentBinaryName: string): v
 export function buildLocalBinaryName(platformInfo: PlatformInfo): string {
   return `sonar-secrets-${SONAR_SECRETS_VERSION}${buildPlatformSuffix(platformInfo)}`;
 }
+
+/**
+ * Returns the path to the installed sonar-secrets binary, or null if not present.
+ * Never downloads — use this where silent operation is required (e.g. hook handlers).
+ */
+export function resolveSecretsBinaryPath(): string | null {
+  const platform = detectPlatform();
+  const binaryPath = join(BIN_DIR, buildLocalBinaryName(platform));
+  return existsSync(binaryPath) ? binaryPath : null;
+}
