@@ -78,7 +78,7 @@ COMMAND_TREE.command('api')
     '-d, --data <data>',
     'JSON string for request body. The tool will automatically format as either form data or JSON body.',
   )
-  .option('-v, --verbose', 'Verbose output for debugging.')
+  .option('-v, --verbose', 'Print request and response details for debugging.')
   .description('Make authenticated API requests to SonarQube')
   .addHelpText('after', apiExtraHelpText())
   .authenticatedAction((auth, method: string, endpoint: string, options: ApiCommandOptions) =>

@@ -47,10 +47,12 @@ export class SonarQubeClient {
 
   private commonHeaders(contentType?: 'json' | 'form'): Record<string, string> {
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.token}`,
       'User-Agent': `sonarqube-cli/${VERSION}`,
       Accept: 'application/json',
     };
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`;
+    }
     if (contentType === 'form') {
       headers['Content-Type'] = 'application/x-www-form-urlencoded';
     } else if (contentType === 'json') {
@@ -115,7 +117,7 @@ export class SonarQubeClient {
     if (debug) {
       print(`request method: ${method}`, process.stderr);
       print(`request url: ${url}`, process.stderr);
-      print(`request headers: ${JSON.stringify(headers)}`, process.stderr);
+      print(`request headers: ${JSON.stringify(redactSensitiveHeaders(headers))}`, process.stderr);
       print(`request body: ${requestBody}`, process.stderr);
     }
 
@@ -332,6 +334,13 @@ export class SonarQubeClient {
       SONARCLOUD_API_URL,
     );
   }
+}
+
+function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {
+  if (headers.Authorization) {
+    headers.Authorization = 'REDACTED';
+  }
+  return headers;
 }
 
 export interface SqaaAnalysisRequest {

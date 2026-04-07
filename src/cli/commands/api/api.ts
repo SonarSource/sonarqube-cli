@@ -39,18 +39,28 @@ export interface ApiCommandOptions {
 export function apiExtraHelpText(): string {
   return `
 Examples:
-  sonar api get "/api/favorites/search"
-  sonar api post "/api/user_tokens/generate" --data '{"name":"my-new-token"}'
-  sonar api get "/api/rules/search?organization=org-name"
-  sonar api post "/api/issues/do_transition" --data '{"comment":"comment text","issue":"issue-id","transition":"accept"}'
+  # List favorite projects
+  $ sonar api get "/api/favorites/search"
+
+  # Search for rules in an organization
+  $ sonar api get "/api/rules/search?organization=org-name"
+
+  # Generate a new user token
+  $ sonar api post "/api/user_tokens/generate" --data '{"name":"my-new-token"}'
+
+  # Accept an issue
+  $ sonar api post "/api/issues/do_transition" --data '{"comment":"comment text","issue":"issue-id","transition":"accept"}'
+
+  # Get the current analysis engine JAR (V2 api)
+  $ sonar api get "/analysis/engine"
+
+V1 and V2 routing:
+  Both cloud and server have V1 and V2 versions of their APIs.
+  This tool automatically switches its behavior based on the endpoint path you choose.
 
 API Usage Documentation:
   SonarQube Cloud:  ${CLOUD_API_DOCS_URL}
   SonarQube Server: ${SERVER_API_DOCS_URL}
-
-V1 and V2 switching:
-  Both cloud and server have V1 and V2 versions of their APIs.
-  This tool automatically switches its behavior based on the endpoint path you choose.
 `;
 }
 
@@ -90,7 +100,14 @@ export async function apiCommand(
     }
   }
 
-  const contentType = endpoint.startsWith('/api/v2/') ? 'json' : 'form';
+  let contentType: 'json' | 'form' | undefined;
+
+  // V2 api is JSON, everything else is form data
+  if (endpoint.startsWith('/api/v2/') || !endpoint.startsWith('/api/')) {
+    contentType = 'json';
+  } else {
+    contentType = 'form';
+  }
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
