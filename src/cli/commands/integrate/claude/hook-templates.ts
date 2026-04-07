@@ -20,270 +20,42 @@
 
 // Hook script templates for Claude Code integration
 
-/**
- * Unix template for sonar-secrets PreToolUse hook (bash)
-1 */
+export const UNIX_SONAR_COMMAND_GUARD = `if ! command -v sonar &> /dev/null; then
+  exit 0
+fi`;
+
+export const WINDOWS_SONAR_COMMAND_GUARD = `if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
+    exit 0
+}`;
+
+function unixTemplate(command: string): string {
+  return `#!/bin/bash\n${UNIX_SONAR_COMMAND_GUARD}\n${command}\n`;
+}
+
+function windowsTemplate(command: string): string {
+  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\n`;
+}
+
 export function getSecretPreToolTemplateUnix(): string {
-  return String.raw`#!/bin/bash
-# PreToolUse hook: Scan files before reading to prevent secret leakage
-# Blocks file reads if secrets are detected
-
-if ! command -v sonar &> /dev/null; then
-  exit 0
-fi
-
-# Read JSON from stdin and extract fields using sed (handles both compact and pretty-printed JSON)
-stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ "$tool_name" != "Read" ]]; then
-  exit 0
-fi
-
-file_path=$(echo "$stdin_data" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
-  exit 0
-fi
-
-# Scan file for secrets
-sonar analyze secrets "$file_path" > /dev/null 2>&1
-exit_code=$?
-
-if [[ $exit_code -eq 51 ]]; then
-  # Secrets found - deny file read
-  reason="Sonar detected secrets in file: $file_path"
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"$reason\"}}"
-  exit 0
-fi
-
-exit 0
-`;
+  return unixTemplate('sonar hook claude-pre-tool-use');
 }
 
-/**
- * Windows template for sonar-secrets PreToolUse hook (PowerShell)
- */
 export function getSecretPreToolTemplateWindows(): string {
-  return String.raw`param(
-    [Parameter(ValueFromPipeline = $true)]
-    [string]$InputData
-)
-
-try {
-    $input = $InputData | ConvertFrom-Json -ErrorAction Stop
-} catch {
-    exit 0
+  return windowsTemplate('sonar hook claude-pre-tool-use');
 }
 
-$toolName = $input.tool_name
-$filePath = $input.tool_input.file_path
-
-if ($toolName -ne "Read" -or [string]::IsNullOrEmpty($filePath) -or -not (Test-Path $filePath)) {
-    exit 0
-}
-
-if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
-    exit 0
-}
-
-try {
-    & sonar analyze secrets $filePath | Out-Null
-    $exitCode = $LASTEXITCODE
-} catch {
-    exit 0
-}
-
-if ($exitCode -eq 51) {
-    $reason = "Sonar detected secrets in file: $filePath"
-    $response = @{
-        hookSpecificOutput = @{
-            hookEventName = "PreToolUse"
-            permissionDecision = "deny"
-            permissionDecisionReason = $reason
-        }
-    } | ConvertTo-Json
-    Write-Host $response
-}
-
-exit 0
-`;
-}
-
-/**
- * Unix template for sonar-secrets UserPromptSubmit hook (bash)
- */
 export function getSecretPromptTemplateUnix(): string {
-  return String.raw`#!/bin/bash
-# UserPromptSubmit hook: Scan prompt for secrets before sending
-
-if ! command -v sonar &> /dev/null; then
-  exit 0
-fi
-
-# Read JSON from stdin
-stdin_data=$(cat)
-
-# Extract prompt field using sed
-prompt=$(echo "$stdin_data" | sed -n 's/.*"prompt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ -z "$prompt" ]]; then
-  exit 0
-fi
-
-# Create temporary file with prompt content (stdin is already occupied by hook input)
-temp_file=$(mktemp -t 'sonarqube-cli-hook.XXXXXX')
-trap "rm -f $temp_file" EXIT
-
-echo -n "$prompt" > "$temp_file"
-
-# Scan prompt for secrets (using file instead of stdin pipe)
-sonar analyze secrets "$temp_file" > /dev/null 2>&1
-exit_code=$?
-
-if [[ $exit_code -eq 51 ]]; then
-  # Secrets found - block prompt
-  reason="Sonar detected secrets in prompt"
-  echo "{\"decision\":\"block\",\"reason\":\"$reason\"}"
-  exit 0
-fi
-
-exit 0
-`;
+  return unixTemplate('sonar hook claude-prompt-submit');
 }
 
-/**
- * Unix template for SQAA PostToolUse hook (bash)
- * Runs after Edit/Write — analyzes the modified file with SQAA.
- */
-export function getSqaaPostToolTemplateUnix(projectKey: string): string {
-  return String.raw`#!/bin/bash
-# PostToolUse hook: Run SQAA analysis on edited/written files
-
-if ! command -v sonar &> /dev/null; then
-  exit 0
-fi
-
-# Read JSON from stdin and extract fields using sed (handles both compact and pretty-printed JSON)
-stdin_data=$(cat)
-tool_name=$(echo "$stdin_data" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ "$tool_name" != "Edit" ]] && [[ "$tool_name" != "Write" ]]; then
-  exit 0
-fi
-
-file_path=$(echo "$stdin_data" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-if [[ -z "$file_path" ]] || [[ ! -f "$file_path" ]]; then
-  exit 0
-fi
-
-# Capture SQAA analysis output and pass it to Claude via additionalContext
-output=$(sonar analyze sqaa --file "$file_path" --project ${projectKey} 2>/dev/null)
-
-# JSON-escape the output using awk (no external runtimes required)
-escaped=$(printf '%s' "$output" | awk 'BEGIN{ORS=""} {gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); if(NR>1) printf "\\n"; print}')
-
-printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$escaped"
-
-exit 0
-`;
-}
-
-/**
- * Windows template for SQAA PostToolUse hook (PowerShell)
- */
-export function getSqaaPostToolTemplateWindows(projectKey: string): string {
-  return String.raw`param(
-    [Parameter(ValueFromPipeline = $true)]
-    [string]$InputData
-)
-
-try {
-    $input = $InputData | ConvertFrom-Json -ErrorAction Stop
-} catch {
-    exit 0
-}
-
-$toolName = $input.tool_name
-$filePath = $input.tool_input.file_path
-
-if (($toolName -ne "Edit" -and $toolName -ne "Write") -or [string]::IsNullOrEmpty($filePath) -or -not (Test-Path $filePath)) {
-    exit 0
-}
-
-if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
-    exit 0
-}
-
-try {
-    $output = & sonar analyze sqaa --file $filePath --project ${projectKey} 2>$null | Out-String
-    $result = @{
-        hookSpecificOutput = @{
-            hookEventName   = "PostToolUse"
-            additionalContext = $output.Trim()
-        }
-    } | ConvertTo-Json -Compress
-    Write-Output $result
-} catch {
-    # Non-blocking
-}
-
-exit 0
-`;
-}
-
-/**
- * Windows template for sonar-secrets UserPromptSubmit hook (PowerShell)
- */
 export function getSecretPromptTemplateWindows(): string {
-  return String.raw`param(
-    [Parameter(ValueFromPipeline = $true)]
-    [string]$InputData
-)
-
-try {
-    $input = $InputData | ConvertFrom-Json -ErrorAction Stop
-} catch {
-    exit 0
+  return windowsTemplate('sonar hook claude-prompt-submit');
 }
 
-$prompt = $input.prompt
-
-if ([string]::IsNullOrEmpty($prompt)) {
-    exit 0
+export function getSqaaPostToolTemplateUnix(projectKey: string): string {
+  return unixTemplate(`sonar hook claude-post-tool-use --project ${projectKey}`);
 }
 
-if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
-    exit 0
-}
-
-# Create temporary file with prompt content (stdin is already occupied by hook input)
-$tempFile = [System.IO.Path]::GetTempFileName()
-
-try {
-    $prompt | Set-Content -Path $tempFile -NoNewline -Encoding UTF8
-
-    # Scan prompt for secrets (using file instead of stdin pipe)
-    & sonar analyze secrets $tempFile | Out-Null
-    $exitCode = $LASTEXITCODE
-} catch {
-    $exitCode = 0
-} finally {
-    if (Test-Path $tempFile) {
-        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-    }
-}
-
-if ($exitCode -eq 51) {
-    $reason = "Sonar detected secrets in prompt"
-    $response = @{
-        decision = "block"
-        reason = $reason
-    } | ConvertTo-Json
-    Write-Host $response
-}
-
-exit 0
-`;
+export function getSqaaPostToolTemplateWindows(projectKey: string): string {
+  return windowsTemplate(`sonar hook claude-post-tool-use --project ${projectKey}`);
 }

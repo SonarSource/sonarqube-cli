@@ -22,7 +22,7 @@
 
 import { spawn } from 'node:child_process';
 
-type StdioMode = 'pipe' | 'ignore' | 'inherit';
+export type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
 export interface SpawnOptions {
   cwd?: string;
@@ -31,6 +31,8 @@ export interface SpawnOptions {
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
+  /** Called immediately after the child process spawns, with a function to kill it. */
+  onSpawn?: (kill: () => void) => void;
 }
 
 export interface SpawnResult {
@@ -68,6 +70,10 @@ export async function spawnProcess(
       proc.stderr.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
+    }
+
+    if (options.onSpawn) {
+      options.onSpawn(() => proc.kill());
     }
 
     proc.on('error', reject);

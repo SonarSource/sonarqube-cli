@@ -325,10 +325,10 @@ describe('installHooks', () => {
     expect(bashEntry).toBeDefined();
   });
 
-  it('pretool-secrets script contains the sonar analyze secrets command', async () => {
+  it('pretool-secrets script delegates to sonar hook claude-pre-tool-use', async () => {
     await installHooks(PROJECT_ROOT);
 
-    expect(getScriptWriteFor('pretool-secrets')).toContain('sonar analyze secrets');
+    expect(getScriptWriteFor('pretool-secrets')).toContain('sonar hook claude-pre-tool-use');
   });
 
   it('posttool-sqaa script contains the projectKey', async () => {

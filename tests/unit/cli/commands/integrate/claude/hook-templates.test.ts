@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Tests for hook template generation
+// Tests for hook template generation — thin launcher format
 
 import { describe, it, expect } from 'bun:test';
 import {
@@ -28,74 +28,87 @@ import {
   getSecretPromptTemplateWindows,
   getSqaaPostToolTemplateUnix,
   getSqaaPostToolTemplateWindows,
+  UNIX_SONAR_COMMAND_GUARD,
+  WINDOWS_SONAR_COMMAND_GUARD,
 } from '../../../../../../src/cli/commands/integrate/claude/hook-templates';
 
 describe('Secret Scanning Hook Templates', () => {
-  it('PreTool Unix hook: bash shebang, sonar analyze command, exit code 51', () => {
+  it('PreTool Unix hook: bash shebang, delegates to sonar hook', () => {
     const template = getSecretPreToolTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar analyze secrets')).toBe(true);
-    expect(template.includes('exit_code -eq 51')).toBe(true);
-    expect(template.includes('permissionDecision')).toBe(true);
+    expect(template.includes('sonar hook claude-pre-tool-use')).toBe(true);
+    expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
-  it('PreTool Windows hook: PowerShell, sonar analyze command, exit code 51', () => {
+  it('PreTool Unix hook: no embedded business logic', () => {
+    const template = getSecretPreToolTemplateUnix();
+
+    expect(template.includes('sonar analyze')).toBe(false);
+    expect(template.includes('sed -n')).toBe(false);
+    expect(template.includes('permissionDecision')).toBe(false);
+  });
+
+  it('PreTool Windows hook: delegates to sonar hook', () => {
     const template = getSecretPreToolTemplateWindows();
 
-    expect(template.includes('sonar analyze secrets')).toBe(true);
-    expect(template.includes('$exitCode -eq 51')).toBe(true);
-    expect(typeof template).toBe('string');
+    expect(template.includes('sonar hook claude-pre-tool-use')).toBe(true);
+    expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
-  it('UserPromptSubmit Unix hook: bash shebang, sonar analyze command, exit code 51', () => {
+  it('UserPromptSubmit Unix hook: bash shebang, delegates to sonar hook', () => {
     const template = getSecretPromptTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar analyze secrets')).toBe(true);
-    expect(template.includes('exit_code -eq 51')).toBe(true);
+    expect(template.includes('sonar hook claude-prompt-submit')).toBe(true);
+    expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
-  it('UserPromptSubmit Windows hook: PowerShell, sonar analyze command, exit code 51', () => {
+  it('UserPromptSubmit Unix hook: no embedded business logic', () => {
+    const template = getSecretPromptTemplateUnix();
+
+    expect(template.includes('sonar analyze')).toBe(false);
+    expect(template.includes('mktemp')).toBe(false);
+  });
+
+  it('UserPromptSubmit Windows hook: delegates to sonar hook', () => {
     const template = getSecretPromptTemplateWindows();
 
-    expect(template.includes('sonar analyze secrets')).toBe(true);
-    expect(template.includes('$exitCode -eq 51')).toBe(true);
-    expect(typeof template).toBe('string');
+    expect(template.includes('sonar hook claude-prompt-submit')).toBe(true);
+    expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
   });
 });
 
 describe('SQAA PostToolUse Hook Templates', () => {
-  it('PostTool Unix hook: bash shebang, sonar analyze sqaa command, handles Edit and Write tools', () => {
-    const template = getSqaaPostToolTemplateUnix();
+  it('PostTool Unix hook: bash shebang, delegates to sonar hook with project key', () => {
+    const template = getSqaaPostToolTemplateUnix('my-project');
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar analyze sqaa --file')).toBe(true);
-    expect(template.includes('"Edit"')).toBe(true);
-    expect(template.includes('"Write"')).toBe(true);
+    expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
+    expect(template.includes('--project my-project')).toBe(true);
+    expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
-  it('PostTool Unix hook: non-blocking (never blocks file operations)', () => {
-    const template = getSqaaPostToolTemplateUnix();
+  it('PostTool Unix hook: no embedded business logic', () => {
+    const template = getSqaaPostToolTemplateUnix('my-project');
 
-    // Must not emit permissionDecision — PostToolUse is informational only
+    expect(template.includes('sonar analyze sqaa')).toBe(false);
     expect(template.includes('permissionDecision')).toBe(false);
-    // Should be non-blocking (uses || true or similar)
-    expect(template.includes('|| true') || template.includes('2>/dev/null')).toBe(true);
+    expect(template.includes('sed -n')).toBe(false);
   });
 
-  it('PostTool Windows hook: PowerShell, sonar analyze sqaa command, handles Edit and Write tools', () => {
-    const template = getSqaaPostToolTemplateWindows();
+  it('PostTool Windows hook: delegates to sonar hook with project key', () => {
+    const template = getSqaaPostToolTemplateWindows('my-project');
 
-    expect(typeof template).toBe('string');
-    expect(template.includes('sonar analyze sqaa')).toBe(true);
-    expect(template.includes('"Edit"') || template.includes('-ne "Edit"')).toBe(true);
-    expect(template.includes('"Write"') || template.includes('-ne "Write"')).toBe(true);
+    expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
+    expect(template.includes('--project my-project')).toBe(true);
+    expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
-  it('PostTool Windows hook: non-blocking (never blocks file operations)', () => {
-    const template = getSqaaPostToolTemplateWindows();
+  it('PostTool Windows hook: no embedded business logic', () => {
+    const template = getSqaaPostToolTemplateWindows('my-project');
 
+    expect(template.includes('sonar analyze sqaa')).toBe(false);
     expect(template.includes('permissionDecision')).toBe(false);
   });
 });
@@ -107,8 +120,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getSqaaPostToolTemplateUnix(),
-      getSqaaPostToolTemplateWindows(),
+      getSqaaPostToolTemplateUnix('proj'),
+      getSqaaPostToolTemplateWindows('proj'),
     ];
 
     const uniqueContents = new Set(templates);
@@ -118,7 +131,8 @@ describe('Template Integrity', () => {
       expect(typeof template).toBe('string');
     });
 
-    expect(uniqueContents.size).toBe(6); // All templates are different
+    const EXPECTED_TEMPLATE_COUNT = templates.length;
+    expect(uniqueContents.size).toBe(EXPECTED_TEMPLATE_COUNT);
   });
 
   it('No template references old sonar secret check command', () => {
@@ -127,8 +141,8 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
-      getSqaaPostToolTemplateUnix(),
-      getSqaaPostToolTemplateWindows(),
+      getSqaaPostToolTemplateUnix('proj'),
+      getSqaaPostToolTemplateWindows('proj'),
     ];
 
     templates.forEach((template) => {
@@ -136,12 +150,11 @@ describe('Template Integrity', () => {
     });
   });
 
-  it('SQAA templates use sonar analyze sqaa, secrets templates use sonar analyze', () => {
-    expect(getSqaaPostToolTemplateUnix().includes('sonar analyze sqaa')).toBe(true);
-    expect(getSqaaPostToolTemplateWindows().includes('sonar analyze sqaa')).toBe(true);
+  it('SQAA template routes to claude-post-tool-use, secrets templates route to other events', () => {
+    expect(getSqaaPostToolTemplateUnix('proj').includes('claude-post-tool-use')).toBe(true);
+    expect(getSqaaPostToolTemplateWindows('proj').includes('claude-post-tool-use')).toBe(true);
 
-    // Secrets templates should NOT call sonar analyze sqaa
-    expect(getSecretPreToolTemplateUnix().includes('sonar analyze sqaa')).toBe(false);
-    expect(getSecretPromptTemplateUnix().includes('sonar analyze sqaa')).toBe(false);
+    expect(getSecretPreToolTemplateUnix().includes('claude-post-tool-use')).toBe(false);
+    expect(getSecretPromptTemplateUnix().includes('claude-post-tool-use')).toBe(false);
   });
 });

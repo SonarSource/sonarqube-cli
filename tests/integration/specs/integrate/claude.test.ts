@@ -432,7 +432,7 @@ describe('integrate claude', () => {
     { timeout: 30000 },
   );
   it(
-    'prompt-secrets script uses correct subcommand (sonar analyze secrets) after integration',
+    'prompt-secrets.sh uses correct subcommand (sonar hook claude-prompt-submit) after integration',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -457,7 +457,7 @@ describe('integrate claude', () => {
           hookScriptName('prompt-secrets'),
         )
         .asText();
-      expect(promptScriptContent).toContain('sonar analyze secrets');
+      expect(promptScriptContent).toContain('sonar hook claude-prompt-submit');
       expect(promptScriptContent).not.toContain('sonar analyze --file');
     },
     { timeout: 30000 },
@@ -1213,7 +1213,7 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
 
       // Hook scripts must be rewritten to use the new subcommand
       const pretoolContent = harness.cwd.file(pretoolScriptRel).asText();
-      expect(pretoolContent).toContain('sonar analyze secrets');
+      expect(pretoolContent).toContain('sonar hook claude-pre-tool-use');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
       // settings.json must have correctly structured hook entries (relative paths, project-level)
@@ -1314,7 +1314,7 @@ describe.skipIf(IS_WINDOWS)('post-update migration — hook script rewrite on CL
 
       // Scripts must be rewritten with the new subcommand
       const pretoolContent = harness.userHome.file(pretoolScriptRel).asText();
-      expect(pretoolContent).toContain('sonar analyze secrets');
+      expect(pretoolContent).toContain('sonar hook claude-pre-tool-use');
       expect(pretoolContent).not.toContain('sonar analyze --file');
 
       // settings.json must have correctly structured hook entries (absolute paths, global)

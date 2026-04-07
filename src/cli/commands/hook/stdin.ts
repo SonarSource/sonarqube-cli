@@ -1,6 +1,6 @@
 /*
  * SonarQube CLI
- * Copyright (C) 2026 SonarSource Sàrl
+ * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
  *
  * This program is free software; you can redistribute it and/or
@@ -37,19 +37,24 @@ export async function readStdinJson<T>(): Promise<T> {
 }
 
 async function readRawStdin(): Promise<string> {
-  return Promise.race([
-    new Promise<string>((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
-      process.stdin.on('end', () => {
-        resolve(Buffer.concat(chunks).toString('utf-8'));
-      });
-      process.stdin.on('error', reject);
-    }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => {
-        reject(new Error(`stdin read timed out after ${STDIN_TIMEOUT_MS}ms`));
-      }, STDIN_TIMEOUT_MS),
-    ),
-  ]);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      new Promise<string>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
+        process.stdin.on('end', () => {
+          resolve(Buffer.concat(chunks).toString('utf-8'));
+        });
+        process.stdin.on('error', reject);
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`stdin read timed out after ${STDIN_TIMEOUT_MS}ms`));
+        }, STDIN_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

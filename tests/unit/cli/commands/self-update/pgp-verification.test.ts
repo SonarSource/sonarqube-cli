@@ -35,12 +35,12 @@ import type { PlatformInfo } from '../../../../../src/lib/install-types.js';
 
 const PLATFORM: PlatformInfo = { os: 'linux', arch: 'x86-64', extension: '' };
 
-async function generateKeyPair() {
+async function generateKeyPair(): Promise<{ privateKey: string; publicKey: string }> {
   return openpgp.generateKey({
     type: 'rsa',
     rsaBits: 2048,
     userIDs: [{ name: 'Test', email: 'test@example.com' }],
-  });
+  }) as Promise<{ privateKey: string; publicKey: string }>;
 }
 
 async function sign(content: Buffer, armoredPrivateKey: string): Promise<string> {

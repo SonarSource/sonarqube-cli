@@ -44,6 +44,7 @@ import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 import { apiCommand, apiExtraHelpText, type ApiCommandOptions } from './commands/api/api';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
+import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -245,12 +246,32 @@ COMMAND_TREE.command('self-update')
   .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
 
 // Hidden callback command — internal handlers for agent and git hooks.
-// Shell hook scripts call `sonar callback <event>` to delegate all business logic to TypeScript.
-export const callbackCommand = COMMAND_TREE.command('callback', { hidden: true })
-  .description('Internal callback handlers for agent and git hooks')
+// Shell hook scripts call `sonar hook <event>` to delegate all business logic to TypeScript.
+export const hookCommand = COMMAND_TREE.command('hook', { hidden: true })
+  .description('Internal hook handlers for agent and git hooks')
   .enablePositionalOptions()
   .anonymousAction(function (this: Command) {
     this.outputHelp();
+  });
+
+hookCommand
+  .command('claude-pre-tool-use')
+  .description('PreToolUse handler: scan files for secrets before agent reads them')
+  .anonymousAction(() => claudePreToolUse());
+
+hookCommand
+  .command('claude-prompt-submit')
+  .description('UserPromptSubmit handler: scan prompts for secrets before sending')
+  .anonymousAction(() => {
+    return;
+  });
+
+hookCommand
+  .command('claude-post-tool-use')
+  .option('-p, --project <project>', 'SonarCloud project key')
+  .description('PostToolUse handler: run SQAA analysis on modified files')
+  .anonymousAction(() => {
+    return;
   });
 
 // Hidden flush command — only registered when running as a telemetry worker.
