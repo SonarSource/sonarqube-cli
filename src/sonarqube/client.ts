@@ -338,7 +338,7 @@ export class SonarQubeClient {
 
 function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {
   if (headers.Authorization) {
-    headers.Authorization = 'REDACTED';
+    return { ...headers, Authorization: 'REDACTED' };
   }
   return headers;
 }
