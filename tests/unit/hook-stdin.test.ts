@@ -1,0 +1,89 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) 2026 SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { readStdinJson } from '../../src/cli/commands/hook/stdin';
+
+describe('readStdinJson', () => {
+  type StdinListener = (...args: unknown[]) => void;
+  const listeners: Record<string, StdinListener[]> = {};
+  let onSpy: ReturnType<typeof spyOn>;
+
+  function captureListener(event: string, fn: StdinListener) {
+    if (!listeners[event]) listeners[event] = [];
+    listeners[event].push(fn);
+    return process.stdin;
+  }
+
+  function emitStdin(event: string, ...args: unknown[]) {
+    for (const fn of listeners[event] ?? []) {
+      fn(...args);
+    }
+  }
+
+  beforeEach(() => {
+    for (const key of Object.keys(listeners)) {
+      delete listeners[key];
+    }
+    onSpy = spyOn(process.stdin, 'on').mockImplementation(
+      captureListener as Parameters<typeof spyOn>[2],
+    );
+  });
+
+  afterEach(() => {
+    onSpy.mockRestore();
+  });
+
+  it('parses a JSON object from stdin', async () => {
+    const payload = { tool_name: 'Read', tool_input: { file_path: '/tmp/test.ts' } };
+    const promise = readStdinJson<typeof payload>();
+    emitStdin('data', Buffer.from(JSON.stringify(payload)));
+    emitStdin('end');
+    expect(await promise).toEqual(payload);
+  });
+
+  it('assembles multiple data chunks before parsing', async () => {
+    const payload = { a: 1, b: 'hello' };
+    const json = JSON.stringify(payload);
+    const mid = Math.floor(json.length / 2);
+    const promise = readStdinJson<typeof payload>();
+    emitStdin('data', Buffer.from(json.slice(0, mid)));
+    emitStdin('data', Buffer.from(json.slice(mid)));
+    emitStdin('end');
+    expect(await promise).toEqual(payload);
+  });
+
+  it('throws when stdin contains invalid JSON', async () => {
+    const promise = readStdinJson();
+    emitStdin('data', Buffer.from('not-valid-json'));
+    emitStdin('end');
+    const err = await promise.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('Failed to parse stdin as JSON');
+  });
+
+  it('throws when stdin emits an error event', async () => {
+    const promise = readStdinJson();
+    emitStdin('error', new Error('stdin read failed'));
+    const err = await promise.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('stdin read failed');
+  });
+});

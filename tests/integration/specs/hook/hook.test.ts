@@ -45,20 +45,11 @@ describe('sonar hook', () => {
   );
 
   it(
-    'sonar hook --help exits 0 and shows usage',
-    async () => {
-      const result = await harness.run('hook --help');
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('hook');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'sonar hook exits 0 (shows help)',
+    'sonar hook exits 0 and shows command description',
     async () => {
       const result = await harness.run('hook');
       expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Internal hook handlers for agent and git hooks');
     },
     { timeout: 15000 },
   );

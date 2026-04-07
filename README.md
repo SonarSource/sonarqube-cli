@@ -154,6 +154,7 @@ Revoke a user token
 sonar api post "/api/user_tokens/revoke" --data '{"name":"my-token"}'
 ```
 
+
 ---
 
 ### `sonar integrate`
@@ -180,7 +181,7 @@ Setup SonarQube integration for Claude Code. This will install secrets scanning 
 
 | Option              | Type    | Required | Description                                                                 | Default |
 | ------------------- | ------- | -------- | --------------------------------------------------------------------------- | ------- |
-| `--project`, `-p`   | string  | No       | Project key                                                                 | -       |
+| `--project`, `-p`   | string  | No       | SonarCloud project key (overrides auto-detected project)                    | -       |
 | `--non-interactive` | boolean | No       | Non-interactive mode (no prompts)                                           | -       |
 | `--global`, `-g`    | boolean | No       | Install hooks and config globally to ~/.claude instead of project directory | -       |
 
@@ -392,6 +393,40 @@ Update sonar CLI to the latest version
 
 ---
 
+### `sonar hook`
+
+Internal callback handlers for agent and git hooks
+
+#### `sonar hook claude-pre-tool-use`
+
+PreToolUse handler: scan files for secrets before agent reads them
+
+---
+
+#### `sonar hook codex-pre-tool-use`
+
+PreToolUse handler for Codex: scan files for secrets before agent reads them
+
+---
+
+#### `sonar hook agent-prompt-submit`
+
+UserPromptSubmit handler: scan prompts for secrets before sending
+
+---
+
+#### `sonar hook agent-post-tool-use`
+
+PostToolUse handler: run SQAA analysis on modified files
+
+**Options:**
+
+| Option            | Type   | Required | Description            | Default |
+| ----------------- | ------ | -------- | ---------------------- | ------- |
+| `--project`, `-p` | string | No       | SonarCloud project key | -       |
+
+---
+
 ## Option Types
 
 - `string` — text value (e.g. `--server https://sonarcloud.io`)
@@ -438,7 +473,7 @@ Both are enabled by default and share the same opt-out toggle. To disable all da
 sonar config telemetry --disabled
 ```
 
-No personally identifiable information is transmitted. File paths in error reports are anonymized by replacing your home directory with `~`.
+No personally identifiable information is transmitted.
 
 ## Contributing
 
