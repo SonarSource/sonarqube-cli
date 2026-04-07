@@ -76,12 +76,12 @@
     "istanbul-reports": "3.2.0",
     "lcov-result-merger": "5.0.1",
     "@types/js-yaml": "^4.0.9",
-    "lint-staged": "16.2.7",
+    "lint-staged": "16.4.0",
     "plop": "^4.0.5",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "@sentry/cli": "3.3.4"
+    "@sentry/cli": "3.3.5"
   },
   "lint-staged": {
     "*.ts": [
