@@ -241,6 +241,15 @@ COMMAND_TREE.command('self-update')
   .option('--force', 'Install the latest version even if already up to date')
   .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
 
+// Hidden callback command — internal handlers for agent and git hooks.
+// Shell hook scripts call `sonar callback <event>` to delegate all business logic to TypeScript.
+export const callbackCommand = COMMAND_TREE.command('callback', { hidden: true })
+  .description('Internal callback handlers for agent and git hooks')
+  .enablePositionalOptions()
+  .anonymousAction(function (this: Command) {
+    this.outputHelp();
+  });
+
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
   COMMAND_TREE.command('flush-telemetry', { hidden: true }).anonymousAction(flushTelemetry);
