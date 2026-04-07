@@ -55,7 +55,7 @@
     "@clack/core": "^1.0.1",
     "@sentry/bun": "^10.46.0",
     "@toon-format/toon": "^2.1.0",
-    "commander": "^12.1.0",
+    "commander": "^14.0.0",
     "js-yaml": "^4.1.1",
     "openpgp": "^6.0.0",
     "picocolors": "^1.1.1"
