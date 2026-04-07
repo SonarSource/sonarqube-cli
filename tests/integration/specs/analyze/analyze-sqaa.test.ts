@@ -138,6 +138,32 @@ describe('analyze sqaa', () => {
   );
 
   it(
+    'exits with code 0 and silently skips SQAA when --branch is provided but no project is registered',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      // Cloud connection with orgKey but no extension registered → no projectKey → skip
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze sqaa --file src/index.ts --branch main');
+
+      expect(result.exitCode).toBe(0);
+      // --branch is ignored, no API call is made
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'calls SQAA API and reports no issues found for clean file',
     async () => {
       const server = await harness
