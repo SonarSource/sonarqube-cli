@@ -25,6 +25,8 @@ import type { GitHookType } from '.';
 
 export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
 
+export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping secrets scan';
+
 /**
  * All-zero object id Git passes on pre-push stdin for ref deletion (`local_sha`) and new refs
  * (`remote_sha`). See githooks(5) "pre-push". SHA-1 length; SHA-256 repos use 64 hex zeros instead.
@@ -61,7 +63,7 @@ function nativeBinBlock(): string {
   return (
     // `|| :` avoids exiting under `sh -e` when `command -v` fails (missing sonar).
     `SONAR_BIN=$(command -v sonar 2>/dev/null || :)\n` +
-    `[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }`
+    `[ -z "$SONAR_BIN" ] && { echo "${SONAR_HOOK_SKIP_SECRETS_MESSAGE}"; exit 0; }`
   );
 }
 
@@ -69,7 +71,7 @@ function huskyBinBlock(): string {
   return (
     `CLEAN_PATH=$(echo "$PATH" | tr ':' '\\n' | grep -v node_modules | tr '\\n' ':' | sed 's/:$//')\n` +
     `SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null || :)\n` +
-    `[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }`
+    `[ -z "$SONAR_BIN" ] && { echo "${SONAR_HOOK_SKIP_SECRETS_MESSAGE}"; exit 0; }`
   );
 }
 

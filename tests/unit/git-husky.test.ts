@@ -24,21 +24,38 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { installViaHusky } from '../../src/cli/commands/integrate/git/git-husky';
 import {
   HOOK_MARKER,
+  SONAR_HOOK_SKIP_SECRETS_MESSAGE,
   getHuskyPreCommitSnippet,
   getHuskyPrePushSnippet,
+  getPreCommitHookScript,
+  getPrePushHookScript,
 } from '../../src/cli/commands/integrate/git/git-shell-fragments';
 import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-husky-tmp');
 const HOOK_PATH = join(TEMP_DIR, 'pre-commit');
 
-// Simulating failure from `command -v sonar`
-const MINIMAL_SH_PATH = '/usr/bin:/bin';
+/** Temp repo used to run generated pre-commit scripts (staged file → sonar skip branch). */
+const HOOK_RUN_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-run-tmp');
+const HOOK_RUN_SCRIPT = 'hook-under-test';
 
-// Run a script with `sh -e`, same idea as Husky’s hook wrapper.
-function shEc(script: string) {
-  return Bun.spawnSync(['sh', '-ec', script], {
-    env: { ...process.env, PATH: MINIMAL_SH_PATH },
+/** `sonar` not on PATH; keep `/usr/bin` for `git` + `sh` + `xargs` etc. */
+const MINIMAL_HOOK_PATH = '/usr/bin:/bin';
+
+function initGitRepoWithStagedFile(cwd: string) {
+  mkdirSync(cwd, { recursive: true });
+  const git = (...args: string[]) =>
+    Bun.spawnSync(['git', ...args], { cwd, stdout: 'ignore', stderr: 'ignore' });
+  git('init');
+  const file = 'staged.txt';
+  writeFileSync(join(cwd, file), 'x\n');
+  git('add', file);
+}
+
+function runWrittenHook(cwd: string, scriptName: string) {
+  return Bun.spawnSync(['sh', '-e', scriptName], {
+    cwd,
+    env: { ...process.env, PATH: MINIMAL_HOOK_PATH },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -106,34 +123,42 @@ describe('installViaHusky', () => {
   });
 });
 
-describe('git-shell-fragments (sonar resolution)', () => {
-  it.each([
-    [
-      'native',
-      'SONAR_BIN=$(command -v sonar 2>/dev/null || :); ' +
-        '[ -z "$SONAR_BIN" ] && { echo skip-secrets-scan; exit 0; }; ' +
-        'exit 99',
-    ],
-    [
-      'husky CLEAN_PATH',
-      String.raw`CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//'); ` +
-        'SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null || :); ' +
-        '[ -z "$SONAR_BIN" ] && { echo skip-secrets-scan; exit 0; }; ' +
-        'exit 99',
-    ],
-  ])('under sh -e, missing sonar skips (%s)', (_, script) => {
-    const r = shEc(script);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout.toString()).toContain('skip-secrets-scan');
+describe('git-shell-fragments (pre-commit hook execution)', () => {
+  beforeEach(() => {
+    rmSync(HOOK_RUN_DIR, { recursive: true, force: true });
+    initGitRepoWithStagedFile(HOOK_RUN_DIR);
   });
 
-  it('regression: sonar lookup without || : aborts under sh -e before empty check', () => {
-    const script =
-      'SONAR_BIN=$(command -v sonar 2>/dev/null); ' +
-      '[ -z "$SONAR_BIN" ] && { echo skip-secrets-scan; exit 0; }; ' +
-      'exit 99';
-    const r = shEc(script);
-    expect(r.stdout.toString()).not.toContain('skip-secrets-scan');
-    expect(r.exitCode).not.toBe(0);
+  afterEach(() => {
+    rmSync(HOOK_RUN_DIR, { recursive: true, force: true });
+  });
+
+  it.each([
+    ['Husky snippet', getHuskyPreCommitSnippet],
+    ['native hook script', getPreCommitHookScript],
+  ] as const)(
+    'with staged files and no sonar on PATH, %s exits 0 and skips secrets scan',
+    (_, getScript) => {
+      writeFileSync(join(HOOK_RUN_DIR, HOOK_RUN_SCRIPT), getScript().trimStart());
+      const response = runWrittenHook(HOOK_RUN_DIR, HOOK_RUN_SCRIPT);
+      expect(response.exitCode).toBe(0);
+      expect(response.stdout.toString()).toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
+    },
+  );
+
+  it('pre-push templates still include the skip message when sonar is missing', () => {
+    expect(getPrePushHookScript()).toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
+    expect(getHuskyPrePushSnippet()).toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
+  });
+
+  it('regression: native script without `|| :` after command -v fails under sh -e', () => {
+    const buggy = getPreCommitHookScript().replace(
+      'command -v sonar 2>/dev/null || :',
+      'command -v sonar 2>/dev/null',
+    );
+    writeFileSync(join(HOOK_RUN_DIR, HOOK_RUN_SCRIPT), buggy.trimStart());
+    const response = runWrittenHook(HOOK_RUN_DIR, HOOK_RUN_SCRIPT);
+    expect(response.stdout.toString()).not.toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
+    expect(response.exitCode).not.toBe(0);
   });
 });
