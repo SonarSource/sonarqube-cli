@@ -19,10 +19,12 @@
  */
 
 /**
- * 1. Reads all Istanbul JSON files from tests/coverage/reports/raw/, merges
- *    them, and generates tests/coverage/reports/integration/lcov.info.
- * 2. Merges the unit lcov (from bun test --coverage) with the integration lcov
- *    into the final coverage/lcov.info consumed by SonarQube.
+ * Reads all Istanbul JSON files from tests/coverage/reports/raw/, merges
+ * them, and generates tests/coverage/reports/integration/lcov.info.
+ *
+ * SonarQube is configured to read both this file and the unit lcov
+ * (tests/coverage/reports/unit/lcov.info) separately via
+ * sonar.javascript.lcov.reportPaths in sonar-project.properties.
  *
  * Run via: bun build-scripts/report-coverage.ts
  */
@@ -30,17 +32,9 @@
 import { createCoverageMap } from 'istanbul-lib-coverage';
 import { createContext } from 'istanbul-lib-report';
 import reports from 'istanbul-reports';
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import {
-  COVERAGE_INTEGRATION_REPORT_DIR,
-  COVERAGE_MERGED_LCOV,
-  COVERAGE_RAW_DIR,
-} from '../tests/coverage/paths.js';
-
-// ---------------------------------------------------------------------------
-// Step 1 — integration lcov from Istanbul JSON
-// ---------------------------------------------------------------------------
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { COVERAGE_INTEGRATION_REPORT_DIR, COVERAGE_RAW_DIR } from '../tests/coverage/paths.js';
 
 if (!existsSync(COVERAGE_RAW_DIR)) {
   console.error(`No integration coverage data found at ${COVERAGE_RAW_DIR}`);
@@ -54,7 +48,7 @@ if (jsonFiles.length === 0) {
   process.exit(1);
 }
 
-console.log(`[1/2] Processing ${jsonFiles.length} integration coverage file(s)...`);
+console.log(`Processing ${jsonFiles.length} integration coverage file(s)...`);
 
 const coverageMap = createCoverageMap({});
 for (const file of jsonFiles) {
@@ -66,30 +60,4 @@ const ctx = createContext({ coverageMap, dir: COVERAGE_INTEGRATION_REPORT_DIR })
 // @ts-ignore — istanbul-reports has no bundled type declarations
 reports.create('lcov').execute(ctx);
 
-console.log(`    Integration lcov written to ${COVERAGE_INTEGRATION_REPORT_DIR}/lcov.info`);
-
-// ---------------------------------------------------------------------------
-// Step 2 — merge unit + integration into coverage/lcov.info
-// ---------------------------------------------------------------------------
-
-console.log('[2/2] Merging unit and integration coverage...');
-
-mkdirSync(dirname(COVERAGE_MERGED_LCOV), { recursive: true });
-
-const PROJECT_ROOT = join(import.meta.dir, '..');
-const merge = Bun.spawnSync(
-  [
-    'bunx',
-    'lcov-result-merger',
-    'tests/coverage/reports/{unit,integration}/lcov.info',
-    COVERAGE_MERGED_LCOV,
-  ],
-  { cwd: PROJECT_ROOT },
-);
-
-if (merge.exitCode !== 0) {
-  process.stderr.write(new TextDecoder().decode(merge.stderr));
-  process.exit(1);
-}
-
-console.log(`    Merged coverage written to ${COVERAGE_MERGED_LCOV}`);
+console.log(`Integration lcov written to ${COVERAGE_INTEGRATION_REPORT_DIR}/lcov.info`);

@@ -31,4 +31,3 @@ export const COVERAGE_INTEGRATION_REPORT_DIR = join(
   'reports',
   'integration',
 );
-export const COVERAGE_MERGED_LCOV = join(PROJECT_ROOT, 'coverage', 'lcov.info');

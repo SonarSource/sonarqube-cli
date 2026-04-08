@@ -74,7 +74,6 @@
     "istanbul-lib-instrument": "6.0.3",
     "istanbul-lib-report": "3.0.1",
     "istanbul-reports": "3.2.0",
-    "lcov-result-merger": "5.0.1",
     "@types/js-yaml": "^4.0.9",
     "lint-staged": "16.4.0",
     "plop": "^4.0.5",
