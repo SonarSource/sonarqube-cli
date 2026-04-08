@@ -23,7 +23,7 @@ import {
   getToken as getKeystoreToken,
 } from '../../../cli/commands/_common/token';
 import { saveToken } from '../../../lib/keychain';
-import { discoverOrganization, discoverServer } from '../_common/discovery';
+import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
 import {
   addOrUpdateConnection,
   generateConnectionId,

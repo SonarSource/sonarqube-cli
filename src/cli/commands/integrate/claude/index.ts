@@ -30,8 +30,7 @@ import {
 } from '../../../../lib/migration';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
-import type { DiscoveredProject } from '../../_common/discovery';
-import { discoverProject } from '../../_common/discovery';
+import { discoverProject, type DiscoveredProject } from '../../../../lib/project-workspace';
 import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { runHealthChecks } from './health';

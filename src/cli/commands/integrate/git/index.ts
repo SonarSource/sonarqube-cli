@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform } from 'node:os';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
-import { findGitRoot } from '../../_common/discovery';
+import { findGitRoot } from '../../../../lib/project-workspace';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { spawnProcess } from '../../../../lib/process';

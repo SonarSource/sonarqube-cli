@@ -18,13 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Discovery module - discovers project information
+// Project workspace: git root, sonar-project.properties, SonarLint connected mode
 
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
-import { spawnProcess } from '../../../lib/process';
-import logger from '../../../lib/logger';
-import { print } from '../../../ui';
+import { loadSonarLintConfig, type SonarLintConfig } from './sonarlint-connected-mode';
+import logger from '../logger';
+import { spawnProcess } from '../process';
+import { print, text } from '../../ui';
 
 export interface ProjectInfo {
   root: string;
@@ -35,6 +36,8 @@ export interface ProjectInfo {
   sonarPropsData: SonarProperties | null;
   hasSonarLintConfig: boolean;
   sonarLintData: SonarLintConfig | null;
+  /** Relative path from project root, e.g. `.sonarlint/connectedMode.json` or `.sonarlint/MySolution.json` */
+  sonarLintConfigPath: string | null;
 }
 
 export interface DiscoveredProject {
@@ -49,12 +52,6 @@ export interface SonarProperties {
   hostURL: string;
   projectKey: string;
   projectName: string;
-  organization: string;
-}
-
-export interface SonarLintConfig {
-  serverURL: string;
-  projectKey: string;
   organization: string;
 }
 
@@ -110,9 +107,6 @@ export async function discoverOrganization(): Promise<string | null> {
 }
 
 /**
- * Discover project information from the current directory
- */
-/**
  * Returns the canonical, fully-resolved path for a directory.
  * On Windows, realpathSync resolves the filesystem-authoritative casing
  * (e.g. "c:\Users\..." → "C:\Users\..."), preventing duplicate keys when
@@ -139,7 +133,7 @@ export async function discoverProjectInfo(startDir: string): Promise<ProjectInfo
   }
 
   const sonarProps = await loadSonarProperties(projectRoot);
-  const sonarLintConfig = await loadSonarLintConfig(projectRoot);
+  const sonarLintLoaded = await loadSonarLintConfig(projectRoot);
 
   return {
     root: projectRoot,
@@ -148,8 +142,9 @@ export async function discoverProjectInfo(startDir: string): Promise<ProjectInfo
     gitRemote,
     hasSonarProps: sonarProps !== null,
     sonarPropsData: sonarProps,
-    hasSonarLintConfig: sonarLintConfig !== null,
-    sonarLintData: sonarLintConfig,
+    hasSonarLintConfig: sonarLintLoaded !== null,
+    sonarLintData: sonarLintLoaded?.config ?? null,
+    sonarLintConfigPath: sonarLintLoaded?.relativePath ?? null,
   };
 }
 
@@ -161,14 +156,18 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
   };
 
   if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
-    print('Found sonar-project.properties', process.stderr);
+    text('Found sonar-project.properties');
     config.serverUrl = projectInfo.sonarPropsData.hostURL;
     config.projectKey = projectInfo.sonarPropsData.projectKey;
     config.organization = projectInfo.sonarPropsData.organization;
   }
 
-  if (projectInfo.hasSonarLintConfig && projectInfo.sonarLintData) {
-    print('Found .sonarlint/connectedMode.json', process.stderr);
+  if (
+    projectInfo.hasSonarLintConfig &&
+    projectInfo.sonarLintData &&
+    projectInfo.sonarLintConfigPath
+  ) {
+    text(`Found ${projectInfo.sonarLintConfigPath}`);
     config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
     config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
     config.organization = config.organization || projectInfo.sonarLintData.organization;
@@ -264,76 +263,4 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
   return props as SonarProperties;
 }
 
-async function tryLoadSonarLintFile(configPath: string): Promise<SonarLintConfig | null> {
-  const fs = await import('node:fs/promises');
-
-  try {
-    const data = await fs.readFile(configPath, 'utf-8');
-    const config = parseSonarLintConfig(data);
-    if (config && (config.serverURL || config.projectKey)) {
-      return config;
-    }
-  } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code === 'ENOENT') {
-      return null;
-    }
-    throw error;
-  }
-
-  return null;
-}
-
-async function loadSonarLintConfig(projectRoot: string): Promise<SonarLintConfig | null> {
-  const possiblePaths = [
-    join(projectRoot, '.sonarlint', 'connectedMode.json'),
-    join(projectRoot, '.sonarlint', 'connected-mode.json'),
-    join(projectRoot, '.sonarlint', 'settings.json'),
-  ];
-
-  for (const configPath of possiblePaths) {
-    const config = await tryLoadSonarLintFile(configPath);
-    if (config) {
-      return config;
-    }
-  }
-
-  return null;
-}
-
-function parseSonarLintConfig(data: string): SonarLintConfig | null {
-  try {
-    const generic = JSON.parse(data);
-
-    // Schema 1: connectedMode.json format
-    if ('sonarQubeUri' in generic) {
-      return {
-        serverURL: generic.sonarQubeUri || '',
-        projectKey: generic.projectKey || '',
-        organization: generic.organization || '',
-      };
-    }
-
-    // Schema 2: settings.json format (legacy)
-    if ('serverId' in generic) {
-      return {
-        serverURL: generic.serverId || '',
-        projectKey: generic.projectKey || '',
-        organization: generic.organization || '',
-      };
-    }
-
-    // Schema 3: connectionId format
-    if ('connectionId' in generic) {
-      return {
-        serverURL: generic.connectionId || '',
-        projectKey: generic.projectKey || '',
-        organization: generic.organization || '',
-      };
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
+export { type SonarLintConfig } from './sonarlint-connected-mode';

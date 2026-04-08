@@ -28,7 +28,7 @@ import { authLogout } from '../../src/cli/commands/auth/logout';
 import { authPurge } from '../../src/cli/commands/auth/purge';
 import { authStatus } from '../../src/cli/commands/auth/status';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
-import * as discovery from '../../src/cli/commands/_common/discovery';
+import * as discovery from '../../src/lib/project-workspace';
 import { setMockUi } from '../../src/ui';
 import { createMockKeytar } from './helpers/mock-keytar.js';
 import * as stateManager from '../../src/lib/state-manager.js';
@@ -189,6 +189,7 @@ const EMPTY_PROJECT_INFO = {
   sonarPropsData: null,
   hasSonarLintConfig: false,
   sonarLintData: null,
+  sonarLintConfigPath: null,
 };
 
 describe('authLoginCommand', () => {

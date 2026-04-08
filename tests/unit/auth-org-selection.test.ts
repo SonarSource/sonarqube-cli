@@ -25,10 +25,10 @@ import { authLogin } from '../../src/cli/commands/auth/login';
 import { getToken } from '../../src/cli/commands/_common/token';
 import * as token from '../../src/cli/commands/_common/token';
 import { SonarQubeClient } from '../../src/sonarqube/client';
-import * as discovery from '../../src/cli/commands/_common/discovery';
+import * as discovery from '../../src/lib/project-workspace';
 import * as stateManager from '../../src/lib/state-manager';
 import { getDefaultState } from '../../src/lib/state';
-import { setMockUi, clearMockUiCalls, queueMockResponse } from '../../src/ui/mock';
+import { setMockUi, clearMockUiCalls, queueMockResponse } from '../../src/ui';
 import { createMockKeytar } from './helpers/mock-keytar';
 
 const keytarHandle = createMockKeytar();
@@ -42,6 +42,7 @@ const EMPTY_PROJECT_INFO = {
   sonarPropsData: null,
   hasSonarLintConfig: false,
   sonarLintData: null,
+  sonarLintConfigPath: null,
 };
 
 // ─── org selection via authLogin ──────────────────────────────────────────────

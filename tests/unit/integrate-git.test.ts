@@ -36,10 +36,10 @@ import {
 import { InvalidOptionError } from '../../src/cli/commands/_common/error.js';
 import { HOOK_MARKER } from '../../src/cli/commands/integrate/git/git-shell-fragments';
 import { PRE_COMMIT_CONFIG_FILE } from '../../src/cli/commands/integrate/git/git-precommit-framework';
-import { setMockUi, queueMockResponse, getMockUiCalls, clearMockUiCalls } from '../../src/ui/mock';
+import { setMockUi, queueMockResponse, getMockUiCalls, clearMockUiCalls } from '../../src/ui';
 import * as processLib from '../../src/lib/process.js';
 import * as authResolver from '../../src/lib/auth-resolver';
-import * as discovery from '../../src/cli/commands/_common/discovery';
+import * as discovery from '../../src/lib/project-workspace';
 import * as secretsInstall from '../../src/cli/commands/_common/install/secrets';
 import * as huskyModule from '../../src/cli/commands/integrate/git/git-husky';
 import * as preCommitModule from '../../src/cli/commands/integrate/git/git-precommit-framework';

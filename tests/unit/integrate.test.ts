@@ -20,8 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 import { homedir } from 'node:os';
-import * as discovery from '../../src/cli/commands/_common/discovery';
-import { DiscoveredProject } from '../../src/cli/commands/_common/discovery';
+import * as discovery from '../../src/lib/project-workspace';
+import type { DiscoveredProject } from '../../src/lib/project-workspace';
 import { CommandFailedError } from '../../src/cli/commands/_common/error';
 import { integrateClaude } from '../../src/cli/commands/integrate/claude';
 import { HealthCheckResult } from '../../src/cli/commands/integrate/claude/health';
