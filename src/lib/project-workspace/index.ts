@@ -29,4 +29,4 @@ export {
   type SonarProperties,
   type SonarLintConfig,
 } from './project-info';
-export { loadSonarLintConfig, type LoadedSonarLintConfig } from './sonarlint-connected-mode';
+export { loadSonarLintConfig, type ResolvedSonarLintConfig } from './sonarlint-connected-mode';

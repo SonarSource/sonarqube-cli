@@ -25,7 +25,7 @@ import { join, dirname, basename, resolve } from 'node:path';
 import { loadSonarLintConfig, type SonarLintConfig } from './sonarlint-connected-mode';
 import logger from '../logger';
 import { spawnProcess } from '../process';
-import { print, text } from '../../ui';
+import { print } from '../../ui';
 
 export interface ProjectInfo {
   root: string;
@@ -156,7 +156,7 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
   };
 
   if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
-    text('Found sonar-project.properties');
+    print('Found sonar-project.properties');
     config.serverUrl = projectInfo.sonarPropsData.hostURL;
     config.projectKey = projectInfo.sonarPropsData.projectKey;
     config.organization = projectInfo.sonarPropsData.organization;
@@ -167,7 +167,7 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
     projectInfo.sonarLintData &&
     projectInfo.sonarLintConfigPath
   ) {
-    text(`Found ${projectInfo.sonarLintConfigPath}`);
+    print(`Found ${projectInfo.sonarLintConfigPath}`);
     config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
     config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
     config.organization = config.organization || projectInfo.sonarLintData.organization;

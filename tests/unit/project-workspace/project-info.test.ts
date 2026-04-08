@@ -231,7 +231,7 @@ describe('discoverProject', () => {
     expect(result.organization).toBeUndefined();
 
     await discoverProject(testDir);
-    expect(getMockUiCalls().filter((c) => c.method === 'text')).toHaveLength(0);
+    expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
   });
 
   it('maps sonar-project.properties to DiscoveredProject and emits Found message', async () => {
@@ -246,7 +246,7 @@ describe('discoverProject', () => {
 
     expect(
       getMockUiCalls().some(
-        (c) => c.method === 'text' && String(c.args[0]) === 'Found sonar-project.properties',
+        (c) => c.method === 'print' && String(c.args[0]) === 'Found sonar-project.properties',
       ),
     ).toBe(true);
   });
@@ -264,11 +264,11 @@ describe('discoverProject', () => {
     const result = await discoverProject(testDir);
     expect(result.serverUrl).toBe('https://sonarqube.example.com');
     expect(result.projectKey).toBe('lint_project');
-    expect(result.organization).toBe('');
+    expect(result.organization).toBeUndefined();
 
     const expected = `Found ${join('.sonarlint', 'connectedMode.json')}`;
     expect(
-      getMockUiCalls().some((c) => c.method === 'text' && String(c.args[0]) === expected),
+      getMockUiCalls().some((c) => c.method === 'print' && String(c.args[0]) === expected),
     ).toBe(true);
   });
 
@@ -347,7 +347,7 @@ describe('discoverProject', () => {
     );
     await discoverProject(testDir);
     const textCalls = getMockUiCalls()
-      .filter((c) => c.method === 'text')
+      .filter((c) => c.method === 'print')
       .map((c) => String(c.args[0]));
     expect(textCalls).toContain('Found sonar-project.properties');
     expect(textCalls).toContain(`Found ${join('.sonarlint', 'connectedMode.json')}`);

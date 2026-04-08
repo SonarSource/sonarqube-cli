@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests: real temp dirs only (no fs mocks). Keeps `bun test:unit --coverage` meaningful for this module.
-
 import { describe, expect, it } from 'bun:test';
 import { chmodSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,7 +30,7 @@ function tempProject(name: string): string {
 }
 
 describe('loadSonarLintConfig', () => {
-  it('loads Server binding from ConnectedMode.json', async () => {
+  it('resolves ConnectedMode.json filename casing (SonarLint connected mode file)', async () => {
     const root = tempProject('sq');
     const sl = join(root, '.sonarlint');
     mkdirSync(sl, { recursive: true });
@@ -50,8 +48,8 @@ describe('loadSonarLintConfig', () => {
       expect(loaded?.config).toMatchObject({
         serverURL: 'https://sonarqube.example.com',
         projectKey: 'example_project',
-        organization: '',
       });
+      expect(loaded?.config.organization).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -80,6 +78,49 @@ describe('loadSonarLintConfig', () => {
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
+    }
+  });
+
+  it('matches binding property names case-insensitively', async () => {
+    const root = tempProject('ci-server');
+    const sl = join(root, '.sonarlint');
+    mkdirSync(sl, { recursive: true });
+    writeFileSync(
+      join(sl, 'MySolution.json'),
+      JSON.stringify({
+        SONARQUBEURI: 'https://sonarqube.ci.example',
+        pRoJeCtKeY: 'ci_server_key',
+      }),
+    );
+
+    try {
+      const loaded = await loadSonarLintConfig(root);
+      expect(loaded?.config.serverURL).toBe('https://sonarqube.ci.example');
+      expect(loaded?.config.projectKey).toBe('ci_server_key');
+      expect(loaded?.config.organization).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+
+    const rootCloud = tempProject('ci-cloud');
+    const slCloud = join(rootCloud, '.sonarlint');
+    mkdirSync(slCloud, { recursive: true });
+    writeFileSync(
+      join(slCloud, 'CloudSolution.json'),
+      JSON.stringify({
+        SonarCloudOrganization: 'ci-org',
+        PROJECTKEY: 'ci_cloud_key',
+        REGION: 'US',
+      }),
+    );
+
+    try {
+      const loaded = await loadSonarLintConfig(rootCloud);
+      expect(loaded?.config.serverURL).toBe(SONARCLOUD_US_URL);
+      expect(loaded?.config.organization).toBe('ci-org');
+      expect(loaded?.config.projectKey).toBe('ci_cloud_key');
+    } finally {
+      rmSync(rootCloud, { recursive: true, force: true });
     }
   });
 

@@ -21,16 +21,18 @@
 // SonarLint `.sonarlint` connected mode files (connectedMode.json + solution JSON)
 
 import { existsSync } from 'node:fs';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../config-constants';
 
 export interface SonarLintConfig {
   serverURL: string;
   projectKey: string;
-  organization: string;
+  /** Present for SonarCloud bindings only. */
+  organization?: string;
 }
 
-export interface LoadedSonarLintConfig {
+export interface ResolvedSonarLintConfig {
   config: SonarLintConfig;
   /** Path relative to the project root (via path.join). */
   relativePath: string;
@@ -54,31 +56,36 @@ function parseStringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function jsonPropInsensitive(obj: Record<string, unknown>, lowerCaseKey: string): unknown {
+  return Object.entries(obj).find(([k]) => k.toLowerCase() === lowerCaseKey)?.[1];
+}
+
 function parseSonarLintConfig(data: string): SonarLintConfig | null {
   try {
     const generic = JSON.parse(data) as Record<string, unknown>;
 
     // SonarQube Server: sonarQubeUri + projectKey
-    if ('sonarQubeUri' in generic) {
-      const serverURL = parseStringValue(generic.sonarQubeUri).trim();
-      const projectKey = parseStringValue(generic.projectKey).trim();
+    const sonarQubeUri = jsonPropInsensitive(generic, 'sonarqubeuri');
+    if (sonarQubeUri !== undefined) {
+      const serverURL = parseStringValue(sonarQubeUri).trim();
+      const projectKey = parseStringValue(jsonPropInsensitive(generic, 'projectkey')).trim();
       if (!serverURL || !projectKey) {
         return null;
       }
       return {
         serverURL,
         projectKey,
-        organization: '',
       };
     }
 
     // SonarQube Cloud: sonarCloudOrganization + projectKey, optional region
-    if ('sonarCloudOrganization' in generic) {
-      const organization = parseStringValue(generic.sonarCloudOrganization).trim();
-      const projectKey = parseStringValue(generic.projectKey).trim();
+    const sonarCloudOrganization = jsonPropInsensitive(generic, 'sonarcloudorganization');
+    if (sonarCloudOrganization !== undefined) {
+      const organization = parseStringValue(sonarCloudOrganization).trim();
+      const projectKey = parseStringValue(jsonPropInsensitive(generic, 'projectkey')).trim();
       if (organization && projectKey) {
         return {
-          serverURL: sonarCloudBaseUrlFromRegion(generic.region),
+          serverURL: sonarCloudBaseUrlFromRegion(jsonPropInsensitive(generic, 'region')),
           projectKey,
           organization,
         };
@@ -92,10 +99,8 @@ function parseSonarLintConfig(data: string): SonarLintConfig | null {
 }
 
 async function tryLoadSonarLintFile(configPath: string): Promise<SonarLintConfig | null> {
-  const fs = await import('node:fs/promises');
-
   try {
-    const data = await fs.readFile(configPath, 'utf-8');
+    const data = await readFile(configPath, 'utf-8');
     const config = parseSonarLintConfig(data);
     if (config && (config.serverURL || config.projectKey)) {
       return config;
@@ -117,16 +122,15 @@ async function tryLoadSonarLintFile(configPath: string): Promise<SonarLintConfig
  */
 export async function loadSonarLintConfig(
   projectRoot: string,
-): Promise<LoadedSonarLintConfig | null> {
+): Promise<ResolvedSonarLintConfig | null> {
   const sonarlintDir = join(projectRoot, '.sonarlint');
   if (!existsSync(sonarlintDir)) {
     return null;
   }
 
-  const fs = await import('node:fs/promises');
   let entries: string[];
   try {
-    entries = await fs.readdir(sonarlintDir);
+    entries = await readdir(sonarlintDir);
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     if (err.code === 'ENOENT') {
