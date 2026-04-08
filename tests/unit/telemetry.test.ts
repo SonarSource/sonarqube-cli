@@ -28,6 +28,7 @@ import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import * as stateManager from '../../src/lib/state-manager.js';
 import * as userModule from '../../src/telemetry/user.js';
 import { getDefaultState } from '../../src/lib/state.js';
+import * as agentDetector from '../../src/lib/agent-detector.js';
 import { storeEvent, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '../../src/telemetry';
 import type { CliState, StoredTelemetryEvent } from '../../src/lib/state.js';
 import type { Command } from 'commander';
@@ -82,6 +83,7 @@ function makeStoredEvent(overrides: Partial<StoredTelemetryEvent> = {}): StoredT
       user_uuid: null,
       organization_uuid_v4: null,
       sqs_installation_id: null,
+      caller_agent: null,
     },
     ...overrides,
   };
@@ -109,6 +111,12 @@ afterEach(() => {
   getUserIdSpy.mockRestore();
   spawnSpy.mockRestore();
   delete process.env[TELEMETRY_FLUSH_MODE_ENV];
+  delete process.env.CLAUDECODE;
+  delete process.env.CLAUDE_CODE_ENTRYPOINT;
+  delete process.env.CLAUDE_PROJECT_DIR;
+  delete process.env.CURSOR_AGENT;
+  delete process.env.CURSOR_PROJECT_DIR;
+  delete process.env.CURSOR_TRACE_ID;
 });
 
 // ─── storeEvent ───────────────────────────────────────────────────────────────
@@ -182,6 +190,18 @@ describe('storeEvent', () => {
 
       const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
       expect(event.event_payload.result).toBe('failure');
+    });
+
+    it('sets event_payload.caller from detectCallerAgent', async () => {
+      const spy = spyOn(agentDetector, 'detectCallerAgent').mockReturnValue('claude');
+      try {
+        await storeEvent(makeCommand('auth login'), true);
+        expect(spy).toHaveBeenCalled();
+        const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+        expect(event.event_payload.caller_agent).toBe('claude');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('uses the machine_id returned by getOrCreateUserId', async () => {

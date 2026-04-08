@@ -22,17 +22,27 @@
 
 import { spawnProcess } from './process';
 
-/**
- * Check if Docker is installed and its daemon is running.
- * Returns true only when both conditions hold — a false result means either
- * the `docker` binary is not on PATH or the daemon is not reachable.
- */
-export async function isDockerAvailable(): Promise<boolean> {
+const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
+export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
+
+async function isRuntimeAvailable(runtime: ContainerRuntime): Promise<boolean> {
   try {
-    // `docker info` exits 0 only when the daemon is reachable.
-    const result = await spawnProcess('docker', ['info']);
+    const result = await spawnProcess(runtime, ['info']);
     return result.exitCode === 0;
   } catch {
     return false;
   }
+}
+
+/**
+ * Detect the first available container runtime, checking in priority order:
+ * docker, then podman, then nerdctl. Returns null when neither is available/reachable.
+ */
+export async function detectContainerRuntime(): Promise<ContainerRuntime | null> {
+  for (const runtime of CONTAINER_RUNTIMES) {
+    if (await isRuntimeAvailable(runtime)) {
+      return runtime;
+    }
+  }
+  return null;
 }

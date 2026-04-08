@@ -20,39 +20,78 @@
 
 import { describe, it, expect, spyOn, afterEach } from 'bun:test';
 import * as process from '../../src/lib/process';
-import { isDockerAvailable } from '../../src/lib/tool-detector';
+import { detectContainerRuntime } from '../../src/lib/tool-detector';
 
-describe('isDockerAvailable', () => {
+describe('detectContainerRuntime', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
 
   afterEach(() => {
     spawnSpy.mockRestore();
   });
 
-  it('returns true when docker is available and daemon is running (exit code 0)', async () => {
+  it('returns "docker" when docker is available', async () => {
     spawnSpy = spyOn(process, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
     });
 
-    expect(await isDockerAvailable()).toBe(true);
+    expect(await detectContainerRuntime()).toBe('docker');
     expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
   });
 
-  it('returns false when docker is installed but daemon is not running (non-zero exit code)', async () => {
+  it('returns "podman" when docker is unavailable but podman is available', async () => {
+    spawnSpy = spyOn(process, 'spawnProcess').mockImplementation((cmd: string, _args: string[]) => {
+      if (cmd === 'docker') {
+        return Promise.reject(new Error('spawn docker ENOENT'));
+      }
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+
+    expect(await detectContainerRuntime()).toBe('podman');
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
+  });
+
+  it('returns "nerdctl" when docker and podman are unavailable but nerdctl is available', async () => {
+    spawnSpy = spyOn(process, 'spawnProcess').mockImplementation((cmd: string, _args: string[]) => {
+      if (cmd === 'nerdctl') {
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      }
+      return Promise.reject(new Error(`spawn ${cmd} ENOENT`));
+    });
+
+    expect(await detectContainerRuntime()).toBe('nerdctl');
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info']);
+  });
+
+  it('returns null when no container runtime is available', async () => {
+    spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
+
+    expect(await detectContainerRuntime()).toBeNull();
+  });
+
+  it('returns "docker" when docker daemon is running even if other runtimes are also available', async () => {
+    spawnSpy = spyOn(process, 'spawnProcess').mockResolvedValue({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
+
+    expect(await detectContainerRuntime()).toBe('docker');
+    // Should not have checked podman/nerdctl since docker succeeded
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when all runtime daemons are not running', async () => {
     spawnSpy = spyOn(process, 'spawnProcess').mockResolvedValue({
       exitCode: 1,
       stdout: '',
-      stderr: 'Cannot connect to the Docker daemon',
+      stderr: 'Cannot connect to daemon',
     });
 
-    expect(await isDockerAvailable()).toBe(false);
-  });
-
-  it('returns false when docker binary is not found (spawnProcess throws)', async () => {
-    spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('spawn docker ENOENT'));
-
-    expect(await isDockerAvailable()).toBe(false);
+    expect(await detectContainerRuntime()).toBeNull();
   });
 });

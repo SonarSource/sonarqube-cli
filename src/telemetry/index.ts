@@ -19,6 +19,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { detectCallerAgent } from '../lib/agent-detector.js';
 import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
 import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
 import { getOrCreateUserId } from './user.js';
@@ -68,6 +69,7 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
     user_uuid: conn?.userUuid ?? null,
     organization_uuid_v4: conn?.organizationUuidV4 ?? null,
     sqs_installation_id: conn?.sqsInstallationId ?? null,
+    caller_agent: detectCallerAgent(),
   };
 
   const event: StoredTelemetryEvent = {

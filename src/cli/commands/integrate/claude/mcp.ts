@@ -25,7 +25,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import { isDockerAvailable } from '../../../../lib/tool-detector';
+import { type ContainerRuntime, detectContainerRuntime } from '../../../../lib/tool-detector';
 import { error, info, success, warn } from '../../../../ui';
 import { normalizePath } from '../../../../lib/fs-utils';
 
@@ -37,17 +37,23 @@ export async function setupMcpServer(
   discoveredProjectKey: string | undefined,
 ): Promise<void> {
   info('Setting up SonarQube MCP Server...');
-  const dockerAvailable = await isDockerAvailable();
-  if (!dockerAvailable) {
+  const runtime = await detectContainerRuntime();
+  if (!runtime) {
     error(
-      'Docker is required to configure the SonarQube MCP Server. Please ensure Docker is installed and the daemon is running.',
+      'A container runtime (Docker/Podman/Nerdctl) is required to configure the SonarQube MCP Server. Please ensure one of them is installed and the daemon is running.',
     );
     warn('Skipping SonarQube MCP Server configuration.');
     return;
   }
 
   const targetFile = getMcpConfigFilePath(agent);
-  const serverConfig = getMcpServerConfig(auth, isGlobal, projectRoot, discoveredProjectKey);
+  const serverConfig = getMcpServerConfig(
+    auth,
+    isGlobal,
+    projectRoot,
+    discoveredProjectKey,
+    runtime,
+  );
 
   try {
     await writeMcpServerEntry(targetFile, serverConfig, isGlobal, projectRoot);
@@ -104,6 +110,7 @@ export function getMcpServerConfig(
   isGlobal: boolean,
   projectRoot: string,
   discoveredProjectKey: string | undefined,
+  runtime: ContainerRuntime,
 ): object {
   const { token, orgKey: org, serverUrl } = auth;
 
@@ -136,5 +143,5 @@ export function getMcpServerConfig(
 
   args.push('mcp/sonarqube');
 
-  return { command: 'docker', args, env };
+  return { command: runtime, args, env };
 }
