@@ -32,7 +32,8 @@ import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
 import { InvalidOptionError } from '../_common/error';
 
 const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
-const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
+export const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
+export const VALID_STATUSES = ['OPEN', 'CONFIRMED', 'FALSE_POSITIVE', 'ACCEPTED', 'FIXED'];
 
 export interface ListIssuesOptions {
   project?: string;
@@ -53,6 +54,10 @@ export interface ListIssuesOptions {
  * Issues search command handler
  */
 export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth): Promise<void> {
+  if (!options.project) {
+    throw new InvalidOptionError('--project is required');
+  }
+
   const format = options.format ?? 'json';
   if (!VALID_FORMATS.includes(format.toLowerCase())) {
     throw new InvalidOptionError(
@@ -72,6 +77,16 @@ export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth)
     throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
+  if (options.status) {
+    const statuses = options.status.split(',').map((s) => s.toUpperCase());
+    if (!statuses.every((s) => VALID_STATUSES.includes(s))) {
+      throw new InvalidOptionError(
+        `Invalid status(es): '${options.status}'. Valid statuses are: ${VALID_STATUSES.join(', ')}`,
+      );
+    }
+    options.status = statuses.join(',');
+  }
+
   if (options.severity) {
     const sev = options.severity.toUpperCase();
     if (!VALID_SEVERITIES.includes(sev)) {
@@ -79,10 +94,6 @@ export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth)
         `Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`,
       );
     }
-  }
-
-  if (!options.project) {
-    throw new InvalidOptionError('--project is required');
   }
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
@@ -93,7 +104,7 @@ export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth)
     organization: auth.orgKey,
     severities: options.severity?.toUpperCase(),
     types: options.type,
-    statuses: options.status,
+    issueStatuses: options.status,
     rules: options.rule,
     tags: options.tag,
     branch: options.branch,

@@ -62,7 +62,7 @@ export interface IssuesSearchParams {
   organization?: string;
   severities?: string;
   types?: string;
-  statuses?: string;
+  issueStatuses?: string;
   rules?: string;
   tags?: string;
   branch?: string;

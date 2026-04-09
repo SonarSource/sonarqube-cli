@@ -288,4 +288,92 @@ describe('list issues — argument validation', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'exits with code 1 when --status is not a recognised value',
+    async () => {
+      // Validation runs inside the handler — auth must pass first
+      harness.withAuth('http://localhost:19999', 'fake-token');
+
+      const result = await harness.run('list issues --project my-project --status UNKNOWN');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Invalid status(es)');
+    },
+    { timeout: 15000 },
+  );
+
+  it('passes multiple statuses to API when --status is provided with multiple values', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('test-token')
+      .withProject('my-project', (p) =>
+        p
+          .withIssue({
+            ruleKey: 'java:S1234',
+            message: 'Major issue',
+            severity: 'MAJOR',
+            status: 'OPEN',
+          })
+          .withIssue({
+            ruleKey: 'java:S9999',
+            message: 'Blocker issue',
+            severity: 'BLOCKER',
+            status: 'FIXED',
+          })
+          .withIssue({
+            ruleKey: 'java:S9999',
+            message: 'Blocker issue',
+            severity: 'BLOCKER',
+            status: 'FALSE_POSITIVE',
+          }),
+      )
+      .start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+
+    const result = await harness.run('list issues --project my-project --status OPEN,FIXED');
+
+    expect(result.exitCode).toBe(0);
+    const recorded = server.getRecordedRequests();
+    const issuesReq = recorded.find((r) => r.path === '/api/issues/search');
+    expect(issuesReq?.query.issueStatuses).toBe('OPEN,FIXED');
+    expect(result.stdout).toContain('"total": 2');
+  });
+
+  it('passes single severity to API when --status is provided with a single value', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('test-token')
+      .withProject('my-project', (p) =>
+        p
+          .withIssue({
+            ruleKey: 'java:S1234',
+            message: 'Major issue',
+            severity: 'MAJOR',
+            status: 'OPEN',
+          })
+          .withIssue({
+            ruleKey: 'java:S9999',
+            message: 'Blocker issue',
+            severity: 'BLOCKER',
+            status: 'FIXED',
+          })
+          .withIssue({
+            ruleKey: 'java:S9999',
+            message: 'Blocker issue',
+            severity: 'BLOCKER',
+            status: 'FALSE_POSITIVE',
+          }),
+      )
+      .start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+
+    const result = await harness.run('list issues --project my-project --status open');
+
+    expect(result.exitCode).toBe(0);
+    const recorded = server.getRecordedRequests();
+    const issuesReq = recorded.find((r) => r.path === '/api/issues/search');
+    expect(issuesReq?.query.issueStatuses).toBe('OPEN');
+    expect(result.stdout).toContain('"total": 1');
+  });
 });

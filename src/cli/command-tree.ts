@@ -22,7 +22,12 @@ import { version as VERSION } from '../../package.json';
 import { type Command, Help, Option } from 'commander';
 import { SonarCommand } from './commands/_common/sonar-command.js';
 import { getBanner, getCustomRootHelp } from './root-help.js';
-import { listIssues, type ListIssuesOptions } from './commands/list/issues';
+import {
+  listIssues,
+  VALID_SEVERITIES,
+  VALID_STATUSES,
+  type ListIssuesOptions,
+} from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
@@ -126,7 +131,14 @@ list
   .command('issues')
   .description('Search for issues in SonarQube')
   .requiredOption('-p, --project <project>', 'Project key')
-  .option('--severity <severity>', 'Filter by severity')
+  .option(
+    '--status <status>',
+    `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')})`,
+  )
+  .option(
+    '--severity <severity>',
+    `Filter by severity (comma-separated list of: ${VALID_SEVERITIES.join(', ')})`,
+  )
   .option('--format <format>', 'Output format', 'json')
   .option('--branch <branch>', 'Branch name')
   .option('--pull-request <pull-request>', 'Pull request ID')

@@ -163,9 +163,9 @@ describe('IssuesClient', () => {
       });
     });
 
-    it('should pass statuses parameter', async () => {
+    it('should pass issueStatuses parameter', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
-        expect(params?.statuses).toBe('OPEN,REOPENED');
+        expect(params?.issueStatuses).toBe('OPEN,REOPENED');
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
 
@@ -174,7 +174,7 @@ describe('IssuesClient', () => {
 
       await issuesClient.searchIssues({
         projects: 'my-project',
-        statuses: 'OPEN,REOPENED',
+        issueStatuses: 'OPEN,REOPENED',
       });
     });
 

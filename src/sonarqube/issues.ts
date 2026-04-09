@@ -36,25 +36,16 @@ export class IssuesClient {
   async searchIssues(params: IssuesSearchParams): Promise<IssuesSearchResponse> {
     const queryParams: Record<string, string | number | boolean> = {};
 
-    if (params.projects) {
-      if (this.client.isCloud) {
-        queryParams.projects = params.projects;
-      } else {
-        queryParams.components = params.projects;
+    Object.entries(params).forEach(([key, value]) => {
+      if (key === 'projects' && value) {
+        const projectParamKey = this.client.isCloud ? 'projects' : 'components';
+        queryParams[projectParamKey] = value as string;
+      } else if (key === 'resolved' && value !== undefined) {
+        queryParams.resolved = value as boolean;
+      } else if (value) {
+        queryParams[key] = value as string | number | boolean;
       }
-    }
-    if (params.organization) queryParams.organization = params.organization;
-    if (params.severities) queryParams.severities = params.severities;
-    if (params.types) queryParams.types = params.types;
-    if (params.statuses) queryParams.statuses = params.statuses;
-    if (params.rules) queryParams.rules = params.rules;
-    if (params.tags) queryParams.tags = params.tags;
-    if (params.branch) queryParams.branch = params.branch;
-    if (params.pullRequest) queryParams.pullRequest = params.pullRequest;
-    if (params.resolved !== undefined) queryParams.resolved = params.resolved;
-    if (params.s) queryParams.s = params.s;
-    if (params.ps) queryParams.ps = params.ps;
-    if (params.p) queryParams.p = params.p;
+    });
 
     return await this.client.get<IssuesSearchResponse>('/api/issues/search', queryParams);
   }

@@ -223,18 +223,22 @@ export class FakeSonarQubeServerBuilder {
           const projectKey = query.components ?? query.projects;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
+          const issueStatusFilter = query.issueStatuses ? query.issueStatuses.split(',') : null;
+
           const issues: SonarQubeIssue[] =
-            projectData?.issues.map((issue) => ({
-              key: issue.key,
-              rule: issue.ruleKey,
-              severity: issue.severity,
-              component: issue.component,
-              project: projectKey ?? '',
-              line: issue.line,
-              status: issue.status,
-              message: issue.message,
-              type: issue.type,
-            })) ?? [];
+            projectData?.issues
+              .filter((issue) => !issueStatusFilter || issueStatusFilter.includes(issue.status))
+              .map((issue) => ({
+                key: issue.key,
+                rule: issue.ruleKey,
+                severity: issue.severity,
+                component: issue.component,
+                project: projectKey ?? '',
+                line: issue.line,
+                status: issue.status,
+                message: issue.message,
+                type: issue.type,
+              })) ?? [];
 
           const pageSize = Number.parseInt(query.ps ?? '500', 10);
           const page = Number.parseInt(query.p ?? '1', 10);
