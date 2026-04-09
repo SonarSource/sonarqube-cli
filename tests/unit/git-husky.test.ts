@@ -123,6 +123,8 @@ describe('installViaHusky', () => {
   });
 });
 
+const IS_WINDOWS = process.platform === 'win32';
+
 describe('git-shell-fragments (pre-commit hook execution)', () => {
   beforeEach(() => {
     rmSync(HOOK_RUN_DIR, { recursive: true, force: true });
@@ -133,7 +135,7 @@ describe('git-shell-fragments (pre-commit hook execution)', () => {
     rmSync(HOOK_RUN_DIR, { recursive: true, force: true });
   });
 
-  it.each([
+  it.skipIf(IS_WINDOWS).each([
     ['Husky snippet', getHuskyPreCommitSnippet],
     ['native hook script', getPreCommitHookScript],
   ] as const)(
@@ -151,14 +153,17 @@ describe('git-shell-fragments (pre-commit hook execution)', () => {
     expect(getHuskyPrePushSnippet()).toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
   });
 
-  it('regression: native script without `|| :` after command -v fails under sh -e', () => {
-    const buggy = getPreCommitHookScript().replace(
-      'command -v sonar 2>/dev/null || :',
-      'command -v sonar 2>/dev/null',
-    );
-    writeFileSync(join(HOOK_RUN_DIR, HOOK_RUN_SCRIPT), buggy.trimStart());
-    const response = runWrittenHook(HOOK_RUN_DIR, HOOK_RUN_SCRIPT);
-    expect(response.stdout.toString()).not.toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
-    expect(response.exitCode).not.toBe(0);
-  });
+  it.skipIf(IS_WINDOWS)(
+    'regression: native script without `|| :` after command -v fails under sh -e',
+    () => {
+      const buggy = getPreCommitHookScript().replace(
+        'command -v sonar 2>/dev/null || :',
+        'command -v sonar 2>/dev/null',
+      );
+      writeFileSync(join(HOOK_RUN_DIR, HOOK_RUN_SCRIPT), buggy.trimStart());
+      const response = runWrittenHook(HOOK_RUN_DIR, HOOK_RUN_SCRIPT);
+      expect(response.stdout.toString()).not.toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
+      expect(response.exitCode).not.toBe(0);
+    },
+  );
 });

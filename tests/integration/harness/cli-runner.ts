@@ -24,9 +24,14 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import type { CliResult } from './types.js';
+import { IS_WINDOWS } from './platform';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../..');
-const DEFAULT_BINARY = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');
+const DEFAULT_BINARY = join(
+  PROJECT_ROOT,
+  'dist',
+  IS_WINDOWS ? 'sonarqube-cli.exe' : 'sonarqube-cli',
+);
 const DEFAULT_TIMEOUT_MS = 30000;
 
 function getBinaryPath(coverageMode: boolean): string {

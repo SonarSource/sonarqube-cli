@@ -18,37 +18,27 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Declarative builder for test file system fixtures
+export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { extname } from 'node:path';
-import { IS_WINDOWS } from './platform';
+export const IS_WINDOWS = process.platform === 'win32';
+export const SCRIPT_EXT = IS_WINDOWS ? '.ps1' : '.sh';
 
-export class File {
-  public readonly path: string;
+/**
+ * Get the name of a hook script file (with extension)
+ */
+export function hookScriptName(name: string): string {
+  return `${name}${SCRIPT_EXT}`;
+}
 
-  constructor(path: string) {
-    this.path = path;
-  }
-
-  asJson(): any {
-    return JSON.parse(readFileSync(this.path, 'utf-8'));
-  }
-
-  asText(): string {
-    return readFileSync(this.path, 'utf-8');
-  }
-
-  exists(): boolean {
-    return existsSync(this.path);
-  }
-
-  get isExecutable(): boolean {
-    if (IS_WINDOWS) {
-      const executableExts = ['.exe', '.cmd', '.bat', '.com', '.ps1'];
-      return executableExts.includes(extname(this.path).toLowerCase());
-    }
-    const stats = statSync(this.path);
-    return !!(stats.mode & 0o100);
-  }
+/**
+ * Extract the script path from a hook command string.
+ * On Windows commands are wrapped as `powershell -NoProfile -File <path>`;
+ * this strips that prefix. Always normalizes to forward slashes.
+ */
+export function hookScriptPath(command: string): string {
+  const powershellPrefix = 'powershell -NoProfile -File ';
+  const path = command.startsWith(powershellPrefix)
+    ? command.slice(powershellPrefix.length)
+    : command;
+  return normalizePath(path);
 }

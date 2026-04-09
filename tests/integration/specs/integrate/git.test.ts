@@ -21,12 +21,13 @@
 // Integration tests for `sonar integrate git`
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
+import { IS_WINDOWS } from '../../harness/platform';
 
-const PATH_DELIM = process.platform === 'win32' ? ';' : ':';
+const PATH_DELIM = IS_WINDOWS ? ';' : ':';
 function pathWithoutNodeModules(envPath: string | undefined): string {
   return (envPath ?? '')
     .split(PATH_DELIM)
@@ -39,17 +40,24 @@ const GITHUB_TEST_TOKEN = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';
 
 /** Env for `git commit` / `git push` so the installed hook sees the same HOME + keychain as `harness.run()`. */
 function buildHookEnv(sonarBinDir: string, harness: TestHarness): Record<string, string> {
-  const homeEnv: Record<string, string> =
-    process.platform === 'win32'
-      ? { USERPROFILE: harness.userHome.path }
-      : { HOME: harness.userHome.path };
+  // HOME is required on Windows because Git for Windows runs hooks in MSYS2 bash,
+  // which derives HOME from HOMEDRIVE+HOMEPATH (leaked via ...process.env) when HOME is unset.
+  const homeEnv: Record<string, string> = IS_WINDOWS
+    ? { USERPROFILE: harness.userHome.path, HOME: harness.userHome.path }
+    : { HOME: harness.userHome.path };
 
-  return {
+  const env: Record<string, string> = {
     ...process.env,
     ...homeEnv,
     SONARQUBE_CLI_KEYCHAIN_FILE: harness.keychainJsonFile.path,
     PATH: `${sonarBinDir}${PATH_DELIM}${pathWithoutNodeModules(process.env.PATH)}`,
   };
+  // On Windows, process.env may use "Path" instead of "PATH". Both keys would
+  // coexist in the object, and the OS may pick the wrong one. Remove the original.
+  if (IS_WINDOWS) {
+    delete env.Path;
+  }
+  return env;
 }
 
 function setupSonarBinDir(harness: TestHarness): {
@@ -58,7 +66,10 @@ function setupSonarBinDir(harness: TestHarness): {
 } {
   const sonarBinDir = join(harness.cwd.path, 'sonar-bin');
   mkdirSync(sonarBinDir, { recursive: true });
-  symlinkSync(getCliBinaryPath(), join(sonarBinDir, 'sonar'));
+
+  // Symlinks require Developer Mode or admin privileges on Windows; copy instead.
+  copyFileSync(getCliBinaryPath(), join(sonarBinDir, 'sonar.exe'));
+
   return { sonarBinDir, hookEnv: buildHookEnv(sonarBinDir, harness) };
 }
 
@@ -120,6 +131,8 @@ async function setupAuthenticated(
 function initGitRepo(harness: TestHarness): void {
   mkdirSync(harness.cwd.path, { recursive: true });
   Bun.spawnSync(['git', 'init'], { cwd: harness.cwd.path });
+  // Isolate from host git config so line-ending settings (autocrlf) don't break tests
+  Bun.spawnSync(['git', 'config', 'core.autocrlf', 'false'], { cwd: harness.cwd.path });
 }
 
 function initGitRepoWithHusky(harness: TestHarness): void {
@@ -379,8 +392,12 @@ describe('integrate git (pre-commit framework)', () => {
     // the real pre-commit framework is not installed (e.g. in CI environments).
     const fakeBinDir = join(harness.cwd.path, 'fake-bin');
     mkdirSync(fakeBinDir, { recursive: true });
-    writeFileSync(join(fakeBinDir, 'pre-commit'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-    return `${fakeBinDir}:${process.env.PATH ?? ''}`;
+    if (IS_WINDOWS) {
+      writeFileSync(join(fakeBinDir, 'pre-commit.cmd'), '@exit /b 0\r\n');
+    } else {
+      writeFileSync(join(fakeBinDir, 'pre-commit'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    }
+    return `${fakeBinDir}${PATH_DELIM}${process.env.PATH ?? ''}`;
   }
 
   it(

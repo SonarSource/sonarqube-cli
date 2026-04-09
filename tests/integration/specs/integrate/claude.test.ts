@@ -24,7 +24,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
-import { TestHarness } from '../../harness';
+import {
+  TestHarness,
+  hookScriptName,
+  hookScriptPath,
+  IS_WINDOWS,
+  normalizePath,
+} from '../../harness';
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
@@ -67,7 +73,7 @@ describe('integrate claude', () => {
           'hooks',
           'sonar-secrets',
           'build-scripts',
-          'pretool-secrets.sh',
+          hookScriptName('pretool-secrets'),
         ),
       ).toBe(true);
     },
@@ -139,7 +145,7 @@ describe('integrate claude', () => {
           'hooks',
           'sonar-secrets',
           'build-scripts',
-          'pretool-secrets.sh',
+          hookScriptName('pretool-secrets'),
         ),
       ).toBe(true);
     },
@@ -226,7 +232,7 @@ describe('integrate claude', () => {
           'hooks',
           'sonar-secrets',
           'build-scripts',
-          'pretool-secrets.sh',
+          hookScriptName('pretool-secrets'),
         ),
       ).toBe(true);
     },
@@ -257,7 +263,7 @@ describe('integrate claude', () => {
           'hooks',
           'sonar-secrets',
           'build-scripts',
-          'pretool-secrets.sh',
+          hookScriptName('pretool-secrets'),
         ),
       ).toBe(true);
     },
@@ -299,7 +305,7 @@ describe('integrate claude', () => {
           'hooks',
           'sonar-secrets',
           'build-scripts',
-          'pretool-secrets.sh',
+          hookScriptName('pretool-secrets'),
         ),
       ).toBe(true);
     },
@@ -397,7 +403,7 @@ describe('integrate claude', () => {
   );
 
   it(
-    'pretool-secrets.sh exists and is executable after integration',
+    'pretool-secrets script exists and is executable after integration',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -418,7 +424,7 @@ describe('integrate claude', () => {
         'hooks',
         'sonar-secrets',
         'build-scripts',
-        'pretool-secrets.sh',
+        hookScriptName('pretool-secrets'),
       );
       expect(preToolScriptFile.exists()).toBe(true);
       expect(preToolScriptFile.isExecutable).toBe(true);
@@ -426,7 +432,7 @@ describe('integrate claude', () => {
     { timeout: 30000 },
   );
   it(
-    'prompt-secrets.sh uses correct subcommand (sonar analyze secrets) after integration',
+    'prompt-secrets script uses correct subcommand (sonar analyze secrets) after integration',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -443,7 +449,13 @@ describe('integrate claude', () => {
       await harness.run('integrate claude --non-interactive');
 
       const promptScriptContent = harness.cwd
-        .file('.claude', 'hooks', 'sonar-secrets', 'build-scripts', 'prompt-secrets.sh')
+        .file(
+          '.claude',
+          'hooks',
+          'sonar-secrets',
+          'build-scripts',
+          hookScriptName('prompt-secrets'),
+        )
         .asText();
       expect(promptScriptContent).toContain('sonar analyze secrets');
       expect(promptScriptContent).not.toContain('sonar analyze --file');
@@ -506,7 +518,13 @@ describe('integrate claude — SQAA entitlement guard', () => {
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
       expect(
-        harness.cwd.exists('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', 'posttool-sqaa.sh'),
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('posttool-sqaa'),
+        ),
       ).toBe(true);
     },
     { timeout: 30000 },
@@ -536,7 +554,13 @@ describe('integrate claude — SQAA entitlement guard', () => {
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeUndefined();
       expect(
-        harness.cwd.exists('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', 'posttool-sqaa.sh'),
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('posttool-sqaa'),
+        ),
       ).toBe(false);
     },
     { timeout: 30000 },
@@ -783,7 +807,7 @@ describe('integrate claude — file placement (local vs global)', () => {
             'hooks',
             'sonar-secrets',
             'build-scripts',
-            'pretool-secrets.sh',
+            hookScriptName('pretool-secrets'),
           ),
         ).toBe(true);
         expect(
@@ -792,7 +816,7 @@ describe('integrate claude — file placement (local vs global)', () => {
             'hooks',
             'sonar-secrets',
             'build-scripts',
-            'prompt-secrets.sh',
+            hookScriptName('prompt-secrets'),
           ),
         ).toBe(true);
       },
@@ -828,14 +852,16 @@ describe('integrate claude — file placement (local vs global)', () => {
         await harness.run('integrate claude --non-interactive');
 
         const settings = harness.cwd.file('.claude', 'settings.json').asJson();
-        const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
-        const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
+        const preToolPath = hookScriptPath(String(settings.hooks.PreToolUse[0].hooks[0].command));
+        const promptPath = hookScriptPath(
+          String(settings.hooks.UserPromptSubmit[0].hooks[0].command),
+        );
 
         // Must be relative (not absolute) so they resolve from the project root
-        expect(isAbsolute(preToolCmd)).toBe(false);
-        expect(preToolCmd.startsWith('.claude')).toBe(true);
-        expect(isAbsolute(promptCmd)).toBe(false);
-        expect(promptCmd.startsWith('.claude')).toBe(true);
+        expect(isAbsolute(preToolPath)).toBe(false);
+        expect(preToolPath.startsWith('.claude')).toBe(true);
+        expect(isAbsolute(promptPath)).toBe(false);
+        expect(promptPath.startsWith('.claude')).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -868,7 +894,7 @@ describe('integrate claude — file placement (local vs global)', () => {
             'hooks',
             'sonar-secrets',
             'build-scripts',
-            'pretool-secrets.sh',
+            hookScriptName('pretool-secrets'),
           ),
         ).toBe(true);
         expect(
@@ -877,7 +903,7 @@ describe('integrate claude — file placement (local vs global)', () => {
             'hooks',
             'sonar-secrets',
             'build-scripts',
-            'prompt-secrets.sh',
+            hookScriptName('prompt-secrets'),
           ),
         ).toBe(true);
       },
@@ -923,14 +949,17 @@ describe('integrate claude — file placement (local vs global)', () => {
         await harness.run('integrate claude -g --non-interactive');
 
         const settings = harness.userHome.file('.claude', 'settings.json').asJson();
-        const preToolCmd = settings.hooks.PreToolUse[0].hooks[0].command as string;
-        const promptCmd = settings.hooks.UserPromptSubmit[0].hooks[0].command as string;
+        const preToolPath = hookScriptPath(String(settings.hooks.PreToolUse[0].hooks[0].command));
+        const promptPath = hookScriptPath(
+          String(settings.hooks.UserPromptSubmit[0].hooks[0].command),
+        );
+        const homePath = normalizePath(harness.userHome.path);
 
         // Must be absolute paths rooted at harness.homeDir
-        expect(isAbsolute(preToolCmd)).toBe(true);
-        expect(preToolCmd.startsWith(harness.userHome.path)).toBe(true);
-        expect(isAbsolute(promptCmd)).toBe(true);
-        expect(promptCmd.startsWith(harness.userHome.path)).toBe(true);
+        expect(isAbsolute(preToolPath)).toBe(true);
+        expect(preToolPath.startsWith(homePath)).toBe(true);
+        expect(isAbsolute(promptPath)).toBe(true);
+        expect(promptPath.startsWith(homePath)).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -1047,7 +1076,7 @@ describe('integrate claude — file placement (local vs global)', () => {
 
 // ─── Legacy state migration ────────────────────────────────────────────────────
 
-describe('integrate claude — legacy state without agentExtensions', () => {
+describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExtensions', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1175,7 +1204,7 @@ describe('integrate claude — legacy state without agentExtensions', () => {
 
 // ─── Post-update migration ─────────────────────────────────────────────────────
 
-describe('post-update migration — hook script rewrite on CLI upgrade', () => {
+describe.skipIf(IS_WINDOWS)('post-update migration — hook script rewrite on CLI upgrade', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
