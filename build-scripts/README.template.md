@@ -68,7 +68,7 @@ Both are enabled by default and share the same opt-out toggle. To disable all da
 sonar config telemetry --disabled
 ```
 
-No personally identifiable information is transmitted.
+No personally identifiable information is transmitted. File paths in error reports are anonymized by replacing your home directory with `~`.
 
 ## Contributing
 

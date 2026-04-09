@@ -60,11 +60,6 @@ COMMAND_TREE.name('sonar')
     this.outputHelp();
   });
 
-const projectOption = new Option(
-  '-p, --project <project>',
-  'SonarCloud project key (overrides auto-detected project)',
-);
-
 COMMAND_TREE.command('api')
   .argument(
     '<method>',
@@ -95,7 +90,7 @@ integrateCommand
   .description(
     'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.',
   )
-  .addOption(projectOption)
+  .option('-p, --project <project>', 'Project key')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option(
     '-g, --global',
@@ -197,7 +192,10 @@ analyze
   .description('Run SQAA server-side analysis on a file (SonarQube Cloud only)')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
-  .addOption(projectOption)
+  .option(
+    '-p, --project <project>',
+    'SonarQube Cloud project key (overrides auto-detected project)',
+  )
   .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
     analyzeSqaa(options, auth, cmd),
   );
@@ -206,7 +204,10 @@ COMMAND_TREE.command('verify')
   .description('Analyze a file for issues')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
-  .addOption(projectOption)
+  .option(
+    '-p, --project <project>',
+    'SonarQube Cloud project key (overrides auto-detected project)',
+  )
   .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
     analyzeSqaa(options, auth, cmd),
   );

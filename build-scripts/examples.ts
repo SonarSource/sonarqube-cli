@@ -24,6 +24,37 @@ export interface Example {
 }
 
 export const EXAMPLES: Record<string, Example[]> = {
+  'sonar api': [
+    {
+      command: 'sonar api get "/api/favorites/search"',
+      description: 'List favorite projects',
+    },
+    {
+      command: 'sonar api get "/api/rules/search?organization=my-org&languages=ts"',
+      description: 'Search for TypeScript rules in an organization',
+    },
+    {
+      command: 'sonar api post "/api/user_tokens/generate" --data \'{"name":"my-token"}\'',
+      description: 'Generate a new user token',
+    },
+    {
+      command:
+        'sonar api post "/api/issues/do_transition" --data \'{"issue":"AYx1z2","transition":"accept"}\'',
+      description: 'Accept an issue',
+    },
+    {
+      command: 'sonar api get "/analysis/engine"',
+      description: 'Get the current analysis engine JAR info (V2 API)',
+    },
+    {
+      command: 'sonar api get "/api/system/status" --verbose',
+      description: 'Check system status with full request/response details',
+    },
+    {
+      command: 'sonar api post "/api/user_tokens/revoke" --data \'{"name":"my-token"}\'',
+      description: 'Revoke a user token',
+    },
+  ],
   'sonar auth login': [
     {
       command: 'sonar auth login',

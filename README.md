@@ -106,6 +106,56 @@ sonar auth status
 
 ---
 
+### `sonar api`
+
+Make authenticated API requests to SonarQube
+
+**Options:**
+
+| Option            | Type    | Required | Description                                                                                        | Default |
+| ----------------- | ------- | -------- | -------------------------------------------------------------------------------------------------- | ------- |
+| `--data`, `-d`    | string  | No       | JSON string for request body. The tool will automatically format as either form data or JSON body. | -       |
+| `--verbose`, `-v` | boolean | No       | Print request and response details for debugging.                                                  | -       |
+
+**Examples:**
+
+List favorite projects
+```bash
+sonar api get "/api/favorites/search"
+```
+
+Search for TypeScript rules in an organization
+```bash
+sonar api get "/api/rules/search?organization=my-org&languages=ts"
+```
+
+Generate a new user token
+```bash
+sonar api post "/api/user_tokens/generate" --data '{"name":"my-token"}'
+```
+
+Accept an issue
+```bash
+sonar api post "/api/issues/do_transition" --data '{"issue":"AYx1z2","transition":"accept"}'
+```
+
+Get the current analysis engine JAR info (V2 API)
+```bash
+sonar api get "/analysis/engine"
+```
+
+Check system status with full request/response details
+```bash
+sonar api get "/api/system/status" --verbose
+```
+
+Revoke a user token
+```bash
+sonar api post "/api/user_tokens/revoke" --data '{"name":"my-token"}'
+```
+
+---
+
 ### `sonar integrate`
 
 Setup SonarQube integration for AI coding agents, git and others.
@@ -277,11 +327,11 @@ Run SQAA server-side analysis on a file (SonarQube Cloud only)
 
 **Options:**
 
-| Option      | Type   | Required | Description                                              | Default |
-| ----------- | ------ | -------- | -------------------------------------------------------- | ------- |
-| `--file`    | string | Yes      | File path to analyze                                     | -       |
-| `--branch`  | string | No       | Branch name for analysis context                         | -       |
-| `--project` | string | No       | SonarCloud project key (overrides auto-detected project) | -       |
+| Option            | Type   | Required | Description                                                   | Default |
+| ----------------- | ------ | -------- | ------------------------------------------------------------- | ------- |
+| `--file`          | string | Yes      | File path to analyze                                          | -       |
+| `--branch`        | string | No       | Branch name for analysis context                              | -       |
+| `--project`, `-p` | string | No       | SonarQube Cloud project key (overrides auto-detected project) | -       |
 
 ---
 
@@ -291,11 +341,11 @@ Analyze a file for issues
 
 **Options:**
 
-| Option      | Type   | Required | Description                                              | Default |
-| ----------- | ------ | -------- | -------------------------------------------------------- | ------- |
-| `--file`    | string | Yes      | File path to analyze                                     | -       |
-| `--branch`  | string | No       | Branch name for analysis context                         | -       |
-| `--project` | string | No       | SonarCloud project key (overrides auto-detected project) | -       |
+| Option            | Type   | Required | Description                                                   | Default |
+| ----------------- | ------ | -------- | ------------------------------------------------------------- | ------- |
+| `--file`          | string | Yes      | File path to analyze                                          | -       |
+| `--branch`        | string | No       | Branch name for analysis context                              | -       |
+| `--project`, `-p` | string | No       | SonarQube Cloud project key (overrides auto-detected project) | -       |
 
 ---
 
