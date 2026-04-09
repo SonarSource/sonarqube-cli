@@ -18,16 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Real-network test for install.sh — validates URL path structure on binaries.sonarsource.com
+// Real-network tests for install scripts — validates URL path structure on binaries.sonarsource.com
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, setDefaultTimeout } from 'bun:test';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const scriptDir = join(import.meta.dir, '../../user-scripts');
+// PowerShell cold-start in afterEach needs more than the default 5s hook timeout
+setDefaultTimeout(30_000);
 
-describe.if(process.platform !== 'win32')('install.sh (network)', () => {
+const scriptDir = join(import.meta.dir, '../../user-scripts');
+const isWindows = process.platform === 'win32';
+
+describe.if(!isWindows)('install.sh (network)', () => {
   let tempHome: string;
 
   beforeEach(() => {
@@ -60,6 +64,59 @@ describe.if(process.platform !== 'win32')('install.sh (network)', () => {
       expect(helpProc.exitCode).toBe(0);
       expect(helpOutput).toContain('sonar');
     },
-    { timeout: 120000 },
+    { timeout: 120_000 },
+  );
+});
+
+function removeFromUserPath(dir: string) {
+  const escaped = dir.replace(/'/g, "''");
+  Bun.spawnSync([
+    'powershell',
+    '-NoProfile',
+    '-Command',
+    `$p = [Environment]::GetEnvironmentVariable('PATH','User'); if ($p) { $entries = ($p -split ';') | Where-Object { $_ -ne '${escaped}' }; [Environment]::SetEnvironmentVariable('PATH', ($entries -join ';'), 'User') }`,
+  ]);
+}
+
+describe.if(isWindows)('install.ps1 (network)', () => {
+  let tempLocalAppData: string;
+  let installDir: string;
+
+  beforeEach(() => {
+    tempLocalAppData = mkdtempSync(join(tmpdir(), 'sonar-install-test-'));
+    installDir = join(tempLocalAppData, 'sonarqube-cli', 'bin');
+  });
+
+  afterEach(() => {
+    removeFromUserPath(installDir);
+    rmSync(tempLocalAppData, { recursive: true, force: true });
+  });
+
+  it(
+    'downloads and installs sonar CLI binary on Windows',
+    () => {
+      const scriptPath = join(scriptDir, 'install.ps1');
+
+      const proc = Bun.spawnSync(
+        ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+        {
+          env: { ...process.env, LOCALAPPDATA: tempLocalAppData },
+        },
+      );
+
+      const installStderr = new TextDecoder().decode(proc.stderr);
+      expect(proc.exitCode, `install.ps1 failed:\n${installStderr}`).toBe(0);
+
+      const binaryPath = join(installDir, 'sonar.exe');
+      expect(existsSync(binaryPath)).toBe(true);
+
+      const helpProc = Bun.spawnSync([binaryPath, '--help'], {
+        env: { ...process.env, LOCALAPPDATA: tempLocalAppData },
+      });
+      const helpOutput = new TextDecoder().decode(helpProc.stdout);
+      expect(helpProc.exitCode).toBe(0);
+      expect(helpOutput).toContain('sonar');
+    },
+    { timeout: 240_000 },
   );
 });
