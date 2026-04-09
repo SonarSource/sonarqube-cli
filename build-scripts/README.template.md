@@ -79,7 +79,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, coding guidelin
 
 ## License
 
-Copyright 2026 SonarSource Sàrl.
+Copyright SonarSource Sàrl.
 
 SonarQube CLI is released under the [GNU Lesser General Public License, Version 3.0⁠,](http://www.gnu.org/licenses/lgpl.txt).
 
