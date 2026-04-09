@@ -24,7 +24,7 @@ run_with_timeout() {
   fi
 }
 
-CURRENT=$(node -e "console.log(require('./package.json').version)")
+CURRENT=$(bun -e "console.log(require('./package.json').version)")
 MAJOR_MINOR=$(echo "$CURRENT" | sed 's/\.[0-9]*$//')
 BUILD=$(echo "$CURRENT" | sed 's/.*\.//')
 
@@ -44,8 +44,7 @@ echo "🔄 Updating version to $NEW_VERSION..."
 
 # Update package.json (single source of truth — only top-level version field)
 echo "  📝 Updating package.json..."
-npm pkg set version="$NEW_VERSION" --no-git-tag-version 2>/dev/null || \
-  node -e "const fs=require('fs'),p='package.json',j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$NEW_VERSION';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
+bun -e "const fs=require('fs'),p='package.json',j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$NEW_VERSION';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
 
 # Update src/version.ts (single-line export, safe to replace)
 echo "  📝 Updating src/version.ts..."
@@ -57,11 +56,11 @@ echo ""
 
 # Build TypeScript
 echo "🔨 Building TypeScript..."
-run_with_timeout npm run build
+run_with_timeout bun run build
 
 # Build binary
 echo "📦 Building binary..."
-run_with_timeout npm run build:binary
+run_with_timeout bun run build:binary
 
 # Update Homebrew tap
 BREW_FORMULA="/opt/homebrew/Library/Taps/local/homebrew-sonar/Formula/sonar.rb"
