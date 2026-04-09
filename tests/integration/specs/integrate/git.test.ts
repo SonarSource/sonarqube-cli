@@ -68,7 +68,8 @@ function setupSonarBinDir(harness: TestHarness): {
   mkdirSync(sonarBinDir, { recursive: true });
 
   // Symlinks require Developer Mode or admin privileges on Windows; copy instead.
-  copyFileSync(getCliBinaryPath(), join(sonarBinDir, 'sonar.exe'));
+  const binaryName = IS_WINDOWS ? 'sonar.exe' : 'sonar';
+  copyFileSync(getCliBinaryPath(), join(sonarBinDir, binaryName));
 
   return { sonarBinDir, hookEnv: buildHookEnv(sonarBinDir, harness) };
 }
