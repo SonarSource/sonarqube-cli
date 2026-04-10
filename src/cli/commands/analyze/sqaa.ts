@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { relative } from 'node:path';
+import { isAbsolute, relative } from 'node:path';
 import type { Command } from 'commander';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { normalizePath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
 import { blank, error, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
@@ -128,6 +129,20 @@ function readSqaaFileContent(file: string): string {
 }
 
 /**
+ * Compute a POSIX-style relative path under the current working directory.
+ * Throws when the file is outside cwd (traversal) or on a different drive.
+ */
+function toRelativePosixPath(file: string): string {
+  const rel = normalizePath(relative(process.cwd(), file));
+
+  if (isAbsolute(rel) || rel.split('/').includes('..')) {
+    throw new InvalidOptionError(`File must be inside the current working directory: ${file}`);
+  }
+
+  return rel;
+}
+
+/**
  * Call the SQAA API and display the results.
  * Throws CommandFailedError on API failure.
  */
@@ -138,7 +153,7 @@ async function callSqaaApiAndDisplay(
   fileContent: string,
   branch: string | undefined,
 ): Promise<void> {
-  const filePath = relative(process.cwd(), file);
+  const filePath = toRelativePosixPath(file);
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
   blank();
