@@ -350,15 +350,15 @@ jobs:
       - name: Check linting
         run: bun lint
 
-      - name: Run all tests with coverage
-        if: matrix.os == 'linux'
-        run: bun test:coverage
-
-      - name: Run all tests
+      - name: Run all tests (Windows)
         if: matrix.os == 'windows'
         run: bun test:all
 
-      - name: Analyze on SonarQubeCloud
+      - name: Run all tests with coverage (Linux)
+        if: matrix.os == 'linux'
+        run: bun test:coverage
+
+      - name: Analyze on SonarQubeCloud (Linux)
         if: matrix.os == 'linux'
         env:
           SONAR_HOST_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
