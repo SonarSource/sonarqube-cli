@@ -513,6 +513,41 @@ describe('integrate claude — SQAA entitlement guard', () => {
   );
 
   it(
+    'records sonar-sqaa in agents.claude-code.hooks.installed after fresh SQAA install',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+
+      const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+
+      const state = harness.stateJsonFile.asJson();
+      const installedHooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
+        name: string;
+        type: string;
+      }>;
+
+      expect(installedHooks.some((h) => h.name === 'sonar-sqaa' && h.type === 'PostToolUse')).toBe(
+        true,
+      );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'does not install PostToolUse SQAA hook when org has no SQAA entitlement (repair path)',
     async () => {
       const server = await harness

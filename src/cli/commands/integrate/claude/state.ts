@@ -53,6 +53,9 @@ export function updateStateAfterConfiguration(
     // Track installed hooks (legacy format for backward compat)
     addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
     addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
+    if (sqaaEnabled) {
+      addInstalledHook(state, 'claude-code', 'sonar-sqaa', 'PostToolUse');
+    }
 
     // Register extensions in the new registry.
     // For global installs, use homedir() as projectRoot so it doesn't collide with project-level entries.
