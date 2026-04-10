@@ -54,6 +54,18 @@ sonar integrate claude -g
 
 See [State Management](./docs/state-management.md) for more information.
 
+## Uninstalling
+
+### Linux/Mac OS
+
+1. Delete the `~/.local/share/sonarqube-cli/` folder.
+2. Remove `export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"` from your `~/.bashrc` or `~/.zshrc` files.
+
+### Windows
+
+1. Delete the `%localappdata%\sonarqube-cli\` folder.
+2. Remove this folder from the `PATH` user-level environment variable.
+
 ## Data collection
 
 The SonarQube CLI collects anonymous usage data and error reports to help improve the product.
