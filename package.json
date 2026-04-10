@@ -15,6 +15,7 @@
     "pretest:integration": "bun build:binary && bun build-scripts/setup-integration-resources.ts",
     "test:integration": "bun test ./tests/integration/",
     "test:all": "bun run test:unit && bun run test:integration",
+    "test:e2e": "bun test ./tests/e2e/",
     "test:coverage": "bun build:binary && bun build-scripts/build-coverage-binary.ts && bun build-scripts/setup-integration-resources.ts && bun build-scripts/clear-coverage-raw.ts && bun test --coverage --coverage-reporter=lcov --coverage-dir=tests/coverage/reports/unit ./tests/unit/ && SONARQUBE_CLI_USE_COVERAGE=1 bun test ./tests/integration/ && bun build-scripts/report-coverage.ts",
     "lint": "eslint src/ tests/",
     "lint:fix": "eslint src/ tests/ --fix",

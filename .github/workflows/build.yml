@@ -358,6 +358,10 @@ jobs:
         if: matrix.os == 'linux'
         run: bun test:coverage
 
+      - name: Run e2e tests
+        if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
+        run: bun test:e2e
+
       - name: Analyze on SonarQubeCloud (Linux)
         if: matrix.os == 'linux'
         env:
