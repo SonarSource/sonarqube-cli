@@ -24,6 +24,16 @@ export const IS_WINDOWS = process.platform === 'win32';
 export const SCRIPT_EXT = IS_WINDOWS ? '.ps1' : '.sh';
 
 /**
+ * Build the HOME-related env vars needed to override a user's home directory.
+ * On Windows both USERPROFILE and HOME are set because Git for Windows runs
+ * hooks in MSYS2 bash, which derives HOME from HOMEDRIVE+HOMEPATH when HOME
+ * is unset.
+ */
+export function buildHomeEnv(homePath: string): Record<string, string> {
+  return IS_WINDOWS ? { USERPROFILE: homePath, HOME: homePath } : { HOME: homePath };
+}
+
+/**
  * Get the name of a hook script file (with extension)
  */
 export function hookScriptName(name: string): string {

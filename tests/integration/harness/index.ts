@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { runCli } from './cli-runner.js';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { Dir } from './dir';
-import { IS_WINDOWS } from './platform';
+import { buildHomeEnv } from './platform';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 import type { CliResult, RunOptions } from './types.js';
@@ -154,10 +154,6 @@ export class TestHarness {
       if (val !== undefined) systemVars[key] = val;
     }
 
-    const homeEnv: Record<string, string> = IS_WINDOWS
-      ? { USERPROFILE: this.userHome.path, HOME: this.userHome.path }
-      : { HOME: this.userHome.path };
-
     const activeBinariesServer = this.binariesServers.at(-1);
     const fakeBinariesEnv: Record<string, string> = activeBinariesServer
       ? { SONARQUBE_CLI_BINARIES_URL: activeBinariesServer.baseUrl() }
@@ -178,7 +174,7 @@ export class TestHarness {
       CI: 'true',
       ...this._extraEnv,
       ...(options?.extraEnv ?? {}),
-      ...homeEnv,
+      ...buildHomeEnv(this.userHome.path),
     };
 
     return runCli(command, env, {

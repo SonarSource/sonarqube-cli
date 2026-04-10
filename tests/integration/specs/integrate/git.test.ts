@@ -25,7 +25,7 @@ import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
-import { IS_WINDOWS } from '../../harness/platform';
+import { IS_WINDOWS, buildHomeEnv } from '../../harness/platform';
 
 const PATH_DELIM = IS_WINDOWS ? ';' : ':';
 function pathWithoutNodeModules(envPath: string | undefined): string {
@@ -40,15 +40,9 @@ const GITHUB_TEST_TOKEN = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';
 
 /** Env for `git commit` / `git push` so the installed hook sees the same HOME + keychain as `harness.run()`. */
 function buildHookEnv(sonarBinDir: string, harness: TestHarness): Record<string, string> {
-  // HOME is required on Windows because Git for Windows runs hooks in MSYS2 bash,
-  // which derives HOME from HOMEDRIVE+HOMEPATH (leaked via ...process.env) when HOME is unset.
-  const homeEnv: Record<string, string> = IS_WINDOWS
-    ? { USERPROFILE: harness.userHome.path, HOME: harness.userHome.path }
-    : { HOME: harness.userHome.path };
-
   const env: Record<string, string> = {
     ...process.env,
-    ...homeEnv,
+    ...buildHomeEnv(harness.userHome.path),
     SONARQUBE_CLI_KEYCHAIN_FILE: harness.keychainJsonFile.path,
     PATH: `${sonarBinDir}${PATH_DELIM}${pathWithoutNodeModules(process.env.PATH)}`,
   };
