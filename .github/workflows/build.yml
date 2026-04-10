@@ -295,9 +295,16 @@ jobs:
           bun run sentry:upload-sourcemaps
 
   test-and-scan:
-    name: Run Tests and Scan with SonarQube
-    runs-on: github-ubuntu-latest-m
+    name: Run Tests and Scan with SonarQube - ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     needs: [prepare]
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            runner: github-ubuntu-latest-m
+          - os: windows
+            runner: warp-custom-windows-2022-s
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -320,7 +327,7 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
       - name: Install libsecret (Linux)
-        if: ${{ runner.os == 'linux' }}
+        if: matrix.os == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
 
       - name: Cache Bun dependencies
@@ -343,10 +350,16 @@ jobs:
       - name: Check linting
         run: bun lint
 
-      - name: Run all tests
+      - name: Run all tests with coverage
+        if: matrix.os == 'linux'
         run: bun test:coverage
 
+      - name: Run all tests
+        if: matrix.os == 'windows'
+        run: bun test:all
+
       - name: Analyze on SonarQubeCloud
+        if: matrix.os == 'linux'
         env:
           SONAR_HOST_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
           SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_TOKEN }}
