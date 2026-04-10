@@ -297,13 +297,12 @@ describe('analyzeSqaa: path normalization', () => {
     const request = analyzeFileSpy.mock.calls[0][0];
     expect(request.filePath).toBe('python/scripts/check_md_code_blocks.py');
   });
-  it('throws InvalidOptionError when file is outside the current working directory', async () => {
+  it('throws InvalidOptionError when file is outside the current working directory', () => {
     const differentDrive =
       process.platform === 'win32' ? 'D:\\other-project\\file.ts' : '/other-project/file.ts';
 
-    await expect(analyzeSqaa({ file: '../outside.ts' }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
-    await expect(analyzeSqaa({ file: differentDrive }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
-  });
+    expect(analyzeSqaa({ file: '../outside.ts' }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
+    expect(analyzeSqaa({ file: differentDrive }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
   });
 });
 
