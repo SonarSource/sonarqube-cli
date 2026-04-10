@@ -43,7 +43,7 @@ describe.if(!isWindows)('install.sh (network)', () => {
   });
 
   it(
-    'downloads and installs sonar CLI binary on the current platform',
+    'downloads and installs sonar CLI binary on Unix',
     () => {
       const scriptPath = join(scriptDir, 'install.sh');
 
