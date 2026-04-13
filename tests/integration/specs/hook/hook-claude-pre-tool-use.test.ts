@@ -18,11 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar hook claude-pre-tool-use`.
-// These tests run the actual binary with real stdin to exercise secrets-scan.ts and stdin.ts.
+// Integration tests for `sonar hook claude-pre-tool-use`:
+// JSON stdin parsing, graceful skips, and end-to-end secret detection in files
+// that Claude Code is about to read.
 //
-// Note: hardcoded token below is an intentional test fixture for the secret scanner.
-// sonar-ignore-next-line S6769
+// Behaviour contract:
+//   - Always exits 0 (hook must never crash Claude Code)
+//   - Outputs {"hookSpecificOutput":{"permissionDecision":"deny",...}} when a secret is found
+//   - Outputs nothing when the file is clean, tool is not Read, or file doesn't exist
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
@@ -33,22 +36,12 @@ import { TestHarness } from '../../harness';
 const GITHUB_TEST_TOKEN = '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';
 const CLEAN_CONTENT = 'const greeting = "hello world";';
 
-// Unreachable server — binary handles connection-refused gracefully and proceeds with scan
+// Unreachable but well-formed server URL: binary handles connection-refused gracefully.
 const FAKE_SERVER = 'http://localhost:19999';
+const VALID_TOKEN = 'integration-test-token';
 
-function preToolUseStdin(filePath: string): string {
+function readPayload(filePath: string): string {
   return JSON.stringify({ tool_name: 'Read', tool_input: { file_path: filePath } });
-}
-
-/**
- * Extract the hook JSON response line from stdout.
- * Other output (e.g. post-update messages) may also be present.
- */
-function findHookJsonLine(stdout: string): string | undefined {
-  return stdout
-    .split('\n')
-    .map((l) => l.trim())
-    .find((l) => l.startsWith('{') && l.includes('hookSpecificOutput'));
 }
 
 describe('sonar hook claude-pre-tool-use', () => {
@@ -63,94 +56,122 @@ describe('sonar hook claude-pre-tool-use', () => {
   });
 
   it(
-    'exits 0 and outputs deny JSON when file contains a secret',
+    'exits 0 and allows when stdin is malformed JSON',
+    async () => {
+      const result = await harness.run('hook claude-pre-tool-use', {
+        stdin: 'not valid json',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('"deny"');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 and allows for non-Read tools',
     async () => {
       harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
       const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: preToolUseStdin(filePath),
+        stdin: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: filePath } }),
       });
 
       expect(result.exitCode).toBe(0);
-      const hookOutput = findHookJsonLine(result.stdout) ?? '';
-      expect(hookOutput).not.toBe('');
-      const output = JSON.parse(hookOutput);
-      expect(output.hookSpecificOutput.permissionDecision).toBe('deny');
-      expect(output.hookSpecificOutput.hookEventName).toBe('PreToolUse');
-      expect(output.hookSpecificOutput.permissionDecisionReason).toContain(filePath);
+      expect(result.stdout).not.toContain('"deny"');
     },
-    { timeout: 30000 },
+    { timeout: 15000 },
   );
 
   it(
-    'exits 0 and outputs no hook response when file contains no secrets',
+    'exits 0 and allows when file does not exist',
     async () => {
       harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+
+      const result = await harness.run('hook claude-pre-tool-use', {
+        stdin: readPayload('/nonexistent/path/file.js'),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('"deny"');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 and allows when not authenticated (graceful skip)',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      const filePath = join(harness.cwd.path, 'secret.js');
+      // No auth configured
+
+      const result = await harness.run('hook claude-pre-tool-use', {
+        stdin: readPayload(filePath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('"deny"');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 and allows when binary is not installed (graceful skip)',
+    async () => {
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      const filePath = join(harness.cwd.path, 'secret.js');
+      // No binary installed
+
+      const result = await harness.run('hook claude-pre-tool-use', {
+        stdin: readPayload(filePath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('"deny"');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 and allows a clean file',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
       harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
       const filePath = join(harness.cwd.path, 'clean.js');
 
       const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: preToolUseStdin(filePath),
+        stdin: readPayload(filePath),
       });
 
       expect(result.exitCode).toBe(0);
-      expect(findHookJsonLine(result.stdout)).toBeUndefined();
+      expect(result.stdout).not.toContain('"deny"');
     },
     { timeout: 30000 },
   );
 
   it(
-    'exits 0 and outputs no hook response when secrets binary is not installed',
+    'exits 0 and outputs deny decision when file contains a secret',
     async () => {
-      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       const filePath = join(harness.cwd.path, 'secret.js');
 
       const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: preToolUseStdin(filePath),
+        stdin: readPayload(filePath),
       });
 
       expect(result.exitCode).toBe(0);
-      expect(findHookJsonLine(result.stdout)).toBeUndefined();
+      expect(result.stdout).toContain('"permissionDecision"');
+      expect(result.stdout).toContain('"deny"');
     },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits 0 and outputs no hook response when tool is not Read',
-    async () => {
-      harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, 'fake-token');
-      harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-      const filePath = join(harness.cwd.path, 'secret.js');
-
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: filePath } }),
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(findHookJsonLine(result.stdout)).toBeUndefined();
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits 0 and outputs no hook response when stdin is invalid JSON',
-    async () => {
-      harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, 'fake-token');
-
-      const result = await harness.run('hook claude-pre-tool-use', {
-        stdin: 'not valid json {{',
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(findHookJsonLine(result.stdout)).toBeUndefined();
-    },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 });

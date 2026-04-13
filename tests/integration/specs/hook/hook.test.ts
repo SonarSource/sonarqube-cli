@@ -39,7 +39,8 @@ describe('sonar hook', () => {
     async () => {
       const result = await harness.run('');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).not.toContain('callback');
+      // 'hook' must not appear as a listed command entry (indented under COMMANDS)
+      expect(result.stdout).not.toMatch(/^\s{4}hook\b/m);
     },
     { timeout: 15000 },
   );
