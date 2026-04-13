@@ -79,6 +79,11 @@ export async function spawnProcess(
       proc.stdin.end();
     }
 
+    if (options.stdinData !== undefined && proc.stdin) {
+      proc.stdin.write(options.stdinData);
+      proc.stdin.end();
+    }
+
     proc.on('error', reject);
 
     proc.on('exit', (code) => {
