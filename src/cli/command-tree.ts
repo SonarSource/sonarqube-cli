@@ -39,6 +39,7 @@ import { parseInteger } from './commands/_common/parsing';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 import { apiCommand, apiExtraHelpText, type ApiCommandOptions } from './commands/api/api';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
+import { pingCommand, type PingOptions } from './commands/ping/index';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -223,6 +224,11 @@ configure
   .anonymousAction((options: ConfigureTelemetryOptions) => configureTelemetry(options));
 
 // Update the CLI to the latest version
+COMMAND_TREE.command('ping')
+  .description('Check connectivity to the configured SonarQube server')
+  .option('--json', 'Output result as JSON')
+  .authenticatedAction((auth, options: PingOptions) => pingCommand(options, auth));
+
 COMMAND_TREE.command('self-update')
   .description('Update sonar CLI to the latest version')
   .option('--status', 'Check for a newer version without installing')
