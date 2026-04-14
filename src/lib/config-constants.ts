@@ -46,6 +46,7 @@ export const CLI_DIR = join(homedir(), '.sonar', APP_NAME);
 // ---------------------------------------------------------------------------
 
 export const STATE_FILE = join(CLI_DIR, 'state.json');
+export const ACCOUNT_INDEX_FILE = join(CLI_DIR, 'keychain-accounts.json');
 
 // ---------------------------------------------------------------------------
 // Logs

@@ -33,6 +33,9 @@
  * Call setup() in beforeEach and teardown() in afterEach.
  */
 
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { clearTokenCache, generateKeychainAccount, saveToken } from '../../../src/lib/keychain';
 
 export interface KeychainTestHandle {
@@ -47,10 +50,11 @@ export interface KeychainTestHandle {
 
 export function createKeychainTestHandle(): KeychainTestHandle {
   let serviceName = '';
+  let testDir = '';
   const trackedAccounts = new Set<string>();
   let savedKeychainFile: string | undefined;
-  let savedDisableKeychain: string | undefined;
   let savedService: string | undefined;
+  let savedAccountIndex: string | undefined;
 
   return {
     async seedToken(serverUrl: string, token: string, org?: string) {
@@ -61,15 +65,17 @@ export function createKeychainTestHandle(): KeychainTestHandle {
 
     setup() {
       serviceName = `sonarqube-cli-test-${crypto.randomUUID()}`;
+      testDir = join(tmpdir(), `keychain-idx-${crypto.randomUUID()}`);
+      mkdirSync(testDir, { recursive: true });
       trackedAccounts.clear();
 
       savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
-      savedDisableKeychain = process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
       savedService = process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE;
+      savedAccountIndex = process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE;
 
       delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
-      delete process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
       process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE = serviceName;
+      process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE = join(testDir, 'keychain-accounts.json');
 
       clearTokenCache();
     },
@@ -80,22 +86,24 @@ export function createKeychainTestHandle(): KeychainTestHandle {
       }
       trackedAccounts.clear();
 
+      rmSync(testDir, { recursive: true, force: true });
+
       if (savedKeychainFile === undefined) {
         delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
       } else {
         process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
       }
 
-      if (savedDisableKeychain === undefined) {
-        delete process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
-      } else {
-        process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN = savedDisableKeychain;
-      }
-
       if (savedService === undefined) {
         delete process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE;
       } else {
         process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE = savedService;
+      }
+
+      if (savedAccountIndex === undefined) {
+        delete process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE;
+      } else {
+        process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE = savedAccountIndex;
       }
 
       clearTokenCache();

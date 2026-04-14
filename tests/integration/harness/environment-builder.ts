@@ -208,6 +208,14 @@ export class EnvironmentBuilder {
       seededAccounts.push(account);
     }
 
+    if (seededAccounts.length > 0) {
+      writeFileSync(
+        join(cliHome, 'keychain-accounts.json'),
+        JSON.stringify({ accounts: seededAccounts }, null, 2),
+        'utf-8',
+      );
+    }
+
     if (this._installSecretsBinary) {
       const binDir = join(cliHome, 'bin');
       mkdirSync(binDir, { recursive: true });
