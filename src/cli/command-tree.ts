@@ -201,8 +201,10 @@ analyze
 
 analyze
   .command('sqaa')
-  .description('Run SQAA server-side analysis on a file (SonarQube Cloud only)')
-  .requiredOption('--file <file>', 'File path to analyze')
+  .description('Run SQAA server-side analysis on a file or local changeset (SonarQube Cloud only)')
+  .option('--file <file>', 'File path to analyze')
+  .option('--staged', 'Analyze only staged files (git add-ed)')
+  .option('--base <branch>', 'Analyze all files changed relative to a branch or commit')
   .option('--branch <branch>', 'Branch name for analysis context')
   .option(
     '-p, --project <project>',

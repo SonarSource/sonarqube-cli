@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, relative } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { normalizePath } from '../../../lib/fs-utils';
@@ -29,9 +29,12 @@ import { SonarQubeClient } from '../../../sonarqube/client';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { loadState, findExtensionsByProject } from '../../../lib/state-manager';
 import type { HookExtension } from '../../../lib/state';
+import { spawnProcess } from '../../../lib/process';
 
 export interface AnalyzeSqaaOptions {
-  file: string;
+  file?: string;
+  staged?: boolean;
+  base?: string;
   branch?: string;
   project?: string;
 }
@@ -41,13 +44,108 @@ export async function analyzeSqaa(
   auth: ResolvedAuth,
   command?: Command,
 ): Promise<void> {
-  const { file, branch, project } = options;
+  const { file, staged, base, branch, project } = options;
 
-  if (!existsSync(file)) {
-    throw new InvalidOptionError(`File not found: ${file}`);
+  if (staged && base !== undefined) {
+    throw new InvalidOptionError('--staged and --base cannot be used together');
   }
 
-  await runSqaaAnalysis(file, auth, branch, project, command);
+  if (file) {
+    if (!existsSync(file)) {
+      throw new InvalidOptionError(`File not found: ${file}`);
+    }
+    await runSqaaAnalysis(file, auth, branch, project, command);
+  } else {
+    await analyzeSqaaChangeSet({ staged, base, branch, project }, auth, command);
+  }
+}
+
+interface ChangeSetOptions {
+  staged?: boolean;
+  base?: string;
+  branch?: string;
+  project?: string;
+}
+
+async function analyzeSqaaChangeSet(
+  options: ChangeSetOptions,
+  auth: ResolvedAuth,
+  command: Command | undefined,
+): Promise<void> {
+  const { staged, base, branch, project } = options;
+
+  const cloudAuth = resolveCloudAuth(auth, project);
+  if (!cloudAuth) return;
+
+  const projectKey = project ?? resolveSqaaProjectKey(command);
+  if (!projectKey) return;
+
+  const files = await getChangedFiles({ staged, base });
+
+  if (files.length === 0) {
+    blank();
+    success('No changes detected since last commit.');
+    return;
+  }
+
+  blank();
+  text(`Analyzing ${files.length} changed file(s)...`);
+
+  let totalIssues = 0;
+  for (const relFile of files) {
+    const absFile = resolve(process.cwd(), relFile);
+    try {
+      const fileContent = readSqaaFileContent(absFile);
+      const issueCount = await callSqaaApiAndDisplay(
+        cloudAuth,
+        projectKey,
+        absFile,
+        fileContent,
+        branch,
+        relFile,
+      );
+      totalIssues += issueCount;
+    } catch (err) {
+      blank();
+      error(`Failed to analyze ${relFile}: ${(err as Error).message}`);
+    }
+  }
+
+  blank();
+  if (totalIssues === 0) {
+    success('Changeset is clean! No new issues introduced.');
+  } else {
+    process.exitCode = 1;
+  }
+}
+
+async function getChangedFiles(options: { staged?: boolean; base?: string }): Promise<string[]> {
+  if (options.staged) {
+    const result = await spawnProcess('git', [
+      'diff',
+      '--cached',
+      '--name-only',
+      '--diff-filter=ACMR',
+    ]);
+    return result.stdout.split('\n').filter(Boolean);
+  }
+
+  const baseRef = options.base ?? 'HEAD';
+  const [changed, untracked] = await Promise.all([
+    spawnProcess('git', ['diff', baseRef, '--name-only', '--diff-filter=ACMR']),
+    spawnProcess('git', ['ls-files', '--others', '--exclude-standard']),
+  ]);
+
+  const seen = new Set<string>();
+  const files: string[] = [];
+  for (const line of [...changed.stdout.split('\n'), ...untracked.stdout.split('\n')]) {
+    const f = line.trim();
+    if (f && !seen.has(f)) {
+      seen.add(f);
+      files.push(f);
+    }
+  }
+  return files;
 }
 
 export async function runSqaaAnalysis(
@@ -145,6 +243,7 @@ function toRelativePosixPath(file: string): string {
 /**
  * Call the SQAA API and display the results.
  * Throws CommandFailedError on API failure.
+ * When fileLabel is provided, it is printed as a section header before results.
  */
 async function callSqaaApiAndDisplay(
   auth: { serverUrl: string; token: string; orgKey: string },
@@ -152,11 +251,15 @@ async function callSqaaApiAndDisplay(
   file: string,
   fileContent: string,
   branch: string | undefined,
-): Promise<void> {
+  fileLabel?: string,
+): Promise<number> {
   const filePath = toRelativePosixPath(file);
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
   blank();
+  if (fileLabel) {
+    text(`── ${fileLabel}`);
+  }
   text('Running SQAA analysis...');
 
   try {
@@ -168,7 +271,7 @@ async function callSqaaApiAndDisplay(
       fileContent,
     });
 
-    displaySqaaResults(response.issues, response.errors);
+    return displaySqaaResults(response.issues, response.errors, fileLabel !== undefined);
   } catch (err) {
     throw new CommandFailedError(`SQAA analysis failed.\n  ${(err as Error).message}`);
   }
@@ -177,11 +280,14 @@ async function callSqaaApiAndDisplay(
 function displaySqaaResults(
   issues: SqaaIssue[],
   errors?: Array<{ code: string; message: string }> | null,
-): void {
+  inChangeSetMode = false,
+): number {
   blank();
 
   if (issues.length === 0) {
-    success('SQAA analysis completed — no issues found.');
+    if (!inChangeSetMode) {
+      success('SQAA analysis completed — no issues found.');
+    }
   } else {
     error(`SQAA analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
     blank();
@@ -201,4 +307,5 @@ function displaySqaaResults(
   }
 
   blank();
+  return issues.length;
 }
