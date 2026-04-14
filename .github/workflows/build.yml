@@ -392,9 +392,6 @@ jobs:
       - name: Check linting
         run: bun lint
 
-      - name: Run unit tests
-        run: bun test:unit
-
       - name: Start D-Bus and unlock keyring (Linux)
         if: matrix.os == 'linux'
         run: |
@@ -405,6 +402,9 @@ jobs:
           if [ -n "$GNOME_KEYRING_CONTROL" ]; then
             echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
           fi
+
+      - name: Run unit tests
+        run: bun test:unit
 
       - name: Run integration tests against cross-compiled binary
         run: bun test:integration
