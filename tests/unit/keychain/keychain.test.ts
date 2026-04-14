@@ -44,7 +44,6 @@ function useFileBackend() {
   let testDir: string;
   let keychainFile: string;
   let savedKeychainFile: string | undefined;
-  let savedDisableKeychain: string | undefined;
 
   beforeEach(() => {
     testDir = join(tmpdir(), `keychain-test-${crypto.randomUUID()}`);
@@ -52,10 +51,7 @@ function useFileBackend() {
     keychainFile = join(testDir, 'keychain.json');
 
     savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
-    savedDisableKeychain = process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
-
     process.env.SONARQUBE_CLI_KEYCHAIN_FILE = keychainFile;
-    delete process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
 
     clearTokenCache();
   });
@@ -67,12 +63,6 @@ function useFileBackend() {
       delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     } else {
       process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
-    }
-
-    if (savedDisableKeychain === undefined) {
-      delete process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN;
-    } else {
-      process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN = savedDisableKeychain;
     }
 
     clearTokenCache();
@@ -244,27 +234,81 @@ describe('account key generation', () => {
   });
 });
 
-describe('SONARQUBE_CLI_DISABLE_KEYCHAIN', () => {
-  let saved: string | undefined;
+describe('account index (Bun.secrets backend)', () => {
+  const handle = createKeychainTestHandle();
 
   beforeEach(() => {
-    saved = process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'];
+    handle.setup();
   });
 
-  afterEach(() => {
-    if (saved === undefined) {
-      delete process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'];
-    } else {
-      process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'] = saved;
-    }
-    clearTokenCache();
+  afterEach(async () => {
+    await handle.teardown();
   });
 
-  it('returns null token when SONARQUBE_CLI_DISABLE_KEYCHAIN is set to true', async () => {
-    process.env['SONARQUBE_CLI_DISABLE_KEYCHAIN'] = 'true';
+  it('getAllCredentials returns tokens saved via saveToken', async () => {
+    await handle.seedToken('https://sonarcloud.io', 'tok1', 'org1');
+    await handle.seedToken('https://sonarcloud.io', 'tok2', 'org2');
+    await handle.seedToken('https://server.example.com', 'tok3');
+
+    const creds = await getAllCredentials();
+    expect(creds).toHaveLength(3);
+    const accounts = creds.map((c) => c.account).sort();
+    expect(accounts).toEqual(['server.example.com', 'sonarcloud.io:org1', 'sonarcloud.io:org2']);
+  });
+
+  it('getAllCredentials returns empty when nothing was saved', async () => {
+    const creds = await getAllCredentials();
+    expect(creds).toEqual([]);
+  });
+
+  it('deleteToken removes the account from the index', async () => {
+    await handle.seedToken('https://sonarcloud.io', 'tok1', 'org1');
+    await handle.seedToken('https://sonarcloud.io', 'tok2', 'org2');
+
+    await deleteToken('https://sonarcloud.io', 'org1');
+    const creds = await getAllCredentials();
+    expect(creds).toHaveLength(1);
+    expect(creds[0].account).toBe('sonarcloud.io:org2');
+  });
+
+  it('purgeAllTokens removes all tokens and clears the index', async () => {
+    await handle.seedToken('https://sonarcloud.io', 'tok1', 'org1');
+    await handle.seedToken('https://server.example.com', 'tok2');
+
+    const service = process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE!;
+
+    await purgeAllTokens();
+
+    expect(await getAllCredentials()).toHaveLength(0);
+    expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
+    expect(await getToken('https://server.example.com')).toBeNull();
+
+    const directLookup1 = await Bun.secrets.get({ service, name: 'sonarcloud.io:org1' });
+    const directLookup2 = await Bun.secrets.get({ service, name: 'server.example.com' });
+    expect(directLookup1).toBeNull();
+    expect(directLookup2).toBeNull();
+  });
+
+  it('does not duplicate accounts on repeated saves', async () => {
+    await handle.seedToken('https://sonarcloud.io', 'v1', 'org1');
     clearTokenCache();
-    const token = await getToken('https://sonarcloud.io', 'myorg');
-    expect(token).toBeNull();
+    await handle.saveToken('https://sonarcloud.io', 'v2', 'org1');
+
+    const creds = await getAllCredentials();
+    expect(creds).toHaveLength(1);
+    expect(creds[0].password).toBe('v2');
+  });
+
+  it('handles orphaned index entries gracefully', async () => {
+    await handle.seedToken('https://sonarcloud.io', 'tok1', 'org1');
+
+    // Manually delete the credential from Bun.secrets without going through deleteToken
+    const service = process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE!;
+    await Bun.secrets.delete({ service, name: 'sonarcloud.io:org1' });
+
+    clearTokenCache();
+    const creds = await getAllCredentials();
+    expect(creds).toHaveLength(0);
   });
 });
 
