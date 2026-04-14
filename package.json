@@ -63,7 +63,7 @@
     "@sentry/bun": "^10.46.0"
   },
   "devDependencies": {
-    "@sonar/scan": "^4.3.0",
+    "@sonar/scan": "^4.3.5",
     "@types/bun": "^1.3.9",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
