@@ -30,13 +30,13 @@ import { authStatus } from '../../src/cli/commands/auth/status';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import * as discovery from '../../src/lib/project-workspace';
 import { setMockUi } from '../../src/ui';
-import { createMockKeytar } from './helpers/mock-keytar.js';
+import { createKeychainTestHandle } from './keychain/keychain-test-handle.js';
 import * as stateManager from '../../src/lib/state-manager.js';
 import type { AuthConnection } from '../../src/lib/state.js';
 import { getDefaultState } from '../../src/lib/state.js';
 import { ResolvedAuth } from '../../src/lib/auth-resolver.js';
 
-const keytarHandle = createMockKeytar();
+const handle = createKeychainTestHandle();
 
 function cliStateWithLoggedInConnection(auth: ResolvedAuth): ReturnType<typeof getDefaultState> {
   const base = getDefaultState('test');
@@ -80,7 +80,7 @@ describe('authLogoutCommand', () => {
   };
 
   beforeEach(() => {
-    keytarHandle.setup();
+    handle.setup();
     setMockUi(true);
     loadStateSpy = spyOn(stateManager, 'loadState').mockImplementation(() =>
       cliStateWithLoggedInConnection(FAKE_SQS_AUTH),
@@ -88,8 +88,8 @@ describe('authLogoutCommand', () => {
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   });
 
-  afterEach(() => {
-    keytarHandle.teardown();
+  afterEach(async () => {
+    await handle.teardown();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -150,12 +150,12 @@ describe('authLogoutCommand', () => {
 
 describe('authPurgeCommand', () => {
   beforeEach(() => {
-    keytarHandle.setup();
+    handle.setup();
     setMockUi(true);
   });
 
-  afterEach(() => {
-    keytarHandle.teardown();
+  afterEach(async () => {
+    await handle.teardown();
     setMockUi(false);
   });
 
@@ -166,12 +166,12 @@ describe('authPurgeCommand', () => {
 
 describe('authStatusCommand', () => {
   beforeEach(() => {
-    keytarHandle.setup();
+    handle.setup();
     setMockUi(true);
   });
 
-  afterEach(() => {
-    keytarHandle.teardown();
+  afterEach(async () => {
+    await handle.teardown();
     setMockUi(false);
   });
 
@@ -194,23 +194,28 @@ const EMPTY_PROJECT_INFO = {
 
 describe('authLoginCommand', () => {
   let loadStateSpy: any;
-
   let saveStateSpy: any;
   let discoverSpy: ReturnType<typeof spyOn>;
+  let getCurrentUserSpy: ReturnType<typeof spyOn>;
+  let getOrgIdSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    keytarHandle.setup();
+    handle.setup();
     setMockUi(true);
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
     discoverSpy = spyOn(discovery, 'discoverProjectInfo').mockResolvedValue(EMPTY_PROJECT_INFO);
+    getCurrentUserSpy = spyOn(SonarQubeClient.prototype, 'getCurrentUser').mockResolvedValue(null);
+    getOrgIdSpy = spyOn(SonarQubeClient.prototype, 'getOrganizationId').mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    keytarHandle.teardown();
+  afterEach(async () => {
+    await handle.teardown();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     discoverSpy.mockRestore();
+    getCurrentUserSpy.mockRestore();
+    getOrgIdSpy.mockRestore();
     setMockUi(false);
   });
 

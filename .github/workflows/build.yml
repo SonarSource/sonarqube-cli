@@ -326,9 +326,9 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
-      - name: Install libsecret (Linux)
+      - name: Install keychain dependencies (Linux)
         if: matrix.os == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
 
       - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
@@ -353,6 +353,17 @@ jobs:
       - name: Run all tests (Windows)
         if: matrix.os == 'windows'
         run: bun test:all
+
+      - name: Start D-Bus and unlock keyring (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          mkdir -p ~/.local/share/keyrings
+          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
+          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
+            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
+          fi
 
       - name: Run all tests with coverage (Linux)
         if: matrix.os == 'linux'

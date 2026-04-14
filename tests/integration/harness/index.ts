@@ -44,16 +44,17 @@ export type { CliResult, RunOptions, RecordedRequest } from './types.js';
 export { IS_WINDOWS, SCRIPT_EXT, hookScriptName, hookScriptPath, normalizePath } from './platform';
 
 export class TestHarness {
-  private readonly tempDir: Dir;
   public readonly cwd: Dir;
   public readonly userHome: Dir;
   public readonly cliHome: Dir;
   public readonly stateJsonFile: File;
-  public readonly keychainJsonFile: File;
+  public readonly keychainServiceName: string;
+  private readonly tempDir: Dir;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
+  private readonly seededAccounts: string[] = [];
+  private readonly _extraEnv: Record<string, string> = {};
   private _envBuilder?: EnvironmentBuilder;
-  private _extraEnv: Record<string, string> = {};
 
   private constructor(tempDir: string) {
     this.tempDir = new Dir(tempDir);
@@ -61,14 +62,11 @@ export class TestHarness {
     this.userHome = this.tempDir.dir('home');
     this.cliHome = this.userHome.dir('.sonar', 'sonarqube-cli');
     this.stateJsonFile = this.cliHome.file('state.json');
-    this.keychainJsonFile = this.tempDir.file('keychain.json');
+    this.keychainServiceName = `sonar-cli-integ-${crypto.randomUUID()}`;
   }
 
   static create(): Promise<TestHarness> {
-    const tempDir = join(
-      tmpdir(),
-      `sonar-cli-harness-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    );
+    const tempDir = join(tmpdir(), `sonar-cli-harness-${Date.now()}-${crypto.randomUUID()}`);
     mkdirSync(tempDir, { recursive: true });
     return Promise.resolve(new TestHarness(tempDir));
   }
@@ -135,21 +133,31 @@ export class TestHarness {
   /**
    * Runs the CLI binary with the given command string.
    *
-   * Before spawning, applies the configured environment (writes state.json + copies binary).
-   * Sets SONARQUBE_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain where the harness
-   * has written tokens (via withKeychainToken()); avoids touching the system keychain.
+   * Before spawning, applies the configured environment (writes state.json + seeds tokens).
+   * Sets SONARQUBE_CLI_KEYCHAIN_SERVICE so the CLI reads tokens from the same isolated
+   * OS credential store namespace that the harness seeded via Bun.secrets.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
-    // Apply environment to tempDir before each run
     if (this._envBuilder) {
-      await this._envBuilder.writeTo(this.cliHome.path, this.keychainJsonFile.path);
+      const accounts = await this._envBuilder.writeTo(this.cliHome.path, this.keychainServiceName);
+      this.seededAccounts.push(...accounts);
     }
 
     // Clean environment — only include the minimum system vars needed to run a binary.
     // This prevents developer-specific env vars (tokens, staging URLs, etc.) from
     // leaking into the CLI process and affecting test behaviour.
     const systemVars: Record<string, string> = {};
-    for (const key of ['PATH', 'HOME', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM']) {
+    for (const key of [
+      'PATH',
+      'HOME',
+      'TMPDIR',
+      'USER',
+      'LOGNAME',
+      'SHELL',
+      'TERM',
+      'DBUS_SESSION_BUS_ADDRESS',
+      'GNOME_KEYRING_CONTROL',
+    ]) {
       const val = process.env[key];
       if (val !== undefined) systemVars[key] = val;
     }
@@ -170,10 +178,10 @@ export class TestHarness {
       ...systemVars,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
-      SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile.path,
+      SONARQUBE_CLI_KEYCHAIN_SERVICE: this.keychainServiceName,
       CI: 'true',
       ...this._extraEnv,
-      ...(options?.extraEnv ?? {}),
+      ...options?.extraEnv,
       ...buildHomeEnv(this.userHome.path),
     };
 
@@ -187,7 +195,7 @@ export class TestHarness {
   }
 
   /**
-   * Stops all fake servers and removes the temporary directory.
+   * Stops all fake servers, cleans up seeded keychain tokens, and removes the temporary directory.
    */
   async dispose(): Promise<void> {
     await Promise.all(
@@ -197,6 +205,14 @@ export class TestHarness {
         }),
       ),
     );
+
+    for (const account of this.seededAccounts) {
+      await Bun.secrets
+        .delete({ service: this.keychainServiceName, name: account })
+        .catch(() => {});
+    }
+    this.seededAccounts.length = 0;
+
     await rm(this.tempDir.path, {
       recursive: true,
       force: true,

@@ -71,7 +71,7 @@ export async function runCli(
   const spawnEnv = { ...env, SONARQUBE_CLI_DISABLE_SENTRY: '1' };
   if (coverageMode) {
     mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const unique = `${Date.now()}-${crypto.randomUUID()}`;
     spawnEnv.COVERAGE_OUTPUT_FILE = join(COVERAGE_RAW_DIR, `coverage-${unique}.json`);
   }
 
@@ -158,7 +158,7 @@ async function streamStdoutAndDeliverToken(
       accumulated += decoder.decode(value, { stream: true });
 
       if (!tokenDelivered) {
-        const match = accumulated.match(/[?&]port=(\d+)/);
+        const match = new RegExp(/[?&]port=(\d+)/).exec(accumulated);
         if (match) {
           tokenDelivered = true;
           const port = match[1];
