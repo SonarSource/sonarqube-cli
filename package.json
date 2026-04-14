@@ -12,7 +12,7 @@
     "postbuild:binary": "bun build-scripts/codesign-local.ts",
     "dev": "bun run src/index.ts",
     "test:unit": "SONARQUBE_CLI_DISABLE_SENTRY=1 bun test ./tests/unit/",
-    "pretest:integration": "bun build:binary && bun build-scripts/setup-integration-resources.ts",
+    "pretest:integration": "bun build-scripts/ensure-binary.ts && bun build-scripts/setup-integration-resources.ts",
     "test:integration": "bun test ./tests/integration/",
     "test:all": "bun run test:unit && bun run test:integration",
     "test:e2e": "bun test ./tests/e2e/",

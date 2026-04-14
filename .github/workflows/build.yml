@@ -321,7 +321,7 @@ jobs:
   test-and-scan:
     name: Run Tests and Scan with SonarQube - ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
-    needs: [prepare]
+    needs: [prepare, build-binaries]
     strategy:
       matrix:
         include:
@@ -368,15 +368,32 @@ jobs:
           ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: bun ci
 
+      - name: Download cross-compiled binaries
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binaries
+          path: dist/
+
+      - name: Place platform binary
+        shell: bash
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+        run: |
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            cp "dist/sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.exe" dist/sonarqube-cli
+            chmod +x dist/sonarqube-cli
+          else
+            cp "dist/sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe" dist/sonarqube-cli.exe
+          fi
+
       - name: Check style
         run: bun format:check
 
       - name: Check linting
         run: bun lint
 
-      - name: Run all tests (Windows)
-        if: matrix.os == 'windows'
-        run: bun test:all
+      - name: Run unit tests
+        run: bun test:unit
 
       - name: Start D-Bus and unlock keyring (Linux)
         if: matrix.os == 'linux'
@@ -389,7 +406,10 @@ jobs:
             echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
           fi
 
-      - name: Run all tests with coverage (Linux)
+      - name: Run integration tests against cross-compiled binary
+        run: bun test:integration
+
+      - name: Run tests with coverage (Linux)
         if: matrix.os == 'linux'
         run: bun test:coverage
 
