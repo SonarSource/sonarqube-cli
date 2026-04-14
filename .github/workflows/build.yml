@@ -64,13 +64,17 @@ jobs:
             runner: macos-latest-xlarge
             target: bun-darwin-arm64
             platform: macos-arm64
+          - os: macos-x86-64
+            runner: macos-13
+            target: bun-darwin-x64
+            platform: macos-x86-64
           - os: windows
             runner: warp-custom-windows-2022-s
             target: bun-windows-x64
             platform: windows-x86-64
     steps:
       - name: Setup Cloudflare WARP (macOS only)
-        if: matrix.os == 'macos'
+        if: startsWith(matrix.os, 'macos')
         uses: SonarSource/gh-action_setup-cloudflare-warp@v1
 
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
@@ -126,7 +130,7 @@ jobs:
 
       - name: Fetch Apple Developer Certificate secrets (macOS only)
         id: apple-secrets
-        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        if: startsWith(matrix.os, 'macos') && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
         uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
         with:
           secrets: |
@@ -137,7 +141,7 @@ jobs:
             development/kv/data/sign/sonarqube-cli APPLE_APP_SPECIFIC_PASSWORD | APPLE_APP_SPECIFIC_PASSWORD;
 
       - name: Code-sign and notarize binary (macOS only)
-        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        if: startsWith(matrix.os, 'macos') && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
         env:
           CERTIFICATE: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CSC_KEY_PASSWORD }}
@@ -170,7 +174,7 @@ jobs:
           rm /tmp/notarize.zip
 
       - name: Clean up build keychain
-        if: always() && matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        if: always() && startsWith(matrix.os, 'macos') && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
         run: |
           security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
           security delete-keychain build.keychain 2>/dev/null || true
@@ -243,6 +247,12 @@ jobs:
           name: binary-macos
           path: dist/
 
+      - name: Download macos-x86-64 binary
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binary-macos-x86-64
+          path: dist/
+
       - name: Download windows binary
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
@@ -265,7 +275,7 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT: ${{ github.event.repository.name }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:exe:linux-x86-64,org.sonarsource.cli:sonarqube-cli:exe:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64'
+          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:exe:linux-x86-64,org.sonarsource.cli:sonarqube-cli:exe:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:macos-x86-64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64'
         run: |
           jf config add repox \
             --artifactory-url="${ARTIFACTORY_URL}" \
