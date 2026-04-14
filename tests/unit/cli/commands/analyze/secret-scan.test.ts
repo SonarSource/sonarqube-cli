@@ -30,7 +30,7 @@ import * as processLib from '../../../../../src/lib/process.js';
 import * as stateManager from '../../../../../src/lib/state-manager.js';
 import * as installSecrets from '../../../../../src/cli/commands/_common/install/secrets';
 import { getDefaultState } from '../../../../../src/lib/state.js';
-import { analyzeSecrets } from '../../../../../src/cli/commands/analyze/secrets';
+import { analyzeSecrets, runSecretsBinaryOnText } from '../../../../../src/cli/commands/analyze/secrets';
 import {
   CommandFailedError,
   InvalidOptionError,
@@ -444,6 +444,29 @@ describe('secretCheckCommand: stdin scan', () => {
     } finally {
       existsSpy.mockRestore();
     }
+  });
+});
+
+// ─── runSecretsBinaryOnText ───────────────────────────────────────────────────
+
+describe('runSecretsBinaryOnText', () => {
+  it('calls spawnProcess with --input as the only arg', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'prompt text', FAKE_AUTH);
+    expect(spawnSpy.mock.calls[0][1]).toEqual(['--input']);
+  });
+
+  it('passes text as stdinData', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'my secret prompt', FAKE_AUTH);
+    expect(spawnSpy.mock.calls[0][2].stdinData).toBe('my secret prompt');
+  });
+
+  it('passes auth env vars to the process', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'text', FAKE_AUTH);
+    expect(spawnSpy.mock.calls[0][2].env['SONAR_SECRETS_AUTH_URL']).toBe(SONARCLOUD_URL);
+    expect(spawnSpy.mock.calls[0][2].env['SONAR_SECRETS_TOKEN']).toBe(TEST_TOKEN);
   });
 });
 
