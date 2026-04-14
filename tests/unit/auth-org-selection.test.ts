@@ -29,9 +29,9 @@ import * as discovery from '../../src/lib/project-workspace';
 import * as stateManager from '../../src/lib/state-manager';
 import { getDefaultState } from '../../src/lib/state';
 import { setMockUi, clearMockUiCalls, queueMockResponse } from '../../src/ui';
-import { createMockKeytar } from './helpers/mock-keytar';
+import { createKeychainTestHandle } from './keychain/keychain-test-handle';
 
-const keytarHandle = createMockKeytar();
+const handle = createKeychainTestHandle();
 
 const EMPTY_PROJECT_INFO = {
   root: '',
@@ -51,21 +51,27 @@ describe('authLogin: org selection', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
   let discoverSpy: ReturnType<typeof spyOn>;
+  let getCurrentUserSpy: ReturnType<typeof spyOn>;
+  let getOrgIdSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    keytarHandle.setup();
+    handle.setup();
     setMockUi(true);
     clearMockUiCalls();
     loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
     discoverSpy = spyOn(discovery, 'discoverProjectInfo').mockResolvedValue(EMPTY_PROJECT_INFO);
+    getCurrentUserSpy = spyOn(SonarQubeClient.prototype, 'getCurrentUser').mockResolvedValue(null);
+    getOrgIdSpy = spyOn(SonarQubeClient.prototype, 'getOrganizationId').mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    keytarHandle.teardown();
+  afterEach(async () => {
+    await handle.teardown();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     discoverSpy.mockRestore();
+    getCurrentUserSpy.mockRestore();
+    getOrgIdSpy.mockRestore();
     setMockUi(false);
   });
 

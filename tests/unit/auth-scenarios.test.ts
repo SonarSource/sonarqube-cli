@@ -40,8 +40,7 @@ import {
   getSuccessHTML,
 } from '../../src/cli/commands/_common/token';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
-import { clearTokenCache } from '../../src/lib/keychain.js';
-import { setKeytarImpl } from './helpers/mock-keytar.js';
+import { createKeychainTestHandle } from './keychain/keychain-test-handle.js';
 import { setMockUi } from '../../src/ui';
 
 const HTTP_SCHEME = 'http';
@@ -66,29 +65,16 @@ function extractPortFromMockBrowserCall(): number {
 // ─── Keychain wrapper functions ──────────────────────────────────────
 
 describe('Auth Scenarios: keychain token management', () => {
-  const mockStore = new Map<string, string>();
+  const handle = createKeychainTestHandle();
   const SONARCLOUD_URL = 'https://sonarcloud.io';
   const ONPREM_URL = 'https://sonar.example.com';
 
   beforeEach(() => {
-    mockStore.clear();
-    clearTokenCache();
-    setKeytarImpl({
-      getPassword: (_service: string, account: string) =>
-        Promise.resolve(mockStore.get(account) ?? null),
-      setPassword: (_service: string, account: string, password: string) => {
-        mockStore.set(account, password);
-        return Promise.resolve();
-      },
-      deletePassword: (_service: string, account: string) =>
-        Promise.resolve(mockStore.delete(account)),
-      findCredentials: () => Promise.resolve([]),
-    });
+    handle.setup();
   });
 
-  afterEach(() => {
-    setKeytarImpl(null);
-    clearTokenCache();
+  afterEach(async () => {
+    await handle.teardown();
   });
 
   it('should save and retrieve token for SonarCloud with org', async () => {
