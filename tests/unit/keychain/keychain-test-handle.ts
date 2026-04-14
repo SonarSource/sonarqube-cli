@@ -33,7 +33,11 @@
  * Call setup() in beforeEach and teardown() in afterEach.
  */
 
-import { clearTokenCache, generateKeychainAccount, saveToken } from '../../../src/lib/keychain';
+import {
+  clearTokenCache,
+  generateKeychainAccount,
+  saveToken as realSaveToken,
+} from '../../../src/lib/keychain';
 
 export interface KeychainTestHandle {
   /**
@@ -41,6 +45,11 @@ export interface KeychainTestHandle {
    * so the next read goes to the backend. Same signature as saveToken.
    */
   seedToken(serverUrl: string, token: string, org?: string): Promise<void>;
+  /**
+   * Save a token and track the account for cleanup. Use this instead of
+   * importing saveToken directly in tests that use the Bun.secrets backend.
+   */
+  saveToken(serverUrl: string, token: string, org?: string): Promise<void>;
   setup(): void;
   teardown(): Promise<void>;
 }
@@ -55,8 +64,13 @@ export function createKeychainTestHandle(): KeychainTestHandle {
   return {
     async seedToken(serverUrl: string, token: string, org?: string) {
       trackedAccounts.add(generateKeychainAccount(serverUrl, org));
-      await saveToken(serverUrl, token, org);
+      await realSaveToken(serverUrl, token, org);
       clearTokenCache();
+    },
+
+    async saveToken(serverUrl: string, token: string, org?: string) {
+      trackedAccounts.add(generateKeychainAccount(serverUrl, org));
+      await realSaveToken(serverUrl, token, org);
     },
 
     setup() {
