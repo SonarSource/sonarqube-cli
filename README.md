@@ -233,15 +233,16 @@ Search for issues in SonarQube
 
 **Options:**
 
-| Option            | Type   | Required | Description        | Default |
-| ----------------- | ------ | -------- | ------------------ | ------- |
-| `--project`, `-p` | string | Yes      | Project key        | -       |
-| `--severity`      | string | No       | Filter by severity | -       |
-| `--format`        | string | No       | Output format      | `json`  |
-| `--branch`        | string | No       | Branch name        | -       |
-| `--pull-request`  | string | No       | Pull request ID    | -       |
-| `--page-size`     | number | No       | Page size (1-500)  | `500`   |
-| `--page`          | number | No       | Page number        | `1`     |
+| Option            | Type   | Required | Description                                                                                  | Default |
+| ----------------- | ------ | -------- | -------------------------------------------------------------------------------------------- | ------- |
+| `--project`, `-p` | string | Yes      | Project key                                                                                  | -       |
+| `--statuses`      | string | No       | Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED) | -       |
+| `--severities`    | string | No       | Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)          | -       |
+| `--format`        | string | No       | Output format                                                                                | `json`  |
+| `--branch`        | string | No       | Branch name                                                                                  | -       |
+| `--pull-request`  | string | No       | Pull request ID                                                                              | -       |
+| `--page-size`     | number | No       | Page size (1-500)                                                                            | `500`   |
+| `--page`          | number | No       | Page number                                                                                  | `1`     |
 
 **Examples:**
 

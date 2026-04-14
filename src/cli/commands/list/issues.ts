@@ -37,9 +37,9 @@ export const VALID_STATUSES = ['OPEN', 'CONFIRMED', 'FALSE_POSITIVE', 'ACCEPTED'
 
 export interface ListIssuesOptions {
   project?: string;
-  severity?: string;
+  severities?: string;
   type?: string;
-  status?: string;
+  statuses?: string;
   rule?: string;
   tag?: string;
   branch?: string;
@@ -77,23 +77,26 @@ export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth)
     throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
   }
 
-  if (options.status) {
-    const statuses = options.status.split(',').map((s) => s.toUpperCase());
+  let normalizedStatuses = options.statuses;
+  if (normalizedStatuses) {
+    const statuses = normalizedStatuses.split(',').map((s) => s.toUpperCase());
     if (!statuses.every((s) => VALID_STATUSES.includes(s))) {
       throw new InvalidOptionError(
-        `Invalid status(es): '${options.status}'. Valid statuses are: ${VALID_STATUSES.join(', ')}`,
+        `Invalid status(es): '${options.statuses}'. Valid statuses are: ${VALID_STATUSES.join(', ')}`,
       );
     }
-    options.status = statuses.join(',');
+    normalizedStatuses = statuses.join(',');
   }
 
-  if (options.severity) {
-    const sev = options.severity.toUpperCase();
-    if (!VALID_SEVERITIES.includes(sev)) {
+  let normalizedSeverities = options.severities;
+  if (normalizedSeverities) {
+    const severities = normalizedSeverities.split(',').map((s) => s.toUpperCase());
+    if (!severities.every((s) => VALID_SEVERITIES.includes(s))) {
       throw new InvalidOptionError(
-        `Invalid severity: '${options.severity}'. Must be one of: ${VALID_SEVERITIES.join(', ')}`,
+        `Invalid severity(es): '${options.severities}'. Valid severities are: ${VALID_SEVERITIES.join(', ')}`,
       );
     }
+    normalizedSeverities = severities.join(',');
   }
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
@@ -102,9 +105,9 @@ export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth)
   const params: IssuesSearchParams = {
     projects: options.project,
     organization: auth.orgKey,
-    severities: options.severity?.toUpperCase(),
+    severities: normalizedSeverities,
     types: options.type,
-    issueStatuses: options.status,
+    issueStatuses: normalizedStatuses,
     rules: options.rule,
     tags: options.tag,
     branch: options.branch,

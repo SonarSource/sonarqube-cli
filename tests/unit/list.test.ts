@@ -165,7 +165,7 @@ describe('IssuesClient', () => {
 
     it('should pass issueStatuses parameter', async () => {
       const mockGet = mock((_endpoint: string, params?: MockParams) => {
-        expect(params?.issueStatuses).toBe('OPEN,REOPENED');
+        expect(params?.issueStatuses).toBe('OPEN,ACCEPTED');
         return Promise.resolve(createMockIssuesResponse([], 1, DEFAULT_PAGE_SIZE, 0));
       });
 
@@ -174,7 +174,7 @@ describe('IssuesClient', () => {
 
       await issuesClient.searchIssues({
         projects: 'my-project',
-        issueStatuses: 'OPEN,REOPENED',
+        issueStatuses: 'OPEN,ACCEPTED',
       });
     });
 
@@ -393,6 +393,7 @@ describe('issuesSearchCommand', () => {
     token: 'test-token',
     serverUrl: 'https://sonarcloud.io',
     orgKey: 'test-org',
+    connectionType: 'cloud',
   };
 
   const emptyApiResponse = {
@@ -441,13 +442,13 @@ describe('issuesSearchCommand', () => {
     ).rejects.toThrow('page-size');
   });
 
-  it('throws when --severity is invalid', () => {
+  it('throws when --severities is invalid', () => {
     expect(
-      listIssues({ project: 'proj', severity: 'EXTREME', page: 1, pageSize: 500 }, mockAuth),
+      listIssues({ project: 'proj', severities: 'EXTREME', page: 1, pageSize: 500 }, mockAuth),
     ).rejects.toThrow('EXTREME');
   });
 
-  it('normalizes severity to uppercase before passing to API', async () => {
+  it('normalizes severities to uppercase before passing to API', async () => {
     let capturedSeverities: string | undefined;
     const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
@@ -458,7 +459,7 @@ describe('issuesSearchCommand', () => {
 
     try {
       await listIssues(
-        { project: 'my-project', severity: 'major', page: 1, pageSize: 500 },
+        { project: 'my-project', severities: 'major', page: 1, pageSize: 500 },
         mockAuth,
       );
       expect(capturedSeverities).toBe('MAJOR');
@@ -475,6 +476,12 @@ describe('issuesSearchCommand', () => {
     } finally {
       getSpy.mockRestore();
     }
+  });
+
+  it('throws when --statuses is invalid', () => {
+    expect(
+      listIssues({ project: 'proj', statuses: 'UNKNOWN', page: 1, pageSize: 500 }, mockAuth),
+    ).rejects.toThrow('UNKNOWN');
   });
 });
 

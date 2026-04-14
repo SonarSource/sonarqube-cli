@@ -96,7 +96,7 @@ describe('list issues', () => {
   );
 
   it(
-    'passes severity filter to API when --severity flag is provided',
+    'passes severity filter to API when --severities flag is provided',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -109,7 +109,7 @@ describe('list issues', () => {
         .start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run(`list issues --project my-project --severity BLOCKER`);
+      const result = await harness.run(`list issues --project my-project --severities BLOCKER`);
 
       expect(result.exitCode).toBe(0);
       const recorded = server.getRecordedRequests();
@@ -276,12 +276,12 @@ describe('list issues — argument validation', () => {
   );
 
   it(
-    'exits with code 1 when --severity is not a recognised value',
+    'exits with code 1 when --severities is not a recognised value',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
-      const result = await harness.run('list issues --project my-project --severity UNKNOWN');
+      const result = await harness.run('list issues --project my-project --severities UNKNOWN');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Invalid severity');
@@ -290,12 +290,63 @@ describe('list issues — argument validation', () => {
   );
 
   it(
-    'exits with code 1 when --status is not a recognised value',
+    'passes multiple severities to API when --severities is provided with multiple values',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p
+            .withIssue({ ruleKey: 'java:S1234', message: 'Major issue', severity: 'MAJOR' })
+            .withIssue({ ruleKey: 'java:S9999', message: 'Critical issue', severity: 'CRITICAL' })
+            .withIssue({ ruleKey: 'java:S9999', message: 'Blocker issue', severity: 'BLOCKER' }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run(
+        'list issues --project my-project --severities MAJOR,CRITICAL',
+      );
+
+      expect(result.exitCode).toBe(0);
+      const recorded = server.getRecordedRequests();
+      const issuesReq = recorded.find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.severities).toBe('MAJOR,CRITICAL');
+      expect(result.stdout).toContain('"total": 2');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'passes single severity to API when --severities is provided with a single value',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project', (p) =>
+          p.withIssue({ ruleKey: 'java:S1234', message: 'Major issue', severity: 'MAJOR' }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run('list issues --project my-project --severities MAJOR');
+
+      expect(result.exitCode).toBe(0);
+      const recorded = server.getRecordedRequests();
+      const issuesReq = recorded.find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.severities).toBe('MAJOR');
+      expect(result.stdout).toContain('"total": 1');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 when --statuses is not a recognised value',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
-      const result = await harness.run('list issues --project my-project --status UNKNOWN');
+      const result = await harness.run('list issues --project my-project --statuses UNKNOWN');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Invalid status(es)');
@@ -303,7 +354,7 @@ describe('list issues — argument validation', () => {
     { timeout: 15000 },
   );
 
-  it('passes multiple statuses to API when --status is provided with multiple values', async () => {
+  it('passes multiple statuses to API when --statuses is provided with multiple values', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken('test-token')
@@ -331,7 +382,7 @@ describe('list issues — argument validation', () => {
       .start();
     harness.withAuth(server.baseUrl(), 'test-token');
 
-    const result = await harness.run('list issues --project my-project --status OPEN,FIXED');
+    const result = await harness.run('list issues --project my-project --statuses OPEN,FIXED');
 
     expect(result.exitCode).toBe(0);
     const recorded = server.getRecordedRequests();
@@ -340,7 +391,7 @@ describe('list issues — argument validation', () => {
     expect(result.stdout).toContain('"total": 2');
   });
 
-  it('passes single severity to API when --status is provided with a single value', async () => {
+  it('passes single status to API when --statuses is provided with a single value', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken('test-token')
@@ -368,7 +419,7 @@ describe('list issues — argument validation', () => {
       .start();
     harness.withAuth(server.baseUrl(), 'test-token');
 
-    const result = await harness.run('list issues --project my-project --status open');
+    const result = await harness.run('list issues --project my-project --statuses open');
 
     expect(result.exitCode).toBe(0);
     const recorded = server.getRecordedRequests();

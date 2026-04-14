@@ -224,10 +224,12 @@ export class FakeSonarQubeServerBuilder {
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
           const issueStatusFilter = query.issueStatuses ? query.issueStatuses.split(',') : null;
+          const severityFilter = query.severities ? query.severities.split(',') : null;
 
           const issues: SonarQubeIssue[] =
             projectData?.issues
               .filter((issue) => !issueStatusFilter || issueStatusFilter.includes(issue.status))
+              .filter((issue) => !severityFilter || severityFilter.includes(issue.severity))
               .map((issue) => ({
                 key: issue.key,
                 rule: issue.ruleKey,

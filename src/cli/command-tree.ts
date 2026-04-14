@@ -132,11 +132,11 @@ list
   .description('Search for issues in SonarQube')
   .requiredOption('-p, --project <project>', 'Project key')
   .option(
-    '--status <status>',
+    '--statuses <statuses>',
     `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')})`,
   )
   .option(
-    '--severity <severity>',
+    '--severities <severities>',
     `Filter by severity (comma-separated list of: ${VALID_SEVERITIES.join(', ')})`,
   )
   .option('--format <format>', 'Output format', 'json')
