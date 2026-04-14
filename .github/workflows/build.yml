@@ -329,6 +329,19 @@ jobs:
         if: matrix.os == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
 
+      - name: Start D-Bus and unlock keyring (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          mkdir -p ~/.local/share/keyrings
+          # Empty password is intentional — CI keyring is ephemeral and
+          # only used to give Bun.secrets a working backend for tests.
+          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
+          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
+            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
+          fi
+
       - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
         with:
@@ -352,17 +365,6 @@ jobs:
       - name: Run all tests (Windows)
         if: matrix.os == 'windows'
         run: bun test:all
-
-      - name: Start D-Bus and unlock keyring (Linux)
-        if: matrix.os == 'linux'
-        run: |
-          eval "$(dbus-launch --sh-syntax)"
-          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
-          mkdir -p ~/.local/share/keyrings
-          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
-          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
-            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
-          fi
 
       - name: Run all tests with coverage (Linux)
         if: matrix.os == 'linux'

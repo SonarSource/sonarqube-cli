@@ -50,14 +50,15 @@ const noOpBackend: KeychainBackend = {
 };
 
 const KEYCHAIN_UNAVAILABLE_MESSAGE =
-  'Could not access the system credential store. Please make sure your OS credential manager is available and unlocked.';
+  "Failed to access the system keychain. Please make sure your system's keychain or credential manager is available and unlocked and try again.";
 
-function wrapBunSecrets<T>(operation: () => Promise<T>): Promise<T> {
-  return operation().catch((err: unknown) => {
-    throw new CommandFailedError(
-      `${KEYCHAIN_UNAVAILABLE_MESSAGE}\n\nUnderlying error: ${(err as Error).message}`,
-    );
-  });
+async function wrapBunSecrets<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new CommandFailedError(`${KEYCHAIN_UNAVAILABLE_MESSAGE}\n\nUnderlying error: ${detail}`);
+  }
 }
 
 const bunSecretsBackend: KeychainBackend = {
@@ -119,11 +120,18 @@ export function clearTokenCache(): void {
   tokenCache.clear();
 }
 
+let cachedFileBackend: { path: string; backend: KeychainBackend } | null = null;
+
 function getBackend(): KeychainBackend {
   const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
   if (keychainFile) {
-    return createFileBackend(keychainFile);
+    if (cachedFileBackend?.path !== keychainFile) {
+      cachedFileBackend = { path: keychainFile, backend: createFileBackend(keychainFile) };
+    }
+    return cachedFileBackend.backend;
   }
+
+  cachedFileBackend = null;
 
   if (process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN === 'true') {
     return noOpBackend;
