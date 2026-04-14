@@ -157,7 +157,6 @@ jobs:
             --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" \
             --options runtime \
             --timestamp \
-            --entitlements build-scripts/entitlements.plist \
             dist/${{ steps.artifact.outputs.name }}
           codesign --verify --verbose dist/${{ steps.artifact.outputs.name }}
 

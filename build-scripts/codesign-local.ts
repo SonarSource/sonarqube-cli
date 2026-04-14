@@ -45,16 +45,7 @@ if (!findIdentity.stdout.includes(teamId)) {
 console.log(`Signing ${BINARY} with Developer ID Application: SonarSource SA...`);
 const result = spawnSync(
   '/usr/bin/codesign',
-  [
-    '--sign',
-    SIGN_IDENTITY,
-    '--force',
-    '--options',
-    'runtime',
-    '--entitlements',
-    'build-scripts/entitlements.plist',
-    BINARY,
-  ],
+  ['--sign', SIGN_IDENTITY, '--force', '--options', 'runtime', BINARY],
   { stdio: 'inherit' },
 );
 
