@@ -21,7 +21,7 @@
 // Authentication keychain tests (Bun.secrets backend)
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { getToken, saveToken, deleteToken, clearTokenCache } from '../../src/lib/keychain.js';
+import { getToken, deleteToken, clearTokenCache } from '../../src/lib/keychain.js';
 import { createKeychainTestHandle } from './keychain/keychain-test-handle.js';
 
 const handle = createKeychainTestHandle();
@@ -32,8 +32,8 @@ describe('Bun.secrets keychain backend', () => {
 
   describe('account key generation', () => {
     it('generates correct key for SonarCloud with org', async () => {
-      await saveToken('https://sonarcloud.io', 'token-org1', 'my-org-1');
-      await saveToken('https://sonarcloud.io', 'token-org2', 'my-org-2');
+      await handle.saveToken('https://sonarcloud.io', 'token-org1', 'my-org-1');
+      await handle.saveToken('https://sonarcloud.io', 'token-org2', 'my-org-2');
 
       clearTokenCache();
       expect(await getToken('https://sonarcloud.io', 'my-org-1')).toBe('token-org1');
@@ -41,8 +41,8 @@ describe('Bun.secrets keychain backend', () => {
     });
 
     it('generates correct key for SonarQube (hostname only)', async () => {
-      await saveToken('https://sonarqube1.io', 'token-sq1');
-      await saveToken('https://sonarqube2.io', 'token-sq2');
+      await handle.saveToken('https://sonarqube1.io', 'token-sq1');
+      await handle.saveToken('https://sonarqube2.io', 'token-sq2');
 
       clearTokenCache();
       expect(await getToken('https://sonarqube1.io')).toBe('token-sq1');
@@ -52,14 +52,14 @@ describe('Bun.secrets keychain backend', () => {
 
   describe('save and get token', () => {
     it('saves and retrieves SonarCloud token with org', async () => {
-      await saveToken('https://sonarcloud.io', 'squ_abc123def456', 'my-org');
+      await handle.saveToken('https://sonarcloud.io', 'squ_abc123def456', 'my-org');
 
       clearTokenCache();
       expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('squ_abc123def456');
     });
 
     it('saves and retrieves SonarQube server token', async () => {
-      await saveToken('https://my-sonarqube.io', 'squ_xyz789uvw012');
+      await handle.saveToken('https://my-sonarqube.io', 'squ_xyz789uvw012');
 
       clearTokenCache();
       expect(await getToken('https://my-sonarqube.io')).toBe('squ_xyz789uvw012');
@@ -72,7 +72,7 @@ describe('Bun.secrets keychain backend', () => {
 
   describe('delete token', () => {
     it('removes token from backend', async () => {
-      await saveToken('https://sonarcloud.io', 'test-token-123', 'test-org');
+      await handle.saveToken('https://sonarcloud.io', 'test-token-123', 'test-org');
       expect(await getToken('https://sonarcloud.io', 'test-org')).toBe('test-token-123');
 
       await deleteToken('https://sonarcloud.io', 'test-org');
@@ -81,8 +81,8 @@ describe('Bun.secrets keychain backend', () => {
     });
 
     it('does not affect other org tokens', async () => {
-      await saveToken('https://sonarcloud.io', 'token-org1', 'org1');
-      await saveToken('https://sonarcloud.io', 'token-org2', 'org2');
+      await handle.saveToken('https://sonarcloud.io', 'token-org1', 'org1');
+      await handle.saveToken('https://sonarcloud.io', 'token-org2', 'org2');
 
       await deleteToken('https://sonarcloud.io', 'org1');
       clearTokenCache();
@@ -93,8 +93,8 @@ describe('Bun.secrets keychain backend', () => {
 
   describe('edge cases', () => {
     it('same server with different orgs have different keys', async () => {
-      await saveToken('https://sonarcloud.io', 'token-for-org1', 'org1');
-      await saveToken('https://sonarcloud.io', 'token-for-org2', 'org2');
+      await handle.saveToken('https://sonarcloud.io', 'token-for-org1', 'org1');
+      await handle.saveToken('https://sonarcloud.io', 'token-for-org2', 'org2');
 
       clearTokenCache();
       const token1 = await getToken('https://sonarcloud.io', 'org1');
@@ -105,13 +105,13 @@ describe('Bun.secrets keychain backend', () => {
     });
 
     it('normalizes URLs with trailing slashes', async () => {
-      await saveToken('https://sonarqube.io/', 'test-token');
+      await handle.saveToken('https://sonarqube.io/', 'test-token');
       clearTokenCache();
       expect(await getToken('https://sonarqube.io')).toBe('test-token');
     });
 
     it('handles special characters in org names', async () => {
-      await saveToken('https://sonarcloud.io', 'token-special', 'my-org_with.special-chars');
+      await handle.saveToken('https://sonarcloud.io', 'token-special', 'my-org_with.special-chars');
       clearTokenCache();
       expect(await getToken('https://sonarcloud.io', 'my-org_with.special-chars')).toBe(
         'token-special',
@@ -119,8 +119,8 @@ describe('Bun.secrets keychain backend', () => {
     });
 
     it('org parameter is optional for SonarQube', async () => {
-      await saveToken('https://sonarqube.io', 'sq-token');
-      await saveToken('https://sonarqube.io', 'sq-token', undefined);
+      await handle.saveToken('https://sonarqube.io', 'sq-token');
+      await handle.saveToken('https://sonarqube.io', 'sq-token', undefined);
 
       clearTokenCache();
       expect(await getToken('https://sonarqube.io')).toBe('sq-token');
@@ -128,8 +128,8 @@ describe('Bun.secrets keychain backend', () => {
     });
 
     it('multiple servers with same org key', async () => {
-      await saveToken('https://sonarcloud.io', 'token-sc', 'my-org');
-      await saveToken('https://sonarqube.io', 'token-sq');
+      await handle.saveToken('https://sonarcloud.io', 'token-sc', 'my-org');
+      await handle.saveToken('https://sonarqube.io', 'token-sq');
 
       clearTokenCache();
       expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('token-sc');

@@ -32,11 +32,13 @@ import { tmpdir } from 'node:os';
 import {
   clearTokenCache,
   deleteToken,
+  generateKeychainAccount,
   getAllCredentials,
   getToken,
   purgeAllTokens,
   saveToken,
 } from '../../../src/lib/keychain.js';
+import { createKeychainTestHandle } from './keychain-test-handle.js';
 
 function useFileBackend() {
   let testDir: string;
@@ -263,5 +265,34 @@ describe('SONARQUBE_CLI_DISABLE_KEYCHAIN', () => {
     clearTokenCache();
     const token = await getToken('https://sonarcloud.io', 'myorg');
     expect(token).toBeNull();
+  });
+});
+
+describe('SONARQUBE_CLI_KEYCHAIN_SERVICE', () => {
+  const handle = createKeychainTestHandle();
+
+  beforeEach(() => handle.setup());
+  afterEach(async () => handle.teardown());
+
+  it('uses the env var as the service name for token isolation', async () => {
+    await handle.saveToken('https://sonarcloud.io', 'token-a', 'org-a');
+
+    const account = generateKeychainAccount('https://sonarcloud.io', 'org-a');
+    const stored = await Bun.secrets.get({
+      service: process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE!,
+      name: account,
+    });
+    expect(stored).toBe('token-a');
+  });
+
+  it('tokens written under one service name are invisible to another', async () => {
+    await handle.saveToken('https://sonarcloud.io', 'token-a', 'org-a');
+
+    const account = generateKeychainAccount('https://sonarcloud.io', 'org-a');
+    const fromOtherService = await Bun.secrets.get({
+      service: 'nonexistent-service',
+      name: account,
+    });
+    expect(fromOtherService).toBeNull();
   });
 });

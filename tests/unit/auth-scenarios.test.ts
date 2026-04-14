@@ -32,7 +32,6 @@ void mock.module('../../src/lib/browser.js', () => ({
 import {
   generateTokenViaBrowser,
   getToken,
-  saveToken,
   deleteToken,
   validateToken,
   openBrowserWithFallback,
@@ -78,13 +77,13 @@ describe('Auth Scenarios: keychain token management', () => {
   });
 
   it('should save and retrieve token for SonarCloud with org', async () => {
-    await saveToken(SONARCLOUD_URL, 'squ_cloud_token', 'my-org');
+    await handle.saveToken(SONARCLOUD_URL, 'squ_cloud_token', 'my-org');
     const token = await getToken(SONARCLOUD_URL, 'my-org');
     expect(token).toBe('squ_cloud_token');
   });
 
   it('should save and retrieve token for on-premise server', async () => {
-    await saveToken(ONPREM_URL, 'squ_onprem_token');
+    await handle.saveToken(ONPREM_URL, 'squ_onprem_token');
     const token = await getToken(ONPREM_URL);
     expect(token).toBe('squ_onprem_token');
   });
@@ -95,15 +94,15 @@ describe('Auth Scenarios: keychain token management', () => {
   });
 
   it('should delete token and return null on subsequent get', async () => {
-    await saveToken(SONARCLOUD_URL, 'squ_to_delete', 'org');
+    await handle.saveToken(SONARCLOUD_URL, 'squ_to_delete', 'org');
     await deleteToken(SONARCLOUD_URL, 'org');
     const token = await getToken(SONARCLOUD_URL, 'org');
     expect(token).toBeNull();
   });
 
   it('should keep tokens isolated between different servers', async () => {
-    await saveToken(SONARCLOUD_URL, 'squ_cloud', 'org');
-    await saveToken(ONPREM_URL, 'squ_onprem');
+    await handle.saveToken(SONARCLOUD_URL, 'squ_cloud', 'org');
+    await handle.saveToken(ONPREM_URL, 'squ_onprem');
 
     const cloud = await getToken(SONARCLOUD_URL, 'org');
     const onprem = await getToken(ONPREM_URL);

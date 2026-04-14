@@ -21,7 +21,7 @@
 // Tests for src/commands/auth.ts exported functions
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { saveToken, getToken } from '../../src/cli/commands/_common/token';
+import { getToken } from '../../src/cli/commands/_common/token';
 import * as token from '../../src/cli/commands/_common/token';
 import { authLogin } from '../../src/cli/commands/auth/login';
 import { authLogout } from '../../src/cli/commands/auth/logout';
@@ -97,7 +97,7 @@ describe('authLogoutCommand', () => {
 
   it('deletes on-premise token from keychain on logout', async () => {
     loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQS_AUTH));
-    await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
+    await handle.saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
     expect(await getToken(FAKE_SQS_AUTH.serverUrl)).toBe(FAKE_SQS_AUTH.token);
 
     await authLogout();
@@ -107,7 +107,7 @@ describe('authLogoutCommand', () => {
 
   it('deletes SonarCloud token when org provided', async () => {
     loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQC_AUTH));
-    await saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
+    await handle.saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
     expect(await getToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.orgKey)).toBe(FAKE_SQC_AUTH.token);
 
     await authLogout();
@@ -117,8 +117,8 @@ describe('authLogoutCommand', () => {
 
   it('does not delete other org tokens when logging out from one org', async () => {
     loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQC_AUTH));
-    await saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
-    await saveToken(FAKE_SQC_AUTH.serverUrl, 'token-org2', 'org2');
+    await handle.saveToken(FAKE_SQC_AUTH.serverUrl, FAKE_SQC_AUTH.token, FAKE_SQC_AUTH.orgKey);
+    await handle.saveToken(FAKE_SQC_AUTH.serverUrl, 'token-org2', 'org2');
 
     await authLogout();
 
@@ -128,7 +128,7 @@ describe('authLogoutCommand', () => {
 
   it('accepts on-premise server with org (org is optional for on-premise)', async () => {
     loadStateSpy.mockImplementation(() => cliStateWithLoggedInConnection(FAKE_SQS_AUTH));
-    await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
+    await handle.saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
 
     await authLogout();
 
@@ -138,7 +138,7 @@ describe('authLogoutCommand', () => {
   it('does not touch keychain when state has no active session', async () => {
     loadStateSpy.mockReturnValue(getDefaultState('test'));
     const deleteSpy = spyOn(token, 'deleteToken').mockResolvedValue(undefined);
-    await saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
+    await handle.saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
 
     await authLogout();
 
