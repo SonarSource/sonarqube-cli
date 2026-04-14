@@ -25,11 +25,21 @@ detect_os() {
   esac
 }
 
-detect_platform() {
-  case "$(detect_os)" in
-    linux) echo "linux-x86-64" ;;
-    macos)   echo "macos-arm64" ;;
+detect_arch() {
+  local machine
+  machine="$(uname -m)"
+  case "$machine" in
+    x86_64|amd64) echo "x86-64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *)
+      echo "Unsupported architecture: $machine" >&2
+      exit 1
+      ;;
   esac
+}
+
+detect_platform() {
+  echo "$(detect_os)-$(detect_arch)"
 }
 
 resolve_latest_version() {
