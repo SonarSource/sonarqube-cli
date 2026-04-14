@@ -30,17 +30,17 @@ import {
 import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui/index.js';
-import { createMockKeytar } from '../../../helpers/mock-keytar.js';
+import { createKeychainTestHandle } from '../../../keychain/keychain-test-handle.js';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const FAKE_TOKEN = 'squ_test_token_abc123';
 const FAKE_TOKEN_ENV = 'squ_env_token_xyz789';
 
-const keytarHandle = createMockKeytar();
+const handle = createKeychainTestHandle();
 
 describe('resolveAuth', () => {
   beforeEach(() => {
-    keytarHandle.setup();
+    handle.setup();
     setMockUi(true);
     clearMockUiCalls();
     // Ensure env vars are clean
@@ -48,8 +48,8 @@ describe('resolveAuth', () => {
     delete process.env[ENV_SERVER];
   });
 
-  afterEach(() => {
-    keytarHandle.teardown();
+  afterEach(async () => {
+    await handle.teardown();
     setMockUi(false);
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
@@ -102,7 +102,7 @@ describe('resolveAuth', () => {
       state.auth.isAuthenticated = true;
 
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
-      await keytarHandle.mock.setPassword('sonarqube-cli', 'sonarcloud.io:my-org', FAKE_TOKEN);
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
         const result = await resolveAuth();
@@ -134,7 +134,7 @@ describe('resolveAuth', () => {
       state.auth.isAuthenticated = true;
 
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
-      await keytarHandle.mock.setPassword('sonarqube-cli', 'sonarcloud.io:my-org', FAKE_TOKEN);
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
         const result = await resolveAuth();
@@ -170,8 +170,7 @@ describe('resolveAuth', () => {
 
       const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
 
-      // Seed keychain with token for sonarcloud.io:my-org
-      await keytarHandle.mock.setPassword('sonarqube-cli', 'sonarcloud.io:my-org', FAKE_TOKEN);
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
         const result = await resolveAuth();

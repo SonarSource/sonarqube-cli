@@ -18,30 +18,56 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Keychain operations wrapper for keytar
+// Keychain operations - OS-backed via Bun.secrets, with file and no-op fallbacks
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { APP_NAME as SERVICE_NAME } from './config-constants.js';
+import { APP_NAME } from './config-constants.js';
+import { CommandFailedError } from '../cli/commands/_common/error.js';
+
+function getServiceName(): string {
+  return process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE || APP_NAME;
+}
 
 interface Credential {
   account: string;
   password: string;
 }
 
-interface KeytarModule {
+interface KeychainBackend {
   getPassword(service: string, account: string): Promise<string | null>;
   setPassword(service: string, account: string, password: string): Promise<void>;
   deletePassword(service: string, account: string): Promise<boolean>;
   findCredentials(service: string): Promise<Credential[]>;
 }
 
-let keytar: KeytarModule | null = null;
 const tokenCache = new Map<string, string | null>();
 
-const noOpKeytar: KeytarModule = {
+const noOpBackend: KeychainBackend = {
   getPassword: () => Promise.resolve(null),
   setPassword: () => Promise.resolve(),
   deletePassword: () => Promise.resolve(false),
+  findCredentials: () => Promise.resolve([]),
+};
+
+const KEYCHAIN_UNAVAILABLE_MESSAGE =
+  'Could not access the system credential store. Please make sure your OS credential manager is available and unlocked.';
+
+function wrapBunSecrets<T>(operation: () => Promise<T>): Promise<T> {
+  return operation().catch((err: unknown) => {
+    throw new CommandFailedError(
+      `${KEYCHAIN_UNAVAILABLE_MESSAGE}\n\nUnderlying error: ${(err as Error).message}`,
+    );
+  });
+}
+
+const bunSecretsBackend: KeychainBackend = {
+  getPassword: (service, account) =>
+    wrapBunSecrets(() => Bun.secrets.get({ service, name: account })),
+  setPassword: (service, account, password) =>
+    wrapBunSecrets(() => Bun.secrets.set({ service, name: account, value: password })),
+  deletePassword: (service, account) =>
+    wrapBunSecrets(() => Bun.secrets.delete({ service, name: account })),
+  // Bun.secrets has no list/enumerate API - CLI-270 will add an account index
   findCredentials: () => Promise.resolve([]),
 };
 
@@ -49,7 +75,7 @@ interface KeychainStore {
   tokens: Record<string, string>;
 }
 
-function createFileKeytar(filePath: string): KeytarModule {
+function createFileBackend(filePath: string): KeychainBackend {
   const readStore = (): KeychainStore => {
     try {
       return JSON.parse(readFileSync(filePath, 'utf-8')) as KeychainStore;
@@ -93,29 +119,25 @@ export function clearTokenCache(): void {
   tokenCache.clear();
 }
 
-async function getKeytar() {
+function getBackend(): KeychainBackend {
   const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
   if (keychainFile) {
-    return createFileKeytar(keychainFile);
+    return createFileBackend(keychainFile);
   }
 
   if (process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN === 'true') {
-    return noOpKeytar;
+    return noOpBackend;
   }
-  try {
-    keytar ??= (await import('keytar')).default;
-    return keytar;
-  } catch {
-    return noOpKeytar;
-  }
+
+  return bunSecretsBackend;
 }
 
 /**
  * Generate keychain account key
- * SonarCloud: "sonarcloud.io:org-key"
- * SonarQube: "hostname"
+ * SonarQube Cloud: "sonarcloud.io:org-key"
+ * SonarQube Server: "hostname"
  */
-function generateKeychainAccount(serverURL: string, org?: string): string {
+export function generateKeychainAccount(serverURL: string, org?: string): string {
   try {
     const url = new URL(serverURL);
     const hostname = url.hostname;
@@ -124,7 +146,7 @@ function generateKeychainAccount(serverURL: string, org?: string): string {
     if (org) {
       return `${hostname}:${org}`;
     }
-    // SonarQube or hostname without organization
+    // SonarQube Server or hostname without organization
     return hostname;
   } catch {
     return serverURL;
@@ -134,7 +156,7 @@ function generateKeychainAccount(serverURL: string, org?: string): string {
 /**
  * Get token from system keychain
  * For SonarQube Cloud: pass org parameter
- * For SonarQube: org parameter is ignored
+ * For SonarQube Server: org parameter is ignored
  * Uses in-memory cache to avoid repeated keychain prompts
  */
 export async function getToken(serverURL: string, org?: string): Promise<string | null> {
@@ -145,8 +167,8 @@ export async function getToken(serverURL: string, org?: string): Promise<string 
     return tokenCache.get(account) ?? null;
   }
 
-  const kt = await getKeytar();
-  const token = await kt.getPassword(SERVICE_NAME, account);
+  const backend = getBackend();
+  const token = await backend.getPassword(getServiceName(), account);
 
   // Cache the result (including null for "not found")
   tokenCache.set(account, token);
@@ -156,13 +178,13 @@ export async function getToken(serverURL: string, org?: string): Promise<string 
 /**
  * Save token to system keychain
  * For SonarQube Cloud: pass org parameter
- * For SonarQube: org parameter is ignored
+ * For SonarQube Server: org parameter is ignored
  * Updates in-memory cache
  */
 export async function saveToken(serverURL: string, token: string, org?: string): Promise<void> {
   const account = generateKeychainAccount(serverURL, org);
-  const kt = await getKeytar();
-  await kt.setPassword(SERVICE_NAME, account, token);
+  const backend = getBackend();
+  await backend.setPassword(getServiceName(), account, token);
   // Update cache
   tokenCache.set(account, token);
 }
@@ -170,23 +192,20 @@ export async function saveToken(serverURL: string, token: string, org?: string):
 /**
  * Delete token from system keychain
  * For SonarQube Cloud: pass org parameter
- * For SonarQube: org parameter is ignored
+ * For SonarQube Server: org parameter is ignored
  * Removes from cache
  */
 export async function deleteToken(serverURL: string, org?: string): Promise<void> {
   const account = generateKeychainAccount(serverURL, org);
-  const kt = await getKeytar();
-  await kt.deletePassword(SERVICE_NAME, account);
+  const backend = getBackend();
+  await backend.deletePassword(getServiceName(), account);
   // Remove from cache
   tokenCache.delete(account);
 }
 
-/**
- * Get all credentials for this service
- */
 export async function getAllCredentials(): Promise<Array<{ account: string; password: string }>> {
-  const kt = await getKeytar();
-  return await kt.findCredentials(SERVICE_NAME);
+  const backend = getBackend();
+  return await backend.findCredentials(getServiceName());
 }
 
 /**
@@ -194,10 +213,9 @@ export async function getAllCredentials(): Promise<Array<{ account: string; pass
  */
 export async function purgeAllTokens(): Promise<void> {
   const credentials = await getAllCredentials();
-  const kt = await getKeytar();
+  const backend = getBackend();
   for (const cred of credentials) {
-    await kt.deletePassword(SERVICE_NAME, cred.account);
+    await backend.deletePassword(getServiceName(), cred.account);
   }
-  // Clear cache
   tokenCache.clear();
 }

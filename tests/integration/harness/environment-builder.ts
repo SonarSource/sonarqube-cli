@@ -36,16 +36,7 @@ import { detectPlatform } from '../../../src/lib/platform-detector.js';
 import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
 import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
-
-/** Mirrors the account-key logic in src/lib/keychain.ts */
-function toKeychainAccount(serverURL: string, org?: string): string {
-  try {
-    const hostname = new URL(serverURL).hostname;
-    return org ? `${hostname}:${org}` : hostname;
-  } catch {
-    return serverURL;
-  }
-}
+import { generateKeychainAccount } from '../../../src/lib/keychain';
 
 function resolveSecretsBinarySource(): string {
   const platform = detectPlatform();
@@ -104,8 +95,8 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Stores a token in the file-based keychain used by the isolated test environment.
-   * Use this to test flows that read tokens from the keychain (e.g. list projects).
+   * Stores a token in the OS credential store under the harness service name.
+   * The token is seeded via Bun.secrets when writeTo() is called.
    */
   withKeychainToken(serverURL: string, token: string, org?: string): this {
     this.keychainTokens.push({ serverURL, token, org });
@@ -200,42 +191,42 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Writes state.json to <cliHome>/state.json and, if withSecretsBinaryInstalled() was called,
-   * copies the mock binary to <cliHome>/bin/sonar-secrets.
+   * Writes state.json to <cliHome>/state.json, seeds keychain tokens via Bun.secrets,
+   * and if withSecretsBinaryInstalled() was called, copies the mock binary.
+   *
+   * Returns the list of account keys seeded so the caller can clean them up.
    */
-  writeTo(cliHome: string, keychainJsonPath: string): Promise<void> {
+  async writeTo(cliHome: string, serviceName: string): Promise<string[]> {
     mkdirSync(cliHome, { recursive: true });
     const stateJson = this._rawStateJson ?? JSON.stringify(this.build(), null, 2);
     writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
 
-    if (this.keychainTokens.length > 0) {
-      const tokens: Record<string, string> = {};
-      for (const { serverURL, token, org } of this.keychainTokens) {
-        tokens[toKeychainAccount(serverURL, org)] = token;
+    const seededAccounts: string[] = [];
+    for (const { serverURL, token, org } of this.keychainTokens) {
+      const account = generateKeychainAccount(serverURL, org);
+      await Bun.secrets.set({ service: serviceName, name: account, value: token });
+      seededAccounts.push(account);
+    }
+
+    if (this._installSecretsBinary) {
+      const binDir = join(cliHome, 'bin');
+      mkdirSync(binDir, { recursive: true });
+
+      const source = resolveSecretsBinarySource();
+      const versionedName = buildLocalBinaryName(detectPlatform());
+      const destPath = join(binDir, versionedName);
+      if (!existsSync(destPath)) {
+        if (!existsSync(source)) {
+          throw new Error(
+            `sonar-secrets binary not found at: ${source}\n` +
+              `Run 'bun run test:integration:prepare' to download it.`,
+          );
+        }
+        copyFileSync(source, destPath);
+        chmodSync(destPath, 0o755);
       }
-      writeFileSync(keychainJsonPath, JSON.stringify({ tokens }, null, 2), 'utf-8');
     }
 
-    if (!this._installSecretsBinary) {
-      return Promise.resolve();
-    }
-
-    const binDir = join(cliHome, 'bin');
-    mkdirSync(binDir, { recursive: true });
-
-    const source = resolveSecretsBinarySource();
-    const versionedName = buildLocalBinaryName(detectPlatform());
-    const destPath = join(binDir, versionedName);
-    if (!existsSync(destPath)) {
-      if (!existsSync(source)) {
-        throw new Error(
-          `sonar-secrets binary not found at: ${source}\n` +
-            `Run 'bun run test:integration:prepare' to download it.`,
-        );
-      }
-      copyFileSync(source, destPath);
-      chmodSync(destPath, 0o755);
-    }
-    return Promise.resolve();
+    return seededAccounts;
   }
 }
