@@ -18,51 +18,42 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// PreToolUse callback handler — scans files for secrets before the agent reads them.
+// UserPromptSubmit callback handler — scans prompt text for secrets before it is sent.
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
-import { existsSync } from 'node:fs';
 import logger from '../../../lib/logger';
 import { readStdinJson } from './stdin';
 import { resolveAuthAndSecrets } from './hook-dependencies';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
+import { EXIT_CODE_SECRETS_FOUND, runSecretsBinaryOnText } from '../analyze/secrets';
 
-interface PreToolUsePayload {
-  tool_name?: string;
-  tool_input?: { file_path?: string };
+interface PromptSubmitPayload {
+  prompt?: string;
 }
 
-export async function claudePreToolUse(): Promise<void> {
-  let payload: PreToolUsePayload;
+export async function agentPromptSubmit(): Promise<void> {
+  let payload: PromptSubmitPayload;
   try {
-    payload = await readStdinJson<PreToolUsePayload>();
-  } catch {
+    payload = await readStdinJson<PromptSubmitPayload>();
+  } catch (err) {
+    logger.debug(`UserPromptSubmit: failed to parse stdin — ${(err as Error).message}`);
     return; // unparseable stdin — allow
   }
 
-  if (payload.tool_name !== 'Read') return;
-
-  const filePath = payload.tool_input?.file_path;
-  if (!filePath || !existsSync(filePath)) return;
+  const prompt = payload.prompt;
+  if (!prompt) return;
 
   const deps = await resolveAuthAndSecrets();
   if (!deps) return;
 
   try {
-    const result = await runSecretsBinary(deps.binaryPath, [filePath], deps.auth);
+    const result = await runSecretsBinaryOnText(deps.binaryPath, prompt, deps.auth);
     const exitCode = result.exitCode ?? 1;
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       process.stdout.write(
-        JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'deny',
-            permissionDecisionReason: `Sonar detected secrets in file: ${filePath}`,
-          },
-        }) + '\n',
+        JSON.stringify({ decision: 'block', reason: 'Sonar detected secrets in prompt' }) + '\n',
       );
     }
   } catch (err) {
-    logger.debug(`PreToolUse secrets scan failed: ${(err as Error).message}`);
+    logger.debug(`UserPromptSubmit secrets scan failed: ${(err as Error).message}`);
   }
 }

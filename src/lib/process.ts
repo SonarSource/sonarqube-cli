@@ -28,6 +28,7 @@ export interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
   stdin?: StdioMode;
+  stdinData?: string;
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
@@ -56,6 +57,7 @@ export async function spawnProcess(
       stdio: [options.stdin || 'ignore', options.stdout || 'pipe', options.stderr || 'pipe'],
       detached: options.detached || false,
     });
+    options.onSpawn?.(() => proc.kill());
 
     let stdout = '';
     let stderr = '';
@@ -72,8 +74,9 @@ export async function spawnProcess(
       });
     }
 
-    if (options.onSpawn) {
-      options.onSpawn(() => proc.kill());
+    if (options.stdinData !== undefined && proc.stdin) {
+      proc.stdin.write(options.stdinData);
+      proc.stdin.end();
     }
 
     proc.on('error', reject);

@@ -45,6 +45,7 @@ import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 import { apiCommand, apiExtraHelpText, type ApiCommandOptions } from './commands/api/api';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
+import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -259,9 +260,7 @@ hookCommand
 hookCommand
   .command('claude-prompt-submit')
   .description('UserPromptSubmit handler: scan prompts for secrets before sending')
-  .anonymousAction(() => {
-    return;
-  });
+  .anonymousAction(() => agentPromptSubmit());
 
 hookCommand
   .command('claude-post-tool-use')
