@@ -1,0 +1,99 @@
+# Experimental PoC: build Linux, macOS, and Windows binaries from a single Linux runner
+# (see CLI-157 / keytar replacement discussion). Does not publish artifacts.
+#
+# Run: Actions → "PoC — Linux-only cross-compile" → Run workflow
+#
+# Note: Historically cross-compilation failed when keytar embedded the wrong platform's
+# native module (CLI-150). Bun download / Repox / TLS issues may still block cross targets.
+
+name: PoC — Linux-only cross-compile
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/poc-linux-cross-compile.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: poc-linux-cross-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-only-cross-compile-poc:
+    name: Cross-compile all targets from Linux
+    runs-on: github-ubuntu-latest-m
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 1
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
+
+      - name: Vault Secrets (Repox reader — same as build-binaries)
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - name: Cache Bun dependencies
+        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
+        with:
+          path: |
+            ~/.bun
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+        run: bun ci
+
+      - name: Build all targets from Linux (PoC)
+        id: poc_builds
+        shell: bash
+        run: |
+          mkdir -p dist/poc
+          set +e
+          bun build src/index.ts --compile --outfile dist/poc/sonarqube-cli-linux-x86-64 --target bun-linux-x64
+          RC_LINUX=$?
+          bun build src/index.ts --compile --outfile dist/poc/sonarqube-cli-macos-arm64 --target bun-darwin-arm64
+          RC_MACOS=$?
+          bun build src/index.ts --compile --outfile dist/poc/sonarqube-cli-windows-x86-64.exe --target bun-windows-x64
+          RC_WINDOWS=$?
+          set -e
+          {
+            echo "## Linux-only cross-compile PoC"
+            echo ""
+            echo "Runner: \`github-ubuntu-latest-m\`"
+            echo ""
+            echo "| Target | Exit code |"
+            echo "| --- | ---: |"
+            echo "| \`bun-linux-x64\` (native) | ${RC_LINUX} |"
+            echo "| \`bun-darwin-arm64\` (cross) | ${RC_MACOS} |"
+            echo "| \`bun-windows-x64\` (cross) | ${RC_WINDOWS} |"
+            echo ""
+            echo "Exit code \`0\` = success."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RC_LINUX" -ne 0 ] || [ "$RC_MACOS" -ne 0 ] || [ "$RC_WINDOWS" -ne 0 ]; then
+            echo "PoC: one or more builds failed (see log above for Bun download / compile errors)."
+            exit 1
+          fi
+          echo "PoC: all three targets built successfully from Linux."
+
+      - name: Upload PoC binaries (partial OK)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: poc-linux-cross-compile-${{ github.run_id }}
+          path: dist/poc/
+          if-no-files-found: warn
