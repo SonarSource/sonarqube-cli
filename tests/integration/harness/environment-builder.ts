@@ -28,7 +28,7 @@ import {
   existsSync,
   realpathSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { CliState } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
@@ -37,6 +37,7 @@ import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
 import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
+import { ACCOUNT_INDEX_FILE } from '../../../src/lib/config-constants';
 
 function resolveSecretsBinarySource(): string {
   const platform = detectPlatform();
@@ -206,6 +207,14 @@ export class EnvironmentBuilder {
       const account = generateKeychainAccount(serverURL, org);
       await Bun.secrets.set({ service: serviceName, name: account, value: token });
       seededAccounts.push(account);
+    }
+
+    if (seededAccounts.length > 0) {
+      writeFileSync(
+        join(cliHome, basename(ACCOUNT_INDEX_FILE)),
+        JSON.stringify({ accounts: seededAccounts }, null, 2),
+        'utf-8',
+      );
     }
 
     if (this._installSecretsBinary) {
