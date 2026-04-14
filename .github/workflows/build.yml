@@ -50,29 +50,10 @@ jobs:
           echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
 
   build-binaries:
-    name: Build Binary - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
+    name: Build All Binaries
+    runs-on: github-ubuntu-latest-m
     needs: prepare
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            runner: github-ubuntu-latest-m
-            target: bun-linux-x64
-            platform: linux-x86-64
-          - os: macos
-            runner: macos-latest-xlarge
-            target: bun-darwin-arm64
-            platform: macos-arm64
-          - os: windows
-            runner: warp-custom-windows-2022-s
-            target: bun-windows-x64
-            platform: windows-x86-64
     steps:
-      - name: Setup Cloudflare WARP (macOS only)
-        if: matrix.os == 'macos'
-        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
-
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
@@ -111,22 +92,68 @@ jobs:
           ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: bun ci
 
-      - name: Compute artifact name
-        id: artifact
-        shell: bash
+      - name: Compute artifact names
+        id: artifacts
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: echo "name=sonarqube-cli-${PROJECT_VERSION}-${{ matrix.platform }}.exe" >> $GITHUB_OUTPUT
+        run: |
+          echo "linux=sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.exe" >> $GITHUB_OUTPUT
+          echo "macos=sonarqube-cli-${PROJECT_VERSION}-macos-arm64.exe" >> $GITHUB_OUTPUT
+          echo "windows=sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe" >> $GITHUB_OUTPUT
 
       - name: Fetch binary signatures
         run: bun run fetch:signatures
 
-      - name: Build binary for ${{ matrix.os }}
-        run: bun build src/index.ts --compile --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
+      - name: Cross-compile all platform binaries
+        run: |
+          bun build src/index.ts --compile --outfile dist/${{ steps.artifacts.outputs.linux }} --target bun-linux-x64
+          bun build src/index.ts --compile --outfile dist/${{ steps.artifacts.outputs.macos }} --target bun-darwin-arm64
+          bun build src/index.ts --compile --outfile dist/${{ steps.artifacts.outputs.windows }} --target bun-windows-x64
 
-      - name: Fetch Apple Developer Certificate secrets (macOS only)
-        id: apple-secrets
-        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+      - name: GPG-sign all binaries
+        env:
+          GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
+        run: |
+          bun build-scripts/sign.mjs dist/${{ steps.artifacts.outputs.linux }}
+          bun build-scripts/sign.mjs dist/${{ steps.artifacts.outputs.macos }}
+          bun build-scripts/sign.mjs dist/${{ steps.artifacts.outputs.windows }}
+
+      - name: Upload all binaries
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: binaries
+          path: dist/
+
+  sign-macos:
+    name: Sign and Notarize macOS Binary
+    runs-on: macos-latest-xlarge
+    needs: [prepare, build-binaries]
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: 2025.7.12
+
+      - name: Setup Cloudflare WARP
+        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
+
+      - name: Compute artifact name
+        id: artifact
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
+        run: echo "name=sonarqube-cli-${PROJECT_VERSION}-macos-arm64.exe" >> $GITHUB_OUTPUT
+
+      - name: Download binaries
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binaries
+          path: dist/
+
+      - name: Vault Secrets
+        id: secrets
         uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
         with:
           secrets: |
@@ -135,15 +162,16 @@ jobs:
             development/kv/data/sign/sonarqube-cli APPLE_TEAM_ID | APPLE_TEAM_ID;
             development/kv/data/sign/sonarqube-cli APPLE_ID | APPLE_ID;
             development/kv/data/sign/sonarqube-cli APPLE_APP_SPECIFIC_PASSWORD | APPLE_APP_SPECIFIC_PASSWORD;
+            development/kv/data/sign key | GPG_SIGNING_KEY;
+            development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
 
-      - name: Code-sign and notarize binary (macOS only)
-        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+      - name: Code-sign and notarize macOS binary
         env:
-          CERTIFICATE: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CSC_KEY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_TEAM_ID }}
-          APPLE_ID: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_APP_SPECIFIC_PASSWORD }}
+          CERTIFICATE: ${{ fromJSON(steps.secrets.outputs.vault).CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).CSC_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_TEAM_ID }}
+          APPLE_ID: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
           echo "$CERTIFICATE" | base64 --decode > /tmp/certificate.p12
           security create-keychain -p "" build.keychain
@@ -169,21 +197,21 @@ jobs:
           rm /tmp/notarize.zip
 
       - name: Clean up build keychain
-        if: always() && matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        if: always()
         run: |
           security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
           security delete-keychain build.keychain 2>/dev/null || true
 
-      - name: Sign binary
+      - name: Re-GPG-sign macOS binary
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
         run: bun build-scripts/sign.mjs dist/${{ steps.artifact.outputs.name }}
 
-      - name: Upload binary to GitHub
+      - name: Upload signed macOS binary
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: binary-${{ matrix.os }}
+          name: binary-macos-signed
           path: |
             dist/${{ steps.artifact.outputs.name }}
             dist/${{ steps.artifact.outputs.name }}.asc
@@ -194,7 +222,9 @@ jobs:
     needs:
       - prepare
       - build-binaries
-    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
+      - sign-macos
+    # Run even when sign-macos is skipped (PRs / non-release branches)
+    if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
@@ -230,22 +260,17 @@ jobs:
           ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: bun ci
 
-      - name: Download linux binary
+      - name: Download all binaries
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: binary-linux
+          name: binaries
           path: dist/
 
-      - name: Download macos binary
+      - name: Download signed macOS binary
+        if: needs.sign-macos.result == 'success'
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: binary-macos
-          path: dist/
-
-      - name: Download windows binary
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: binary-windows
+          name: binary-macos-signed
           path: dist/
 
       - name: Copy user scripts to dist
@@ -390,9 +415,10 @@ jobs:
     needs:
       - prepare
       - build-binaries
+      - sign-macos
       - publish-binaries
       - test-and-scan
-    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
+    if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
       - uses: SonarSource/ci-github-actions/promote@148774f456203f228b7bd1bd68ed0c22254d9cd1 # 1.3.24
         env:
