@@ -21,10 +21,9 @@
 // UserPromptSubmit callback handler — scans prompt text for secrets before it is sent.
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
-import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { readStdinJson } from './stdin';
-import { resolveSecretsBinaryPath } from '../_common/install/secrets';
+import { resolveAuthAndSecrets } from './hook-dependencies';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinaryOnText } from '../analyze/secrets';
 
 interface PromptSubmitPayload {
@@ -35,21 +34,19 @@ export async function agentPromptSubmit(): Promise<void> {
   let payload: PromptSubmitPayload;
   try {
     payload = await readStdinJson<PromptSubmitPayload>();
-  } catch {
+  } catch (err) {
+    logger.debug(`UserPromptSubmit: failed to parse stdin — ${(err as Error).message}`);
     return; // unparseable stdin — allow
   }
 
   const prompt = payload.prompt;
   if (!prompt) return;
 
-  const auth = await resolveAuth().catch(() => null);
-  if (!auth) return; // not authenticated — allow gracefully
-
-  const binaryPath = resolveSecretsBinaryPath();
-  if (!binaryPath) return; // binary not installed — allow gracefully
+  const deps = await resolveAuthAndSecrets();
+  if (!deps) return;
 
   try {
-    const result = await runSecretsBinaryOnText(binaryPath, prompt, auth);
+    const result = await runSecretsBinaryOnText(deps.binaryPath, prompt, deps.auth);
     const exitCode = result.exitCode ?? 1;
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       process.stdout.write(

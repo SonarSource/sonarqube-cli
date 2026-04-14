@@ -22,10 +22,9 @@
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
 import { existsSync } from 'node:fs';
-import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { readStdinJson } from './stdin';
-import { resolveSecretsBinaryPath } from '../_common/install/secrets';
+import { resolveAuthAndSecrets } from './hook-dependencies';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 
 interface PreToolUsePayload {
@@ -46,14 +45,11 @@ export async function claudePreToolUse(): Promise<void> {
   const filePath = payload.tool_input?.file_path;
   if (!filePath || !existsSync(filePath)) return;
 
-  const auth = await resolveAuth().catch(() => null);
-  if (!auth) return; // not authenticated — allow gracefully
-
-  const binaryPath = resolveSecretsBinaryPath();
-  if (!binaryPath) return; // binary not installed — allow gracefully
+  const deps = await resolveAuthAndSecrets();
+  if (!deps) return;
 
   try {
-    const result = await runSecretsBinary(binaryPath, [filePath], auth);
+    const result = await runSecretsBinary(deps.binaryPath, [filePath], deps.auth);
     const exitCode = result.exitCode ?? 1;
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       process.stdout.write(
