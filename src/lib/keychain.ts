@@ -18,36 +18,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Keychain operations - OS-backed via Bun.secrets, with file and no-op fallbacks
+// Keychain operations - OS-backed via Bun.secrets, with file fallback for tests
 
-import { readFileSync, writeFileSync } from 'node:fs';
-import { APP_NAME } from './config-constants.js';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { ACCOUNT_INDEX_FILE, APP_NAME } from './config-constants.js';
 import { CommandFailedError } from '../cli/commands/_common/error.js';
 
 function getServiceName(): string {
   return process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE || APP_NAME;
 }
 
-interface Credential {
-  account: string;
-  password: string;
-}
-
 interface KeychainBackend {
   getPassword(service: string, account: string): Promise<string | null>;
   setPassword(service: string, account: string, password: string): Promise<void>;
   deletePassword(service: string, account: string): Promise<boolean>;
-  findCredentials(service: string): Promise<Credential[]>;
 }
 
 const tokenCache = new Map<string, string | null>();
-
-const noOpBackend: KeychainBackend = {
-  getPassword: () => Promise.resolve(null),
-  setPassword: () => Promise.resolve(),
-  deletePassword: () => Promise.resolve(false),
-  findCredentials: () => Promise.resolve([]),
-};
 
 const KEYCHAIN_UNAVAILABLE_MESSAGE =
   "Failed to access the system keychain. Please make sure your system's keychain or credential manager is available and unlocked and try again.";
@@ -68,50 +56,47 @@ const bunSecretsBackend: KeychainBackend = {
     wrapBunSecrets(() => Bun.secrets.set({ service, name: account, value: password })),
   deletePassword: (service, account) =>
     wrapBunSecrets(() => Bun.secrets.delete({ service, name: account })),
-  // Bun.secrets has no list/enumerate API - CLI-270 will add an account index
-  findCredentials: () => Promise.resolve([]),
 };
+
+function readJsonFile<T>(filePath: string, fallback: T): T {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf-8')) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 interface KeychainStore {
   tokens: Record<string, string>;
 }
 
+function writeFileStore(filePath: string, store: KeychainStore): void {
+  writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf-8');
+}
+
+function readFileStore(filePath: string): KeychainStore {
+  return readJsonFile(filePath, { tokens: {} });
+}
+
 function createFileBackend(filePath: string): KeychainBackend {
-  const readStore = (): KeychainStore => {
-    try {
-      return JSON.parse(readFileSync(filePath, 'utf-8')) as KeychainStore;
-    } catch {
-      return { tokens: {} };
-    }
-  };
-
-  const writeStore = (store: KeychainStore): void => {
-    writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf-8');
-  };
-
   return {
-    getPassword: (_service, account) => Promise.resolve(readStore().tokens[account] ?? null),
+    getPassword: (_service, account) =>
+      Promise.resolve(readFileStore(filePath).tokens[account] ?? null),
     setPassword: (_service, account, password) => {
-      const store = readStore();
+      const store = readFileStore(filePath);
       store.tokens[account] = password;
-      writeStore(store);
+      writeFileStore(filePath, store);
       return Promise.resolve();
     },
     deletePassword: (_service, account) => {
-      const store = readStore();
+      const store = readFileStore(filePath);
       if (!(account in store.tokens)) {
         return Promise.resolve(false);
       }
       const { [account]: _removed, ...remaining } = store.tokens;
       store.tokens = remaining;
-      writeStore(store);
+      writeFileStore(filePath, store);
       return Promise.resolve(true);
-    },
-    findCredentials: (_service) => {
-      const store = readStore();
-      return Promise.resolve(
-        Object.entries(store.tokens).map(([account, password]) => ({ account, password })),
-      );
     },
   };
 }
@@ -122,22 +107,53 @@ export function clearTokenCache(): void {
 
 let cachedFileBackend: { path: string; backend: KeychainBackend } | null = null;
 
+/** Returns the file-backend path if set (tests/CI only), undefined otherwise. */
+function getKeychainFilePath(): string | undefined {
+  return process.env.SONARQUBE_CLI_KEYCHAIN_FILE || undefined;
+}
+
 function getBackend(): KeychainBackend {
-  const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
-  if (keychainFile) {
-    if (cachedFileBackend?.path !== keychainFile) {
-      cachedFileBackend = { path: keychainFile, backend: createFileBackend(keychainFile) };
+  const filePath = getKeychainFilePath();
+  if (filePath) {
+    if (cachedFileBackend?.path !== filePath) {
+      cachedFileBackend = { path: filePath, backend: createFileBackend(filePath) };
     }
     return cachedFileBackend.backend;
   }
 
   cachedFileBackend = null;
-
-  if (process.env.SONARQUBE_CLI_DISABLE_KEYCHAIN === 'true') {
-    return noOpBackend;
-  }
-
   return bunSecretsBackend;
+}
+
+function getAccountIndexPath(): string {
+  return process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE || ACCOUNT_INDEX_FILE;
+}
+
+function readAccountIndex(): string[] {
+  const data = readJsonFile(getAccountIndexPath(), { accounts: [] as string[] });
+  return Array.isArray(data.accounts) ? data.accounts : [];
+}
+
+function writeAccountIndex(accounts: string[]): void {
+  const filePath = getAccountIndexPath();
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, JSON.stringify({ accounts }, null, 2), 'utf-8');
+}
+
+function addToAccountIndex(account: string): void {
+  const accounts = readAccountIndex();
+  if (!accounts.includes(account)) {
+    accounts.push(account);
+    writeAccountIndex(accounts);
+  }
+}
+
+function removeFromAccountIndex(account: string): void {
+  const accounts = readAccountIndex();
+  const filtered = accounts.filter((a) => a !== account);
+  if (filtered.length !== accounts.length) {
+    writeAccountIndex(filtered);
+  }
 }
 
 /**
@@ -193,8 +209,10 @@ export async function saveToken(serverURL: string, token: string, org?: string):
   const account = generateKeychainAccount(serverURL, org);
   const backend = getBackend();
   await backend.setPassword(getServiceName(), account, token);
-  // Update cache
   tokenCache.set(account, token);
+  if (!getKeychainFilePath()) {
+    addToAccountIndex(account);
+  }
 }
 
 /**
@@ -207,13 +225,29 @@ export async function deleteToken(serverURL: string, org?: string): Promise<void
   const account = generateKeychainAccount(serverURL, org);
   const backend = getBackend();
   await backend.deletePassword(getServiceName(), account);
-  // Remove from cache
   tokenCache.delete(account);
+  if (!getKeychainFilePath()) {
+    removeFromAccountIndex(account);
+  }
 }
 
 export async function getAllCredentials(): Promise<Array<{ account: string; password: string }>> {
-  const backend = getBackend();
-  return await backend.findCredentials(getServiceName());
+  const filePath = getKeychainFilePath();
+  if (filePath) {
+    const store = readFileStore(filePath);
+    return Object.entries(store.tokens).map(([account, password]) => ({ account, password }));
+  }
+
+  const accounts = readAccountIndex();
+  const service = getServiceName();
+  const results: Array<{ account: string; password: string }> = [];
+  for (const account of accounts) {
+    const password = await bunSecretsBackend.getPassword(service, account);
+    if (password != null) {
+      results.push({ account, password });
+    }
+  }
+  return results;
 }
 
 /**
@@ -222,8 +256,12 @@ export async function getAllCredentials(): Promise<Array<{ account: string; pass
 export async function purgeAllTokens(): Promise<void> {
   const credentials = await getAllCredentials();
   const backend = getBackend();
+  const service = getServiceName();
   for (const cred of credentials) {
-    await backend.deletePassword(getServiceName(), cred.account);
+    await backend.deletePassword(service, cred.account);
+  }
+  if (!getKeychainFilePath()) {
+    writeAccountIndex([]);
   }
   tokenCache.clear();
 }

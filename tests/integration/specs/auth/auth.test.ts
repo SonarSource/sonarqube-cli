@@ -411,9 +411,7 @@ describe('auth purge', () => {
     { timeout: 15000 },
   );
 
-  // CLI-270: Bun.secrets has no list/enumerate API, so purgeAllTokens cannot discover
-  // tokens to delete. Re-enable this test once the account index is implemented.
-  it.skip(
+  it(
     'removes all tokens after confirmation',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('purge-token-1').start();
