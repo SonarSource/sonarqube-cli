@@ -24,6 +24,7 @@
 import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
+import { print } from '../../../ui';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 import { CommandFailedError } from '../_common/error';
@@ -38,16 +39,18 @@ export async function gitPreCommit(): Promise<void> {
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) return; // binary not installed — skip gracefully
 
+  let result;
   try {
-    const result = await runSecretsBinary(binaryPath, stagedFiles, auth);
-    const exitCode = result.exitCode ?? 1;
-    if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      throw new CommandFailedError('Secrets detected in staged files');
-    }
+    result = await runSecretsBinary(binaryPath, stagedFiles, auth);
   } catch (err) {
-    if (err instanceof CommandFailedError) throw err;
     logger.debug(`git pre-commit secrets scan failed: ${(err as Error).message}`);
     throw new CommandFailedError('Secrets scan failed');
+  }
+
+  if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
+    const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
+    if (output) print(output);
+    throw new CommandFailedError('Secrets detected in staged files');
   }
 }
 

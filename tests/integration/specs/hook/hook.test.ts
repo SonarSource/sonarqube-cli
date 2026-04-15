@@ -39,7 +39,9 @@ describe('sonar hook', () => {
     async () => {
       const result = await harness.run('');
       expect(result.exitCode).toBe(0);
-      // 'hook' must not appear as a listed command entry (indented under COMMANDS)
+      // 'hook' must not appear as a listed command entry — the regex matches the 4-space indented
+      // format used in the COMMANDS section, so it only flags actual command entries, not other
+      // lines that happen to contain the word 'hook' (e.g. descriptions or option names)
       expect(result.stdout).not.toMatch(/^\s{4}hook\b/m);
     },
     { timeout: 15000 },
