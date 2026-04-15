@@ -92,7 +92,15 @@ function migrateState(state: CliState) {
   if (!state.agentExtensions) {
     state.agentExtensions = [];
   }
-  state.auth.keychainAccounts ??= [];
+  // Strip legacy fields that older state files may still contain
+  for (const conn of state.auth.connections) {
+    if ('keystoreKey' in conn) {
+      delete (conn as Record<string, unknown>).keystoreKey;
+    }
+  }
+  if ('keychainAccounts' in state.auth) {
+    delete (state.auth as Record<string, unknown>).keychainAccounts;
+  }
 }
 
 /**
@@ -127,27 +135,25 @@ export function addOrUpdateConnection(
   state: CliState,
   serverUrl: string,
   type: 'cloud' | 'on-premise',
-  options: {
+  options?: {
     orgKey?: string;
     region?: CloudRegion;
-    keystoreKey: string;
   },
 ): AuthConnection {
-  const connectionId = generateConnectionId(serverUrl, options.orgKey);
+  const connectionId = generateConnectionId(serverUrl, options?.orgKey);
 
   const connection: AuthConnection = {
     id: connectionId,
     type,
     serverUrl,
     authenticatedAt: new Date().toISOString(),
-    keystoreKey: options.keystoreKey,
   };
 
-  if (options.orgKey) {
+  if (options?.orgKey) {
     connection.orgKey = options.orgKey;
   }
 
-  if (options.region) {
+  if (options?.region) {
     connection.region = options.region;
   }
 

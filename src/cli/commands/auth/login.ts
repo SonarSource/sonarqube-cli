@@ -22,14 +22,9 @@ import {
   generateTokenViaBrowser,
   getToken as getKeystoreToken,
 } from '../../../cli/commands/_common/token';
-import { saveToken } from '../../../lib/keychain';
+import { deleteStaleTokens, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
-import {
-  addOrUpdateConnection,
-  generateConnectionId,
-  loadState,
-  saveState,
-} from '../../../lib/state-manager';
+import { addOrUpdateConnection, loadState, saveState } from '../../../lib/state-manager';
 import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
 import { SonarQubeClient } from '../../../sonarqube/client';
@@ -56,15 +51,14 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
     org = await setupOnPremiseOrganization(org);
   }
 
-  await saveToken(server, token, org);
-
   const state = loadState();
-  const keystoreKey = generateConnectionId(server, org);
+  await deleteStaleTokens(state.auth.connections, server, org);
+
+  await saveToken(server, token, org);
 
   const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
     orgKey: org,
     region: isCloud ? region : undefined,
-    keystoreKey,
   });
 
   // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).

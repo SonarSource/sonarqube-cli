@@ -141,7 +141,6 @@ export class EnvironmentBuilder {
           serverUrl: this.activeConnectionUrl,
           orgKey: this.activeConnectionOrgKey,
           authenticatedAt: new Date().toISOString(),
-          keystoreKey: `sonarqube-cli:${this.activeConnectionUrl}`,
         },
       ];
       state.auth.activeConnectionId = connectionId;

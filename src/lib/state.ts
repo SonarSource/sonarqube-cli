@@ -58,8 +58,6 @@ export interface AuthConnection {
   orgKey?: string;
   /** Timestamp when authenticated */
   authenticatedAt: string;
-  /** Key for storing token in keychain */
-  keystoreKey: string;
   /** UUID of the user on the server side (fetched at auth time) */
   userUuid?: string | null;
   /** UUID of the SonarQube Cloud organization (fetched at auth time, SQC only) */
@@ -78,8 +76,6 @@ export interface AuthState {
   connections: AuthConnection[];
   /** ID of currently active connection */
   activeConnectionId?: string;
-  /** Account names stored in the OS keychain (Bun.secrets), used for purge/listing */
-  keychainAccounts?: string[];
 }
 
 /**
