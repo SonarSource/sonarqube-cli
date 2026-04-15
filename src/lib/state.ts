@@ -78,6 +78,8 @@ export interface AuthState {
   connections: AuthConnection[];
   /** ID of currently active connection */
   activeConnectionId?: string;
+  /** Account names stored in the OS keychain (Bun.secrets), used for purge/listing */
+  keychainAccounts?: string[];
 }
 
 /**

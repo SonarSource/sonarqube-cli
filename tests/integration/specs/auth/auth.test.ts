@@ -21,8 +21,20 @@
 // Integration tests for `sonar auth login`, `auth logout`, `auth purge`, and `auth status`
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { TestHarness } from '../../harness';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
+
+function readKeychainToken(keychainFile: string, account: string): string | undefined {
+  try {
+    const store = JSON.parse(readFileSync(keychainFile, 'utf-8')) as {
+      tokens: Record<string, string>;
+    };
+    return store.tokens[account];
+  } catch {
+    return undefined;
+  }
+}
 
 describe('auth login', () => {
   let harness: TestHarness;
@@ -58,13 +70,8 @@ describe('auth login', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
 
-      // Verify token was saved to the OS credential store
       const account = generateKeychainAccount(server.baseUrl());
-      const storedToken = await Bun.secrets.get({
-        service: harness.keychainServiceName,
-        name: account,
-      });
-      expect(storedToken).toBe('my-login-token');
+      expect(readKeychainToken(harness.keychainJsonFile, account)).toBe('my-login-token');
 
       // Verify state.json has a connection
       const state = harness.stateJsonFile.asJson();
@@ -326,13 +333,8 @@ describe('auth logout', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
 
-      // Verify token was removed from the OS credential store
       const account = generateKeychainAccount(server.baseUrl());
-      const storedToken = await Bun.secrets.get({
-        service: harness.keychainServiceName,
-        name: account,
-      });
-      expect(storedToken).toBeNull();
+      expect(readKeychainToken(harness.keychainJsonFile, account)).toBeUndefined();
       expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
       expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
     },
@@ -429,12 +431,8 @@ describe('auth purge', () => {
 
       const account1 = generateKeychainAccount(server.baseUrl());
       const account2 = generateKeychainAccount(server2.baseUrl());
-      expect(
-        await Bun.secrets.get({ service: harness.keychainServiceName, name: account1 }),
-      ).toBeNull();
-      expect(
-        await Bun.secrets.get({ service: harness.keychainServiceName, name: account2 }),
-      ).toBeNull();
+      expect(readKeychainToken(harness.keychainJsonFile, account1)).toBeUndefined();
+      expect(readKeychainToken(harness.keychainJsonFile, account2)).toBeUndefined();
     },
     { timeout: 15000 },
   );

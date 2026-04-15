@@ -19,105 +19,62 @@
  */
 
 /**
- * Test helper that exercises the real Bun.secrets keychain backend with
- * a unique service name per test to ensure complete isolation.
- *
- * Each setup() generates a fresh SONARQUBE_CLI_KEYCHAIN_SERVICE value,
- * so tokens written by one test are invisible to the next. Teardown
- * deletes all tracked accounts from the OS credential store.
- *
- * For tests that need to manipulate the backing store independently
- * of the cache (e.g. corrupt a file), use SONARQUBE_CLI_KEYCHAIN_FILE
- * directly - see keychain.test.ts.
+ * Test helper that uses the file-based keychain backend
+ * (SONARQUBE_CLI_KEYCHAIN_FILE) to avoid touching the real OS credential store.
  *
  * Call setup() in beforeEach and teardown() in afterEach.
  */
 
-import {
-  clearTokenCache,
-  generateKeychainAccount,
-  saveToken as realSaveToken,
-} from '../../../src/lib/keychain';
+import { clearTokenCache, saveToken as realSaveToken } from '../../../src/lib/keychain';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 export interface KeychainTestHandle {
   /**
-   * Seed a token into the real OS credential store and clear the cache
-   * so the next read goes to the backend. Same signature as saveToken.
+   * Seed a token into the file-based keychain and clear the cache
+   * so the next read goes to the backend.
    */
   seedToken(serverUrl: string, token: string, org?: string): Promise<void>;
   /**
-   * Save a token and track the account for cleanup. Use this instead of
-   * importing saveToken directly in tests that use the Bun.secrets backend.
+   * Save a token via the keychain module (cache is updated).
    */
   saveToken(serverUrl: string, token: string, org?: string): Promise<void>;
   setup(): void;
-  teardown(): Promise<void>;
+  teardown(): void;
 }
 
 export function createKeychainTestHandle(): KeychainTestHandle {
-  let serviceName = '';
   let testDir = '';
-  const trackedAccounts = new Set<string>();
   let savedKeychainFile: string | undefined;
-  let savedService: string | undefined;
-  let savedAccountIndex: string | undefined;
 
   return {
     async seedToken(serverUrl: string, token: string, org?: string) {
-      trackedAccounts.add(generateKeychainAccount(serverUrl, org));
       await realSaveToken(serverUrl, token, org);
       clearTokenCache();
     },
 
     async saveToken(serverUrl: string, token: string, org?: string) {
-      trackedAccounts.add(generateKeychainAccount(serverUrl, org));
       await realSaveToken(serverUrl, token, org);
     },
 
     setup() {
-      serviceName = `sonarqube-cli-test-${crypto.randomUUID()}`;
-      testDir = join(tmpdir(), `keychain-idx-${crypto.randomUUID()}`);
+      testDir = join(tmpdir(), `keychain-test-${crypto.randomUUID()}`);
       mkdirSync(testDir, { recursive: true });
-      trackedAccounts.clear();
 
       savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
-      savedService = process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE;
-      savedAccountIndex = process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE;
-
-      delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
-      process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE = serviceName;
-      process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE = join(testDir, 'keychain-accounts.json');
+      process.env.SONARQUBE_CLI_KEYCHAIN_FILE = join(testDir, 'keychain.json');
 
       clearTokenCache();
     },
 
-    async teardown() {
-      for (const account of trackedAccounts) {
-        await Bun.secrets.delete({ service: serviceName, name: account }).catch(() => {});
-      }
-      trackedAccounts.clear();
-
+    teardown() {
       rmSync(testDir, { recursive: true, force: true });
 
       if (savedKeychainFile === undefined) {
         delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
       } else {
         process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
-      }
-
-      if (savedService === undefined) {
-        delete process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE;
-      } else {
-        process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE = savedService;
-      }
-
-      if (savedAccountIndex === undefined) {
-        delete process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE;
-      } else {
-        process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE = savedAccountIndex;
       }
 
       clearTokenCache();
