@@ -14,14 +14,6 @@ on:
         type: string
 
 jobs:
-  lock-branch:
-    name: Lock ${{ inputs.branch }} branch
-    uses: ./.github/workflows/ToggleLockBranch.yml
-    permissions:
-      id-token: write
-    with:
-      branch: ${{ inputs.branch }}
-
   release:
     name: Release
     uses: SonarSource/release-github-actions/.github/workflows/ide-automated-release.yml@v1
@@ -31,21 +23,10 @@ jobs:
       contents: write
       actions: write
       pull-requests: write
-    needs:
-      - lock-branch
     with:
       jira-project-key: "CLI"
       project-name: "SonarQube CLI"
       short-description: ${{ inputs.short-description }}
-      branch: ${{ inputs.branch }}
-
-  unlock-branch:
-    name: Unlock ${{ inputs.branch }} branch
-    uses: ./.github/workflows/ToggleLockBranch.yml
-    needs: release
-    permissions:
-      id-token: write
-    with:
       branch: ${{ inputs.branch }}
 
   bump-version:
