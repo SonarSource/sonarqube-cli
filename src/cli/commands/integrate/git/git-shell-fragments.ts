@@ -78,15 +78,6 @@ function huskyBinBlock(): string {
 // ─── Shared script templates ───────────────────────────────────────────────────
 // Accept a binBlock function (native or Husky) to produce the correct resolver.
 
-function preCommitBody(filesVar: string, binBlock: BinBlock): string {
-  return (
-    `${filesVar}=$(git diff --cached --name-only --diff-filter=ACMR)\n` +
-    `[ -z "$${filesVar}" ] && exit 0\n` +
-    `${binBlock()}\n` +
-    `echo "$${filesVar}" | tr '\\n' '\\0' | xargs -0 "$SONAR_BIN" analyze secrets -- || exit 1\n`
-  );
-}
-
 function prePushBody(filesVar: string, binBlock: BinBlock): string {
   return (
     `${binBlock()}\n` +
@@ -113,12 +104,7 @@ function prePushBody(filesVar: string, binBlock: BinBlock): string {
 // Use plain PATH lookup — git does not inject node_modules/.bin.
 
 export function getPreCommitHookScript(): string {
-  return (
-    `#!/bin/sh\n` +
-    `# ${HOOK_MARKER}\n` +
-    `# Staged files (added/copy/modified, not deleted)\n` +
-    preCommitBody('FILES', nativeBinBlock)
-  );
+  return `#!/bin/sh\n# ${HOOK_MARKER}\n${nativeBinBlock()}\n"$SONAR_BIN" hook git-pre-commit\n`;
 }
 
 export function getPrePushHookScript(): string {
@@ -135,7 +121,7 @@ export function getHookScript(hook: GitHookType): string {
 // looking up `sonar` to avoid accidentally running a project-local package.
 
 export function getHuskyPreCommitSnippet(): string {
-  return `\n# ${HOOK_MARKER}\n` + preCommitBody('FILES', huskyBinBlock);
+  return `\n# ${HOOK_MARKER}\n${huskyBinBlock()}\n"$SONAR_BIN" hook git-pre-commit\n`;
 }
 
 export function getHuskyPrePushSnippet(): string {

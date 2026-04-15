@@ -50,6 +50,7 @@ import {
   agentPostToolUse,
   type AgentPostToolUseOptions,
 } from './commands/hook/agent-post-tool-use';
+import { gitPreCommit } from './commands/hook/git-pre-commit';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -274,6 +275,11 @@ hookCommand
   .description('PostToolUse handler: run SQAA analysis after agent edits or writes a file')
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
+
+hookCommand
+  .command('git-pre-commit')
+  .description('git pre-commit handler: scan staged files for secrets')
+  .anonymousAction(() => gitPreCommit());
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {

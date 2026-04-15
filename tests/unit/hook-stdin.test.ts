@@ -86,4 +86,23 @@ describe('readStdinJson', () => {
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toBe('stdin read failed');
   });
+
+  it('throws when stdin read times out', async () => {
+    let timeoutFn: (() => void) | undefined;
+    const timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation((fn: TimerHandler) => {
+      timeoutFn = fn as () => void;
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+
+    try {
+      const promise = readStdinJson();
+      // Promise.race is set up; setTimeout callback captured — fire it now
+      timeoutFn?.();
+      const err = await promise.catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain('stdin read timed out');
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
 });
