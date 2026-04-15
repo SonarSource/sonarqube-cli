@@ -22,11 +22,11 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { version as VERSION } from '../../../../../package.json';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
+import { deleteStaleTokens } from '../../../../lib/keychain';
 import logger from '../../../../lib/logger';
 import {
   addInstalledHook,
   addOrUpdateConnection,
-  generateConnectionId,
   loadState,
   markAgentConfigured,
   saveState,
@@ -38,12 +38,12 @@ import type { ConfigurationData } from './index';
 /**
  * Update state after successful configuration
  */
-export function updateStateAfterConfiguration(
+export async function updateStateAfterConfiguration(
   config: ConfigurationData,
   projectRoot: string,
   isGlobal: boolean,
   sqaaEnabled: boolean,
-): void {
+): Promise<void> {
   try {
     const state = loadState();
 
@@ -102,10 +102,9 @@ export function updateStateAfterConfiguration(
 
     // Save connection so `sonar auth status` reports the active connection
     const type = isCloud ? 'cloud' : 'on-premise';
-    const keystoreKey = generateConnectionId(config.serverURL, config.organization);
+    await deleteStaleTokens(state.auth.connections, config.serverURL, config.organization);
     addOrUpdateConnection(state, config.serverURL, type, {
       orgKey: config.organization,
-      keystoreKey,
     });
 
     saveState(state);

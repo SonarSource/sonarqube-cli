@@ -63,7 +63,6 @@ describe('State Manager', () => {
       const connection = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
         region: 'eu',
-        keystoreKey: 'test-key',
       });
 
       expect(connection.type).toBe('cloud');
@@ -76,9 +75,7 @@ describe('State Manager', () => {
 
     it('should add on-premise connection', () => {
       const state = getDefaultState('0.2.61');
-      const connection = addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise', {
-        keystoreKey: 'test-key',
-      });
+      const connection = addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise');
 
       expect(connection.type).toBe('on-premise');
       expect(connection.orgKey).toBeUndefined();
@@ -90,13 +87,11 @@ describe('State Manager', () => {
       const conn1 = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
         region: 'eu',
-        keystoreKey: 'key1',
       });
 
       const conn2 = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
         region: 'us',
-        keystoreKey: 'key2',
       });
 
       expect(conn1.id).toBe(conn2.id);
@@ -111,7 +106,6 @@ describe('State Manager', () => {
       const connection = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
         region: 'eu',
-        keystoreKey: 'test-key',
       });
 
       const active = getActiveConnection(state);
@@ -162,16 +156,13 @@ describe('State Manager', () => {
       const conn1 = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'org-one',
         region: 'eu',
-        keystoreKey: 'key1',
       });
 
       expect(state.auth.connections).toHaveLength(1);
       expect(state.auth.activeConnectionId).toBe(conn1.id);
 
       // Add second connection to different server - should replace first
-      const conn2 = addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise', {
-        keystoreKey: 'key2',
-      });
+      const conn2 = addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise');
 
       expect(state.auth.connections).toHaveLength(1);
       expect(state.auth.connections[0].serverUrl).toBe('https://sonar.internal.com');
@@ -185,14 +176,11 @@ describe('State Manager', () => {
       addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
         region: 'eu',
-        keystoreKey: 'cloud-key',
       });
 
       expect(state.auth.connections[0].type).toBe('cloud');
 
-      addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise', {
-        keystoreKey: 'onprem-key',
-      });
+      addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise');
 
       expect(state.auth.connections).toHaveLength(1);
       expect(state.auth.connections[0].type).toBe('on-premise');
@@ -202,16 +190,13 @@ describe('State Manager', () => {
     it('should replace on-premise with SonarCloud', () => {
       const state = getDefaultState('0.2.61');
 
-      addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise', {
-        keystoreKey: 'onprem-key',
-      });
+      addOrUpdateConnection(state, 'https://sonar.company.com', 'on-premise');
 
       expect(state.auth.connections[0].type).toBe('on-premise');
 
       addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'sonarsource',
         region: 'us',
-        keystoreKey: 'cloud-key',
       });
 
       expect(state.auth.connections).toHaveLength(1);
@@ -225,15 +210,12 @@ describe('State Manager', () => {
       addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'org1',
         region: 'eu',
-        keystoreKey: 'key1',
       });
 
       expect(state.auth.isAuthenticated).toBe(true);
       expect(state.auth.connections).toHaveLength(1);
 
-      addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise', {
-        keystoreKey: 'key2',
-      });
+      addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise');
 
       expect(state.auth.isAuthenticated).toBe(true);
       expect(state.auth.connections).toHaveLength(1);

@@ -19,12 +19,7 @@
  */
 
 import { deleteToken } from '../../../cli/commands/_common/token';
-import {
-  generateConnectionId,
-  getActiveConnection,
-  loadState,
-  saveState,
-} from '../../../lib/state-manager';
+import { getActiveConnection, loadState, saveState } from '../../../lib/state-manager';
 import { print, success } from '../../../ui';
 
 /**
@@ -44,8 +39,7 @@ export async function authLogout(): Promise<void> {
 
   await deleteToken(server, org);
 
-  const connectionId = generateConnectionId(server, org);
-  state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
+  state.auth.connections = state.auth.connections.filter((c) => c.id !== active.id);
 
   state.auth.activeConnectionId = undefined;
 

@@ -113,7 +113,7 @@ export async function integrateClaude(
   await runMigrations(project.rootDir, globalDir, sqaaEnabled, config.projectKey);
   await installHooks(project.rootDir, globalDir, sqaaEnabled, config.projectKey);
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
-  updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled);
+  await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled);
   success('Claude code hooks installed');
 
   await setupMcpServer('claude', project.rootDir, isGlobal, auth, project.projectKey);

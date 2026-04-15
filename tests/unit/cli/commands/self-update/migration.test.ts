@@ -197,7 +197,6 @@ describe('runMigrations — migration execution', () => {
     );
     stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
       orgKey: 'my-org',
-      keystoreKey: 'sonarcloud.io:my-org',
     });
     loadStateSpy.mockReturnValue(state);
 
@@ -221,7 +220,6 @@ describe('runMigrations — migration execution', () => {
     });
     stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
       orgKey: 'my-org',
-      keystoreKey: 'sonarcloud.io:my-org',
     });
     loadStateSpy.mockReturnValue(state);
 
@@ -246,7 +244,6 @@ describe('runMigrations — migration execution', () => {
     });
     stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
       orgKey: 'my-org',
-      keystoreKey: 'sonarcloud.io:my-org',
     });
     // Pre-populate a global entry for the same hook (as if integrate -g already ran).
     // Global entries use homedir() as projectRoot — that's the new invariant after CLI-148.
@@ -505,7 +502,6 @@ describe('runMigrations — already-migrated extensions not duplicated', () => {
     // Pre-populate agentExtensions with the sonar-sqaa entry for this project
     stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
       orgKey: 'my-org',
-      keystoreKey: 'sonarcloud.io:my-org',
     });
     stateManager.upsertAgentExtension(state, {
       id: 'existing-ext',

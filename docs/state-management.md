@@ -49,7 +49,6 @@ The state file persists configuration across CLI invocations and stores:
 | `orgKey` | string | ❌* | Organization key (for SonarQube Cloud only) |
 | `region` | 'eu' \| 'us' | ❌* | Cloud region (for SonarQube Cloud only) |
 | `authenticatedAt` | ISO 8601 timestamp | ✅ | When connection was established |
-| `keystoreKey` | string | ✅ | Key for token retrieval from system keychain |
 
 *Required only for SonarQube Cloud connections
 
@@ -119,8 +118,7 @@ A user authenticated with SonarQube Cloud and configured Claude Code with a PreT
         "serverUrl": "https://sonarcloud.io",
         "orgKey": "my-organization",
         "region": "eu",
-        "authenticatedAt": "2026-02-18T10:00:00.000Z",
-        "keystoreKey": "abc123def456"
+        "authenticatedAt": "2026-02-18T10:00:00.000Z"
       }
     ],
     "activeConnectionId": "abc123def456"
@@ -168,8 +166,7 @@ A user authenticated with a self-hosted SonarQube instance (no organization requ
         "id": "44a2bfab8f2c6ffa",
         "type": "on-premise",
         "serverUrl": "https://sonar.company.com:9000",
-        "authenticatedAt": "2026-02-18T09:45:00.000Z",
-        "keystoreKey": "44a2bfab8f2c6ffa"
+        "authenticatedAt": "2026-02-18T09:45:00.000Z"
       }
     ],
     "activeConnectionId": "44a2bfab8f2c6ffa"
@@ -211,8 +208,7 @@ A complete setup with SonarQube Cloud, multiple hooks, skills, and installed too
         "serverUrl": "https://sonarcloud.io",
         "orgKey": "sonarsource",
         "region": "eu",
-        "authenticatedAt": "2026-02-15T14:22:10.000Z",
-        "keystoreKey": "xyz789abc123"
+        "authenticatedAt": "2026-02-15T14:22:10.000Z"
       }
     ],
     "activeConnectionId": "xyz789abc123"
@@ -306,7 +302,7 @@ cat ~/.sonar/sonarqube-cli/state.json | jq '.tools.installed'
 - **Linux**: Secret Service or pass
 - **Windows**: Credential Manager
 
-The `keystoreKey` field in the connection object is used to retrieve the token from the keychain.
+The keychain account key is derived from the connection's `serverUrl` and `orgKey` fields.
 
 ### State Modification
 

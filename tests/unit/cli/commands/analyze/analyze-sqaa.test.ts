@@ -57,7 +57,6 @@ function makeCloudState() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
     orgKey: TEST_ORG,
-    keystoreKey: `sonarcloud.io:${TEST_ORG}`,
   });
   stateManager.upsertAgentExtension(state, {
     id: 'test-ext',
@@ -81,7 +80,6 @@ function makeCloudStateNoExt() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
     orgKey: TEST_ORG,
-    keystoreKey: `sonarcloud.io:${TEST_ORG}`,
   });
   return state;
 }
@@ -155,7 +153,6 @@ describe('analyzeSqaa: auth resolution', () => {
     const state = getDefaultState('test');
     stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
       orgKey: TEST_ORG,
-      keystoreKey: `sonarcloud.io:${TEST_ORG}`,
     });
     // Extension exists but projectKey is undefined
     stateManager.upsertAgentExtension(state, {

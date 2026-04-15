@@ -95,7 +95,6 @@ describe('resolveAuth', () => {
           serverUrl: SONARCLOUD_URL,
           orgKey: 'my-org',
           authenticatedAt: new Date().toISOString(),
-          keystoreKey: 'sonarcloud.io:my-org',
         },
       ];
       state.auth.activeConnectionId = 'conn-1';
@@ -127,7 +126,6 @@ describe('resolveAuth', () => {
           serverUrl: SONARCLOUD_URL,
           orgKey: 'my-org',
           authenticatedAt: new Date().toISOString(),
-          keystoreKey: 'sonarcloud.io:my-org',
         },
       ];
       state.auth.activeConnectionId = 'conn-1';
@@ -162,7 +160,6 @@ describe('resolveAuth', () => {
           serverUrl: SONARCLOUD_URL,
           orgKey: 'my-org',
           authenticatedAt: new Date().toISOString(),
-          keystoreKey: 'sonarcloud.io:my-org',
         },
       ];
       state.auth.activeConnectionId = 'conn-1';

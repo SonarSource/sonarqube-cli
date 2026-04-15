@@ -244,7 +244,6 @@ describe('storeEvent', () => {
       const state = getDefaultState('1.0.0');
       stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
-        keystoreKey: 'sonarcloud.io:my-org',
       });
       loadStateSpy.mockReturnValue(state);
 
@@ -256,9 +255,7 @@ describe('storeEvent', () => {
 
     it('sets connection_type to "sqs" for an on-premise connection', async () => {
       const state = getDefaultState('1.0.0');
-      stateManager.addOrUpdateConnection(state, 'https://sonarqube.example.com', 'on-premise', {
-        keystoreKey: 'sonarqube.example.com',
-      });
+      stateManager.addOrUpdateConnection(state, 'https://sonarqube.example.com', 'on-premise', {});
       loadStateSpy.mockReturnValue(state);
 
       await storeEvent(makeCommand('auth login'), true);
@@ -279,7 +276,6 @@ describe('storeEvent', () => {
       const state = getDefaultState('1.0.0');
       const conn = stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
-        keystoreKey: 'sonarcloud.io:my-org',
       });
       conn.userUuid = 'user-uuid-abc';
       loadStateSpy.mockReturnValue(state);
@@ -294,7 +290,6 @@ describe('storeEvent', () => {
       const state = getDefaultState('1.0.0');
       const conn = stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
         orgKey: 'my-org',
-        keystoreKey: 'sonarcloud.io:my-org',
       });
       conn.organizationUuidV4 = 'org-uuid-xyz';
       loadStateSpy.mockReturnValue(state);
@@ -311,9 +306,7 @@ describe('storeEvent', () => {
         state,
         'https://sonarqube.example.com',
         'on-premise',
-        {
-          keystoreKey: 'sonarqube.example.com',
-        },
+        {},
       );
       conn.sqsInstallationId = 'sqs-install-id-123';
       loadStateSpy.mockReturnValue(state);
