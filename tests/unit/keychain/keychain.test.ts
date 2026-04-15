@@ -31,6 +31,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   clearTokenCache,
+  deleteStaleTokens,
   deleteToken,
   generateKeychainAccount,
   getAllCredentials,
@@ -248,6 +249,54 @@ describe('generateKeychainAccount', () => {
 
   it('strips trailing slash via URL hostname extraction', () => {
     expect(generateKeychainAccount('https://sonar.example.com/')).toBe('sonar.example.com');
+  });
+});
+
+describe('deleteStaleTokens', () => {
+  useFileBackend();
+
+  it('deletes token for a replaced connection', async () => {
+    await saveToken('https://sonarcloud.io', 'old-token', 'org-old');
+    clearTokenCache();
+
+    const oldConnections = [{ serverUrl: 'https://sonarcloud.io', orgKey: 'org-old' }];
+    await deleteStaleTokens(oldConnections, 'https://sonar.company.com');
+
+    expect(await getToken('https://sonarcloud.io', 'org-old')).toBeNull();
+  });
+
+  it('preserves token when re-logging into the same server/org', async () => {
+    await saveToken('https://sonarcloud.io', 'my-token', 'my-org');
+    clearTokenCache();
+
+    const connections = [{ serverUrl: 'https://sonarcloud.io', orgKey: 'my-org' }];
+    await deleteStaleTokens(connections, 'https://sonarcloud.io', 'my-org');
+
+    expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('my-token');
+  });
+
+  it('is a no-op when connections array is empty', async () => {
+    await saveToken('https://sonarcloud.io', 'tok', 'org1');
+    clearTokenCache();
+
+    await deleteStaleTokens([], 'https://other.example.com');
+
+    expect(await getToken('https://sonarcloud.io', 'org1')).toBe('tok');
+  });
+
+  it('only deletes the stale connection, not the matching one', async () => {
+    await saveToken('https://sonarcloud.io', 'cloud-tok', 'org1');
+    await saveToken('https://sonar.internal.com', 'onprem-tok');
+    clearTokenCache();
+
+    const connections = [
+      { serverUrl: 'https://sonarcloud.io', orgKey: 'org1' },
+      { serverUrl: 'https://sonar.internal.com' },
+    ];
+    await deleteStaleTokens(connections, 'https://sonarcloud.io', 'org1');
+
+    expect(await getToken('https://sonarcloud.io', 'org1')).toBe('cloud-tok');
+    expect(await getToken('https://sonar.internal.com')).toBeNull();
   });
 });
 

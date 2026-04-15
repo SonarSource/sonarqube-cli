@@ -23,7 +23,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { APP_NAME } from './config-constants.js';
 import { CommandFailedError } from '../cli/commands/_common/error.js';
-import { loadState, saveState } from './state-manager.js';
+import { loadState } from './state-manager.js';
 
 function getServiceName(): string {
   return process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE || APP_NAME;
@@ -125,30 +125,13 @@ function getBackend(): KeychainBackend {
   return bunSecretsBackend;
 }
 
-function readAccountIndex(): string[] {
-  return loadState().auth.keychainAccounts ?? [];
-}
-
-function writeAccountIndex(accounts: string[]): void {
+/**
+ * Derive account names from the connections stored in state.json.
+ * This replaces the former keychainAccounts index.
+ */
+function deriveAccountsFromConnections(): string[] {
   const state = loadState();
-  state.auth.keychainAccounts = accounts;
-  saveState(state);
-}
-
-function addToAccountIndex(account: string): void {
-  const accounts = readAccountIndex();
-  if (!accounts.includes(account)) {
-    accounts.push(account);
-    writeAccountIndex(accounts);
-  }
-}
-
-function removeFromAccountIndex(account: string): void {
-  const accounts = readAccountIndex();
-  const filtered = accounts.filter((a) => a !== account);
-  if (filtered.length !== accounts.length) {
-    writeAccountIndex(filtered);
-  }
+  return state.auth.connections.map((c) => generateKeychainAccount(c.serverUrl, c.orgKey));
 }
 
 /**
@@ -205,8 +188,27 @@ export async function saveToken(serverURL: string, token: string, org?: string):
   const backend = getBackend();
   await backend.setPassword(getServiceName(), account, token);
   tokenCache.set(account, token);
-  if (!getKeychainFilePath()) {
-    addToAccountIndex(account);
+}
+
+/**
+ * Delete tokens for connections that are about to be replaced.
+ * Skips the new connection's account (identified by newServerURL + newOrg) so
+ * it doesn't get deleted right before being written.
+ */
+export async function deleteStaleTokens(
+  connections: ReadonlyArray<{ serverUrl: string; orgKey?: string }>,
+  newServerURL: string,
+  newOrg?: string,
+): Promise<void> {
+  const newAccount = generateKeychainAccount(newServerURL, newOrg);
+  const backend = getBackend();
+  const service = getServiceName();
+  for (const conn of connections) {
+    const account = generateKeychainAccount(conn.serverUrl, conn.orgKey);
+    if (account !== newAccount) {
+      await backend.deletePassword(service, account);
+      tokenCache.delete(account);
+    }
   }
 }
 
@@ -221,9 +223,6 @@ export async function deleteToken(serverURL: string, org?: string): Promise<void
   const backend = getBackend();
   await backend.deletePassword(getServiceName(), account);
   tokenCache.delete(account);
-  if (!getKeychainFilePath()) {
-    removeFromAccountIndex(account);
-  }
 }
 
 export async function getAllCredentials(): Promise<Array<{ account: string; password: string }>> {
@@ -233,7 +232,7 @@ export async function getAllCredentials(): Promise<Array<{ account: string; pass
     return Object.entries(store.tokens).map(([account, password]) => ({ account, password }));
   }
 
-  const accounts = readAccountIndex();
+  const accounts = deriveAccountsFromConnections();
   const service = getServiceName();
   const results: Array<{ account: string; password: string }> = [];
   for (const account of accounts) {
@@ -254,9 +253,6 @@ export async function purgeAllTokens(): Promise<void> {
   const service = getServiceName();
   for (const cred of credentials) {
     await backend.deletePassword(service, cred.account);
-  }
-  if (!getKeychainFilePath()) {
-    writeAccountIndex([]);
   }
   tokenCache.clear();
 }

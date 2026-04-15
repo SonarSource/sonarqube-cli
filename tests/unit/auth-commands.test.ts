@@ -46,7 +46,6 @@ function cliStateWithLoggedInConnection(auth: ResolvedAuth): ReturnType<typeof g
     type: auth.connectionType === 'cloud' ? 'cloud' : 'on-premise',
     serverUrl: auth.serverUrl,
     authenticatedAt: new Date().toISOString(),
-    keystoreKey: 'test',
   };
   if (auth.orgKey !== undefined) {
     connection.orgKey = auth.orgKey;
