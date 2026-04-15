@@ -353,12 +353,12 @@ jobs:
         if: matrix.os == 'linux'
         run: bun test:coverage
 
-      - name: Install keychain dependencies (Linux, e2e only)
-        if: matrix.os == 'linux' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+      - name: Install keychain dependencies (Linux)
+        if: matrix.os == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
 
-      - name: Start D-Bus and unlock keyring (Linux, e2e only)
-        if: matrix.os == 'linux' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+      - name: Start D-Bus and unlock keyring (Linux)
+        if: matrix.os == 'linux'
         run: |
           eval "$(dbus-launch --sh-syntax)"
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
@@ -370,9 +370,13 @@ jobs:
             echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
           fi
 
-      - name: Run e2e tests
-        if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
+      - name: Run e2e tests (Windows)
+        if: matrix.os == 'windows'
         run: bun test:e2e
+
+      - name: Run e2e tests with coverage (Linux)
+        if: matrix.os == 'linux'
+        run: bun test:e2e:coverage
 
       - name: Analyze on SonarQubeCloud (Linux)
         if: matrix.os == 'linux'
