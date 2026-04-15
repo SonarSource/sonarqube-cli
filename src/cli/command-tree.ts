@@ -46,6 +46,10 @@ import { apiCommand, apiExtraHelpText, type ApiCommandOptions } from './commands
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
+import {
+  agentPostToolUse,
+  type AgentPostToolUseOptions,
+} from './commands/hook/agent-post-tool-use';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -267,11 +271,9 @@ hookCommand
 
 hookCommand
   .command('claude-post-tool-use')
-  .option('-p, --project <project>', 'SonarCloud project key')
-  .description('PostToolUse handler: run SQAA analysis on modified files')
-  .anonymousAction(() => {
-    return;
-  });
+  .description('PostToolUse handler: run SQAA analysis after agent edits or writes a file')
+  .requiredOption('--project <key>', 'SonarQube Cloud project key')
+  .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
