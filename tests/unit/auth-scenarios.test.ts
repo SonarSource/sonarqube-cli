@@ -72,8 +72,8 @@ describe('Auth Scenarios: keychain token management', () => {
     handle.setup();
   });
 
-  afterEach(async () => {
-    await handle.teardown();
+  afterEach(() => {
+    handle.teardown();
   });
 
   it('should save and retrieve token for SonarCloud with org', async () => {

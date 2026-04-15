@@ -28,7 +28,7 @@ import {
   existsSync,
   realpathSync,
 } from 'node:fs';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { CliState } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
@@ -37,7 +37,6 @@ import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
 import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
-import { ACCOUNT_INDEX_FILE } from '../../../src/lib/config-constants';
 
 function resolveSecretsBinarySource(): string {
   const platform = detectPlatform();
@@ -96,8 +95,7 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Stores a token in the OS credential store under the harness service name.
-   * The token is seeded via Bun.secrets when writeTo() is called.
+   * Stores a token in the file-based keychain when writeTo() is called.
    */
   withKeychainToken(serverURL: string, token: string, org?: string): this {
     this.keychainTokens.push({ serverURL, token, org });
@@ -192,29 +190,20 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Writes state.json to <cliHome>/state.json, seeds keychain tokens via Bun.secrets,
-   * and if withSecretsBinaryInstalled() was called, copies the mock binary.
-   *
-   * Returns the list of account keys seeded so the caller can clean them up.
+   * Writes state.json and the keychain JSON file, and if withSecretsBinaryInstalled() was called, copies the mock binary.
    */
-  async writeTo(cliHome: string, serviceName: string): Promise<string[]> {
+  writeTo(cliHome: string, keychainFile: string): void {
     mkdirSync(cliHome, { recursive: true });
     const stateJson = this._rawStateJson ?? JSON.stringify(this.build(), null, 2);
     writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
 
-    const seededAccounts: string[] = [];
-    for (const { serverURL, token, org } of this.keychainTokens) {
-      const account = generateKeychainAccount(serverURL, org);
-      await Bun.secrets.set({ service: serviceName, name: account, value: token });
-      seededAccounts.push(account);
-    }
-
-    if (seededAccounts.length > 0) {
-      writeFileSync(
-        join(cliHome, basename(ACCOUNT_INDEX_FILE)),
-        JSON.stringify({ accounts: seededAccounts }, null, 2),
-        'utf-8',
-      );
+    if (this.keychainTokens.length > 0) {
+      const tokens: Record<string, string> = {};
+      for (const { serverURL, token, org } of this.keychainTokens) {
+        const account = generateKeychainAccount(serverURL, org);
+        tokens[account] = token;
+      }
+      writeFileSync(keychainFile, JSON.stringify({ tokens }, null, 2), 'utf-8');
     }
 
     if (this._installSecretsBinary) {
@@ -235,7 +224,5 @@ export class EnvironmentBuilder {
         chmodSync(destPath, 0o755);
       }
     }
-
-    return seededAccounts;
   }
 }

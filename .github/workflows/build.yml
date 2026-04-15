@@ -325,23 +325,6 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
-      - name: Install keychain dependencies (Linux)
-        if: matrix.os == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
-
-      - name: Start D-Bus and unlock keyring (Linux)
-        if: matrix.os == 'linux'
-        run: |
-          eval "$(dbus-launch --sh-syntax)"
-          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
-          mkdir -p ~/.local/share/keyrings
-          # Empty password is intentional — CI keyring is ephemeral and
-          # only used to give Bun.secrets a working backend for tests.
-          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
-          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
-            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
-          fi
-
       - name: Cache Bun dependencies
         uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
         with:
@@ -369,6 +352,23 @@ jobs:
       - name: Run all tests with coverage (Linux)
         if: matrix.os == 'linux'
         run: bun test:coverage
+
+      - name: Install keychain dependencies (Linux, e2e only)
+        if: matrix.os == 'linux' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
+
+      - name: Start D-Bus and unlock keyring (Linux, e2e only)
+        if: matrix.os == 'linux' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
+        run: |
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          mkdir -p ~/.local/share/keyrings
+          # Empty password is intentional — CI keyring is ephemeral and
+          # only used to give Bun.secrets a working backend for e2e tests.
+          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
+          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
+            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
+          fi
 
       - name: Run e2e tests
         if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')

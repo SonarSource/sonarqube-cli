@@ -92,6 +92,7 @@ function migrateState(state: CliState) {
   if (!state.agentExtensions) {
     state.agentExtensions = [];
   }
+  state.auth.keychainAccounts ??= [];
 }
 
 /**
