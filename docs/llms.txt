@@ -11,7 +11,6 @@
 
 ## Quick Start
 sonar auth login
-sonar install secrets
 sonar integrate claude -g
 
 ## For AI Agents
