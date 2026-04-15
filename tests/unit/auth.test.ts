@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Authentication keychain tests (Bun.secrets backend)
+// Authentication keychain tests (file backend)
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { getToken, deleteToken, clearTokenCache } from '../../src/lib/keychain.js';
@@ -26,9 +26,9 @@ import { createKeychainTestHandle } from './keychain/keychain-test-handle.js';
 
 const handle = createKeychainTestHandle();
 
-describe('Bun.secrets keychain backend', () => {
+describe('keychain backend', () => {
   beforeEach(() => handle.setup());
-  afterEach(async () => handle.teardown());
+  afterEach(() => handle.teardown());
 
   describe('account key generation', () => {
     it('generates correct key for SonarCloud with org', async () => {

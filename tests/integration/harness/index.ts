@@ -48,11 +48,10 @@ export class TestHarness {
   public readonly userHome: Dir;
   public readonly cliHome: Dir;
   public readonly stateJsonFile: File;
-  public readonly keychainServiceName: string;
+  public readonly keychainJsonFile: string;
   private readonly tempDir: Dir;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
-  private readonly seededAccounts: string[] = [];
   private readonly _extraEnv: Record<string, string> = {};
   private _envBuilder?: EnvironmentBuilder;
 
@@ -62,7 +61,7 @@ export class TestHarness {
     this.userHome = this.tempDir.dir('home');
     this.cliHome = this.userHome.dir('.sonar', 'sonarqube-cli');
     this.stateJsonFile = this.cliHome.file('state.json');
-    this.keychainServiceName = `sonar-cli-integ-${crypto.randomUUID()}`;
+    this.keychainJsonFile = join(this.cliHome.path, 'keychain.json');
   }
 
   static create(): Promise<TestHarness> {
@@ -134,30 +133,16 @@ export class TestHarness {
    * Runs the CLI binary with the given command string.
    *
    * Before spawning, applies the configured environment (writes state.json + seeds tokens).
-   * Sets SONARQUBE_CLI_KEYCHAIN_SERVICE so the CLI reads tokens from the same isolated
-   * OS credential store namespace that the harness seeded via Bun.secrets.
+   * Sets SONARQUBE_CLI_KEYCHAIN_FILE so the CLI uses the file-based keychain backend,
+   * avoiding OS credential store access and macOS keychain prompts.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
     if (this._envBuilder) {
-      const accounts = await this._envBuilder.writeTo(this.cliHome.path, this.keychainServiceName);
-      this.seededAccounts.push(...accounts);
+      this._envBuilder.writeTo(this.cliHome.path, this.keychainJsonFile);
     }
 
-    // Clean environment — only include the minimum system vars needed to run a binary.
-    // This prevents developer-specific env vars (tokens, staging URLs, etc.) from
-    // leaking into the CLI process and affecting test behaviour.
     const systemVars: Record<string, string> = {};
-    for (const key of [
-      'PATH',
-      'HOME',
-      'TMPDIR',
-      'USER',
-      'LOGNAME',
-      'SHELL',
-      'TERM',
-      'DBUS_SESSION_BUS_ADDRESS',
-      'GNOME_KEYRING_CONTROL',
-    ]) {
+    for (const key of ['PATH', 'HOME', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM']) {
       const val = process.env[key];
       if (val !== undefined) systemVars[key] = val;
     }
@@ -167,8 +152,6 @@ export class TestHarness {
       ? { SONARQUBE_CLI_BINARIES_URL: activeBinariesServer.baseUrl() }
       : {};
 
-    // Redirect SonarCloud API calls to the active fake server so that
-    // integration tests don't hit api.sonarcloud.io (e.g. for SQAA analysis)
     const activeFakeServer = this.servers.at(-1);
     const fakeSonarcloudApiEnv: Record<string, string> = activeFakeServer
       ? { SONARQUBE_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
@@ -178,7 +161,7 @@ export class TestHarness {
       ...systemVars,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
-      SONARQUBE_CLI_KEYCHAIN_SERVICE: this.keychainServiceName,
+      SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
       ...this._extraEnv,
       ...options?.extraEnv,
@@ -195,7 +178,7 @@ export class TestHarness {
   }
 
   /**
-   * Stops all fake servers, cleans up seeded keychain tokens, and removes the temporary directory.
+   * Stops all fake servers and removes the temporary directory.
    */
   async dispose(): Promise<void> {
     await Promise.all(
@@ -205,13 +188,6 @@ export class TestHarness {
         }),
       ),
     );
-
-    for (const account of this.seededAccounts) {
-      await Bun.secrets
-        .delete({ service: this.keychainServiceName, name: account })
-        .catch(() => {});
-    }
-    this.seededAccounts.length = 0;
 
     await rm(this.tempDir.path, {
       recursive: true,

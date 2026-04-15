@@ -106,13 +106,15 @@ export class FakeSonarQubeServer {
 
 export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
+  private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
+  private readonly sqaaEntitlementOrgs: Map<
+    string,
+    { uuid: string; eligible: boolean; enabled: boolean }
+  > = new Map();
   private validToken?: string;
-  private systemStatus: 'UP' | 'DOWN' = 'UP';
   private memberOrganizations: Array<{ key: string; name: string }> = [];
   private memberOrganizationsTotal?: number;
   private sqaaResponse?: SqaaResponseConfig;
-  private sqaaEntitlementOrgs: Map<string, { uuid: string; eligible: boolean; enabled: boolean }> =
-    new Map();
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -156,13 +158,15 @@ export class FakeSonarQubeServerBuilder {
 
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
-    const validToken = this.validToken;
-    const systemStatus = this.systemStatus;
-    const memberOrganizations = this.memberOrganizations;
-    const memberOrganizationsTotal =
-      this.memberOrganizationsTotal ?? this.memberOrganizations.length;
-    const sqaaResponse = this.sqaaResponse;
-    const sqaaEntitlementOrgs = this.sqaaEntitlementOrgs;
+    const {
+      validToken,
+      systemStatus,
+      memberOrganizations,
+      memberOrganizationsTotal: rawMemberOrganizationsTotal,
+      sqaaResponse,
+      sqaaEntitlementOrgs,
+    } = this;
+    const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
 
     const server = Bun.serve({

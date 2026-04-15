@@ -65,8 +65,8 @@ describe('authLogin: org selection', () => {
     getOrgIdSpy = spyOn(SonarQubeClient.prototype, 'getOrganizationId').mockResolvedValue(null);
   });
 
-  afterEach(async () => {
-    await handle.teardown();
+  afterEach(() => {
+    handle.teardown();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     discoverSpy.mockRestore();

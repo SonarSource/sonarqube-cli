@@ -48,8 +48,8 @@ describe('resolveAuth', () => {
     delete process.env[ENV_SERVER];
   });
 
-  afterEach(async () => {
-    await handle.teardown();
+  afterEach(() => {
+    handle.teardown();
     setMockUi(false);
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];

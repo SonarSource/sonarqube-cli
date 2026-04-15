@@ -88,8 +88,8 @@ describe('authLogoutCommand', () => {
     saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
   });
 
-  afterEach(async () => {
-    await handle.teardown();
+  afterEach(() => {
+    handle.teardown();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     setMockUi(false);
@@ -154,8 +154,8 @@ describe('authPurgeCommand', () => {
     setMockUi(true);
   });
 
-  afterEach(async () => {
-    await handle.teardown();
+  afterEach(() => {
+    handle.teardown();
     setMockUi(false);
   });
 
@@ -170,8 +170,8 @@ describe('authStatusCommand', () => {
     setMockUi(true);
   });
 
-  afterEach(async () => {
-    await handle.teardown();
+  afterEach(() => {
+    handle.teardown();
     setMockUi(false);
   });
 
@@ -209,8 +209,8 @@ describe('authLoginCommand', () => {
     getOrgIdSpy = spyOn(SonarQubeClient.prototype, 'getOrganizationId').mockResolvedValue(null);
   });
 
-  afterEach(async () => {
-    await handle.teardown();
+  afterEach(() => {
+    handle.teardown();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     discoverSpy.mockRestore();

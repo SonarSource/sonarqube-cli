@@ -20,10 +20,10 @@
 
 // Keychain operations - OS-backed via Bun.secrets, with file fallback for tests
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { ACCOUNT_INDEX_FILE, APP_NAME } from './config-constants.js';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { APP_NAME } from './config-constants.js';
 import { CommandFailedError } from '../cli/commands/_common/error.js';
+import { loadState, saveState } from './state-manager.js';
 
 function getServiceName(): string {
   return process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE || APP_NAME;
@@ -125,19 +125,14 @@ function getBackend(): KeychainBackend {
   return bunSecretsBackend;
 }
 
-function getAccountIndexPath(): string {
-  return process.env.SONARQUBE_CLI_ACCOUNT_INDEX_FILE || ACCOUNT_INDEX_FILE;
-}
-
 function readAccountIndex(): string[] {
-  const data = readJsonFile(getAccountIndexPath(), { accounts: [] as string[] });
-  return Array.isArray(data.accounts) ? data.accounts : [];
+  return loadState().auth.keychainAccounts ?? [];
 }
 
 function writeAccountIndex(accounts: string[]): void {
-  const filePath = getAccountIndexPath();
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify({ accounts }, null, 2), 'utf-8');
+  const state = loadState();
+  state.auth.keychainAccounts = accounts;
+  saveState(state);
 }
 
 function addToAccountIndex(account: string): void {
