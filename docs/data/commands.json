@@ -61,7 +61,7 @@
           "flags": "-s, --server <server>",
           "long": "--server",
           "short": "-s",
-          "description": "SonarQube URL (default is SonarQube https://sonarcloud.io)",
+          "description": "SonarQube URL (default is SonarQube Cloud https://sonarcloud.io)",
           "type": "string",
           "required": false
         },
@@ -93,7 +93,7 @@
         },
         {
           "command": "sonar auth login -s https://my-sonarqube.io --with-token squ_def456",
-          "description": "Non-interactive login for custom server with token"
+          "description": "Non-interactive login for SonarQube Server with token"
         }
       ],
       "children": []
@@ -263,7 +263,7 @@
       "id": "sonar-integrate-claude",
       "name": "claude",
       "fullName": "sonar integrate claude",
-      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.",
+      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -518,7 +518,7 @@
       "id": "sonar-analyze",
       "name": "analyze",
       "fullName": "sonar analyze",
-      "description": "Analyze code for security issues",
+      "description": "Analyze code for quality and security issues",
       "isGroup": true,
       "isRoot": false,
       "requiresAuth": false,
@@ -579,7 +579,7 @@
       "id": "sonar-analyze-sqaa",
       "name": "sqaa",
       "fullName": "sonar analyze sqaa",
-      "description": "Run SQAA server-side analysis on a file (SonarQube Cloud only)",
+      "description": "Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,

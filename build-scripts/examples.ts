@@ -66,7 +66,7 @@ export const EXAMPLES: Record<string, Example[]> = {
     },
     {
       command: 'sonar auth login -s https://my-sonarqube.io --with-token squ_def456',
-      description: 'Non-interactive login for custom server with token',
+      description: 'Non-interactive login for SonarQube Server with token',
     },
   ],
   'sonar auth logout': [

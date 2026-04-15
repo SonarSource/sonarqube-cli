@@ -288,7 +288,7 @@ describe('analyzeSqaa: API call and result display', () => {
     analyzeFileSpy.mockRejectedValue(new Error('Network error'));
 
     expect(analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH)).rejects.toThrow(
-      'SQAA analysis failed',
+      'SonarQube Agentic Analysis failed',
     );
   });
 });

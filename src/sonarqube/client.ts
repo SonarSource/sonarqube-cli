@@ -324,7 +324,7 @@ export class SonarQubeClient {
   }
 
   /**
-   * Run SQAA server-side analysis on a single file.
+   * Run server-side SonarQube Agentic Analysis on a single file.
    * SonarQube Cloud only — endpoint lives on api.sonarcloud.io.
    */
   async analyzeFile(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {

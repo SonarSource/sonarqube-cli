@@ -42,11 +42,11 @@ Save authentication token to keychain
 
 **Options:**
 
-| Option               | Type   | Required | Description                                                     | Default |
-| -------------------- | ------ | -------- | --------------------------------------------------------------- | ------- |
-| `--server`, `-s`     | string | No       | SonarQube URL (default is SonarQube https://sonarcloud.io)      | -       |
-| `--org`, `-o`        | string | No       | SonarQube Cloud organization key (required for SonarQube Cloud) | -       |
-| `--with-token`, `-t` | string | No       | Token value (skips browser, non-interactive mode)               | -       |
+| Option               | Type   | Required | Description                                                      | Default |
+| -------------------- | ------ | -------- | ---------------------------------------------------------------- | ------- |
+| `--server`, `-s`     | string | No       | SonarQube URL (default is SonarQube Cloud https://sonarcloud.io) | -       |
+| `--org`, `-o`        | string | No       | SonarQube Cloud organization key (required for SonarQube Cloud)  | -       |
+| `--with-token`, `-t` | string | No       | Token value (skips browser, non-interactive mode)                | -       |
 
 **Examples:**
 
@@ -60,7 +60,7 @@ Non-interactive login with direct token
 sonar auth login -o my-org -t squ_abc123
 ```
 
-Non-interactive login for custom server with token
+Non-interactive login for SonarQube Server with token
 ```bash
 sonar auth login -s https://my-sonarqube.io --with-token squ_def456
 ```
@@ -174,7 +174,7 @@ sonar integrate claude -g
 
 #### `sonar integrate claude`
 
-Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.
+Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
 
 **Options:**
 
@@ -291,7 +291,7 @@ sonar list projects --page 2 --page-size 50
 
 ### `sonar analyze`
 
-Analyze code for security issues
+Analyze code for quality and security issues
 
 #### `sonar analyze secrets`
 
@@ -324,7 +324,7 @@ cat .env | sonar analyze secrets --stdin
 
 #### `sonar analyze sqaa`
 
-Run SQAA server-side analysis on a file (SonarQube Cloud only)
+Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)
 
 **Options:**
 

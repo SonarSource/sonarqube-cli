@@ -79,10 +79,10 @@ function resolveCloudAuth(
   if (auth.connectionType != 'cloud' || auth.orgKey == null) {
     if (explicitProject) {
       throw new CommandFailedError(
-        'SQAA analysis requires a SonarQube Cloud connection. Run: sonar auth login',
+        'SonarQube Agentic Analysis requires a SonarQube Cloud connection. Run: sonar auth login',
       );
     }
-    logger.debug('SQAA analysis skipped: missing orgKey or on-premise server');
+    logger.debug('SonarQube Agentic Analysis skipped: missing orgKey or on-premise server');
     return null;
   }
 
@@ -102,7 +102,9 @@ function resolveSqaaProjectKey(command?: Command): string | null {
     );
 
     if (!sqaaExt?.projectKey) {
-      logger.debug('SQAA analysis skipped: no project key found in extensions registry');
+      logger.debug(
+        'SonarQube Agentic Analysis skipped: no project key found in extensions registry',
+      );
       if (process.stdin.isTTY) {
         command?.outputHelp();
       }
@@ -111,7 +113,7 @@ function resolveSqaaProjectKey(command?: Command): string | null {
 
     return sqaaExt.projectKey;
   } catch {
-    logger.debug('SQAA analysis skipped: failed to resolve extensions');
+    logger.debug('SonarQube Agentic Analysis skipped: failed to resolve extensions');
     return null;
   }
 }
@@ -157,7 +159,7 @@ async function callSqaaApiAndDisplay(
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
   blank();
-  text('Running SQAA analysis...');
+  text('Running SonarQube Agentic Analysis...');
 
   try {
     const response = await client.analyzeFile({
@@ -170,7 +172,7 @@ async function callSqaaApiAndDisplay(
 
     displaySqaaResults(response.issues, response.errors);
   } catch (err) {
-    throw new CommandFailedError(`SQAA analysis failed.\n  ${(err as Error).message}`);
+    throw new CommandFailedError(`SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`);
   }
 }
 
@@ -181,9 +183,11 @@ function displaySqaaResults(
   blank();
 
   if (issues.length === 0) {
-    success('SQAA analysis completed — no issues found.');
+    success('SonarQube Agentic Analysis completed — no issues found.');
   } else {
-    error(`SQAA analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
+    error(
+      `SonarQube Agentic Analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`,
+    );
     blank();
     issues.forEach((issue, idx) => {
       const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
@@ -194,7 +198,7 @@ function displaySqaaResults(
 
   if (errors && errors.length > 0) {
     blank();
-    error('SQAA analysis returned errors:');
+    error('SonarQube Agentic Analysis returned errors:');
     errors.forEach((e) => {
       text(`  [${e.code}] ${e.message}`);
     });

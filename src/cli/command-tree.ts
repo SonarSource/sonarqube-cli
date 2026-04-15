@@ -93,7 +93,7 @@ const integrateCommand = COMMAND_TREE.command('integrate').description(
 integrateCommand
   .command('claude')
   .description(
-    'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.',
+    'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
   )
   .option('-p, --project <project>', 'Project key')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
@@ -162,7 +162,10 @@ const auth = COMMAND_TREE.command('auth').description(
 auth
   .command('login')
   .description('Save authentication token to keychain')
-  .option('-s, --server <server>', 'SonarQube URL (default is SonarQube https://sonarcloud.io)')
+  .option(
+    '-s, --server <server>',
+    'SonarQube URL (default is SonarQube Cloud https://sonarcloud.io)',
+  )
   .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
   .anonymousAction((options: AuthLoginOptions) => authLogin(options));
@@ -182,9 +185,9 @@ auth
   .description('Show active authentication connection with token verification')
   .anonymousAction(() => authStatus());
 
-// Analyze code for security issues
+// Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')
-  .description('Analyze code for security issues')
+  .description('Analyze code for quality and security issues')
   .enablePositionalOptions()
   .anonymousAction(function (this: Command) {
     this.outputHelp();
@@ -201,7 +204,7 @@ analyze
 
 analyze
   .command('sqaa')
-  .description('Run SQAA server-side analysis on a file (SonarQube Cloud only)')
+  .description('Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)')
   .requiredOption('--file <file>', 'File path to analyze')
   .option('--branch <branch>', 'Branch name for analysis context')
   .option(

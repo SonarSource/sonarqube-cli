@@ -476,7 +476,7 @@
       <button class="jtbd-pill" onclick="showJtbd('status')">Check my authentication status</button>
       <button class="jtbd-pill" onclick="showJtbd('list-projects')">List projects</button>
       <button class="jtbd-pill" onclick="showJtbd('issues')">List issues in my project</button>
-      <button class="jtbd-pill" onclick="showJtbd('analyze')">Analyze a file for code issues</button>
+      <button class="jtbd-pill" onclick="showJtbd('analyze')">Analyze a file for issues</button>
       <button class="jtbd-pill" onclick="showJtbd('secrets-scan')">Scan a file for secrets</button>
       <button class="jtbd-pill" onclick="showJtbd('hooks')">Block bad commits with git hooks</button>
       <button class="jtbd-pill" onclick="showJtbd('claude')">Set up Claude Code integration</button>
@@ -501,7 +501,7 @@
     </div>
     <div class="feature-card">
       <h3>Claude Integration</h3>
-      <p>Wire Claude Code into your SonarQube workflow. Get AI-assisted fixes for issues surfaced by SonarQube analysis.</p>
+      <p>Wire SonarQube into your Claude Code workflow. Get AI-assisted fixes for issues surfaced by SonarQube analysis.</p>
     </div>
     <div class="feature-card">
       <h3>Issue Explorer</h3>
@@ -509,7 +509,7 @@
     </div>
     <div class="feature-card">
       <h3>Git Hooks</h3>
-      <p>Block bad commits automatically. Pre-commit hooks run secrets and quality checks before every <code>git commit</code>.</p>
+      <p>Block bad commits automatically. Pre-commit hooks run secrets scanning before every <code>git commit</code>.</p>
     </div>
     <div class="feature-card">
       <h3>MCP Server</h3>
@@ -517,11 +517,11 @@
     </div>
     <div class="feature-card">
       <h3>Multi-platform</h3>
-      <p>Native binaries for Linux, macOS (Intel and Apple Silicon), and Windows. One install script, zero dependencies.</p>
+      <p>Native binaries for Linux, macOS (Apple Silicon), and Windows. One install script, zero dependencies.</p>
     </div>
     <div class="feature-card">
       <h3>Code Quality Analysis</h3>
-      <p>Run advanced static analysis via the SonarQube A3S API on any file. Catch bugs and code smells before they land in review.</p>
+      <p>Run advanced static analysis via the SonarQube A3S API on any file. Catch quality and security issues before they land in review.</p>
     </div>
     <div class="feature-card">
       <h3>Secure Keychain Auth</h3>
@@ -590,7 +590,7 @@
       'list my project\'s open issues',
       'authenticate with SonarQube',
       'set up Claude Code integration',
-      'analyze a file for code issues',
+      'analyze a file for issues',
       'scan for hardcoded secrets',
     ];
 
@@ -598,7 +598,7 @@
       'fetching open issues for my-org_app',
       'authenticating with sonarcloud.io',
       'setting up hooks and MCP server for Claude Code',
-      'checking src/auth.ts for code issues',
+      'checking src/auth.ts for issues',
       'scanning src/ for hardcoded secrets',
     ];
 
@@ -631,9 +631,9 @@
       [ // sonar verify --file
         { t: '$ sonar verify --file src/auth.ts', cmd: true },
         { t: '' },
-        { t: 'Running SQAA analysis...',              c: C.muted },
+        { t: 'Running SonarQube Agentic Analysis analysis...',              c: C.muted },
         { t: '' },
-        { t: '❌ SQAA analysis found 2 issues:',      c: C.error },
+        { t: '❌ SonarQube Agentic Analysis found 2 issues:',      c: C.error },
         { t: '' },
         { t: '  [1] SQL injection vulnerability (line 23)', c: C.cmd },
         { t: '      Rule: java:S3649',               c: C.muted },

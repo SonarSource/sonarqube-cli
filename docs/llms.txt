@@ -7,7 +7,6 @@
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://cli.sonarqube.com/data/commands.json
 - Source: https://github.com/SonarSource/sonarqube-cli
-- Issues: https://github.com/SonarSource/sonarqube-cli/issues
 - Commands reference: https://cli.sonarqube.com/commands.html
 
 ## Quick Start
@@ -30,7 +29,7 @@ Save authentication token to keychain
 Usage: sonar auth login [-s <value>] [-o <value>] [-t <value>]
 
 Options:
-  --server, -s  <string>   SonarQube URL (default is SonarQube https://sonarcloud.io)
+  --server, -s  <string>   SonarQube URL (default is SonarQube Cloud https://sonarcloud.io)
   --org, -o  <string>   SonarQube Cloud organization key (required for SonarQube Cloud)
   --with-token, -t  <string>   Token value (skips browser, non-interactive mode)
 
@@ -85,7 +84,7 @@ Examples:
   sonar integrate claude -g
 
 ### sonar integrate claude *
-Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.
+Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
 Usage: sonar integrate claude [-p <value>] [--non-interactive] [--global]
 
 Options:
@@ -144,7 +143,7 @@ Examples:
   sonar list projects --page 2 --page-size 50
 
 ### sonar analyze
-Analyze code for security issues
+Analyze code for quality and security issues
 
 ### sonar analyze secrets *
 Scan files or stdin for hardcoded secrets
@@ -159,7 +158,7 @@ Examples:
   cat .env | sonar analyze secrets --stdin
 
 ### sonar analyze sqaa *
-Run SQAA server-side analysis on a file (SonarQube Cloud only)
+Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)
 Usage: sonar analyze sqaa [--file <value>] [--branch <value>] [-p <value>]
 
 Options:
