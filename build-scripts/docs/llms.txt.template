@@ -1,0 +1,23 @@
+# SonarQube CLI
+
+> Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
+
+- Version: {{VERSION}}
+- Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
+- Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
+- Machine-readable schema: https://cli.sonarqube.com/data/commands.json
+- Source: https://github.com/SonarSource/sonarqube-cli
+- Commands reference: https://cli.sonarqube.com/commands.html
+
+## Quick Start
+sonar auth login
+sonar integrate claude -g
+
+## For AI Agents
+Use `sonar list issues --format toon` to output issues in a format optimized for LLM consumption.
+Use `sonar list projects` to discover available projects before running analysis.
+Commands marked with * require prior authentication via `sonar auth login`.
+
+## Commands
+
+{{COMMANDS}}

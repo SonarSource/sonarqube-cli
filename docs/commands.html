@@ -18,7 +18,6 @@
   <link rel="alternate" type="application/json" href="data/commands.json" title="Command Reference (JSON)">
   <link rel="stylesheet" href="assets/style.css">
   <script>if(localStorage.getItem('clidoc-theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
-  <script src="data/commands.js" defer></script>
 </head>
 <body class="commands-page">
 
@@ -62,10 +61,10 @@
 </div>
 
 <script type="module">
-const data = window.__CLIDOC_DATA__;
+const data = await fetch('data/commands.json').then(r => r.json()).catch(() => null);
 if (!data) {
-  document.getElementById('detail').innerHTML = '<div class="empty-state">No command data found. Run <code>bun run gen:clidoc</code> first.</div>';
-  throw new Error('No __CLIDOC_DATA__');
+  document.getElementById('detail').innerHTML = '<div class="empty-state">No command data found.</div>';
+  throw new Error('Failed to load commands.json');
 }
 
 // Build lookup map

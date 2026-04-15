@@ -47,6 +47,7 @@ import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git
 import {
   listIssues,
   type ListIssuesOptions,
+  VALID_FORMATS,
   VALID_SEVERITIES,
   VALID_STATUSES,
 } from './commands/list/issues';
@@ -136,6 +137,9 @@ const pageOption = new Option('--page <page>', 'Page number').default(1).argPars
 const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
   .default(DEFAULT_PAGE_SIZE)
   .argParser(parseInteger);
+const listIssuesFormatOption = new Option('--format <format>', 'Output format')
+  .choices(VALID_FORMATS)
+  .default('json');
 list
   .command('issues')
   .description('Search for issues in SonarQube')
@@ -148,7 +152,7 @@ list
     '--severities <severities>',
     `Filter by severity (comma-separated list of: ${VALID_SEVERITIES.join(', ')})`,
   )
-  .option('--format <format>', 'Output format', 'json')
+  .addOption(listIssuesFormatOption)
   .option('--branch <branch>', 'Branch name')
   .option('--pull-request <pull-request>', 'Pull request ID')
   .addOption(pageSizeOption)

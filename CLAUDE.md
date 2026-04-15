@@ -64,8 +64,4 @@ When adding, removing, or changing commands, scripts, or project structure, upda
 
 ## Docs site (`docs/`)
 
-The docs site is generated from the CLI source — do not edit `commands.json`, `commands.js`, `llms.txt`, or `sitemap.xml` by hand.
-
-**Source of truth:**
-- Command structure → `src/cli/command-tree.ts`
-- Examples → `build-scripts/examples.ts`
+The docs site is generated from the CLI source — do not edit `commands.json`, `llms.txt`, or `sitemap.xml` by hand. This is done by automation post-release.

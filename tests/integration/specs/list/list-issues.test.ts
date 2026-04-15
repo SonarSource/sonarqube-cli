@@ -271,7 +271,9 @@ describe('list issues — argument validation', () => {
       const result = await harness.run('list issues --project my-project --format xml');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Invalid format');
+      expect(result.stdout + result.stderr).toContain(
+        "error: option '--format <format>' argument 'xml' is invalid. Allowed choices are json, toon, table, csv.",
+      );
     },
     { timeout: 15000 },
   );

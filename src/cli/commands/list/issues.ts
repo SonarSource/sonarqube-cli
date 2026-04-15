@@ -32,7 +32,7 @@ import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
 import { print } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 
-const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
+export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
 export const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
 export const VALID_STATUSES = ['OPEN', 'CONFIRMED', 'FALSE_POSITIVE', 'ACCEPTED', 'FIXED'];
 

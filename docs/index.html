@@ -35,7 +35,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="assets/style.css">
   <script>if(localStorage.getItem('clidoc-theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
-  <script src="data/commands.js"></script>
 </head>
 <body>
 
@@ -233,11 +232,10 @@
   })();
 
   // Inject version from data
-  if (window.__CLIDOC_DATA__) {
-    const v = window.__CLIDOC_DATA__.version;
-    document.getElementById('nav-version').textContent = 'v' + v;
-    document.getElementById('meta-version').setAttribute('content', v);
-  }
+  fetch('data/commands.json').then(r => r.json()).then(data => {
+    document.getElementById('nav-version').textContent = 'v' + data.version;
+    document.getElementById('meta-version').setAttribute('content', data.version);
+  });
 
   // ─── Cycling terminal ───────────────────────────────────────────
   (function() {

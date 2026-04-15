@@ -413,9 +413,9 @@
           "defaultValue": "json",
           "allowedValues": [
             "json",
+            "toon",
             "table",
-            "csv",
-            "toon"
+            "csv"
           ]
         },
         {
