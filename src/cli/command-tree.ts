@@ -121,7 +121,7 @@ integrateCommand
   .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
 
 // List Sonar resources
-const list = COMMAND_TREE.command('list').description('List Sonar resources');
+const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');
 
 const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
 const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')

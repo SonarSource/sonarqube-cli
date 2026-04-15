@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SonarQube CLI — cli.sonarqube.com</title>
+  <meta name="description" content="SonarQube CLI — code quality and security in your terminal. Scan for secrets, integrate Claude Code, and manage SonarQube issues from the command line.">
+  <meta name="version" id="meta-version" content="">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="canonical" href="https://cli.sonarqube.com/">
+  <meta property="og:title" content="SonarQube CLI — Code Quality & Security in Your Terminal">
+  <meta property="og:description" content="SonarQube CLI — code quality and security in your terminal. Scan for secrets, integrate Claude Code, and manage SonarQube issues from the command line.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cli.sonarqube.com/">
+  <meta property="og:site_name" content="SonarQube CLI">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="SonarQube CLI — Code Quality & Security in Your Terminal">
+  <meta name="twitter:description" content="SonarQube CLI — code quality and security in your terminal. Scan for secrets, integrate Claude Code, and manage SonarQube issues from the command line.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "SonarQube CLI",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Linux, Windows",
+    "description": "Code quality and security in your terminal. Scan for secrets, integrate Claude Code, and manage SonarQube issues from the command line.",
+    "url": "https://cli.sonarqube.com",
+    "downloadUrl": "https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh",
+    "license": "https://www.gnu.org/licenses/lgpl-3.0.html",
+    "softwareVersion": "0.10.0"
+  }
+  </script>
+  <link rel="alternate" type="application/json" href="data/commands.json" title="Command Reference (JSON)">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="assets/style.css">
+  <script>if(localStorage.getItem('clidoc-theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
+  <script src="data/commands.js"></script>
+  <style>
+    /* ─── Hero ─────────────────────────────────────────────────── */
+    .hero {
+      padding: 80px 24px 64px;
+      text-align: center;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .hero h1 {
+      font-size: 52px;
+      font-weight: 600;
+      letter-spacing: -1.5px;
+      line-height: 1.1;
+      margin-bottom: 16px;
+    }
+    .hero h1 span { color: var(--accent); }
+    .beta-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      letter-spacing: 0.3px;
+    }
+    .hero h1 .beta-badge { font-size: 14px; vertical-align: middle; }
+    .hero .tagline {
+      font-size: 20px;
+      color: var(--text-muted);
+      margin-bottom: 40px;
+      line-height: 1.5;
+    }
+    .hero-ctas {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+    .hero-ctas .btn {
+      padding: 10px 22px;
+      font-size: 14px;
+    }
+
+    /* ─── Terminal typewriter ───────────────────────────────────── */
+    .terminal-intent {
+      text-align: center;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .intent-human {
+      font-size: 18px;
+      font-weight: 500;
+      min-height: 1.4em;
+    }
+    .intent-agent {
+      font-size: 13px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text-muted);
+      min-height: 1.4em;
+    }
+    .intent-prefix { color: var(--text-muted); }
+    #terminal-intent-text { color: var(--text); }
+    #terminal-agent-text { color: var(--accent); }
+    .intent-cursor, .intent-cursor-agent {
+      animation: blink 0.8s step-end infinite;
+      margin-left: 1px;
+    }
+    .intent-cursor { color: var(--accent); }
+    .intent-cursor-agent { color: var(--text-muted); }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+    .terminal {
+      background: #0c0c0c;
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 720px;
+      margin: 0 auto 48px;
+      text-align: left;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+      border: 1px solid #2a2a2a;
+    }
+    .terminal-bar {
+      background: #1a1a1a;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .terminal-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+    }
+    .terminal-dot:nth-child(1) { background: #f87171; }
+    .terminal-dot:nth-child(2) { background: #fb923c; }
+    .terminal-dot:nth-child(3) { background: #4ade80; }
+    .terminal-title {
+      margin-left: auto;
+      font-size: 11px;
+      color: #555;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .terminal-body {
+      padding: 18px 20px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #d4d4d4;
+      height: 300px;
+      overflow: hidden;
+      transition: opacity 0.4s;
+    }
+
+    /* ─── Sections ──────────────────────────────────────────────── */
+    .section {
+      padding: 64px 24px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .section-title {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .section-sub {
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-bottom: 36px;
+    }
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ─── OS Tabs ───────────────────────────────────────────────── */
+    .hero-install {
+      width: 100%;
+      max-width: 900px;
+      margin: 64px auto 64px;
+    }
+    .hero-install pre {
+      padding: 14px 16px;
+    }
+    .hero-install-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .hero-install .tab-group {
+      border: none;
+      background: none;
+      gap: 0;
+      margin-bottom: 0;
+    }
+    .hero-install-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hero-install-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .hero-install .tab-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+    .hero-install .tab-btn.active { background: none; color: var(--text); font-weight: 600; }
+    .hero-install .tab-btn:hover { background: none; color: var(--text); }
+    .hero-install .tab-btn:not(:last-child) { border-right: none; }
+    .hero-install .tab-btn:not(:last-child)::after {
+      content: ' | ';
+      color: var(--border);
+      padding: 0 4px;
+    }
+    .hero-install-link {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+    .hero-install-link:hover { color: var(--accent); }
+    .tab-group {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      width: fit-content;
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      padding: 7px 18px;
+      background: var(--surface2);
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .tab-btn:not(:last-child) { border-right: 1px solid var(--border); }
+    .tab-btn.active { background: var(--accent); color: #fff; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ─── Quickstart steps ──────────────────────────────────────── */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .steps-arrow { display: none; }
+    .step {
+      min-width: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .step h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .step code {
+      display: block;
+      font-size: 12px;
+      padding: 8px 10px;
+    }
+    .step p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+    .steps-arrow {
+      font-size: 20px;
+      color: var(--border);
+      align-self: center;
+      flex-shrink: 0;
+    }
+
+    /* ─── I want to pills ──────────────────────────────────────── */
+    .jtbd-layout {
+      display: flex;
+      gap: 24px;
+      margin-top: 36px;
+      align-items: flex-start;
+    }
+    .jtbd-pills {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+      width: 280px;
+    }
+    .jtbd-pill {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      font-family: inherit;
+    }
+    .jtbd-pill:hover { border-color: var(--accent); color: var(--accent); }
+    .jtbd-pill.active { border-color: var(--accent); background: var(--accent-dim, rgba(18,110,211,0.12)); color: var(--accent); }
+    .jtbd-recipe {
+      flex: 1;
+      display: none;
+    }
+    .jtbd-recipe.visible { display: block; }
+
+    /* ─── Feature cards ─────────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 640px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .steps-arrow { display: none; }
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      transition: border-color 0.15s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+    .feature-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Nav ──────────────────────────────────────────────────── -->
+<nav class="nav">
+  <a href="index.html" class="logo">
+    <img class="logo-dark"  src="assets/SQ-CLI_Dark Backgrounds.svg"  alt="SonarQube CLI">
+    <img class="logo-light" src="assets/SQ-CLI_Light Backgrounds.svg" alt="SonarQube CLI">
+  </a>
+  <span class="version" id="nav-version" style="display:none">v0.8.1</span>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link active">Home</a>
+    <a href="commands.html" class="nav-link">Commands</a>
+    <a href="https://github.com/SonarSource/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
+    <a href="llms.txt" class="nav-link">llms.txt</a>
+    <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">☀</button>
+  </div>
+</nav>
+
+<!-- ─── ASCII Wave Background ────────────────────────────────── -->
+<canvas id="wave-bg" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0.45;" aria-hidden="true"></canvas>
+<div id="wave-glow" style="position:fixed;bottom:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;background:radial-gradient(ellipse 70% 60% at 50% 100%, rgba(18,110,211,0.18) 0%, rgba(18,110,211,0.07) 45%, transparent 70%);" aria-hidden="true"></div>
+
+<!-- ─── Hero ──────────────────────────────────────────────────── -->
+<section class="hero" style="position:relative;z-index:1;">
+  <h1>SonarQube <span>CLI</span> <span class="beta-badge">BETA</span></h1>
+  <p class="tagline">Code verification in your terminal</p>
+
+  <div class="hero-install">
+    <div class="hero-install-header">
+      <div class="hero-install-tabs">
+        <span class="hero-install-label">Install:</span>
+        <div class="tab-group">
+          <button class="tab-btn active" onclick="showHeroTab('linux', this)">Linux / macOS</button>
+          <button class="tab-btn" onclick="showHeroTab('windows', this)">Windows</button>
+        </div>
+      </div>
+      <a href="https://github.com/SonarSource/sonarqube-cli?tab=readme-ov-file#sonarqube-cli" class="hero-install-link" target="_blank" rel="noopener">View installation instructions ↗</a>
+    </div>
+    <div id="hero-tab-linux" class="tab-panel active">
+      <div class="code-block">
+        <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
+        <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+      </div>
+    </div>
+    <div id="hero-tab-windows" class="tab-panel">
+      <div class="code-block">
+        <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
+        <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="terminal-intent">
+    <div class="intent-human"><span id="dev-emoji">👨‍💻</span> <span class="intent-prefix">I want to </span><span id="terminal-intent-text"></span><span class="intent-cursor">|</span></div>
+    <div class="intent-agent">🤖 <span class="intent-prefix">Agent: </span><span id="terminal-agent-text"></span></div>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="terminal-dot"></div>
+      <div class="terminal-dot"></div>
+      <div class="terminal-dot"></div>
+      <span class="terminal-title">zsh</span>
+    </div>
+    <div class="terminal-body" id="terminal-body"></div>
+  </div>
+
+  <div class="hero-ctas">
+    <a href="commands.html" class="btn btn-primary">Browse Commands</a>
+  </div>
+</section>
+
+<hr class="section-divider">
+
+<!-- ─── Install ───────────────────────────────────────────────── -->
+<section class="section" id="install" style="display:none">
+  <h2 class="section-title">Installation</h2>
+  <p class="section-sub">One-line install for all platforms.</p>
+
+  <div class="tab-group">
+    <button class="tab-btn active" onclick="showTab('linux')">Linux / macOS</button>
+    <button class="tab-btn" onclick="showTab('windows')">Windows</button>
+  </div>
+
+  <div id="tab-linux" class="tab-panel active">
+    <div class="code-block">
+      <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
+      <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+    </div>
+  </div>
+  <div id="tab-windows" class="tab-panel">
+    <div class="code-block">
+      <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
+      <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+    </div>
+  </div>
+</section>
+
+<hr class="section-divider">
+
+<!-- ─── Quick Start ───────────────────────────────────────────── -->
+<section class="section" id="quickstart">
+  <h2 class="section-title">Quick Start</h2>
+  <p class="section-sub">What do you want to do?</p>
+
+  <div class="jtbd-layout">
+    <div class="jtbd-pills" id="jtbd-pills">
+      <button class="jtbd-pill" onclick="showJtbd('status')">Check my authentication status</button>
+      <button class="jtbd-pill" onclick="showJtbd('list-projects')">List projects</button>
+      <button class="jtbd-pill" onclick="showJtbd('issues')">List issues in my project</button>
+      <button class="jtbd-pill" onclick="showJtbd('analyze')">Analyze a file for code issues</button>
+      <button class="jtbd-pill" onclick="showJtbd('secrets-scan')">Scan a file for secrets</button>
+      <button class="jtbd-pill" onclick="showJtbd('hooks')">Block bad commits with git hooks</button>
+      <button class="jtbd-pill" onclick="showJtbd('claude')">Set up Claude Code integration</button>
+      <button class="jtbd-pill" onclick="showJtbd('pr-issues')" style="display:none">Review issues in a pull request</button>
+      <button class="jtbd-pill" onclick="showJtbd('install')">Update the CLI</button>
+    </div>
+    <div class="jtbd-recipe" id="jtbd-recipe"></div>
+  </div>
+</section>
+
+<hr class="section-divider">
+
+<!-- ─── Features ─────────────────────────────────────────────── -->
+<section class="section" id="features" style="display:none">
+  <h2 class="section-title">Features</h2>
+  <p class="section-sub">Everything you need for code security in the terminal.</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <h3>Secrets Scanning</h3>
+      <p>Detect hardcoded secrets, API keys, and credentials before they reach your repository. Integrates as a pre-commit hook.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Claude Integration</h3>
+      <p>Wire Claude Code into your SonarQube workflow. Get AI-assisted fixes for issues surfaced by SonarQube analysis.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Issue Explorer</h3>
+      <p>Query and filter SonarQube issues from your terminal or agent. JSON and TOON output formats pipe directly into LLM workflows without extra post-processing.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Git Hooks</h3>
+      <p>Block bad commits automatically. Pre-commit hooks run secrets and quality checks before every <code>git commit</code>.</p>
+    </div>
+    <div class="feature-card">
+      <h3>MCP Server</h3>
+      <p>Expose SonarQube tools as a Model Context Protocol server. Any MCP-compatible agent can list issues, scan files, and query projects.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Multi-platform</h3>
+      <p>Native binaries for Linux, macOS (Intel and Apple Silicon), and Windows. One install script, zero dependencies.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Code Quality Analysis</h3>
+      <p>Run advanced static analysis via the SonarQube A3S API on any file. Catch bugs and code smells before they land in review.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Secure Keychain Auth</h3>
+      <p>Tokens are stored in the OS keychain — never in plain files. Authenticate once and every command just works.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Footer ────────────────────────────────────────────────── -->
+<footer class="footer">
+  <span>© 2026 SonarSource Sàrl</span>
+  <a href="https://github.com/SonarSource/sonarqube-cli" target="_blank" rel="noopener">GitHub</a>
+  <a href="commands.html">Commands</a>
+  <a href="https://docs.sonarsource.com/sonarqube-cli" target="_blank" rel="noopener">Docs</a>
+  <a href="llms.txt">For AI Agents</a>
+  <a href="data/commands.json">commands.json</a>
+</footer>
+
+<script>
+  // Theme toggle
+  (function() {
+    const btn = document.getElementById('themeToggle');
+    if (document.documentElement.getAttribute('data-theme') === 'light') btn.textContent = '☾';
+    btn.addEventListener('click', () => {
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+      if (isLight) {
+        document.documentElement.removeAttribute('data-theme');
+        btn.textContent = '☀';
+        localStorage.setItem('clidoc-theme', 'dark');
+        document.getElementById('wave-glow').style.background = 'radial-gradient(ellipse 70% 60% at 50% 100%, rgba(18,110,211,0.18) 0%, rgba(18,110,211,0.07) 45%, transparent 70%)';
+      } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        btn.textContent = '☾';
+        localStorage.setItem('clidoc-theme', 'light');
+        document.getElementById('wave-glow').style.background = 'radial-gradient(ellipse 70% 60% at 50% 100%, rgba(18,110,211,0.10) 0%, rgba(18,110,211,0.04) 45%, transparent 70%)';
+      }
+    });
+  })();
+
+  // Inject version from data
+  if (window.__CLIDOC_DATA__) {
+    const v = window.__CLIDOC_DATA__.version;
+    document.getElementById('nav-version').textContent = 'v' + v;
+    document.getElementById('meta-version').setAttribute('content', v);
+  }
+
+  // ─── Cycling terminal ───────────────────────────────────────────
+  (function() {
+    const C = { prompt: '#126ed3', cmd: '#d4d4d4', success: '#4ade80', muted: '#888', error: '#f87171', accent: '#60a5fa' };
+    const CHAR_MS = 42, LINE_MS = 70, PAUSE_MS = 2800, FADE_MS = 350;
+    const DEV_EMOJIS = [
+      '👨🏻‍💻','👨🏼‍💻','👨🏽‍💻','👨🏽‍💻','👨🏾‍💻','👨🏿‍💻',
+      '👩🏻‍💻','👩🏼‍💻','👩🏽‍💻','👩🏽‍💻','👩🏾‍💻',
+      '🧑🏻‍💻','🧑🏼‍💻','🧑🏽‍💻','🧑🏽‍💻','🧑🏾‍💻',
+    ];
+
+    // Table helpers — mirrors the real formatTable() column widths
+    const SW = 8, RW = 15, MW = 45;
+    const tr = (sev, rule, msg, file, c) => ({
+      t: `${sev.padEnd(SW)} | ${rule.padEnd(RW)} | ${msg.substring(0, MW).padEnd(MW)} | ${file}`,
+      c,
+    });
+    const tsep = { t: `${'-'.repeat(SW)}-+-${'-'.repeat(RW)}-+-${'-'.repeat(MW)}-+-${'-'.repeat(16)}`, c: C.muted };
+
+    const intents = [
+      'list my project\'s open issues',
+      'authenticate with SonarQube',
+      'set up Claude Code integration',
+      'analyze a file for code issues',
+      'scan for hardcoded secrets',
+    ];
+
+    const agentIntents = [
+      'fetching open issues for my-org_app',
+      'authenticating with sonarcloud.io',
+      'setting up hooks and MCP server for Claude Code',
+      'checking src/auth.ts for code issues',
+      'scanning src/ for hardcoded secrets',
+    ];
+
+    const flows = [
+      [ // sonar list issues --format table
+        { t: '$ sonar list issues --project my-org_app --format table', cmd: true },
+        tr('SEVERITY', 'RULE', 'MESSAGE', 'FILE', C.muted),
+        tsep,
+        tr('BLOCKER',  'java:S2068', 'Hardcoded password detected',              'src/config.ts:12', C.error),
+        tr('CRITICAL', 'java:S3649', 'SQL injection vulnerability',               'src/db.ts:34',     C.error),
+        tr('MAJOR',    'java:S1764', 'Identical sub-expressions on both sides',   'src/auth.ts:78',   C.cmd  ),
+        tr('MINOR',    'java:S1135', 'Complete the task associated to this TODO', 'src/utils.ts:5',   C.muted),
+      ],
+      [ // sonar auth login
+        { t: '$ sonar auth login', cmd: true },
+        { t: 'Authenticating with: sonarcloud.io',  c: C.muted },
+        { t: '  ✓  Token received',                 c: C.success },
+        { t: 'Using organization: my-org',           c: C.muted },
+        { t: '✅ Authentication successful for: sonarcloud.io (my-org)', c: C.success },
+      ],
+      [ // sonar integrate claude
+        { t: '$ sonar integrate claude', cmd: true },
+        { t: 'Phase 1/3: Discovery & Validation',    c: C.muted },
+        { t: 'Server: sonarcloud.io · Project: my-org_app', c: C.muted },
+        { t: 'Phase 2/3: Health Check & Repair',     c: C.muted },
+        { t: '✅ All checks passed! Configuration is healthy.', c: C.success },
+        { t: 'Installing claude code hooks...',       c: C.muted },
+        { t: '✅ Setup complete!',                   c: C.success },
+      ],
+      [ // sonar verify --file
+        { t: '$ sonar verify --file src/auth.ts', cmd: true },
+        { t: '' },
+        { t: 'Running SQAA analysis...',              c: C.muted },
+        { t: '' },
+        { t: '❌ SQAA analysis found 2 issues:',      c: C.error },
+        { t: '' },
+        { t: '  [1] SQL injection vulnerability (line 23)', c: C.cmd },
+        { t: '      Rule: java:S3649',               c: C.muted },
+        { t: '  [2] Hardcoded password detected (line 45)', c: C.cmd },
+        { t: '      Rule: java:S2068',               c: C.muted },
+      ],
+      [ // sonar analyze secrets
+        { t: '$ sonar analyze secrets src/', cmd: true },
+        { t: '' },
+        { t: '✅ Scan completed successfully',        c: C.success },
+        { t: '  Duration: 312ms',                    c: C.muted },
+        { t: '  No issues detected',                 c: C.muted },
+      ],
+    ];
+
+    function line(text, color) {
+      const el = document.createElement('span');
+      el.style.cssText = 'display:block;white-space:nowrap;overflow:hidden;';
+      if (color) el.style.color = color;
+      el.textContent = text;
+      return el;
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    async function typeLine(body, text, charMs) {
+      const promptEl = document.createElement('span');
+      promptEl.style.color = C.prompt;
+      promptEl.textContent = '$ ';
+      const cmdEl = document.createElement('span');
+      cmdEl.style.color = C.cmd;
+      const row = document.createElement('span');
+      row.style.cssText = 'display:block;white-space:nowrap;overflow:hidden;';
+      row.appendChild(promptEl);
+      row.appendChild(cmdEl);
+      body.appendChild(row);
+      const content = text.slice(2);
+      for (const ch of content) {
+        cmdEl.textContent += ch;
+        await sleep(charMs);
+      }
+    }
+
+    async function revealLine(body, text, color) {
+      const el = line(text, color);
+      el.style.width = '0';
+      el.style.transition = `width ${Math.max(80, text.length * 6)}ms steps(${Math.max(1, text.length)}, end)`;
+      body.appendChild(el);
+      await sleep(20);
+      el.style.width = '100%';
+      await sleep(Math.max(80, text.length * 6));
+    }
+
+    async function runFlow(body, flow) {
+      for (const item of flow) {
+        if (item.cmd) {
+          await typeLine(body, item.t, CHAR_MS);
+        } else if (item.t === '') {
+          body.appendChild(line('', item.c));
+        } else {
+          await revealLine(body, item.t, item.c);
+        }
+        await sleep(LINE_MS);
+      }
+    }
+
+    async function typeEl(id, text, charMs) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = '';
+      for (const ch of text) {
+        el.textContent += ch;
+        await sleep(charMs);
+      }
+    }
+
+    const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*?/\\';
+    function randGlyph() { return GLYPHS[Math.floor(Math.random() * GLYPHS.length)]; }
+    async function scrambleEl(id, text) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const words = text.split(' ');
+      let settled = '';
+      for (let w = 0; w < words.length; w++) {
+        const word = words[w];
+        const TICK = 16, SETTLE_EVERY = 1;
+        let tick = 0, s = 0;
+        await new Promise(resolve => {
+          const interval = setInterval(() => {
+            if (s >= word.length) {
+              settled += (w > 0 ? ' ' : '') + word;
+              el.textContent = settled;
+              clearInterval(interval);
+              resolve();
+              return;
+            }
+            const scrambled = Array.from({ length: word.length - s }, () => randGlyph()).join('');
+            el.textContent = settled + (w > 0 ? ' ' : '') + word.slice(0, s) + scrambled;
+            tick++;
+            if (tick % SETTLE_EVERY === 0) s++;
+          }, TICK);
+        });
+        await sleep(40);
+      }
+    }
+
+    async function typeIntent(i) {
+      await Promise.all([
+        typeEl('terminal-intent-text', intents[i], CHAR_MS - 10),
+        scrambleEl('terminal-agent-text', agentIntents[i]),
+      ]);
+    }
+
+    function clearIntent() {
+      ['terminal-intent-text', 'terminal-agent-text'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+      });
+    }
+
+    async function cycle() {
+      const body = document.getElementById('terminal-body');
+      if (!body) return;
+      let i = 0;
+      while (true) {
+        body.innerHTML = '';
+        body.style.opacity = '1';
+        const emojiEl = document.getElementById('dev-emoji');
+        if (emojiEl) emojiEl.textContent = DEV_EMOJIS[Math.floor(Math.random() * DEV_EMOJIS.length)];
+        await typeIntent(i);
+        await runFlow(body, flows[i]);
+        await sleep(PAUSE_MS);
+        body.style.opacity = '0';
+        clearIntent();
+        await sleep(FADE_MS);
+        i = (i + 1) % flows.length;
+      }
+    }
+
+    cycle();
+  })();
+  // ────────────────────────────────────────────────────────────────
+
+  function showHeroTab(name, btn) {
+    document.querySelectorAll('#hero-tab-linux, #hero-tab-windows').forEach(p => p.classList.remove('active'));
+    btn.closest('.tab-group').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('hero-tab-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function showTab(name) {
+    const section = document.getElementById('install');
+    section.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    section.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  const JTBD_RECIPES = {
+    claude: [
+      { title: 'Authenticate',        cmd: 'sonar auth login',         desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
+      { title: 'Integrate Claude',    cmd: 'sonar integrate claude',   desc: 'Installs hooks and MCP server for your project.' },
+    ],
+    'secrets-scan': [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                               desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
+      { title: 'Scan a file',         cmd: 'sonar analyze secrets &lt;file&gt;',             desc: 'Detects hardcoded API keys, tokens, and credentials.' },
+    ],
+    issues: [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                                        desc: 'Connect to SonarQube.' },
+      { title: 'List issues',         cmd: 'sonar list issues --project &lt;key&gt;',                 desc: 'Returns issues in JSON by default.' },
+      { title: 'Filter &amp; format', cmd: 'sonar list issues --project &lt;key&gt; --severity CRITICAL --format table', desc: 'Narrow by severity and output as a table.' },
+    ],
+    analyze: [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                                              desc: 'Connect to SonarQube.' },
+      { title: 'Analyze',             cmd: 'sonar verify --file &lt;file&gt; --project &lt;key&gt;',       desc: 'Runs server-side static analysis on a file (SonarQube Cloud only).' },
+    ],
+    hooks: [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                           desc: 'Connect to SonarQube.' },
+      { title: 'Install hook',        cmd: 'sonar integrate git',                        desc: 'Runs a secrets scan before every git commit or push.' },
+    ],
+    'pr-issues': [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                                                              desc: 'Connect to SonarQube.' },
+      { title: 'List PR issues',      cmd: 'sonar list issues --project &lt;key&gt; --pull-request &lt;number&gt;',        desc: 'Shows only issues introduced in the pull request.' },
+      { title: 'Format as table',     cmd: 'sonar list issues --project &lt;key&gt; --pull-request &lt;number&gt; --format table', desc: 'Human-readable table output.' },
+    ],
+    'list-projects': [
+      { title: 'Authenticate',        cmd: 'sonar auth login',         desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
+      { title: 'List projects',       cmd: 'sonar list projects',      desc: 'Returns all projects you have access to.' },
+    ],
+    install: [
+      { title: 'Check for updates',   cmd: 'sonar self-update --status',      desc: 'Check if a newer version is available without installing.' },
+      { title: 'Update',              cmd: 'sonar self-update',               desc: 'Install the latest version of the CLI.' },
+    ],
+    status: [
+      { title: 'Check status',        cmd: 'sonar auth status',   desc: 'Shows your current server and org connection.' },
+      { title: 'Re-authenticate',     cmd: 'sonar auth login',    desc: 'Refresh credentials if expired.' },
+    ],
+  };
+
+  function buildStepsHtml(steps) {
+    return '<div class="steps">' + steps.map((s, i) => {
+      const arrow = i < steps.length - 1 ? '<div class="steps-arrow">→</div>' : '';
+      return `<div class="step"><div class="step-num">${i + 1}</div><h3>${s.title}</h3><code>${s.cmd}</code><p>${s.desc}</p></div>${arrow}`;
+    }).join('') + '</div>';
+  }
+
+  let activeJtbd = null;
+
+  function showJtbd(key) {
+    const steps = JTBD_RECIPES[key];
+    const box = document.getElementById('jtbd-recipe');
+    const pills = document.querySelectorAll('.jtbd-pill');
+
+    pills.forEach(p => p.classList.remove('active'));
+
+    if (activeJtbd === key) {
+      activeJtbd = null;
+      box.classList.remove('visible');
+      box.innerHTML = '';
+      return;
+    }
+
+    activeJtbd = key;
+    const activePill = document.querySelector(`.jtbd-pill[onclick="showJtbd('${key}')"]`);
+    if (activePill) activePill.classList.add('active');
+    box.innerHTML = buildStepsHtml(steps);
+    box.classList.add('visible');
+  }
+
+  showJtbd('status');
+
+  function copyInstall(btn) {
+    const text = btn.closest('.code-block').querySelector('code').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  // ─── ASCII Side-view Wave ────────────────────────────────────
+  (function() {
+    const canvas = document.getElementById('wave-bg');
+    const ctx    = canvas.getContext('2d');
+
+    const CELL_W = 14;
+    const CELL_H = 20;
+
+    // Characters for: surface crest, just-below, mid-water, deep
+    const SURFACE = ['≈', '∿', '~', '∼', '≈', '∿'];
+    const WATER   = ['~', '∼', '·', '·', ' ', ' '];
+
+    // 1-D wave simulation along X (the surface height per column)
+    let simN    = 200;
+    let wCur    = new Float32Array(simN);
+    let wPrev   = new Float32Array(simN);
+    const DAMP  = 0.988;   // energy decay (higher = rings longer)
+    const SPD   = 0.05;    // propagation speed
+
+    // Water level: fraction of screen height where surface sits
+    const WATER_LEVEL = 0.62;
+
+    let renderCols, renderRows;
+    function resize() {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+      renderCols = Math.ceil(canvas.width  / CELL_W) + 2;
+      renderRows = Math.ceil(canvas.height / CELL_H) + 2;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Mouse: push the surface up at the cursor's X column
+    let lastMCol = -1;
+    document.addEventListener('mousemove', e => {
+      const col = Math.round((e.clientX / window.innerWidth) * (simN - 1));
+      if (col === lastMCol) return;
+      lastMCol = col;
+      for (let dx = -4; dx <= 4; dx++) {
+        const nx = col + dx;
+        if (nx < 0 || nx >= simN) continue;
+        wCur[nx] -= 0.03 * Math.exp(-dx * dx / 6); // negative = push surface up
+      }
+    });
+
+    // Random ambient drip
+    let tick = 0;
+    function maybeDroplet() {
+      if (++tick % 220 === 0) {
+        const x = 3 + Math.floor(Math.random() * (simN - 6));
+        wCur[x] += (0.3 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1);
+      }
+    }
+
+    // Seed gentle initial motion
+    wCur[Math.floor(simN * 0.25)] = 0.4;
+    wCur[Math.floor(simN * 0.65)] = -0.3;
+
+    function stepWave() {
+      const next = new Float32Array(simN);
+      for (let x = 1; x < simN - 1; x++) {
+        const lap = wCur[x - 1] + wCur[x + 1] - 2 * wCur[x];
+        next[x] = (2 * wCur[x] - wPrev[x] + SPD * lap) * DAMP;
+      }
+      // Reflective boundaries
+      next[0]       = next[1];
+      next[simN - 1] = next[simN - 2];
+      wPrev = wCur;
+      wCur  = next;
+    }
+
+    // Slow background swell (sine) layered on top of simulation
+    let t = 0;
+
+    function getSurfaceRow(col) {
+      const nx  = col / renderCols;
+      const sim = wCur[Math.round(nx * (simN - 1))];
+      // Background swell: two slow sine waves
+      const swell =
+        Math.sin(nx * Math.PI * 3.5 + t * 0.22) * 0.022 +
+        Math.sin(nx * Math.PI * 6.0 - t * 0.14) * 0.012;
+      return (WATER_LEVEL + swell + sim * 0.04) * renderRows;
+    }
+
+    function getColor() {
+      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+      return isDark ? '#7dd3fc' : '#126ed3';
+    }
+
+    function draw() {
+      maybeDroplet();
+      stepWave();
+      t += 0.003;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = `${CELL_H * 0.68}px 'SF Mono', 'Fira Code', monospace`;
+      ctx.textBaseline = 'top';
+      const color = getColor();
+
+      for (let col = 0; col < renderCols; col++) {
+        const surfRow = getSurfaceRow(col);
+
+        for (let row = 0; row < renderRows; row++) {
+          const depth = row - surfRow; // negative = above water
+
+          if (depth < -0.5) continue; // above surface — empty
+
+          let ch, alpha;
+
+          if (depth < 1.2) {
+            // Surface row: undulating crest characters
+            const si = Math.floor(((Math.sin(col * 0.28 + t * 1.1) + 1) / 2) * SURFACE.length);
+            ch    = SURFACE[Math.min(si, SURFACE.length - 1)];
+            alpha = 0.32 + Math.abs(wCur[Math.round((col / renderCols) * (simN - 1))]) * 0.14;
+          } else {
+            // Below surface: sparse fill that fades with depth
+            const depthFrac = Math.min((depth - 1) / 10, 1);
+            if (depthFrac > 0.75) continue;
+
+            const wi = Math.floor(depthFrac * WATER.length);
+            ch = WATER[Math.min(wi, WATER.length - 1)];
+            if (ch === ' ') continue;
+
+            // Horizontal undulation in the body
+            const bodyWave = (Math.sin(col * 0.35 + t * 0.5 + depth * 0.3) + 1) / 2;
+            if (bodyWave < 0.45) continue; // keep it sparse
+
+            alpha = (0.22 - depthFrac * 0.20) * bodyWave;
+          }
+
+          ctx.globalAlpha = Math.max(0, Math.min(alpha, 0.52));
+          ctx.fillStyle   = color;
+          ctx.fillText(ch, col * CELL_W, row * CELL_H);
+        }
+      }
+
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(draw);
+    }
+
+    draw();
+  })();
+  // ─────────────────────────────────────────────────────────────
+</script>
+</body>
+</html>

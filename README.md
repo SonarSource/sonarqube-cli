@@ -225,7 +225,7 @@ sonar integrate git --hook pre-push --global --non-interactive
 
 ### `sonar list`
 
-List Sonar resources
+List issues and projects from SonarQube
 
 #### `sonar list issues`
 

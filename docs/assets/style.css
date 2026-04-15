@@ -1,0 +1,337 @@
+/* ─── Fonts ──────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;500;600&family=Poppins:wght@600&display=swap');
+
+/* ─── Design Tokens (Dark) ───────────────────────────────────── */
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #242836;
+  --border: #2e3346;
+  --text: #e1e4ed;
+  --text-muted: #8b90a0;
+  --accent: #126ed3;
+  --accent-dim: #126ed322;
+  --green: #4ade80;
+  --green-dim: #4ade8018;
+  --orange: #fb923c;
+  --orange-dim: #fb923c18;
+  --red: #f87171;
+  --pink: #e879a0;
+  --cyan: #67e8f9;
+  --cyan-dim: #67e8f918;
+  --pill-bg: #272b3a;
+  --pill-border: #363c52;
+}
+
+/* ─── Light Theme ────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface2: #f0f2f5;
+  --border: #dde1ea;
+  --text: #1e2133;
+  --text-muted: #626d8a;
+  --accent: #3684c8;
+  --accent-dim: #3684c820;
+  --green: #07a35a;
+  --green-dim: #07a35a18;
+  --orange: #ed7d20;
+  --orange-dim: #ed7d2018;
+  --red: #e1434c;
+  --pink: #c24789;
+  --cyan: #0eb5cc;
+  --cyan-dim: #0eb5cc18;
+  --pill-bg: #eaecf5;
+  --pill-border: #cdd1df;
+}
+
+/* Light-mode overrides for selection/hover states */
+[data-theme="light"] .tree-row:hover   { background: #d6e8f7; }
+[data-theme="light"] .tree-row.selected { background: #bcd9f2; }
+[data-theme="light"] .col-row:hover    { background: #d6e8f7; }
+[data-theme="light"] .col-row.selected  { background: #bcd9f2; }
+[data-theme="light"] .tree-children::before,
+[data-theme="light"] .tree-children > .tree-node > .tree-row::before { background: #e4e8f0; }
+
+/* ─── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ─── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ─── Logo ───────────────────────────────────────────────────── */
+.logo {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+.logo img {
+  height: 28px;
+  display: block;
+}
+.logo .logo-light { display: none; }
+.logo .logo-dark  { display: block; }
+[data-theme="light"] .logo .logo-light { display: block; }
+[data-theme="light"] .logo .logo-dark  { display: none; }
+.logo:hover { text-decoration: none; opacity: 0.85; }
+
+/* ─── Version Badge ──────────────────────────────────────────── */
+.beta-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  letter-spacing: 0.3px;
+}
+
+.version {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface2);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  border: 1px solid var(--border);
+}
+
+/* ─── Buttons ────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+  font-family: inherit;
+}
+.btn:hover { border-color: var(--accent); background: var(--accent-dim); text-decoration: none; }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { opacity: 0.88; background: var(--accent); }
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* ─── Pills ──────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+  border: 1px solid var(--pill-border);
+  background: var(--pill-bg);
+  transition: all 0.15s;
+  user-select: none;
+}
+.pill-root {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.pill-group {
+  background: var(--surface2);
+  border-color: var(--pill-border);
+  color: var(--text);
+}
+.pill-leaf {
+  background: var(--pill-bg);
+  border-color: var(--pill-border);
+  color: var(--text-muted);
+}
+
+/* ─── Type Badges ────────────────────────────────────────────── */
+.pill-type {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pill-type.cmd { background: var(--green-dim); color: var(--green); }
+.pill-type.group { background: var(--orange-dim); color: var(--orange); }
+.pill-type.string { background: var(--cyan-dim); color: var(--cyan); }
+.pill-type.boolean { background: var(--green-dim); color: var(--green); }
+.pill-type.number { background: var(--orange-dim); color: var(--orange); }
+
+/* ─── Nav ────────────────────────────────────────────────────── */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 57px;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.nav-link {
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.nav-link:hover { color: var(--text); background: var(--surface2); text-decoration: none; }
+.nav-link.active { color: var(--accent); }
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ─── Code blocks ────────────────────────────────────────────── */
+pre, code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-size: 13px;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+code {
+  font-size: 13px;
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* ─── Copy button ────────────────────────────────────────────── */
+.code-block { position: relative; }
+.code-block .copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.copy-btn.copied { border-color: var(--green); color: var(--green); }
+
+/* ─── Tables ─────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--surface2); }
+
+/* ─── Footer ─────────────────────────────────────────────────── */
+.footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.footer a { color: var(--text-muted); }
+.footer a:hover { color: var(--accent); }

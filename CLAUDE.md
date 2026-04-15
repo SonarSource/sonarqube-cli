@@ -62,3 +62,11 @@ Try to get inspiration from other tests to follow the same structure.
 ## Documentation
 
 When adding, removing, or changing commands, scripts, or project structure, update `CLAUDE.md`, and `AGENTS.md` to reflect the change before finishing.
+
+## Docs site (`docs/`)
+
+The docs site is generated from the CLI source — do not edit `commands.json`, `commands.js`, `llms.txt`, or `sitemap.xml` by hand.
+
+**Source of truth:**
+- Command structure → `src/cli/command-tree.ts`
+- Examples → `build-scripts/examples.ts`

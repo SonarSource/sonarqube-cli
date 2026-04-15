@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commands — SonarQube CLI</title>
+  <meta name="description" content="Full command reference for the SonarQube CLI. Browse all commands, options, and examples for sonar auth, sonar install, sonar integrate, sonar list, sonar analyze, and more. Machine-readable schema available at /data/commands.json.">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="canonical" href="https://cli.sonarqube.com/commands.html">
+  <meta property="og:title" content="Commands — SonarQube CLI">
+  <meta property="og:description" content="Full command reference for the SonarQube CLI. Browse all commands, options, and examples. Machine-readable schema available at /data/commands.json.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cli.sonarqube.com/commands.html">
+  <meta property="og:site_name" content="SonarQube CLI">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Commands — SonarQube CLI">
+  <meta name="twitter:description" content="Full command reference for the SonarQube CLI. Browse all commands, options, and examples. Machine-readable schema available at /data/commands.json.">
+  <link rel="alternate" type="application/json" href="data/commands.json" title="Command Reference (JSON)">
+  <link rel="stylesheet" href="assets/style.css">
+  <script>if(localStorage.getItem('clidoc-theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
+  <script src="data/commands.js" defer></script>
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+
+    /* ─── Layout ────────────────────────────────────────────────── */
+    .app {
+      display: flex;
+      height: calc(100vh - 57px);
+      overflow: hidden;
+    }
+
+    /* ─── Sidebar ───────────────────────────────────────────────── */
+    .sidebar {
+      width: 352px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-search {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .sidebar-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .search-input {
+      flex: 1;
+      min-width: 0;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--text-muted); }
+
+    /* ─── View toggle ──────────────────────────────────────────── */
+    .view-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .view-toggle-btn {
+      padding: 5px 9px;
+      background: var(--surface2);
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .view-toggle-btn:not(:last-child) { border-right: 1px solid var(--border); }
+    .view-toggle-btn.active { background: var(--accent); color: #fff; }
+
+    /* ─── Pills (tree view) ────────────────────────────────────── */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      white-space: nowrap;
+      border: 1px solid var(--pill-border);
+      background: var(--pill-bg);
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      user-select: none;
+      cursor: pointer;
+    }
+    .pill-root {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      cursor: default;
+    }
+    .pill-group { color: var(--text); }
+    .pill-leaf  { color: var(--text-muted); }
+    .pill.selected { background: var(--accent-dim); border-color: var(--accent); border-width: 2px; }
+    .pill.path-highlight { border-color: var(--accent); }
+    .pill-root.path-highlight { background: var(--accent); }
+
+    /* ─── Pill arg badge ───────────────────────────────────────── */
+    .pill-type {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .pill-type.arg { background: #a78bfa22; color: #a78bfa; }
+
+    /* ─── Sidebar col-mode ──────────────────────────────────────── */
+    .sidebar.col-mode {
+      width: 352px;
+    }
+
+    /* ─── Column view ──────────────────────────────────────────── */
+    .tree-columns {
+      position: relative;
+      overflow-x: auto;
+      padding: 0 0 8px;
+    }
+    .tree-columns::-webkit-scrollbar { height: 5px; }
+    .tree-columns::-webkit-scrollbar-track { background: transparent; }
+    .tree-columns::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .col-svg {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .col-grid {
+      position: relative;
+      z-index: 1;
+    }
+    .col-cell {
+      padding: 3px 8px;
+      display: flex;
+      align-items: center;
+      min-height: 32px;
+    }
+    .col-cell-empty {
+      padding: 0;
+      min-height: 0;
+    }
+    .col-row {
+      display: flex;
+      align-items: center;
+      padding: 4px 6px;
+      border-radius: 6px;
+      cursor: default;
+      transition: background 0.1s;
+    }
+    .col-row:hover { background: var(--surface2); }
+    .col-row.selected { background: var(--accent-dim); }
+
+    .sidebar-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 8px;
+    }
+
+    /* ─── Tree nodes ─────────────────────────────────────────────── */
+    .tree-node { margin-bottom: 1px; }
+    .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.1s;
+      user-select: none;
+      position: relative;
+    }
+    .tree-row:hover { background: var(--surface2); }
+    .tree-row.selected { background: var(--accent-dim); }
+
+    .tree-children {
+      padding-left: 20px;
+      position: relative;
+    }
+    .tree-children.collapsed { display: none; }
+
+    .tree-toggle {
+      font-size: 10px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      width: 12px;
+      transition: transform 0.15s;
+    }
+    .tree-toggle.open { transform: rotate(0deg); }
+
+    .tree-label {
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-weight: 500;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tree-label.group { color: var(--text); }
+    .tree-label.leaf { color: var(--text-muted); }
+    .tree-label.root { color: var(--accent); font-weight: 700; }
+
+    .tree-badge {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+    .tree-badge.group { background: var(--orange-dim); color: var(--orange); }
+    .tree-badge.cmd { background: var(--green-dim); color: var(--green); }
+
+    /* ─── Main panel ─────────────────────────────────────────────── */
+    .main-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+      background: var(--bg);
+    }
+
+    /* ─── Detail ─────────────────────────────────────────────────── */
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .detail-title {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .detail-badge {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .detail-badge.group { background: var(--orange-dim); color: var(--orange); }
+    .detail-badge.cmd { background: var(--green-dim); color: var(--green); }
+
+    .detail-desc {
+      font-size: 15px;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+
+    .detail-section {
+      margin-bottom: 28px;
+    }
+    .detail-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    /* Options table */
+    .opts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .opts-table th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .opts-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .opts-table tr:last-child td { border-bottom: none; }
+    .opts-table tr:hover td { background: var(--surface2); }
+    .opt-flag {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: #38bdf8;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .opt-default {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .opt-req-yes { color: var(--orange); font-weight: 600; font-size: 12px; }
+    .opt-req-no { color: var(--text-muted); font-size: 12px; }
+    .opt-allowed { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+    .opt-allowed-val {
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Type badge colors */
+    .type-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      white-space: nowrap;
+    }
+    .type-badge.string { background: var(--cyan-dim); color: var(--cyan); }
+    .type-badge.boolean { background: var(--green-dim); color: var(--green); }
+    .type-badge.number { background: var(--orange-dim); color: var(--orange); }
+
+    /* Arguments table */
+    .args-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .args-table th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .args-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .args-table tr:last-child td { border-bottom: none; }
+    .args-table tr:hover td { background: var(--surface2); }
+    .arg-name {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--cyan);
+      font-size: 12px;
+    }
+
+    /* Examples */
+    .example-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .example-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 10px 14px 6px;
+    }
+    .example-code-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px 8px 14px;
+    }
+    .example-code {
+      flex: 1;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      color: var(--text);
+      background: transparent;
+      border: none;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    /* Subcommands */
+    .subcmd-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .subcmd-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .subcmd-item:hover {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      text-decoration: none;
+    }
+    .subcmd-name {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .subcmd-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .subcmd-arrow {
+      margin-left: auto;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    /* ─── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .app { flex-direction: column; height: auto; overflow: auto; }
+      .sidebar { width: 100%; flex-shrink: 0; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      .sidebar-tree { max-height: 40vh; overflow-y: auto; }
+      .main-panel { overflow-y: visible; }
+      html, body { height: auto; overflow: auto; }
+    }
+    .beta-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      letter-spacing: 0.3px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Nav ──────────────────────────────────────────────────── -->
+<nav class="nav">
+  <a href="index.html" class="logo">
+    <img class="logo-dark"  src="assets/SQ-CLI_Dark Backgrounds.svg"  alt="SonarQube CLI">
+    <img class="logo-light" src="assets/SQ-CLI_Light Backgrounds.svg" alt="SonarQube CLI">
+  </a>
+  <span class="beta-badge">BETA</span>
+  <span class="version" id="nav-version" style="display:none">v0.0.0</span>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="commands.html" class="nav-link active">Commands</a>
+    <a href="https://github.com/SonarSource/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
+    <a href="llms.txt" class="nav-link">llms.txt</a>
+    <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">☀</button>
+  </div>
+</nav>
+
+<!-- ─── App ──────────────────────────────────────────────────── -->
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-search">
+      <div class="sidebar-toolbar">
+        <input type="search" class="search-input" id="search" placeholder="Search commands…" autocomplete="off" spellcheck="false">
+        <div class="view-toggle">
+          <button class="view-toggle-btn active" id="viewColumnsBtn" title="Column view">Columns</button>
+          <button class="view-toggle-btn" id="viewListBtn" title="List view">List</button>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-tree" id="tree"></div>
+  </aside>
+
+  <!-- Main panel -->
+  <main class="main-panel" id="detail">
+    <div class="empty-state">Loading…</div>
+  </main>
+</div>
+
+<script type="module">
+const data = window.__CLIDOC_DATA__;
+if (!data) {
+  document.getElementById('detail').innerHTML = '<div class="empty-state">No command data found. Run <code>bun run gen:clidoc</code> first.</div>';
+  throw new Error('No __CLIDOC_DATA__');
+}
+
+// Build lookup map
+const byId = {};
+for (const cmd of data.commands) {
+  byId[cmd.id] = cmd;
+}
+
+// Set version
+document.getElementById('nav-version').textContent = 'v' + data.version;
+
+// ── State ────────────────────────────────────────────────────
+const collapsed = new Set(); // IDs of collapsed groups
+let activeId = null;
+let viewMode = 'columns'; // 'tree' (pills) | 'columns' | 'list'
+
+// ── Ancestor helpers ─────────────────────────────────────────
+function getAncestorIds(id) {
+  const ancestors = new Set();
+  let cur = byId[id];
+  while (cur && cur.parentId) {
+    ancestors.add(cur.parentId);
+    cur = byId[cur.parentId];
+  }
+  return ancestors;
+}
+
+// ── Tree rendering (dispatches to pill or text) ───────────────
+function renderTree(filter) {
+  const treeEl = document.getElementById('tree');
+  treeEl.innerHTML = '';
+
+  const root = byId['sonar'];
+  if (!root) return;
+
+  if (viewMode === 'columns' && !filter) {
+    treeEl.appendChild(buildColumnView(root));
+    return;
+  }
+
+  if (filter) {
+    const q = filter.toLowerCase();
+    const matches = data.commands.filter(c =>
+      c.fullName.toLowerCase().includes(q) ||
+      c.description.toLowerCase().includes(q)
+    );
+    for (const cmd of matches) {
+      treeEl.appendChild(viewMode === 'list'
+        ? renderTreeNode(cmd, true)
+        : buildPillNode(cmd, true));
+    }
+    if (matches.length === 0) {
+      treeEl.innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted)">No commands match.</div>';
+    }
+  } else {
+    if (viewMode === 'tree') {
+      treeEl.appendChild(buildPillNode(root, false));
+    } else {
+      for (const childId of root.children) {
+        const child = byId[childId];
+        if (child) treeEl.appendChild(renderTreeNode(child, false));
+      }
+    }
+  }
+}
+
+// ── Pill tree node (tree mode) ────────────────────────────────
+function buildPillNode(cmd, flat) {
+  const ancestors = activeId ? getAncestorIds(activeId) : new Set();
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tree-node';
+  wrapper.dataset.id = cmd.id;
+
+  const row = document.createElement('div');
+  row.className = 'tree-row';
+  row.dataset.id = cmd.id;
+
+  const pill = document.createElement('span');
+  const pillClass = cmd.isRoot ? 'pill-root'
+    : (cmd.isGroup || cmd.depth === 1) ? 'pill-group'
+    : 'pill-leaf';
+  const isSelected  = cmd.id === activeId;
+  const isOnPath    = ancestors.has(cmd.id);
+  pill.className = 'pill ' + pillClass
+    + (isSelected ? ' selected' : '')
+    + (!isSelected && isOnPath ? ' path-highlight' : '');
+  pill.textContent = cmd.name;
+  row.appendChild(pill);
+
+  if (!cmd.isRoot) {
+    row.addEventListener('click', () => {
+      if (cmd.isGroup && !flat) {
+        if (collapsed.has(cmd.id)) collapsed.delete(cmd.id);
+        else collapsed.add(cmd.id);
+        renderTree(document.getElementById('search').value.trim());
+      }
+      selectCommand(cmd.id);
+    });
+  }
+
+  wrapper.appendChild(row);
+
+  if (cmd.isGroup && !flat && cmd.children.length > 0) {
+    const childrenEl = document.createElement('div');
+    childrenEl.className = 'tree-children' + (collapsed.has(cmd.id) ? ' collapsed' : '');
+    for (const childId of cmd.children) {
+      const child = byId[childId];
+      if (child) childrenEl.appendChild(buildPillNode(child, false));
+    }
+    wrapper.appendChild(childrenEl);
+  }
+
+  return wrapper;
+}
+
+// ── Text tree node (list mode) ────────────────────────────────
+function renderTreeNode(cmd, flat) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tree-node';
+  wrapper.dataset.id = cmd.id;
+
+  const row = document.createElement('div');
+  row.className = 'tree-row' + (cmd.id === activeId ? ' selected' : '');
+  row.dataset.id = cmd.id;
+
+  const label = document.createElement('span');
+  label.className = 'tree-label ' + (cmd.isRoot ? 'root' : (cmd.isGroup || cmd.depth === 1) ? 'group' : 'leaf');
+  label.textContent = cmd.name;
+  row.appendChild(label);
+
+  row.addEventListener('click', () => { selectCommand(cmd.id); });
+
+  wrapper.appendChild(row);
+
+  if (cmd.isGroup && !flat && cmd.children.length > 0) {
+    const childrenEl = document.createElement('div');
+    childrenEl.className = 'tree-children';
+    for (const childId of cmd.children) {
+      const child = byId[childId];
+      if (child) childrenEl.appendChild(renderTreeNode(child, false));
+    }
+    wrapper.appendChild(childrenEl);
+  }
+
+  return wrapper;
+}
+
+// ── Column view ──────────────────────────────────────────────
+function getChildren(cmd) {
+  return (cmd.children || []).map(id => byId[id]).filter(Boolean);
+}
+
+function getMaxDepth(cmd, depth = 0) {
+  let max = depth;
+  for (const c of getChildren(cmd)) max = Math.max(max, getMaxDepth(c, depth + 1));
+  return max;
+}
+
+function flattenForColumns(cmd, depth, rows, childIndex = 0) {
+  const children = getChildren(cmd);
+  if (depth === 1 && childIndex > 0) rows.push({ _spacer: true });
+  if (children.length === 0) {
+    const row = {}; row[depth] = cmd; rows.push(row); return;
+  }
+  const startRow = rows.length;
+  flattenForColumns(children[0], depth + 1, rows, 0);
+  rows[startRow][depth] = cmd;
+  for (let i = 1; i < children.length; i++) flattenForColumns(children[i], depth + 1, rows, i);
+}
+
+function buildColumnView(root) {
+  const pathIds = activeId ? new Set([activeId, ...getAncestorIds(activeId)]) : new Set();
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tree-columns';
+
+  const maxDepth = getMaxDepth(root);
+  const rows = [];
+  flattenForColumns(root, 0, rows);
+
+  const grid = document.createElement('div');
+  grid.className = 'col-grid';
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = `repeat(${maxDepth + 1}, max-content)`;
+  grid.style.gap = '0';
+  grid.style.alignItems = 'start';
+
+  const pillElements = {};
+
+  for (const row of rows) {
+    if (row._spacer) {
+      for (let c = 0; c <= maxDepth; c++) {
+        const spacer = document.createElement('div'); spacer.style.height = '12px';
+        grid.appendChild(spacer);
+      }
+      continue;
+    }
+    for (let c = 0; c <= maxDepth; c++) {
+      const cell = document.createElement('div');
+      const entry = row[c];
+      cell.className = entry ? 'col-cell' : 'col-cell col-cell-empty';
+      if (entry) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'col-row' + (entry.id === activeId ? ' selected' : '');
+        rowEl.dataset.id = entry.id;
+
+        const pill = document.createElement('span');
+        const pillClass = c === 0 ? 'pill-root'
+          : (getChildren(entry).length > 0 || c === 1) ? 'pill-group' : 'pill-leaf';
+        const isSelected = entry.id === activeId;
+        const isOnPath   = !isSelected && pathIds.has(entry.id);
+        pill.className = 'pill ' + pillClass
+          + (isSelected ? ' selected' : '')
+          + (isOnPath   ? ' path-highlight' : '');
+        pill.textContent = entry.name;
+        pill.dataset.id = entry.id;
+
+
+        if (c > 0) rowEl.addEventListener('click', () => selectCommand(entry.id));
+        rowEl.appendChild(pill);
+        cell.appendChild(rowEl);
+        pillElements[entry.id] = pill;
+      }
+      grid.appendChild(cell);
+    }
+  }
+
+  wrapper.appendChild(grid);
+
+  const draw = () => drawColumnConnectors(wrapper, grid, pillElements, root, pathIds);
+  requestAnimationFrame(draw);
+
+  const ro = new ResizeObserver(draw);
+  ro.observe(wrapper);
+  const onResize = () => draw();
+  window.addEventListener('resize', onResize);
+  const mo = new MutationObserver(() => {
+    if (!wrapper.isConnected) {
+      ro.disconnect();
+      window.removeEventListener('resize', onResize);
+      mo.disconnect();
+    }
+  });
+  mo.observe(document.getElementById('tree'), { childList: true });
+
+  return wrapper;
+}
+
+function drawColumnConnectors(wrapper, grid, pillElements, root, pathIds) {
+  const old = wrapper.querySelector('.col-svg');
+  if (old) old.remove();
+
+  const wRect = wrapper.getBoundingClientRect();
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('col-svg');
+  svg.style.width  = grid.scrollWidth  + 'px';
+  svg.style.height = grid.scrollHeight + 'px';
+
+  const paths = [];
+  collectConnectorPaths(root, pillElements, wRect, paths, pathIds);
+  for (const p of paths) { if (!p._highlighted) svg.appendChild(p); }
+  for (const p of paths) { if (p._highlighted)  svg.appendChild(p); }
+
+  wrapper.insertBefore(svg, grid);
+}
+
+function collectConnectorPaths(node, pillElements, wRect, paths, pathIds) {
+  const children = getChildren(node);
+  if (children.length === 0) return;
+
+  const parentPill = pillElements[node.id];
+  if (!parentPill) return;
+
+  const pRect    = parentPill.getBoundingClientRect();
+  const pRight   = pRect.right  - wRect.left;
+  const pCenterY = pRect.top + pRect.height / 2 - wRect.top;
+
+  const childPos = [];
+  for (const child of children) {
+    const cp = pillElements[child.id];
+    if (!cp) continue;
+    const cRect = cp.getBoundingClientRect();
+    childPos.push({ cLeft: cRect.left - wRect.left, cCenterY: cRect.top + cRect.height / 2 - wRect.top, id: child.id });
+  }
+  if (childPos.length === 0) return;
+
+  const midX = pRight + (childPos[0].cLeft - pRight) / 2;
+
+  for (const cp of childPos) {
+    const isOnPath = pathIds.has(node.id) && pathIds.has(cp.id);
+    let d;
+    if (Math.abs(cp.cCenterY - pCenterY) < 2) {
+      d = `M ${pRight} ${pCenterY} L ${cp.cLeft} ${cp.cCenterY}`;
+    } else {
+      const r = 6, yDir = cp.cCenterY > pCenterY ? 1 : -1;
+      d = [
+        `M ${pRight} ${pCenterY}`,
+        `L ${midX - r} ${pCenterY}`,
+        `Q ${midX} ${pCenterY} ${midX} ${pCenterY + r * yDir}`,
+        `L ${midX} ${cp.cCenterY - r * yDir}`,
+        `Q ${midX} ${cp.cCenterY} ${midX + r} ${cp.cCenterY}`,
+        `L ${cp.cLeft} ${cp.cCenterY}`
+      ].join(' ');
+    }
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.style.stroke = isOnPath ? 'var(--accent)' : 'var(--border)';
+    path.style.strokeWidth = isOnPath ? '2' : '1.5';
+    path._highlighted = isOnPath;
+    paths.push(path);
+  }
+  for (const child of children) collectConnectorPaths(child, pillElements, wRect, paths, pathIds);
+}
+
+// ── Select command ───────────────────────────────────────────
+function selectCommand(id) {
+  const cmd = byId[id];
+  if (!cmd) return;
+
+  activeId = id;
+  history.replaceState(null, '', '#' + id);
+
+  // Re-render tree to update selection + path highlighting
+  renderTree(document.getElementById('search').value.trim());
+
+  // Render detail panel
+  const detail = document.getElementById('detail');
+  detail.innerHTML = renderDetail(cmd);
+
+  // Wire copy buttons
+  detail.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.dataset.copy;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 1500);
+      });
+    });
+  });
+
+  // Wire subcommand links
+  detail.querySelectorAll('.subcmd-item[data-target]').forEach(item => {
+    item.addEventListener('click', () => {
+      const targetId = item.dataset.target;
+      expandParents(targetId);
+      renderTree(document.getElementById('search').value.trim());
+      selectCommand(targetId);
+    });
+  });
+}
+
+function renderDetail(cmd) {
+  const parts = [];
+
+  // Header
+  parts.push(`<div class="detail-header">`);
+  parts.push(`<span class="detail-title"><code>${escHtml(cmd.fullName)}</code></span>`);
+  parts.push(`</div>`);
+
+  // Description
+  parts.push(`<p class="detail-desc">${escHtml(cmd.description)}</p>`);
+
+  // Options
+  if (cmd.options.length > 0) {
+    parts.push(`<div class="detail-section">`);
+    parts.push(`<div class="detail-section-title">Options</div>`);
+    parts.push(`<table class="opts-table">`);
+    parts.push(`<thead><tr><th>Option</th><th>Type</th><th>Required</th><th>Description</th><th>Default</th></tr></thead>`);
+    parts.push(`<tbody>`);
+    for (const opt of cmd.options) {
+      const flags = opt.short
+        ? `<span class="opt-flag">${escHtml(opt.long)}, ${escHtml(opt.short)}</span>`
+        : `<span class="opt-flag">${escHtml(opt.long)}</span>`;
+      const typeBadge = `<span class="type-badge ${opt.type}">${escHtml(opt.type)}</span>`;
+      const req = opt.required
+        ? `<span class="opt-req-yes">Yes</span>`
+        : `<span class="opt-req-no">No</span>`;
+      const def = opt.defaultValue !== undefined && opt.defaultValue !== null
+        ? `<span class="opt-default">${escHtml(String(opt.defaultValue))}</span>`
+        : `<span class="opt-req-no">—</span>`;
+      const allowedHtml = opt.allowedValues && opt.allowedValues.length
+        ? `<div class="opt-allowed">${opt.allowedValues.map(v => `<code class="opt-allowed-val">${escHtml(v)}</code>`).join('')}</div>`
+        : '';
+      parts.push(`<tr><td>${flags}</td><td>${typeBadge}</td><td>${req}</td><td>${escHtml(opt.description)}${allowedHtml}</td><td>${def}</td></tr>`);
+    }
+    parts.push(`</tbody></table></div>`);
+  }
+
+  // Arguments
+  if (cmd.arguments.length > 0) {
+    parts.push(`<div class="detail-section">`);
+    parts.push(`<div class="detail-section-title">Arguments</div>`);
+    parts.push(`<table class="args-table">`);
+    parts.push(`<thead><tr><th>Argument</th><th>Required</th><th>Description</th></tr></thead>`);
+    parts.push(`<tbody>`);
+    for (const arg of cmd.arguments) {
+      const displayName = arg.variadic ? `[${escHtml(arg.name)}...]` : `<${escHtml(arg.name)}>`;
+      const req = arg.required
+        ? `<span class="opt-req-yes">Yes</span>`
+        : `<span class="opt-req-no">No</span>`;
+      parts.push(`<tr><td><span class="arg-name">${displayName}</span></td><td>${req}</td><td>${escHtml(arg.description)}</td></tr>`);
+    }
+    parts.push(`</tbody></table></div>`);
+  }
+
+  // Examples
+  if (cmd.examples.length > 0) {
+    parts.push(`<div class="detail-section">`);
+    parts.push(`<div class="detail-section-title">Examples</div>`);
+    for (const ex of cmd.examples) {
+      parts.push(`<div class="example-block">`);
+      parts.push(`<div class="example-desc">${escHtml(ex.description)}</div>`);
+      parts.push(`<div class="example-code-row">`);
+      parts.push(`<span class="example-code">${escHtml(ex.command)}</span>`);
+      parts.push(`<button class="copy-btn btn-sm" data-copy="${escAttr(ex.command)}">Copy</button>`);
+      parts.push(`</div></div>`);
+    }
+    parts.push(`</div>`);
+  }
+
+  // Subcommands
+  if (cmd.isGroup && cmd.children.length > 0) {
+    parts.push(`<div class="detail-section">`);
+    parts.push(`<div class="detail-section-title">Subcommands</div>`);
+    parts.push(`<div class="subcmd-list">`);
+    for (const childId of cmd.children) {
+      const child = byId[childId];
+      if (!child) continue;
+      parts.push(`<div class="subcmd-item" data-target="${escAttr(child.id)}">`);
+      parts.push(`<span class="subcmd-name">${escHtml(child.fullName)}</span>`);
+      parts.push(`<span class="subcmd-desc">${escHtml(child.description)}</span>`);
+      parts.push(`<span class="subcmd-arrow">→</span>`);
+      parts.push(`</div>`);
+    }
+    parts.push(`</div></div>`);
+  }
+
+  return parts.join('');
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escAttr(str) {
+  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function expandParents(id) {
+  const cmd = byId[id];
+  if (!cmd || !cmd.parentId) return;
+  collapsed.delete(cmd.parentId);
+  expandParents(cmd.parentId);
+}
+
+// ── View toggle ──────────────────────────────────────────────
+function setViewMode(mode) {
+  if (viewMode === mode) return;
+  viewMode = mode;
+  document.getElementById('viewColumnsBtn').classList.toggle('active', mode === 'columns');
+  document.getElementById('viewListBtn').classList.toggle('active', mode === 'list');
+  renderTree(document.getElementById('search').value.trim());
+}
+document.getElementById('viewColumnsBtn').addEventListener('click', () => setViewMode('columns'));
+document.getElementById('viewListBtn').addEventListener('click', () => setViewMode('list'));
+document.querySelector('.sidebar').classList.add('col-mode');
+
+// ── Search ───────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', (e) => {
+  const q = e.target.value.trim();
+  if (!q) {
+    // Re-collapse to previous state
+    renderTree('');
+  } else {
+    renderTree(q);
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────
+renderTree('');
+
+const hash = location.hash.slice(1);
+const startId = (hash && byId[hash]) ? hash : 'sonar-auth-login';
+expandParents(startId);
+renderTree('');
+selectCommand(startId);
+
+// ── Theme toggle ─────────────────────────────────────────────
+(function() {
+  const btn = document.getElementById('themeToggle');
+  if (document.documentElement.getAttribute('data-theme') === 'light') btn.textContent = '☾';
+  btn.addEventListener('click', () => {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if (isLight) {
+      document.documentElement.removeAttribute('data-theme');
+      btn.textContent = '☀';
+      localStorage.setItem('clidoc-theme', 'dark');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+      btn.textContent = '☾';
+      localStorage.setItem('clidoc-theme', 'light');
+    }
+    // Redraw SVG connectors with updated theme colors
+    renderTree(document.getElementById('search').value.trim());
+  });
+})();
+
+// ── Hash navigation ──────────────────────────────────────────
+window.addEventListener('hashchange', () => {
+  const id = location.hash.slice(1);
+  if (id && byId[id]) {
+    expandParents(id);
+    renderTree(document.getElementById('search').value.trim());
+    selectCommand(id);
+  }
+});
+</script>
+</body>
+</html>

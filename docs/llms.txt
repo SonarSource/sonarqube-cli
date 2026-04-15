@@ -1,0 +1,200 @@
+# SonarQube CLI
+
+> Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
+
+- Version: 0.10.0
+- Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
+- Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
+- Machine-readable schema: https://cli.sonarqube.com/data/commands.json
+- Source: https://github.com/SonarSource/sonarqube-cli
+- Issues: https://github.com/SonarSource/sonarqube-cli/issues
+- Commands reference: https://cli.sonarqube.com/commands.html
+
+## Quick Start
+sonar auth login
+sonar install secrets
+sonar integrate claude -g
+
+## For AI Agents
+Use `sonar list issues --format toon` to output issues in a format optimized for LLM consumption.
+Use `sonar list projects` to discover available projects before running analysis.
+Commands marked with * require prior authentication via `sonar auth login`.
+
+## Commands
+
+### sonar auth
+Manage authentication tokens and credentials
+
+### sonar auth login
+Save authentication token to keychain
+Usage: sonar auth login [-s <value>] [-o <value>] [-t <value>]
+
+Options:
+  --server, -s  <string>   SonarQube URL (default is SonarQube https://sonarcloud.io)
+  --org, -o  <string>   SonarQube Cloud organization key (required for SonarQube Cloud)
+  --with-token, -t  <string>   Token value (skips browser, non-interactive mode)
+
+Examples:
+  sonar auth login
+  sonar auth login -o my-org -t squ_abc123
+  sonar auth login -s https://my-sonarqube.io --with-token squ_def456
+
+### sonar auth logout
+Remove active connection token from keychain
+Usage: sonar auth logout
+
+Examples:
+  sonar auth logout
+
+### sonar auth purge
+Remove all authentication tokens from keychain
+Usage: sonar auth purge
+
+Examples:
+  sonar auth purge
+
+### sonar auth status
+Show active authentication connection with token verification
+Usage: sonar auth status
+
+Examples:
+  sonar auth status
+
+### sonar api *
+Make authenticated API requests to SonarQube
+Usage: sonar api [-d <value>] [--verbose] <method> <endpoint>
+
+Options:
+  --data, -d  <string>   JSON string for request body. The tool will automatically format as either form data or JSON body.
+  --verbose, -v   Print request and response details for debugging.
+
+Examples:
+  sonar api get "/api/favorites/search"
+  sonar api get "/api/rules/search?organization=my-org&languages=ts"
+  sonar api post "/api/user_tokens/generate" --data '{"name":"my-token"}'
+  sonar api post "/api/issues/do_transition" --data '{"issue":"AYx1z2","transition":"accept"}'
+  sonar api get "/analysis/engine"
+  sonar api get "/api/system/status" --verbose
+  sonar api post "/api/user_tokens/revoke" --data '{"name":"my-token"}'
+
+### sonar integrate
+Setup SonarQube integration for AI coding agents, git and others.
+
+Examples:
+  sonar integrate claude -s https://sonarcloud.io -p my-project
+  sonar integrate claude -g
+
+### sonar integrate claude *
+Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, and configure SonarQube MCP Server.
+Usage: sonar integrate claude [-p <value>] [--non-interactive] [--global]
+
+Options:
+  --project, -p  <string>   Project key
+  --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Install hooks and config globally to ~/.claude instead of project directory
+
+### sonar integrate git *
+Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).
+Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--global]
+
+Options:
+  --hook  <string>   Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)
+  --force   Overwrite existing hook if it is not from sonar integrate git
+  --non-interactive   Non-interactive mode (no prompts)
+  --global   Install hook globally for all repositories (sets git config --global core.hooksPath)
+
+Examples:
+  sonar integrate git
+  sonar integrate git --hook pre-push
+  sonar integrate git --global
+  sonar integrate git --hook pre-push --global --non-interactive
+
+### sonar list
+List issues and projects from SonarQube
+
+### sonar list issues *
+Search for issues in SonarQube
+Usage: sonar list issues [-p <value>] [--severity <value>] [--format <value>] [--branch <value>] [--pull-request <value>] [--page-size <value>] [--page <value>]
+
+Options:
+  --project, -p  <string>   Project key
+  --severity  <string>   Filter by severity
+  --format  <string>   Output format
+  --branch  <string>   Branch name
+  --pull-request  <string>   Pull request ID
+  --page-size  <number>   Page size (1-500)
+  --page  <number>   Page number
+
+Examples:
+  sonar list issues -p my-project
+  sonar list issues -p my-project --format toon
+
+### sonar list projects *
+Search for projects in SonarQube
+Usage: sonar list projects [-q <value>] [--page <value>] [--page-size <value>]
+
+Options:
+  --query, -q  <string>   Search query to filter projects by name or key
+  --page  <number>   Page number
+  --page-size  <number>   Page size (1-500)
+
+Examples:
+  sonar list projects
+  sonar list projects -q my-project
+  sonar list projects --page 2 --page-size 50
+
+### sonar analyze
+Analyze code for security issues
+
+### sonar analyze secrets *
+Scan files or stdin for hardcoded secrets
+Usage: sonar analyze secrets [--stdin] [paths]
+
+Options:
+  --stdin   Read from standard input instead of paths
+
+Examples:
+  sonar analyze secrets src/config.ts
+  sonar analyze secrets src/file1.ts src/file2.ts
+  cat .env | sonar analyze secrets --stdin
+
+### sonar analyze sqaa *
+Run SQAA server-side analysis on a file (SonarQube Cloud only)
+Usage: sonar analyze sqaa [--file <value>] [--branch <value>] [-p <value>]
+
+Options:
+  --file  <string>   File path to analyze
+  --branch  <string>   Branch name for analysis context
+  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
+
+### sonar verify *
+Analyze a file for issues
+Usage: sonar verify [--file <value>] [--branch <value>] [-p <value>]
+
+Options:
+  --file  <string>   File path to analyze
+  --branch  <string>   Branch name for analysis context
+  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
+
+### sonar config
+Configure CLI settings
+
+### sonar config telemetry
+Configure telemetry settings
+Usage: sonar config telemetry [--enabled] [--disabled]
+
+Options:
+  --enabled   Enable collection of anonymous usage statistics
+  --disabled   Disable collection of anonymous usage statistics
+
+Examples:
+  sonar config telemetry --enabled
+  sonar config telemetry --disabled
+
+### sonar self-update
+Update sonar CLI to the latest version
+Usage: sonar self-update [--status] [--force]
+
+Options:
+  --status   Check for a newer version without installing
+  --force   Install the latest version even if already up to date
