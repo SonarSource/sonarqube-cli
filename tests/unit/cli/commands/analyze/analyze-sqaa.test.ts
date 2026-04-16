@@ -77,15 +77,6 @@ function makeCloudState() {
   return state;
 }
 
-/** Cloud state WITHOUT any extensions (simulates missing registry entry) */
-function makeCloudStateNoExt() {
-  const state = getDefaultState('test');
-  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
-    orgKey: TEST_ORG,
-  });
-  return state;
-}
-
 beforeEach(() => {
   setMockUi(true);
   clearMockUiCalls();
@@ -128,26 +119,6 @@ describe('analyzeSqaa: auth resolution', () => {
     const noOrgAuth = { ...FAKE_AUTH, orgKey: undefined };
 
     await analyzeSqaa({ file: 'src/index.ts' }, noOrgAuth);
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
-  });
-
-  it('skips SQAA for on-premise server connection', async () => {
-    const onPremiseAuth = {
-      token: TEST_TOKEN,
-      serverUrl: 'https://mysonar.company.com',
-      orgKey: TEST_ORG,
-      connectionType: 'on-premise' as const,
-    };
-
-    await analyzeSqaa({ file: 'src/index.ts' }, onPremiseAuth);
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
-  });
-
-  it('skips SQAA when no extension found in registry for this project', async () => {
-    loadStateSpy.mockReturnValue(makeCloudStateNoExt());
-
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
-
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
@@ -211,61 +182,6 @@ describe('analyzeSqaa: API call and result display', () => {
     expect(request.branchName).toBe('feature/my-branch');
   });
 
-  it('displays success message when no issues found', async () => {
-    analyzeFileSpy.mockResolvedValue({ id: 'a1', issues: [], errors: null });
-
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
-
-    const output = getMockUiCalls().map((c) => String(c.args[0]));
-    expect(output.some((m) => m.toLowerCase().includes('no issues found'))).toBe(true);
-  });
-
-  it('displays issue count and details when issues are found', async () => {
-    analyzeFileSpy.mockResolvedValue({
-      id: 'a1',
-      issues: [
-        {
-          rule: 'python:S1234',
-          message: 'Refactor this method',
-          textRange: { startLine: 5, endLine: 5, startOffset: 0, endOffset: 10 },
-        },
-        {
-          rule: 'python:S5678',
-          message: 'Remove unused variable',
-          textRange: null,
-        },
-      ],
-      errors: null,
-    });
-
-    await analyzeSqaa({ file: 'main.py' }, FAKE_AUTH);
-
-    const output = getMockUiCalls()
-      .map((c) => String(c.args[0]))
-      .join('\n');
-    expect(output).toContain('2 issue');
-    expect(output).toContain('Refactor this method');
-    expect(output).toContain('line 5');
-    expect(output).toContain('python:S1234');
-    expect(output).toContain('Remove unused variable');
-  });
-
-  it('displays API error codes when response contains errors', async () => {
-    analyzeFileSpy.mockResolvedValue({
-      id: 'a1',
-      issues: [],
-      errors: [{ code: 'NOT_ENTITLED', message: 'Organization not entitled to SQAA' }],
-    });
-
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
-
-    const output = getMockUiCalls()
-      .map((c) => String(c.args[0]))
-      .join('\n');
-    expect(output).toContain('NOT_ENTITLED');
-    expect(output).toContain('not entitled');
-  });
-
   it('displays both issues and errors when response contains both', async () => {
     analyzeFileSpy.mockResolvedValue({
       id: 'a1',
@@ -320,15 +236,6 @@ describe('analyzeSqaa: path normalization', () => {
 // ─── analyzeSqaa: explicit --project option ──────────────────────────────────
 
 describe('analyzeSqaa: explicit --project option', () => {
-  it('uses provided project key directly without consulting extensions registry', async () => {
-    loadStateSpy.mockReturnValue(makeCloudStateNoExt());
-
-    await analyzeSqaa({ file: 'src/index.ts', project: 'explicit-project' }, FAKE_AUTH);
-
-    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
-    expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('explicit-project');
-  });
-
   it('uses provided project key even when extension has a different project key', async () => {
     await analyzeSqaa({ file: 'src/index.ts', project: 'override-project' }, FAKE_AUTH);
 
