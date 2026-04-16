@@ -23,6 +23,7 @@ import { SonarQubeClient } from '../../../src/sonarqube/client.js';
 import {
   SONARCLOUD_API_URL,
   SONARCLOUD_URL,
+  SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
 } from '../../../src/lib/config-constants.js';
 import { version as VERSION } from '../../../package.json';
@@ -243,6 +244,13 @@ describe('SonarQubeClient', () => {
       expect(url.searchParams.get('organizationKey')).toBe('my-org');
     });
 
+    it('hits api.sonarqube.us for US Cloud', async () => {
+      const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
+      fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
+      await usClient.getOrganizationId('my-org');
+      expect(lastFetchUrl(fetchSpy)).toContain(SONARCLOUD_US_API_URL);
+    });
+
     it('returns the uuidV4 of the first result on success', async () => {
       fetchSpy = mockFetch([{ id: 'str-id', uuidV4: 'org-uuid-v4' }]);
       expect(await client.getOrganizationId('my-org')).toBe('org-uuid-v4');
@@ -384,7 +392,7 @@ describe('SonarQubeClient', () => {
       expect(entitlementUrl.pathname).toBe(`/a3s-analysis/org-config/${targetUuid}`);
     });
 
-    it('returns true for SonarQube Cloud US', async () => {
+    it('returns true for SonarQube Cloud US and hits US API', async () => {
       const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
@@ -399,6 +407,11 @@ describe('SonarQubeClient', () => {
         } as Response);
 
       expect(await usClient.hasSqaaEntitlement('my-org')).toBe(true);
+
+      const orgUrl = (fetchSpy.mock.calls[0][0] as URL).toString();
+      expect(orgUrl).toContain(SONARCLOUD_US_API_URL);
+      const entitlementUrl = (fetchSpy.mock.calls[1][0] as URL).toString();
+      expect(entitlementUrl).toContain(SONARCLOUD_US_API_URL);
     });
   });
 
@@ -608,10 +621,11 @@ describe('SonarQubeClient', () => {
   // -------------------------------------------------------------------------
 
   describe('analyzeFile', () => {
-    it('sends POST to SONARCLOUD_API_URL/a3s-analysis/analyses', async () => {
+    it('sends POST to SONARCLOUD_API_URL for EU Cloud', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
-      await client.analyzeFile({
+      await cloudClient.analyzeFile({
         organizationKey: 'my-org',
         projectKey: 'my-project',
         filePath: 'src/index.ts',
@@ -620,6 +634,21 @@ describe('SonarQubeClient', () => {
 
       const url = lastFetchUrl(fetchSpy);
       expect(url).toBe(`${SONARCLOUD_API_URL}/a3s-analysis/analyses`);
+    });
+
+    it('sends POST to SONARCLOUD_US_API_URL for US Cloud', async () => {
+      const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await usClient.analyzeFile({
+        organizationKey: 'my-org',
+        projectKey: 'my-project',
+        filePath: 'src/index.ts',
+        fileContent: 'const x = 1;',
+      });
+
+      const url = lastFetchUrl(fetchSpy);
+      expect(url).toBe(`${SONARCLOUD_US_API_URL}/a3s-analysis/analyses`);
     });
 
     it('sends Bearer token in Authorization header', async () => {

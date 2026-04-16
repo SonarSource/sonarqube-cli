@@ -22,7 +22,7 @@
 
 import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
-import { SONARCLOUD_API_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '../lib/config-constants.js';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../lib/config-constants.js';
 import { print } from '../ui';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
@@ -215,14 +215,15 @@ export class SonarQubeClient {
 
   /**
    * Get an organization by key and return its server-side UUID (uuidV4).
-   * Uses the api.sonarcloud.io/organizations/organizations endpoint (SonarQube Cloud only).
+   * Uses the region-specific Cloud API host (SonarQube Cloud only).
    */
   async getOrganizationId(organizationKey: string): Promise<string | null> {
     try {
+      const endpoint = '/organizations/organizations';
       const result = await this.get<Array<{ id: string; uuidV4: string }>>(
-        '/organizations/organizations',
+        endpoint,
         { organizationKey, excludeEligibility: 'true' },
-        SONARCLOUD_API_URL,
+        resolveFromEndpoint(this.serverURL, endpoint),
       );
       return result[0]?.uuidV4 ?? null;
     } catch {
@@ -236,10 +237,11 @@ export class SonarQubeClient {
    */
   async checkSqaaEntitlement(organizationUuid: string): Promise<boolean> {
     try {
+      const endpoint = `/a3s-analysis/org-config/${organizationUuid}`;
       const result = await this.get<{ id: string; enabled: boolean; eligible: boolean }>(
-        `/a3s-analysis/org-config/${organizationUuid}`,
+        endpoint,
         undefined,
-        SONARCLOUD_API_URL,
+        resolveFromEndpoint(this.serverURL, endpoint),
       );
       return result.eligible && result.enabled;
     } catch {
@@ -325,13 +327,14 @@ export class SonarQubeClient {
 
   /**
    * Run server-side SonarQube Agentic Analysis on a single file.
-   * SonarQube Cloud only — endpoint lives on api.sonarcloud.io.
+   * SonarQube Cloud only — endpoint lives on the region-specific API host.
    */
   async analyzeFile(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
+    const endpoint = '/a3s-analysis/analyses';
     return await this.post<SqaaAnalysisResponse>(
-      '/a3s-analysis/analyses',
+      endpoint,
       request,
-      SONARCLOUD_API_URL,
+      resolveFromEndpoint(this.serverURL, endpoint),
     );
   }
 }
