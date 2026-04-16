@@ -21,8 +21,9 @@
 // Tests for src/commands/auth.ts exported functions
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { getToken } from '../../src/cli/commands/_common/token';
 import * as token from '../../src/cli/commands/_common/token';
+import { getToken } from '../../src/lib/keychain';
+import * as keychain from '../../src/lib/keychain';
 import { authLogin } from '../../src/cli/commands/auth/login';
 import { authLogout } from '../../src/cli/commands/auth/logout';
 import { authPurge } from '../../src/cli/commands/auth/purge';
@@ -136,7 +137,7 @@ describe('authLogoutCommand', () => {
 
   it('does not touch keychain when state has no active session', async () => {
     loadStateSpy.mockReturnValue(getDefaultState('test'));
-    const deleteSpy = spyOn(token, 'deleteToken').mockResolvedValue(undefined);
+    const deleteSpy = spyOn(keychain, 'deleteToken').mockResolvedValue(undefined);
     await handle.saveToken(FAKE_SQS_AUTH.serverUrl, FAKE_SQS_AUTH.token);
 
     await authLogout();
@@ -263,7 +264,7 @@ describe('authLoginCommand', () => {
   });
 
   it('throws when saving token to keychain fails', () => {
-    const saveTokenSpy = spyOn(token, 'saveToken').mockRejectedValue(
+    const saveTokenSpy = spyOn(keychain, 'saveToken').mockRejectedValue(
       new Error('Keychain access denied'),
     );
     try {

@@ -20,12 +20,8 @@
 
 // Repair orchestrator - fixes configuration issues
 
-import {
-  generateTokenViaBrowser,
-  saveToken,
-  validateToken,
-  deleteToken,
-} from '../../_common/token';
+import { generateTokenViaBrowser, validateToken } from '../../_common/token';
+import { deleteToken, saveToken } from '../../../../lib/keychain';
 import logger from '../../../../lib/logger';
 import { text, success } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';

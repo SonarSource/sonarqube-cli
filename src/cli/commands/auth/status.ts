@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { getToken as getKeystoreToken } from '../../../cli/commands/_common/token';
+import { getToken as getKeystoreToken } from '../../../lib/keychain';
 import { loadState } from '../../../lib/state-manager';
 import { note, print } from '../../../ui';
 import { dim, green, red } from '../../../ui/colors';

@@ -22,8 +22,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { authLogin } from '../../src/cli/commands/auth/login';
-import { getToken } from '../../src/cli/commands/_common/token';
 import * as token from '../../src/cli/commands/_common/token';
+import { getToken } from '../../src/lib/keychain';
 import { SonarQubeClient } from '../../src/sonarqube/client';
 import * as discovery from '../../src/lib/project-workspace';
 import * as stateManager from '../../src/lib/state-manager';
