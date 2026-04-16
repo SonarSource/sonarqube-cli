@@ -53,9 +53,6 @@ bun run typecheck
 # Unit tests
 bun test
 
-# Unit tests with coverage
-bun run test:coverage
-
 # Script tests
 bun run test:scripts
 

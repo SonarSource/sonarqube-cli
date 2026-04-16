@@ -28,6 +28,9 @@ jobs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
       PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
+      ARTIFACT_LINUX: ${{ steps.project_version.outputs.ARTIFACT_LINUX }}
+      ARTIFACT_MACOS: ${{ steps.project_version.outputs.ARTIFACT_MACOS }}
+      ARTIFACT_WINDOWS: ${{ steps.project_version.outputs.ARTIFACT_WINDOWS }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -48,38 +51,159 @@ jobs:
           PACKAGE_VERSION=$(bun build-scripts/set-build-number.ts "${BUILD_NUMBER}")
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
+          echo "ARTIFACT_LINUX=sonarqube-cli-${PACKAGE_VERSION}-linux-x86-64.exe" >> $GITHUB_OUTPUT
+          echo "ARTIFACT_MACOS=sonarqube-cli-${PACKAGE_VERSION}-macos-arm64.exe" >> $GITHUB_OUTPUT
+          echo "ARTIFACT_WINDOWS=sonarqube-cli-${PACKAGE_VERSION}-windows-x86-64.exe" >> $GITHUB_OUTPUT
 
   build-binaries:
-    name: Build Binary - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
+    name: Build All Binaries
+    runs-on: github-ubuntu-latest-m
     needs: prepare
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            runner: github-ubuntu-latest-m
-            target: bun-linux-x64
-            platform: linux-x86-64
-          - os: macos
-            runner: macos-latest-xlarge
-            target: bun-darwin-arm64
-            platform: macos-arm64
-          - os: windows
-            runner: warp-custom-windows-2022-s
-            target: bun-windows-x64
-            platform: windows-x86-64
     steps:
-      - name: Setup Cloudflare WARP (macOS only)
-        if: matrix.os == 'macos'
-        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
-
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
         with:
-          version: 2025.7.12
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/kv/data/sign key | GPG_SIGNING_KEY;
+            development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Fetch binary signatures
+        run: bun run fetch:signatures
+
+      - name: Cross-compile all platform binaries
+        run: |
+          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }} --target bun-linux-x64
+          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }} --target bun-darwin-arm64
+          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }} --target bun-windows-x64
+
+      - name: GPG-sign all binaries
+        env:
+          GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
+        run: |
+          bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }}
+          bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+          bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }}
+
+      - name: Upload all binaries
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: binaries
+          path: dist/
+
+  sign-macos:
+    name: Sign and Notarize macOS Binary
+    runs-on: macos-latest-xlarge
+    needs: [prepare, build-binaries]
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Setup Cloudflare WARP
+        uses: SonarSource/gh-action_setup-cloudflare-warp@v1
+
+      - name: Download binaries
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binaries
+          path: dist/
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/kv/data/sign/sonarqube-cli CERTIFICATE | CERTIFICATE;
+            development/kv/data/sign/sonarqube-cli CSC_KEY_PASSWORD | CSC_KEY_PASSWORD;
+            development/kv/data/sign/sonarqube-cli APPLE_TEAM_ID | APPLE_TEAM_ID;
+            development/kv/data/sign/sonarqube-cli APPLE_ID | APPLE_ID;
+            development/kv/data/sign/sonarqube-cli APPLE_APP_SPECIFIC_PASSWORD | APPLE_APP_SPECIFIC_PASSWORD;
+            development/kv/data/sign key | GPG_SIGNING_KEY;
+            development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Code-sign and notarize macOS binary
+        env:
+          CERTIFICATE: ${{ fromJSON(steps.secrets.outputs.vault).CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).CSC_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_TEAM_ID }}
+          APPLE_ID: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          echo "$CERTIFICATE" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import /tmp/certificate.p12 -k build.keychain -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          rm /tmp/certificate.p12
+
+          codesign \
+            --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" \
+            --options runtime \
+            --timestamp \
+            dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+          codesign --verify --verbose dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+
+          zip /tmp/notarize.zip dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+          xcrun notarytool submit /tmp/notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          rm /tmp/notarize.zip
+
+      - name: Clean up build keychain
+        if: always()
+        run: |
+          security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+          security delete-keychain build.keychain 2>/dev/null || true
+
+      - name: Re-GPG-sign macOS binary
+        env:
+          GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
+        run: bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+
+      - name: Upload signed macOS binary
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: binary-macos-signed
+          path: |
+            dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+            dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}.asc
+
+  publish-binaries:
+    name: Publish Binaries to Artifactory
+    runs-on: github-ubuntu-latest-s
+    needs:
+      - prepare
+      - build-binaries
+      - sign-macos
+      - scan
+    if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
       - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
@@ -94,158 +218,25 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/kv/data/sign key | GPG_SIGNING_KEY;
-            development/kv/data/sign passphrase | GPG_SIGNING_PASSPHRASE;
-
-      - name: Cache Bun dependencies
-        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
-        with:
-          path: |
-            ~/.bun
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-          restore-keys: bun-${{ runner.os }}
-
-      - name: Install dependencies
-        env:
-          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: bun ci
-
-      - name: Compute artifact name
-        id: artifact
-        shell: bash
-        env:
-          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
-        run: echo "name=sonarqube-cli-${PROJECT_VERSION}-${{ matrix.platform }}.exe" >> $GITHUB_OUTPUT
-
-      - name: Fetch binary signatures
-        run: bun run fetch:signatures
-
-      - name: Build binary for ${{ matrix.os }}
-        run: bun build src/index.ts --compile --outfile dist/${{ steps.artifact.outputs.name }} --target ${{ matrix.target }}
-
-      - name: Fetch Apple Developer Certificate secrets (macOS only)
-        id: apple-secrets
-        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
-        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
-        with:
-          secrets: |
-            development/kv/data/sign/sonarqube-cli CERTIFICATE | CERTIFICATE;
-            development/kv/data/sign/sonarqube-cli CSC_KEY_PASSWORD | CSC_KEY_PASSWORD;
-            development/kv/data/sign/sonarqube-cli APPLE_TEAM_ID | APPLE_TEAM_ID;
-            development/kv/data/sign/sonarqube-cli APPLE_ID | APPLE_ID;
-            development/kv/data/sign/sonarqube-cli APPLE_APP_SPECIFIC_PASSWORD | APPLE_APP_SPECIFIC_PASSWORD;
-
-      - name: Code-sign and notarize binary (macOS only)
-        if: matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
-        env:
-          CERTIFICATE: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').CSC_KEY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_TEAM_ID }}
-          APPLE_ID: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ fromJSON(steps.apple-secrets.outputs.vault || '{}').APPLE_APP_SPECIFIC_PASSWORD }}
-        run: |
-          echo "$CERTIFICATE" | base64 --decode > /tmp/certificate.p12
-          security create-keychain -p "" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
-          security import /tmp/certificate.p12 -k build.keychain -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
-          rm /tmp/certificate.p12
-
-          codesign \
-            --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" \
-            --options runtime \
-            --timestamp \
-            dist/${{ steps.artifact.outputs.name }}
-          codesign --verify --verbose dist/${{ steps.artifact.outputs.name }}
-
-          zip /tmp/notarize.zip dist/${{ steps.artifact.outputs.name }}
-          xcrun notarytool submit /tmp/notarize.zip \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-          rm /tmp/notarize.zip
-
-      - name: Clean up build keychain
-        if: always() && matrix.os == 'macos' && (github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-'))
-        run: |
-          security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
-          security delete-keychain build.keychain 2>/dev/null || true
-
-      - name: Sign binary
-        env:
-          GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
-          GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-        run: bun build-scripts/sign.mjs dist/${{ steps.artifact.outputs.name }}
-
-      - name: Upload binary to GitHub
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        with:
-          name: binary-${{ matrix.os }}
-          path: |
-            dist/${{ steps.artifact.outputs.name }}
-            dist/${{ steps.artifact.outputs.name }}.asc
-
-  publish-binaries:
-    name: Publish Binaries to Artifactory
-    runs-on: github-ubuntu-latest-s
-    needs:
-      - prepare
-      - build-binaries
-    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: 2025.7.12
-
-      - name: Setup JFrog CLI
-        uses: jfrog/setup-jfrog-cli@279b1f629f43dd5bc658d8361ac4802a7ef8d2d5
-        with:
-          version: 2.77.0
-
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
-        with:
-          secrets: |
-            development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
             development/kv/data/sentry/sq-ide-upload token | SENTRY_AUTH_TOKEN;
 
-      - name: Cache Bun dependencies
-        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
+      - uses: ./.github/actions/setup-bun
         with:
-          path: |
-            ~/.bun
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-          restore-keys: bun-${{ runner.os }}
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
-      - name: Install dependencies
-        env:
-          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: bun ci
-
-      - name: Download linux binary
+      - name: Download all binaries
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: binary-linux
+          name: binaries
           path: dist/
 
-      - name: Download macos binary
+      - name: Download signed macOS binary
+        if: needs.sign-macos.result == 'success'
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
-          name: binary-macos
-          path: dist/
-
-      - name: Download windows binary
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: binary-windows
+          name: binary-macos-signed
           path: dist/
 
       - name: Copy user scripts to dist
@@ -293,10 +284,38 @@ jobs:
           bun build src/index.ts --outdir ./dist --sourcemap=external --target=bun
           bun run sentry:upload-sourcemaps
 
-  test-and-scan:
-    name: Run Tests and Scan with SonarQube - ${{ matrix.os }}
+  lint:
+    name: Lint
+    runs-on: github-ubuntu-latest-s
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Check style
+        run: bun format:check
+
+      - name: Check linting
+        run: bun lint
+
+      - name: Type check
+        run: bun typecheck
+
+  unit-tests:
+    name: Unit Tests - ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
-    needs: [prepare]
     strategy:
       matrix:
         include:
@@ -306,12 +325,149 @@ jobs:
             runner: warp-custom-windows-2022-s
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Run unit tests (Windows)
+        if: matrix.os == 'windows'
+        run: bun test:unit
+
+      - name: Run unit tests with coverage (Linux)
+        if: matrix.os == 'linux'
+        env:
+          SONARQUBE_CLI_DISABLE_SENTRY: '1'
+        run: bun test --coverage --coverage-reporter=lcov --coverage-dir=tests/coverage/reports/unit ./tests/unit/
+
+      - name: Upload unit coverage (Linux)
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: unit-coverage
+          path: tests/coverage/reports/unit/
+
+  integration-and-e2e:
+    name: Integration and E2E Tests - ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    needs: [prepare, build-binaries]
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            runner: github-ubuntu-latest-m
+          - os: windows
+            runner: warp-custom-windows-2022-s
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@320bd31b03e5dacaac6be51bbbb15adf7caccc32 # 3.1.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - name: Install keychain dependencies (Linux)
+        if: matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Download cross-compiled binaries
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: binaries
+          path: dist/
+
+      - name: Place platform binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            cp "dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }}" dist/sonarqube-cli
+            chmod +x dist/sonarqube-cli
+          else
+            cp "dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }}" dist/sonarqube-cli.exe
+          fi
+
+      - name: Setup integration resources
+        run: bun build-scripts/setup-integration-resources.ts
+
+      - name: Start D-Bus and unlock keyring (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          eval "$(dbus-launch --sh-syntax)"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+          mkdir -p ~/.local/share/keyrings
+          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
+          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
+            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build coverage binary (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          bun build-scripts/build-coverage-binary.ts
+          bun build-scripts/clear-coverage-raw.ts
+
+      - name: Run integration tests (Windows)
+        if: matrix.os == 'windows'
+        env:
+          SONARQUBE_CLI_DISABLE_SENTRY: '1'
+        run: bun test ./tests/integration/
+
+      - name: Run integration tests with coverage (Linux)
+        if: matrix.os == 'linux'
+        env:
+          SONARQUBE_CLI_DISABLE_SENTRY: '1'
+        run: SONARQUBE_CLI_USE_COVERAGE=1 bun test ./tests/integration/
+
+      - name: Run e2e tests (Windows)
+        if: matrix.os == 'windows'
+        env:
+          SONARQUBE_CLI_DISABLE_SENTRY: '1'
+        run: bun test:e2e
+
+      - name: Run e2e tests with coverage (Linux)
+        if: matrix.os == 'linux'
+        env:
+          SONARQUBE_CLI_DISABLE_SENTRY: '1'
+        run: SONARQUBE_CLI_USE_COVERAGE=1 bun test ./tests/e2e/
+
+      - name: Merge coverage reports (Linux)
+        if: matrix.os == 'linux'
+        run: bun build-scripts/report-coverage.ts
+
+      - name: Upload integration coverage (Linux)
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: integration-coverage
+          path: tests/coverage/reports/integration/
+
+  scan:
+    name: SonarQube Analysis
+    runs-on: github-ubuntu-latest-s
+    needs: [prepare, lint, unit-tests, integration-and-e2e]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
-
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: 2025.7.12
 
       - name: Vault Secrets
         id: secrets
@@ -323,63 +479,25 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-qa-deployer access_token | ARTIFACTORY_DEPLOY_PASSWORD;
 
-      - name: Cache Bun dependencies
-        uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c
+      - uses: ./.github/actions/setup-bun
         with:
-          path: |
-            ~/.bun
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-          restore-keys: bun-${{ runner.os }}
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
-      - name: Install dependencies
-        env:
-          ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: bun ci
+      - name: Download unit coverage
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: unit-coverage
+          path: tests/coverage/reports/unit/
 
-      - name: Check style
-        run: bun format:check
+      - name: Download integration coverage
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: integration-coverage
+          path: tests/coverage/reports/integration/
 
-      - name: Check linting
-        run: bun lint
-
-      - name: Run all tests (Windows)
-        if: matrix.os == 'windows'
-        run: bun test:all
-
-      - name: Run all tests with coverage (Linux)
-        if: matrix.os == 'linux'
-        run: bun test:coverage
-
-      - name: Install keychain dependencies (Linux)
-        if: matrix.os == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 gnome-keyring dbus-x11
-
-      - name: Start D-Bus and unlock keyring (Linux)
-        if: matrix.os == 'linux'
-        run: |
-          eval "$(dbus-launch --sh-syntax)"
-          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
-          mkdir -p ~/.local/share/keyrings
-          # Empty password is intentional — CI keyring is ephemeral and
-          # only used to give Bun.secrets a working backend for e2e tests.
-          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
-          if [ -n "$GNOME_KEYRING_CONTROL" ]; then
-            echo "GNOME_KEYRING_CONTROL=$GNOME_KEYRING_CONTROL" >> "$GITHUB_ENV"
-          fi
-
-      - name: Run e2e tests (Windows)
-        if: matrix.os == 'windows'
-        run: bun test:e2e
-
-      - name: Run e2e tests with coverage (Linux)
-        if: matrix.os == 'linux'
-        run: bun test:e2e:coverage
-
-      - name: Analyze on SonarQubeCloud (Linux)
-        if: matrix.os == 'linux'
+      - name: Analyze on SonarQubeCloud
         env:
           SONAR_HOST_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}
           SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_TOKEN }}
@@ -396,9 +514,10 @@ jobs:
     needs:
       - prepare
       - build-binaries
+      - sign-macos
       - publish-binaries
-      - test-and-scan
-    if: ${{ github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-') }}
+      - scan
+    if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
       - uses: SonarSource/ci-github-actions/promote@148774f456203f228b7bd1bd68ed0c22254d9cd1 # 1.3.24
         env:
