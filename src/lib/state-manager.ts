@@ -98,9 +98,6 @@ function migrateState(state: CliState) {
       delete (conn as Record<string, unknown>).keystoreKey;
     }
   }
-  if ('keychainAccounts' in state.auth) {
-    delete (state.auth as Record<string, unknown>).keychainAccounts;
-  }
 }
 
 /**

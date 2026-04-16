@@ -31,13 +31,12 @@ void mock.module('../../src/lib/browser.js', () => ({
 
 import {
   generateTokenViaBrowser,
-  getToken,
-  deleteToken,
   validateToken,
   openBrowserWithFallback,
   buildAuthURL,
   getSuccessHTML,
 } from '../../src/cli/commands/_common/token';
+import { deleteToken, getToken } from '../../src/lib/keychain';
 import { SonarQubeClient } from '../../src/sonarqube/client.js';
 import { createKeychainTestHandle } from './keychain/keychain-test-handle.js';
 import { setMockUi } from '../../src/ui';

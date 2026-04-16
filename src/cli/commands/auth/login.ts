@@ -18,11 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  generateTokenViaBrowser,
-  getToken as getKeystoreToken,
-} from '../../../cli/commands/_common/token';
-import { deleteStaleTokens, saveToken } from '../../../lib/keychain';
+import { generateTokenViaBrowser } from '../../../cli/commands/_common/token';
+import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
 import { addOrUpdateConnection, loadState, saveState } from '../../../lib/state-manager';
 import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';

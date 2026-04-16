@@ -127,7 +127,6 @@ function getBackend(): KeychainBackend {
 
 /**
  * Derive account names from the connections stored in state.json.
- * This replaces the former keychainAccounts index.
  */
 function deriveAccountsFromConnections(): string[] {
   const state = loadState();
@@ -233,10 +232,11 @@ export async function getAllCredentials(): Promise<Array<{ account: string; pass
   }
 
   const accounts = deriveAccountsFromConnections();
+  const backend = getBackend();
   const service = getServiceName();
   const results: Array<{ account: string; password: string }> = [];
   for (const account of accounts) {
-    const password = await bunSecretsBackend.getPassword(service, account);
+    const password = await backend.getPassword(service, account);
     if (password != null) {
       results.push({ account, password });
     }

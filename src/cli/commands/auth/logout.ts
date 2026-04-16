@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { deleteToken } from '../../../cli/commands/_common/token';
+import { deleteToken } from '../../../lib/keychain';
 import { getActiveConnection, loadState, saveState } from '../../../lib/state-manager';
 import { print, success } from '../../../ui';
 
