@@ -114,7 +114,7 @@ describe('analyze sqaa', () => {
   );
 
   it(
-    'exits with code 0 and skips SQAA when no extension registered for this project',
+    'exits with code 0, warns, and skips SQAA when no extension registered for this project',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -130,6 +130,9 @@ describe('analyze sqaa', () => {
       const result = await harness.run('analyze sqaa --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
+      );
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -139,7 +142,7 @@ describe('analyze sqaa', () => {
   );
 
   it(
-    'exits with code 0 and silently skips SQAA when --branch is provided but no project is registered',
+    'exits with code 0, warns, and skips SQAA when --branch is provided but no project is registered',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -155,11 +158,69 @@ describe('analyze sqaa', () => {
       const result = await harness.run('analyze sqaa --file src/index.ts --branch main');
 
       expect(result.exitCode).toBe(0);
-      // --branch is ignored, no API call is made
+      expect(result.stdout + result.stderr).toContain(
+        'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
+      );
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'calls SQAA API when --project is provided without extension registry entry',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      // Cloud auth only — no extension registered; --project bypasses registry lookup
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run(
+        `analyze sqaa --file src/index.ts --project ${TEST_PROJECT}`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('no issues found');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'calls SQAA API when both --project and --branch are provided',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      // Cloud auth only — --project + --branch both provided
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run(
+        `analyze sqaa --file src/index.ts --project ${TEST_PROJECT} --branch main`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('no issues found');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
   );

@@ -151,7 +151,7 @@ describe('analyzeSqaa: auth resolution', () => {
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 
-  it('skips SQAA when extension has no projectKey', async () => {
+  it('skips SQAA and warns when extension has no projectKey', async () => {
     const state = getDefaultState('test');
     stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
       orgKey: TEST_ORG,
@@ -173,7 +173,14 @@ describe('analyzeSqaa: auth resolution', () => {
     loadStateSpy.mockReturnValue(state);
 
     await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+
     expect(analyzeFileSpy).not.toHaveBeenCalled();
+    const output = getMockUiCalls()
+      .map((c) => String(c.args[0]))
+      .join('\n');
+    expect(output).toContain(
+      'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
+    );
   });
 });
 
@@ -294,14 +301,16 @@ describe('analyzeSqaa: API call and result display', () => {
 
 describe('analyzeSqaa: path normalization', () => {
   it('normalizes Windows-style backslash paths to forward slashes in the API request', async () => {
-    await analyzeSqaa({ file: 'python\\scripts\\check_md_code_blocks.py' }, FAKE_AUTH);
+    await analyzeSqaa({ file: String.raw`python\scripts\check_md_code_blocks.py` }, FAKE_AUTH);
 
     const request = analyzeFileSpy.mock.calls[0][0];
     expect(request.filePath).toBe('python/scripts/check_md_code_blocks.py');
   });
   it('throws InvalidOptionError when file is outside the current working directory', () => {
     const differentDrive =
-      process.platform === 'win32' ? 'D:\\other-project\\file.ts' : '/other-project/file.ts';
+      process.platform === 'win32'
+        ? String.raw`D:\other-project\file.ts`
+        : '/other-project/file.ts';
 
     expect(analyzeSqaa({ file: '../outside.ts' }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
     expect(analyzeSqaa({ file: differentDrive }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);

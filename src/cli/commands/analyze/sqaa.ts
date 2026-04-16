@@ -29,7 +29,7 @@ import type { HookExtension } from '../../../lib/state';
 import { findExtensionsByProject, loadState } from '../../../lib/state-manager';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { blank, error, success, text } from '../../../ui';
+import { blank, error, success, text, warn } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 
 export interface AnalyzeSqaaOptions {
@@ -63,7 +63,12 @@ export async function runSqaaAnalysis(
   if (!cloudAuth) return;
 
   const projectKey = explicitProject ?? resolveSqaaProjectKey(command);
-  if (!projectKey) return;
+  if (!projectKey) {
+    warn(
+      'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
+    );
+    return;
+  }
 
   const fileContent = readSqaaFileContent(file);
   await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch);
