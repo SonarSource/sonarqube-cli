@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { readStdinJson } from '../../src/cli/commands/hook/stdin';
+import { readStdinJson, readGitPushRefs } from '../../src/cli/commands/hook/stdin';
 
 describe('readStdinJson', () => {
   type StdinListener = (...args: unknown[]) => void;
@@ -104,5 +104,80 @@ describe('readStdinJson', () => {
     } finally {
       timeoutSpy.mockRestore();
     }
+  });
+});
+
+describe('readGitPushRefs', () => {
+  type StdinListener = (...args: unknown[]) => void;
+  const listeners: Record<string, StdinListener[]> = {};
+  let onSpy: ReturnType<typeof spyOn>;
+
+  function captureListener(event: string, fn: StdinListener) {
+    if (!listeners[event]) listeners[event] = [];
+    listeners[event].push(fn);
+    return process.stdin;
+  }
+
+  function emitStdin(event: string, ...args: unknown[]) {
+    for (const fn of listeners[event] ?? []) {
+      fn(...args);
+    }
+  }
+
+  beforeEach(() => {
+    for (const key of Object.keys(listeners)) {
+      delete listeners[key];
+    }
+    onSpy = spyOn(process.stdin, 'on').mockImplementation(
+      captureListener as Parameters<typeof spyOn>[2],
+    );
+  });
+
+  afterEach(() => {
+    onSpy.mockRestore();
+  });
+
+  it('parses valid push ref lines', async () => {
+    const localSha = 'abc1234abc1234abc1234abc1234abc1234abc123';
+    const remoteSha = 'def5678def5678def5678def5678def5678def56';
+    const promise = readGitPushRefs();
+    emitStdin('data', Buffer.from(`refs/heads/main ${localSha} refs/heads/main ${remoteSha}\n`));
+    emitStdin('end');
+    const refs = await promise;
+    expect(refs).toHaveLength(1);
+    expect(refs[0].localRef).toBe('refs/heads/main');
+    expect(refs[0].localSha).toBe(localSha);
+    expect(refs[0].remoteRef).toBe('refs/heads/main');
+    expect(refs[0].remoteSha).toBe(remoteSha);
+  });
+
+  it('filters out lines missing required fields', async () => {
+    const promise = readGitPushRefs();
+    emitStdin('data', Buffer.from('refs/heads/main only-two-fields\n'));
+    emitStdin('end');
+    const refs = await promise;
+    expect(refs).toHaveLength(0);
+  });
+
+  it('returns empty array when stdin times out', async () => {
+    let timeoutFn: (() => void) | undefined;
+    const timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation((fn: TimerHandler) => {
+      timeoutFn = fn as () => void;
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+
+    try {
+      const promise = readGitPushRefs();
+      timeoutFn?.();
+      expect(await promise).toEqual([]);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it('returns empty array when stdin emits an error', async () => {
+    const promise = readGitPushRefs();
+    emitStdin('error', new Error('pipe broken'));
+    expect(await promise).toEqual([]);
   });
 });

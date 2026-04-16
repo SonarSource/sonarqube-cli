@@ -247,7 +247,7 @@ describe('integrate git (native hooks)', () => {
 
       expect(secondPush.exitCode).not.toBe(0);
       const output = (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
-      expect(output).toContain('Secrets found');
+      expect(output).toContain('Secrets detected');
     },
     { timeout: 30000 },
   );

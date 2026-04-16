@@ -30,7 +30,10 @@ import * as processLib from '../../../../../src/lib/process.js';
 import * as stateManager from '../../../../../src/lib/state-manager.js';
 import * as installSecrets from '../../../../../src/cli/commands/_common/install/secrets';
 import { getDefaultState } from '../../../../../src/lib/state.js';
-import { analyzeSecrets, runSecretsBinaryOnText } from '../../../../../src/cli/commands/analyze/secrets';
+import {
+  analyzeSecrets,
+  runSecretsBinaryOnText,
+} from '../../../../../src/cli/commands/analyze/secrets';
 import {
   CommandFailedError,
   InvalidOptionError,

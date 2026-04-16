@@ -21,27 +21,23 @@
 // git pre-commit callback handler — scans staged files for secrets before commit.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
 import { print } from '../../../ui';
-import { resolveSecretsBinaryPath } from '../_common/install/secrets';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 import { CommandFailedError } from '../_common/error';
+import { resolveAuthAndSecrets } from './hook-dependencies';
 
 export async function gitPreCommit(): Promise<void> {
   const stagedFiles = await getStagedFiles();
   if (stagedFiles.length === 0) return;
 
-  const auth = await resolveAuth().catch(() => null);
-  if (!auth) return; // not authenticated — skip gracefully
-
-  const binaryPath = resolveSecretsBinaryPath();
-  if (!binaryPath) return; // binary not installed — skip gracefully
+  const deps = await resolveAuthAndSecrets();
+  if (!deps) return;
 
   let result;
   try {
-    result = await runSecretsBinary(binaryPath, stagedFiles, auth);
+    result = await runSecretsBinary(deps.binaryPath, stagedFiles, deps.auth);
   } catch (err) {
     logger.debug(`git pre-commit secrets scan failed: ${(err as Error).message}`);
     throw new CommandFailedError('Secrets scan failed');

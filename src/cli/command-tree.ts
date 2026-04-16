@@ -51,6 +51,7 @@ import {
   type AgentPostToolUseOptions,
 } from './commands/hook/agent-post-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
+import { gitPrePush } from './commands/hook/git-pre-push';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -280,6 +281,11 @@ hookCommand
   .command('git-pre-commit')
   .description('git pre-commit handler: scan staged files for secrets')
   .anonymousAction(() => gitPreCommit());
+
+hookCommand
+  .command('git-pre-push')
+  .description('git pre-push handler: scan files in new commits for secrets')
+  .anonymousAction(() => gitPrePush());
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {

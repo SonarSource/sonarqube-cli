@@ -23,6 +23,36 @@
 
 const STDIN_TIMEOUT_MS = 5000;
 
+export interface PushRef {
+  localRef: string;
+  localSha: string;
+  remoteRef: string;
+  remoteSha: string;
+}
+
+/**
+ * Read git pre-push refs from stdin.
+ * Git passes refs as raw space-separated lines: <localRef> <localSha> <remoteRef> <remoteSha>
+ * Returns an empty array on timeout or error.
+ */
+export async function readGitPushRefs(): Promise<PushRef[]> {
+  let raw: string;
+  try {
+    raw = await readRawStdin();
+  } catch {
+    return []; // timeout or read error — allow the push
+  }
+  return raw
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [localRef, localSha, remoteRef, remoteSha] = line.split(' ');
+      return { localRef, localSha, remoteRef, remoteSha };
+    })
+    .filter((r) => r.localSha && r.remoteSha);
+}
+
 /**
  * Read stdin, parse as JSON, and return the result typed as T.
  * Throws if stdin is not valid JSON or if the read times out.
