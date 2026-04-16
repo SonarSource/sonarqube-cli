@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 import { repairToken } from '../../../../../../src/cli/commands/integrate/claude/repair';
 import * as token from '../../../../../../src/cli/commands/_common/token';
+import * as keychain from '../../../../../../src/lib/keychain';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
 const SERVER_URL = 'https://sonarqube.example.com';
@@ -31,15 +32,15 @@ describe('repairToken', () => {
     Extract<(typeof token)['generateTokenViaBrowser'], (...args: any[]) => any>
   >;
   let validateTokenSpy: Mock<Extract<(typeof token)['validateToken'], (...args: any[]) => any>>;
-  let saveTokenSpy: Mock<Extract<(typeof token)['saveToken'], (...args: any[]) => any>>;
-  let deleteTokenSpy: Mock<Extract<(typeof token)['deleteToken'], (...args: any[]) => any>>;
+  let saveTokenSpy: Mock<Extract<(typeof keychain)['saveToken'], (...args: any[]) => any>>;
+  let deleteTokenSpy: Mock<Extract<(typeof keychain)['deleteToken'], (...args: any[]) => any>>;
 
   beforeEach(() => {
     setMockUi(true);
     generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(NEW_TOKEN);
     validateTokenSpy = spyOn(token, 'validateToken').mockResolvedValue(true);
-    saveTokenSpy = spyOn(token, 'saveToken').mockResolvedValue(undefined);
-    deleteTokenSpy = spyOn(token, 'deleteToken').mockResolvedValue(undefined);
+    saveTokenSpy = spyOn(keychain, 'saveToken').mockResolvedValue(undefined);
+    deleteTokenSpy = spyOn(keychain, 'deleteToken').mockResolvedValue(undefined);
   });
 
   afterEach(() => {

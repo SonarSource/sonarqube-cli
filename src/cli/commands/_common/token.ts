@@ -22,11 +22,6 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
-import {
-  getToken as getKeystoreToken,
-  saveToken as saveKeystoreToken,
-  deleteToken as deleteKeystoreToken,
-} from '../../../lib/keychain';
 import { openBrowser } from '../../../lib/browser';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { startLoopbackServer } from '../../../lib/loopback-server';
@@ -38,27 +33,6 @@ const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const MAX_POST_BODY_BYTES = 4096;
-
-/**
- * Get token from keychain
- */
-export async function getToken(serverURL: string, org?: string): Promise<string | null> {
-  return await getKeystoreToken(serverURL, org);
-}
-
-/**
- * Save token to keychain
- */
-export async function saveToken(serverURL: string, token: string, org?: string): Promise<void> {
-  await saveKeystoreToken(serverURL, token, org);
-}
-
-/**
- * Delete token from keychain
- */
-export async function deleteToken(serverURL: string, org?: string): Promise<void> {
-  await deleteKeystoreToken(serverURL, org);
-}
 
 /**
  * Validate token by calling SonarQube API
