@@ -1,3 +1,13 @@
 {
-  "eslint.workingDirectories": [{ "mode": "auto" }]
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "eslint.workingDirectories": [{ "mode": "auto" }],
+  "eslint.validate": ["typescript"],
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "files.associations": {
+    "*.mdc": "markdown"
+  }
 }
