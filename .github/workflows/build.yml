@@ -94,9 +94,9 @@ jobs:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
         run: |
-          bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }}
-          bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
-          bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }}
+          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }}
+          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }}
 
       - name: Upload all binaries
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -183,7 +183,7 @@ jobs:
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-        run: bun build-scripts/sign.mjs dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+        run: bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
 
       - name: Upload signed macOS binary
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f

@@ -24,7 +24,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.build-scripts.json",
     "gen:docs": "bun run build-scripts/generate-docs.ts",
     "version:build_number": "bun build-scripts/set-build-number.ts",
-    "fetch:signatures": "bun build-scripts/fetch-signatures.js",
+    "fetch:signatures": "bun build-scripts/fetch-signatures.ts",
     "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --release=\"${PROJECT_VERSION}\" dist/*.map",
     "prepare": "husky"
   },

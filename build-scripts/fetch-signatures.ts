@@ -24,7 +24,7 @@
  * into src/lib/signatures.ts so they compile into the binary.
  *
  * Run after bumping the version in package.json#externalBinaries:
- *   npm run fetch:signatures
+ *   bun run fetch:signatures
  *
  * The .asc files are public on binaries.sonarsource.com. Each one is validated
  * to be a well-formed OpenPGP signature issued by the trusted SonarSource key
@@ -34,24 +34,49 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
+
 import * as openpgp from 'openpgp';
-import { SONARSOURCE_BINARIES_URL } from '../src/lib/config-constants.js';
-import { SONARSOURCE_PUBLIC_KEY } from '../src/lib/signatures.js';
-import pkg from '../package.json' with { type: 'json' };
+
+import { SONARSOURCE_BINARIES_URL } from '../src/lib/config-constants.ts';
+import { SONARSOURCE_PUBLIC_KEY } from '../src/lib/signatures.ts';
+
+interface Platform {
+  os: string;
+  arch: string;
+}
+
+interface ExternalBinary {
+  version: string;
+  binaryPath: string;
+  platforms: Platform[];
+}
+
+interface SignatureResult {
+  platform: string;
+  armoredSignature: string;
+}
 
 const SIGNATURES_TS_PATH = new URL('../src/lib/signatures.ts', import.meta.url);
+const PACKAGE_JSON_PATH = new URL('../package.json', import.meta.url);
 
-async function fetchSignatures() {
+async function fetchSignatures(): Promise<void> {
   const verificationKey = await openpgp.readKey({ armoredKey: SONARSOURCE_PUBLIC_KEY });
 
-  for (const [binaryName, { version, binaryPath, platforms }] of Object.entries(pkg.externalBinaries)) {
+  const pkg = JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8')) as {
+    externalBinaries: Record<string, ExternalBinary>;
+  };
+  for (const [binaryName, { version, binaryPath, platforms }] of Object.entries(
+    pkg.externalBinaries,
+  )) {
     console.log(`Fetching signatures for ${binaryName} v${version}\n`);
 
     const results = await Promise.all(
-      platforms.map(platform => fetchAndVerifySignature(platform, version, binaryPath, verificationKey))
+      platforms.map((platform) =>
+        fetchAndVerifySignature(platform, version, binaryPath, verificationKey),
+      ),
     );
 
-    const signatures = {};
+    const signatures: Record<string, string> = {};
     for (const result of results) {
       if (result) {
         signatures[result.platform] = result.armoredSignature;
@@ -63,13 +88,18 @@ async function fetchSignatures() {
   }
 }
 
-function patchSignaturesTs(binaryName, version, signatures, outputPath) {
+function patchSignaturesTs(
+  binaryName: string,
+  version: string,
+  signatures: Record<string, string>,
+  outputPath: URL,
+): void {
   const PREFIX = binaryName.toUpperCase().replaceAll('-', '_');
   let content = readFileSync(outputPath, 'utf-8');
 
   content = content.replace(
     new RegExp(`^export const ${PREFIX}_VERSION = '.*';$`, 'm'),
-    `export const ${PREFIX}_VERSION = '${version}';`
+    `export const ${PREFIX}_VERSION = '${version}';`,
   );
 
   const sigEntries = Object.entries(signatures)
@@ -77,15 +107,20 @@ function patchSignaturesTs(binaryName, version, signatures, outputPath) {
     .map(([platform, sig]) => `  '${platform}': \`${sig.trim()}\`,`);
   content = content.replace(
     new RegExp(String.raw`^export const ${PREFIX}_SIGNATURES[^=]+=\s*\{[^}]*\};$`, 'ms'),
-    `export const ${PREFIX}_SIGNATURES: Record<string, string> = {\n${sigEntries.join('\n')}\n};`
+    `export const ${PREFIX}_SIGNATURES: Record<string, string> = {\n${sigEntries.join('\n')}\n};`,
   );
 
   writeFileSync(outputPath, content, 'utf-8');
-  console.log(`Patched ${outputPath}`);
+  console.log(`Patched ${outputPath.toString()}`);
 }
 
 /** Returns { platform, armoredSignature } if distributed, null if skipped. */
-async function fetchAndVerifySignature(platform, version, distPrefix, verificationKey) {
+async function fetchAndVerifySignature(
+  platform: Platform,
+  version: string,
+  distPrefix: string,
+  verificationKey: openpgp.Key,
+): Promise<SignatureResult | null> {
   const platformKey = `${platform.os}-${platform.arch}`;
   const binaryName = distPrefix.split('/').at(-1);
   const ascUrl = `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${binaryName}-${version}-${platformKey}.exe.asc`;
@@ -98,7 +133,9 @@ async function fetchAndVerifySignature(platform, version, distPrefix, verificati
       console.log(`Skipped: ${ascResponse.status}`);
       return null;
     }
-    throw new Error(`${platformKey}: ASC download failed: ${ascResponse.status} ${ascResponse.statusText}`);
+    throw new Error(
+      `${platformKey}: ASC download failed: ${ascResponse.status} ${ascResponse.statusText}`,
+    );
   }
   const armoredSignature = await ascResponse.text();
 
@@ -107,13 +144,13 @@ async function fetchAndVerifySignature(platform, version, distPrefix, verificati
   const signature = await openpgp.readSignature({ armoredSignature });
   const trustedKeyIDs = new Set([
     verificationKey.getKeyID().toHex(),
-    ...verificationKey.getSubkeys().map(sub => sub.getKeyID().toHex()),
+    ...verificationKey.getSubkeys().map((sub) => sub.getKeyID().toHex()),
   ]);
-  const signatureKeyIDs = signature.packets.map(p => p.issuerKeyID.toHex());
-  if (!signatureKeyIDs.some(id => trustedKeyIDs.has(id))) {
+  const signatureKeyIDs = signature.packets.map((p) => p.issuerKeyID.toHex());
+  if (!signatureKeyIDs.some((id) => trustedKeyIDs.has(id))) {
     throw new Error(
       `${platformKey}: signature not issued by the trusted SonarSource key ` +
-      `(got key IDs: ${signatureKeyIDs.join(', ')})`
+        `(got key IDs: ${signatureKeyIDs.join(', ')})`,
     );
   }
 
@@ -123,6 +160,6 @@ async function fetchAndVerifySignature(platform, version, distPrefix, verificati
 try {
   await fetchSignatures();
 } catch (err) {
-  console.error(`\nFailed: ${err.message}`);
+  console.error(`\nFailed: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 }

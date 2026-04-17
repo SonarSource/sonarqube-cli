@@ -17,19 +17,29 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { decryptKey, readPrivateKey, createMessage, sign as pgpSign } from 'openpgp';
-import { createReadStream, writeFileSync, existsSync } from 'node:fs';
-import { Readable } from 'node:stream';
 
-async function signFile(filePath, privateKeyArmored, passphrase) {
-  const stream = Readable.toWeb(createReadStream(filePath));
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+
+import { createMessage, decryptKey, readPrivateKey, sign as pgpSign } from 'openpgp';
+
+async function signFile(
+  filePath: string,
+  privateKeyArmored: string,
+  passphrase: string,
+): Promise<void> {
+  const binary = new Uint8Array(readFileSync(filePath));
   const privateKey = await decryptKey({
     privateKey: await readPrivateKey({ armoredKey: privateKeyArmored }),
     passphrase,
   });
-  const message = await createMessage({ binary: stream });
-  const signature = await pgpSign({ message, signingKeys: privateKey, detached: true });
-  writeFileSync(`${filePath}.asc`, signature.toString(), 'ascii');
+  const message = await createMessage({ binary });
+  const signature = (await pgpSign({
+    message,
+    signingKeys: privateKey,
+    detached: true,
+    format: 'armored',
+  })) as string;
+  writeFileSync(`${filePath}.asc`, signature, 'ascii');
   console.log(`Signed: ${filePath} -> ${filePath}.asc`);
 }
 
@@ -43,7 +53,7 @@ if (!privateKeyArmored || !passphrase) {
 }
 
 if (!filePath) {
-  console.error('Usage: bun build-scripts/sign.mjs <file-path>');
+  console.error('Usage: bun build-scripts/sign.ts <file-path>');
   process.exit(1);
 }
 
@@ -52,7 +62,7 @@ if (!existsSync(filePath)) {
   process.exit(1);
 }
 
-signFile(filePath, privateKeyArmored, passphrase).catch(err => {
-  console.error(`Signing failed: ${err.message}`);
+signFile(filePath, privateKeyArmored, passphrase).catch((err: unknown) => {
+  console.error(`Signing failed: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });
