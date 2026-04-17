@@ -167,23 +167,24 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // validateToken
+  // checkTokenValidity
   // -------------------------------------------------------------------------
 
-  describe('validateToken', () => {
-    it('returns true when API reports the token as valid', async () => {
+  describe('checkTokenValidity', () => {
+    it("returns 'valid' when API reports the token as valid", async () => {
       fetchSpy = mockFetch({ valid: true });
-      expect(await client.validateToken()).toBe(true);
+      expect(await client.checkTokenValidity()).toBe('valid');
     });
 
-    it('returns false when API reports the token as invalid', async () => {
+    it("returns 'invalid' when API reports the token as invalid", async () => {
       fetchSpy = mockFetch({ valid: false });
-      expect(await client.validateToken()).toBe(false);
+      expect(await client.checkTokenValidity()).toBe('invalid');
     });
 
-    it('returns false on network / API error', async () => {
+    it('throws on network / API error', async () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'));
-      expect(await client.validateToken()).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+      await expect(client.checkTokenValidity()).rejects.toThrow('Network error');
     });
   });
 

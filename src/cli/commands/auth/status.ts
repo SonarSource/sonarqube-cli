@@ -20,32 +20,69 @@
 
 import { getToken as getKeystoreToken } from '../../../lib/keychain';
 import { loadState } from '../../../lib/state-manager';
-import { note, print } from '../../../ui';
-import { dim, green, red } from '../../../ui/colors';
+import { note, print, withSpinner } from '../../../ui';
+import { NOTE_STYLES } from '../../../ui/colors';
+import { CommandFailedError } from '../_common/error';
+import type { TokenStatus } from '../_common/token';
+import { checkTokenStatus } from '../_common/token';
 
-/**
- * Show active authentication connection with token verification
- */
+function connectionLines(serverUrl: string, orgKey: string | undefined): string[] {
+  return [`Server  ${serverUrl}`, ...(orgKey ? [`Org     ${orgKey}`] : [])];
+}
+
+function displayTokenMissing(serverUrl: string, orgKey: string | undefined): void {
+  note(
+    [...connectionLines(serverUrl, orgKey), '', 'Run "sonar auth login" to restore the token'],
+    '✗ Token missing',
+    NOTE_STYLES.error,
+  );
+}
+
+function displayTokenStatus(
+  serverUrl: string,
+  orgKey: string | undefined,
+  status: TokenStatus,
+): void {
+  const lines = connectionLines(serverUrl, orgKey);
+
+  if (status === 'valid') {
+    note(lines, '✓ Connected', NOTE_STYLES.success);
+  } else if (status === 'invalid') {
+    note(
+      [...lines, '', 'Run "sonar auth login" to reauthenticate'],
+      '✗ Token invalid',
+      NOTE_STYLES.error,
+    );
+  } else {
+    note(
+      [...lines, '', 'Could not connect to the server to verify the token'],
+      '⚠ Cannot reach server',
+      NOTE_STYLES.warn,
+    );
+  }
+}
+
 export async function authStatus(): Promise<void> {
   const state = loadState();
 
   if (state.auth.connections.length === 0) {
     print('No saved connection');
-    return;
+    throw new CommandFailedError('Authentication check failed');
   }
 
   const conn = state.auth.connections[0];
   const token = await getKeystoreToken(conn.serverUrl, conn.orgKey);
 
-  const lines = [`Server  ${conn.serverUrl}`, ...(conn.orgKey ? [`Org     ${conn.orgKey}`] : [])];
-
   if (token === null) {
-    note([...lines, '', 'Run "sonar auth login" to restore the token'], '✗ Token missing', {
-      borderColor: red,
-      titleColor: red,
-      contentColor: dim,
-    });
-  } else {
-    note(lines, '✓ Connected', { borderColor: green, titleColor: green, contentColor: dim });
+    displayTokenMissing(conn.serverUrl, conn.orgKey);
+    throw new CommandFailedError('Authentication check failed');
   }
+
+  const status = await withSpinner('Verifying token...', () =>
+    checkTokenStatus(conn.serverUrl, token),
+  );
+  displayTokenStatus(conn.serverUrl, conn.orgKey, status);
+
+  if (status === 'unreachable') throw new CommandFailedError('Connection check failed');
+  if (status !== 'valid') throw new CommandFailedError('Authentication check failed');
 }

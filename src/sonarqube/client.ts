@@ -183,16 +183,9 @@ export class SonarQubeClient {
     return (await response.json()) as T;
   }
 
-  /**
-   * Validate authentication token
-   */
-  async validateToken(): Promise<boolean> {
-    try {
-      const result = await this.get<{ valid: boolean }>('/api/authentication/validate');
-      return result.valid;
-    } catch {
-      return false;
-    }
+  async checkTokenValidity(): Promise<'valid' | 'invalid'> {
+    const result = await this.get<{ valid: boolean }>('/api/authentication/validate');
+    return result.valid ? 'valid' : 'invalid';
   }
 
   /**

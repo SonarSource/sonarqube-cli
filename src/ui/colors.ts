@@ -22,7 +22,7 @@
 
 import pc from 'picocolors';
 
-import type { ColorFn, StepStatus } from './types.js';
+import type { ColorFn, NoteOptions, StepStatus } from './types.js';
 
 // When stdout is not a TTY (piped), all color functions become identity
 export const isTTY = process.stdout.isTTY;
@@ -57,6 +57,12 @@ export const STATUS_COLORS: Record<StepStatus, ColorFn> = {
   warn: yellow,
   pending: dim,
   info: cyan,
+};
+
+export const NOTE_STYLES: Record<'success' | 'error' | 'warn', NoteOptions> = {
+  success: { borderColor: green, titleColor: green, contentColor: dim },
+  error: { borderColor: red, titleColor: red, contentColor: dim },
+  warn: { borderColor: yellow, titleColor: yellow, contentColor: dim },
 };
 
 export const STATUS_ICONS: Record<StepStatus, string> = {

@@ -457,8 +457,9 @@ describe('auth status', () => {
     async () => {
       const result = await harness.run('auth status');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('No saved connection');
+      expect(result.stderr).toContain('Authentication check failed');
     },
     { timeout: 15000 },
   );
@@ -472,8 +473,9 @@ describe('auth status', () => {
 
       const result = await harness.run('auth status');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('Token missing');
+      expect(result.stderr).toContain('Authentication check failed');
     },
     { timeout: 15000 },
   );
@@ -492,6 +494,43 @@ describe('auth status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Connected');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports token invalid when server rejects the token',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('valid-token').start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'wrong-token');
+
+      const result = await harness.run('auth status');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain('Token invalid');
+      expect(result.stderr).toContain('Authentication check failed');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports cannot reach server when server is not running',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const baseUrl = server.baseUrl();
+      await server.stop();
+
+      harness.state().withActiveConnection(baseUrl).withKeychainToken(baseUrl, 'any-token');
+
+      const result = await harness.run('auth status');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain('Cannot reach server');
+      expect(result.stderr).toContain('Connection check failed');
     },
     { timeout: 15000 },
   );

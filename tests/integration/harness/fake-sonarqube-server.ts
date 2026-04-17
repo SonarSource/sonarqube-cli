@@ -197,6 +197,12 @@ export class FakeSonarQubeServerBuilder {
         const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
         const isAuthorized = !validToken || bearerToken === validToken;
 
+        if (path === '/api/authentication/validate' && req.method === 'GET') {
+          return new Response(JSON.stringify({ valid: isAuthorized }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
         if (!isAuthorized) {
           return new Response(JSON.stringify({ errors: [{ msg: 'Unauthorized' }] }), {
             status: 401,

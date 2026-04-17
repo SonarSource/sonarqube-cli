@@ -35,16 +35,26 @@ const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const MAX_POST_BODY_BYTES = 4096;
 
+export type TokenStatus = 'valid' | 'invalid' | 'unreachable';
+
+export async function checkTokenStatus(serverURL: string, token: string): Promise<TokenStatus> {
+  try {
+    const client = new SonarQubeClient(serverURL, token);
+    return await client.checkTokenValidity();
+  } catch (err) {
+    // checkTokenValidity() lets HTTP errors propagate — any non-200 response or
+    // network failure is treated as a connectivity issue rather than an auth failure,
+    // because /api/authentication/validate always returns HTTP 200 per the SonarQube API contract.
+    logger.debug(`Token validation failed for ${serverURL}: ${(err as Error).message}`);
+    return 'unreachable';
+  }
+}
+
 /**
  * Validate token by calling SonarQube API
  */
 export async function validateToken(serverURL: string, token: string): Promise<boolean> {
-  try {
-    const client = new SonarQubeClient(serverURL, token);
-    return await client.validateToken();
-  } catch {
-    return false;
-  }
+  return (await checkTokenStatus(serverURL, token)) === 'valid';
 }
 
 /**
