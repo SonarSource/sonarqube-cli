@@ -26,11 +26,7 @@ Output goes to `dist/`.
 bun run build:binary
 ```
 
-Produces `dist/sonarqube-cli` using Bun's single-file compiler. To install it locally:
-
-```bash
-bun run setup
-```
+Produces `dist/sonarqube-cli` using Bun's single-file compiler. To use it locally, add `dist/` to your `PATH` or symlink `dist/sonarqube-cli` somewhere on your `PATH` (e.g. `ln -s "$PWD/dist/sonarqube-cli" ~/.local/bin/sonar`).
 
 ## Checks
 
@@ -51,28 +47,31 @@ bun run typecheck
 
 ```bash
 # Unit tests
-bun test
-
-# Script tests
-bun run test:scripts
+bun run test:unit
 
 # Integration tests (require env vars — see below)
 bun run test:integration
 
-# All tests
+# Unit + integration
 bun run test:all
+
+# End-to-end tests (verifies full integration with external systems)
+bun run test:e2e
+
+# Full merged lcov report (unit + integration, slow)
+bun run test:coverage
 ```
 
 ### Integration tests
 
-Integration tests hit real external services and require environment variables:
+Integration tests hit real external services and require environment variables. The CLI targets both **SonarQube Server** and **SonarQube Cloud**, so the token can come from either product:
 
 ```bash
-export SONAR_SECRETS_TOKEN="sqp_xxxxx"   # SonarQube (Server, Cloud) token for secret scanning
-export SONAR_SECRETS_AUTH_URL="https://sonarcloud.io"       # SonarQube (Server, Cloud) URL for onboard-agent tests
+export SONAR_SECRETS_TOKEN="sqp_xxxxx"                # SonarQube Server or Cloud token for secret scanning
+export SONAR_SECRETS_AUTH_URL="https://sonarcloud.io" # SonarQube Server or Cloud URL for onboard-agent tests
 ```
 
-Obtain a token from **sonarcloud.io → Account → Security → Generate token**.
+Obtain a token from your SonarQube instance: **My Account → Security → Generate token** (SonarQube Cloud at https://sonarcloud.io, or your self-hosted SonarQube Server).
 
 If the variables are not set, the relevant tests are skipped automatically — this is expected for local development.
 
