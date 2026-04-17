@@ -31,17 +31,18 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
+
 import { detectPlatform } from '../src/lib/platform-detector.js';
+import {
+  SONAR_SECRETS_SIGNATURES,
+  SONAR_SECRETS_VERSION,
+  SONARSOURCE_PUBLIC_KEY,
+} from '../src/lib/signatures.js';
 import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
 } from '../src/lib/sonarsource-releases.js';
-import {
-  SONAR_SECRETS_VERSION,
-  SONAR_SECRETS_SIGNATURES,
-  SONARSOURCE_PUBLIC_KEY,
-} from '../src/lib/signatures.js';
 
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
 const platform = detectPlatform();

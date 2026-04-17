@@ -84,6 +84,34 @@ export default tseslint.config(
     },
   },
 
+  // Build scripts: relaxed, no license-header enforcement, own tsconfig
+  {
+    files: ['build-scripts/**/*.ts'],
+    extends: [
+      ...tseslint.configs.recommendedTypeChecked,
+    ],
+    plugins: {
+      'simple-import-sort': simpleImportSort,
+    },
+    languageOptions: {
+      parserOptions: {
+        project: './tsconfig.build-scripts.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      'simple-import-sort/imports': 'error',
+      'simple-import-sort/exports': 'error',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-console': 'off',
+    },
+  },
+
   // Prettier must be last — disables all formatting rules
   prettierConfig,
 );

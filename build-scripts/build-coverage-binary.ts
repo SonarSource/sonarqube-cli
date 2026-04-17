@@ -30,9 +30,10 @@
  * Run via: bun build-scripts/build-coverage-binary.ts
  */
 
-import { createInstrumenter } from 'istanbul-lib-instrument';
 import { join } from 'node:path';
+
 import type { BunPlugin } from 'bun';
+import { createInstrumenter } from 'istanbul-lib-instrument';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
 const SRC_DIR = join(PROJECT_ROOT, 'src') + '/';
@@ -78,7 +79,7 @@ const result = await Bun.build({
 
 if (!result.success) {
   for (const log of result.logs) {
-    process.stderr.write(String(log) + '\n');
+    process.stderr.write(`${log.message ?? JSON.stringify(log)}\n`);
   }
   process.exit(1);
 }

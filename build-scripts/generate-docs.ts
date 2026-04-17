@@ -27,10 +27,12 @@
  *   bun run build-scripts/generate-docs.ts
  */
 
-import { writeFileSync, readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import type { Command, Option } from 'commander';
+
 import { COMMAND_TREE } from '../src/cli/command-tree.ts';
 import { EXAMPLES } from './examples.ts';
 
@@ -113,7 +115,7 @@ function renderCommand(cmd: Command, prefix: string, depth: number): string {
   const examples = renderExamples(name);
   if (examples) lines.push(examples);
 
-  const subcommands = cmd.commands.filter((c) => !c.hidden);
+  const subcommands = cmd.commands.filter((c) => !(c as Command & { hidden?: boolean }).hidden);
   if (subcommands.length > 0) {
     for (const sub of subcommands) {
       lines.push(renderCommand(sub, name, depth + 1));
@@ -125,7 +127,9 @@ function renderCommand(cmd: Command, prefix: string, depth: number): string {
   return lines.join('\n');
 }
 
-const visibleCommands = COMMAND_TREE.commands.filter((cmd) => !cmd.hidden);
+const visibleCommands = COMMAND_TREE.commands.filter(
+  (cmd) => !(cmd as Command & { hidden?: boolean }).hidden,
+);
 const authCmd = visibleCommands.find((cmd) => cmd.name() === 'auth');
 const otherCmds = visibleCommands.filter((cmd) => cmd.name() !== 'auth');
 const orderedCommands = authCmd ? [authCmd, ...otherCmds] : otherCmds;

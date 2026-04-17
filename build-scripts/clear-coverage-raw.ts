@@ -27,6 +27,7 @@
  */
 
 import { existsSync, rmSync } from 'node:fs';
+
 import { COVERAGE_RAW_DIR } from '../tests/coverage/paths.js';
 
 if (existsSync(COVERAGE_RAW_DIR)) {

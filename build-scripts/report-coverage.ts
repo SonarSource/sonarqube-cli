@@ -29,11 +29,13 @@
  * Run via: bun build-scripts/report-coverage.ts
  */
 
-import { createCoverageMap } from 'istanbul-lib-coverage';
-import { createContext } from 'istanbul-lib-report';
-import reports from 'istanbul-reports';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { type CoverageMapData, createCoverageMap } from 'istanbul-lib-coverage';
+import { createContext } from 'istanbul-lib-report';
+import reports from 'istanbul-reports';
+
 import { COVERAGE_INTEGRATION_REPORT_DIR, COVERAGE_RAW_DIR } from '../tests/coverage/paths.js';
 
 if (!existsSync(COVERAGE_RAW_DIR)) {
@@ -52,12 +54,11 @@ console.log(`Processing ${jsonFiles.length} integration coverage file(s)...`);
 
 const coverageMap = createCoverageMap({});
 for (const file of jsonFiles) {
-  const data = JSON.parse(readFileSync(join(COVERAGE_RAW_DIR, file), 'utf-8'));
+  const data = JSON.parse(readFileSync(join(COVERAGE_RAW_DIR, file), 'utf-8')) as CoverageMapData;
   coverageMap.merge(data);
 }
 
 const ctx = createContext({ coverageMap, dir: COVERAGE_INTEGRATION_REPORT_DIR });
-// @ts-ignore — istanbul-reports has no bundled type declarations
 reports.create('lcov').execute(ctx);
 
 console.log(`Integration lcov written to ${COVERAGE_INTEGRATION_REPORT_DIR}/lcov.info`);
