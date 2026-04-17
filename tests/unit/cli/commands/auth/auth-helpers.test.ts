@@ -54,6 +54,30 @@ describe('Auth Helper Functions', () => {
         `${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`,
       );
     });
+
+    it('should use /auth for SQS >= 2026.2', () => {
+      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, '2026.2');
+      expect(url).toBe(`${EXAMPLE_SERVER}/auth?product=cli&port=${TEST_PORT_A}`);
+    });
+
+    it('should use /auth for SQS Community >= 26.2', () => {
+      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, '26.2');
+      expect(url).toBe(`${EXAMPLE_SERVER}/auth?product=cli&port=${TEST_PORT_A}`);
+    });
+
+    it('should use /sonarlint/auth for SQS < 2026.2', () => {
+      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, '2025.1');
+      expect(url).toBe(
+        `${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`,
+      );
+    });
+
+    it('should fallback to /sonarlint/auth when server version is unknown/SQC', () => {
+      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, undefined);
+      expect(url).toBe(
+        `${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`,
+      );
+    });
   });
 
   describe('extractTokenFromPostBody', () => {

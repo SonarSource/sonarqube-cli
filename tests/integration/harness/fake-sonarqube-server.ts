@@ -112,6 +112,8 @@ export class FakeSonarQubeServerBuilder {
     { uuid: string; eligible: boolean; enabled: boolean }
   > = new Map();
   private validToken?: string;
+  private systemStatusCode = 200;
+  private systemVersion = '9.9.0.00001';
   private memberOrganizations: Array<{ key: string; name: string }> = [];
   private memberOrganizationsTotal?: number;
   private sqaaResponse?: SqaaResponseConfig;
@@ -125,6 +127,16 @@ export class FakeSonarQubeServerBuilder {
 
   withAuthToken(token: string): this {
     this.validToken = token;
+    return this;
+  }
+
+  withVersion(version: string): this {
+    this.systemVersion = version;
+    return this;
+  }
+
+  withSystemStatusCode(code: number): this {
+    this.systemStatusCode = code;
     return this;
   }
 
@@ -161,6 +173,8 @@ export class FakeSonarQubeServerBuilder {
     const {
       validToken,
       systemStatus,
+      systemStatusCode,
+      systemVersion,
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
       sqaaResponse,
@@ -193,6 +207,14 @@ export class FakeSonarQubeServerBuilder {
           timestamp: Date.now(),
         });
 
+        // Public endpoints (no auth required)
+        if (path === '/api/system/status') {
+          return new Response(JSON.stringify({ status: systemStatus, version: systemVersion }), {
+            status: systemStatusCode,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
         const authHeader = req.headers.get('Authorization');
         const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
         const isAuthorized = !validToken || bearerToken === validToken;
@@ -212,12 +234,6 @@ export class FakeSonarQubeServerBuilder {
 
         if (path === '/api/editions/is_valid_license') {
           return new Response(JSON.stringify({ isValidLicense: true }), {
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-
-        if (path === '/api/system/status') {
-          return new Response(JSON.stringify({ status: systemStatus, version: '9.9.0.00001' }), {
             headers: { 'Content-Type': 'application/json' },
           });
         }

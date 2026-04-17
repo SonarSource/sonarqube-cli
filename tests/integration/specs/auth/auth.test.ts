@@ -441,6 +441,115 @@ describe('auth purge', () => {
   );
 });
 
+describe('auth login — auth URL', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'uses /auth endpoint for SQS >= 2026.2',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withVersion('2026.2')
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('/auth?product=cli&port=');
+      expect(result.stdout).not.toContain('/sonarlint/auth');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses /auth endpoint for SQS Community >= 26.2',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withVersion('26.2')
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('/auth?product=cli&port=');
+      expect(result.stdout).not.toContain('/sonarlint/auth');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses legacy /sonarlint/auth endpoint for SQS < 2026.2',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withVersion('2025.1')
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('/sonarlint/auth?ideName=sonarqube-cli&port=');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses legacy /sonarlint/auth endpoint for SQS Community < 26.2',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withVersion('25.1')
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('/sonarlint/auth?ideName=sonarqube-cli&port=');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to legacy /sonarlint/auth endpoint when /api/system/status returns 503',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withSystemStatusCode(503)
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('/sonarlint/auth?ideName=sonarqube-cli&port=');
+    },
+    { timeout: 15000 },
+  );
+});
+
 describe('auth status', () => {
   let harness: TestHarness;
 

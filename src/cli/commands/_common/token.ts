@@ -23,9 +23,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
 
+import { isSonarQubeCloud } from '../../../lib/auth-resolver';
 import { openBrowser } from '../../../lib/browser';
 import logger from '../../../lib/logger';
 import { startLoopbackServer } from '../../../lib/loopback-server';
+import { fetchServerVersion, isAtLeast } from '../../../lib/server-info';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { isMockActive, pressEnterKeyPrompt, print, warn } from '../../../ui';
 import { blue } from '../../../ui/colors';
@@ -67,12 +69,12 @@ export function extractTokenFromPostBody(body: string): string | undefined {
 /**
  * Build authentication URL from server URL and port
  */
-export function buildAuthURL(serverURL: string, port: number): string {
+export function buildAuthURL(serverURL: string, port: number, serverVersion?: string): string {
   const cleanServerURL = serverURL.replace(/\/$/, '');
-  if (serverURL.includes('sonarcloud') || serverURL.includes('sonarqube.us')) {
+  if (isSonarQubeCloud(serverURL) || isAtLeast(serverVersion, '26.2')) {
     return `${cleanServerURL}/auth?product=cli&port=${port}`;
   }
-  // temporarily fallback to SQS and IDE auth page, should be fixed soon
+
   return `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
 }
 
@@ -213,6 +215,10 @@ export async function generateTokenViaBrowser(
     resolveToken = resolve;
   });
 
+  const serverVersion = isSonarQubeCloud(serverURL)
+    ? undefined
+    : await fetchServerVersion(serverURL).catch(() => undefined);
+
   // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
   const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
@@ -224,7 +230,7 @@ export async function generateTokenViaBrowser(
     { allowedOrigins: [serverOrigin] },
   );
 
-  const authURL = buildAuthURL(serverURL, server.port);
+  const authURL = buildAuthURL(serverURL, server.port, serverVersion);
 
   print('🔑 Obtaining access token from SonarQube...');
   print(`URL: ${blue(authURL)}`);

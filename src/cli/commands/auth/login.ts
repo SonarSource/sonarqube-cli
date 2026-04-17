@@ -66,8 +66,8 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
     if (isCloud && org) {
       connection.organizationUuidV4 = await apiClient.getOrganizationId(org);
     } else if (!isCloud) {
-      const status = await apiClient.getSystemStatus();
-      connection.sqsInstallationId = status.id ?? null;
+      const status = await apiClient.getSystemStatus().catch(() => null);
+      connection.sqsInstallationId = status?.id ?? null;
     }
   }
 
