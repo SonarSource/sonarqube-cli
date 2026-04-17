@@ -6,7 +6,7 @@ import headersPlugin from 'eslint-plugin-headers';
 export default tseslint.config(
   // Global ignores
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'scripts/**', 'plop-templates/**'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
   },
 
   // License header enforcement
