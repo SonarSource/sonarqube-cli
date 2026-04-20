@@ -76,9 +76,7 @@ export class TestHarness {
    * Configure it before calling run().
    */
   state(): EnvironmentBuilder {
-    if (!this._envBuilder) {
-      this._envBuilder = new EnvironmentBuilder();
-    }
+    this._envBuilder ??= new EnvironmentBuilder();
     return this._envBuilder;
   }
 
@@ -173,7 +171,7 @@ export class TestHarness {
       stdin: options?.stdin,
       stdinChunks: options?.stdinChunks,
       timeoutMs: options?.timeoutMs,
-      cwd: this.cwd.path,
+      cwd: options?.cwd ?? this.cwd.path,
       browserToken: options?.browserToken,
       browserTokenName: options?.browserTokenName,
     });

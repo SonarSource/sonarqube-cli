@@ -29,6 +29,8 @@ export interface CliResult {
 
 export interface RunOptions {
   extraEnv?: Record<string, string>;
+  /** Working directory for the CLI process. Defaults to harness.cwd.path. */
+  cwd?: string;
   timeoutMs?: number;
   stdin?: string;
   /**

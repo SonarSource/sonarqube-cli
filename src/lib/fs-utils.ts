@@ -18,4 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
+
+/**
+ * Returns the canonical, fully-resolved path for a directory.
+ * On Windows, realpathSync resolves the filesystem-authoritative casing
+ * (e.g. "c:\Users\..." → "C:\Users\..."), preventing duplicate keys when
+ * the same directory is represented with different cases or separators.
+ * Falls back to path.resolve() if the path doesn't exist yet.
+ */
+export function canonicalizePath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+}

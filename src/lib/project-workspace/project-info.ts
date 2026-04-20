@@ -20,10 +20,11 @@
 
 // Project workspace: git root, sonar-project.properties, SonarLint connected mode
 
-import { existsSync, realpathSync, statSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 import { print } from '../../ui';
+import { canonicalizePath } from '../fs-utils';
 import logger from '../logger';
 import { spawnProcess } from '../process';
 import { loadSonarLintConfig, type SonarLintConfig } from './sonarlint-connected-mode';
@@ -47,6 +48,8 @@ export interface DiscoveredProject {
   serverUrl?: string;
   organization?: string;
   projectKey?: string;
+  /** Config files that contributed to the discovered project, in order found. */
+  configSources: string[];
 }
 
 export interface SonarProperties {
@@ -107,21 +110,6 @@ export async function discoverOrganization(): Promise<string | null> {
   }
 }
 
-/**
- * Returns the canonical, fully-resolved path for a directory.
- * On Windows, realpathSync resolves the filesystem-authoritative casing
- * (e.g. "c:\Users\..." → "C:\Users\..."), preventing duplicate keys when
- * the same directory is represented with different cases or separators.
- * Falls back to path.resolve() if the path doesn't exist yet.
- */
-function canonicalizePath(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    return resolve(p);
-  }
-}
-
 export async function discoverProjectInfo(startDir: string): Promise<ProjectInfo> {
   const { gitRoot, isGit } = findGitRoot(startDir);
 
@@ -154,10 +142,11 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
   const config: DiscoveredProject = {
     rootDir: projectInfo.root,
     isGitRepo: projectInfo.isGitRepo,
+    configSources: [],
   };
 
   if (projectInfo.hasSonarProps && projectInfo.sonarPropsData) {
-    print('Found sonar-project.properties');
+    config.configSources.push('sonar-project.properties');
     config.serverUrl = projectInfo.sonarPropsData.hostURL;
     config.projectKey = projectInfo.sonarPropsData.projectKey;
     config.organization = projectInfo.sonarPropsData.organization;
@@ -168,7 +157,7 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
     projectInfo.sonarLintData &&
     projectInfo.sonarLintConfigPath
   ) {
-    print(`Found ${projectInfo.sonarLintConfigPath}`);
+    config.configSources.push(projectInfo.sonarLintConfigPath);
     config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
     config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
     config.organization = config.organization || projectInfo.sonarLintData.organization;

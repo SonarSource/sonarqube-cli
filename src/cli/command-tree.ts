@@ -52,6 +52,7 @@ import {
   VALID_STATUSES,
 } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { runMcp } from './commands/run/mcp.js';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { getBanner, getCustomRootHelp } from './root-help.js';
 
@@ -256,6 +257,26 @@ COMMAND_TREE.command('self-update')
   .option('--status', 'Check for a newer version without installing')
   .option('--force', 'Install the latest version even if already up to date')
   .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
+
+const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
+  'Run SonarQube services',
+);
+
+// Hidden command for running MCP server. Spawns MCP Docker container and proxies stdio for MCP transport.
+runCommand
+  .command('mcp')
+  .description('Run the SonarQube MCP server (stdio transport, for use in agent MCP configs)')
+  .option('--debug', 'Enable debug logging in the MCP server container')
+  .option('--read-only', 'Start the MCP server in read-only mode')
+  .option(
+    '--toolsets <toolsets>',
+    'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,cag,portfolios)',
+  )
+  .option('-p, --project <project>', 'Project key (skips auto-discovery)')
+  .authenticatedAction(
+    (auth, options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string }) =>
+      runMcp(auth, options),
+  );
 
 // Hidden callback command — internal handlers for agent and git hooks.
 // Shell hook scripts call `sonar hook <event>` to delegate all business logic to TypeScript.

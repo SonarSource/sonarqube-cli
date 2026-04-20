@@ -88,11 +88,7 @@ describe('Project workspace + SonarLint (harness)', () => {
       expect(discovered.serverUrl).toBe('https://sonarqube.example.com');
       expect(discovered.projectKey).toBe('my_server_project');
       expect(discovered.organization).toBeUndefined();
-
-      const expected = `Found ${join('.sonarlint', 'connectedMode.json')}`;
-      expect(
-        getMockUiCalls().some((c) => c.method === 'print' && String(c.args[0]) === expected),
-      ).toBe(true);
+      expect(discovered.configSources).toEqual([join('.sonarlint', 'connectedMode.json')]);
     },
     { timeout: 15000 },
   );

@@ -31,7 +31,7 @@ import {
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
+import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { runHealthChecks } from './health';
@@ -67,6 +67,9 @@ export async function integrateClaude(
   blank();
 
   const project = await discoverProject(process.cwd());
+  for (const configSource of project.configSources) {
+    print(`Found ${configSource}`);
+  }
   const config = loadConfiguration(project, options, auth);
   validateConfiguration(project, config);
 

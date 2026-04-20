@@ -26,11 +26,11 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   getMcpConfigFilePath,
-  getMcpServerConfig,
   setupMcpServer,
   writeMcpServerEntry,
 } from '../../../../../../src/cli/commands/integrate/claude/mcp';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
+import { getMcpServerConfig } from '../../../../../../src/lib/mcp/server-config';
 import * as toolDetector from '../../../../../../src/lib/tool-detector';
 import { getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
@@ -54,7 +54,7 @@ const CLOUD_US_AUTH: ResolvedAuth = {
 
 describe('getMcpServerConfig', () => {
   it('returns a docker command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, true, '/fake/project', undefined, 'docker');
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, 'docker', { withFsMount: false });
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -74,7 +74,7 @@ describe('getMcpServerConfig', () => {
   });
 
   it('returns a podman command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, true, '/fake/project', undefined, 'podman');
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, 'podman', { withFsMount: false });
     expect(config).toEqual({
       command: 'podman',
       args: [
@@ -95,7 +95,7 @@ describe('getMcpServerConfig', () => {
 
   it('returns a docker command with SONARQUBE_ORG for cloud (sonarcloud.io)', () => {
     const auth: ResolvedAuth = { ...CLOUD_AUTH, orgKey: 'my-org' };
-    const config = getMcpServerConfig(auth, true, '/fake/project', undefined, 'docker');
+    const config = getMcpServerConfig(auth, 'docker', { withFsMount: false });
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -122,7 +122,7 @@ describe('getMcpServerConfig', () => {
 
   it('returns a docker command with SONARQUBE_ORG for cloud US (sonarqube.us)', () => {
     const auth: ResolvedAuth = { ...CLOUD_US_AUTH, orgKey: 'my-org' };
-    const config = getMcpServerConfig(auth, true, '/fake/project', undefined, 'docker');
+    const config = getMcpServerConfig(auth, 'docker', { withFsMount: false });
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -148,13 +148,10 @@ describe('getMcpServerConfig', () => {
   });
 
   it('uses forward slashes in the -v host path on Windows-style roots', () => {
-    const config = getMcpServerConfig(
-      ON_PREMISE_AUTH,
-      false,
-      String.raw`C:\Users\tdd\source\repos\sonarlint-core`,
-      undefined,
-      'docker',
-    );
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, 'docker', {
+      withFsMount: true,
+      projectRoot: String.raw`C:\Users\tdd\source\repos\sonarlint-core`,
+    });
     const args = (config as { args: string[] }).args;
     const vIndex = args.indexOf('-v');
     expect(vIndex).toBeGreaterThan(-1);
@@ -162,7 +159,10 @@ describe('getMcpServerConfig', () => {
   });
 
   it('returns a docker command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', undefined, 'docker');
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, 'docker', {
+      withFsMount: true,
+      projectRoot: '/fake/project',
+    });
     expect(config).toEqual({
       command: 'docker',
       args: [
@@ -184,7 +184,10 @@ describe('getMcpServerConfig', () => {
   });
 
   it('returns a podman command with -v ${projectRoot}:/app/mcp-workspace:ro for non-global config', () => {
-    const config = getMcpServerConfig(ON_PREMISE_AUTH, false, '/fake/project', undefined, 'podman');
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, 'podman', {
+      withFsMount: true,
+      projectRoot: '/fake/project',
+    });
     expect(config).toEqual({
       command: 'podman',
       args: [
@@ -206,13 +209,11 @@ describe('getMcpServerConfig', () => {
   });
 
   it('returns a docker command with SONARQUBE_PROJECT_KEY for non-global config with project key', () => {
-    const config = getMcpServerConfig(
-      ON_PREMISE_AUTH,
-      false,
-      '/fake/project',
-      'my-project',
-      'docker',
-    );
+    const config = getMcpServerConfig(ON_PREMISE_AUTH, 'docker', {
+      withFsMount: true,
+      projectRoot: '/fake/project',
+      discoveredProjectKey: 'my-project',
+    });
     expect(config).toEqual({
       command: 'docker',
       args: [

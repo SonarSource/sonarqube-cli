@@ -27,7 +27,8 @@ import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { normalizePath } from '../../../../lib/fs-utils';
-import { type ContainerRuntime, detectContainerRuntime } from '../../../../lib/tool-detector';
+import { getMcpServerConfig } from '../../../../lib/mcp/server-config';
+import { detectContainerRuntime } from '../../../../lib/tool-detector';
 import { error, info, success, warn } from '../../../../ui';
 
 export async function setupMcpServer(
@@ -50,10 +51,8 @@ export async function setupMcpServer(
   const targetFile = getMcpConfigFilePath(agent);
   const serverConfig = getMcpServerConfig(
     auth,
-    isGlobal,
-    projectRoot,
-    discoveredProjectKey,
     runtime,
+    isGlobal ? { withFsMount: false } : { withFsMount: true, projectRoot, discoveredProjectKey },
   );
 
   try {
@@ -104,45 +103,4 @@ export function getMcpConfigFilePath(agent: string): string {
     return join(homedir(), '.claude.json');
   }
   throw new Error(`Unsupported agent: ${agent}`);
-}
-
-export function getMcpServerConfig(
-  auth: ResolvedAuth,
-  isGlobal: boolean,
-  projectRoot: string,
-  discoveredProjectKey: string | undefined,
-  runtime: ContainerRuntime,
-): object {
-  const { token, orgKey: org, serverUrl } = auth;
-
-  const args = [
-    'run',
-    '--init',
-    '--pull=always',
-    '-i',
-    '--rm',
-    '-e',
-    'SONARQUBE_TOKEN',
-    '-e',
-    'SONARQUBE_URL',
-  ];
-  const env: Record<string, string> = { SONARQUBE_TOKEN: token, SONARQUBE_URL: serverUrl };
-
-  if (auth.connectionType === 'cloud') {
-    args.push('-e', 'SONARQUBE_ORG');
-    env.SONARQUBE_ORG = org ?? '';
-  }
-
-  if (!isGlobal) {
-    const hostPath = normalizePath(projectRoot);
-    if (discoveredProjectKey) {
-      args.push('-e', 'SONARQUBE_PROJECT_KEY');
-      env.SONARQUBE_PROJECT_KEY = discoveredProjectKey;
-    }
-    args.push('-v', `${hostPath}:/app/mcp-workspace:ro`);
-  }
-
-  args.push('mcp/sonarqube');
-
-  return { command: runtime, args, env };
 }

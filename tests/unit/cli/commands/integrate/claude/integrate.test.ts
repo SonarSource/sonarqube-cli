@@ -722,6 +722,7 @@ describe('integrateCommand', () => {
       serverUrl: project.serverUrl,
       organization: project.organization,
       projectKey: project.projectKey,
+      configSources: project.configSources ?? [],
     });
   }
 
