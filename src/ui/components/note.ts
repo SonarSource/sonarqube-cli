@@ -21,9 +21,10 @@
 // Boxed note component with optional title
 
 import { getColumns } from '@clack/core';
-import { isTTY, bold, dim } from '../colors.js';
+
+import { bold, dim, isTTY } from '../colors.js';
 import { isMockActive, recordCall } from '../mock.js';
-import type { NoteOptions, ColorFn } from '../types.js';
+import type { ColorFn, NoteOptions } from '../types.js';
 
 const MIN_WIDTH = 40;
 const MAX_WIDTH = 80;

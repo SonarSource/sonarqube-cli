@@ -20,35 +20,37 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
+import { InvalidOptionError } from '../../../../../../src/cli/commands/_common/error.js';
+import * as secretsInstall from '../../../../../../src/cli/commands/_common/install/secrets';
 import {
-  isGitHookType,
-  hasMarker,
-  resolveGitHooksDir,
-  resolveHookType,
   detectSonarHookInstallation as detectHookInstallation,
-  showPostInstallInfo,
-  showInstallationStatus,
+  hasMarker,
   installViaGitHooks,
   integrateGit,
   type IntegrateGitOptions,
+  isGitHookType,
+  resolveGitHooksDir,
+  resolveHookType,
+  showInstallationStatus,
+  showPostInstallInfo,
 } from '../../../../../../src/cli/commands/integrate/git';
-import { InvalidOptionError } from '../../../../../../src/cli/commands/_common/error.js';
-import { HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/git-shell-fragments';
-import { PRE_COMMIT_CONFIG_FILE } from '../../../../../../src/cli/commands/integrate/git/git-precommit-framework';
-import {
-  setMockUi,
-  queueMockResponse,
-  getMockUiCalls,
-  clearMockUiCalls,
-} from '../../../../../../src/ui';
-import * as processLib from '../../../../../../src/lib/process.js';
-import * as authResolver from '../../../../../../src/lib/auth-resolver';
-import * as discovery from '../../../../../../src/lib/project-workspace';
-import * as secretsInstall from '../../../../../../src/cli/commands/_common/install/secrets';
 import * as huskyModule from '../../../../../../src/cli/commands/integrate/git/git-husky';
 import * as preCommitModule from '../../../../../../src/cli/commands/integrate/git/git-precommit-framework';
+import { PRE_COMMIT_CONFIG_FILE } from '../../../../../../src/cli/commands/integrate/git/git-precommit-framework';
+import { HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/git-shell-fragments';
+import * as authResolver from '../../../../../../src/lib/auth-resolver';
 import { GLOBAL_HOOKS_DIR } from '../../../../../../src/lib/config-constants';
+import * as processLib from '../../../../../../src/lib/process.js';
+import * as discovery from '../../../../../../src/lib/project-workspace';
+import {
+  clearMockUiCalls,
+  getMockUiCalls,
+  queueMockResponse,
+  setMockUi,
+} from '../../../../../../src/ui';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 

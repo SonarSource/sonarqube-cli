@@ -21,6 +21,7 @@
 // Integration tests for `api` — generic authenticated API requests
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 describe('api', () => {

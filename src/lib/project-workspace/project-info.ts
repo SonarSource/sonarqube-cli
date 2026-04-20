@@ -21,11 +21,12 @@
 // Project workspace: git root, sonar-project.properties, SonarLint connected mode
 
 import { existsSync, realpathSync, statSync } from 'node:fs';
-import { join, dirname, basename, resolve } from 'node:path';
-import { loadSonarLintConfig, type SonarLintConfig } from './sonarlint-connected-mode';
+import { basename, dirname, join, resolve } from 'node:path';
+
+import { print } from '../../ui';
 import logger from '../logger';
 import { spawnProcess } from '../process';
-import { print } from '../../ui';
+import { loadSonarLintConfig, type SonarLintConfig } from './sonarlint-connected-mode';
 
 export interface ProjectInfo {
   root: string;

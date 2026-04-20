@@ -22,10 +22,11 @@
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
 import { existsSync } from 'node:fs';
+
 import logger from '../../../lib/logger';
-import { readStdinJson } from './stdin';
-import { resolveAuthAndSecrets } from './hook-dependencies';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
+import { resolveAuthAndSecrets } from './hook-dependencies';
+import { readStdinJson } from './stdin';
 
 interface PreToolUsePayload {
   tool_name?: string;

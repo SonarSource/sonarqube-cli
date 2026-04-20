@@ -20,6 +20,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
+
 import { version as VERSION } from '../../../../../package.json';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { deleteStaleTokens } from '../../../../lib/keychain';

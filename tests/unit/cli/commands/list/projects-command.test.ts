@@ -2,13 +2,14 @@
  * Tests for projects search command logic
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { MAX_PAGE_SIZE } from '../../../../../src/sonarqube/projects.js';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { listProjects, ListProjectsOptions } from '../../../../../src/cli/commands/list/projects';
-import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.js';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../../../src/ui';
 import type { ProjectsSearchResponse } from '../../../../../src/lib/types.js';
+import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
+import { MAX_PAGE_SIZE } from '../../../../../src/sonarqube/projects.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const DEFAULT_OPTIONS: ListProjectsOptions = {
   page: 1,

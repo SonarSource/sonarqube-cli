@@ -25,9 +25,10 @@
  * concurrent processes always converge on the same UUID.
  */
 
-import { openSync, closeSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
 import { CLI_DIR } from '../lib/config-constants.js';
 
 const USER_FILE = join(CLI_DIR, 'user');

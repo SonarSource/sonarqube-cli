@@ -22,11 +22,12 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
+
 import { openBrowser } from '../../../lib/browser';
-import { SonarQubeClient } from '../../../sonarqube/client';
-import { startLoopbackServer } from '../../../lib/loopback-server';
 import logger from '../../../lib/logger';
-import { warn, print, pressEnterKeyPrompt, isMockActive } from '../../../ui';
+import { startLoopbackServer } from '../../../lib/loopback-server';
+import { SonarQubeClient } from '../../../sonarqube/client';
+import { isMockActive, pressEnterKeyPrompt, print, warn } from '../../../ui';
 import { blue } from '../../../ui/colors';
 
 const HTTP_STATUS_OK = 200;

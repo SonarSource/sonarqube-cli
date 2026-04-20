@@ -22,7 +22,8 @@
  * Tests for state management
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+
 import { getDefaultState } from '../../../src/lib/state.js';
 
 describe('State Management', () => {

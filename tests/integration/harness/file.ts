@@ -22,6 +22,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
+
 import { IS_WINDOWS } from './platform';
 
 export class File {

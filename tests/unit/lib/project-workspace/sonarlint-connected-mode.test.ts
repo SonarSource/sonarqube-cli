@@ -18,10 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
 import { chmodSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { describe, expect, it } from 'bun:test';
+
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
 import { loadSonarLintConfig } from '../../../../src/lib/project-workspace';
 

@@ -20,9 +20,10 @@
 
 // Interactive prompts — text input, confirmation, press-to-continue
 
-import { TextPrompt, ConfirmPrompt, SelectPrompt, isCancel } from '@clack/core';
-import { cyan, green, red, dim } from '../colors.js';
-import { isMockActive, recordCall, dequeueMockResponse } from '../mock.js';
+import { ConfirmPrompt, isCancel, SelectPrompt, TextPrompt } from '@clack/core';
+
+import { cyan, dim, green, red } from '../colors.js';
+import { dequeueMockResponse, isMockActive, recordCall } from '../mock.js';
 
 const CTRL_C = 0x03;
 const ENTER_CR = 0x0d;

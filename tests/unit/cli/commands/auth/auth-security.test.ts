@@ -21,12 +21,12 @@
 // Tests for security features of the loopback OAuth server:
 // response headers, DNS rebinding protection, Host header validation, body size limits
 
-import { describe, it, expect, afterEach } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 
 import { createRequestHandler } from '../../../../../src/cli/commands/_common/token.js';
 import {
-  startLoopbackServer,
   type LoopbackServerResult,
+  startLoopbackServer,
 } from '../../../../../src/lib/loopback-server.js';
 
 const LOOPBACK_HOST = '127.0.0.1';

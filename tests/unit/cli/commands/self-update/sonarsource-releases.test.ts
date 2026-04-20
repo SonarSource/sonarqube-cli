@@ -18,12 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect } from 'bun:test';
-import { buildDownloadUrl } from '../../../../../src/lib/sonarsource-releases.js';
+import { describe, expect, it } from 'bun:test';
+
 import {
-  SONARSOURCE_BINARIES_URL,
   SONAR_SECRETS_DIST_PREFIX,
+  SONARSOURCE_BINARIES_URL,
 } from '../../../../../src/lib/config-constants.js';
+import { buildDownloadUrl } from '../../../../../src/lib/sonarsource-releases.js';
 
 describe('sonarsource-releases', () => {
   describe('buildDownloadUrl', () => {

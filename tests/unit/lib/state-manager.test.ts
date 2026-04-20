@@ -22,17 +22,18 @@
  * Tests for state manager
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+
+import type { SkillExtension } from '../../../src/lib/state.js';
+import { getDefaultState } from '../../../src/lib/state.js';
 import {
-  generateConnectionId,
+  addInstalledHook,
   addOrUpdateConnection,
+  generateConnectionId,
   getActiveConnection,
   markAgentConfigured,
-  addInstalledHook,
   upsertAgentExtension,
 } from '../../../src/lib/state-manager.js';
-import { getDefaultState } from '../../../src/lib/state.js';
-import type { SkillExtension } from '../../../src/lib/state.js';
 
 describe('State Manager', () => {
   describe('generateConnectionId', () => {

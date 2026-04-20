@@ -18,13 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as nodeOs from 'node:os';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
+
 import {
-  installHooks,
   areHooksInstalled,
+  installHooks,
 } from '../../../../../../src/cli/commands/integrate/claude/hooks';
 
 const PROJECT_ROOT = '/fake/project';

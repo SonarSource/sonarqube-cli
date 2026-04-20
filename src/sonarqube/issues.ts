@@ -20,8 +20,8 @@
 
 // SonarQube Issues API wrapper
 
-import { type SonarQubeClient } from './client.js';
 import type { IssuesSearchParams, IssuesSearchResponse } from '../lib/types.js';
+import { type SonarQubeClient } from './client.js';
 
 export class IssuesClient {
   private readonly client: SonarQubeClient;

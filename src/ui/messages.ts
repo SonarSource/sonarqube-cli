@@ -20,7 +20,7 @@
 
 // Inline terminal output — non-interactive, static messages
 
-import { isTTY, cyan, yellow, red, green } from './colors.js';
+import { cyan, green, isTTY, red, yellow } from './colors.js';
 import { isMockActive, recordCall } from './mock.js';
 import type { ColorFn } from './types.js';
 

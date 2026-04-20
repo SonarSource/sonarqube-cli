@@ -21,8 +21,9 @@
 // Keychain operations - OS-backed via Bun.secrets, with file fallback for tests
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { APP_NAME } from './config-constants.js';
+
 import { CommandFailedError } from '../cli/commands/_common/error.js';
+import { APP_NAME } from './config-constants.js';
 import { loadState } from './state-manager.js';
 
 function getServiceName(): string {

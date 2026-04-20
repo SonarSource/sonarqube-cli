@@ -19,12 +19,14 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { detectCallerAgent } from '../lib/agent-detector.js';
-import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
-import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
-import { getOrCreateUserId } from './user.js';
+
 import { type Command } from 'commander';
+
 import { version as VERSION } from '../../package.json';
+import { detectCallerAgent } from '../lib/agent-detector.js';
+import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
+import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
+import { getOrCreateUserId } from './user.js';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
 

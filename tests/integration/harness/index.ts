@@ -22,26 +22,27 @@
 
 import { mkdirSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { runCli } from './cli-runner.js';
-import { EnvironmentBuilder } from './environment-builder.js';
 import { Dir } from './dir';
-import { buildHomeEnv } from './platform';
-import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
+import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
-import type { CliResult, RunOptions } from './types.js';
+import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { File } from './file';
+import { buildHomeEnv } from './platform';
+import type { CliResult, RunOptions } from './types.js';
 
 export { EnvironmentBuilder } from './environment-builder.js';
+export { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 export {
-  FakeSonarQubeServerBuilder,
   FakeSonarQubeServer,
+  FakeSonarQubeServerBuilder,
   ProjectBuilder,
 } from './fake-sonarqube-server.js';
-export { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
-export type { CliResult, RunOptions, RecordedRequest } from './types.js';
-export { IS_WINDOWS, SCRIPT_EXT, hookScriptName, hookScriptPath, normalizePath } from './platform';
+export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath, SCRIPT_EXT } from './platform';
+export type { CliResult, RecordedRequest, RunOptions } from './types.js';
 
 export class TestHarness {
   public readonly cwd: Dir;

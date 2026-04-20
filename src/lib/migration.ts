@@ -23,21 +23,22 @@
 // It should eventually become part of a dedicated post-update mechanism that
 // runs automatically after CLI upgrades, to be implemented in a future iteration.
 
-import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+
+import { version as CURRENT_VERSION } from '../../package.json';
+import { installHooks } from '../cli/commands/integrate/claude/hooks';
 import logger from './logger';
+import type { CliState, HookExtension } from './state';
 import {
+  addInstalledHook,
+  getActiveConnection,
   loadState,
   saveState,
-  addInstalledHook,
   upsertAgentExtension,
-  getActiveConnection,
 } from './state-manager';
-import type { CliState, HookExtension } from './state';
-import { installHooks } from '../cli/commands/integrate/claude/hooks';
-import { version as CURRENT_VERSION } from '../../package.json';
 
 // Version that introduced the new hook architecture (separate secrets/SQAA hooks)
 const NEW_HOOK_ARCH_VERSION = CURRENT_VERSION;

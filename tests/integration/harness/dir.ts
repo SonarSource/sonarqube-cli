@@ -21,7 +21,8 @@
 // Declarative builder for test file system fixtures
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+
 import { File } from './file';
 
 export class Dir {

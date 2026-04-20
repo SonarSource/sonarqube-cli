@@ -18,15 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, afterEach } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+
+import { AUTH_PORT_COUNT, AUTH_PORT_START } from '../../../src/lib/config-constants.js';
 import {
-  startLoopbackServer,
   getSecurityHeaders,
-  isValidLoopbackOrigin,
   isValidLoopbackHost,
+  isValidLoopbackOrigin,
   type LoopbackServerResult,
+  startLoopbackServer,
 } from '../../../src/lib/loopback-server.js';
-import { AUTH_PORT_START, AUTH_PORT_COUNT } from '../../../src/lib/config-constants.js';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;

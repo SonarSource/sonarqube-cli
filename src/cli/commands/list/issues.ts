@@ -20,15 +20,16 @@
 
 // Issues command - search for SonarQube issues
 
+import { encode as encodeToToon } from '@toon-format/toon';
+
+import { formatCSV } from '../../../formatter/csv';
+import { formatTable } from '../../../formatter/table';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import type { IssuesSearchParams } from '../../../lib/types';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { IssuesClient } from '../../../sonarqube/issues';
-import { encode as encodeToToon } from '@toon-format/toon';
-import { formatTable } from '../../../formatter/table';
-import { formatCSV } from '../../../formatter/csv';
-import type { IssuesSearchParams } from '../../../lib/types';
-import { print } from '../../../ui';
 import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
+import { print } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 
 const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];

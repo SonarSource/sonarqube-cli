@@ -20,9 +20,10 @@
 
 // Unit tests for table and CSV formatters
 
-import { describe, it, expect } from 'bun:test';
-import { formatTable } from '../../../src/formatter/table.js';
+import { describe, expect, it } from 'bun:test';
+
 import { formatCSV } from '../../../src/formatter/csv.js';
+import { formatTable } from '../../../src/formatter/table.js';
 import type { SonarQubeIssue } from '../../../src/lib/types.js';
 
 function makeIssue(overrides: Partial<SonarQubeIssue> = {}): SonarQubeIssue {

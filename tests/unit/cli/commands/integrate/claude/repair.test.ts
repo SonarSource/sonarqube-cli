@@ -19,8 +19,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
-import { repairToken } from '../../../../../../src/cli/commands/integrate/claude/repair';
+
 import * as token from '../../../../../../src/cli/commands/_common/token';
+import { repairToken } from '../../../../../../src/cli/commands/integrate/claude/repair';
 import * as keychain from '../../../../../../src/lib/keychain';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 

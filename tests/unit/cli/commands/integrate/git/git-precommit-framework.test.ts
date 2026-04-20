@@ -20,18 +20,20 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import yaml from 'js-yaml';
+
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import {
-  PRE_COMMIT_CONFIG_FILE,
   hasSonarHookInPreCommitConfig,
-  upsertPreCommitConfig,
-  runPreCommitInstall,
   installViaPreCommitFramework,
+  PRE_COMMIT_CONFIG_FILE,
+  runPreCommitInstall,
+  upsertPreCommitConfig,
 } from '../../../../../../src/cli/commands/integrate/git/git-precommit-framework';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../../../../src/ui/mock';
 import * as processLib from '../../../../../../src/lib/process.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui/mock';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-tmp');
 

@@ -21,9 +21,10 @@
 // Tests for messages.ts: info, success, warn, error, text, print, blank
 // Covers both mock mode (recordCall) and real output paths
 
-import { describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
-import { info, success, warn, error, text, print, blank } from '../../../src/ui';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../src/ui';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
+import { blank, error, info, print, success, text, warn } from '../../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 

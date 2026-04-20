@@ -21,7 +21,7 @@
 // TTY rendering tests for phase, sections, and messages
 // mock.module sets isTTY: true so TTY branches execute
 
-import { describe, it, expect, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
 void mock.module('../../../src/ui/colors.js', () => ({
   isTTY: true,
@@ -54,6 +54,7 @@ void mock.module('../../../src/ui/colors.js', () => ({
 }));
 
 import { mock } from 'bun:test';
+
 import { phase, phaseItem } from '../../../src/ui';
 import { intro, outro } from '../../../src/ui';
 import { blank } from '../../../src/ui';

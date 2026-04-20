@@ -25,6 +25,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
 import type { RecordedRequest } from './types.js';
 
 function resourcesDir(): string {

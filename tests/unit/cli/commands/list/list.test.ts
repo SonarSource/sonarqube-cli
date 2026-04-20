@@ -23,17 +23,18 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { IssuesClient } from '../../../../../src/sonarqube/issues.js';
-import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
+
+import { listIssues } from '../../../../../src/cli/commands/list/issues';
+import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.js';
 import type {
   IssuesSearchResponse,
   ProjectsSearchResponse,
   SonarQubeIssue,
 } from '../../../../../src/lib/types.js';
-import { listIssues } from '../../../../../src/cli/commands/list/issues';
-import { setMockUi } from '../../../../../src/ui';
+import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
+import { IssuesClient } from '../../../../../src/sonarqube/issues.js';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../../../../src/sonarqube/projects';
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.js';
+import { setMockUi } from '../../../../../src/ui';
 
 // Test constants
 const DEFAULT_PAGE_SIZE = 500;

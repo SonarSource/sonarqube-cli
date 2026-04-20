@@ -21,8 +21,9 @@
 // SonarLint `.sonarlint` connected mode files (connectedMode.json + solution JSON)
 
 import { existsSync } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../config-constants';
 
 export interface SonarLintConfig {

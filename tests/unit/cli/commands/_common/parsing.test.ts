@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { parseInteger } from '../../../../../src/cli/commands/_common/parsing';
 import { InvalidArgumentError } from 'commander';
+
+import { parseInteger } from '../../../../../src/cli/commands/_common/parsing';
 
 describe('CLI option parsing', () => {
   it('should throw if not a valid number', () => {

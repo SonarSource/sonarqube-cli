@@ -20,7 +20,7 @@
 
 // Structural markers — intro, outro
 
-import { isTTY, bold, green, red } from '../colors.js';
+import { bold, green, isTTY, red } from '../colors.js';
 import { isMockActive, recordCall } from '../mock.js';
 
 const DIVIDER_BASE_WIDTH = 40;

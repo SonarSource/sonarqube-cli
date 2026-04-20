@@ -22,7 +22,7 @@
 // Tests mock mode and non-TTY plain output paths
 // mock.module forces isTTY: false so non-TTY branches execute regardless of terminal
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 void mock.module('../../../src/ui/colors.js', () => ({
   isTTY: false,
@@ -61,10 +61,11 @@ void mock.module('../../../src/ui/colors.js', () => ({
 }));
 
 import { mock } from 'bun:test';
+
 import { phase, phaseItem } from '../../../src/ui';
 import { intro, outro } from '../../../src/ui';
 import { withSpinner } from '../../../src/ui';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ─── phaseItem helper ─────────────────────────────────────────────────────────
 

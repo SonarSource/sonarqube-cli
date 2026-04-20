@@ -22,8 +22,9 @@
 
 import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import { dirname, basename, join } from 'node:path';
 import * as nodeOs from 'node:os';
+import { basename, dirname, join } from 'node:path';
+
 import logger from '../../../../lib/logger';
 import {
   getSecretPreToolTemplateUnix,

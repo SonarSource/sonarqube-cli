@@ -24,14 +24,15 @@
  * flushTelemetry (fetch calls, partial failure handling, disabled state)
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import * as stateManager from '../../../src/lib/state-manager.js';
-import * as userModule from '../../../src/telemetry/user.js';
-import { getDefaultState } from '../../../src/lib/state.js';
-import * as agentDetector from '../../../src/lib/agent-detector.js';
-import { storeEvent, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '../../../src/telemetry';
-import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
+
+import * as agentDetector from '../../../src/lib/agent-detector.js';
+import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
+import { getDefaultState } from '../../../src/lib/state.js';
+import * as stateManager from '../../../src/lib/state-manager.js';
+import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../../../src/telemetry';
+import * as userModule from '../../../src/telemetry/user.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

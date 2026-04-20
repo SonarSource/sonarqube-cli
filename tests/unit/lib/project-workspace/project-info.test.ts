@@ -18,20 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
 import logger from '../../../../src/lib/logger';
+import * as processLib from '../../../../src/lib/process.js';
+import * as projectWorkspace from '../../../../src/lib/project-workspace';
 import {
   discoverOrganization,
   discoverProject,
   discoverProjectInfo,
   discoverServer,
 } from '../../../../src/lib/project-workspace';
-import * as projectWorkspace from '../../../../src/lib/project-workspace';
-import * as processLib from '../../../../src/lib/process.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {

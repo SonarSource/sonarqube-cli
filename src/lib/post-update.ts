@@ -19,23 +19,24 @@
  */
 
 import * as fs from 'node:fs';
-import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { version as CURRENT_VERSION } from '../../package.json';
+import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
+import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
 import { STATE_FILE } from './config-constants.js';
+import { SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
+import {
+  cleanObsoleteFromState,
+  migrateHookScripts,
+  OBSOLETE_A3S_MARKER,
+  removeObsoleteHookArtifacts,
+} from './migration.js';
+import type { CliState } from './state.js';
 import { loadState, saveState } from './state-manager';
 import { isNewerVersion } from './version';
-import {
-  migrateHookScripts,
-  cleanObsoleteFromState,
-  removeObsoleteHookArtifacts,
-  OBSOLETE_A3S_MARKER,
-} from './migration.js';
-import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
-import { SECRETS_BINARY_NAME } from './install-types.js';
-import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
-import type { CliState } from './state.js';
 
 /**
  * Runs any actions that need to happen once after the CLI has been updated.

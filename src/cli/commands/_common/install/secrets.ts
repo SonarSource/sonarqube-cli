@@ -20,28 +20,29 @@
 
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnProcess } from '../../../../lib/process';
+
+import { version as VERSION } from '../../../../../package.json';
 import { BIN_DIR } from '../../../../lib/config-constants';
+import {
+  buildPlatformSuffix,
+  type PlatformInfo,
+  SECRETS_BINARY_NAME,
+} from '../../../../lib/install-types';
+import logger from '../../../../lib/logger';
 import { detectPlatform } from '../../../../lib/platform-detector';
+import { spawnProcess } from '../../../../lib/process';
+import {
+  SONAR_SECRETS_SIGNATURES,
+  SONAR_SECRETS_VERSION,
+  SONARSOURCE_PUBLIC_KEY,
+} from '../../../../lib/signatures';
 import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
 } from '../../../../lib/sonarsource-releases';
-import {
-  SONAR_SECRETS_VERSION,
-  SONAR_SECRETS_SIGNATURES,
-  SONARSOURCE_PUBLIC_KEY,
-} from '../../../../lib/signatures';
 import { loadState, saveState } from '../../../../lib/state-manager';
-import { version as VERSION } from '../../../../../package.json';
-import logger from '../../../../lib/logger';
-import {
-  type PlatformInfo,
-  SECRETS_BINARY_NAME,
-  buildPlatformSuffix,
-} from '../../../../lib/install-types';
-import { text, warn, withSpinner, print, success } from '../../../../ui';
+import { print, success, text, warn, withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../error';
 
 type DownloadResult = { skipped: boolean; binaryPath: string };

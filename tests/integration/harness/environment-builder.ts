@@ -20,23 +20,24 @@
 
 // Declarative builder for the isolated test environment: state.json + binary setup
 
+import { randomUUID } from 'node:crypto';
 import {
-  mkdirSync,
-  writeFileSync,
-  copyFileSync,
   chmodSync,
+  copyFileSync,
   existsSync,
+  mkdirSync,
   realpathSync,
+  writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import type { CliState } from '../../../src/lib/state.js';
-import { getDefaultState } from '../../../src/lib/state.js';
+
+import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
+import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
 import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
-import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
-import { generateKeychainAccount } from '../../../src/lib/keychain';
+import type { CliState } from '../../../src/lib/state.js';
+import { getDefaultState } from '../../../src/lib/state.js';
 
 function resolveSecretsBinarySource(): string {
   const platform = detectPlatform();

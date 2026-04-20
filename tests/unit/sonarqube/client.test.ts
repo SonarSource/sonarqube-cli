@@ -18,15 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { SonarQubeClient } from '../../../src/sonarqube/client.js';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
+import { version as VERSION } from '../../../package.json';
 import {
   SONARCLOUD_API_URL,
   SONARCLOUD_URL,
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
 } from '../../../src/lib/config-constants.js';
-import { version as VERSION } from '../../../package.json';
+import { SonarQubeClient } from '../../../src/sonarqube/client.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ---------------------------------------------------------------------------

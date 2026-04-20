@@ -20,21 +20,23 @@
 
 // Unit tests for resolveSecretsBinary (sonar-secrets binary download and setup)
 
-import { mock, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
-import * as processLib from '../../../../../src/lib/process.js';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
-import { getDefaultState } from '../../../../../src/lib/state.js';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+
+import { buildLocalBinaryName } from '../../../../../src/cli/commands/_common/install/secrets';
 import {
-  SONARSOURCE_BINARIES_URL,
   SONAR_SECRETS_DIST_PREFIX,
+  SONARSOURCE_BINARIES_URL,
 } from '../../../../../src/lib/config-constants.js';
 import { detectPlatform } from '../../../../../src/lib/platform-detector.js';
+import * as processLib from '../../../../../src/lib/process.js';
 import { SONAR_SECRETS_VERSION } from '../../../../../src/lib/signatures.js';
-import { buildLocalBinaryName } from '../../../../../src/cli/commands/_common/install/secrets';
+import { getDefaultState } from '../../../../../src/lib/state.js';
+import * as stateManager from '../../../../../src/lib/state-manager.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 // Import the real module first, then register it as a mock with the same object.
 // Because mock.module returns a plain mutable object (not a frozen ES namespace),

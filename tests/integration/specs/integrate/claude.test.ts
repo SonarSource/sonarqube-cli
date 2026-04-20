@@ -20,20 +20,22 @@
 
 // Integration tests for `sonar integrate claude`
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+import { version as CURRENT_VERSION } from '../../../../package.json';
+import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import {
-  TestHarness,
   hookScriptName,
   hookScriptPath,
   IS_WINDOWS,
   normalizePath,
+  TestHarness,
 } from '../../harness';
-import { version as CURRENT_VERSION } from '../../../../package.json';
-import { detectPlatform } from '../../../../src/lib/platform-detector.js';
-import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
 
 describe('integrate claude', () => {
   let harness: TestHarness;

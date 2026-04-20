@@ -18,21 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import * as stateManager from '../../../../../src/lib/state-manager';
-import * as versionLib from '../../../../../src/lib/version';
-import * as migration from '../../../../../src/lib/migration';
-import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
+
+import { version as CURRENT_VERSION } from '../../../../../package.json';
 import * as secretsInstall from '../../../../../src/cli/commands/_common/install/secrets';
+import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
+import * as migration from '../../../../../src/lib/migration';
 import {
-  runPostUpdateActions,
   migrateClaudeCodeHooks,
+  runPostUpdateActions,
   updateSecretsBinaryIfNeeded,
 } from '../../../../../src/lib/post-update';
-import { getDefaultState } from '../../../../../src/lib/state';
 import type { CliState, HookExtension } from '../../../../../src/lib/state';
-import { version as CURRENT_VERSION } from '../../../../../package.json';
+import { getDefaultState } from '../../../../../src/lib/state';
+import * as stateManager from '../../../../../src/lib/state-manager';
+import * as versionLib from '../../../../../src/lib/version';
 
 const FAKE_HOME = '/fake/home';
 const homedirFn = () => FAKE_HOME;

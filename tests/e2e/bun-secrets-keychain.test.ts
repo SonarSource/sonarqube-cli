@@ -26,15 +26,17 @@
  * SONARQUBE_CLI_KEYCHAIN_SERVICE isolates tokens per test run.
  */
 
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runCli, getCliBinaryPath } from '../integration/harness/cli-runner';
-import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../integration/harness';
-import { buildHomeEnv } from '../integration/harness/platform';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
+
 import { generateKeychainAccount } from '../../src/lib/keychain';
 import { getDefaultState } from '../../src/lib/state';
+import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../integration/harness';
+import { getCliBinaryPath, runCli } from '../integration/harness/cli-runner';
+import { buildHomeEnv } from '../integration/harness/platform';
 
 setDefaultTimeout(30_000);
 

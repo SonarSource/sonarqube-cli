@@ -19,15 +19,15 @@
  */
 
 import { type ResolvedAuth } from '../../../lib/auth-resolver.js';
+import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '../../../lib/config-constants.js';
 import {
   GENERIC_HTTP_METHODS,
-  METHODS_WITH_BODY,
   type HttpMethod,
+  METHODS_WITH_BODY,
   SonarQubeClient,
 } from '../../../sonarqube/client';
 import { print } from '../../../ui/index.js';
 import { InvalidOptionError } from '../_common/error.js';
-import { CLOUD_API_DOCS_URL, SERVER_API_DOCS_URL } from '../../../lib/config-constants.js';
 
 const VALID_METHODS = new Set<string>(GENERIC_HTTP_METHODS);
 

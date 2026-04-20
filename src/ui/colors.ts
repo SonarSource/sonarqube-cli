@@ -21,6 +21,7 @@
 // Color palette and TTY detection
 
 import pc from 'picocolors';
+
 import type { ColorFn, StepStatus } from './types.js';
 
 // When stdout is not a TTY (piped), all color functions become identity

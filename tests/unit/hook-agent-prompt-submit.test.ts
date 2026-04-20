@@ -22,12 +22,13 @@
 //   • catch block when runSecretsBinaryOnText throws (no way to make the real binary throw)
 //   • exitCode null branch (real binary always returns an integer exit code)
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import * as authResolver from '../../src/lib/auth-resolver';
-import * as stdinModule from '../../src/cli/commands/hook/stdin';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import * as installSecrets from '../../src/cli/commands/_common/install/secrets';
 import * as analyzeSecrets from '../../src/cli/commands/analyze/secrets';
 import { agentPromptSubmit } from '../../src/cli/commands/hook/agent-prompt-submit';
+import * as stdinModule from '../../src/cli/commands/hook/stdin';
+import * as authResolver from '../../src/lib/auth-resolver';
 
 describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;

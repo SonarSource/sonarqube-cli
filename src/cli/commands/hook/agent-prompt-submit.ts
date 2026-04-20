@@ -22,9 +22,9 @@
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
 import logger from '../../../lib/logger';
-import { readStdinJson } from './stdin';
-import { resolveAuthAndSecrets } from './hook-dependencies';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinaryOnText } from '../analyze/secrets';
+import { resolveAuthAndSecrets } from './hook-dependencies';
+import { readStdinJson } from './stdin';
 
 interface PromptSubmitPayload {
   prompt?: string;

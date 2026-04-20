@@ -22,10 +22,11 @@
 
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { CommandFailedError } from './error';
+
+import { normalizePath } from '../../../lib/fs-utils';
 import { spawnProcess } from '../../../lib/process';
 import { PRE_COMMIT_CONFIG_FILE } from '../integrate/git/git-precommit-framework';
-import { normalizePath } from '../../../lib/fs-utils';
+import { CommandFailedError } from './error';
 
 /**
  * Resolves the directory git uses for hooks (core.hooksPath or .git/hooks).

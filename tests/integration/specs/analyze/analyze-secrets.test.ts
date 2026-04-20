@@ -23,10 +23,11 @@
 // Note: hardcoded token below is an intentional test fixture for the secret scanner.
 // sonar-ignore-next-line S6769
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { TestHarness } from '../../harness';
-import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+import { TestHarness } from '../../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769

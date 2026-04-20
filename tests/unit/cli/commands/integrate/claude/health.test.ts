@@ -18,11 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { runHealthChecks } from '../../../../../../src/cli/commands/integrate/claude/health';
-import { SonarQubeClient } from '../../../../../../src/sonarqube/client.js';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import * as auth from '../../../../../../src/cli/commands/_common/token';
+import { runHealthChecks } from '../../../../../../src/cli/commands/integrate/claude/health';
 import * as hooks from '../../../../../../src/cli/commands/integrate/claude/hooks';
+import { SonarQubeClient } from '../../../../../../src/sonarqube/client.js';
 import { setMockUi } from '../../../../../../src/ui';
 
 const SERVER = 'https://sonarcloud.io';

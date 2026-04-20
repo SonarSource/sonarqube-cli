@@ -21,7 +21,8 @@
 // Tests for withSpinner TTY path
 // Temporarily sets process.stdout.isTTY = true to exercise the animated branch
 
-import { describe, it, expect, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
+
 import { withSpinner } from '../../../src/ui';
 
 async function withTTY(fn: () => Promise<void>): Promise<void> {

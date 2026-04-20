@@ -19,6 +19,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 function assertRootHelpOutput(stdout: string): void {

@@ -24,8 +24,8 @@
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
 import { print } from '../../../ui';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 import { CommandFailedError } from '../_common/error';
+import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 import { resolveAuthAndSecrets } from './hook-dependencies';
 
 export async function gitPreCommit(): Promise<void> {

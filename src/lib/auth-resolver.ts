@@ -20,6 +20,7 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
+import { warn } from '../ui';
 import {
   SONARCLOUD_API_URL,
   SONARCLOUD_HOSTNAME,
@@ -29,9 +30,8 @@ import {
   SONARCLOUD_US_URL,
 } from './config-constants';
 import { getToken } from './keychain.js';
-import { loadState, getActiveConnection } from './state-manager.js';
-import { warn } from '../ui';
 import logger from './logger.js';
+import { getActiveConnection, loadState } from './state-manager.js';
 
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';

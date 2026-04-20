@@ -22,16 +22,18 @@
 // that Bun's module registry is not contaminated by secret-install.test.ts, which
 // mocks sonarsource-releases.js for its own purposes.
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as openpgp from 'openpgp';
-import {
-  verifyPgpSignature,
-  verifyBinarySignature,
-} from '../../../../../src/lib/sonarsource-releases.js';
+
 import type { PlatformInfo } from '../../../../../src/lib/install-types.js';
+import {
+  verifyBinarySignature,
+  verifyPgpSignature,
+} from '../../../../../src/lib/sonarsource-releases.js';
 
 const PLATFORM: PlatformInfo = { os: 'linux', arch: 'x86-64', extension: '' };
 

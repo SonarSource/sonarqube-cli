@@ -24,10 +24,11 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { normalizePath } from '../../../../lib/fs-utils';
 import { type ContainerRuntime, detectContainerRuntime } from '../../../../lib/tool-detector';
 import { error, info, success, warn } from '../../../../ui';
-import { normalizePath } from '../../../../lib/fs-utils';
 
 export async function setupMcpServer(
   agent: string,

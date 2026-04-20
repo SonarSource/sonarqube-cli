@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import logger, { configureLogger, setMockLogger, getLogLevelConfig } from '../../../src/lib/logger';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+import logger, { configureLogger, getLogLevelConfig, setMockLogger } from '../../../src/lib/logger';
 
 describe('Logger', () => {
   let logOutput: string[];

@@ -20,10 +20,12 @@
 
 // Integration tests for post-update migration (runPostUpdateActions)
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { TestHarness } from '../../harness';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { version as CURRENT_VERSION } from '../../../../package.json';
+import { TestHarness } from '../../harness';
 
 describe('post-update migration', () => {
   let harness: TestHarness;

@@ -21,16 +21,17 @@
 // Integrate command - setup SonarQube integration for Claude Code
 
 import { homedir } from 'node:os';
-import { isEnvBasedAuth, isSonarQubeCloud } from '../../../../lib/auth-resolver';
+
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { isEnvBasedAuth, isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import {
-  runMigrations,
-  removeObsoleteHookArtifacts,
   OBSOLETE_A3S_MARKER,
+  removeObsoleteHookArtifacts,
+  runMigrations,
 } from '../../../../lib/migration';
+import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
-import { discoverProject, type DiscoveredProject } from '../../../../lib/project-workspace';
 import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { runHealthChecks } from './health';

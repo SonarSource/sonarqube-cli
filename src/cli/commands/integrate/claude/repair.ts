@@ -20,11 +20,11 @@
 
 // Repair orchestrator - fixes configuration issues
 
-import { generateTokenViaBrowser, validateToken } from '../../_common/token';
 import { deleteToken, saveToken } from '../../../../lib/keychain';
 import logger from '../../../../lib/logger';
-import { text, success } from '../../../../ui';
+import { success, text } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
+import { generateTokenViaBrowser, validateToken } from '../../_common/token';
 
 export async function repairToken(serverURL: string, organization?: string): Promise<string> {
   text('Obtaining access token...');

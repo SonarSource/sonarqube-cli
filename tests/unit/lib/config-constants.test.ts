@@ -18,8 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect } from 'bun:test';
 import { join } from 'node:path';
+
+import { describe, expect, it } from 'bun:test';
+
 import { APP_NAME, LOG_DIR, LOG_FILE } from '../../../src/lib/config-constants';
 
 describe('config-constants', () => {

@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+
 import { isNewerVersion, stripBuildNumber } from '../../../src/lib/version';
 
 describe('isNewerVersion', () => {

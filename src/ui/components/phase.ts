@@ -20,9 +20,9 @@
 
 // Phase component — process phase with status items
 
-import { isTTY, bold, dim, STATUS_COLORS, STATUS_ICONS } from '../colors.js';
+import { bold, dim, isTTY, STATUS_COLORS, STATUS_ICONS } from '../colors.js';
 import { isMockActive, recordCall } from '../mock.js';
-import type { PhaseItem, PhaseOptions, StepStatus, ColorFn } from '../types.js';
+import type { ColorFn, PhaseItem, PhaseOptions, StepStatus } from '../types.js';
 
 export type { PhaseItem, StepStatus } from '../types.js';
 

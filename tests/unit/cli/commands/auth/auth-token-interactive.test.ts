@@ -58,8 +58,8 @@ mock.module('../../../../../src/lib/browser.js', () => ({
 }));
 
 import {
-  waitForTokenInteractive,
   openBrowserWithFallback,
+  waitForTokenInteractive,
 } from '../../../../../src/cli/commands/_common/token';
 
 // ─── Shared setup ─────────────────────────────────────────────────────────────

@@ -19,12 +19,12 @@
  */
 
 import { generateTokenViaBrowser } from '../../../cli/commands/_common/token';
+import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
 import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
 import { addOrUpdateConnection, loadState, saveState } from '../../../lib/state-manager';
-import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
 import { SonarQubeClient } from '../../../sonarqube/client';
+import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error';
 
 /**

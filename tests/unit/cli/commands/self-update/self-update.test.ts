@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mock, describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../../../src/ui';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 // Mock node:child_process before importing self-update so that the named
 // imports (spawn, spawnSync) in self-update.ts resolve to the test doubles.

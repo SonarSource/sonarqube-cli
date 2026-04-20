@@ -27,8 +27,10 @@
 //   - Outputs {"hookSpecificOutput":{"permissionDecision":"deny",...}} when a secret is found
 //   - Outputs nothing when the file is clean, tool is not Read, or file doesn't exist
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential

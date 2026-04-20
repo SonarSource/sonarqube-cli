@@ -21,7 +21,8 @@
 // Integration tests for `list issues` auth scenarios
 // Complements list-issues.test.ts which covers happy-path and basic error cases
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 describe('list issues — auth scenarios', () => {

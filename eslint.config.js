@@ -2,6 +2,7 @@
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
 import headersPlugin from 'eslint-plugin-headers';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
 export default tseslint.config(
   // Global ignores
@@ -28,6 +29,9 @@ export default tseslint.config(
       ...tseslint.configs.strictTypeChecked,
       ...tseslint.configs.stylisticTypeChecked,
     ],
+    plugins: {
+      'simple-import-sort': simpleImportSort,
+    },
     languageOptions: {
       parserOptions: {
         project: './tsconfig.json',
@@ -35,6 +39,8 @@ export default tseslint.config(
       },
     },
     rules: {
+      'simple-import-sort/imports': 'error',
+      'simple-import-sort/exports': 'error',
       // TypeScript-specific overrides
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-floating-promises': 'error',
@@ -65,6 +71,9 @@ export default tseslint.config(
   {
     files: ['tests/**/*.ts', 'build-scripts/**/*.ts'],
     extends: [...tseslint.configs.recommendedTypeChecked],
+    plugins: {
+      'simple-import-sort': simpleImportSort,
+    },
     languageOptions: {
       parserOptions: {
         project: './tsconfig.json',
@@ -72,6 +81,8 @@ export default tseslint.config(
       },
     },
     rules: {
+      'simple-import-sort/imports': 'error',
+      'simple-import-sort/exports': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',

@@ -25,10 +25,11 @@
  * Call setup() in beforeEach and teardown() in afterEach.
  */
 
-import { clearTokenCache, saveToken as realSaveToken } from '../../../src/lib/keychain';
 import { mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { clearTokenCache, saveToken as realSaveToken } from '../../../src/lib/keychain';
 
 export interface KeychainTestHandle {
   /**

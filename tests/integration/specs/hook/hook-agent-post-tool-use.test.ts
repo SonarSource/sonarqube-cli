@@ -20,8 +20,10 @@
 
 // Integration tests for `sonar hook claude-post-tool-use`.
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';

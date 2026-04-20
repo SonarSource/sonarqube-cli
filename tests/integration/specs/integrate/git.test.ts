@@ -20,12 +20,14 @@
 
 // Integration tests for `sonar integrate git`
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
-import { IS_WINDOWS, buildHomeEnv } from '../../harness/platform';
+import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 
 const PATH_DELIM = IS_WINDOWS ? ';' : ':';
 function pathWithoutNodeModules(envPath: string | undefined): string {

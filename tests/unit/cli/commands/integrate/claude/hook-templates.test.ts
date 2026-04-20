@@ -20,7 +20,8 @@
 
 // Tests for hook template generation — thin launcher format
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,

@@ -18,40 +18,41 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { version as VERSION } from '../../package.json';
 import { type Command, Help, Option } from 'commander';
+
+import { version as VERSION } from '../../package.json';
+import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
+import { MAX_PAGE_SIZE } from '../sonarqube/projects';
+import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
+import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
-import { getBanner, getCustomRootHelp } from './root-help.js';
-import {
-  listIssues,
-  VALID_SEVERITIES,
-  VALID_STATUSES,
-  type ListIssuesOptions,
-} from './commands/list/issues';
-import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
+import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
+import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
 import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
-import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
-import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git/index';
-import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
-import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
-import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
-import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
-import { parseInteger } from './commands/_common/parsing';
-import { MAX_PAGE_SIZE } from '../sonarqube/projects';
-import { apiCommand, apiExtraHelpText, type ApiCommandOptions } from './commands/api/api';
-import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
-import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
-import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import {
   agentPostToolUse,
   type AgentPostToolUseOptions,
 } from './commands/hook/agent-post-tool-use';
+import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
+import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
+import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
+import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git/index';
+import {
+  listIssues,
+  type ListIssuesOptions,
+  VALID_SEVERITIES,
+  VALID_STATUSES,
+} from './commands/list/issues';
+import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
+import { getBanner, getCustomRootHelp } from './root-help.js';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 

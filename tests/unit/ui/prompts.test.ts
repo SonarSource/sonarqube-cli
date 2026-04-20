@@ -24,14 +24,15 @@
  * - CI=true: pressAnyKeyPrompt skips without recording
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { textPrompt, confirmPrompt, pressEnterKeyPrompt } from '../../../src/ui';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+import { confirmPrompt, pressEnterKeyPrompt, textPrompt } from '../../../src/ui';
 import {
-  setMockUi,
-  getMockUiCalls,
-  clearMockUiCalls,
   clearMockResponses,
+  clearMockUiCalls,
+  getMockUiCalls,
   queueMockResponse,
+  setMockUi,
 } from '../../../src/ui';
 
 // ─── textPrompt ───────────────────────────────────────────────────────────────

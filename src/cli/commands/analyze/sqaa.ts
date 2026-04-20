@@ -19,16 +19,18 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, relative } from 'node:path';
+
 import type { Command } from 'commander';
+
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { normalizePath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
+import type { HookExtension } from '../../../lib/state';
+import { findExtensionsByProject, loadState } from '../../../lib/state-manager';
+import type { SqaaIssue } from '../../../sonarqube/client';
+import { SonarQubeClient } from '../../../sonarqube/client';
 import { blank, error, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
-import { SonarQubeClient } from '../../../sonarqube/client';
-import type { SqaaIssue } from '../../../sonarqube/client';
-import { loadState, findExtensionsByProject } from '../../../lib/state-manager';
-import type { HookExtension } from '../../../lib/state';
 
 export interface AnalyzeSqaaOptions {
   file: string;

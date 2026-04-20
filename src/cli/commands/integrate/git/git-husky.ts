@@ -20,10 +20,11 @@
 
 // Husky integration: appends a secrets-scan snippet to an existing .husky hook file.
 
-import { info, success } from '../../../../ui';
-import { HOOK_MARKER, getHuskySnippet } from './git-shell-fragments';
-import type { GitHookType } from '.';
 import { readFile, writeFile } from 'node:fs/promises';
+
+import { info, success } from '../../../../ui';
+import type { GitHookType } from '.';
+import { getHuskySnippet, HOOK_MARKER } from './git-shell-fragments';
 
 export async function installViaHusky(huskyHookPath: string, hook: GitHookType): Promise<void> {
   let content: string;

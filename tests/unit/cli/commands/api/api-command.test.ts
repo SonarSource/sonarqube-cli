@@ -19,9 +19,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
+import { apiCommand } from '../../../../../src/cli/commands/api/api.js';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.js';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
-import { apiCommand } from '../../../../../src/cli/commands/api/api.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const TEST_SERVER = 'https://sonar.example.com';

@@ -21,6 +21,7 @@
 // Integration tests for `sonar hook` command infrastructure
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 describe('sonar hook', () => {

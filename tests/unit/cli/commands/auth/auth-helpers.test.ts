@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+
 import {
-  extractTokenFromPostBody,
   buildAuthURL,
+  extractTokenFromPostBody,
 } from '../../../../../src/cli/commands/_common/token';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';

@@ -21,11 +21,12 @@
 // SonarCommand — Commander Command subclass with built-in error handling and auth support
 
 import { Command } from 'commander';
-import logger from '../../../lib/logger.js';
+
 import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import { resolveAuth } from '../../../lib/auth-resolver.js';
-import { CommandFailedError } from './error.js';
+import logger from '../../../lib/logger.js';
 import { blank, error } from '../../../ui';
+import { CommandFailedError } from './error.js';
 
 /**
  * Commander Command subclass for the Sonar CLI.

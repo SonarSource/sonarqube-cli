@@ -20,10 +20,11 @@
 
 // Real-network tests for install scripts — validates URL path structure on binaries.sonarsource.com
 
-import { describe, it, expect, beforeEach, afterEach, setDefaultTimeout } from 'bun:test';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 // PowerShell cold-start in afterEach needs more than the default 5s hook timeout
 setDefaultTimeout(30_000);

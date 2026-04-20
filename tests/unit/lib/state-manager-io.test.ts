@@ -21,17 +21,19 @@
 // Tests for loadState/saveState filesystem I/O and new-agent initialization
 // SONARQUBE_CLI_DIR env var redirects state paths to a temporary directory
 
-import { afterAll, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
-import {
-  loadState,
-  saveState,
-  markAgentConfigured,
-  addInstalledHook,
-} from '../../../src/lib/state-manager.js';
+
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { getDefaultState } from '../../../src/lib/state.js';
+import {
+  addInstalledHook,
+  loadState,
+  markAgentConfigured,
+  saveState,
+} from '../../../src/lib/state-manager.js';
 
 const testCliDir = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
 const testStateFile = join(testCliDir, 'state.json');

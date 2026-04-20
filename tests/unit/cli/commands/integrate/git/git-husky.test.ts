@@ -20,17 +20,19 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { installViaHusky } from '../../../../../../src/cli/commands/integrate/git/git-husky';
 import {
-  HOOK_MARKER,
-  SONAR_HOOK_SKIP_SECRETS_MESSAGE,
   getHuskyPreCommitSnippet,
   getHuskyPrePushSnippet,
   getPreCommitHookScript,
   getPrePushHookScript,
+  HOOK_MARKER,
+  SONAR_HOOK_SKIP_SECRETS_MESSAGE,
 } from '../../../../../../src/cli/commands/integrate/git/git-shell-fragments';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../../../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-husky-tmp');
 const HOOK_PATH = join(TEMP_DIR, 'pre-commit');

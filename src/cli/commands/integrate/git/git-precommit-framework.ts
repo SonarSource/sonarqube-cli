@@ -22,10 +22,12 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
 import yaml from 'js-yaml';
+
 import { spawnProcess } from '../../../../lib/process';
-import { CommandFailedError } from '../../_common/error';
 import { success } from '../../../../ui';
+import { CommandFailedError } from '../../_common/error';
 import type { GitHookType } from '.';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';

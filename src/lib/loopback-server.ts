@@ -21,8 +21,9 @@
 // Loopback HTTP server with security headers and DNS rebinding protection
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+
+import { AUTH_PORT_COUNT, AUTH_PORT_START } from './config-constants.js';
 import logger from './logger.js';
-import { AUTH_PORT_START, AUTH_PORT_COUNT } from './config-constants.js';
 
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;

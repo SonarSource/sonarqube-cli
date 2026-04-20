@@ -18,19 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, spyOn, afterEach } from 'bun:test';
-import { writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as toolDetector from '../../../../../../src/lib/tool-detector';
+
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+
 import {
-  setupMcpServer,
   getMcpConfigFilePath,
   getMcpServerConfig,
+  setupMcpServer,
   writeMcpServerEntry,
 } from '../../../../../../src/cli/commands/integrate/claude/mcp';
-import { setMockUi, getMockUiCalls } from '../../../../../../src/ui';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
+import * as toolDetector from '../../../../../../src/lib/tool-detector';
+import { getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
 const ON_PREMISE_AUTH: ResolvedAuth = {
   token: 'squ_test',

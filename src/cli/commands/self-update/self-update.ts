@@ -22,10 +22,11 @@ import { spawn, spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
 import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
-import { info, success, warn, text, blank } from '../../../ui';
+import { blank, info, success, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 
 const VERSION_PATTERNS = [

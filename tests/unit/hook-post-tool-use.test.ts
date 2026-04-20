@@ -18,12 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import * as authResolver from '../../src/lib/auth-resolver';
-import * as stdinModule from '../../src/cli/commands/hook/stdin';
-import * as clientModule from '../../src/sonarqube/client';
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { agentPostToolUse } from '../../src/cli/commands/hook/agent-post-tool-use';
+import * as stdinModule from '../../src/cli/commands/hook/stdin';
+import * as authResolver from '../../src/lib/auth-resolver';
+import * as clientModule from '../../src/sonarqube/client';
 
 const TEST_FILE = '/sonar-test/src/main.ts';
 

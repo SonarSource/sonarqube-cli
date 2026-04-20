@@ -18,11 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import * as Sentry from '@sentry/bun';
-import type { ErrorEvent, EventHint } from '@sentry/bun';
 import { homedir } from 'node:os';
-import { SENTRY_DSN } from './config-constants.js';
+
+import type { ErrorEvent, EventHint } from '@sentry/bun';
+import * as Sentry from '@sentry/bun';
+
 import { getOrCreateUserId } from '../telemetry/user.js';
+import { SENTRY_DSN } from './config-constants.js';
 import type { CliState } from './state.js';
 
 /**

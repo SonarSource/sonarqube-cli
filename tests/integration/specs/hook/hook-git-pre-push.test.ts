@@ -21,12 +21,14 @@
 // Integration tests for `sonar hook git-pre-push`:
 // ref parsing, graceful skips, and end-to-end scan with a real local git repo.
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { chmodSync } from 'node:fs';
-import { TestHarness } from '../../harness';
-import { initGitRepo, commitFile } from './git-test-helpers';
-import { detectPlatform } from '../../../../src/lib/platform-detector';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets';
+import { detectPlatform } from '../../../../src/lib/platform-detector';
+import { TestHarness } from '../../harness';
+import { commitFile, initGitRepo } from './git-test-helpers';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769

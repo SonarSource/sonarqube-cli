@@ -22,21 +22,22 @@
  * State manager for reading and writing ~/.sonar/sonarqube-cli/state.json
  */
 
-import fs from 'node:fs';
 import crypto, { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import { join } from 'node:path';
+
+import { version as VERSION } from '../../package.json';
+import { CLI_DIR } from './config-constants.js';
 import logger from './logger.js';
 import {
   type AgentConfig,
   type AgentExtension,
-  type HookType,
   type AuthConnection,
   type CliState,
   type CloudRegion,
   getDefaultState,
+  type HookType,
 } from './state.js';
-import { join } from 'node:path';
-import { CLI_DIR } from './config-constants.js';
-import { version as VERSION } from '../../package.json';
 
 function getCliDir(): string {
   return process.env.SONARQUBE_CLI_DIR ?? CLI_DIR;

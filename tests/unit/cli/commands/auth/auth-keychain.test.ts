@@ -20,13 +20,14 @@
 
 // Unit tests for keychain token storage
 
-import { afterAll, beforeAll, it, expect } from 'bun:test';
+import { afterAll, beforeAll, expect, it } from 'bun:test';
+
 import {
-  getToken,
-  saveToken,
   deleteToken,
   getAllCredentials,
+  getToken,
   purgeAllTokens,
+  saveToken,
 } from '../../../../../src/lib/keychain.js';
 import { createKeychainTestHandle } from '../../../keychain/keychain-test-handle.js';
 

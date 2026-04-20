@@ -20,10 +20,12 @@
 
 // Integration tests for `sonar auth login`, `auth logout`, `auth purge`, and `auth status`
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { TestHarness } from '../../harness';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
+import { TestHarness } from '../../harness';
 
 function readKeychainToken(keychainFile: string, account: string): string | undefined {
   try {

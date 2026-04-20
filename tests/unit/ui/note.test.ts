@@ -24,7 +24,7 @@
  * - TTY box rendering (renderTTY): borders, title, content, string splitting
  */
 
-import { mock, describe, it, expect, spyOn, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 // Override colors to simulate TTY environment — must be before any imports
 void mock.module('../../../src/ui/colors.js', () => ({
@@ -40,7 +40,7 @@ void mock.module('../../../src/ui/colors.js', () => ({
 }));
 
 import { note } from '../../../src/ui';
-import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 

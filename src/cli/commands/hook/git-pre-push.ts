@@ -23,11 +23,11 @@
 
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
-import { readGitPushRefs } from './stdin';
-import type { PushRef } from './stdin';
 import { CommandFailedError } from '../_common/error';
+import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 import { resolveAuthAndSecrets } from './hook-dependencies';
+import type { PushRef } from './stdin';
+import { readGitPushRefs } from './stdin';
 
 const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 

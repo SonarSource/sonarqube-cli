@@ -21,10 +21,11 @@
 // SonarSource binaries client for downloading sonar-secrets
 
 import { readFileSync } from 'node:fs';
+
+import { version as VERSION } from '../../package.json';
+import { SONAR_SECRETS_DIST_PREFIX, SONARSOURCE_BINARIES_URL } from './config-constants.js';
 import type { PlatformInfo } from './install-types.js';
 import logger from './logger.js';
-import { version as VERSION } from '../../package.json';
-import { SONARSOURCE_BINARIES_URL, SONAR_SECRETS_DIST_PREFIX } from './config-constants.js';
 
 const DOWNLOAD_TIMEOUT_MS = 60000;
 

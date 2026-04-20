@@ -19,14 +19,14 @@
  */
 
 export {
+  type DiscoveredProject,
   discoverOrganization,
   discoverProject,
   discoverProjectInfo,
   discoverServer,
   findGitRoot,
-  type DiscoveredProject,
   type ProjectInfo,
-  type SonarProperties,
   type SonarLintConfig,
+  type SonarProperties,
 } from './project-info';
 export { loadSonarLintConfig, type ResolvedSonarLintConfig } from './sonarlint-connected-mode';

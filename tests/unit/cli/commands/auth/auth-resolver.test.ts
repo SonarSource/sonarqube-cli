@@ -20,15 +20,16 @@
 
 // Unit tests for the centralized auth resolver
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import {
-  resolveAuth,
-  ENV_TOKEN,
   ENV_SERVER,
+  ENV_TOKEN,
+  resolveAuth,
   resolveFromEndpoint,
 } from '../../../../../src/lib/auth-resolver.js';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
+import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui/index.js';
 import { createKeychainTestHandle } from '../../../keychain/keychain-test-handle.js';
 

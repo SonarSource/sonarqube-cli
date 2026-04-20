@@ -20,7 +20,8 @@
 
 // Integration tests for `config telemetry`
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 describe('config telemetry', () => {

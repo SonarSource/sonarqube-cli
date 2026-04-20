@@ -19,6 +19,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+
 import { getBanner } from '../../../src/cli/root-help';
 
 // Strip ANSI escape codes to get the visible character width of a string

@@ -23,22 +23,24 @@
  * auth failures, successful scans, scan failures, error handling
  */
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
-import * as processLib from '../../../../../src/lib/process.js';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
-import * as installSecrets from '../../../../../src/cli/commands/_common/install/secrets';
-import { getDefaultState } from '../../../../../src/lib/state.js';
-import {
-  analyzeSecrets,
-  runSecretsBinaryOnText,
-} from '../../../../../src/cli/commands/analyze/secrets';
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import {
   CommandFailedError,
   InvalidOptionError,
 } from '../../../../../src/cli/commands/_common/error.js';
+import * as installSecrets from '../../../../../src/cli/commands/_common/install/secrets';
+import {
+  analyzeSecrets,
+  runSecretsBinaryOnText,
+} from '../../../../../src/cli/commands/analyze/secrets';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.js';
+import * as processLib from '../../../../../src/lib/process.js';
+import { getDefaultState } from '../../../../../src/lib/state.js';
+import * as stateManager from '../../../../../src/lib/state-manager.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';

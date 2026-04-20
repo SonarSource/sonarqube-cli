@@ -18,15 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import * as authResolver from '../../src/lib/auth-resolver';
-import * as processLib from '../../src/lib/process';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
+import { CommandFailedError } from '../../src/cli/commands/_common/error';
 import * as installSecrets from '../../src/cli/commands/_common/install/secrets';
 import * as analyzeSecrets from '../../src/cli/commands/analyze/secrets';
-import * as stdinModule from '../../src/cli/commands/hook/stdin';
 import { gitPreCommit } from '../../src/cli/commands/hook/git-pre-commit';
 import { gitPrePush } from '../../src/cli/commands/hook/git-pre-push';
-import { CommandFailedError } from '../../src/cli/commands/_common/error';
+import * as stdinModule from '../../src/cli/commands/hook/stdin';
+import * as authResolver from '../../src/lib/auth-resolver';
+import * as processLib from '../../src/lib/process';
 
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 

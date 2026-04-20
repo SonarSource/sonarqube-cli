@@ -18,22 +18,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 import { homedir } from 'node:os';
-import * as discovery from '../../../../../../src/lib/project-workspace';
-import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
+
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
+import * as installSecrets from '../../../../../../src/cli/commands/_common/install/secrets';
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
-import { HealthCheckResult } from '../../../../../../src/cli/commands/integrate/claude/health';
 import * as health from '../../../../../../src/cli/commands/integrate/claude/health';
+import { HealthCheckResult } from '../../../../../../src/cli/commands/integrate/claude/health';
 import * as hooks from '../../../../../../src/cli/commands/integrate/claude/hooks';
+import * as mcp from '../../../../../../src/cli/commands/integrate/claude/mcp';
 import * as repair from '../../../../../../src/cli/commands/integrate/claude/repair';
 import * as state from '../../../../../../src/cli/commands/integrate/claude/state';
-import * as authResolver from '../../../../../../src/lib/auth-resolver';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
-import * as installSecrets from '../../../../../../src/cli/commands/_common/install/secrets';
-import * as mcp from '../../../../../../src/cli/commands/integrate/claude/mcp';
+import * as authResolver from '../../../../../../src/lib/auth-resolver';
 import * as migration from '../../../../../../src/lib/migration';
+import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
+import * as discovery from '../../../../../../src/lib/project-workspace';
 import { getDefaultState } from '../../../../../../src/lib/state';
 import * as stateManager from '../../../../../../src/lib/state-manager';
 import { SonarQubeClient } from '../../../../../../src/sonarqube/client';

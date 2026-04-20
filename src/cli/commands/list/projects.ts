@@ -22,8 +22,8 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { print } from '../../../ui';
 import { MAX_PAGE_SIZE, ProjectsClient } from '../../../sonarqube/projects';
+import { print } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 
 export interface ListProjectsOptions {

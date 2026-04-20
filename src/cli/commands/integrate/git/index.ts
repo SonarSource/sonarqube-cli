@@ -21,14 +21,14 @@
 // Integrate command - install git hooks for secrets scanning
 
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { platform } from 'node:os';
-import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
-import { findGitRoot } from '../../../../lib/project-workspace';
-import { CommandFailedError, InvalidOptionError } from '../../_common/error';
-import { installSecretsBinary } from '../../_common/install/secrets';
-import { spawnProcess } from '../../../../lib/process';
 import * as fs from 'node:fs/promises';
+import { platform } from 'node:os';
+import { join } from 'node:path';
+
+import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
+import { normalizePath } from '../../../../lib/fs-utils';
+import { spawnProcess } from '../../../../lib/process';
+import { findGitRoot } from '../../../../lib/project-workspace';
 import {
   blank,
   confirmPrompt,
@@ -40,15 +40,16 @@ import {
   text,
   warn,
 } from '../../../../ui';
+import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
-import { HOOK_MARKER, getHookScript } from './git-shell-fragments';
+import { installSecretsBinary } from '../../_common/install/secrets';
 import { installViaHusky } from './git-husky';
 import {
-  PRE_COMMIT_CONFIG_FILE,
   hasSonarHookInPreCommitConfig,
   installViaPreCommitFramework,
+  PRE_COMMIT_CONFIG_FILE,
 } from './git-precommit-framework';
-import { normalizePath } from '../../../../lib/fs-utils';
+import { getHookScript, HOOK_MARKER } from './git-shell-fragments';
 
 export type GitHookType = 'pre-commit' | 'pre-push';
 

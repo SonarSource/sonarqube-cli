@@ -20,17 +20,19 @@
 
 // Unit tests for auto-migration logic (src/bootstrap/migration.ts)
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { tmpdir, homedir } from 'node:os';
-import { setMockUi } from '../../../../../src/ui';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
-import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
-import { getDefaultState } from '../../../../../src/lib/state.js';
-import type { HookExtension } from '../../../../../src/lib/state.js';
-import { runMigrations } from '../../../../../src/lib/migration';
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { version as CURRENT_VERSION } from '../../../../../package.json';
+import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
+import { runMigrations } from '../../../../../src/lib/migration';
+import type { HookExtension } from '../../../../../src/lib/state.js';
+import { getDefaultState } from '../../../../../src/lib/state.js';
+import * as stateManager from '../../../../../src/lib/state-manager.js';
+import { setMockUi } from '../../../../../src/ui';
 
 const OLD_VERSION = '0.4.0';
 const CLI_105_VERSION = '0.5.1';

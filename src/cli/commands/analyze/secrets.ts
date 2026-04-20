@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import { existsSync } from 'node:fs';
-import { spawnProcess } from '../../../lib/process';
-import type { SpawnOptions, SpawnResult, StdioMode } from '../../../lib/process';
+
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
+import type { SpawnOptions, SpawnResult, StdioMode } from '../../../lib/process';
+import { spawnProcess } from '../../../lib/process';
 import { blank, error, print, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { installSecretsBinary } from '../_common/install/secrets';

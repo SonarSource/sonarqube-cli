@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { readStdinJson, readGitPushRefs } from '../../src/cli/commands/hook/stdin';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
+import { readGitPushRefs, readStdinJson } from '../../src/cli/commands/hook/stdin';
 
 describe('readStdinJson', () => {
   type StdinListener = (...args: unknown[]) => void;

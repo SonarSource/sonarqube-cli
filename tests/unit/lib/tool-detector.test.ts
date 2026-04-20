@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, spyOn, afterEach } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+
 import * as process from '../../../src/lib/process';
 import { detectContainerRuntime } from '../../../src/lib/tool-detector';
 

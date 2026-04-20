@@ -18,13 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import * as Sentry from '@sentry/bun';
-import type { ErrorEvent, EventHint } from '@sentry/bun';
 import { homedir } from 'node:os';
-import * as userModule from '../../../src/telemetry/user.js';
+
+import type { ErrorEvent, EventHint } from '@sentry/bun';
+import * as Sentry from '@sentry/bun';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { initSentry } from '../../../src/lib/sentry.js';
 import { getDefaultState } from '../../../src/lib/state.js';
+import * as userModule from '../../../src/telemetry/user.js';
 
 function makeErrorEvent(
   filenames: (string | undefined)[][],

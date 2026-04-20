@@ -20,26 +20,26 @@
 
 // Public API for the UI module
 
-export { info, discreetSuccess, success, warn, error, text, print, blank } from './messages.js';
 export { note } from './components/note.js';
-export { phase, phaseItem } from './components/phase.js';
 export type { PhaseItem, StepStatus } from './components/phase.js';
-export { intro, outro } from './components/sections.js';
+export { phase, phaseItem } from './components/phase.js';
+export type { SelectOption } from './components/prompts.js';
 export {
-  setMockUi,
-  isMockActive,
-  getMockUiCalls,
-  clearMockUiCalls,
-  queueMockResponse,
-  clearMockResponses,
-} from './mock.js';
-export type { UiCall } from './mock.js';
-export type { NoteOptions, PhaseOptions, LogOptions, ColorFn } from './types.js';
-export { withSpinner } from './components/spinner.js';
-export {
-  textPrompt,
   confirmPrompt,
   pressEnterKeyPrompt,
   selectPrompt,
+  textPrompt,
 } from './components/prompts.js';
-export type { SelectOption } from './components/prompts.js';
+export { intro, outro } from './components/sections.js';
+export { withSpinner } from './components/spinner.js';
+export { blank, discreetSuccess, error, info, print, success, text, warn } from './messages.js';
+export type { UiCall } from './mock.js';
+export {
+  clearMockResponses,
+  clearMockUiCalls,
+  getMockUiCalls,
+  isMockActive,
+  queueMockResponse,
+  setMockUi,
+} from './mock.js';
+export type { ColorFn, LogOptions, NoteOptions, PhaseOptions } from './types.js';

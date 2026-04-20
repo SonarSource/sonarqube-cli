@@ -21,10 +21,11 @@
 // Unit tests for SonarCommand
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import * as authResolver from '../../../../../src/lib/auth-resolver';
-import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver';
-import { SonarCommand } from '../../../../../src/cli/commands/_common/sonar-command';
+
 import { CommandFailedError } from '../../../../../src/cli/commands/_common/error';
+import { SonarCommand } from '../../../../../src/cli/commands/_common/sonar-command';
+import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver';
+import * as authResolver from '../../../../../src/lib/auth-resolver';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const FAKE_AUTH: ResolvedAuth = {

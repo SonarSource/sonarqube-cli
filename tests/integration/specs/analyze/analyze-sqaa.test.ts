@@ -20,7 +20,8 @@
 
 // Integration tests for `analyze sqaa` and `verify` commands.
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';

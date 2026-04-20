@@ -20,7 +20,8 @@
 
 // Platform detection for sonar-secrets binary installation
 
-import { platform, arch } from 'node:os';
+import { arch, platform } from 'node:os';
+
 import type { PlatformInfo } from './install-types.js';
 
 const OS_MAP: Record<string, string> = {

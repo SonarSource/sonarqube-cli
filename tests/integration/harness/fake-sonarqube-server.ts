@@ -20,8 +20,8 @@
 
 // Lightweight in-process mock SonarQube HTTP server (Bun.serve)
 
-import type { RecordedRequest } from './types.js';
 import type { SonarQubeIssue } from '../../../src/lib/types.js';
+import type { RecordedRequest } from './types.js';
 
 export interface IssueConfig {
   key?: string;

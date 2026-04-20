@@ -20,17 +20,19 @@
 
 // Unit tests for analyzeSqaa command
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
-import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
-import { getDefaultState } from '../../../../../src/lib/state.js';
-import { analyzeSqaa } from '../../../../../src/cli/commands/analyze/sqaa';
+
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import {
   CommandFailedError,
   InvalidOptionError,
 } from '../../../../../src/cli/commands/_common/error.js';
+import { analyzeSqaa } from '../../../../../src/cli/commands/analyze/sqaa';
+import { getDefaultState } from '../../../../../src/lib/state.js';
+import * as stateManager from '../../../../../src/lib/state-manager.js';
+import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
 const TEST_ORG = 'test-org';

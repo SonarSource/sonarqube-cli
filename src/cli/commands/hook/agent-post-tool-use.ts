@@ -23,10 +23,11 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { relative } from 'node:path';
+
 import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
-import { SonarQubeClient } from '../../../sonarqube/client';
 import type { SqaaIssue } from '../../../sonarqube/client';
+import { SonarQubeClient } from '../../../sonarqube/client';
 import { readStdinJson } from './stdin';
 
 interface PostToolUsePayload {

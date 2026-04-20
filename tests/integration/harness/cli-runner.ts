@@ -22,9 +22,10 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
-import type { CliResult } from './types.js';
 import { IS_WINDOWS } from './platform';
+import type { CliResult } from './types.js';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const DEFAULT_BINARY = join(

@@ -21,7 +21,7 @@
 // Tests for note() renderPlain path (non-TTY, no mock)
 // mock.module forces isTTY: false so renderPlain executes regardless of terminal
 
-import { describe, it, expect, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
 void mock.module('../../../src/ui/colors.js', () => ({
   isTTY: false,
@@ -36,6 +36,7 @@ void mock.module('../../../src/ui/colors.js', () => ({
 }));
 
 import { mock } from 'bun:test';
+
 import { note } from '../../../src/ui';
 
 describe('note: renderPlain (non-TTY)', () => {
