@@ -27,7 +27,7 @@ import {
 } from '../../../src/lib/agent-detector.js';
 
 function env(overrides: Record<string, string | undefined>): NodeJS.ProcessEnv {
-  return overrides as NodeJS.ProcessEnv;
+  return overrides;
 }
 
 describe('agent-detector', () => {

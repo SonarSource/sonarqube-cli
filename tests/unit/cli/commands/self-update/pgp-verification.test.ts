@@ -42,7 +42,7 @@ async function generateKeyPair(): Promise<{ privateKey: string; publicKey: strin
     type: 'rsa',
     rsaBits: 2048,
     userIDs: [{ name: 'Test', email: 'test@example.com' }],
-  }) as Promise<{ privateKey: string; publicKey: string }>;
+  });
 }
 
 async function sign(content: Buffer, armoredPrivateKey: string): Promise<string> {
@@ -115,7 +115,7 @@ describe('verifyBinarySignature', () => {
   it('throws when no signature is registered for the platform', () => {
     const unknownPlatform: PlatformInfo = {
       os: 'linux',
-      arch: 'arm' as PlatformInfo['arch'],
+      arch: 'arm',
       extension: '',
     };
     expect(

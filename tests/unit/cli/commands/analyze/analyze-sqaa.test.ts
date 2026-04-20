@@ -127,7 +127,7 @@ describe('analyzeSqaa: auth resolution', () => {
   it('skips SQAA when orgKey is missing from auth', async () => {
     const noOrgAuth = { ...FAKE_AUTH, orgKey: undefined };
 
-    await analyzeSqaa({ file: 'src/index.ts' }, noOrgAuth as typeof FAKE_AUTH);
+    await analyzeSqaa({ file: 'src/index.ts' }, noOrgAuth);
     expect(analyzeFileSpy).not.toHaveBeenCalled();
   });
 

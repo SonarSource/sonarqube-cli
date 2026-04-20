@@ -43,9 +43,7 @@ describe('projectsSearchCommand', () => {
   let getSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(
-      makeProjectsResponse([]) as unknown as never,
-    );
+    getSpy = spyOn(SonarQubeClient.prototype, 'get').mockResolvedValue(makeProjectsResponse([]));
   });
 
   afterEach(() => {
@@ -105,7 +103,7 @@ describe('projectsSearchCommand', () => {
         makeProjectsResponse([
           { key: 'proj-1', name: 'Project One' },
           { key: 'proj-2', name: 'Project Two' },
-        ]) as unknown as never,
+        ]),
       );
 
       await listProjects(DEFAULT_OPTIONS, mockAuth);
@@ -122,7 +120,7 @@ describe('projectsSearchCommand', () => {
     it('includes correct paging metadata with hasNextPage=true when more pages exist', async () => {
       clearMockUiCalls();
       getSpy.mockResolvedValue(
-        makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5) as unknown as never,
+        makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 1, 1, 5),
       );
 
       await listProjects({ pageSize: 1, page: 1 }, mockAuth);
@@ -141,7 +139,7 @@ describe('projectsSearchCommand', () => {
     it('includes correct paging metadata with hasNextPage=false on the last page', async () => {
       clearMockUiCalls();
       getSpy.mockResolvedValue(
-        makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2) as unknown as never,
+        makeProjectsResponse([{ key: 'proj-1', name: 'Project One' }], 2, 1, 2),
       );
 
       await listProjects({ pageSize: 1, page: 2 }, mockAuth);

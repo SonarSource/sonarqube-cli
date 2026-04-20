@@ -86,7 +86,7 @@ describe('checkForUpdate', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve(scriptContent),
-    } as Response);
+    });
 
     const result = await checkForUpdate();
 
@@ -103,7 +103,7 @@ describe('checkForUpdate', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve(scriptContent),
-    } as Response);
+    });
 
     const result = await checkForUpdate();
 
@@ -112,7 +112,7 @@ describe('checkForUpdate', () => {
   });
 
   it('throws on HTTP error', () => {
-    fetchSpy.mockResolvedValue({ ok: false, status: 404 } as Response);
+    fetchSpy.mockResolvedValue({ ok: false, status: 404 });
 
     expect(checkForUpdate()).rejects.toThrow('HTTP 404');
   });
@@ -121,7 +121,7 @@ describe('checkForUpdate', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve('#!/bin/bash\necho "no version here"'),
-    } as Response);
+    });
 
     expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
   });
@@ -145,7 +145,7 @@ describe('selfUpdate --status', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve('version="99.0.0.241"\necho hi'),
-    } as Response);
+    });
 
     await selfUpdate({ status: true });
 
@@ -159,7 +159,7 @@ describe('selfUpdate --status', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve('version="0.0.1"\necho hi'),
-    } as Response);
+    });
 
     await selfUpdate({ status: true });
 
@@ -188,7 +188,7 @@ describe('selfUpdate --force', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve(scriptContent),
-    } as Response);
+    });
     await selfUpdate({ force: true });
   }
 

@@ -208,10 +208,10 @@ describe('pressEnterKeyPrompt: TTY path', () => {
     delete process.env.CI;
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     if (!(process.stdin as NodeJS.ReadStream).setRawMode) {
-      (process.stdin as NodeJS.ReadStream).setRawMode = () => process.stdin as NodeJS.ReadStream;
+      (process.stdin as NodeJS.ReadStream).setRawMode = () => process.stdin;
     }
     setRawModeSpy = spyOn(process.stdin as NodeJS.ReadStream, 'setRawMode').mockReturnValue(
-      process.stdin as NodeJS.ReadStream,
+      process.stdin,
     );
     resumeSpy = spyOn(process.stdin, 'resume').mockReturnValue(process.stdin);
     pauseSpy = spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);

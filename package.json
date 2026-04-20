@@ -69,8 +69,8 @@
     "@types/istanbul-lib-report": "3.0.3",
     "@types/istanbul-reports": "3.0.4",
     "@types/js-yaml": "^4.0.9",
-    "@typescript-eslint/eslint-plugin": "^8.56.1",
-    "@typescript-eslint/parser": "^8.56.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
     "ajv": "^8.18.0",
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
@@ -82,8 +82,8 @@
     "istanbul-reports": "3.2.0",
     "lint-staged": "16.4.0",
     "prettier": "^3.8.1",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.0"
   },
   "lint-staged": {
     "*.ts": [
