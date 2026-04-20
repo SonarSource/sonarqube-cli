@@ -14,8 +14,6 @@ bun run test:unit         # All unit tests
 bun run test:integration  # All integration tests, no coverage (local development)
 bun run test:all          # Unit + integration
 bun run test:e2e          # E2E tests (install scripts, requires network)
-bun run test:coverage     # Full merged lcov report (unit + integration, slow)
-bun run test:e2e:coverage # E2E tests with coverage (appends to integration lcov)
 ```
 
 ### Running a single test file
