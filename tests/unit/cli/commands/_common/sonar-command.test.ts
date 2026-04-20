@@ -22,11 +22,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
+import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver';
 import { SonarCommand } from '../../../../../src/cli/commands/_common/sonar-command';
 import { CommandFailedError } from '../../../../../src/cli/commands/_common/error';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
-const FAKE_AUTH = { token: 'fake-token', serverUrl: 'https://sonar.example.com' };
+const FAKE_AUTH: ResolvedAuth = {
+  token: 'fake-token',
+  serverUrl: 'https://sonar.example.com',
+  connectionType: 'on-premise',
+};
 
 describe('SonarCommand', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;

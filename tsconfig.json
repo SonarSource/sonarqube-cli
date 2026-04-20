@@ -5,8 +5,8 @@
     "lib": ["ES2022"],
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -19,9 +19,8 @@
     "types": ["node", "bun", "js-yaml"]
   },
   "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "tests"
+    "src/**/*",
+    "tests/**/*",
+    "build-scripts/**/*.ts"
   ]
 }

@@ -225,7 +225,7 @@ describe('State Manager', () => {
   describe('migrateState via loadState', () => {
     it('initialises agentExtensions when missing from state file', () => {
       // Simulate a state object that pre-dates the agentExtensions field
-      const raw = getDefaultState('0.1.0') as Record<string, unknown>;
+      const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
       delete raw['agentExtensions'];
 
       // Verify the field is gone

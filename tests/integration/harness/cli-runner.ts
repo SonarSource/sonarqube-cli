@@ -68,7 +68,7 @@ export async function runCli(
   const startTime = Date.now();
   mkdirSync(options.cwd, { recursive: true });
 
-  const spawnEnv = { ...env, SONARQUBE_CLI_DISABLE_SENTRY: '1' };
+  const spawnEnv: Record<string, string> = { ...env, SONARQUBE_CLI_DISABLE_SENTRY: '1' };
   if (coverageMode) {
     mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
     const unique = `${Date.now()}-${crypto.randomUUID()}`;
@@ -98,7 +98,7 @@ export async function runCli(
     // Write each chunk with a delay so readline in the CLI process finishes
     // handling one prompt before the next chunk arrives for the next prompt.
     await (async () => {
-      for (const chunk of options.stdinChunks) {
+      for (const chunk of options.stdinChunks ?? []) {
         await new Promise((r) => setTimeout(r, STDIN_CHUNK_DELAY_MS));
         sink.write(encoder.encode(chunk));
       }

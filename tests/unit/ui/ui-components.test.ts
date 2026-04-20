@@ -70,21 +70,21 @@ import { setMockUi, getMockUiCalls, clearMockUiCalls } from '../../../src/ui';
 
 describe('phaseItem', () => {
   it('creates item with text, status, and no detail by default', () => {
-    const item = phaseItem('Checking config', 'success');
+    const item = phaseItem('Checking config', 'done');
     expect(item.text).toBe('Checking config');
-    expect(item.status).toBe('success');
+    expect(item.status).toBe('done');
     expect(item.detail).toBeUndefined();
   });
 
   it('creates item with detail when provided', () => {
-    const item = phaseItem('Checking config', 'error', 'file not found');
+    const item = phaseItem('Checking config', 'failed', 'file not found');
     expect(item.detail).toBe('file not found');
   });
 
   it('supports all status values', () => {
-    expect(phaseItem('a', 'success').status).toBe('success');
-    expect(phaseItem('b', 'error').status).toBe('error');
-    expect(phaseItem('c', 'warning').status).toBe('warning');
+    expect(phaseItem('a', 'done').status).toBe('done');
+    expect(phaseItem('b', 'failed').status).toBe('failed');
+    expect(phaseItem('c', 'warn').status).toBe('warn');
     expect(phaseItem('d', 'pending').status).toBe('pending');
   });
 });
@@ -101,7 +101,7 @@ describe('phase: mock mode', () => {
   });
 
   it('records call with title and items', () => {
-    const items = [phaseItem('Step 1', 'success')];
+    const items = [phaseItem('Step 1', 'done')];
     phase('Setup', items);
     const calls = getMockUiCalls();
     expect(calls.some((c) => c.method === 'phase' && c.args[0] === 'Setup')).toBe(true);
@@ -110,7 +110,7 @@ describe('phase: mock mode', () => {
   it('does not write to stdout in mock mode', () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      phase('Title', [phaseItem('item', 'success')]);
+      phase('Title', [phaseItem('item', 'done')]);
       expect(writeSpy).not.toHaveBeenCalled();
     } finally {
       writeSpy.mockRestore();
@@ -128,7 +128,7 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Verification', [phaseItem('Token valid', 'success')]);
+      phase('Verification', [phaseItem('Token valid', 'done')]);
       expect(output.join('')).toContain('Verification');
     } finally {
       writeSpy.mockRestore();
@@ -142,7 +142,7 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Phase', [phaseItem('Step one', 'success'), phaseItem('Step two', 'error')]);
+      phase('Phase', [phaseItem('Step one', 'done'), phaseItem('Step two', 'failed')]);
       const combined = output.join('');
       expect(combined).toContain('Step one');
       expect(combined).toContain('Step two');
@@ -158,7 +158,7 @@ describe('phase: non-TTY output', () => {
       return true;
     });
     try {
-      phase('Phase', [phaseItem('Config', 'warning', 'missing field')]);
+      phase('Phase', [phaseItem('Config', 'warn', 'missing field')]);
       expect(output.join('')).toContain('missing field');
     } finally {
       writeSpy.mockRestore();
@@ -290,14 +290,14 @@ describe('withSpinner: mock mode', () => {
   });
 
   it('records call with message', async () => {
-    await withSpinner('Loading', () => 42);
+    await withSpinner('Loading', () => Promise.resolve(42));
     expect(getMockUiCalls().some((c) => c.method === 'spinner' && c.args[0] === 'Loading')).toBe(
       true,
     );
   });
 
   it('returns task result in mock mode', async () => {
-    const result = await withSpinner('Fetching', () => 'data');
+    const result = await withSpinner('Fetching', () => Promise.resolve('data'));
     expect(result).toBe('data');
   });
 
@@ -320,7 +320,7 @@ describe('withSpinner: non-TTY output', () => {
       return true;
     });
     try {
-      await withSpinner('Processing', () => 'done');
+      await withSpinner('Processing', () => Promise.resolve('done'));
       expect(output.some((s) => s.includes('Processing'))).toBe(true);
     } finally {
       writeSpy.mockRestore();
@@ -330,7 +330,7 @@ describe('withSpinner: non-TTY output', () => {
   it('returns task result in non-TTY mode', async () => {
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      const result = await withSpinner('Computing', () => 99);
+      const result = await withSpinner('Computing', () => Promise.resolve(99));
       expect(result).toBe(99);
     } finally {
       writeSpy.mockRestore();

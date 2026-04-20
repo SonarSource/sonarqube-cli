@@ -132,7 +132,7 @@ describe('formatCSV: data rows', () => {
 
   it('row contains all fields in correct order', () => {
     const issue = makeIssue({
-      severity: 'HIGH',
+      severity: 'CRITICAL',
       rule: 'r1',
       message: 'msg',
       type: 'BUG',
@@ -141,7 +141,7 @@ describe('formatCSV: data rows', () => {
     });
     const row = formatCSV([issue]).split('\n')[1];
     const parts = row.split(',');
-    expect(parts[0]).toBe('HIGH');
+    expect(parts[0]).toBe('CRITICAL');
     expect(parts[1]).toBe('r1');
     expect(parts[2]).toBe('msg');
     expect(parts[4]).toBe('5');

@@ -43,7 +43,7 @@ describe('readStdinJson', () => {
       delete listeners[key];
     }
     onSpy = spyOn(process.stdin, 'on').mockImplementation(
-      captureListener as Parameters<typeof spyOn>[2],
+      captureListener as unknown as typeof process.stdin.on,
     );
   });
 
@@ -89,10 +89,10 @@ describe('readStdinJson', () => {
 
   it('throws when stdin read times out', async () => {
     let timeoutFn: (() => void) | undefined;
-    const timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation((fn: TimerHandler) => {
-      timeoutFn = fn as () => void;
+    const timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
+      timeoutFn = fn;
       return 0 as unknown as ReturnType<typeof setTimeout>;
-    });
+    }) as unknown as typeof setTimeout);
 
     try {
       const promise = readStdinJson();
@@ -129,7 +129,7 @@ describe('readGitPushRefs', () => {
       delete listeners[key];
     }
     onSpy = spyOn(process.stdin, 'on').mockImplementation(
-      captureListener as Parameters<typeof spyOn>[2],
+      captureListener as unknown as typeof process.stdin.on,
     );
   });
 
@@ -161,10 +161,10 @@ describe('readGitPushRefs', () => {
 
   it('returns empty array when stdin times out', async () => {
     let timeoutFn: (() => void) | undefined;
-    const timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation((fn: TimerHandler) => {
-      timeoutFn = fn as () => void;
+    const timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
+      timeoutFn = fn;
       return 0 as unknown as ReturnType<typeof setTimeout>;
-    });
+    }) as unknown as typeof setTimeout);
 
     try {
       const promise = readGitPushRefs();

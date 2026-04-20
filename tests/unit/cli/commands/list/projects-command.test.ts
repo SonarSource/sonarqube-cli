@@ -18,6 +18,7 @@ const DEFAULT_OPTIONS: ListProjectsOptions = {
 const mockAuth: ResolvedAuth = {
   token: 'test-token',
   serverUrl: 'https://sonar.example.com',
+  connectionType: 'on-premise',
 };
 
 function makeProjectsResponse(
@@ -88,9 +89,13 @@ describe('projectsSearchCommand', () => {
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
       expect(prints).toHaveLength(1);
-      expect(prints[0].projects).toEqual([]);
-      expect(prints[0].paging.total).toBe(0);
-      expect(prints[0].paging.hasNextPage).toBe(false);
+      const first = prints[0] as {
+        projects: unknown;
+        paging: { total: number; hasNextPage: boolean };
+      };
+      expect(first.projects).toEqual([]);
+      expect(first.paging.total).toBe(0);
+      expect(first.paging.hasNextPage).toBe(false);
     });
 
     it('prints JSON with mapped projects (key and name only)', async () => {
@@ -107,7 +112,7 @@ describe('projectsSearchCommand', () => {
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
-      expect(prints[0].projects).toEqual([
+      expect((prints[0] as { projects: unknown }).projects).toEqual([
         { key: 'proj-1', name: 'Project One' },
         { key: 'proj-2', name: 'Project Two' },
       ]);
@@ -124,7 +129,12 @@ describe('projectsSearchCommand', () => {
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
-      expect(prints[0].paging).toEqual({ pageIndex: 1, pageSize: 1, total: 5, hasNextPage: true });
+      expect((prints[0] as { paging: unknown }).paging).toEqual({
+        pageIndex: 1,
+        pageSize: 1,
+        total: 5,
+        hasNextPage: true,
+      });
     });
 
     it('includes correct paging metadata with hasNextPage=false on the last page', async () => {
@@ -138,7 +148,7 @@ describe('projectsSearchCommand', () => {
       const prints = getMockUiCalls()
         .filter((c) => c.method === 'print')
         .map((c) => JSON.parse(String(c.args[0])) as Record<string, unknown>);
-      expect(prints[0].paging.hasNextPage).toBe(false);
+      expect((prints[0] as { paging: { hasNextPage: boolean } }).paging.hasNextPage).toBe(false);
     });
 
     it('passes query option to the API', async () => {
@@ -182,6 +192,7 @@ describe('projectsSearchCommand', () => {
         token: 'cloud-token',
         serverUrl: 'https://sonarcloud.io',
         orgKey: 'my-org',
+        connectionType: 'cloud',
       };
 
       let capturedParams: Record<string, unknown> | undefined;
@@ -199,6 +210,7 @@ describe('projectsSearchCommand', () => {
       const onPremAuth: ResolvedAuth = {
         token: 'test-token',
         serverUrl: 'https://sonar.example.com',
+        connectionType: 'on-premise',
       };
 
       let capturedParams: Record<string, unknown> | undefined;

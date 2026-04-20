@@ -266,6 +266,7 @@ describe('runMigrations — migration execution', () => {
     const projectExts = state.agentExtensions.filter(
       (e) =>
         e.name === 'sonar-secrets' &&
+        e.kind === 'hook' &&
         e.hookType === 'PreToolUse' &&
         e.projectRoot === '/some/project',
     );
