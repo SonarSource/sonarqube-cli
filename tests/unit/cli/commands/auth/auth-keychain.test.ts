@@ -20,7 +20,7 @@
 
 // Unit tests for keychain token storage
 
-import { it, expect } from 'bun:test';
+import { afterAll, beforeAll, it, expect } from 'bun:test';
 import {
   getToken,
   saveToken,
@@ -28,9 +28,11 @@ import {
   getAllCredentials,
   purgeAllTokens,
 } from '../../../../../src/lib/keychain.js';
-import { createMockKeytar } from '../../../helpers/mock-keytar.js';
+import { createKeychainTestHandle } from '../../../keychain/keychain-test-handle.js';
 
-createMockKeytar().setup();
+const handle = createKeychainTestHandle();
+beforeAll(() => handle.setup());
+afterAll(() => handle.teardown());
 
 it('keychain: save and get token for SonarCloud with org', async () => {
   await saveToken('https://sonarcloud.io', 'squ_abc123', 'my-org');

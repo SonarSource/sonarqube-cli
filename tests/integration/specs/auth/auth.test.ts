@@ -383,9 +383,10 @@ describe('auth logout', () => {
 
       expect(result.exitCode).toBe(0);
 
-      const keychain = harness.keychainJsonFile.asJson() as { tokens: Record<string, string> };
-      expect(Object.values(keychain.tokens)).not.toContain('token-org1');
-      expect(Object.values(keychain.tokens)).toContain('token-org2');
+      const account1 = generateKeychainAccount(server.baseUrl(), 'org1');
+      const account2 = generateKeychainAccount(server.baseUrl(), 'org2');
+      expect(readKeychainToken(harness.keychainJsonFile, account1)).toBeUndefined();
+      expect(readKeychainToken(harness.keychainJsonFile, account2)).toBe('token-org2');
     },
     { timeout: 15000 },
   );
