@@ -119,6 +119,25 @@ detect_profile() {
   [[ -n "$detected" ]] && echo "$detected"
 }
 
+# Appends the sonarqube-cli PATH export to the best shell profile,
+# skipping if it is already present. Uses detect_profile() to choose
+# the target file and reports the outcome on stdout.
+update_profile() {
+  local path_line='export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"'
+  local detected_profile
+  detected_profile="$(detect_profile || true)"
+
+  if [[ -z "$detected_profile" ]]; then
+    echo "No shell profile files found. Add the following line to your shell profile manually:"
+    echo "  $path_line"
+  elif grep -qF 'sonarqube-cli/bin' "$detected_profile" 2>/dev/null; then
+    echo "Already present in $detected_profile, skipping."
+  else
+    printf '\n# Added by sonarqube-cli installer\n%s\n' "$path_line" >> "$detected_profile"
+    echo "Updated PATH in: $detected_profile"
+  fi
+}
+
 main() {
   local version=""
   local token="${ARTIFACTORY_ACCESS_TOKEN:-}"
@@ -178,18 +197,7 @@ main() {
 
   echo "Installed sonar to: $dest"
 
-  local path_line='export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"'
-  local detected_profile="$(detect_profile)"
-
-  if [[ -z "$detected_profile" ]]; then
-    echo "No shell profile files found. Add the following line to your shell profile manually:"
-    echo "  $path_line"
-  elif grep -qF 'sonarqube-cli/bin' "$detected_profile" 2>/dev/null; then
-    echo "Already present in $detected_profile, skipping."
-  else
-    printf '\n# Added by sonarqube-cli installer\n%s\n' "$path_line" >> "$detected_profile"
-    echo "Updated PATH in: $detected_profile"
-  fi
+  update_profile
 
   echo ""
   echo "Installation complete! (pre-release $version)"
