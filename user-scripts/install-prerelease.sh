@@ -90,7 +90,7 @@ detect_profile() {
   fi
 
   local detected=""
-  case "${SHELL##*/}" in
+  case "${SHELL+${SHELL##*/}}" in
     bash)
       if [[ -f "$HOME/.bashrc" ]]; then
         detected="$HOME/.bashrc"

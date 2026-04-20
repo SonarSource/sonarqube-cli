@@ -43,10 +43,18 @@ const PATH_LINE = 'export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"';
  * By extracting the functions directly from the production script, the test
  * will break if the script's logic (marker string, comment, messages, etc.)
  * changes without the test being updated.
+ *
+ * Pass `unsetShell: true` to simulate environments where $SHELL is not set
+ * (minimal containers, `env -i`, some CI runners). Bun's runtime always injects
+ * SHELL into child processes, so we have to unset it from inside bash.
  */
-function runProfileUpdate(env: Record<string, string>): { stdout: string; exitCode: number } {
+function runProfileUpdate(
+  env: Record<string, string>,
+  opts: { unsetShell?: boolean } = {},
+): { stdout: string; stderr: string; exitCode: number } {
   const bashSnippet = `
 set -euo pipefail
+${opts.unsetShell ? 'unset SHELL' : ''}
 eval "$(sed -n '/^detect_profile()/,/^}/p' "${scriptPath}")"
 eval "$(sed -n '/^update_profile()/,/^}/p' "${scriptPath}")"
 update_profile
@@ -56,6 +64,7 @@ update_profile
   });
   return {
     stdout: new TextDecoder().decode(proc.stdout).trim(),
+    stderr: new TextDecoder().decode(proc.stderr).trim(),
     exitCode: proc.exitCode,
   };
 }
@@ -245,6 +254,37 @@ describe.if(!isWindows)('install.sh profile update', () => {
       expect(extract(scriptPath, 'update_profile')).toBe(
         extract(prereleaseScriptPath, 'update_profile'),
       );
+    });
+  });
+
+  describe('unset or empty SHELL', () => {
+    it('does not crash under set -u when SHELL is unset', () => {
+      touch(join(tempHome, '.profile'));
+
+      const result = runProfileUpdate({ HOME: tempHome }, { unsetShell: true });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('unbound variable');
+      expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.profile')}`);
+      expect(readProfile(join(tempHome, '.profile'))).toContain(PATH_LINE);
+    });
+
+    it('falls through to generic fallback when SHELL is empty', () => {
+      touch(join(tempHome, '.profile'));
+
+      const result = runProfileUpdate({ HOME: tempHome, SHELL: '' });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('unbound variable');
+      expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.profile')}`);
+    });
+
+    it('reports no profile when SHELL is unset and HOME has no profile files', () => {
+      const result = runProfileUpdate({ HOME: tempHome }, { unsetShell: true });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('unbound variable');
+      expect(result.stdout).toContain('No shell profile files found.');
     });
   });
 
