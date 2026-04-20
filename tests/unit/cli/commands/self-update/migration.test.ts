@@ -130,7 +130,9 @@ describe('runMigrations — migration execution', () => {
 
     await runMigrations('/some/project');
 
-    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', undefined, false, undefined);
+    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', undefined, false, undefined, {
+      skipSecretsHooks: false,
+    });
   });
 
   it('passes globalDir to installHooks when provided', async () => {
@@ -138,7 +140,19 @@ describe('runMigrations — migration execution', () => {
 
     await runMigrations('/some/project', '/global/dir');
 
-    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', '/global/dir', false, undefined);
+    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', '/global/dir', false, undefined, {
+      skipSecretsHooks: false,
+    });
+  });
+
+  it('forwards skipSecretsHooks: true to installHooks when a global secrets hook pre-exists', async () => {
+    loadStateSpy.mockReturnValue(makeConfiguredState(OLD_VERSION));
+
+    await runMigrations('/some/project', undefined, false, undefined, { skipSecretsHooks: true });
+
+    expect(installHooksSpy).toHaveBeenCalledWith('/some/project', undefined, false, undefined, {
+      skipSecretsHooks: true,
+    });
   });
 
   it('registers sonar-sqaa PostToolUse hook in state', async () => {
@@ -266,12 +280,13 @@ describe('runMigrations — migration execution', () => {
     await runMigrations('/some/project');
 
     const projectExts = state.agentExtensions.filter(
-      (e) =>
-        e.name === 'sonar-secrets' &&
+      (e): e is HookExtension =>
         e.kind === 'hook' &&
+        e.name === 'sonar-secrets' &&
         e.hookType === 'PreToolUse' &&
         e.projectRoot === '/some/project',
     );
+
     expect(projectExts.length).toBe(1);
   });
 });

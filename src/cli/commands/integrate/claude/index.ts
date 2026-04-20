@@ -35,7 +35,7 @@ import { blank, info, intro, note, outro, success, text, warn } from '../../../.
 import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { runHealthChecks } from './health';
-import { installHooks } from './hooks';
+import { detectSecretsHook, installHooks } from './hooks';
 import { setupMcpServer } from './mcp';
 import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
@@ -71,7 +71,21 @@ export async function integrateClaude(
   validateConfiguration(project, config);
 
   const isGlobal = options.global ?? false;
-  const hooksRoot = isGlobal ? homedir() : project.rootDir;
+  // When running a project-level install, probe the user home for a global Claude
+  // hook. If a complete global install is detected we skip project-level secrets
+  // to avoid duplicate execution; if we detect an orphaned/half-deleted install
+  // we warn the user and proceed with a fresh project-level install.
+  const globalSecretsHookState = isGlobal ? null : await detectSecretsHook(homedir());
+  if (globalSecretsHookState?.kind === 'orphaned') {
+    warn(
+      `WARNING: Global hook configuration detected, but the source files are missing at ${globalSecretsHookState.hookDir}. Falling back to local project installation`,
+    );
+  }
+  const globalSecretsHookPath =
+    globalSecretsHookState?.kind === 'installed' ? globalSecretsHookState.hookDir : null;
+  const skipSecretsHooks = globalSecretsHookPath !== null;
+  // Health check looks at the directory that actually owns the secrets hooks.
+  const hooksRoot = isGlobal || skipSecretsHooks ? homedir() : project.rootDir;
   const globalDir = isGlobal ? homedir() : undefined;
 
   let token = config.token;
@@ -110,12 +124,18 @@ export async function integrateClaude(
 
   const sqaaEnabled = await resolveSqaaEntitlement(config.serverURL, token, config.organization);
 
-  text('Installing claude code hooks...');
-  await runMigrations(project.rootDir, globalDir, sqaaEnabled, config.projectKey);
-  await installHooks(project.rootDir, globalDir, sqaaEnabled, config.projectKey);
+  announceHookScope(isGlobal, skipSecretsHooks);
+  await runMigrations(project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
+    skipSecretsHooks,
+  });
+  await installHooks(project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
+    skipSecretsHooks,
+  });
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
-  await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled);
-  success('Claude code hooks installed');
+  await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled, {
+    skipSecretsHooks,
+  });
+  reportHookInstallationOutcome(isGlobal, globalSecretsHookPath);
 
   await setupMcpServer('claude', project.rootDir, isGlobal, auth, project.projectKey);
 
@@ -186,6 +206,45 @@ function validateConfiguration(project: DiscoveredProject, config: Configuration
     text(`Project: ${config.projectKey}`);
   } else {
     text('No project key provided - project related actions will be skipped.');
+  }
+}
+
+/**
+ * Print the scope-aware notice before hook installation runs.
+ * Covers the three UX states agreed with design:
+ *   1. A global hook already exists → project-level setup will be skipped.
+ *   2. No global hook exists → proceed with project-level configuration.
+ *   3. The user explicitly requested a global install (-g) → no notice needed,
+ *      the outcome message at the end of installation is sufficient.
+ */
+function announceHookScope(isGlobal: boolean, skipSecretsHooks: boolean): void {
+  if (isGlobal) return;
+  if (skipSecretsHooks) {
+    info(
+      'A global secrets scanning hook is already configured for SonarQube. To avoid duplicate execution, project-level secrets hooks were skipped.',
+    );
+  } else {
+    text('No global Claude hook was found. Configuring SonarQube for this project only.');
+  }
+}
+
+/**
+ * Print the scope-aware outcome after hook installation completes.
+ * When project-level setup was skipped because a global hook already owns the
+ * sonar-secrets scope, surface the existing hook path so the user knows where
+ * the active secrets scanning hook lives.
+ */
+function reportHookInstallationOutcome(isGlobal: boolean, globalHookPath: string | null): void {
+  if (globalHookPath !== null) {
+    success(
+      `Claude integration configured. Secrets scanning will use the existing global hook at: ${globalHookPath}`,
+    );
+    return;
+  }
+  if (isGlobal) {
+    success('Claude integration successfully configured globally');
+  } else {
+    success('Claude integration successfully configured at the project level');
   }
 }
 

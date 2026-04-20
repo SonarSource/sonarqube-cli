@@ -135,6 +135,15 @@ export function cleanObsoleteFromState(state: CliState, marker: string): void {
   state.agentExtensions = state.agentExtensions.filter((e) => e.name !== marker);
 }
 
+export interface RunMigrationsOptions {
+  /**
+   * When true, skip migrating/rewriting/installing project-level sonar-secrets hooks.
+   * Mirrors the same-named flag on {@link installHooks}; used when a pre-existing
+   * global sonar-secrets hook should take precedence over the project-level one.
+   */
+  skipSecretsHooks?: boolean;
+}
+
 /**
  * Run all pending config migrations for Claude Code agent.
  * Called during sonar claude setup. Non-blocking — logs and continues on error.
@@ -144,6 +153,7 @@ export async function runMigrations(
   globalDir?: string,
   installSqaa = false,
   projectKey?: string,
+  options: RunMigrationsOptions = {},
 ): Promise<void> {
   try {
     const state = loadState();
@@ -177,11 +187,17 @@ export async function runMigrations(
       }
     }
 
-    // Migrate hook scripts on disk: rewrite with new commands
-    migrateHookScripts(projectRoot, globalDir);
+    const { skipSecretsHooks = false } = options;
 
-    // Install new PostToolUse hook
-    await installHooks(projectRoot, globalDir, installSqaa, projectKey);
+    // Migrate hook scripts on disk: rewrite with new commands.
+    // When skipSecretsHooks is set, a global hook already exists — leave the
+    // project-level scripts alone rather than re-materializing them.
+    if (!skipSecretsHooks) {
+      migrateHookScripts(projectRoot, globalDir);
+    }
+
+    // Install new PostToolUse hook (and refresh secrets hooks unless skipped)
+    await installHooks(projectRoot, globalDir, installSqaa, projectKey, { skipSecretsHooks });
 
     // Clean up obsolete sonar-a3s artifacts (settings.json entries + hook dir on disk)
     await removeObsoleteHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);

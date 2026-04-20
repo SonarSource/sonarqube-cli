@@ -903,6 +903,169 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
   });
 
+  // ─── Global pre-exists, project install runs ────────────────────
+
+  describe('project-level install when a global Claude hook already exists', () => {
+    function writeExistingGlobalSecretsHook(): void {
+      // Simulate the on-disk footprint of a previous `sonar integrate claude -g` run:
+      // .claude/settings.json with a sonar-secrets PreToolUse entry plus the script file.
+      const globalScriptRel =
+        '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets' + (IS_WINDOWS ? '.ps1' : '.sh');
+      harness.userHome.writeFile(globalScriptRel, '#!/bin/bash\nexit 0\n');
+      harness.userHome.writeFile(
+        '.claude/settings.json',
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Read',
+                hooks: [
+                  {
+                    type: 'command',
+                    command: `${harness.userHome.path}/${globalScriptRel}`,
+                    timeout: 60,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+    }
+
+    it(
+      'does not create .claude/settings.json in the project directory',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('tok')
+          .withProject('proj')
+          .start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+        );
+        writeExistingGlobalSecretsHook();
+
+        const result = await harness.run('integrate claude --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists('.claude', 'settings.json')).toBe(false);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'does not create project-level sonar-secrets scripts',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('tok')
+          .withProject('proj')
+          .start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+        );
+        writeExistingGlobalSecretsHook();
+
+        await harness.run('integrate claude --non-interactive');
+
+        expect(harness.cwd.exists('.claude', 'hooks', 'sonar-secrets')).toBe(false);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'prints the "global hook already configured — project-level skipped" message',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('tok')
+          .withProject('proj')
+          .start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+        );
+        writeExistingGlobalSecretsHook();
+
+        const result = await harness.run('integrate claude --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(
+          'A global secrets scanning hook is already configured for SonarQube. To avoid duplicate execution, project-level secrets hooks were skipped.',
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'leaves the pre-existing global settings.json file intact',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('tok')
+          .withProject('proj')
+          .start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+        );
+        writeExistingGlobalSecretsHook();
+        const before = harness.userHome.file('.claude', 'settings.json').asText();
+
+        await harness.run('integrate claude --non-interactive');
+
+        const after = harness.userHome.file('.claude', 'settings.json').asText();
+        expect(after).toBe(before);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'still writes the project-scoped sonar-sqaa hook when the org has SQAA entitlement',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+          .withSqaaEntitlement('my-org', 'test-uuid-1234')
+          .withProject('proj')
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+        writeExistingGlobalSecretsHook();
+
+        const result = await harness.run(`integrate claude --project proj --non-interactive`, {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        // SQAA hook must still land project-locally because it is always project-scoped.
+        expect(
+          harness.cwd.exists(
+            '.claude',
+            'hooks',
+            'sonar-sqaa',
+            'build-scripts',
+            hookScriptName('posttool-sqaa'),
+          ),
+        ).toBe(true);
+        // Secrets scripts must NOT be duplicated at project level.
+        expect(harness.cwd.exists('.claude', 'hooks', 'sonar-secrets')).toBe(false);
+      },
+      { timeout: 30000 },
+    );
+  });
+
   // ─── Global (-g flag) ──────────────────────────────────────────────────────
 
   describe('global hooks (-g flag)', () => {

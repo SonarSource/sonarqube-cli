@@ -145,21 +145,39 @@ async function installHook(params: HookInstallParams): Promise<void> {
 }
 
 /**
- * Check if hooks are installed.
- * The hooksRoot parameter is the directory whose agent config settings.json file is inspected.
+ * Result of probing for a Sonar secrets hook installation under a given root.
+ *
+ *  - `installed`: settings entry references sonar-secrets AND the backing
+ *    script directory exists. `hookDir` is the absolute path of that directory.
+ *  - `orphaned`:  settings entry exists but the backing script directory is
+ *    missing — the install was partially deleted/corrupted. `hookDir`
+ *    is the expected path of the missing script directory so callers can
+ *    surface it to the user.
+ *  - `absent`:    no settings entry referencing sonar-secrets.
  */
-export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
+export type SecretsHookState =
+  | { kind: 'installed'; hookDir: string }
+  | { kind: 'orphaned'; hookDir: string }
+  | { kind: 'absent' };
+
+/**
+ * Detect the state of the Sonar secrets hook installation under `hooksRoot`.
+ *
+ * This is the single source of truth for the install/orphaned/absent contract;
+ * boolean and path-only helpers are thin wrappers over this function.
+ */
+export async function detectSecretsHook(hooksRoot: string): Promise<SecretsHookState> {
   const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR.claude, SETTINGS_FILE);
 
   if (!nodeFs.existsSync(settingsPath)) {
-    return false;
+    return { kind: 'absent' };
   }
 
   try {
     const data = await fsPromises.readFile(settingsPath, 'utf-8');
     const settings = JSON.parse(data) as AgentSettings;
 
-    return Boolean(
+    const hasSettingsEntry = Boolean(
       settings.hooks?.PreToolUse &&
       Array.isArray(settings.hooks.PreToolUse) &&
       settings.hooks.PreToolUse.some(
@@ -167,9 +185,41 @@ export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
           Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER)),
       ),
     );
+
+    if (!hasSettingsEntry) {
+      return { kind: 'absent' };
+    }
+
+    // Settings entry references sonar-secrets — verify the backing script directory.
+    // A missing directory means the install was partially deleted; we surface that
+    // as `orphaned` so callers can warn the user instead of silently re-installing.
+    const hookDir = join(hooksRoot, AGENT_CONFIG_DIR.claude, HOOKS_DIR, SONAR_SECRETS_MARKER);
+    if (!nodeFs.existsSync(hookDir)) {
+      return { kind: 'orphaned', hookDir };
+    }
+    return { kind: 'installed', hookDir };
   } catch {
-    return false;
+    return { kind: 'absent' };
   }
+}
+
+/**
+ * Check whether a Sonar secrets hook is fully installed under `hooksRoot`.
+ *
+ * Thin boolean wrapper around {@link detectSecretsHook} for callers that only
+ * care about presence (e.g. the health check).
+ */
+export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
+  return (await detectSecretsHook(hooksRoot)).kind === 'installed';
+}
+
+export interface InstallHooksOptions {
+  /**
+   * When true, skip the project-level sonar-secrets hook writes.
+   * Used when a global sonar-secrets hook is already configured to avoid duplicate execution.
+   * SQAA remains installed project-locally because it is always project-scoped.
+   */
+  skipSecretsHooks?: boolean;
 }
 
 /**
@@ -182,31 +232,35 @@ export async function installHooks(
   globalDir?: string,
   installSqaa = false,
   projectKey?: string,
+  options: InstallHooksOptions = {},
 ): Promise<void> {
   const secretsDir = globalDir ?? projectRoot;
   const secretsScope = globalDir ? 'global' : 'project';
+  const { skipSecretsHooks = false } = options;
 
   try {
-    await installHook({
-      installDir: secretsDir,
-      scope: secretsScope,
-      agent: 'claude',
-      eventType: 'PreToolUse',
-      matcher: 'Read',
-      scriptPath: 'sonar-secrets/build-scripts/pretool-secrets',
-      scriptContentUnix: getSecretPreToolTemplateUnix(),
-      scriptContentWindows: getSecretPreToolTemplateWindows(),
-    });
-    await installHook({
-      installDir: secretsDir,
-      scope: secretsScope,
-      agent: 'claude',
-      eventType: 'UserPromptSubmit',
-      matcher: '*',
-      scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
-      scriptContentUnix: getSecretPromptTemplateUnix(),
-      scriptContentWindows: getSecretPromptTemplateWindows(),
-    });
+    if (!skipSecretsHooks) {
+      await installHook({
+        installDir: secretsDir,
+        scope: secretsScope,
+        agent: 'claude',
+        eventType: 'PreToolUse',
+        matcher: 'Read',
+        scriptPath: 'sonar-secrets/build-scripts/pretool-secrets',
+        scriptContentUnix: getSecretPreToolTemplateUnix(),
+        scriptContentWindows: getSecretPreToolTemplateWindows(),
+      });
+      await installHook({
+        installDir: secretsDir,
+        scope: secretsScope,
+        agent: 'claude',
+        eventType: 'UserPromptSubmit',
+        matcher: '*',
+        scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
+        scriptContentUnix: getSecretPromptTemplateUnix(),
+        scriptContentWindows: getSecretPromptTemplateWindows(),
+      });
+    }
     if (installSqaa && projectKey) {
       await installHook({
         installDir: projectRoot,

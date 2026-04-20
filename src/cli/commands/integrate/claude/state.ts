@@ -36,6 +36,15 @@ import {
 import { warn } from '../../../../ui';
 import type { ConfigurationData } from './index';
 
+export interface UpdateStateOptions {
+  /**
+   * When true, do not register project-level sonar-secrets entries in state.
+   * Use when a global sonar-secrets hook already owns that scope and the
+   * project-level installation was intentionally skipped.
+   */
+  skipSecretsHooks?: boolean;
+}
+
 /**
  * Update state after successful configuration
  */
@@ -44,16 +53,21 @@ export async function updateStateAfterConfiguration(
   projectRoot: string,
   isGlobal: boolean,
   sqaaEnabled: boolean,
+  options: UpdateStateOptions = {},
 ): Promise<void> {
   try {
     const state = loadState();
+    const { skipSecretsHooks = false } = options;
 
     // Mark agent as configured
     markAgentConfigured(state, 'claude-code', VERSION);
 
-    // Track installed hooks (legacy format for backward compat)
-    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
-    addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
+    // Track installed hooks (legacy format for backward compat).
+    // Skip secrets entries when a pre-existing global hook owns that scope.
+    if (!skipSecretsHooks) {
+      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
+      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
+    }
     if (sqaaEnabled) {
       addInstalledHook(state, 'claude-code', 'sonar-sqaa', 'PostToolUse');
     }
@@ -73,20 +87,22 @@ export async function updateStateAfterConfiguration(
       updatedAt: now,
     };
 
-    upsertAgentExtension(state, {
-      ...baseExt,
-      id: randomUUID(),
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'PreToolUse',
-    });
-    upsertAgentExtension(state, {
-      ...baseExt,
-      id: randomUUID(),
-      kind: 'hook',
-      name: 'sonar-secrets',
-      hookType: 'UserPromptSubmit',
-    });
+    if (!skipSecretsHooks) {
+      upsertAgentExtension(state, {
+        ...baseExt,
+        id: randomUUID(),
+        kind: 'hook',
+        name: 'sonar-secrets',
+        hookType: 'PreToolUse',
+      });
+      upsertAgentExtension(state, {
+        ...baseExt,
+        id: randomUUID(),
+        kind: 'hook',
+        name: 'sonar-secrets',
+        hookType: 'UserPromptSubmit',
+      });
+    }
 
     const isCloud = isSonarQubeCloud(config.serverURL);
     if (sqaaEnabled) {
