@@ -5,6 +5,7 @@ The SonarQube CLI maintains persistent state in `~/.sonar/sonarqube-cli/state.js
 ## Overview
 
 The state file persists configuration across CLI invocations and stores:
+
 - **Authentication**: Server connections details. Tokens are stored securely in system keychain, NOT in the state file
 - **Agent Configuration**: Integration status with Claude Code and other agents
 - **Installed Hooks**: Pre/Post tool use and session start hooks for agent interactions
@@ -22,52 +23,52 @@ The state file persists configuration across CLI invocations and stores:
 
 ### Root Level
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `version` | string | State format version (currently `"1.0"`) |
-| `lastUpdated` | ISO 8601 timestamp | When state was last modified |
-| `auth` | AuthState | Authentication and server connections |
-| `agents` | AgentsState | Configuration for each agent (Claude Code, etc.) |
-| `config` | CliConfig | CLI configuration metadata |
-| `tools` | ToolsState (optional) | Installed tools and binaries |
+| Field         | Type                  | Description                                      |
+| ------------- | --------------------- | ------------------------------------------------ |
+| `version`     | string                | State format version (currently `"1.0"`)         |
+| `lastUpdated` | ISO 8601 timestamp    | When state was last modified                     |
+| `auth`        | AuthState             | Authentication and server connections            |
+| `agents`      | AgentsState           | Configuration for each agent (Claude Code, etc.) |
+| `config`      | CliConfig             | CLI configuration metadata                       |
+| `tools`       | ToolsState (optional) | Installed tools and binaries                     |
 
 ### Auth Section
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `isAuthenticated` | boolean | Whether at least one valid connection exists |
-| `connections` | AuthConnection[] | List of configured server connections |
-| `activeConnectionId` | string (optional) | ID of the currently active connection |
+| Field                | Type              | Description                                  |
+| -------------------- | ----------------- | -------------------------------------------- |
+| `isAuthenticated`    | boolean           | Whether at least one valid connection exists |
+| `connections`        | AuthConnection[]  | List of configured server connections        |
+| `activeConnectionId` | string (optional) | ID of the currently active connection        |
 
 #### AuthConnection Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | ✅ | Hash identifier (from serverUrl + orgKey) |
-| `type` | 'cloud' \| 'on-premise' | ✅ | Server type classification |
-| `serverUrl` | string | ✅ | Server URL (e.g., `https://sonarcloud.io`) |
-| `orgKey` | string | ❌* | Organization key (for SonarQube Cloud only) |
-| `region` | 'eu' \| 'us' | ❌* | Cloud region (for SonarQube Cloud only) |
-| `authenticatedAt` | ISO 8601 timestamp | ✅ | When connection was established |
+| Field             | Type                    | Required | Description                                 |
+| ----------------- | ----------------------- | -------- | ------------------------------------------- |
+| `id`              | string                  | ✅       | Hash identifier (from serverUrl + orgKey)   |
+| `type`            | 'cloud' \| 'on-premise' | ✅       | Server type classification                  |
+| `serverUrl`       | string                  | ✅       | Server URL (e.g., `https://sonarcloud.io`)  |
+| `orgKey`          | string                  | ❌\*     | Organization key (for SonarQube Cloud only) |
+| `region`          | 'eu' \| 'us'            | ❌\*     | Cloud region (for SonarQube Cloud only)     |
+| `authenticatedAt` | ISO 8601 timestamp      | ✅       | When connection was established             |
 
-*Required only for SonarQube Cloud connections
+\*Required only for SonarQube Cloud connections
 
 ### Agents Section
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `claude-code` | AgentConfig | Claude Code agent configuration |
-| `[other-agents]` | AgentConfig | Future agents can be added |
+| Field            | Type        | Description                     |
+| ---------------- | ----------- | ------------------------------- |
+| `claude-code`    | AgentConfig | Claude Code agent configuration |
+| `[other-agents]` | AgentConfig | Future agents can be added      |
 
 #### AgentConfig Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `configured` | boolean | Whether agent is fully configured |
-| `configuredAt` | ISO 8601 timestamp (optional) | When agent was configured |
-| `configuredByCliVersion` | string (optional) | CLI version that configured the agent |
-| `hooks.installed` | InstalledHook[] | List of installed hooks |
-| `skills.installed` | InstalledSkill[] | List of installed skills |
+| Field                    | Type                          | Description                           |
+| ------------------------ | ----------------------------- | ------------------------------------- |
+| `configured`             | boolean                       | Whether agent is fully configured     |
+| `configuredAt`           | ISO 8601 timestamp (optional) | When agent was configured             |
+| `configuredByCliVersion` | string (optional)             | CLI version that configured the agent |
+| `hooks.installed`        | InstalledHook[]               | List of installed hooks               |
+| `skills.installed`       | InstalledSkill[]              | List of installed skills              |
 
 #### Hook Types
 
@@ -77,25 +78,25 @@ The state file persists configuration across CLI invocations and stores:
 
 ### Config Section
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field        | Type   | Description             |
+| ------------ | ------ | ----------------------- |
 | `cliVersion` | string | Latest CLI version used |
 
 ### Tools Section
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field       | Type            | Description              |
+| ----------- | --------------- | ------------------------ |
 | `installed` | InstalledTool[] | Array of installed tools |
 
 #### InstalledTool Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Tool identifier (e.g., `sonar-secrets`) |
-| `version` | string | Installed tool version |
-| `path` | string | Full path to tool binary |
-| `installedAt` | ISO 8601 timestamp | Installation time |
-| `installedByCliVersion` | string | CLI version that installed the tool |
+| Field                   | Type               | Description                             |
+| ----------------------- | ------------------ | --------------------------------------- |
+| `name`                  | string             | Tool identifier (e.g., `sonar-secrets`) |
+| `version`               | string             | Installed tool version                  |
+| `path`                  | string             | Full path to tool binary                |
+| `installedAt`           | ISO 8601 timestamp | Installation time                       |
+| `installedByCliVersion` | string             | CLI version that installed the tool     |
 
 ---
 
@@ -297,10 +298,11 @@ cat ~/.sonar/sonarqube-cli/state.json | jq '.tools.installed'
 
 ### Token Storage
 
-**Tokens are NOT stored in the state file.** They are stored securely in the system keychain:
-- **macOS**: Keychain
-- **Linux**: Secret Service or pass
-- **Windows**: Credential Manager
+**Tokens are NOT stored in the state file.** They are stored securely in the OS credential store via [`Bun.secrets`](https://bun.com/docs/runtime/secrets):
+
+- **macOS**: Keychain Services
+- **Linux**: libsecret (GNOME Keyring, KWallet, etc.)
+- **Windows**: Windows Credential Manager
 
 The keychain account key is derived from the connection's `serverUrl` and `orgKey` fields.
 
