@@ -18,12 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { deleteToken } from '../../../lib/keychain';
+import { deleteToken, getToken } from '../../../lib/keychain';
+import logger from '../../../lib/logger';
 import { getActiveConnection, loadState, saveState } from '../../../lib/state-manager';
-import { print, success } from '../../../ui';
+import { SonarQubeClient } from '../../../sonarqube/client';
+import { print, success, warn } from '../../../ui';
 
 /**
- * Logout command - remove token from keychain
+ * Logout command - revoke token on the server (best-effort) and remove it from the keychain.
  */
 export async function authLogout(): Promise<void> {
   const state = loadState();
@@ -36,6 +38,26 @@ export async function authLogout(): Promise<void> {
 
   const server = active.serverUrl;
   const org = active.orgKey;
+
+  // Revoke on the server before wiping the keychain: the API call needs the token as Bearer auth.
+  // Only possible when we captured the token name from the OAuth callback at login time.
+  if (active.tokenName) {
+    const token = await getToken(server, org);
+    if (token) {
+      try {
+        await new SonarQubeClient(server, token).revokeUserToken(active.tokenName);
+      } catch (error) {
+        logger.debug(`Failed to revoke token on server: ${(error as Error).message}`);
+        warn(
+          'Could not revoke token on the server. You may revoke it manually in your SonarQube account security settings.',
+        );
+      }
+    }
+  } else {
+    print(
+      'Token name is not known locally, skipping server-side revocation. You may revoke it manually in your SonarQube account security settings.',
+    );
+  }
 
   await deleteToken(server, org);
 

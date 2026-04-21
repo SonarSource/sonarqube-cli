@@ -392,6 +392,84 @@ describe('auth logout', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'revokes the token on the server when a tokenName is stored on the connection',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('logout-token').start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('SonarQube CLI 4')
+        .withKeychainToken(server.baseUrl(), 'logout-token');
+
+      const result = await harness.run('auth logout');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+      expect(result.stdout + result.stderr).not.toContain('Could not revoke token');
+
+      expect(server.getRevokedTokenNames()).toEqual(['SonarQube CLI 4']);
+
+      const account = generateKeychainAccount(server.baseUrl());
+      expect(readKeychainToken(harness.keychainJsonFile, account)).toBeUndefined();
+      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'skips server-side revocation and prints a manual-revocation note when no tokenName is stored',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('logout-token').start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'logout-token');
+
+      const result = await harness.run('auth logout');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+      expect(result.stdout + result.stderr).toContain('revoke it manually');
+      expect(server.getRevokedTokenNames()).toEqual([]);
+
+      const account = generateKeychainAccount(server.baseUrl());
+      expect(readKeychainToken(harness.keychainJsonFile, account)).toBeUndefined();
+      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns but completes local cleanup when server-side revocation fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('logout-token')
+        .withRevokeTokenFailure()
+        .start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('SonarQube CLI 4')
+        .withKeychainToken(server.baseUrl(), 'logout-token');
+
+      const result = await harness.run('auth logout');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+      expect(result.stdout + result.stderr).toContain('Could not revoke token on the server');
+
+      const account = generateKeychainAccount(server.baseUrl());
+      expect(readKeychainToken(harness.keychainJsonFile, account)).toBeUndefined();
+      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
 });
 
 describe('auth purge', () => {

@@ -141,8 +141,8 @@ describe('Auth: security features via real HTTP', () => {
   it('should allow requests without Origin header (same-origin)', async () => {
     let receivedToken: string | undefined;
 
-    const handler = createRequestHandler((token: string) => {
-      receivedToken = token;
+    const handler = createRequestHandler((payload) => {
+      receivedToken = payload.token;
     });
     server = await startLoopbackServer(handler);
 
@@ -171,8 +171,8 @@ describe('Auth: security features via real HTTP', () => {
   it('should accept requests with loopback Host header', async () => {
     let receivedToken: string | undefined;
 
-    const handler = createRequestHandler((token: string) => {
-      receivedToken = token;
+    const handler = createRequestHandler((payload) => {
+      receivedToken = payload.token;
     });
     server = await startLoopbackServer(handler);
 
@@ -216,8 +216,8 @@ describe('Auth: security features via real HTTP', () => {
   it('should accept POST body within 4KB limit', async () => {
     let receivedToken: string | undefined;
 
-    const handler = createRequestHandler((token: string) => {
-      receivedToken = token;
+    const handler = createRequestHandler((payload) => {
+      receivedToken = payload.token;
     });
     server = await startLoopbackServer(handler);
 

@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { generateTokenViaBrowser } from '../../../cli/commands/_common/token';
 import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
 import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
@@ -26,6 +25,7 @@ import { addOrUpdateConnection, loadState, saveState } from '../../../lib/state-
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error';
+import { generateTokenViaBrowser } from '../_common/token.ts';
 
 /**
  * Login command - authenticate and save token with organization
@@ -37,7 +37,12 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const region = (options.region || 'eu') as 'eu' | 'us';
   const isNonInteractive = !!options.withToken;
 
-  const token = await getOrGenerateToken(server, options.org, isNonInteractive, options.withToken);
+  const { token, name: tokenName } = await getOrGenerateToken(
+    server,
+    options.org,
+    isNonInteractive,
+    options.withToken,
+  );
 
   let org = options.org;
 
@@ -57,6 +62,10 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
     orgKey: org,
     region: isCloud ? region : undefined,
   });
+
+  if (tokenName) {
+    connection.tokenName = tokenName;
+  }
 
   // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
   const actualToken = token || (await getKeystoreToken(server, org));
@@ -114,16 +123,18 @@ async function setupOnPremiseOrganization(org: string | undefined): Promise<stri
 }
 
 /**
- * Get token for authentication
+ * Get token for authentication.
+ * `name` is populated only when the browser OAuth callback provided it;
+ * `--with-token`, manual-paste, and already-saved-in-keychain paths return `{ token }` only.
  */
 async function getOrGenerateToken(
   server: string,
   org: string | undefined,
   isNonInteractive: boolean,
   withToken: string | undefined,
-): Promise<string> {
+): Promise<{ token: string; name?: string }> {
   if (isNonInteractive) {
-    return withToken || '';
+    return { token: withToken || '' };
   }
 
   const existingToken = await getKeystoreToken(server, org);
@@ -131,13 +142,13 @@ async function getOrGenerateToken(
     const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
     print(`Token already exists for: ${displayServer}`);
     print('You are already authenticated');
-    return existingToken;
+    return { token: existingToken };
   }
 
   print(`\nAuthenticating with: ${server}`);
-  const token = await generateTokenViaBrowser(server);
+  const payload = await generateTokenViaBrowser(server);
   discreetSuccess('Token received');
-  return token;
+  return payload;
 }
 
 async function getUserSelectedOrganization(

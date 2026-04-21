@@ -30,7 +30,7 @@ export async function repairToken(serverURL: string, organization?: string): Pro
   text('Obtaining access token...');
 
   // Generate new token
-  const newToken = await generateTokenViaBrowser(serverURL);
+  const { token: newToken } = await generateTokenViaBrowser(serverURL);
 
   // Validate new token
   const valid = await validateToken(serverURL, newToken);

@@ -167,6 +167,65 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
+  // postForm
+  // -------------------------------------------------------------------------
+
+  describe('postForm', () => {
+    it('sends POST with form-urlencoded body', async () => {
+      fetchSpy = mockFetch({});
+      await client.postForm('/api/user_tokens/revoke', { name: 'SonarQube CLI 4' });
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe('name=SonarQube+CLI+4');
+    });
+
+    it('sets Content-Type: application/x-www-form-urlencoded', async () => {
+      fetchSpy = mockFetch({});
+      await client.postForm('/api/user_tokens/revoke', { name: 'any' });
+      expect(lastFetchInit(fetchSpy).headers).toMatchObject({
+        'Content-Type': 'application/x-www-form-urlencoded',
+      });
+    });
+
+    it('sends Bearer authorization header', async () => {
+      fetchSpy = mockFetch({});
+      await client.postForm('/api/user_tokens/revoke', { name: 'any' });
+      expect(lastFetchInit(fetchSpy).headers).toMatchObject({
+        Authorization: `Bearer ${TOKEN}`,
+      });
+    });
+
+    it('throws when response is not ok', () => {
+      fetchSpy = mockFetch({ message: 'forbidden' }, false, 403);
+      expect(client.postForm('/api/user_tokens/revoke', { name: 'any' })).rejects.toThrow('403');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // revokeUserToken
+  // -------------------------------------------------------------------------
+
+  describe('revokeUserToken', () => {
+    it('posts to /api/user_tokens/revoke with the name as form body', async () => {
+      fetchSpy = mockFetch({});
+      await client.revokeUserToken('SonarQube CLI 4');
+      expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/user_tokens/revoke`);
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe('name=SonarQube+CLI+4');
+      expect(init.headers).toMatchObject({
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${TOKEN}`,
+      });
+    });
+
+    it('propagates server errors to the caller', () => {
+      fetchSpy = mockFetch({ message: 'unauthorized' }, false, 401);
+      expect(client.revokeUserToken('SonarQube CLI 4')).rejects.toThrow('401');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // validateToken
   // -------------------------------------------------------------------------
 

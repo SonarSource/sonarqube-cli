@@ -57,6 +57,7 @@ export class EnvironmentBuilder {
   private activeConnectionUrl?: string;
   private activeConnectionType: 'cloud' | 'on-premise' = 'on-premise';
   private activeConnectionOrgKey?: string;
+  private activeConnectionTokenName?: string;
   private _installSecretsBinary = false;
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
@@ -70,6 +71,16 @@ export class EnvironmentBuilder {
     this.activeConnectionUrl = url;
     this.activeConnectionType = type;
     this.activeConnectionOrgKey = orgKey;
+    return this;
+  }
+
+  /**
+   * Sets the token name stored on the active connection.
+   * Must be called after `withActiveConnection(...)`.
+   * The token name is what the CLI uses at logout time to call POST api/user_tokens/revoke`.
+   */
+  withTokenName(tokenName: string): this {
+    this.activeConnectionTokenName = tokenName;
     return this;
   }
 
@@ -142,6 +153,7 @@ export class EnvironmentBuilder {
           serverUrl: this.activeConnectionUrl,
           orgKey: this.activeConnectionOrgKey,
           authenticatedAt: new Date().toISOString(),
+          tokenName: this.activeConnectionTokenName,
         },
       ];
       state.auth.activeConnectionId = connectionId;

@@ -59,31 +59,54 @@ describe('Auth Helper Functions', () => {
   describe('extractTokenFromPostBody', () => {
     it('should extract token from valid JSON POST body', () => {
       const body = JSON.stringify({ token: 'squ_valid_token' });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBe('squ_valid_token');
+      const payload = extractTokenFromPostBody(body);
+      expect(payload).toEqual({ token: 'squ_valid_token' });
+    });
+
+    it('should extract token and name when both are present', () => {
+      const body = JSON.stringify({
+        login: 'john.doe@example.com',
+        name: 'SonarQube CLI 4',
+        token: 'squ_valid_token',
+        createdAt: '2026-04-21T17:59:27+0000',
+      });
+      const payload = extractTokenFromPostBody(body);
+      expect(payload).toEqual({ token: 'squ_valid_token', name: 'SonarQube CLI 4' });
+    });
+
+    it('should omit name when name is empty', () => {
+      const body = JSON.stringify({ token: 'squ_valid_token', name: '' });
+      const payload = extractTokenFromPostBody(body);
+      expect(payload).toEqual({ token: 'squ_valid_token' });
+    });
+
+    it('should omit name when name is not a string', () => {
+      const body = JSON.stringify({ token: 'squ_valid_token', name: 123 });
+      const payload = extractTokenFromPostBody(body);
+      expect(payload).toEqual({ token: 'squ_valid_token' });
     });
 
     it('should return undefined for missing token field', () => {
       const body = JSON.stringify({ data: 'something' });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBeUndefined();
+      const payload = extractTokenFromPostBody(body);
+      expect(payload).toBeUndefined();
     });
 
     it('should return undefined for empty token', () => {
       const body = JSON.stringify({ token: '' });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBeUndefined();
+      const payload = extractTokenFromPostBody(body);
+      expect(payload).toBeUndefined();
     });
 
     it('should return undefined for invalid JSON', () => {
-      const token = extractTokenFromPostBody('not json');
-      expect(token).toBeUndefined();
+      const payload = extractTokenFromPostBody('not json');
+      expect(payload).toBeUndefined();
     });
 
     it('should return undefined if token is not a string', () => {
       const body = JSON.stringify({ token: null });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBeUndefined();
+      const payload = extractTokenFromPostBody(body);
+      expect(payload).toBeUndefined();
     });
   });
 });

@@ -64,6 +64,10 @@ export interface AuthConnection {
   organizationUuidV4?: string | null;
   /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
   sqsInstallationId?: string | null;
+  /** Name of the user token that authenticates this connection.
+   *  Captured from the OAuth loopback callback at login time.
+   *  Absent for legacy connections, `--with-token` logins, and manual-paste logins. */
+  tokenName?: string;
 }
 
 /**

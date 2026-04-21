@@ -38,7 +38,9 @@ describe('repairToken', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue(NEW_TOKEN);
+    generateTokenSpy = spyOn(token, 'generateTokenViaBrowser').mockResolvedValue({
+      token: NEW_TOKEN,
+    });
     validateTokenSpy = spyOn(token, 'validateToken').mockResolvedValue(true);
     saveTokenSpy = spyOn(keychain, 'saveToken').mockResolvedValue(undefined);
     deleteTokenSpy = spyOn(keychain, 'deleteToken').mockResolvedValue(undefined);

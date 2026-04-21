@@ -85,10 +85,16 @@ export class ProjectBuilder {
 export class FakeSonarQubeServer {
   private readonly server: ReturnType<typeof Bun.serve>;
   private readonly requests: RecordedRequest[];
+  private readonly revokedTokenNames: string[];
 
-  constructor(server: ReturnType<typeof Bun.serve>, requests: RecordedRequest[]) {
+  constructor(
+    server: ReturnType<typeof Bun.serve>,
+    requests: RecordedRequest[],
+    revokedTokenNames: string[],
+  ) {
     this.server = server;
     this.requests = requests;
+    this.revokedTokenNames = revokedTokenNames;
   }
 
   baseUrl(): string {
@@ -97,6 +103,10 @@ export class FakeSonarQubeServer {
 
   getRecordedRequests(): RecordedRequest[] {
     return [...this.requests];
+  }
+
+  getRevokedTokenNames(): string[] {
+    return [...this.revokedTokenNames];
   }
 
   async stop(): Promise<void> {
@@ -115,6 +125,7 @@ export class FakeSonarQubeServerBuilder {
   private memberOrganizations: Array<{ key: string; name: string }> = [];
   private memberOrganizationsTotal?: number;
   private sqaaResponse?: SqaaResponseConfig;
+  private _revokeTokenShouldFail = false;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -143,6 +154,15 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Makes `POST /api/user_tokens/revoke` respond with HTTP 500, to exercise
+   * the CLI's warn-and-continue behaviour on logout.
+   */
+  withRevokeTokenFailure(): this {
+    this._revokeTokenShouldFail = true;
+    return this;
+  }
+
   withSqaaEntitlement(
     orgKey: string,
     uuid: string,
@@ -168,11 +188,13 @@ export class FakeSonarQubeServerBuilder {
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
+    const revokedTokenNames: string[] = [];
+    const revokeTokenShouldFail = this._revokeTokenShouldFail;
 
     const server = Bun.serve({
       port: 0,
       hostname: '127.0.0.1',
-      fetch(req) {
+      async fetch(req) {
         const url = new URL(req.url);
         const path = url.pathname;
         const query: Record<string, string> = {};
@@ -202,6 +224,22 @@ export class FakeSonarQubeServerBuilder {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/api/user_tokens/revoke' && req.method === 'POST') {
+          if (revokeTokenShouldFail) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Revoke failed' }] }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          const rawBody = await req.text();
+          const params = new URLSearchParams(rawBody);
+          const name = params.get('name');
+          if (name) {
+            revokedTokenNames.push(name);
+          }
+          return new Response(null, { status: 204 });
         }
 
         if (path === '/api/authentication/validate') {
@@ -398,6 +436,6 @@ export class FakeSonarQubeServerBuilder {
       },
     });
 
-    return Promise.resolve(new FakeSonarQubeServer(server, requests));
+    return Promise.resolve(new FakeSonarQubeServer(server, requests, revokedTokenNames));
   }
 }

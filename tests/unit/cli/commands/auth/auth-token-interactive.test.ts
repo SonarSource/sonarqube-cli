@@ -59,6 +59,7 @@ mock.module('../../../../../src/lib/browser.js', () => ({
 
 import {
   openBrowserWithFallback,
+  type TokenCallbackPayload,
   waitForTokenInteractive,
 } from '../../../../../src/cli/commands/_common/token';
 
@@ -93,7 +94,7 @@ describe('waitForTokenInteractive: printed messages', () => {
   });
 
   it('prints the waiting message when started', async () => {
-    const p = waitForTokenInteractive(new Promise<string>(() => {}));
+    const p = waitForTokenInteractive(new Promise<TokenCallbackPayload>(() => {}));
     await Promise.resolve();
     const out = spies.writeSpy.mock.calls.map((c) => (c[0] as string).toString()).join('');
     expect(out).toContain('Waiting for authorization');
@@ -116,19 +117,21 @@ describe('waitForTokenInteractive: server delivers token', () => {
     restoreSharedSpies(spies);
   });
 
-  it('resolves with the server token', async () => {
-    const result = await waitForTokenInteractive(Promise.resolve('squ_server_abc'));
-    expect(result).toBe('squ_server_abc');
+  it('resolves with the server token payload', async () => {
+    const result = await waitForTokenInteractive(
+      Promise.resolve({ token: 'squ_server_abc', name: 'SonarQube CLI 4' }),
+    );
+    expect(result).toEqual({ token: 'squ_server_abc', name: 'SonarQube CLI 4' });
   });
 
   it('closes readline when server delivers (releases stdin for next prompt on Windows)', async () => {
-    await waitForTokenInteractive(Promise.resolve('squ_server_abc'));
+    await waitForTokenInteractive(Promise.resolve({ token: 'squ_server_abc' }));
     expect(closeCalled).toBe(true);
   });
 
   it('ignores server token when user already submitted (settled flag)', async () => {
-    let resolveServer!: (token: string) => void;
-    const serverPromise = new Promise<string>((r) => {
+    let resolveServer!: (payload: TokenCallbackPayload) => void;
+    const serverPromise = new Promise<TokenCallbackPayload>((r) => {
       resolveServer = r;
     });
     const resultPromise = waitForTokenInteractive(serverPromise);
@@ -137,8 +140,8 @@ describe('waitForTokenInteractive: server delivers token', () => {
     questionCallback?.('squ_user_token');
     await Promise.resolve();
 
-    resolveServer('squ_server_token');
-    expect(await resultPromise).toBe('squ_user_token');
+    resolveServer({ token: 'squ_server_token', name: 'SonarQube CLI 4' });
+    expect(await resultPromise).toEqual({ token: 'squ_user_token' });
   });
 });
 
@@ -155,29 +158,29 @@ describe('waitForTokenInteractive: user input', () => {
     restoreSharedSpies(spies);
   });
 
-  it('resolves with the user-entered token', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<string>(() => {}));
+  it('resolves with a user-entered payload that has no name', async () => {
+    const resultPromise = waitForTokenInteractive(new Promise<TokenCallbackPayload>(() => {}));
     await Promise.resolve();
     questionCallback?.('squ_user_abc');
-    expect(await resultPromise).toBe('squ_user_abc');
+    expect(await resultPromise).toEqual({ token: 'squ_user_abc' });
   });
 
   it('trims whitespace from the user-entered token', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<string>(() => {}));
+    const resultPromise = waitForTokenInteractive(new Promise<TokenCallbackPayload>(() => {}));
     await Promise.resolve();
     questionCallback?.('  squ_padded  ');
-    expect(await resultPromise).toBe('squ_padded');
+    expect(await resultPromise).toEqual({ token: 'squ_padded' });
   });
 
   it('rejects when the user cancels (Ctrl+C)', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<string>(() => {}));
+    const resultPromise = waitForTokenInteractive(new Promise<TokenCallbackPayload>(() => {}));
     await Promise.resolve();
     rlMock.simulateCtrlC();
     expect(resultPromise).rejects.toThrow('Authentication cancelled');
   });
 
   it('closes readline when user submits', async () => {
-    const resultPromise = waitForTokenInteractive(new Promise<string>(() => {}));
+    const resultPromise = waitForTokenInteractive(new Promise<TokenCallbackPayload>(() => {}));
     await Promise.resolve();
     questionCallback?.('squ_user_abc');
     await resultPromise;
@@ -185,8 +188,8 @@ describe('waitForTokenInteractive: user input', () => {
   });
 
   it('ignores empty submission and keeps waiting', async () => {
-    let resolveServer!: (token: string) => void;
-    const serverPromise = new Promise<string>((r) => {
+    let resolveServer!: (payload: TokenCallbackPayload) => void;
+    const serverPromise = new Promise<TokenCallbackPayload>((r) => {
       resolveServer = r;
     });
     const resultPromise = waitForTokenInteractive(serverPromise);
@@ -195,8 +198,11 @@ describe('waitForTokenInteractive: user input', () => {
     questionCallback?.('');
     await Promise.resolve();
 
-    resolveServer('squ_server_fallback');
-    expect(await resultPromise).toBe('squ_server_fallback');
+    resolveServer({ token: 'squ_server_fallback', name: 'SonarQube CLI 4' });
+    expect(await resultPromise).toEqual({
+      token: 'squ_server_fallback',
+      name: 'SonarQube CLI 4',
+    });
   });
 });
 

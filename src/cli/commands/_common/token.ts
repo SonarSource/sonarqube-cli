@@ -36,6 +36,18 @@ const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const MAX_POST_BODY_BYTES = 4096;
 
 /**
+ * Payload delivered by the SonarQube auth callback to the loopback server.
+ * `name` is the server-assigned token name (e.g. "SonarQube CLI 4") and is
+ * required to revoke the token later via `api/user_tokens/revoke`.
+ * It is absent when a user manually pastes a token instead of completing
+ * the browser flow.
+ */
+export interface TokenCallbackPayload {
+  token: string;
+  name?: string;
+}
+
+/**
  * Validate token by calling SonarQube API
  */
 export async function validateToken(serverURL: string, token: string): Promise<boolean> {
@@ -48,17 +60,23 @@ export async function validateToken(serverURL: string, token: string): Promise<b
 }
 
 /**
- * Extract token from POST body JSON
+ * Extract token (and optional name) from POST body JSON.
+ * The SonarQube auth callback posts `{ login, name, token, createdAt }`;
+ * only `token` is required, `name` is captured when present for later revocation.
  */
-export function extractTokenFromPostBody(body: string): string | undefined {
+export function extractTokenFromPostBody(body: string): TokenCallbackPayload | undefined {
   try {
     const data = JSON.parse(body) as Record<string, unknown>;
     const token = data.token;
-    // Token must be a non-empty string
-    if (typeof token === 'string' && token.length > 0) {
-      return token;
+    if (typeof token !== 'string' || token.length === 0) {
+      return undefined;
     }
-    return undefined;
+    const name = data.name;
+    const payload: TokenCallbackPayload = { token };
+    if (typeof name === 'string' && name.length > 0) {
+      payload.name = name;
+    }
+    return payload;
   } catch {
     return undefined;
   }
@@ -97,13 +115,13 @@ export async function openBrowserWithFallback(authURL: string): Promise<void> {
  */
 export function sendSuccessResponse(
   res: ServerResponse,
-  extractedToken?: string,
-  onToken?: (token: string) => void,
+  extractedPayload?: TokenCallbackPayload,
+  onToken?: (payload: TokenCallbackPayload) => void,
 ): void {
   res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
   res.end('OK');
-  if (extractedToken && onToken) {
-    onToken(extractedToken);
+  if (extractedPayload && onToken) {
+    onToken(extractedPayload);
   }
 }
 
@@ -113,7 +131,7 @@ export function sendSuccessResponse(
 export function handlePostRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  onToken: (token: string) => void,
+  onToken: (payload: TokenCallbackPayload) => void,
 ): void {
   let body = '';
   let bodySize = 0;
@@ -132,15 +150,15 @@ export function handlePostRequest(
     if (bodySize > MAX_POST_BODY_BYTES) {
       return;
     }
-    const extractedToken = extractTokenFromPostBody(body);
-    sendSuccessResponse(res, extractedToken ?? undefined, onToken);
+    const extractedPayload = extractTokenFromPostBody(body);
+    sendSuccessResponse(res, extractedPayload ?? undefined, onToken);
   });
 }
 
 /**
  * Create request handler for loopback server
  */
-export function createRequestHandler(onToken: (token: string) => void) {
+export function createRequestHandler(onToken: (payload: TokenCallbackPayload) => void) {
   return (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === 'POST') {
       handlePostRequest(req, res, onToken);
@@ -158,16 +176,19 @@ export function createRequestHandler(onToken: (token: string) => void) {
  * Uses readline (not TextPrompt) so that when the server delivers the token we can
  * close the interface and release stdin, avoiding the prompt staying open and
  * blocking the next prompt (e.g. org key) on Windows.
+ *
+ * Manual-paste submissions yield `{ token }` without a `name`; the server callback
+ * path yields `{ token, name? }` as received from the SonarQube auth flow.
  */
 export async function waitForTokenInteractive(
-  serverTokenPromise: Promise<string>,
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
+  serverTokenPromise: Promise<TokenCallbackPayload>,
+): Promise<TokenCallbackPayload> {
+  return new Promise<TokenCallbackPayload>((resolve, reject) => {
     let settled = false;
     /** Only call rl.close() once; skip when we're already inside the 'close' handler (e.g. Ctrl+C). */
     let rlClosed = false;
 
-    function settle(token?: string, err?: Error): void {
+    function settle(payload?: TokenCallbackPayload, err?: Error): void {
       if (settled) return;
       settled = true;
       if (!rlClosed) {
@@ -176,7 +197,7 @@ export async function waitForTokenInteractive(
         process.stdin.resume(); // so next prompt (e.g. org key) receives keypresses on Windows
       }
       if (err) reject(err);
-      else resolve(token ?? '');
+      else resolve(payload ?? { token: '' });
     }
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -186,8 +207,8 @@ export async function waitForTokenInteractive(
     });
 
     serverTokenPromise
-      .then((token) => {
-        settle(token);
+      .then((payload) => {
+        settle(payload);
       })
       .catch(() => undefined);
 
@@ -195,30 +216,33 @@ export async function waitForTokenInteractive(
     rl.question('', (line) => {
       if (settled) return;
       const userToken = line.trim();
-      if (userToken.length > 0) settle(userToken);
+      if (userToken.length > 0) settle({ token: userToken });
     });
   });
 }
 
 /**
- * Generate token via browser OAuth flow
+ * Generate token via browser OAuth flow.
+ * Returns `{ token, name? }`. `name` is the server-issued token name, present
+ * when the callback POSTed it (modern SonarQube auth pages) and absent when the
+ * user manually pasted a token.
  */
 export async function generateTokenViaBrowser(
   serverURL: string,
   openBrowserFn: (url: string) => Promise<void> = openBrowserWithFallback,
-): Promise<string> {
-  let resolveToken: ((token: string) => void) | null = null;
+): Promise<TokenCallbackPayload> {
+  let resolveToken: ((payload: TokenCallbackPayload) => void) | null = null;
 
-  const tokenPromise = new Promise<string>((resolve) => {
+  const tokenPromise = new Promise<TokenCallbackPayload>((resolve) => {
     resolveToken = resolve;
   });
 
   // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
   const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
-    createRequestHandler((token: string) => {
+    createRequestHandler((payload: TokenCallbackPayload) => {
       if (resolveToken) {
-        resolveToken(token);
+        resolveToken(payload);
       }
     }),
     { allowedOrigins: [serverOrigin] },
@@ -231,14 +255,14 @@ export async function generateTokenViaBrowser(
   await pressEnterKeyPrompt('Press Enter to open the browser');
   await openBrowserFn(authURL);
 
-  let token: string | undefined;
+  let payload: TokenCallbackPayload | undefined;
   try {
     if (isMockActive() || process.env.CI === 'true') {
       // Non-interactive: wait for server token
-      token = await tokenPromise;
+      payload = await tokenPromise;
     } else {
       // Interactive: race between browser delivery and manual paste
-      token = await waitForTokenInteractive(tokenPromise);
+      payload = await waitForTokenInteractive(tokenPromise);
     }
   } finally {
     await server.close().catch((err: unknown) => {
@@ -246,5 +270,5 @@ export async function generateTokenViaBrowser(
     });
   }
 
-  return token;
+  return payload;
 }

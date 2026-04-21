@@ -184,6 +184,34 @@ export class SonarQubeClient {
   }
 
   /**
+   * Make a form-encoded POST request to SonarQube API using Bearer token.
+   * Required for classic endpoints like `/api/user_tokens/revoke` that expect
+   * `application/x-www-form-urlencoded` bodies.
+   */
+  async postForm(endpoint: string, params: Record<string, string>): Promise<void> {
+    const url = `${this.serverURL}${endpoint}`;
+    const body = new URLSearchParams(params).toString();
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: this.commonHeaders('form'),
+      body,
+      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS),
+    });
+
+    await this.raiseForStatus(response, 'POST');
+  }
+
+  /**
+   * Revoke a user access token by name.
+   * Uses the classic `api/user_tokens/revoke` endpoint, which accepts a
+   * form-encoded body and is available on both SonarQube Server and Cloud.
+   */
+  async revokeUserToken(name: string): Promise<void> {
+    await this.postForm('/api/user_tokens/revoke', { name });
+  }
+
+  /**
    * Validate authentication token
    */
   async validateToken(): Promise<boolean> {
