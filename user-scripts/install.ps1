@@ -3,6 +3,10 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+# Disable the PowerShell progress bar: in Windows PowerShell 5.1 it makes
+# Invoke-WebRequest 10-50x slower for non-trivial downloads (the CLI binary
+# is ~100 MB, so this takes the download from ~60s down to a few seconds).
+$ProgressPreference = 'SilentlyContinue'
 
 $InstallDir = Join-Path $env:LOCALAPPDATA 'sonarqube-cli\bin'
 $BinaryName = 'sonar.exe'
