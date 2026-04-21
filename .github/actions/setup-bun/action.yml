@@ -17,7 +17,7 @@ runs:
         version: 2026.4.14
 
     - name: Cache Bun dependencies
-      uses: SonarSource/gh-action_cache@54a48984cf6564fd48f3c6c67c0891d7fe89604c # v1.2.2
+      uses: SonarSource/gh-action_cache@55df12d329333911afa3e89a9b558fbf47dcd61c # v1.4.4
       with:
         path: |
           ~/.bun
