@@ -1,5 +1,5 @@
 # SonarQube CLI
-
+#
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
 - Version: 0.10.0
