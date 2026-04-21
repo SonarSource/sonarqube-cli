@@ -24,13 +24,15 @@
  * Generate cli.sonarqube.com data files from the command tree.
  */
 
-import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Option } from 'commander';
+
+import type { Command, Option } from 'commander';
+
+import { version } from '../../package.json';
 import { COMMAND_TREE } from '../../src/cli/command-tree';
 import type { SonarCommand } from '../../src/cli/commands/_common/sonar-command';
-import { version } from '../../package.json';
 import { EXAMPLES } from './examples';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -91,8 +93,8 @@ function serializeCommand(
   parentId: string | null,
 ): ClidocCommand {
   const fullName = `${prefix} ${cmd.name()}`.trim();
-  const id = fullName.replace(/\s+/g, '-');
-  const visibleChildren = cmd.commands.filter((c) => !c.hidden);
+  const id = fullName.replaceAll(/\s+/g, '-');
+  const visibleChildren = cmd.commands.filter((c) => !(c as Command & { hidden?: boolean }).hidden);
 
   const entry: ClidocCommand = {
     id,
@@ -137,7 +139,9 @@ function serializeCommand(
 
 // Root entry
 const rootId = 'sonar';
-const visibleTopLevel = COMMAND_TREE.commands.filter((cmd) => !cmd.hidden);
+const visibleTopLevel = COMMAND_TREE.commands.filter(
+  (cmd) => !(cmd as Command & { hidden?: boolean }).hidden,
+);
 const authCmd = visibleTopLevel.find((cmd) => cmd.name() === 'auth');
 const otherCmds = visibleTopLevel.filter((cmd) => cmd.name() !== 'auth');
 const orderedCommands = authCmd ? [authCmd, ...otherCmds] : otherCmds;
@@ -192,7 +196,7 @@ function buildLlmsTxt(): string {
       const optsSummary = cmd.options
         .map((o) => {
           const flag = o.short ? `${o.short}` : o.long;
-          return o.type !== 'boolean' ? `[${flag} <value>]` : `[${o.long}]`;
+          return o.type === 'boolean' ? `[${o.long}]` : `[${flag} <value>]`;
         })
         .join(' ');
       const usageParts = [cmd.fullName, optsSummary, args].filter(Boolean).join(' ');
@@ -203,7 +207,7 @@ function buildLlmsTxt(): string {
         commandLines.push('Options:');
         for (const opt of cmd.options) {
           const flagPart = opt.short ? `${opt.long}, ${opt.short}` : opt.long;
-          const typePart = opt.type !== 'boolean' ? `  <${opt.type}>` : '';
+          const typePart = opt.type === 'boolean' ? '' : `  <${opt.type}>`;
           commandLines.push(`  ${flagPart}${typePart}   ${opt.description}`);
         }
       }
@@ -237,7 +241,7 @@ writeFileSync(join(CLIDOC_ROOT, 'sitemap.xml'), buildSitemapXml());
 const indexHtmlPath = join(CLIDOC_ROOT, 'index.html');
 const indexHtml = readFileSync(indexHtmlPath, 'utf-8');
 const updatedIndexHtml = indexHtml.replace(
-  /("license":\s*"[^"]*")(\s*\})/,
+  /("license":\s*"[^"]*")(\s*})/,
   `$1,\n    "softwareVersion": "${version}"$2`,
 );
 const alreadyPatched = indexHtml.includes('"softwareVersion"');
