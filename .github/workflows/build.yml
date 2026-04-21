@@ -29,6 +29,7 @@ jobs:
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
       PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
       ARTIFACT_LINUX: ${{ steps.project_version.outputs.ARTIFACT_LINUX }}
+      ARTIFACT_LINUX_ARM64: ${{ steps.project_version.outputs.ARTIFACT_LINUX_ARM64 }}
       ARTIFACT_MACOS: ${{ steps.project_version.outputs.ARTIFACT_MACOS }}
       ARTIFACT_WINDOWS: ${{ steps.project_version.outputs.ARTIFACT_WINDOWS }}
     steps:
@@ -52,6 +53,7 @@ jobs:
           echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
           echo "ARTIFACT_LINUX=sonarqube-cli-${PACKAGE_VERSION}-linux-x86-64.exe" >> $GITHUB_OUTPUT
+          echo "ARTIFACT_LINUX_ARM64=sonarqube-cli-${PACKAGE_VERSION}-linux-arm64.exe" >> $GITHUB_OUTPUT
           echo "ARTIFACT_MACOS=sonarqube-cli-${PACKAGE_VERSION}-macos-arm64.exe" >> $GITHUB_OUTPUT
           echo "ARTIFACT_WINDOWS=sonarqube-cli-${PACKAGE_VERSION}-windows-x86-64.exe" >> $GITHUB_OUTPUT
 
@@ -86,6 +88,7 @@ jobs:
       - name: Cross-compile all platform binaries
         run: |
           bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }} --target bun-linux-x64
+          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_LINUX_ARM64 }} --target bun-linux-arm64
           bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }} --target bun-darwin-arm64
           bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }} --target bun-windows-x64
 
@@ -95,6 +98,7 @@ jobs:
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
         run: |
           bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }}
+          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_LINUX_ARM64 }}
           bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
           bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }}
 
@@ -255,7 +259,7 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT: ${{ github.event.repository.name }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:exe:linux-x86-64,org.sonarsource.cli:sonarqube-cli:exe:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64'
+          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:exe:linux-x86-64,org.sonarsource.cli:sonarqube-cli:exe:linux-arm64,org.sonarsource.cli:sonarqube-cli:exe:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64'
         run: |
           jf config add repox \
             --artifactory-url="${ARTIFACTORY_URL}" \

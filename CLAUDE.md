@@ -2,6 +2,8 @@
 
 A CLI tool (`sonar`) that integrates SonarQube Server and Cloud into developer workflows.
 
+Release builds publish standalone executables for `linux-x86-64`, `linux-arm64`, `macos-arm64`, and `windows-x86-64`. The `user-scripts/install.sh` and `user-scripts/install-prerelease.sh` installers select the Linux artifact using `uname -m` (`aarch64` / `arm64` → `linux-arm64`, `x86_64` / `amd64` → `linux-x86-64`).
+
 # Running checks
 
 Use the package.json scripts for full test runs.

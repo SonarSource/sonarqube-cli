@@ -12,20 +12,32 @@ trap cleanup EXIT
 
 BASE_URL="https://repox.jfrog.io/artifactory/sonarsource-public-builds/org/sonarsource/cli/sonarqube-cli"
 
-detect_platform() {
+detect_os() {
   local os
   os="$(uname -s)"
   case "$os" in
-    Linux*)
-      echo "linux-x86-64"
-      ;;
-    Darwin*)
-      echo "macos-arm64"
-      ;;
+    Linux*)  echo "linux" ;;
+    Darwin*) echo "macos" ;;
     *)
       echo "Unsupported operating system: $os" >&2
       exit 1
       ;;
+  esac
+}
+
+detect_platform() {
+  case "$(detect_os)" in
+    linux)
+      case "$(uname -m)" in
+        aarch64 | arm64) echo "linux-arm64" ;;
+        x86_64 | amd64) echo "linux-x86-64" ;;
+        *)
+          echo "Unsupported Linux architecture: $(uname -m)" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    macos) echo "macos-arm64" ;;
   esac
 }
 

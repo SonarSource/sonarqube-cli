@@ -70,7 +70,7 @@ export class FakeBinariesServerBuilder {
   start(): Promise<FakeBinariesServer> {
     const requests: RecordedRequest[] = [];
 
-    // Load versioned artifacts from resources (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe)
+    // Load versioned artifacts from resources (e.g. sonar-secrets-*-linux-x86-64.exe or *-linux-arm64.exe)
     const files = new Map<string, Buffer>();
     if (this._loadArtifacts) {
       const dir = resourcesDir();

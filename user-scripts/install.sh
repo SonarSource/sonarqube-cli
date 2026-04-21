@@ -27,8 +27,17 @@ detect_os() {
 
 detect_platform() {
   case "$(detect_os)" in
-    linux) echo "linux-x86-64" ;;
-    macos)   echo "macos-arm64" ;;
+    linux)
+      case "$(uname -m)" in
+        aarch64 | arm64) echo "linux-arm64" ;;
+        x86_64 | amd64) echo "linux-x86-64" ;;
+        *)
+          echo "Unsupported Linux architecture: $(uname -m)" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    macos) echo "macos-arm64" ;;
   esac
 }
 

@@ -45,6 +45,13 @@ describe('sonarsource-releases', () => {
       );
     });
 
+    it('builds correct URL for Linux arm64', () => {
+      const url = buildDownloadUrl('1.2.3', { os: 'linux', arch: 'arm64', extension: '' });
+      expect(url).toBe(
+        `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-1.2.3-linux-arm64.exe`,
+      );
+    });
+
     it('builds correct URL for macOS arm64', () => {
       const url = buildDownloadUrl('1.2.3', { os: 'macos', arch: 'arm64', extension: '' });
       expect(url).toBe(
