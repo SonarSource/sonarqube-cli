@@ -28,5 +28,5 @@ jobs:
       releaseId: ${{ inputs.releaseId }}
       dryRun: ${{ inputs.dryRun }}
       publishToBinaries: true
-      slackChannel: squad-ide-private
+      slackChannel: C02E6L5C01H # squad-devex-private
       skipJavascriptReleasabilityChecks: true
