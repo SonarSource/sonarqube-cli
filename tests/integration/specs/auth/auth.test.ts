@@ -24,6 +24,8 @@ import { readFileSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '../../../../src/lib/auth-resolver';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { TestHarness } from '../../harness';
 
@@ -602,7 +604,64 @@ describe('auth status', () => {
       const result = await harness.run('auth status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Connected');
+      expect(result.stdout).toContain(
+        `[✓ Connected]\nServer  ${server.baseUrl()}\nSource  OS Keychain`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports connected when SQS credentials are set via environment variables',
+    async () => {
+      const result = await harness.run('auth status', {
+        extraEnv: {
+          [ENV_TOKEN]: 'env-token',
+          [ENV_SERVER]: 'http://my-sonarqube.example.com',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `[✓ Connected]\nServer  http://my-sonarqube.example.com\nSource  env vars:  ${ENV_TOKEN}, ${ENV_SERVER}`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports connected when SQC credentials are set via environment variables',
+    async () => {
+      const result = await harness.run('auth status', {
+        extraEnv: {
+          [ENV_TOKEN]: 'env-token',
+          [ENV_ORG]: 'my-org',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `[✓ Connected]\nServer  ${SONARCLOUD_URL}\nOrg     my-org\nSource  env vars:  ${ENV_TOKEN}, ${ENV_ORG}`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports connected when SQC US credentials are set via environment variables',
+    async () => {
+      const result = await harness.run('auth status', {
+        extraEnv: {
+          [ENV_TOKEN]: 'env-token',
+          [ENV_ORG]: 'my-org',
+          [ENV_SERVER]: SONARCLOUD_US_URL,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `[✓ Connected]\nServer  ${SONARCLOUD_US_URL}\nOrg     my-org\nSource  env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`,
+      );
     },
     { timeout: 15000 },
   );

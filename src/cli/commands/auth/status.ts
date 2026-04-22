@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '../../../lib/auth-resolver';
 import { getToken as getKeystoreToken } from '../../../lib/keychain';
 import { loadState } from '../../../lib/state-manager';
 import { note, print, withSpinner } from '../../../ui';
@@ -63,6 +64,20 @@ function displayTokenStatus(
 }
 
 export async function authStatus(): Promise<void> {
+  const envAuth = resolveFromEnv();
+  if (envAuth) {
+    let source: string;
+    if (envAuth.connectionType === 'cloud') {
+      source = process.env[ENV_SERVER]
+        ? `env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`
+        : `env vars:  ${ENV_TOKEN}, ${ENV_ORG}`;
+    } else {
+      source = `env vars:  ${ENV_TOKEN}, ${ENV_SERVER}`;
+    }
+    printConnected(envAuth.serverUrl, source, envAuth.orgKey);
+    return;
+  }
+
   const state = loadState();
 
   if (state.auth.connections.length === 0) {
@@ -81,8 +96,23 @@ export async function authStatus(): Promise<void> {
   const status = await withSpinner('Verifying token...', () =>
     checkTokenStatus(conn.serverUrl, token),
   );
-  displayTokenStatus(conn.serverUrl, conn.orgKey, status);
+
+  if (status === 'valid') {
+    printConnected(conn.serverUrl, 'OS Keychain', conn.orgKey);
+  } else {
+    displayTokenStatus(conn.serverUrl, conn.orgKey, status);
+  }
 
   if (status === 'unreachable') throw new CommandFailedError('Connection check failed');
   if (status !== 'valid') throw new CommandFailedError('Authentication check failed');
+}
+
+function printConnected(serverUrl: string, source: string, orgKey?: string): void {
+  const lines = [
+    `Server  ${serverUrl}`,
+    ...(orgKey ? [`Org     ${orgKey}`] : []),
+    '',
+    `Source  ${source}`,
+  ];
+  note(lines, '✓ Connected', NOTE_STYLES.success);
 }

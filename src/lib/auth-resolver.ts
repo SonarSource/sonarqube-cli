@@ -58,7 +58,7 @@ export async function resolveAuth(): Promise<ResolvedAuth | null> {
   return resolveFromEnv() ?? (await resolveFromState());
 }
 
-function resolveFromEnv(): ResolvedAuth | null {
+export function resolveFromEnv(): ResolvedAuth | null {
   const envToken = process.env[ENV_TOKEN];
   const envServer = process.env[ENV_SERVER];
   const envOrg = process.env[ENV_ORG];
