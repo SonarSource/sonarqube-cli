@@ -31,6 +31,7 @@ import {
 } from './config-constants';
 import { getToken } from './keychain.js';
 import logger from './logger.js';
+import type { CloudRegion } from './state.js';
 import { getActiveConnection, loadState } from './state-manager.js';
 
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
@@ -143,8 +144,9 @@ export async function resolveFromState(): Promise<ResolvedAuth | null> {
  */
 export function resolveFromEndpoint(serverUrl: string, endpoint: string): string {
   const normalized = serverUrl.replace(/\/$/, '');
-  if (isSonarQubeCloud(serverUrl)) {
-    const isUS = new URL(serverUrl).hostname === SONARCLOUD_US_HOSTNAME;
+  const region = cloudRegionFromUrl(serverUrl);
+  if (region !== undefined) {
+    const isUS = region === 'us';
 
     if (endpoint.startsWith('/api')) {
       return isUS ? SONARCLOUD_US_URL : SONARCLOUD_URL;
@@ -155,11 +157,17 @@ export function resolveFromEndpoint(serverUrl: string, endpoint: string): string
   return normalized;
 }
 
-export function isSonarQubeCloud(serverUrl: string): boolean {
+export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
   try {
-    const url = new URL(serverUrl);
-    return url.hostname === SONARCLOUD_HOSTNAME || url.hostname === SONARCLOUD_US_HOSTNAME;
+    const { hostname } = new URL(serverUrl);
+    if (hostname === SONARCLOUD_US_HOSTNAME) return 'us';
+    if (hostname === SONARCLOUD_HOSTNAME) return 'eu';
+    return undefined;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+export function isSonarQubeCloud(serverUrl: string): boolean {
+  return cloudRegionFromUrl(serverUrl) !== undefined;
 }

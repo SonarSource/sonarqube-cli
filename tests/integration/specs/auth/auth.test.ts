@@ -102,6 +102,38 @@ describe('auth login', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'saves token and org when logging in to SonarCloud US',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'us-org', name: 'US Org' }])
+        .start();
+
+      const result = await harness.run(
+        `auth login --with-token my-token --server ${server.baseUrl()}`,
+        {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl(),
+            SONARQUBE_CLI_SONARCLOUD_US_API_URL: server.baseUrl(),
+          },
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ type: string; orgKey: string; region: string }> };
+      };
+      expect(state.auth.connections[0].type).toBe('cloud');
+      expect(state.auth.connections[0].orgKey).toBe('us-org');
+      expect(state.auth.connections[0].region).toBe('us');
+    },
+    { timeout: 15000 },
+  );
 });
 
 const LARGE_ORG_TOTAL = 200;

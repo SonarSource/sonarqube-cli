@@ -22,11 +22,26 @@ irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/maste
 ```
 
 ## Setup steps for Claude Code integration
-Below is an example of a setup which will work for SonarQube Cloud.
+
+Below is an example of a setup which will work for SonarQube Cloud EU (default).
 The authentication step is optional. With authentication, more types of secrets can be detected.
 
 ```
 sonar auth login
+sonar integrate claude -g
+```
+
+For SonarQube Cloud US, pass the server URL explicitly:
+
+```
+sonar auth login --server https://sonarqube.us
+sonar integrate claude -g
+```
+
+For SonarQube Server, pass your instance URL:
+
+```
+sonar auth login --server https://sonarqube.mycompany.com
 sonar integrate claude -g
 ```
 
@@ -36,10 +51,10 @@ The full list of commands is available at https://cli.sonarqube.com
 
 ## Exit Codes
 
-| Code | Meaning                           |
-|------|-----------------------------------|
-| 0    | Success                           |
-| 1    | Error (validation, execution, etc.) |
+| Code | Meaning                              |
+|------|--------------------------------------|
+| 0    | Success                              |
+| 1    | Error (validation, execution, etc.)  |
 
 ---
 

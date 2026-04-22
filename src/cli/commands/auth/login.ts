@@ -19,7 +19,8 @@
  */
 
 import { generateTokenViaBrowser } from '../../../cli/commands/_common/token';
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_URL } from '../../../lib/config-constants';
+import { cloudRegionFromUrl, isSonarQubeCloud } from '../../../lib/auth-resolver';
+import { SONARCLOUD_URL } from '../../../lib/config-constants';
 import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
 import { addOrUpdateConnection, loadState, saveState } from '../../../lib/state-manager';
@@ -33,8 +34,7 @@ import { CommandFailedError, InvalidOptionError } from '../_common/error';
 export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const server = await validateLoginOptions(options);
 
-  const isCloud = isSonarCloud(server);
-  const region = (options.region || 'eu') as 'eu' | 'us';
+  const isCloud = isSonarQubeCloud(server);
   const isNonInteractive = !!options.withToken;
 
   const token = await getOrGenerateToken(server, options.org, isNonInteractive, options.withToken);
@@ -55,7 +55,7 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
 
   const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
     orgKey: org,
-    region: isCloud ? region : undefined,
+    region: cloudRegionFromUrl(server),
   });
 
   // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
@@ -73,25 +73,13 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
 
   saveState(state);
 
-  const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
+  const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
   success(`Authentication successful for: ${displayServer}`);
 
   // When org came from config we never ran the org selection prompts, so stdin is still
   // resumed from the token step (for Windows). Pause it so the process can exit.
   if (process.stdin.isTTY) {
     process.stdin.pause();
-  }
-}
-
-/**
- * Check if server is SonarCloud
- */
-function isSonarCloud(serverURL: string): boolean {
-  try {
-    const url = new URL(serverURL);
-    return url.hostname === SONARCLOUD_HOSTNAME;
-  } catch {
-    return false;
   }
 }
 
@@ -128,7 +116,7 @@ async function getOrGenerateToken(
 
   const existingToken = await getKeystoreToken(server, org);
   if (existingToken) {
-    const displayServer = isSonarCloud(server) ? `${server} (${org})` : server;
+    const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
     print(`Token already exists for: ${displayServer}`);
     print('You are already authenticated');
     return existingToken;
@@ -232,7 +220,6 @@ async function validateLoginOptions(options: {
   server?: string;
   org?: string;
   withToken?: string;
-  region?: string;
 }) {
   if (options.org !== undefined && !options.org.trim()) {
     throw new InvalidOptionError(
@@ -274,5 +261,4 @@ export interface AuthLoginOptions {
   server?: string;
   org?: string;
   withToken?: string;
-  region?: string;
 }

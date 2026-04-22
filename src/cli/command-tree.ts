@@ -177,7 +177,7 @@ auth
   .description('Save authentication token to keychain')
   .option(
     '-s, --server <server>',
-    'SonarQube URL (default is SonarQube Cloud https://sonarcloud.io)',
+    'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
   )
   .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
   .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')

@@ -23,6 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
+  cloudRegionFromUrl,
   ENV_SERVER,
   ENV_TOKEN,
   resolveAuth,
@@ -244,5 +245,29 @@ describe('resolveBaseUrl', () => {
   it('returns the input as-is when the URL is not parseable', () => {
     const result = resolveFromEndpoint('not-a-valid-url', '/api/system/status');
     expect(result).toBe('not-a-valid-url');
+  });
+
+  it('returns the SonarCloud US URL for /api endpoints', () => {
+    const result = resolveFromEndpoint('https://sonarqube.us', '/api/system/status');
+    expect(result).toBe('https://sonarqube.us');
+  });
+
+  it('returns the SonarCloud US API URL for non-/api endpoints', () => {
+    const result = resolveFromEndpoint('https://sonarqube.us', '/organizations/search');
+    expect(result).toBe('https://api.sonarqube.us');
+  });
+});
+
+describe('cloudRegionFromUrl', () => {
+  it("returns 'eu' for SonarCloud EU", () => {
+    expect(cloudRegionFromUrl('https://sonarcloud.io')).toBe('eu');
+  });
+
+  it("returns 'us' for SonarCloud US", () => {
+    expect(cloudRegionFromUrl('https://sonarqube.us')).toBe('us');
+  });
+
+  it('returns undefined for a self-hosted SonarQube Server', () => {
+    expect(cloudRegionFromUrl('https://sonar.mycompany.com')).toBeUndefined();
   });
 });
