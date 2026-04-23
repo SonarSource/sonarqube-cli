@@ -86,6 +86,26 @@ describe('auth login', () => {
   );
 
   it(
+    'persists tokenName returned by the browser auth callback',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('browser-login-token').start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'browser-login-token',
+        browserTokenName: 'cli-browser-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ tokenName?: string; serverUrl: string }> };
+      };
+      expect(state.auth.connections[0].serverUrl).toBe(server.baseUrl());
+      expect(state.auth.connections[0].tokenName).toBe('cli-browser-token');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 when organization is not found on SonarCloud',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
@@ -361,13 +381,19 @@ describe('auth logout', () => {
 
       harness
         .state()
-        .withActiveConnection(server.baseUrl())
+        .withActiveConnection(server.baseUrl(), 'on-premise', undefined, 'cli-logout-token')
         .withKeychainToken(server.baseUrl(), 'logout-token');
 
       const result = await harness.run(`auth logout`);
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+
+      const revokeRequest = server
+        .getRecordedRequests()
+        .find((request) => request.path === '/api/user_tokens/revoke');
+      expect(revokeRequest?.method).toBe('POST');
+      expect(revokeRequest?.body).toBe('name=cli-logout-token');
 
       const account = generateKeychainAccount(server.baseUrl());
       expect(readKeychainToken(harness.keychainJsonFile, account)).toBeUndefined();
@@ -386,7 +412,40 @@ describe('auth logout', () => {
       const result = await harness.run(`auth logout`);
 
       expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        'The server-side token name is unknown for this connection, so the token could not be revoked automatically. Revoke it manually on the server if needed.',
+      );
       expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+      expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
+      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns and still completes local cleanup when token revocation fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('logout-token')
+        .withTokenRevocationFailure(500, 'revocation boom')
+        .start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'on-premise', undefined, 'cli-logout-token')
+        .withKeychainToken(server.baseUrl(), 'logout-token');
+
+      const result = await harness.run('auth logout');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        'Failed to revoke the server-side token "cli-logout-token": SonarQube API error: 500 Internal Server Error - revocation boom. Continuing with local logout.',
+      );
+      expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+
+      const account = generateKeychainAccount(server.baseUrl());
+      expect(readKeychainToken(harness.keychainJsonFile, account)).toBeUndefined();
       expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
       expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
     },

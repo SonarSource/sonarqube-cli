@@ -23,6 +23,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   buildAuthURL,
   extractTokenFromPostBody,
+  parseBrowserAuthCallback,
 } from '../../../../../src/cli/commands/_common/token';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
@@ -85,6 +86,12 @@ describe('Auth Helper Functions', () => {
       const body = JSON.stringify({ token: 'squ_valid_token' });
       const token = extractTokenFromPostBody(body);
       expect(token).toBe('squ_valid_token');
+    });
+
+    it('should extract token name from valid JSON POST body', () => {
+      const body = JSON.stringify({ token: 'squ_valid_token', name: 'cli-token-name' });
+      const authResult = parseBrowserAuthCallback(body);
+      expect(authResult).toEqual({ token: 'squ_valid_token', tokenName: 'cli-token-name' });
     });
 
     it('should return undefined for missing token field', () => {

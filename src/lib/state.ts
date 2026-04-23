@@ -56,6 +56,13 @@ export interface AuthConnection {
   region?: CloudRegion;
   /** Organization key (only for cloud type) */
   orgKey?: string;
+  /**
+   * Server-generated token name, present only for connections created through
+   * the browser-based OAuth flow. Used during logout to revoke the token on
+   * the server side via `/api/user_tokens/revoke`. Absent when the user
+   * authenticated with a manually-provided token (`--with-token`).
+   */
+  tokenName?: string;
   /** Timestamp when authenticated */
   authenticatedAt: string;
   /** UUID of the user on the server side (fetched at auth time) */

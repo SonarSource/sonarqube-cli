@@ -182,6 +182,22 @@ export class SonarQubeClient {
     return (await response.json()) as T;
   }
 
+  /**
+   * Revoke a user token on the server by its name.
+   * Sends a form-encoded POST to `/api/user_tokens/revoke`.
+   * Throws on non-2xx responses so callers can handle failures (e.g. best-effort logout).
+   */
+  async revokeUserToken(tokenName: string): Promise<void> {
+    const response = await fetch(`${this.serverURL}/api/user_tokens/revoke`, {
+      method: 'POST',
+      headers: this.commonHeaders('form'),
+      body: new URLSearchParams({ name: tokenName }).toString(),
+      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS),
+    });
+
+    await this.raiseForStatus(response, 'POST');
+  }
+
   async checkTokenValidity(): Promise<'valid' | 'invalid'> {
     const result = await this.get<{ valid: boolean }>('/api/authentication/validate');
     return result.valid ? 'valid' : 'invalid';

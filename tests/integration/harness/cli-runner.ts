@@ -61,6 +61,7 @@ export async function runCli(
     timeoutMs?: number;
     cwd: string;
     browserToken?: string;
+    browserTokenName?: string;
   },
 ): Promise<CliResult> {
   const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
@@ -116,7 +117,11 @@ export async function runCli(
   let stdout: string;
 
   if (options.browserToken) {
-    stdout = await streamStdoutAndDeliverToken(proc.stdout, options.browserToken);
+    stdout = await streamStdoutAndDeliverToken(
+      proc.stdout,
+      options.browserToken,
+      options.browserTokenName,
+    );
   } else {
     stdout = await new Response(proc.stdout).text();
   }
@@ -141,14 +146,14 @@ export async function runCli(
  * Extracts the loopback port from accumulated stdout and POSTs the token to it.
  * Returns true if the token was delivered, false if the port was not found yet.
  */
-function tryDeliverToken(accumulated: string, token: string): boolean {
+function tryDeliverToken(accumulated: string, token: string, tokenName?: string): boolean {
   const match = /[?&]port=(\d+)/.exec(accumulated);
   if (!match) return false;
   const port = match[1];
   fetch(`http://127.0.0.1:${port}/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, ...(tokenName ? { name: tokenName } : {}) }),
   }).catch(() => {
     /* loopback server may close before response completes */
   });
@@ -163,6 +168,7 @@ function tryDeliverToken(accumulated: string, token: string): boolean {
 async function streamStdoutAndDeliverToken(
   stream: ReadableStream<Uint8Array>,
   token: string,
+  tokenName?: string,
 ): Promise<string> {
   const decoder = new TextDecoder();
   const reader = stream.getReader();
@@ -177,7 +183,7 @@ async function streamStdoutAndDeliverToken(
       accumulated += decoder.decode(value, { stream: true });
 
       if (!tokenDelivered) {
-        tokenDelivered = tryDeliverToken(accumulated, token);
+        tokenDelivered = tryDeliverToken(accumulated, token, tokenName);
       }
     }
   } finally {

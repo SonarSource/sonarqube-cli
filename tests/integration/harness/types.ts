@@ -40,10 +40,11 @@ export interface RunOptions {
   stdinChunks?: string[];
   /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
-   * port (pattern: `port=\d+`), then delivers this token via GET request to
+   * port (pattern: `port=\d+`), then delivers this token via POST request to
    * the loopback server. Use this to test interactive browser-auth flows.
    */
   browserToken?: string;
+  browserTokenName?: string;
 }
 
 export interface RecordedRequest {
@@ -52,5 +53,6 @@ export interface RecordedRequest {
   path: string;
   query: Record<string, string>;
   headers: Record<string, string>;
+  body?: string;
   timestamp: number;
 }
