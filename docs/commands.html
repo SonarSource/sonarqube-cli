@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Commands — SonarQube CLI</title>
   <meta name="description" content="Full command reference for the SonarQube CLI. Browse all commands, options, and examples for sonar auth, sonar install, sonar integrate, sonar list, sonar analyze, and more. Machine-readable schema available at /data/commands.json.">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" href="favicon.ico">
   <link rel="canonical" href="https://cli.sonarqube.com/commands.html">
   <meta property="og:title" content="Commands — SonarQube CLI">
   <meta property="og:description" content="Full command reference for the SonarQube CLI. Browse all commands, options, and examples. Machine-readable schema available at /data/commands.json.">
@@ -34,6 +34,7 @@
     <a href="commands.html" class="nav-link active">Commands</a>
     <a href="https://github.com/SonarSource/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
     <a href="llms.txt" class="nav-link">llms.txt</a>
+    <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="nav-link" target="_blank" rel="noopener">Feedback</a>
     <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">☀</button>
   </div>
 </nav>
@@ -582,6 +583,26 @@ selectCommand(startId);
 })();
 
 // ── Hash navigation ──────────────────────────────────────────
+// ── Feedback popover trigger ─────────────────────────────────
+(function() {
+  var fab = document.getElementById('feedbackFab');
+  if (!fab) return;
+  var triggered = false;
+  function show() {
+    if (triggered) return;
+    triggered = true;
+    fab.classList.add('open');
+  }
+  // Any click outside the fab, or scrolling the main panel / sidebar
+  document.addEventListener('click', function(e) {
+    if (!fab.contains(e.target)) show();
+  });
+  var main = document.querySelector('.main-panel');
+  if (main) main.addEventListener('scroll', function() { show(); }, { passive: true });
+  var tree = document.querySelector('.sidebar-tree');
+  if (tree) tree.addEventListener('scroll', function() { show(); }, { passive: true });
+})();
+
 window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
   if (id && byId[id]) {
@@ -591,5 +612,14 @@ window.addEventListener('hashchange', () => {
   }
 });
 </script>
+
+<div class="feedback-fab" id="feedbackFab">
+  <div class="feedback-fab-popover">
+    <button class="feedback-fab-x" onclick="document.getElementById('feedbackFab').classList.remove('open')" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <p class="feedback-fab-title">How useful was this site?</p>
+    <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Share Feedback</a>
+  </div>
+  <button class="feedback-fab-btn" onclick="document.getElementById('feedbackFab').classList.toggle('open')">Feedback</button>
+</div>
 </body>
 </html>

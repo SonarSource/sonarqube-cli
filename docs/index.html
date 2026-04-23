@@ -6,7 +6,7 @@
   <title>SonarQube CLI — cli.sonarqube.com</title>
   <meta name="description" content="SonarQube CLI — code quality and security in your terminal. Scan for secrets, integrate Claude Code, and manage SonarQube issues from the command line.">
   <meta name="version" id="meta-version" content="">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" href="favicon.ico">
   <link rel="canonical" href="https://cli.sonarqube.com/">
   <meta property="og:title" content="SonarQube CLI — Code Quality & Security in Your Terminal">
   <meta property="og:description" content="SonarQube CLI — code quality and security in your terminal. Scan for secrets, integrate Claude Code, and manage SonarQube issues from the command line.">
@@ -50,6 +50,7 @@
     <a href="commands.html" class="nav-link">Commands</a>
     <a href="https://github.com/SonarSource/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
     <a href="llms.txt" class="nav-link">llms.txt</a>
+    <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="nav-link" target="_blank" rel="noopener">Feedback</a>
     <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">☀</button>
   </div>
 </nav>
@@ -208,7 +209,17 @@
   <a href="https://docs.sonarsource.com/sonarqube-cli" target="_blank" rel="noopener">Docs</a>
   <a href="llms.txt">For AI Agents</a>
   <a href="data/commands.json">commands.json</a>
+  <a href="https://forms.gle/zuNTSBFq2EKsum3E6" target="_blank" rel="noopener">Send Feedback</a>
 </footer>
+
+<div class="feedback-fab" id="feedbackFab">
+  <div class="feedback-fab-popover">
+    <button class="feedback-fab-x" onclick="document.getElementById('feedbackFab').classList.remove('open')" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <p class="feedback-fab-title">How useful was this site?</p>
+    <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Share Feedback</a>
+  </div>
+  <button class="feedback-fab-btn" onclick="document.getElementById('feedbackFab').classList.toggle('open')">Feedback</button>
+</div>
 
 <script>
   // Theme toggle
@@ -542,6 +553,28 @@
       setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
     });
   }
+
+  // ─── Feedback popover trigger ─────────────────────────────────
+  (function() {
+    var fab = document.getElementById('feedbackFab');
+    if (!fab) return;
+    var triggered = false;
+    function show() {
+      if (triggered) return;
+      triggered = true;
+      fab.classList.add('open');
+      window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('click', onClick);
+    }
+    function onScroll() {
+      if (window.scrollY > 200) show();
+    }
+    function onClick(e) {
+      if (!fab.contains(e.target)) show();
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('click', onClick);
+  })();
 
   // ─── ASCII Side-view Wave ────────────────────────────────────
   (function() {
