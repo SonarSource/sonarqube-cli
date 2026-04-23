@@ -86,10 +86,6 @@ export function parseBrowserAuthCallback(body: string): BrowserAuthResult | unde
   }
 }
 
-export function extractTokenFromPostBody(body: string): string | undefined {
-  return parseBrowserAuthCallback(body)?.token;
-}
-
 /**
  * Build authentication URL from server URL and port
  */

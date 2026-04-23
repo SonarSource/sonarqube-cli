@@ -67,11 +67,19 @@ export class EnvironmentBuilder {
     url: string,
     type: 'cloud' | 'on-premise' = 'on-premise',
     orgKey?: string,
-    tokenName?: string,
   ): this {
     this.activeConnectionUrl = url;
     this.activeConnectionType = type;
     this.activeConnectionOrgKey = orgKey;
+    return this;
+  }
+
+  /**
+   * Sets the server-generated token name on the active connection. Reflects
+   * the value populated by the browser-based OAuth flow (see `AuthConnection.tokenName`).
+   * Must be called after `withActiveConnection(...)`.
+   */
+  withTokenName(tokenName: string): this {
     this.activeConnectionTokenName = tokenName;
     return this;
   }

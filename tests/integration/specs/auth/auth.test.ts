@@ -106,6 +106,34 @@ describe('auth login', () => {
   );
 
   it(
+    'does not inherit a stale tokenName when re-authenticating with --with-token',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('manual-token').start();
+
+      // Pre-existing state: a prior browser-OAuth login left a tokenName behind.
+      // The keychain token has since been replaced by a manually-supplied one.
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('cli-browser-token-from-prior-session');
+
+      const result = await harness.run(
+        `auth login --server ${server.baseUrl()} --with-token manual-token`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ tokenName?: string; serverUrl: string }> };
+      };
+      // The manually-supplied token has no server-side name we can know about,
+      // so the connection must NOT carry the stale browser-issued tokenName forward.
+      expect(state.auth.connections[0].serverUrl).toBe(server.baseUrl());
+      expect(state.auth.connections[0].tokenName).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 when organization is not found on SonarCloud',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
@@ -381,7 +409,8 @@ describe('auth logout', () => {
 
       harness
         .state()
-        .withActiveConnection(server.baseUrl(), 'on-premise', undefined, 'cli-logout-token')
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('cli-logout-token')
         .withKeychainToken(server.baseUrl(), 'logout-token');
 
       const result = await harness.run(`auth logout`);
@@ -423,6 +452,30 @@ describe('auth logout', () => {
   );
 
   it(
+    'warns and skips revocation when tokenName is known but the keychain has no token',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.state().withActiveConnection(server.baseUrl()).withTokenName('cli-browser-token');
+
+      const result = await harness.run(`auth logout`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        'Could not retrieve the local token from the keychain, so the server-side token "cli-browser-token" could not be revoked automatically. Revoke it manually on the server if needed.',
+      );
+      // No revoke call should have been issued: we have no token to authenticate it.
+      const revokeRequest = server
+        .getRecordedRequests()
+        .find((request) => request.path === '/api/user_tokens/revoke');
+      expect(revokeRequest).toBeUndefined();
+      expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+      expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
+      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'warns and still completes local cleanup when token revocation fails',
     async () => {
       const server = await harness
@@ -433,7 +486,8 @@ describe('auth logout', () => {
 
       harness
         .state()
-        .withActiveConnection(server.baseUrl(), 'on-premise', undefined, 'cli-logout-token')
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('cli-logout-token')
         .withKeychainToken(server.baseUrl(), 'logout-token');
 
       const result = await harness.run('auth logout');

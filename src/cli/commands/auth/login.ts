@@ -67,7 +67,12 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
     orgKey: org,
     region: cloudRegionFromUrl(server),
-    tokenName: tokenName ?? existingConnection?.tokenName,
+    // Manual `--with-token` logins are out of scope for server-side revocation
+    // (we have no reliable way to know the token's server-side name), so never
+    // inherit a stale tokenName from a prior browser-OAuth session — that would
+    // re-arm the revoke path against a name that no longer matches the secret
+    // now stored in the keychain.
+    tokenName: isNonInteractive ? undefined : (tokenName ?? existingConnection?.tokenName),
   });
 
   // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).

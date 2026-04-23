@@ -49,6 +49,8 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.
 - Caller-agent hints (Cursor vs Claude Code) from the environment: `src/lib/agent-detector.ts` (`detectCallerAgent`, etc.).
 - `sonar auth logout` relies on state: if there is no active connection or `isAuthenticated` is false, it only reports that you are already logged out (no keychain changes).
+- When `sonar auth login` runs the browser-based OAuth flow, the server-generated token name returned in the callback POST body is captured and persisted on the connection as `tokenName` (see `AuthConnection` in `src/lib/state.ts`). The wire field is `name` (matching `/api/user_tokens/revoke?name=`); we keep it as `tokenName` in-memory to disambiguate from other "name" fields. Tokens supplied via `--with-token` are not assigned a `tokenName`.
+- On `sonar auth logout`, the CLI best-effort revokes the server-side token via `SonarQubeClient.revokeUserToken(...)` (a one-line wrapper over the generic `postForm(endpoint, params)` helper) before clearing the keychain entry. Failures (network error, non-2xx response) are reported via a warning on stderr; local cleanup still proceeds. When the connection has no `tokenName` (e.g. authenticated with `--with-token`, or upgraded from an older CLI), the CLI emits a manual-revocation hint on stderr instead.
 
 ## Tests
 

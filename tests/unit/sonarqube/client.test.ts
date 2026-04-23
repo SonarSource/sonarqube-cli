@@ -167,6 +167,72 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
+  // postForm + revokeUserToken
+  // -------------------------------------------------------------------------
+
+  describe('postForm', () => {
+    it('sends a form-encoded POST with URL-encoded body', async () => {
+      fetchSpy = mockFetch({}, true, 204);
+      await client.postForm('/api/some/form', { foo: 'bar baz', qux: 'a&b' });
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe('foo=bar+baz&qux=a%26b');
+    });
+
+    it('sets Content-Type: application/x-www-form-urlencoded and Bearer auth', async () => {
+      fetchSpy = mockFetch({}, true, 204);
+      await client.postForm('/api/some/form', { name: 'test' });
+      expect(lastFetchInit(fetchSpy).headers).toMatchObject({
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${TOKEN}`,
+      });
+    });
+
+    it('targets the exact endpoint on the configured server URL', async () => {
+      fetchSpy = mockFetch({}, true, 204);
+      await client.postForm('/api/some/form', { name: 'test' });
+      expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/some/form`);
+    });
+
+    it('throws with error body text when response is not ok', async () => {
+      fetchSpy = mockFetch({ message: 'boom' }, false, 500);
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.postForm('/api/some/form', { name: 'test' })).rejects.toThrow(
+        'SonarQube API error: 500 Internal Server Error',
+      );
+    });
+  });
+
+  describe('revokeUserToken', () => {
+    it('POSTs name=<tokenName> to /api/user_tokens/revoke', async () => {
+      fetchSpy = mockFetch({}, true, 204);
+      await client.revokeUserToken('cli-token-name');
+      expect(lastFetchUrl(fetchSpy)).toBe(`${SERVER_URL}/api/user_tokens/revoke`);
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe('name=cli-token-name');
+      expect(init.headers).toMatchObject({
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${TOKEN}`,
+      });
+    });
+
+    it('URL-encodes special characters in the token name', async () => {
+      fetchSpy = mockFetch({}, true, 204);
+      await client.revokeUserToken('cli token+with/special&chars');
+      expect(lastFetchInit(fetchSpy).body).toBe('name=cli+token%2Bwith%2Fspecial%26chars');
+    });
+
+    it('propagates server errors to the caller', async () => {
+      fetchSpy = mockFetch('revocation boom', false, 500);
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.revokeUserToken('cli-token-name')).rejects.toThrow(
+        'SonarQube API error: 500 Internal Server Error',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // checkTokenValidity
   // -------------------------------------------------------------------------
 

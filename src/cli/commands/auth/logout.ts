@@ -40,6 +40,9 @@ async function revokeServerTokenIfPossible(
   }
 
   if (!token) {
+    warn(
+      `Could not retrieve the local token from the keychain, so the server-side token "${active.tokenName}" could not be revoked automatically. Revoke it manually on the server if needed.`,
+    );
     return;
   }
 
