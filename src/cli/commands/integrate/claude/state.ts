@@ -22,15 +22,14 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 
 import { version as VERSION } from '../../../../../package.json';
-import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
+import { cloudRegionFromUrl, isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { deleteStaleTokens } from '../../../../lib/keychain';
 import logger from '../../../../lib/logger';
+import { loadState, saveState } from '../../../../lib/repository/state-repository';
 import {
   addInstalledHook,
   addOrUpdateConnection,
-  loadState,
   markAgentConfigured,
-  saveState,
   upsertAgentExtension,
 } from '../../../../lib/state-manager';
 import { warn } from '../../../../ui';
@@ -122,6 +121,7 @@ export async function updateStateAfterConfiguration(
     await deleteStaleTokens(state.auth.connections, config.serverURL, config.organization);
     addOrUpdateConnection(state, config.serverURL, type, {
       orgKey: config.organization,
+      region: cloudRegionFromUrl(config.serverURL),
     });
 
     saveState(state);

@@ -19,8 +19,9 @@
  */
 
 import { deleteToken, getToken } from '../../../lib/keychain';
+import { loadState, saveState } from '../../../lib/repository/state-repository';
 import type { AuthConnection } from '../../../lib/state';
-import { getActiveConnection, loadState, saveState } from '../../../lib/state-manager';
+import { getActiveConnection, removeConnection } from '../../../lib/state-manager';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { print, success, warn } from '../../../ui';
 
@@ -75,11 +76,7 @@ export async function authLogout(): Promise<void> {
 
   await deleteToken(server, org);
 
-  state.auth.connections = state.auth.connections.filter((c) => c.id !== active.id);
-
-  state.auth.activeConnectionId = undefined;
-
-  state.auth.isAuthenticated = false;
+  removeConnection(state, active.id);
 
   saveState(state);
 

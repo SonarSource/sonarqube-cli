@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { version as CURRENT_VERSION } from '../../../../../package.json';
 import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
 import { runMigrations } from '../../../../../src/lib/migration';
+import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import type { HookExtension } from '../../../../../src/lib/state.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
 import * as stateManager from '../../../../../src/lib/state-manager.js';
@@ -45,8 +46,8 @@ describe('runMigrations — skip conditions', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
@@ -109,8 +110,8 @@ describe('runMigrations — migration execution', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
@@ -155,12 +156,25 @@ describe('runMigrations — migration execution', () => {
     });
   });
 
-  it('registers sonar-sqaa PostToolUse hook in state', async () => {
+  it('registers sonar-sqaa PostToolUse hook in state when installSqaa is true', async () => {
     loadStateSpy.mockReturnValue(makeConfiguredState(OLD_VERSION));
 
-    await runMigrations('/some/project');
+    await runMigrations('/some/project', undefined, true);
 
     expect(addInstalledHookSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      'claude-code',
+      'sonar-sqaa',
+      'PostToolUse',
+    );
+  });
+
+  it('does not register sonar-sqaa hook in state when installSqaa is false', async () => {
+    loadStateSpy.mockReturnValue(makeConfiguredState(OLD_VERSION));
+
+    await runMigrations('/some/project', undefined, false);
+
+    expect(addInstalledHookSpy).not.toHaveBeenCalledWith(
       expect.anything(),
       'claude-code',
       'sonar-sqaa',
@@ -183,9 +197,7 @@ describe('runMigrations — migration execution', () => {
 
     await runMigrations('/some/project');
 
-    expect(state.agents['claude-code'].migratedAt).toBeDefined();
-    // Should be a valid ISO timestamp
-    expect(() => new Date(state.agents['claude-code'].migratedAt!)).not.toThrow();
+    expect(state.agents['claude-code'].migratedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('saves state after migration', async () => {
@@ -299,8 +311,8 @@ describe('runMigrations — CLI-105 patch', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
@@ -350,10 +362,12 @@ describe('runMigrations — CLI-105 patch', () => {
 
     await runMigrations('/some/project');
 
-    const secretsPreToolCalls = addInstalledHookSpy.mock.calls.filter(
-      (call: unknown[]) => call[2] === 'sonar-secrets' && call[3] === 'PreToolUse',
+    expect(addInstalledHookSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'claude-code',
+      'sonar-secrets',
+      'PreToolUse',
     );
-    expect(secretsPreToolCalls).toHaveLength(0);
   });
 
   it('does not patch when v0.5.1 has a PreToolUse hook already (non-UserPromptSubmit only)', async () => {
@@ -367,10 +381,12 @@ describe('runMigrations — CLI-105 patch', () => {
 
     await runMigrations('/some/project');
 
-    const secretsPreToolCalls = addInstalledHookSpy.mock.calls.filter(
-      (call: unknown[]) => call[2] === 'sonar-secrets' && call[3] === 'PreToolUse',
+    expect(addInstalledHookSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'claude-code',
+      'sonar-secrets',
+      'PreToolUse',
     );
-    expect(secretsPreToolCalls).toHaveLength(0);
   });
 });
 
@@ -390,8 +406,8 @@ describe('runMigrations — hook script rewriting', () => {
     state.agents['claude-code'].configured = true;
     state.agents['claude-code'].configuredByCliVersion = OLD_VERSION;
 
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
@@ -496,8 +512,8 @@ describe('runMigrations — already-migrated extensions not duplicated', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );
@@ -556,8 +572,8 @@ describe('runMigrations — sonar-a3s state cleanup', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
     addInstalledHookSpy = spyOn(stateManager, 'addInstalledHook').mockImplementation(
       () => undefined,
     );

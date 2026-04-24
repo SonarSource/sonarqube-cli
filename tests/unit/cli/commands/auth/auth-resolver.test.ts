@@ -29,8 +29,8 @@ import {
   resolveAuth,
   resolveFromEndpoint,
 } from '../../../../../src/lib/auth-resolver.js';
+import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui/index.js';
 import { createKeychainTestHandle } from '../../../keychain/keychain-test-handle.js';
 
@@ -74,7 +74,7 @@ describe('resolveAuth', () => {
     });
 
     it('skips keychain lookup entirely', async () => {
-      const loadStateSpy = spyOn(stateManager, 'loadState');
+      const loadStateSpy = spyOn(stateRepository, 'loadState');
       try {
         await resolveAuth();
         expect(loadStateSpy).not.toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe('resolveAuth', () => {
       state.auth.activeConnectionId = 'conn-1';
       state.auth.isAuthenticated = true;
 
-      const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
@@ -133,7 +133,7 @@ describe('resolveAuth', () => {
       state.auth.activeConnectionId = 'conn-1';
       state.auth.isAuthenticated = true;
 
-      const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
       try {
@@ -167,7 +167,7 @@ describe('resolveAuth', () => {
       state.auth.activeConnectionId = 'conn-1';
       state.auth.isAuthenticated = true;
 
-      const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
 
       await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
 
@@ -187,7 +187,7 @@ describe('resolveAuth', () => {
 
   describe('when no auth is available', () => {
     it('returns null when no server can be resolved', async () => {
-      const loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(
+      const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(
         getDefaultState('test'),
       );
 

@@ -31,14 +31,9 @@ import { join } from 'node:path';
 import { version as CURRENT_VERSION } from '../../package.json';
 import { installHooks } from '../cli/commands/integrate/claude/hooks';
 import logger from './logger';
+import { loadState, saveState } from './repository/state-repository';
 import type { CliState, HookExtension } from './state';
-import {
-  addInstalledHook,
-  getActiveConnection,
-  loadState,
-  saveState,
-  upsertAgentExtension,
-} from './state-manager';
+import { addInstalledHook, getActiveConnection, upsertAgentExtension } from './state-manager';
 
 // Version that introduced the new hook architecture (separate secrets/SQAA hooks)
 const NEW_HOOK_ARCH_VERSION = CURRENT_VERSION;

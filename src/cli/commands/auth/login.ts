@@ -26,12 +26,8 @@ import { cloudRegionFromUrl, isSonarQubeCloud } from '../../../lib/auth-resolver
 import { SONARCLOUD_URL } from '../../../lib/config-constants';
 import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
-import {
-  addOrUpdateConnection,
-  getActiveConnection,
-  loadState,
-  saveState,
-} from '../../../lib/state-manager';
+import { loadState, saveState } from '../../../lib/repository/state-repository';
+import { addOrUpdateConnection, getActiveConnection } from '../../../lib/state-manager';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error';

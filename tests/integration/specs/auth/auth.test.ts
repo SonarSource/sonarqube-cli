@@ -207,6 +207,29 @@ describe('auth login', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'preserves telemetry.installationId when logging in to a second server',
+    async () => {
+      const server1 = await harness.newFakeServer().withAuthToken('tok-1').start();
+      const server2 = await harness.newFakeServer().withAuthToken('tok-2').start();
+
+      await harness.run(`auth login --with-token tok-1 --server ${server1.baseUrl()}`);
+      const { installationId } = (
+        harness.stateJsonFile.asJson() as { telemetry: { installationId: string } }
+      ).telemetry;
+
+      await harness.run(`auth login --with-token tok-2 --server ${server2.baseUrl()}`);
+      const stateAfter = harness.stateJsonFile.asJson() as {
+        telemetry: { installationId: string };
+        auth: { connections: Array<{ serverUrl: string }> };
+      };
+
+      expect(stateAfter.telemetry.installationId).toBe(installationId);
+      expect(stateAfter.auth.connections[0].serverUrl).toBe(server2.baseUrl());
+    },
+    { timeout: 15000 },
+  );
 });
 
 const LARGE_ORG_TOTAL = 200;
@@ -449,8 +472,14 @@ describe('auth logout', () => {
 
       const account = generateKeychainAccount(server.baseUrl());
       expect(readKeychainToken(harness.keychainJsonFile, account)).toBeUndefined();
-      expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
-      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+      const authState = harness.stateJsonFile.asJson().auth as {
+        connections: unknown[];
+        activeConnectionId: string | undefined;
+        isAuthenticated: boolean;
+      };
+      expect(authState.connections).toHaveLength(0);
+      expect(authState.activeConnectionId).toBeUndefined();
+      expect(authState.isAuthenticated).toBe(false);
     },
     { timeout: 15000 },
   );
@@ -468,8 +497,14 @@ describe('auth logout', () => {
         'The server-side token name is unknown for this connection, so the token could not be revoked automatically. Revoke it manually on the server if needed.',
       );
       expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
-      expect(harness.stateJsonFile.asJson().auth.activeConnectionId).toBeUndefined();
-      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(false);
+      const authState = harness.stateJsonFile.asJson().auth as {
+        connections: unknown[];
+        activeConnectionId: string | undefined;
+        isAuthenticated: boolean;
+      };
+      expect(authState.connections).toHaveLength(0);
+      expect(authState.activeConnectionId).toBeUndefined();
+      expect(authState.isAuthenticated).toBe(false);
     },
     { timeout: 15000 },
   );
@@ -587,7 +622,7 @@ describe('auth purge', () => {
   );
 
   it(
-    'removes all tokens after confirmation',
+    'removes all tokens after confirmation and clears auth state',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('purge-token-1').start();
 
@@ -595,6 +630,7 @@ describe('auth purge', () => {
 
       harness
         .state()
+        .withActiveConnection(server.baseUrl())
         .withKeychainToken(server.baseUrl(), 'purge-token-1')
         .withKeychainToken(server2.baseUrl(), 'purge-token-2');
 
@@ -606,10 +642,21 @@ describe('auth purge', () => {
       const account2 = generateKeychainAccount(server2.baseUrl());
       expect(readKeychainToken(harness.keychainJsonFile, account1)).toBeUndefined();
       expect(readKeychainToken(harness.keychainJsonFile, account2)).toBeUndefined();
+
+      const authState = harness.stateJsonFile.asJson().auth as {
+        connections: unknown[];
+        activeConnectionId: string | undefined;
+        isAuthenticated: boolean;
+      };
+      expect(authState.connections).toHaveLength(0);
+      expect(authState.activeConnectionId).toBeUndefined();
+      expect(authState.isAuthenticated).toBe(false);
     },
     { timeout: 15000 },
   );
 });
+
+const HTTP_503_SERVICE_UNAVAILABLE = 503;
 
 describe('auth login — auth URL', () => {
   let harness: TestHarness;
@@ -706,7 +753,7 @@ describe('auth login — auth URL', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withSystemStatusCode(503)
+        .withSystemStatusCode(HTTP_503_SERVICE_UNAVAILABLE)
         .start();
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {

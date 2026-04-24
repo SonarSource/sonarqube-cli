@@ -31,6 +31,7 @@ import {
 import logger from '../../../../lib/logger';
 import { detectPlatform } from '../../../../lib/platform-detector';
 import { spawnProcess } from '../../../../lib/process';
+import { loadState, saveState } from '../../../../lib/repository/state-repository';
 import {
   SONAR_SECRETS_SIGNATURES,
   SONAR_SECRETS_VERSION,
@@ -41,7 +42,6 @@ import {
   downloadBinary,
   verifyBinarySignature,
 } from '../../../../lib/sonarsource-releases';
-import { loadState, saveState } from '../../../../lib/state-manager';
 import { print, success, text, warn, withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../error';
 

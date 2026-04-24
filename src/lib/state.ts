@@ -158,6 +158,13 @@ export interface SkillExtension extends BaseAgentExtension {
  */
 export type AgentExtension = HookExtension | SkillExtension;
 
+export function agentExtensionEquals(a: AgentExtension, b: AgentExtension): boolean {
+  if (a.agentId !== b.agentId || a.projectRoot !== b.projectRoot) return false;
+  if (a.kind !== b.kind || a.name !== b.name) return false;
+  if (a.kind === 'hook' && b.kind === 'hook') return a.hookType === b.hookType;
+  return true;
+}
+
 /**
  * Agent hooks configuration
  */

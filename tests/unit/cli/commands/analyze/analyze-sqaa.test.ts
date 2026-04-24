@@ -29,6 +29,7 @@ import {
   InvalidOptionError,
 } from '../../../../../src/cli/commands/_common/error.js';
 import { analyzeSqaa } from '../../../../../src/cli/commands/analyze/sqaa';
+import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
 import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { SonarQubeClient } from '../../../../../src/sonarqube/client.js';
@@ -81,8 +82,8 @@ beforeEach(() => {
   setMockUi(true);
   clearMockUiCalls();
 
-  loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeCloudState());
-  saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+  loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeCloudState());
+  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
 
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);

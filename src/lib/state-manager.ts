@@ -19,101 +19,44 @@
  */
 
 /**
- * State manager for reading and writing ~/.sonar/sonarqube-cli/state.json
+ * Business logic for manipulating in-memory state.
+ * File I/O (loadState, saveState) lives in ./repository/state-repository.ts.
  */
 
-import crypto, { randomUUID } from 'node:crypto';
-import fs from 'node:fs';
-import { join } from 'node:path';
+import crypto from 'node:crypto';
 
-import { version as VERSION } from '../../package.json';
-import { CLI_DIR } from './config-constants.js';
-import logger from './logger.js';
+export { loadState, saveState } from './repository/state-repository.js';
+
 import {
-  type AgentConfig,
   type AgentExtension,
+  agentExtensionEquals,
   type AuthConnection,
   type CliState,
   type CloudRegion,
-  getDefaultState,
   type HookType,
 } from './state.js';
 
-function getCliDir(): string {
-  return process.env.SONARQUBE_CLI_DIR ?? CLI_DIR;
-}
-
-function getStateFile(): string {
-  return join(getCliDir(), 'state.json');
+/**
+ * Get the currently active authentication connection, or undefined if none.
+ */
+export function getActiveConnection(state: CliState): AuthConnection | undefined {
+  if (!state.auth.activeConnectionId) {
+    return undefined;
+  }
+  return state.auth.connections.find((c) => c.id === state.auth.activeConnectionId);
 }
 
 /**
- * Ensure state directory exists
+ * Find all extensions registered for a specific agent + project root combination.
  */
-function ensureStateDir(): void {
-  if (!fs.existsSync(getCliDir())) {
-    fs.mkdirSync(getCliDir(), { recursive: true });
-  }
-}
-
-/**
- * Load state from file, or return default if not exists
- */
-export function loadState(cliVersion?: string): CliState {
-  ensureStateDir();
-
-  if (!fs.existsSync(getStateFile())) {
-    return getDefaultState(cliVersion ?? VERSION);
-  }
-
-  try {
-    const content = fs.readFileSync(getStateFile(), 'utf-8');
-    const state = JSON.parse(content) as CliState;
-    migrateState(state);
-    return state;
-  } catch (error) {
-    logger.debug(`Failed to load state from ${getStateFile()}: ${(error as Error).message}`);
-    return getDefaultState(cliVersion ?? VERSION);
-  }
-}
-
-function migrateState(state: CliState) {
-  // users might have a state file without telemetry
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (!state.telemetry) {
-    state.telemetry = {
-      enabled: true,
-      installationId: randomUUID(),
-      firstUseDate: new Date().toISOString(),
-      events: [],
-    };
-  }
-  // users might have a state file without agentExtensions (pre-registry format)
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (!state.agentExtensions) {
-    state.agentExtensions = [];
-  }
-  // Strip legacy fields that older state files may still contain
-  for (const conn of state.auth.connections) {
-    if ('keystoreKey' in conn) {
-      delete (conn as Record<string, unknown>).keystoreKey;
-    }
-  }
-}
-
-/**
- * Save state to file
- */
-export function saveState(state: CliState): void {
-  ensureStateDir();
-
-  state.lastUpdated = new Date().toISOString();
-
-  try {
-    fs.writeFileSync(getStateFile(), JSON.stringify(state, null, 2), 'utf-8');
-  } catch (error) {
-    throw new Error(`Failed to save state to ${getStateFile()}: ${String(error)}`);
-  }
+export function findExtensionsByProject(
+  state: CliState,
+  agentId: string,
+  projectRoot: string,
+): AgentExtension[] {
+  return state.agentExtensions.filter(
+    (e) => e.agentId === agentId && e.projectRoot === projectRoot,
+  );
 }
 
 /**
@@ -125,7 +68,7 @@ export function generateConnectionId(serverUrl: string, orgKey?: string): string
 }
 
 /**
- * Add or update authentication connection
+ * Add or update authentication connection.
  * Note: Currently supports only one connection. Logging in to a different server
  * will replace the previous connection.
  */
@@ -171,21 +114,32 @@ export function addOrUpdateConnection(
 }
 
 /**
- * Get active connection
+ * Remove a specific connection from state.
+ * Clears activeConnectionId and sets isAuthenticated = false when the removed
+ * connection was the active one.
  */
-export function getActiveConnection(state: CliState): AuthConnection | undefined {
-  if (!state.auth.activeConnectionId) {
-    return undefined;
+export function removeConnection(state: CliState, connectionId: string): void {
+  state.auth.connections = state.auth.connections.filter((c) => c.id !== connectionId);
+  if (state.auth.activeConnectionId === connectionId) {
+    state.auth.activeConnectionId = undefined;
+    state.auth.isAuthenticated = false;
   }
+}
 
-  return state.auth.connections.find((c) => c.id === state.auth.activeConnectionId);
+/**
+ * Remove all connections from state (used by purge).
+ */
+export function clearAllConnections(state: CliState): void {
+  state.auth.connections = [];
+  state.auth.activeConnectionId = undefined;
+  state.auth.isAuthenticated = false;
 }
 
 /**
  * Mark agent as configured
  */
 export function markAgentConfigured(state: CliState, agentName: string, cliVersion: string): void {
-  if (!(state.agents[agentName] as AgentConfig | undefined)) {
+  if (!Object.hasOwn(state.agents, agentName)) {
     state.agents[agentName] = {
       configured: false,
       hooks: { installed: [] },
@@ -199,7 +153,7 @@ export function markAgentConfigured(state: CliState, agentName: string, cliVersi
 }
 
 /**
- * Add installed hook for agent (legacy — kept for backward compatibility)
+ * Add installed hook for agent (legacy — kept for migration compatibility)
  */
 export function addInstalledHook(
   state: CliState,
@@ -233,33 +187,12 @@ export function addInstalledHook(
  * For global installs, projectRoot is set to homedir() so it naturally differs from project-level.
  */
 export function upsertAgentExtension(state: CliState, extension: AgentExtension): void {
-  const idx = state.agentExtensions.findIndex((e) => {
-    if (e.agentId !== extension.agentId) return false;
-    if (e.projectRoot !== extension.projectRoot) return false;
-    if (e.kind !== extension.kind) return false;
-    if (e.name !== extension.name) return false;
-    if (e.kind === 'hook' && extension.kind === 'hook') {
-      return e.hookType === extension.hookType;
-    }
-    return true;
-  });
+  const idx = state.agentExtensions.findIndex((e) => agentExtensionEquals(e, extension));
 
   if (idx >= 0) {
-    state.agentExtensions[idx] = extension;
+    // Preserve the original id — callers pass randomUUID() on every call
+    state.agentExtensions[idx] = { ...extension, id: state.agentExtensions[idx].id };
   } else {
     state.agentExtensions.push(extension);
   }
-}
-
-/**
- * Find all extensions registered for a specific agent + project root combination.
- */
-export function findExtensionsByProject(
-  state: CliState,
-  agentId: string,
-  projectRoot: string,
-): AgentExtension[] {
-  return state.agentExtensions.filter(
-    (e) => e.agentId === agentId && e.projectRoot === projectRoot,
-  );
 }

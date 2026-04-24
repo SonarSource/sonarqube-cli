@@ -38,8 +38,8 @@ import {
 } from '../../../../../src/cli/commands/analyze/secrets';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.js';
 import * as processLib from '../../../../../src/lib/process.js';
+import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const SONARCLOUD_URL = 'https://sonarcloud.io';
@@ -70,8 +70,8 @@ let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
 beforeEach(() => {
   setMockUi(true);
   clearMockUiCalls();
-  loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-  saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+  loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
     exitCode: 0,
     stdout: '{}',

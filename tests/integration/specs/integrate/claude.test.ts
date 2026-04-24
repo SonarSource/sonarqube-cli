@@ -634,7 +634,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       );
 
       expect(sqaaExt).toBeDefined();
-      expect(sqaaExt!.global).toBe(false);
+      expect(sqaaExt?.global).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -905,34 +905,34 @@ describe('integrate claude — file placement (local vs global)', () => {
 
   // ─── Global pre-exists, project install runs ────────────────────
 
-  describe('project-level install when a global Claude hook already exists', () => {
-    function writeExistingGlobalSecretsHook(): void {
-      // Simulate the on-disk footprint of a previous `sonar integrate claude -g` run:
-      // .claude/settings.json with a sonar-secrets PreToolUse entry plus the script file.
-      const globalScriptRel =
-        '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets' + (IS_WINDOWS ? '.ps1' : '.sh');
-      harness.userHome.writeFile(globalScriptRel, '#!/bin/bash\nexit 0\n');
-      harness.userHome.writeFile(
-        '.claude/settings.json',
-        JSON.stringify({
-          hooks: {
-            PreToolUse: [
-              {
-                matcher: 'Read',
-                hooks: [
-                  {
-                    type: 'command',
-                    command: `${harness.userHome.path}/${globalScriptRel}`,
-                    timeout: 60,
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-      );
-    }
+  function writeExistingGlobalSecretsHook(): void {
+    // Simulate the on-disk footprint of a previous `sonar integrate claude -g` run:
+    // .claude/settings.json with a sonar-secrets PreToolUse entry plus the script file.
+    const globalScriptRel =
+      '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets' + (IS_WINDOWS ? '.ps1' : '.sh');
+    harness.userHome.writeFile(globalScriptRel, '#!/bin/bash\nexit 0\n');
+    harness.userHome.writeFile(
+      '.claude/settings.json',
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: 'Read',
+              hooks: [
+                {
+                  type: 'command',
+                  command: `${harness.userHome.path}/${globalScriptRel}`,
+                  timeout: 60,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+  }
 
+  describe('project-level install when a global Claude hook already exists', () => {
     it(
       'does not create .claude/settings.json in the project directory',
       async () => {
@@ -1810,7 +1810,7 @@ describe('integrate claude — hook migration scenarios', () => {
   );
 
   it(
-    'scenario C: running integrate twice is idempotent — no duplicate hook entries',
+    'scenario C: running integrate twice is idempotent — no duplicate hook entries or agentExtensions',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('p').start();
 
@@ -1822,6 +1822,13 @@ describe('integrate claude — hook migration scenarios', () => {
       };
       expect(settings.hooks?.PreToolUse).toHaveLength(1);
       expect(settings.hooks?.UserPromptSubmit).toHaveLength(1);
+
+      // agentExtensions must not accumulate duplicates across re-runs
+      const state = harness.stateJsonFile.asJson() as {
+        agentExtensions: Array<{ name: string; hookType: string }>;
+      };
+      const secretsExts = state.agentExtensions.filter((e) => e.name === 'sonar-secrets');
+      expect(secretsExts).toHaveLength(2); // PreToolUse + UserPromptSubmit only
     },
     { timeout: 30000 },
   );

@@ -33,9 +33,9 @@ import {
 } from '../../../../../src/lib/config-constants.js';
 import { detectPlatform } from '../../../../../src/lib/platform-detector.js';
 import * as processLib from '../../../../../src/lib/process.js';
+import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { SONAR_SECRETS_VERSION } from '../../../../../src/lib/signatures.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
-import * as stateManager from '../../../../../src/lib/state-manager.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 // Import the real module first, then register it as a mock with the same object.
@@ -69,8 +69,8 @@ describe('resolveSecretsBinary: happy path', () => {
     clearMockUiCalls();
     tempBinDir = join(tmpdir(), `sonar-install-test-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
     downloadBinarySpy = spyOn(releases, 'downloadBinary').mockImplementation(
       (_url: string, path: string) => {
         writeFileSync(path, '');
@@ -233,8 +233,8 @@ describe('resolveSecretsBinary: error paths', () => {
       stdout: `sonar-secrets ${SONAR_SECRETS_VERSION}\n`,
       stderr: '',
     });
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {
       throw new Error('disk full');
     });
 
