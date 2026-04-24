@@ -52,12 +52,7 @@ export async function repairToken(serverURL: string, organization?: string): Pro
   // Save to keychain
   await saveToken(serverURL, newToken, organization);
 
-  // Persist the fresh tokenName on the active connection so that the
-  // in-memory state matches the token we just wrote to the keychain.
-  // Without this update, `state.tokenName` would keep pointing at the
-  // previous (now-invalid) token name while the keychain holds a new,
-  // live token — leading `auth logout` to revoke the wrong name and leak
-  // the repaired token on the server.
+  // Keep state.tokenName in sync with the freshly-saved keychain token.
   persistTokenNameOnActiveConnection(serverURL, organization, authResult.tokenName);
 
   success('Token saved to keychain');
@@ -65,9 +60,8 @@ export async function repairToken(serverURL: string, organization?: string): Pro
 }
 
 /**
- * Update the active connection's `tokenName` to reflect the freshly-minted
- * browser-OAuth token. Explicitly resets to `undefined` when the server did
- * not return a `name` field, so we never carry a stale value forward.
+ * Update the active connection's `tokenName` to match the freshly-minted
+ * browser-OAuth token (resets to `undefined` if the callback omitted `name`).
  */
 function persistTokenNameOnActiveConnection(
   serverURL: string,
