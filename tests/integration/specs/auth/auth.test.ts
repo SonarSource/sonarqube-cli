@@ -134,6 +134,29 @@ describe('auth login', () => {
   );
 
   it(
+    'preserves tokenName when re-authenticating with the existing keychain token',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('browser-login-token').start();
+
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('cli-browser-token')
+        .withKeychainToken(server.baseUrl(), 'browser-login-token');
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`);
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ tokenName?: string; serverUrl: string }> };
+      };
+      expect(state.auth.connections[0].serverUrl).toBe(server.baseUrl());
+      expect(state.auth.connections[0].tokenName).toBe('cli-browser-token');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 when organization is not found on SonarCloud',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
