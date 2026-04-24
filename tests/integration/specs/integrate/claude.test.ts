@@ -1399,6 +1399,118 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
   );
 });
 
+// ─── CLI-137: global install over old project-level state ─────────────────────
+
+describe.skipIf(IS_WINDOWS)(
+  'integrate claude — global install over pre-registry project-level state (CLI-137)',
+  () => {
+    let harness: TestHarness;
+
+    beforeEach(async () => {
+      harness = await TestHarness.create();
+      harness.state().withSecretsBinaryInstalled();
+    });
+
+    afterEach(async () => {
+      await harness.dispose();
+    });
+
+    it(
+      'populates agentExtensions with global entries when upgrading from old project-level install with -g',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withProject('my-project')
+          .start();
+
+        const serverUrl = server.baseUrl();
+
+        // Old state: project-level install at v0.4.0, hooks in hooks.installed, no agentExtensions
+        harness.state().withRawState(
+          JSON.stringify({
+            version: 1,
+            config: { cliVersion: '0.4.0' },
+            auth: {
+              isAuthenticated: true,
+              connections: [
+                {
+                  id: 'conn-1',
+                  type: 'on-premise',
+                  serverUrl,
+                  authenticatedAt: new Date().toISOString(),
+                },
+              ],
+              activeConnectionId: 'conn-1',
+            },
+            agents: {
+              'claude-code': {
+                configured: true,
+                configuredByCliVersion: '0.4.0',
+                hooks: {
+                  installed: [
+                    {
+                      name: 'sonar-secrets',
+                      type: 'PreToolUse',
+                      installedAt: new Date().toISOString(),
+                    },
+                    {
+                      name: 'sonar-secrets',
+                      type: 'UserPromptSubmit',
+                      installedAt: new Date().toISOString(),
+                    },
+                  ],
+                },
+                skills: { installed: [] },
+              },
+            },
+            tools: { installed: [] },
+            telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
+          }),
+        );
+        harness.state().withKeychainToken(serverUrl, 'test-token');
+
+        // Old hook scripts at project level (pre-registry location)
+        const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
+        harness.cwd.writeFile(
+          '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
+          oldScript,
+        );
+        harness.cwd.writeFile(
+          '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
+          oldScript,
+        );
+
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          [`sonar.host.url=${serverUrl}`, 'sonar.projectKey=my-project'].join('\n'),
+        );
+
+        const result = await harness.run('integrate claude -g --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+
+        const state = harness.stateJsonFile.asJson();
+        const extensions = state.agentExtensions as Array<{
+          name: string;
+          hookType: string;
+          global: boolean;
+          projectRoot: string;
+        }>;
+
+        // Global sonar-secrets hooks MUST be in agentExtensions
+        const globalSecretsHooks = extensions.filter(
+          (e) => e.name === 'sonar-secrets' && e.global === true,
+        );
+        expect(globalSecretsHooks.length).toBeGreaterThan(0);
+        expect(globalSecretsHooks.some((h) => h.hookType === 'PreToolUse')).toBe(true);
+        expect(globalSecretsHooks.some((h) => h.hookType === 'UserPromptSubmit')).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+  },
+);
+
 // ─── Post-update migration ─────────────────────────────────────────────────────
 
 describe.skipIf(IS_WINDOWS)('post-update migration — hook script rewrite on CLI upgrade', () => {
