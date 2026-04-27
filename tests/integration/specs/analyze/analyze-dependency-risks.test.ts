@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `analyze dependency-risks` (CLI-354 skeleton + CLI-355 SCA gate).
-// At this stage the command is still a stub: no analysis logic, but it now
-// pre-flights `/sca/enabled` (cloud) or `/api/v2/sca/enabled` (on-premise).
+// Integration tests for `analyze dependency-risks` (CLI-354 skeleton + CLI-355 SCA gate
+// + CLI-356 analysis properties fetch). The command is still a stub for output, but
+// now pre-flights `/sca/enabled`, validates the project, and fetches analysis
+// properties from `/api/settings/values`.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -52,6 +53,12 @@ describe('analyze dependency-risks', () => {
       .newFakeServer()
       .withAuthToken(VALID_TOKEN)
       .withScaEnabled(true)
+      .withProject('demo')
+      .withProjectSettings('demo', [
+        { key: 'sonar.exclusions', values: ['**/test/**', '**/dist/**'], inherited: false },
+        { key: 'sonar.sca.foo', value: 'bar', inherited: false },
+        { key: 'sonar.scm.exclusions.disabled', value: 'true', inherited: false },
+      ])
       .start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
@@ -60,9 +67,17 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Project: demo');
     expect(result.stdout).toContain('(no risks)');
-    const scaCalls = server.getRecordedRequests().filter((r) => r.path === '/sca/enabled');
+
+    const recorded = server.getRecordedRequests();
+    const scaCalls = recorded.filter((r) => r.path === '/sca/enabled');
     expect(scaCalls).toHaveLength(1);
     expect(scaCalls[0].query.organization).toBe(TEST_ORG);
+
+    const componentShowIndex = recorded.findIndex((r) => r.path === '/api/components/show');
+    const settingsIndex = recorded.findIndex((r) => r.path === '/api/settings/values');
+    expect(componentShowIndex).toBeGreaterThanOrEqual(0);
+    expect(settingsIndex).toBeGreaterThan(componentShowIndex);
+    expect(recorded[settingsIndex].query.component).toBe('demo');
   });
 
   it('prints stub JSON output when --format json is passed (on-premise)', async () => {
@@ -70,6 +85,8 @@ describe('analyze dependency-risks', () => {
       .newFakeServer()
       .withAuthToken(VALID_TOKEN)
       .withScaEnabled(true)
+      .withProject('demo')
+      .withProjectSettings('demo', [])
       .start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
@@ -79,6 +96,27 @@ describe('analyze dependency-risks', () => {
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toEqual({ project: 'demo', risks: [] });
     expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/enabled')).toBe(true);
+    expect(
+      server
+        .getRecordedRequests()
+        .some((r) => r.path === '/api/settings/values' && r.query.component === 'demo'),
+    ).toBe(true);
+  });
+
+  it('exits with code 1 with "No project" when project does not exist', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain('No project: demo');
+    // Settings fetch must be skipped when the project pre-check fails.
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(false);
   });
 
   it('exits with code 1 when SCA is disabled on the server', async () => {

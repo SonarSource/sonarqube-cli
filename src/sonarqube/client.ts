@@ -23,6 +23,11 @@
 import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
 import { print } from '../ui';
+import {
+  parseAnalysisProperties,
+  type ProjectAnalysisProperties,
+  type SettingsValue,
+} from './analysis-properties';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
@@ -321,6 +326,20 @@ export class SonarQubeClient {
     } catch {
       return { organizations: [], total: 0 };
     }
+  }
+
+  /**
+   * Fetch project-scoped analysis properties from `/api/settings/values` and
+   * project the response into the subset SCA analysis cares about
+   * (`sonar.sca.*`, `sonar.exclusions`, `sonar.scm.exclusions.disabled`).
+   * The `component` query param is what scopes the values to a specific
+   * project; without it the API returns global defaults.
+   */
+  async getProjectSettings(componentKey: string): Promise<ProjectAnalysisProperties> {
+    const result = await this.get<{ settings?: SettingsValue[] }>('/api/settings/values', {
+      component: componentKey,
+    });
+    return parseAnalysisProperties(result.settings ?? []);
   }
 
   /**

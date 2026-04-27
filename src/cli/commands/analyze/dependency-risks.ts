@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import logger from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
@@ -50,6 +51,14 @@ export async function analyzeDependencyRisks(
   if (!enabled) {
     throw new CommandFailedError('Advanced Security not available');
   }
+
+  const componentExists = await client.checkComponent(options.project);
+  if (!componentExists) {
+    throw new CommandFailedError(`No project: ${options.project}`);
+  }
+
+  const properties = await client.getProjectSettings(options.project);
+  logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
 
   const stub = { project: options.project, risks: [] as unknown[] };
   print(
