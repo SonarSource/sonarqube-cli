@@ -119,6 +119,7 @@ export class FakeSonarQubeServerBuilder {
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
+  private scaEnabled?: boolean;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -176,6 +177,17 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Configure the response of the SCA availability endpoints
+   * (`/sca/enabled` for cloud, `/api/v2/sca/enabled` for on-premise).
+   * When unset (default), both endpoints return 404 to simulate a server
+   * without Sonar Advanced Security installed.
+   */
+  withScaEnabled(enabled: boolean): this {
+    this.scaEnabled = enabled;
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const {
@@ -189,6 +201,7 @@ export class FakeSonarQubeServerBuilder {
       revokeTokenResponseBody,
       sqaaResponse,
       sqaaEntitlementOrgs,
+      scaEnabled,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -385,6 +398,18 @@ export class FakeSonarQubeServerBuilder {
             JSON.stringify([{ id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey }]),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/sca/enabled' || path === '/api/v2/sca/enabled') {
+          if (scaEnabled === undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ enabled: scaEnabled }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         const orgConfigMatch = /^\/a3s-analysis\/org-config\/(.+)$/.exec(path);

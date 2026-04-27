@@ -19,7 +19,9 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
+import { CommandFailedError } from '../_common/error.js';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -28,12 +30,19 @@ export interface AnalyzeDependencyRisksOptions {
   format: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await -- stub; real async work lands in CLI-355/356/352
 export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
-  _auth: ResolvedAuth,
+  auth: ResolvedAuth,
 ): Promise<void> {
   const stub = { project: options.project, risks: [] as unknown[] };
+
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
+  if (!enabled) {
+    throw new CommandFailedError(
+      'Software Composition Analysis is not available for the current server connection',
+    );
+  }
 
   print(
     options.format === 'json'

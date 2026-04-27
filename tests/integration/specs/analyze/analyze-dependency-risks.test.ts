@@ -18,14 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `analyze dependency-risks` skeleton (CLI-354).
-// At this stage the command is a stub: no SCA call, no settings fetch.
+// Integration tests for `analyze dependency-risks` (CLI-354 skeleton + CLI-355 SCA gate).
+// At this stage the command is still a stub: no analysis logic, but it now
+// pre-flights `/sca/enabled` (cloud) or `/api/v2/sca/enabled` (on-premise).
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
 
-const FAKE_SERVER = 'http://localhost:19999';
+const VALID_TOKEN = 'integration-test-token';
+const TEST_ORG = 'my-org';
 
 describe('analyze dependency-risks', () => {
   let harness: TestHarness;
@@ -45,23 +47,65 @@ describe('analyze dependency-risks', () => {
     expect(result.stdout + result.stderr).toContain('❌ Not authenticated. Run: sonar auth login');
   });
 
-  it('prints stub table output by default when authenticated', async () => {
-    harness.withAuth(FAKE_SERVER, 'fake-token');
+  it('prints stub table output by default when authenticated (cloud)', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks --project demo');
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Project: demo');
     expect(result.stdout).toContain('(no risks)');
+    const scaCalls = server.getRecordedRequests().filter((r) => r.path === '/sca/enabled');
+    expect(scaCalls).toHaveLength(1);
+    expect(scaCalls[0].query.organization).toBe(TEST_ORG);
   });
 
-  it('prints stub JSON output when --format json is passed', async () => {
-    harness.withAuth(FAKE_SERVER, 'fake-token');
+  it('prints stub JSON output when --format json is passed (on-premise)', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
     const result = await harness.run('analyze dependency-risks --project demo --format json');
 
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toEqual({ project: 'demo', risks: [] });
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/enabled')).toBe(true);
+  });
+
+  it('exits with code 1 when SCA is disabled on the server', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(false)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Software Composition Analysis is not available for the current server connection',
+    );
+  });
+
+  it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
+    const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Software Composition Analysis is not available for the current server connection',
+    );
   });
 });
