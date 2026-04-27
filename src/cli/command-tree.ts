@@ -26,6 +26,11 @@ import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
+import {
+  analyzeDependencyRisks,
+  type AnalyzeDependencyRisksOptions,
+  VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
+} from './commands/analyze/dependency-risks';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
@@ -227,6 +232,19 @@ analyze
   )
   .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
     analyzeSqaa(options, auth, cmd),
+  );
+
+const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')
+  .choices(DEPENDENCY_RISKS_FORMATS)
+  .default('table');
+
+analyze
+  .command('dependency-risks', { hidden: true })
+  .description('Analyze project dependencies for security and license risks')
+  .requiredOption('-p, --project <project>', 'Project key')
+  .addOption(dependencyRisksFormatOption)
+  .authenticatedAction((auth, options: AnalyzeDependencyRisksOptions) =>
+    analyzeDependencyRisks(options, auth),
   );
 
 COMMAND_TREE.command('verify')
