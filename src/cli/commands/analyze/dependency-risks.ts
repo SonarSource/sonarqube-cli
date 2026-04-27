@@ -19,9 +19,11 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import logger from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
+import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -34,8 +36,6 @@ export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  const stub = { project: options.project, risks: [] as unknown[] };
-
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
   if (!enabled) {
@@ -44,6 +44,16 @@ export async function analyzeDependencyRisks(
     );
   }
 
+  const componentExists = await client.checkComponent(options.project);
+  if (!componentExists) {
+    throw new CommandFailedError(`No project: ${options.project}`);
+  }
+
+  const settings = await client.getProjectSettings(options.project);
+  const properties = parseAnalysisProperties(settings);
+  logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
+
+  const stub = { project: options.project, risks: [] as unknown[] };
   print(
     options.format === 'json'
       ? JSON.stringify(stub, null, 2)

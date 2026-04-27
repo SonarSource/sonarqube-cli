@@ -21,6 +21,7 @@
 // Lightweight in-process mock SonarQube HTTP server (Bun.serve)
 
 import type { SonarQubeIssue } from '../../../src/lib/types.js';
+import type { SettingsValue } from '../../../src/sonarqube/settings-value.js';
 import type { RecordedRequest } from './types.js';
 
 export interface IssueConfig {
@@ -120,6 +121,7 @@ export class FakeSonarQubeServerBuilder {
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
   private scaEnabled?: boolean;
+  private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -188,6 +190,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Configure the response of `/api/settings/values?component=<componentKey>`.
+   * Settings shape matches the real API: each entry has at least a `key`, plus
+   * optionally `value`, `values`, `fieldValues`, and `inherited`.
+   */
+  withProjectSettings(componentKey: string, settings: SettingsValue[]): this {
+    this.projectSettings.set(componentKey, settings);
+    return this;
+  }
+
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const {
@@ -202,6 +214,7 @@ export class FakeSonarQubeServerBuilder {
       sqaaResponse,
       sqaaEntitlementOrgs,
       scaEnabled,
+      projectSettings,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -398,6 +411,14 @@ export class FakeSonarQubeServerBuilder {
             JSON.stringify([{ id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey }]),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/settings/values' && req.method === 'GET') {
+          const component = query.component;
+          const settings = component ? (projectSettings.get(component) ?? []) : [];
+          return new Response(JSON.stringify({ settings }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/sca/enabled' || path === '/api/v2/sca/enabled') {

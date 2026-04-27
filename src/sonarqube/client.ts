@@ -23,6 +23,7 @@
 import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
 import { print } from '../ui';
+import type { SettingsValue } from './settings-value';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
@@ -321,6 +322,19 @@ export class SonarQubeClient {
     } catch {
       return { organizations: [], total: 0 };
     }
+  }
+
+  /**
+   * Fetch project-scoped settings via `/api/settings/values`. The `component`
+   * query param scopes the values to a specific project; without it the API
+   * returns global defaults. Callers project the raw entries into whatever
+   * shape they need (e.g. `parseAnalysisProperties` for SCA).
+   */
+  async getProjectSettings(componentKey: string): Promise<SettingsValue[]> {
+    const result = await this.get<{ settings?: SettingsValue[] }>('/api/settings/values', {
+      component: componentKey,
+    });
+    return result.settings ?? [];
   }
 
   /**
