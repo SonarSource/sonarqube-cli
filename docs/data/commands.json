@@ -1,5 +1,5 @@
 {
-  "version": "0.10.0",
+  "version": "0.11.0",
   "commands": [
     {
       "id": "sonar",
@@ -22,7 +22,8 @@
         "sonar-analyze",
         "sonar-verify",
         "sonar-config",
-        "sonar-self-update"
+        "sonar-self-update",
+        "sonar-hook"
       ]
     },
     {
@@ -61,7 +62,7 @@
           "flags": "-s, --server <server>",
           "long": "--server",
           "short": "-s",
-          "description": "SonarQube URL (default is SonarQube Cloud https://sonarcloud.io)",
+          "description": "SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.",
           "type": "string",
           "required": false
         },
@@ -398,9 +399,16 @@
           "required": true
         },
         {
-          "flags": "--severity <severity>",
-          "long": "--severity",
-          "description": "Filter by severity",
+          "flags": "--statuses <statuses>",
+          "long": "--statuses",
+          "description": "Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--severities <severities>",
+          "long": "--severities",
+          "description": "Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)",
           "type": "string",
           "required": false
         },
@@ -734,6 +742,110 @@
           "required": false
         }
       ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-hook",
+      "name": "hook",
+      "fullName": "sonar hook",
+      "description": "Internal hook handlers for agent and git hooks",
+      "isGroup": true,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-hook-claude-pre-tool-use",
+        "sonar-hook-claude-prompt-submit",
+        "sonar-hook-claude-post-tool-use",
+        "sonar-hook-git-pre-commit",
+        "sonar-hook-git-pre-push"
+      ]
+    },
+    {
+      "id": "sonar-hook-claude-pre-tool-use",
+      "name": "claude-pre-tool-use",
+      "fullName": "sonar hook claude-pre-tool-use",
+      "description": "PreToolUse handler: scan files for secrets before agent reads them",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-hook",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-hook-claude-prompt-submit",
+      "name": "claude-prompt-submit",
+      "fullName": "sonar hook claude-prompt-submit",
+      "description": "UserPromptSubmit handler: scan prompts for secrets before sending",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-hook",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-hook-claude-post-tool-use",
+      "name": "claude-post-tool-use",
+      "fullName": "sonar hook claude-post-tool-use",
+      "description": "PostToolUse handler: run SQAA analysis after agent edits or writes a file",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-hook",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--project <key>",
+          "long": "--project",
+          "description": "SonarQube Cloud project key",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-hook-git-pre-commit",
+      "name": "git-pre-commit",
+      "fullName": "sonar hook git-pre-commit",
+      "description": "git pre-commit handler: scan staged files for secrets",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-hook",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-hook-git-pre-push",
+      "name": "git-pre-push",
+      "fullName": "sonar hook git-pre-push",
+      "description": "git pre-push handler: scan files in new commits for secrets",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-hook",
+      "arguments": [],
+      "options": [],
       "examples": [],
       "children": []
     }
