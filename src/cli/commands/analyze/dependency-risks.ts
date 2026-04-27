@@ -19,8 +19,9 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
-import { InvalidOptionError } from '../_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -29,10 +30,9 @@ export interface AnalyzeDependencyRisksOptions {
   format?: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await -- stub; real async work lands in CLI-355/356/352
 export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
-  _auth: ResolvedAuth,
+  auth: ResolvedAuth,
 ): Promise<void> {
   if (!options.project) {
     throw new InvalidOptionError('--project is required');
@@ -43,6 +43,12 @@ export async function analyzeDependencyRisks(
     throw new InvalidOptionError(
       `Invalid format: '${options.format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
     );
+  }
+
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
+  if (!enabled) {
+    throw new CommandFailedError('Advanced Security not available');
   }
 
   const stub = { project: options.project, risks: [] as unknown[] };
