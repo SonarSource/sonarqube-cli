@@ -22,8 +22,7 @@
         "sonar-analyze",
         "sonar-verify",
         "sonar-config",
-        "sonar-self-update",
-        "sonar-hook"
+        "sonar-self-update"
       ]
     },
     {
@@ -742,110 +741,6 @@
           "required": false
         }
       ],
-      "examples": [],
-      "children": []
-    },
-    {
-      "id": "sonar-hook",
-      "name": "hook",
-      "fullName": "sonar hook",
-      "description": "Internal hook handlers for agent and git hooks",
-      "isGroup": true,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 1,
-      "parentId": "sonar",
-      "arguments": [],
-      "options": [],
-      "examples": [],
-      "children": [
-        "sonar-hook-claude-pre-tool-use",
-        "sonar-hook-claude-prompt-submit",
-        "sonar-hook-claude-post-tool-use",
-        "sonar-hook-git-pre-commit",
-        "sonar-hook-git-pre-push"
-      ]
-    },
-    {
-      "id": "sonar-hook-claude-pre-tool-use",
-      "name": "claude-pre-tool-use",
-      "fullName": "sonar hook claude-pre-tool-use",
-      "description": "PreToolUse handler: scan files for secrets before agent reads them",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 2,
-      "parentId": "sonar-hook",
-      "arguments": [],
-      "options": [],
-      "examples": [],
-      "children": []
-    },
-    {
-      "id": "sonar-hook-claude-prompt-submit",
-      "name": "claude-prompt-submit",
-      "fullName": "sonar hook claude-prompt-submit",
-      "description": "UserPromptSubmit handler: scan prompts for secrets before sending",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 2,
-      "parentId": "sonar-hook",
-      "arguments": [],
-      "options": [],
-      "examples": [],
-      "children": []
-    },
-    {
-      "id": "sonar-hook-claude-post-tool-use",
-      "name": "claude-post-tool-use",
-      "fullName": "sonar hook claude-post-tool-use",
-      "description": "PostToolUse handler: run SQAA analysis after agent edits or writes a file",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 2,
-      "parentId": "sonar-hook",
-      "arguments": [],
-      "options": [
-        {
-          "flags": "--project <key>",
-          "long": "--project",
-          "description": "SonarQube Cloud project key",
-          "type": "string",
-          "required": true
-        }
-      ],
-      "examples": [],
-      "children": []
-    },
-    {
-      "id": "sonar-hook-git-pre-commit",
-      "name": "git-pre-commit",
-      "fullName": "sonar hook git-pre-commit",
-      "description": "git pre-commit handler: scan staged files for secrets",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 2,
-      "parentId": "sonar-hook",
-      "arguments": [],
-      "options": [],
-      "examples": [],
-      "children": []
-    },
-    {
-      "id": "sonar-hook-git-pre-push",
-      "name": "git-pre-push",
-      "fullName": "sonar hook git-pre-push",
-      "description": "git pre-push handler: scan files in new commits for secrets",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 2,
-      "parentId": "sonar-hook",
-      "arguments": [],
-      "options": [],
       "examples": [],
       "children": []
     }

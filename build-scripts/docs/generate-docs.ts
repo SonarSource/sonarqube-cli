@@ -28,7 +28,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { Command, Option } from 'commander';
+import type { Option } from 'commander';
 
 import { version } from '../../package.json';
 import { COMMAND_TREE } from '../../src/cli/command-tree';
@@ -85,16 +85,18 @@ interface ClidocCommand {
 }
 
 const allCommands: ClidocCommand[] = [];
+const help = COMMAND_TREE.createHelp();
 
 function serializeCommand(
   cmd: SonarCommand,
   prefix: string,
   depth: number,
   parentId: string | null,
-): ClidocCommand {
+) {
   const fullName = `${prefix} ${cmd.name()}`.trim();
   const id = fullName.replaceAll(/\s+/g, '-');
-  const visibleChildren = cmd.commands.filter((c) => !(c as Command & { hidden?: boolean }).hidden);
+  // we don't want to display implicit child help menus
+  const visibleChildren = help.visibleCommands(cmd).filter((c) => c.name() !== 'help');
 
   const entry: ClidocCommand = {
     id,
@@ -133,18 +135,11 @@ function serializeCommand(
   for (const child of visibleChildren) {
     serializeCommand(child as SonarCommand, fullName, depth + 1, id);
   }
-
-  return entry;
 }
 
 // Root entry
 const rootId = 'sonar';
-const visibleTopLevel = COMMAND_TREE.commands.filter(
-  (cmd) => !(cmd as Command & { hidden?: boolean }).hidden,
-);
-const authCmd = visibleTopLevel.find((cmd) => cmd.name() === 'auth');
-const otherCmds = visibleTopLevel.filter((cmd) => cmd.name() !== 'auth');
-const orderedCommands = authCmd ? [authCmd, ...otherCmds] : otherCmds;
+const visibleTopLevel = help.visibleCommands(COMMAND_TREE);
 
 const rootEntry: ClidocCommand = {
   id: rootId,
@@ -159,12 +154,12 @@ const rootEntry: ClidocCommand = {
   arguments: [],
   options: [],
   examples: [],
-  children: orderedCommands.map((c) => `sonar-${c.name()}`),
+  children: visibleTopLevel.map((c) => `sonar-${c.name()}`),
 };
 
 allCommands.push(rootEntry);
 
-for (const cmd of orderedCommands) {
+for (const cmd of visibleTopLevel) {
   serializeCommand(cmd as SonarCommand, 'sonar', 1, rootId);
 }
 

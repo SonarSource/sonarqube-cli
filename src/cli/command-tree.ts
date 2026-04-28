@@ -43,7 +43,7 @@ import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
-import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git/index';
+import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -74,6 +74,37 @@ COMMAND_TREE.name('sonar')
   .anonymousAction(function (this: Command) {
     this.outputHelp();
   });
+
+// Manage authentication tokens and credentials
+const auth = COMMAND_TREE.command('auth').description(
+  'Manage authentication tokens and credentials',
+);
+
+auth
+  .command('login')
+  .description('Save authentication token to keychain')
+  .option(
+    '-s, --server <server>',
+    'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
+  )
+  .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
+  .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
+  .anonymousAction((options: AuthLoginOptions) => authLogin(options));
+
+auth
+  .command('logout')
+  .description('Remove active connection token from keychain')
+  .anonymousAction(() => authLogout());
+
+auth
+  .command('purge')
+  .description('Remove all authentication tokens from keychain')
+  .anonymousAction(() => authPurge());
+
+auth
+  .command('status')
+  .description('Show active authentication connection with token verification')
+  .anonymousAction(() => authStatus());
 
 COMMAND_TREE.command('api')
   .argument(
@@ -166,37 +197,6 @@ list
   .addOption(pageOption)
   .addOption(pageSizeOption)
   .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
-
-// Manage authentication tokens and credentials
-const auth = COMMAND_TREE.command('auth').description(
-  'Manage authentication tokens and credentials',
-);
-
-auth
-  .command('login')
-  .description('Save authentication token to keychain')
-  .option(
-    '-s, --server <server>',
-    'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
-  )
-  .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-  .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
-  .anonymousAction((options: AuthLoginOptions) => authLogin(options));
-
-auth
-  .command('logout')
-  .description('Remove active connection token from keychain')
-  .anonymousAction(() => authLogout());
-
-auth
-  .command('purge')
-  .description('Remove all authentication tokens from keychain')
-  .anonymousAction(() => authPurge());
-
-auth
-  .command('status')
-  .description('Show active authentication connection with token verification')
-  .anonymousAction(() => authStatus());
 
 // Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')
