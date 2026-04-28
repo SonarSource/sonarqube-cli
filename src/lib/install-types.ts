@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Types for sonar-secrets binary installation
+// Types for binary installation
 
 export interface PlatformInfo {
   os: string;

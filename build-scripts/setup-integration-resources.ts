@@ -32,6 +32,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { SONAR_SECRETS_DIST_PREFIX } from '../src/lib/config-constants.js';
+import { SECRETS_BINARY_NAME } from '../src/lib/install-types.js';
 import { detectPlatform } from '../src/lib/platform-detector.js';
 import {
   SONAR_SECRETS_SIGNATURES,
@@ -46,7 +48,12 @@ import {
 
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
 const platform = detectPlatform();
-const downloadUrl = buildDownloadUrl(SONAR_SECRETS_VERSION, platform);
+const downloadUrl = buildDownloadUrl(
+  SECRETS_BINARY_NAME,
+  SONAR_SECRETS_VERSION,
+  SONAR_SECRETS_DIST_PREFIX,
+  platform,
+);
 const signatureUrl = `${downloadUrl}.asc`;
 // Keep the original versioned filename so the fake binaries server can match requests exactly
 const downloadFilename = downloadUrl.split('/').at(-1)!;

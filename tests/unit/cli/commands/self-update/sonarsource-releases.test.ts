@@ -26,49 +26,90 @@ import {
 } from '../../../../../src/lib/config-constants.js';
 import { buildDownloadUrl } from '../../../../../src/lib/sonarsource-releases.js';
 
+const SECRETS = 'sonar-secrets';
+
 describe('sonarsource-releases', () => {
   describe('buildDownloadUrl', () => {
     it('always uses .exe suffix for Linux', () => {
-      const url = buildDownloadUrl('1.2.3', { os: 'linux', arch: 'x86-64', extension: '' });
+      const url = buildDownloadUrl(SECRETS, '1.2.3', SONAR_SECRETS_DIST_PREFIX, {
+        os: 'linux',
+        arch: 'x86-64',
+        extension: '',
+      });
       expect(url).toEndWith('.exe');
     });
 
     it('always uses .exe suffix for macOS', () => {
-      const url = buildDownloadUrl('1.2.3', { os: 'macos', arch: 'arm64', extension: '' });
+      const url = buildDownloadUrl(SECRETS, '1.2.3', SONAR_SECRETS_DIST_PREFIX, {
+        os: 'macos',
+        arch: 'arm64',
+        extension: '',
+      });
       expect(url).toEndWith('.exe');
     });
 
     it('builds correct URL for Linux x86-64', () => {
-      const url = buildDownloadUrl('1.2.3', { os: 'linux', arch: 'x86-64', extension: '' });
+      const url = buildDownloadUrl(SECRETS, '1.2.3', SONAR_SECRETS_DIST_PREFIX, {
+        os: 'linux',
+        arch: 'x86-64',
+        extension: '',
+      });
       expect(url).toBe(
         `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-1.2.3-linux-x86-64.exe`,
       );
     });
 
     it('builds correct URL for Linux arm64', () => {
-      const url = buildDownloadUrl('1.2.3', { os: 'linux', arch: 'arm64', extension: '' });
+      const url = buildDownloadUrl(SECRETS, '1.2.3', SONAR_SECRETS_DIST_PREFIX, {
+        os: 'linux',
+        arch: 'arm64',
+        extension: '',
+      });
       expect(url).toBe(
         `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-1.2.3-linux-arm64.exe`,
       );
     });
 
     it('builds correct URL for macOS arm64', () => {
-      const url = buildDownloadUrl('1.2.3', { os: 'macos', arch: 'arm64', extension: '' });
+      const url = buildDownloadUrl(SECRETS, '1.2.3', SONAR_SECRETS_DIST_PREFIX, {
+        os: 'macos',
+        arch: 'arm64',
+        extension: '',
+      });
       expect(url).toBe(
         `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-1.2.3-macos-arm64.exe`,
       );
     });
 
     it('builds correct URL for Windows x86-64', () => {
-      const url = buildDownloadUrl('1.2.3', { os: 'windows', arch: 'x86-64', extension: '.exe' });
+      const url = buildDownloadUrl(SECRETS, '1.2.3', SONAR_SECRETS_DIST_PREFIX, {
+        os: 'windows',
+        arch: 'x86-64',
+        extension: '.exe',
+      });
       expect(url).toBe(
         `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-1.2.3-windows-x86-64.exe`,
       );
     });
 
     it('handles four-part version numbers', () => {
-      const url = buildDownloadUrl('2.38.0.10279', { os: 'linux', arch: 'x86-64', extension: '' });
+      const url = buildDownloadUrl(SECRETS, '2.38.0.10279', SONAR_SECRETS_DIST_PREFIX, {
+        os: 'linux',
+        arch: 'x86-64',
+        extension: '',
+      });
       expect(url).toContain('sonar-secrets-2.38.0.10279-linux-x86-64.exe');
+    });
+
+    it('substitutes the binary name and dist prefix for other binaries', () => {
+      const url = buildDownloadUrl('other-binary', '1.0.0', 'other-distribution/other-binary', {
+        os: 'linux',
+        arch: 'x86-64',
+        extension: '',
+      });
+      expect(url).toBe(
+        `${SONARSOURCE_BINARIES_URL}/other-distribution/other-binary/other-binary-1.0.0-linux-x86-64.exe`,
+      );
     });
   });
 });

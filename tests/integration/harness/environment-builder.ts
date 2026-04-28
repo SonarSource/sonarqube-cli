@@ -32,6 +32,8 @@ import {
 import { join } from 'node:path';
 
 import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
+import { SONAR_SECRETS_DIST_PREFIX } from '../../../src/lib/config-constants.js';
+import { SECRETS_BINARY_NAME } from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
 import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
@@ -41,7 +43,12 @@ import { getDefaultState } from '../../../src/lib/state.js';
 
 function resolveSecretsBinarySource(): string {
   const platform = detectPlatform();
-  const downloadUrl = buildDownloadUrl(SONAR_SECRETS_VERSION, platform);
+  const downloadUrl = buildDownloadUrl(
+    SECRETS_BINARY_NAME,
+    SONAR_SECRETS_VERSION,
+    SONAR_SECRETS_DIST_PREFIX,
+    platform,
+  );
   const filename = downloadUrl.split('/').at(-1)!;
   return join(import.meta.dir, '..', 'resources', filename);
 }

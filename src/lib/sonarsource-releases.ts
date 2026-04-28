@@ -18,30 +18,41 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// SonarSource binaries client for downloading sonar-secrets
+// SonarSource binaries client for downloading distributed CLI binariy dependencies
 
 import { readFileSync } from 'node:fs';
 
 import { version as VERSION } from '../../package.json';
-import { SONAR_SECRETS_DIST_PREFIX, SONARSOURCE_BINARIES_URL } from './config-constants.js';
+import { SONARSOURCE_BINARIES_URL } from './config-constants.js';
 import type { PlatformInfo } from './install-types.js';
 import logger from './logger.js';
 
 const DOWNLOAD_TIMEOUT_MS = 60000;
 
 /**
- * Build the download filename — Sonarsource always uses .exe regardless of platform
+ * Build the download filename — Sonarsource always uses .exe regardless of platform.
  */
-function buildDownloadFilename(version: string, platformInfo: PlatformInfo): string {
-  return `sonar-secrets-${version}-${platformInfo.os}-${platformInfo.arch}.exe`;
+function buildDownloadFilename(
+  binaryName: string,
+  version: string,
+  platformInfo: PlatformInfo,
+): string {
+  return `${binaryName}-${version}-${platformInfo.os}-${platformInfo.arch}.exe`;
 }
 
 /**
- * Build the full download URL for a specific version and platform
+ * Build the full download URL for a specific binary, version, and platform.
+ * `distPrefix` is the path under SONARSOURCE_BINARIES_URL (e.g.
+ * `CommercialDistribution/sonar-secrets`).
  */
-export function buildDownloadUrl(version: string, platformInfo: PlatformInfo): string {
-  const filename = buildDownloadFilename(version, platformInfo);
-  return `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/${filename}`;
+export function buildDownloadUrl(
+  binaryName: string,
+  version: string,
+  distPrefix: string,
+  platformInfo: PlatformInfo,
+): string {
+  const filename = buildDownloadFilename(binaryName, version, platformInfo);
+  return `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${filename}`;
 }
 
 /**

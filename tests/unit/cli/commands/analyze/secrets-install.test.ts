@@ -27,10 +27,6 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { buildLocalBinaryName } from '../../../../../src/cli/commands/_common/install/secrets';
-import {
-  SONAR_SECRETS_DIST_PREFIX,
-  SONARSOURCE_BINARIES_URL,
-} from '../../../../../src/lib/config-constants.js';
 import { detectPlatform } from '../../../../../src/lib/platform-detector.js';
 import * as processLib from '../../../../../src/lib/process.js';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
@@ -45,8 +41,6 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/
 const releases = await import('../../../../../src/lib/sonarsource-releases.js');
 void mock.module('../../../../../src/lib/sonarsource-releases.js', () => ({
   ...releases,
-  buildDownloadUrl: (version: string, platform: { os: string; arch: string }): string =>
-    `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-${version}-${platform.os}-${platform.arch}.exe`,
 }));
 
 const { resolveSecretsBinary } =
