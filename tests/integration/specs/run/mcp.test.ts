@@ -63,6 +63,8 @@ describe('run mcp', () => {
         '  echo ENV_URL=%SONARQUBE_URL%',
         '  echo ENV_PROJECT_KEY=%SONARQUBE_PROJECT_KEY%',
         '  echo ENV_DEBUG_ENABLED=%SONARQUBE_DEBUG_ENABLED%',
+        '  echo ENV_READ_ONLY=%SONARQUBE_READ_ONLY%',
+        '  echo ENV_TOOLSETS=%SONARQUBE_TOOLSETS%',
         '  more',
         `  exit /b ${runExitCode}`,
         ')',
@@ -80,6 +82,8 @@ describe('run mcp', () => {
         String.raw`    printf "ENV_URL=%s\n" "$SONARQUBE_URL"`,
         String.raw`    printf "ENV_PROJECT_KEY=%s\n" "$SONARQUBE_PROJECT_KEY"`,
         String.raw`    printf "ENV_DEBUG_ENABLED=%s\n" "$SONARQUBE_DEBUG_ENABLED"`,
+        String.raw`    printf "ENV_READ_ONLY=%s\n" "$SONARQUBE_READ_ONLY"`,
+        String.raw`    printf "ENV_TOOLSETS=%s\n" "$SONARQUBE_TOOLSETS"`,
         '    cat',
         `    exit ${runExitCode} ;;`,
         'esac',
@@ -169,6 +173,42 @@ describe('run mcp', () => {
   );
 
   it(
+    'passes SONARQUBE_READ_ONLY=true to docker when --read-only is set',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      const result = await harness.run('run mcp --read-only', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('-e SONARQUBE_READ_ONLY');
+      expect(result.stdout).toContain('ENV_READ_ONLY=true');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'passes SONARQUBE_TOOLSETS to docker when --toolsets is set',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      const result = await harness.run('run mcp --toolsets issues,rules', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('-e SONARQUBE_TOOLSETS');
+      expect(result.stdout).toContain('ENV_TOOLSETS=issues,rules');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'propagates non-zero container exit code to CLI exit code',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
@@ -198,6 +238,23 @@ describe('run mcp', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('hello mcp');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 when the saved connection is SonarQube Cloud but has no organization key',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud')
+        .withKeychainToken(server.baseUrl(), 'test-token');
+
+      const result = await harness.run('run mcp');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Not authenticated');
     },
     { timeout: 15000 },
   );

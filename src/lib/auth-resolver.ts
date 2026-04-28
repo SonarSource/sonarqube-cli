@@ -129,6 +129,10 @@ export async function resolveFromState(): Promise<ResolvedAuth | null> {
   const orgKey = connection.orgKey;
   const connectionType = connection.type;
 
+  if (connectionType === 'cloud' && orgKey === undefined) {
+    return null;
+  }
+
   // Look up token in keychain
   const token = await getToken(serverUrl, orgKey);
   if (token) {
