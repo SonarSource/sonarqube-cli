@@ -90,3 +90,37 @@ export async function spawnProcess(
     });
   });
 }
+
+/**
+ * Spawn process and reject with `timeoutMessage` if it does not finish within `timeoutMs`.
+ * Kills the child on timeout.
+ */
+export async function spawnProcessWithTimeout(
+  command: string,
+  args: string[],
+  options: SpawnOptions,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<SpawnResult> {
+  let killChild: (() => void) | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      spawnProcess(command, args, {
+        ...options,
+        onSpawn: (kill) => {
+          killChild = kill;
+          options.onSpawn?.(kill);
+        },
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          killChild?.();
+          reject(new Error(timeoutMessage));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}

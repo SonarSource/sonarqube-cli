@@ -21,8 +21,8 @@ import { existsSync } from 'node:fs';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
-import type { SpawnOptions, SpawnResult, StdioMode } from '../../../lib/process';
-import { spawnProcess } from '../../../lib/process';
+import type { SpawnResult, StdioMode } from '../../../lib/process';
+import { spawnProcessWithTimeout } from '../../../lib/process';
 import { blank, error, print, success, text } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { installSecretsBinary } from '../_common/install/secrets';
@@ -57,12 +57,18 @@ export async function runSecretsBinary(
   auth: ResolvedAuth,
   stdin: StdioMode = 'pipe',
 ): Promise<SpawnResult> {
-  return spawnWithTimeout(binaryPath, ['--non-interactive', ...files], {
-    stdin,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: buildAuthEnv(auth),
-  });
+  return spawnProcessWithTimeout(
+    binaryPath,
+    ['--non-interactive', ...files],
+    {
+      stdin,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: buildAuthEnv(auth),
+    },
+    SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+  );
 }
 
 /**
@@ -73,44 +79,23 @@ export async function runSecretsBinaryOnText(
   text: string,
   auth: ResolvedAuth,
 ): Promise<SpawnResult> {
-  return spawnWithTimeout(binaryPath, ['--input'], {
-    stdin: 'pipe',
-    stdinData: text,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: buildAuthEnv(auth),
-  });
+  return spawnProcessWithTimeout(
+    binaryPath,
+    ['--input'],
+    {
+      stdin: 'pipe',
+      stdinData: text,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: buildAuthEnv(auth),
+    },
+    SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+  );
 }
 
 function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
   return { [BINARY_AUTH_URL_ENV]: auth.serverUrl, [BINARY_AUTH_TOKEN_ENV]: auth.token };
-}
-
-async function spawnWithTimeout(
-  binaryPath: string,
-  args: string[],
-  options: SpawnOptions,
-): Promise<SpawnResult> {
-  let killChild: (() => void) | undefined;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      spawnProcess(binaryPath, args, {
-        ...options,
-        onSpawn: (kill) => {
-          killChild = kill;
-        },
-      }),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          killChild?.();
-          reject(new Error(`Scan timed out after ${SCAN_TIMEOUT_MS}ms`));
-        }, SCAN_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 async function handleCheckCommand(
