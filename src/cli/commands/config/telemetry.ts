@@ -19,7 +19,7 @@
  */
 // Configure CLI settings
 
-import { loadState, saveState } from '../../../lib/state-manager';
+import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { info, success } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 

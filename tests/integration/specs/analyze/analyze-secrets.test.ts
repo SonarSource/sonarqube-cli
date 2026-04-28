@@ -34,6 +34,7 @@ import { TestHarness } from '../../harness';
 const GITHUB_TEST_TOKEN = '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';
 const CLEAN_CONTENT = 'const greeting = "hello world";';
 const VALID_TOKEN = 'integration-test-token';
+const EXIT_CODE_SECRETS_FOUND = 51;
 
 // Placeholder server URL for tests that need to pass the auth gate but don't call a real server.
 // The binary handles unreachable auth URLs gracefully (quick connection-refused, scan proceeds).
@@ -90,7 +91,7 @@ describe('analyze secrets', () => {
 
       const result = await harness.run('analyze secrets secrets.js');
 
-      expect(result.exitCode).toBe(51);
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
       // Binary reports auth failure when credentials point to an unreachable server
       expect(result.stdout + result.stderr).toContain('Authentication was not successful');
       expect(result.stdout + result.stderr).toContain('GitHub Token');
@@ -122,7 +123,7 @@ describe('analyze secrets', () => {
         stdin: `const token = "${GITHUB_TEST_TOKEN}";`,
       });
 
-      expect(result.exitCode).toBe(51);
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
       // Binary reports auth failure when credentials point to an unreachable server
       expect(result.stdout + result.stderr).toContain('Authentication was not successful');
       expect(result.stdout + result.stderr).toContain('GitHub Token');
@@ -144,6 +145,12 @@ describe('analyze secrets', () => {
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
         true,
       );
+      const state = harness.stateJsonFile.asJson() as {
+        tools: { installed: Array<{ name: string; version: string }> };
+      };
+      const recorded = state.tools.installed.find((t) => t.name === 'sonar-secrets');
+      expect(recorded).toBeDefined();
+      expect(recorded?.version).toBeDefined();
     },
     { timeout: 30000 },
   );
@@ -211,7 +218,7 @@ describe('analyze secrets', () => {
         },
       });
 
-      expect(result.exitCode).toBe(51);
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
       expect(result.stdout + result.stderr).not.toContain('Authentication was not successful');
       expect(result.stdout + result.stderr).toContain('GitHub Token');
     },
@@ -247,7 +254,7 @@ describe('analyze secrets', () => {
         extraEnv: { SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true' },
       });
 
-      expect(result.exitCode).toBe(51);
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
       expect(result.stdout + result.stderr).not.toContain('Authentication was not successful');
       expect(result.stdout + result.stderr).toContain('GitHub Token');
     },

@@ -56,6 +56,13 @@ export interface AuthConnection {
   region?: CloudRegion;
   /** Organization key (only for cloud type) */
   orgKey?: string;
+  /**
+   * Server-generated token name, present only for connections created through
+   * the browser-based OAuth flow. Used during logout to revoke the token on
+   * the server side via `/api/user_tokens/revoke`. Absent when the user
+   * authenticated with a manually-provided token (`--with-token`).
+   */
+  tokenName?: string;
   /** Timestamp when authenticated */
   authenticatedAt: string;
   /** UUID of the user on the server side (fetched at auth time) */
@@ -150,6 +157,13 @@ export interface SkillExtension extends BaseAgentExtension {
  * Union of all extension types stored in the registry
  */
 export type AgentExtension = HookExtension | SkillExtension;
+
+export function agentExtensionEquals(a: AgentExtension, b: AgentExtension): boolean {
+  if (a.agentId !== b.agentId || a.projectRoot !== b.projectRoot) return false;
+  if (a.kind !== b.kind || a.name !== b.name) return false;
+  if (a.kind === 'hook' && b.kind === 'hook') return a.hookType === b.hookType;
+  return true;
+}
 
 /**
  * Agent hooks configuration

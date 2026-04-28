@@ -39,6 +39,11 @@ const MAX_POST_BODY_BYTES = 4096;
 
 export type TokenStatus = 'valid' | 'invalid' | 'unreachable';
 
+export interface BrowserAuthResult {
+  token: string;
+  tokenName?: string;
+}
+
 export async function checkTokenStatus(serverURL: string, token: string): Promise<TokenStatus> {
   try {
     const client = new SonarQubeClient(serverURL, token);
@@ -60,17 +65,22 @@ export async function validateToken(serverURL: string, token: string): Promise<b
 }
 
 /**
- * Extract token from POST body JSON
+ * Parse the JSON body sent by the browser OAuth callback.
+ * Returns the token and, when present, the server-generated token name.
  */
-export function extractTokenFromPostBody(body: string): string | undefined {
+export function parseBrowserAuthCallback(body: string): BrowserAuthResult | undefined {
   try {
     const data = JSON.parse(body) as Record<string, unknown>;
     const token = data.token;
-    // Token must be a non-empty string
-    if (typeof token === 'string' && token.length > 0) {
-      return token;
+    if (typeof token !== 'string' || token.length === 0) {
+      return undefined;
     }
-    return undefined;
+
+    const name = data.name;
+    return {
+      token,
+      tokenName: typeof name === 'string' && name.length > 0 ? name : undefined,
+    };
   } catch {
     return undefined;
   }
@@ -109,13 +119,13 @@ export async function openBrowserWithFallback(authURL: string): Promise<void> {
  */
 export function sendSuccessResponse(
   res: ServerResponse,
-  extractedToken?: string,
-  onToken?: (token: string) => void,
+  extractedAuthResult?: BrowserAuthResult,
+  onToken?: (token: string, tokenName?: string) => void,
 ): void {
   res.writeHead(HTTP_STATUS_OK, { 'Content-Type': 'text/plain' });
   res.end('OK');
-  if (extractedToken && onToken) {
-    onToken(extractedToken);
+  if (extractedAuthResult && onToken) {
+    onToken(extractedAuthResult.token, extractedAuthResult.tokenName);
   }
 }
 
@@ -125,7 +135,7 @@ export function sendSuccessResponse(
 export function handlePostRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  onToken: (token: string) => void,
+  onToken: (token: string, tokenName?: string) => void,
 ): void {
   let body = '';
   let bodySize = 0;
@@ -144,15 +154,15 @@ export function handlePostRequest(
     if (bodySize > MAX_POST_BODY_BYTES) {
       return;
     }
-    const extractedToken = extractTokenFromPostBody(body);
-    sendSuccessResponse(res, extractedToken ?? undefined, onToken);
+    const extractedAuthResult = parseBrowserAuthCallback(body);
+    sendSuccessResponse(res, extractedAuthResult, onToken);
   });
 }
 
 /**
  * Create request handler for loopback server
  */
-export function createRequestHandler(onToken: (token: string) => void) {
+export function createRequestHandler(onToken: (token: string, tokenName?: string) => void) {
   return (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === 'POST') {
       handlePostRequest(req, res, onToken);
@@ -172,14 +182,14 @@ export function createRequestHandler(onToken: (token: string) => void) {
  * blocking the next prompt (e.g. org key) on Windows.
  */
 export async function waitForTokenInteractive(
-  serverTokenPromise: Promise<string>,
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
+  serverTokenPromise: Promise<BrowserAuthResult>,
+): Promise<BrowserAuthResult> {
+  return new Promise<BrowserAuthResult>((resolve, reject) => {
     let settled = false;
     /** Only call rl.close() once; skip when we're already inside the 'close' handler (e.g. Ctrl+C). */
     let rlClosed = false;
 
-    function settle(token?: string, err?: Error): void {
+    function settle(result?: BrowserAuthResult, err?: Error): void {
       if (settled) return;
       settled = true;
       if (!rlClosed) {
@@ -188,7 +198,7 @@ export async function waitForTokenInteractive(
         process.stdin.resume(); // so next prompt (e.g. org key) receives keypresses on Windows
       }
       if (err) reject(err);
-      else resolve(token ?? '');
+      else resolve(result ?? { token: '' });
     }
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -207,7 +217,7 @@ export async function waitForTokenInteractive(
     rl.question('', (line) => {
       if (settled) return;
       const userToken = line.trim();
-      if (userToken.length > 0) settle(userToken);
+      if (userToken.length > 0) settle({ token: userToken });
     });
   });
 }
@@ -218,10 +228,10 @@ export async function waitForTokenInteractive(
 export async function generateTokenViaBrowser(
   serverURL: string,
   openBrowserFn: (url: string) => Promise<void> = openBrowserWithFallback,
-): Promise<string> {
-  let resolveToken: ((token: string) => void) | null = null;
+): Promise<BrowserAuthResult> {
+  let resolveToken: ((result: BrowserAuthResult) => void) | null = null;
 
-  const tokenPromise = new Promise<string>((resolve) => {
+  const tokenPromise = new Promise<BrowserAuthResult>((resolve) => {
     resolveToken = resolve;
   });
 
@@ -232,9 +242,9 @@ export async function generateTokenViaBrowser(
   // Allow the Sonar server origin so the OAuth callback POST is not blocked by DNS rebinding protection
   const serverOrigin = new URL(serverURL).origin;
   const server = await startLoopbackServer(
-    createRequestHandler((token: string) => {
+    createRequestHandler((token: string, tokenName?: string) => {
       if (resolveToken) {
-        resolveToken(token);
+        resolveToken({ token, tokenName });
       }
     }),
     { allowedOrigins: [serverOrigin] },
@@ -247,14 +257,14 @@ export async function generateTokenViaBrowser(
   await pressEnterKeyPrompt('Press Enter to open the browser');
   await openBrowserFn(authURL);
 
-  let token: string | undefined;
+  let authResult: BrowserAuthResult | undefined;
   try {
     if (isMockActive() || process.env.CI === 'true') {
       // Non-interactive: wait for server token
-      token = await tokenPromise;
+      authResult = await tokenPromise;
     } else {
       // Interactive: race between browser delivery and manual paste
-      token = await waitForTokenInteractive(tokenPromise);
+      authResult = await waitForTokenInteractive(tokenPromise);
     }
   } finally {
     await server.close().catch((err: unknown) => {
@@ -262,5 +272,5 @@ export async function generateTokenViaBrowser(
     });
   }
 
-  return token;
+  return authResult;
 }

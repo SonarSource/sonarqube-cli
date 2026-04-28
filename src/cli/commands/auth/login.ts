@@ -18,12 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { generateTokenViaBrowser } from '../../../cli/commands/_common/token';
+import {
+  type BrowserAuthResult,
+  generateTokenViaBrowser,
+} from '../../../cli/commands/_common/token';
 import { cloudRegionFromUrl, isSonarQubeCloud } from '../../../lib/auth-resolver';
 import { SONARCLOUD_URL } from '../../../lib/config-constants';
 import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
-import { addOrUpdateConnection, loadState, saveState } from '../../../lib/state-manager';
+import { loadState, saveState } from '../../../lib/repository/state-repository';
+import { addOrUpdateConnection, getActiveConnection } from '../../../lib/state-manager';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error';
@@ -37,7 +41,12 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const isCloud = isSonarQubeCloud(server);
   const isNonInteractive = !!options.withToken;
 
-  const token = await getOrGenerateToken(server, options.org, isNonInteractive, options.withToken);
+  const { token, tokenName, reusedExistingToken } = await getOrGenerateToken(
+    server,
+    options.org,
+    isNonInteractive,
+    options.withToken,
+  );
 
   let org = options.org;
 
@@ -52,10 +61,18 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   await deleteStaleTokens(state.auth.connections, server, org);
 
   await saveToken(server, token, org);
+  const existingConnection = getActiveConnection(state);
+  const existingTokenName =
+    existingConnection?.serverUrl === server && existingConnection.orgKey === org
+      ? existingConnection.tokenName
+      : undefined;
 
   const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
     orgKey: org,
     region: cloudRegionFromUrl(server),
+    // `--with-token` logins have no server-side name; only browser-OAuth logins
+    // carry a tokenName (always provided by the callback for new tokens).
+    tokenName: isNonInteractive ? undefined : reusedExistingToken ? existingTokenName : tokenName,
   });
 
   // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
@@ -109,9 +126,9 @@ async function getOrGenerateToken(
   org: string | undefined,
   isNonInteractive: boolean,
   withToken: string | undefined,
-): Promise<string> {
+): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
   if (isNonInteractive) {
-    return withToken || '';
+    return { token: withToken || '', reusedExistingToken: false };
   }
 
   const existingToken = await getKeystoreToken(server, org);
@@ -119,13 +136,13 @@ async function getOrGenerateToken(
     const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
     print(`Token already exists for: ${displayServer}`);
     print('You are already authenticated');
-    return existingToken;
+    return { token: existingToken, reusedExistingToken: true };
   }
 
   print(`\nAuthenticating with: ${server}`);
-  const token = await generateTokenViaBrowser(server);
+  const authResult = await generateTokenViaBrowser(server);
   discreetSuccess('Token received');
-  return token;
+  return { ...authResult, reusedExistingToken: false };
 }
 
 async function getUserSelectedOrganization(

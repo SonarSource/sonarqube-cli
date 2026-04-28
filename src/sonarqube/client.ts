@@ -182,6 +182,34 @@ export class SonarQubeClient {
     return (await response.json()) as T;
   }
 
+  /**
+   * Generic helper to POST a form-encoded body to a SonarQube endpoint using
+   * the configured Bearer token. Throws on non-2xx responses so callers can
+   * handle failures (e.g. best-effort logout).
+   */
+  async postForm(endpoint: string, params: Record<string, string>): Promise<void> {
+    const response = await fetch(`${this.serverURL}${endpoint}`, {
+      method: 'POST',
+      headers: this.commonHeaders('form'),
+      body: new URLSearchParams(params).toString(),
+      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS),
+    });
+
+    await this.raiseForStatus(response, 'POST');
+  }
+
+  /**
+   * Revoke a user token on the server by its name.
+   *
+   * The wire field is `name` (matches the `/api/user_tokens/revoke?name=`
+   * contract). Internally we keep the field as `tokenName` on `AuthConnection`
+   * to disambiguate from other "name" fields in the state (project name,
+   * org name, etc.). The translation happens here at the wire boundary.
+   */
+  async revokeUserToken(tokenName: string): Promise<void> {
+    await this.postForm('/api/user_tokens/revoke', { name: tokenName });
+  }
+
   async checkTokenValidity(): Promise<'valid' | 'invalid'> {
     const result = await this.get<{ valid: boolean }>('/api/authentication/validate');
     return result.valid ? 'valid' : 'invalid';

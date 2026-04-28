@@ -175,6 +175,7 @@ export class TestHarness {
       timeoutMs: options?.timeoutMs,
       cwd: this.cwd.path,
       browserToken: options?.browserToken,
+      browserTokenName: options?.browserTokenName,
     });
   }
 

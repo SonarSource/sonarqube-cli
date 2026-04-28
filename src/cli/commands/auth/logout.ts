@@ -18,9 +18,43 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { deleteToken } from '../../../lib/keychain';
-import { getActiveConnection, loadState, saveState } from '../../../lib/state-manager';
-import { print, success } from '../../../ui';
+import { deleteToken, getToken } from '../../../lib/keychain';
+import { loadState, saveState } from '../../../lib/repository/state-repository';
+import type { AuthConnection } from '../../../lib/state';
+import { getActiveConnection, removeConnection } from '../../../lib/state-manager';
+import { SonarQubeClient } from '../../../sonarqube/client';
+import { print, success, warn } from '../../../ui';
+
+/**
+ * Attempt to revoke the server-side token before local cleanup.
+ * Best-effort: warns and returns on failure so that local logout always proceeds.
+ */
+async function revokeServerTokenIfPossible(
+  active: AuthConnection,
+  token: string | undefined,
+): Promise<void> {
+  if (!active.tokenName) {
+    warn(
+      'The server-side token name is unknown for this connection, so the token could not be revoked automatically. Revoke it manually on the server if needed.',
+    );
+    return;
+  }
+
+  if (!token) {
+    warn(
+      `Could not retrieve the local token from the keychain, so the server-side token "${active.tokenName}" could not be revoked automatically. Revoke it manually on the server if needed.`,
+    );
+    return;
+  }
+
+  try {
+    await new SonarQubeClient(active.serverUrl, token).revokeUserToken(active.tokenName);
+  } catch (error) {
+    warn(
+      `Failed to revoke the server-side token "${active.tokenName}": ${(error as Error).message}. Continuing with local logout.`,
+    );
+  }
+}
 
 /**
  * Logout command - remove token from keychain
@@ -36,14 +70,13 @@ export async function authLogout(): Promise<void> {
 
   const server = active.serverUrl;
   const org = active.orgKey;
+  const token = (await getToken(server, org)) ?? undefined;
+
+  await revokeServerTokenIfPossible(active, token);
 
   await deleteToken(server, org);
 
-  state.auth.connections = state.auth.connections.filter((c) => c.id !== active.id);
-
-  state.auth.activeConnectionId = undefined;
-
-  state.auth.isAuthenticated = false;
+  removeConnection(state, active.id);
 
   saveState(state);
 

@@ -116,6 +116,8 @@ export class FakeSonarQubeServerBuilder {
   private systemVersion = '9.9.0.00001';
   private memberOrganizations: Array<{ key: string; name: string }> = [];
   private memberOrganizationsTotal?: number;
+  private revokeTokenStatusCode = 204;
+  private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
@@ -150,6 +152,12 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withTokenRevocationFailure(statusCode = 500, responseBody = 'Token revocation failed'): this {
+    this.revokeTokenStatusCode = statusCode;
+    this.revokeTokenResponseBody = responseBody;
+    return this;
+  }
+
   withSqaaResponse(response: SqaaResponseConfig = {}): this {
     this.sqaaResponse = response;
     return this;
@@ -177,6 +185,8 @@ export class FakeSonarQubeServerBuilder {
       systemVersion,
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
+      revokeTokenStatusCode,
+      revokeTokenResponseBody,
       sqaaResponse,
       sqaaEntitlementOrgs,
     } = this;
@@ -186,7 +196,7 @@ export class FakeSonarQubeServerBuilder {
     const server = Bun.serve({
       port: 0,
       hostname: '127.0.0.1',
-      fetch(req) {
+      async fetch(req) {
         const url = new URL(req.url);
         const path = url.pathname;
         const query: Record<string, string> = {};
@@ -197,6 +207,7 @@ export class FakeSonarQubeServerBuilder {
         req.headers.forEach((v, k) => {
           headers[k] = v;
         });
+        const body = req.method === 'POST' ? await req.text() : undefined;
 
         requests.push({
           method: req.method,
@@ -204,6 +215,7 @@ export class FakeSonarQubeServerBuilder {
           path,
           query,
           headers,
+          body,
           timestamp: Date.now(),
         });
 
@@ -242,6 +254,14 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify({ isValidLicense: true }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/api/user_tokens/revoke' && req.method === 'POST') {
+          if (revokeTokenStatusCode >= 400) {
+            return new Response(revokeTokenResponseBody, { status: revokeTokenStatusCode });
+          }
+
+          return new Response(null, { status: revokeTokenStatusCode });
         }
 
         if (path === '/api/issues/search') {

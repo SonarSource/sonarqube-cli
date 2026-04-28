@@ -49,16 +49,26 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.
 - Caller-agent hints (Cursor vs Claude Code) from the environment: `src/lib/agent-detector.ts` (`detectCallerAgent`, etc.).
 - `sonar auth logout` relies on state: if there is no active connection or `isAuthenticated` is false, it only reports that you are already logged out (no keychain changes).
+- When `sonar auth login` runs the browser-based OAuth flow, the server-generated token name returned in the callback POST body is captured and persisted on the connection as `tokenName` (see `AuthConnection` in `src/lib/state.ts`). The wire field is `name` (matching `/api/user_tokens/revoke?name=`); we keep it as `tokenName` in-memory to disambiguate from other "name" fields. Tokens supplied via `--with-token` are not assigned a `tokenName`.
+- On `sonar auth logout`, the CLI best-effort revokes the server-side token via `SonarQubeClient.revokeUserToken(...)` (a one-line wrapper over the generic `postForm(endpoint, params)` helper) before clearing the keychain entry. Failures (network error, non-2xx response) are reported via a warning on stderr; local cleanup still proceeds. When the connection has no `tokenName` (e.g. authenticated with `--with-token`, or upgraded from an older CLI), the CLI emits a manual-revocation hint on stderr instead.
 
 ## Tests
 
-Always prefer end-to-end integration tests. Unit tests are a last resort — only when e2e is genuinely impractical (e.g. the dependency cannot be controlled or isolated at all).
-Try to get inspiration from other tests to follow the same structure.
+### Philosophy
 
-- Unit tests: `tests/unit/` — run with `bun test:unit`
-- Integration tests: `tests/integration/` — require env vars. They are using a harness to help set up tests and make assertions. Run with `bun test:integration`.
-- E2E tests: `tests/e2e/` — end-to-end tests to verify full integration with external systems. Run with `bun test:e2e`.
-- The UI module has a built-in mock system (`src/ui/mock.ts`) — use it instead of mocking stdout directly.
+**Integration tests are the default.** Unit tests are justified only when a situation is genuinely hard to recreate via integration tests due to test setup complexity. Before writing a unit test, first consider extending the harness or fake server infrastructure to handle the scenario. Unit tests are a last resort.
+
+Follow the structure of existing tests for the command or feature area you are working in.
+
+- Integration tests: `tests/integration/specs/<command>/` — run the compiled binary against fake servers. Use `TestHarness` from `tests/integration/harness/`.
+- Unit tests: `tests/unit/` — use `src/ui/mock.ts` for UI layer, `tests/unit/keychain/keychain-test-handle.ts` for keychain.
+- E2E tests: `tests/e2e/` — real external dependencies that cannot be faked: OS keychain, install scripts with real network, real SonarQube server calls, and integration with external agents (Claude Code, Codex, Cursor, etc.).
+
+Before writing a test, find an existing spec for the same command area and follow its structure.
+
+### Integration test harness
+
+Each test creates a fresh `TestHarness` and disposes it in `afterEach`. The harness runs the compiled binary in a fully isolated environment (temp dir, fake keychain, fake servers). For fine-grained state setup beyond `withAuth`, use `harness.state()` builder (see `tests/integration/harness/environment-builder.ts`). For git hook tests, use `initGitRepo` / `stageFile` from `tests/integration/specs/hook/git-test-helpers.ts`.
 
 ## Documentation
 

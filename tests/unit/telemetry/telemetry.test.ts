@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
 import * as agentDetector from '../../../src/lib/agent-detector.js';
+import * as stateRepository from '../../../src/lib/repository/state-repository.js';
 import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
@@ -98,8 +99,8 @@ let getUserIdSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
-  saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => undefined);
+  loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
+  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
   spawnSpy = spyOn(Bun, 'spawn').mockReturnValue({ unref: () => {} } as ReturnType<
     typeof Bun.spawn

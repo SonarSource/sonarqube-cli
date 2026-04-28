@@ -36,8 +36,8 @@ import * as authResolver from '../../../../../../src/lib/auth-resolver';
 import * as migration from '../../../../../../src/lib/migration';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
+import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
 import { getDefaultState } from '../../../../../../src/lib/state';
-import * as stateManager from '../../../../../../src/lib/state-manager';
 import { SonarQubeClient } from '../../../../../../src/sonarqube/client';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
@@ -100,8 +100,8 @@ describe('integrateCommand', () => {
     hasSqaaEntitlementSpy.mockResolvedValue(false);
     setupMcpServerSpy = spyOn(mcp, 'setupMcpServer').mockResolvedValue(undefined);
 
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
 
     isEnvBasedAuthSpy = spyOn(authResolver, 'isEnvBasedAuth');
     runHealthChecksSpy = spyOn(health, 'runHealthChecks');

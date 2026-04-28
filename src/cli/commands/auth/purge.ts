@@ -19,7 +19,8 @@
  */
 
 import { getAllCredentials, purgeAllTokens } from '../../../lib/keychain';
-import { loadState, saveState } from '../../../lib/state-manager';
+import { loadState, saveState } from '../../../lib/repository/state-repository';
+import { clearAllConnections } from '../../../lib/state-manager';
 import { confirmPrompt, print, success } from '../../../ui';
 
 /**
@@ -48,9 +49,7 @@ export async function authPurge(): Promise<void> {
   await purgeAllTokens();
 
   const state = loadState();
-  state.auth.connections = [];
-  state.auth.activeConnectionId = undefined;
-  state.auth.isAuthenticated = false;
+  clearAllConnections(state);
   saveState(state);
 
   success('All tokens have been removed from keychain');

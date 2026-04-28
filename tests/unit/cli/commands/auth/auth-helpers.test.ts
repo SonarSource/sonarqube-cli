@@ -22,7 +22,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   buildAuthURL,
-  extractTokenFromPostBody,
+  parseBrowserAuthCallback,
 } from '../../../../../src/cli/commands/_common/token';
 
 const SONARCLOUD_SERVER = 'https://sonarcloud.io';
@@ -80,34 +80,65 @@ describe('Auth Helper Functions', () => {
     });
   });
 
-  describe('extractTokenFromPostBody', () => {
+  describe('parseBrowserAuthCallback', () => {
     it('should extract token from valid JSON POST body', () => {
       const body = JSON.stringify({ token: 'squ_valid_token' });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBe('squ_valid_token');
+      const result = parseBrowserAuthCallback(body);
+      expect(result?.token).toBe('squ_valid_token');
+    });
+
+    it('should extract token name from valid JSON POST body', () => {
+      const body = JSON.stringify({ token: 'squ_valid_token', name: 'cli-token-name' });
+      const authResult = parseBrowserAuthCallback(body);
+      expect(authResult).toEqual({ token: 'squ_valid_token', tokenName: 'cli-token-name' });
+    });
+
+    it('should parse a full real-world payload (login, name, token, createdAt)', () => {
+      const body = JSON.stringify({
+        login: 'admin',
+        name: 'cli-token-name',
+        token: 'squ_valid_token',
+        createdAt: '2026-04-23T10:20:30+0200',
+      });
+      const authResult = parseBrowserAuthCallback(body);
+      expect(authResult).toEqual({ token: 'squ_valid_token', tokenName: 'cli-token-name' });
+    });
+
+    it('should return undefined tokenName when name is empty', () => {
+      const body = JSON.stringify({ token: 'squ_valid_token', name: '' });
+      const authResult = parseBrowserAuthCallback(body);
+      expect(authResult).toEqual({ token: 'squ_valid_token', tokenName: undefined });
+    });
+
+    it('should return undefined tokenName when name is not a string', () => {
+      const body = JSON.stringify({ token: 'squ_valid_token', name: 42 });
+      const authResult = parseBrowserAuthCallback(body);
+      expect(authResult).toEqual({ token: 'squ_valid_token', tokenName: undefined });
+    });
+
+    it('should return undefined tokenName when name is missing', () => {
+      const body = JSON.stringify({ token: 'squ_valid_token' });
+      const authResult = parseBrowserAuthCallback(body);
+      expect(authResult).toEqual({ token: 'squ_valid_token', tokenName: undefined });
     });
 
     it('should return undefined for missing token field', () => {
       const body = JSON.stringify({ data: 'something' });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBeUndefined();
+      expect(parseBrowserAuthCallback(body)).toBeUndefined();
     });
 
     it('should return undefined for empty token', () => {
       const body = JSON.stringify({ token: '' });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBeUndefined();
+      expect(parseBrowserAuthCallback(body)).toBeUndefined();
     });
 
     it('should return undefined for invalid JSON', () => {
-      const token = extractTokenFromPostBody('not json');
-      expect(token).toBeUndefined();
+      expect(parseBrowserAuthCallback('not json')).toBeUndefined();
     });
 
     it('should return undefined if token is not a string', () => {
       const body = JSON.stringify({ token: null });
-      const token = extractTokenFromPostBody(body);
-      expect(token).toBeUndefined();
+      expect(parseBrowserAuthCallback(body)).toBeUndefined();
     });
   });
 });

@@ -31,8 +31,9 @@ import {
 } from './config-constants';
 import { getToken } from './keychain.js';
 import logger from './logger.js';
+import { loadState } from './repository/state-repository.js';
 import type { CloudRegion } from './state.js';
-import { getActiveConnection, loadState } from './state-manager.js';
+import { getActiveConnection } from './state-manager.js';
 
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';

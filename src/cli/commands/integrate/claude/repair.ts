@@ -22,6 +22,7 @@
 
 import { deleteToken, saveToken } from '../../../../lib/keychain';
 import logger from '../../../../lib/logger';
+import { getActiveConnection, loadState, saveState } from '../../../../lib/state-manager';
 import { success, text } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { generateTokenViaBrowser, validateToken } from '../../_common/token';
@@ -29,8 +30,11 @@ import { generateTokenViaBrowser, validateToken } from '../../_common/token';
 export async function repairToken(serverURL: string, organization?: string): Promise<string> {
   text('Obtaining access token...');
 
-  // Generate new token
-  const newToken = await generateTokenViaBrowser(serverURL);
+  // Generate new token via the browser-OAuth flow. We also capture the
+  // server-generated `tokenName` so that a later `sonar auth logout` can
+  // revoke exactly this token on the server side (see CLI-75).
+  const authResult = await generateTokenViaBrowser(serverURL);
+  const newToken = authResult.token;
 
   // Validate new token
   const valid = await validateToken(serverURL, newToken);
@@ -47,6 +51,34 @@ export async function repairToken(serverURL: string, organization?: string): Pro
 
   // Save to keychain
   await saveToken(serverURL, newToken, organization);
+
+  // Keep state.tokenName in sync with the freshly-saved keychain token.
+  persistTokenNameOnActiveConnection(serverURL, organization, authResult.tokenName);
+
   success('Token saved to keychain');
   return newToken;
+}
+
+/**
+ * Update the active connection's `tokenName` to match the freshly-minted
+ * browser-OAuth token (resets to `undefined` if the callback omitted `name`).
+ */
+function persistTokenNameOnActiveConnection(
+  serverURL: string,
+  organization: string | undefined,
+  tokenName: string | undefined,
+): void {
+  const state = loadState();
+  const active = getActiveConnection(state);
+
+  // Only update when the active connection actually matches the server/org
+  // we just repaired. `integrate claude` is the sole caller and always
+  // operates on the active connection, but guard anyway to avoid silently
+  // overwriting an unrelated connection if that ever changes.
+  if (active?.serverUrl !== serverURL || active.orgKey !== organization) {
+    return;
+  }
+
+  active.tokenName = tokenName;
+  saveState(state);
 }

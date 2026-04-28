@@ -25,7 +25,6 @@ import { join } from 'node:path';
 import { version as CURRENT_VERSION } from '../../package.json';
 import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
-import { STATE_FILE } from './config-constants.js';
 import { SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
 import {
@@ -34,8 +33,8 @@ import {
   OBSOLETE_A3S_MARKER,
   removeObsoleteHookArtifacts,
 } from './migration.js';
+import { loadState, saveState, stateFileExists } from './repository/state-repository';
 import type { CliState } from './state.js';
-import { loadState, saveState } from './state-manager';
 import { isNewerVersion } from './version';
 
 /**
@@ -47,13 +46,12 @@ import { isNewerVersion } from './version';
  *   actions are not repeated on the next invocation.
  */
 export async function runPostUpdateActions(): Promise<void> {
-  if (!fs.existsSync(STATE_FILE)) {
+  if (!stateFileExists()) {
     // No state file means this is a fresh installation — nothing to migrate.
     return;
   }
 
-  const state = loadState();
-  const previousVersion = state.config.cliVersion;
+  const previousVersion = loadState().config.cliVersion;
 
   if (!isNewerVersion(previousVersion, CURRENT_VERSION)) {
     return;
@@ -63,6 +61,9 @@ export async function runPostUpdateActions(): Promise<void> {
 
   try {
     await runActions(previousVersion, CURRENT_VERSION);
+    // Reload state to pick up changes made by subroutines (migrateClaudeCodeHooks,
+    // updateSecretsBinaryIfNeeded) that load and save their own state copies.
+    const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
     cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
     saveState(state);

@@ -31,9 +31,9 @@ import {
   runPostUpdateActions,
   updateSecretsBinaryIfNeeded,
 } from '../../../../../src/lib/post-update';
+import * as stateRepository from '../../../../../src/lib/repository/state-repository';
 import type { CliState, HookExtension } from '../../../../../src/lib/state';
 import { getDefaultState } from '../../../../../src/lib/state';
-import * as stateManager from '../../../../../src/lib/state-manager';
 import * as versionLib from '../../../../../src/lib/version';
 
 const FAKE_HOME = '/fake/home';
@@ -65,27 +65,21 @@ function makeExtension(projectRoot: string, global: boolean): HookExtension {
 }
 
 describe('runPostUpdateActions', () => {
-  let existsSyncSpy: Mock<Extract<(typeof fs)['existsSync'], (...args: any[]) => any>>;
-  let loadStateSpy: Mock<Extract<(typeof stateManager)['loadState'], (...args: any[]) => any>>;
-  let saveStateSpy: Mock<Extract<(typeof stateManager)['saveState'], (...args: any[]) => any>>;
-  let isNewerVersionSpy: Mock<
-    Extract<(typeof versionLib)['isNewerVersion'], (...args: any[]) => any>
-  >;
-  let migrateHookScriptsSpy: Mock<
-    Extract<(typeof migration)['migrateHookScripts'], (...args: any[]) => any>
-  >;
-  let removeObsoleteHookArtifactsSpy: Mock<
-    Extract<(typeof migration)['removeObsoleteHookArtifacts'], (...args: any[]) => any>
-  >;
-  let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
-  let installSecretsBinarySpy: Mock<
-    Extract<(typeof secretsInstall)['installSecretsBinary'], (...args: any[]) => any>
-  >;
+  let existsSyncSpy: Mock<typeof fs.existsSync>;
+  let stateFileExistsSpy: Mock<typeof stateRepository.stateFileExists>;
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+  let isNewerVersionSpy: Mock<typeof versionLib.isNewerVersion>;
+  let migrateHookScriptsSpy: Mock<typeof migration.migrateHookScripts>;
+  let removeObsoleteHookArtifactsSpy: Mock<typeof migration.removeObsoleteHookArtifacts>;
+  let installHooksSpy: Mock<typeof hooks.installHooks>;
+  let installSecretsBinarySpy: Mock<typeof secretsInstall.installSecretsBinary>;
 
   beforeEach(() => {
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeState());
-    saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+    stateFileExistsSpy = spyOn(stateRepository, 'stateFileExists').mockReturnValue(true);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
     isNewerVersionSpy = spyOn(versionLib, 'isNewerVersion').mockReturnValue(true);
     migrateHookScriptsSpy = spyOn(migration, 'migrateHookScripts').mockImplementation(() => {});
     removeObsoleteHookArtifactsSpy = spyOn(
@@ -100,6 +94,7 @@ describe('runPostUpdateActions', () => {
 
   afterEach(() => {
     existsSyncSpy.mockRestore();
+    stateFileExistsSpy.mockRestore();
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     isNewerVersionSpy.mockRestore();
@@ -110,7 +105,7 @@ describe('runPostUpdateActions', () => {
   });
 
   it('does nothing when state file does not exist', async () => {
-    existsSyncSpy.mockReturnValue(false);
+    stateFileExistsSpy.mockReturnValue(false);
 
     await runPostUpdateActions();
 
@@ -133,6 +128,24 @@ describe('runPostUpdateActions', () => {
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
     const savedState = saveStateSpy.mock.calls[0][0];
     expect(savedState.config.cliVersion).toBe(CURRENT_VERSION);
+  });
+
+  it('saves the reloaded state, not the pre-runActions snapshot', async () => {
+    // loadState is called 4 times:
+    //   1. version check in runPostUpdateActions
+    //   2. inside migrateClaudeCodeHooks
+    //   3. inside updateSecretsBinaryIfNeeded
+    //   4. the reload after runActions (the fix being tested)
+    const reloadedState = makeState();
+    loadStateSpy
+      .mockReturnValueOnce(makeState()) // call 1: version check
+      .mockReturnValueOnce(makeState()) // call 2: migrateClaudeCodeHooks
+      .mockReturnValueOnce(makeState()) // call 3: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 4: reload
+
+    await runPostUpdateActions();
+
+    expect(saveStateSpy.mock.calls[0][0]).toBe(reloadedState);
   });
 
   it('passes previousVersion and CURRENT_VERSION to isNewerVersion', async () => {
@@ -184,19 +197,15 @@ describe('runPostUpdateActions', () => {
 });
 
 describe('migrateClaudeCodeHooks', () => {
-  let existsSyncSpy: Mock<Extract<(typeof fs)['existsSync'], (...args: any[]) => any>>;
-  let loadStateSpy: Mock<Extract<(typeof stateManager)['loadState'], (...args: any[]) => any>>;
-  let migrateHookScriptsSpy: Mock<
-    Extract<(typeof migration)['migrateHookScripts'], (...args: any[]) => any>
-  >;
-  let removeObsoleteHookArtifactsSpy: Mock<
-    Extract<(typeof migration)['removeObsoleteHookArtifacts'], (...args: any[]) => any>
-  >;
-  let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
+  let existsSyncSpy: Mock<typeof fs.existsSync>;
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let migrateHookScriptsSpy: Mock<typeof migration.migrateHookScripts>;
+  let removeObsoleteHookArtifactsSpy: Mock<typeof migration.removeObsoleteHookArtifacts>;
+  let installHooksSpy: Mock<typeof hooks.installHooks>;
 
   beforeEach(() => {
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeState());
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
     migrateHookScriptsSpy = spyOn(migration, 'migrateHookScripts').mockImplementation(() => {});
     removeObsoleteHookArtifactsSpy = spyOn(
       migration,
@@ -370,30 +379,28 @@ describe('migrateClaudeCodeHooks', () => {
   });
 });
 
-describe('updateSecretsBinaryIfNeeded', () => {
-  let loadStateSpy: Mock<Extract<(typeof stateManager)['loadState'], (...args: any[]) => any>>;
-  let installSecretsBinarySpy: Mock<
-    Extract<(typeof secretsInstall)['installSecretsBinary'], (...args: any[]) => any>
-  >;
+function makeStateWithSecrets(): CliState {
+  const state = makeState();
+  state.tools = {
+    installed: [
+      {
+        name: 'sonar-secrets',
+        version: '0.0.0.1',
+        path: '/fake/bin/sonar-secrets-0.0.0.1-linux-x86-64',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        installedByCliVersion: '1.0.0',
+      },
+    ],
+  };
+  return state;
+}
 
-  function makeStateWithSecrets(): CliState {
-    const state = makeState();
-    state.tools = {
-      installed: [
-        {
-          name: 'sonar-secrets',
-          version: '0.0.0.1',
-          path: '/fake/bin/sonar-secrets-0.0.0.1-linux-x86-64',
-          installedAt: '2026-01-01T00:00:00.000Z',
-          installedByCliVersion: '1.0.0',
-        },
-      ],
-    };
-    return state;
-  }
+describe('updateSecretsBinaryIfNeeded', () => {
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let installSecretsBinarySpy: Mock<typeof secretsInstall.installSecretsBinary>;
 
   beforeEach(() => {
-    loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(makeStateWithSecrets());
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeStateWithSecrets());
     installSecretsBinarySpy = spyOn(secretsInstall, 'installSecretsBinary').mockResolvedValue(
       '/fake/bin/sonar-secrets',
     );
