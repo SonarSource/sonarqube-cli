@@ -34,6 +34,9 @@ import { join } from 'node:path';
 
 export const APP_NAME = 'sonarqube-cli';
 
+/** The CLI command name as it appears on PATH after installation. */
+export const CLI_COMMAND = process.platform === 'win32' ? 'sonar.exe' : 'sonar';
+
 // ---------------------------------------------------------------------------
 // CLI data directory
 // ---------------------------------------------------------------------------
