@@ -18,7 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import { intro } from '../../../../ui';
+import { discoverProject } from '../../../../lib/project-workspace';
+import { intro, print } from '../../../../ui';
+import { setupMcpServerForAgent } from '../_common/mcp';
 
 /*
  * SonarQube CLI
@@ -45,10 +47,20 @@ export interface IntegrateCopilotOptions {
   global?: boolean;
 }
 
-export function integrateCopilot(_auth: ResolvedAuth, _options: IntegrateCopilotOptions) {
-  intro('SonarQube Copilot integration - coming soon');
+export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateCopilotOptions) {
+  intro('SonarQube integration for Copilot');
+
+  const project = await discoverProject(process.cwd());
+  for (const configSource of project.configSources) {
+    print(`Found ${configSource}`);
+  }
 
   // TODO setup hooks
 
-  // TODO setup MCP Server
+  await setupMcpServerForAgent(
+    'copilot',
+    project.rootDir,
+    options.global ?? false,
+    options.project || project.projectKey,
+  );
 }

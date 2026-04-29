@@ -34,9 +34,9 @@ import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
+import { setupMcpServerForAgent } from '../_common/mcp';
 import { runHealthChecks } from './health';
 import { detectSecretsHook, installHooks } from './hooks';
-import { setupMcpServer } from './mcp';
 import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
 
@@ -140,7 +140,12 @@ export async function integrateClaude(
   });
   reportHookInstallationOutcome(isGlobal, globalSecretsHookPath);
 
-  await setupMcpServer('claude', project.rootDir, isGlobal, auth, project.projectKey);
+  await setupMcpServerForAgent(
+    'claude',
+    project.rootDir,
+    isGlobal,
+    options.project || project.projectKey,
+  );
 
   blank();
   text('Phase 3/3: Final Verification');

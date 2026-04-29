@@ -144,7 +144,7 @@ integrateCommand
   .description(
     'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
   )
-  .option('-p, --project <project>', 'Project key')
+  .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option(
     '-g, --global',
@@ -174,10 +174,14 @@ integrateCommand
   .description(
     'Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
   )
-  .authenticatedAction((_auth, _options: IntegrateCopilotOptions): Promise<void> => {
-    integrateCopilot(_auth, _options);
-    return Promise.resolve();
-  });
+  .option(
+    '-g, --global',
+    'Install hooks and config globally to ~/.copilot instead of project directory',
+  )
+  .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
+  .authenticatedAction((_auth, options: IntegrateCopilotOptions) =>
+    integrateCopilot(_auth, options),
+  );
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');
