@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
@@ -18,17 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Types for binary installation
+import { type ScaScannerInstallerLike } from './sca-scanner.ts';
 
-export interface PlatformInfo {
-  os: string;
-  arch: string;
-  extension: string;
-}
+// TODO(SCA wiring): remove this temporary hardcoded path and switch back to
+// `DefaultScaScannerInstaller` once the binary is published.
+const TEMP_SCA_SCANNER_PATH =
+  'C:\\Users\\georgii.borovinskikh\\Desktop\\tmp\\SCA\\sca-scanner-windows-x86-64.exe';
 
-export const SECRETS_BINARY_NAME = 'sonar-secrets';
-export const SCA_SCANNER_BINARY_NAME = 'sca-scanner-cli';
-
-export function buildPlatformSuffix(p: PlatformInfo): string {
-  return `-${p.os}-${p.arch}${p.extension}`;
+export class TempScaScannerInstaller implements ScaScannerInstallerLike {
+  install(): Promise<string> {
+    return Promise.resolve(TEMP_SCA_SCANNER_PATH);
+  }
 }

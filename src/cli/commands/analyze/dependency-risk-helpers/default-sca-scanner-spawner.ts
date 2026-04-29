@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
@@ -17,18 +17,17 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+import { spawnProcessWithTimeout, type SpawnResult } from '../../../../lib/process.ts';
+import { type ScaScannerSpawnerLike } from './sca-scanner-spawner.ts';
 
-// Types for binary installation
-
-export interface PlatformInfo {
-  os: string;
-  arch: string;
-  extension: string;
-}
-
-export const SECRETS_BINARY_NAME = 'sonar-secrets';
-export const SCA_SCANNER_BINARY_NAME = 'sca-scanner-cli';
-
-export function buildPlatformSuffix(p: PlatformInfo): string {
-  return `-${p.os}-${p.arch}${p.extension}`;
+export class DefaultScaScannerSpawner implements ScaScannerSpawnerLike {
+  spawn(binaryPath: string, args: string[]): Promise<SpawnResult> {
+    return spawnProcessWithTimeout(
+      binaryPath,
+      args,
+      { stdout: 'pipe', stderr: 'pipe' },
+      120000,
+      'Sca timed out',
+    );
+  }
 }
