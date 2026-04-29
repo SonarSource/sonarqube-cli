@@ -200,3 +200,8 @@ hMQKN37n3c0HoxQTBrEk
 =q/jJ
 -----END PGP SIGNATURE-----`,
 };
+
+// Placeholders until sca-scanner is published. Once the binary appears,
+// `bun run fetch:signatures` will populate these alongside the secrets entries.
+export const SONAR_SCA_SCANNER_VERSION = '0.0.0';
+export const SONAR_SCA_SCANNER_SIGNATURES: Record<string, string> = {};

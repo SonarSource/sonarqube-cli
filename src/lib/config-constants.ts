@@ -71,6 +71,7 @@ export const GLOBAL_HOOKS_DIR = join(CLI_DIR, 'hooks');
 export const SONARSOURCE_BINARIES_URL =
   process.env.SONARQUBE_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
+export const SONAR_SCA_SCANNER_DIST_PREFIX = 'CommercialDistribution/sca-scanner';
 export const UPDATE_SCRIPT_BASE_URL =
   'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
 
