@@ -94,6 +94,8 @@ export async function analyzeDependencyRisks(
   };
 
   const result = await new ScaScannerRunner(
+    // new TempScaScannerInstaller(),
+    // new DefaultScaScannerSpawner(),
     new MockScaScannerInstaller(),
     new MockScaScannerSpawner(),
   ).run(invocation);

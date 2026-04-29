@@ -18,10 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type SpawnResult } from '../../../../lib/process.ts';
+import { spawnProcessWithTimeout, type SpawnResult } from '../../../../lib/process.ts';
 
 export interface ScaScannerSpawnerLike {
   spawn(binaryPath: string, args: string[]): Promise<SpawnResult>;
+}
+
+export class DefaultScaScannerSpawner implements ScaScannerSpawnerLike {
+  spawn(binaryPath: string, args: string[]): Promise<SpawnResult> {
+    return spawnProcessWithTimeout(
+      binaryPath,
+      args,
+      { stdout: 'pipe', stderr: 'pipe' },
+      120000,
+      'Sca timed out',
+    );
+  }
 }
 
 export class MockScaScannerSpawner implements ScaScannerSpawnerLike {
