@@ -24,11 +24,11 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import * as installSecrets from '../../../../../../src/cli/commands/_common/install/secrets';
+import * as mcp from '../../../../../../src/cli/commands/integrate/_common/mcp';
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
 import * as health from '../../../../../../src/cli/commands/integrate/claude/health';
 import { HealthCheckResult } from '../../../../../../src/cli/commands/integrate/claude/health';
 import * as hooks from '../../../../../../src/cli/commands/integrate/claude/hooks';
-import * as mcp from '../../../../../../src/cli/commands/integrate/claude/mcp';
 import * as repair from '../../../../../../src/cli/commands/integrate/claude/repair';
 import * as state from '../../../../../../src/cli/commands/integrate/claude/state';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
@@ -91,14 +91,16 @@ describe('integrateCommand', () => {
   let resolveSecretsBinarySpy: Mock<
     Extract<(typeof installSecrets)['resolveSecretsBinary'], (...args: any[]) => any>
   >;
-  let setupMcpServerSpy: Mock<Extract<(typeof mcp)['setupMcpServer'], (...args: any[]) => any>>;
+  let setupMcpServerForAgentSpy: Mock<
+    Extract<(typeof mcp)['setupMcpServerForAgent'], (...args: any[]) => any>
+  >;
 
   beforeEach(() => {
     setMockUi(true);
 
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
     hasSqaaEntitlementSpy.mockResolvedValue(false);
-    setupMcpServerSpy = spyOn(mcp, 'setupMcpServer').mockResolvedValue(undefined);
+    setupMcpServerForAgentSpy = spyOn(mcp, 'setupMcpServerForAgent').mockResolvedValue(undefined);
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
@@ -136,7 +138,7 @@ describe('integrateCommand', () => {
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
     resolveSecretsBinarySpy.mockRestore();
-    setupMcpServerSpy.mockRestore();
+    setupMcpServerForAgentSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
