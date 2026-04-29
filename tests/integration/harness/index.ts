@@ -20,18 +20,18 @@
 
 // TestHarness — main entry point for integration tests
 
-import { mkdirSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runCli } from './cli-runner.js';
+import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { File } from './file';
-import { buildHomeEnv } from './platform';
+import { buildHomeEnv, IS_WINDOWS } from './platform';
 import type { CliResult, RunOptions } from './types.js';
 
 export { EnvironmentBuilder } from './environment-builder.js';
@@ -53,8 +53,8 @@ export class TestHarness {
   private readonly tempDir: Dir;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
-  private readonly _extraEnv: Record<string, string> = {};
   private _envBuilder?: EnvironmentBuilder;
+  private systemEnvVars: Record<string, string> = {};
 
   private constructor(tempDir: string) {
     this.tempDir = new Dir(tempDir);
@@ -63,6 +63,21 @@ export class TestHarness {
     this.cliHome = this.userHome.dir('.sonar', 'sonarqube-cli');
     this.stateJsonFile = this.cliHome.file('state.json');
     this.keychainJsonFile = join(this.cliHome.path, 'keychain.json');
+    for (const key of [
+      'PATH',
+      'PATHEXT',
+      'HOME',
+      'TMPDIR',
+      'USER',
+      'LOGNAME',
+      'SHELL',
+      'TERM',
+      'SystemRoot',
+      'ComSpec',
+    ]) {
+      const val = process.env[key];
+      if (val !== undefined) this.systemEnvVars[key] = val;
+    }
   }
 
   static create(): Promise<TestHarness> {
@@ -88,6 +103,26 @@ export class TestHarness {
   withAuth(serverUrl: string, token: string, org?: string): this {
     this.state().withAuth(serverUrl, token, org);
     return this;
+  }
+
+  withCliInPath(): this {
+    const pathBinDir = join(this.userHome.path, '.local', 'bin');
+    mkdirSync(pathBinDir, { recursive: true });
+    const sonarAlias = join(pathBinDir, IS_WINDOWS ? 'sonar.exe' : 'sonar');
+    copyFileSync(getCliBinaryPath(), sonarAlias);
+    if (!IS_WINDOWS) {
+      chmodSync(sonarAlias, 0o755);
+    }
+    this.systemEnvVars['PATH'] = this._pathWith([pathBinDir], this.systemEnvVars['PATH']);
+    if (IS_WINDOWS) {
+      this.systemEnvVars['PATHEXT'] = this._pathWith(['.EXE'], this.systemEnvVars['PATHEXT']);
+    }
+    return this;
+  }
+
+  _pathWith(extraDirs: string[], basePath: string | undefined): string {
+    const pathSeparator = IS_WINDOWS ? ';' : ':';
+    return [...extraDirs, basePath].filter(Boolean).join(pathSeparator);
   }
 
   /**
@@ -136,14 +171,22 @@ export class TestHarness {
    * avoiding OS credential store access and macOS keychain prompts.
    */
   async run(command: string, options?: RunOptions): Promise<CliResult> {
+    return runCli(command, this.env(options), {
+      stdin: options?.stdin,
+      stdinChunks: options?.stdinChunks,
+      timeoutMs: options?.timeoutMs,
+      cwd: options?.cwd ?? this.cwd.path,
+      browserToken: options?.browserToken,
+      browserTokenName: options?.browserTokenName,
+    });
+  }
+
+  /**
+   * Builds the environment used to run the CLI from this harness.
+   */
+  env(options?: Pick<RunOptions, 'extraEnv'>): Record<string, string> {
     if (this._envBuilder) {
       this._envBuilder.writeTo(this.cliHome.path, this.keychainJsonFile);
-    }
-
-    const systemVars: Record<string, string> = {};
-    for (const key of ['PATH', 'HOME', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM']) {
-      const val = process.env[key];
-      if (val !== undefined) systemVars[key] = val;
     }
 
     const activeBinariesServer = this.binariesServers.at(-1);
@@ -156,25 +199,23 @@ export class TestHarness {
       ? { SONARQUBE_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
       : {};
 
-    const env: Record<string, string> = {
-      ...systemVars,
+    const appDataEnv: Record<string, string> = IS_WINDOWS
+      ? {
+          APPDATA: join(this.userHome.path, 'AppData', 'Roaming'),
+          LOCALAPPDATA: join(this.userHome.path, 'AppData', 'Local'),
+        }
+      : {};
+
+    return {
+      ...this.systemEnvVars,
+      ...appDataEnv,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
-      ...this._extraEnv,
       ...options?.extraEnv,
       ...buildHomeEnv(this.userHome.path),
     };
-
-    return runCli(command, env, {
-      stdin: options?.stdin,
-      stdinChunks: options?.stdinChunks,
-      timeoutMs: options?.timeoutMs,
-      cwd: options?.cwd ?? this.cwd.path,
-      browserToken: options?.browserToken,
-      browserTokenName: options?.browserTokenName,
-    });
   }
 
   /**

@@ -383,6 +383,7 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
 
       - name: Install keychain dependencies (Linux)
         if: matrix.os == 'linux'
@@ -445,12 +446,14 @@ jobs:
         if: matrix.os == 'windows'
         env:
           SONARQUBE_CLI_DISABLE_SENTRY: '1'
+          CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         run: bun test:e2e
 
       - name: Run e2e tests with coverage (Linux)
         if: matrix.os == 'linux'
         env:
           SONARQUBE_CLI_DISABLE_SENTRY: '1'
+          CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         run: SONARQUBE_CLI_USE_COVERAGE=1 bun test ./tests/e2e/
 
       - name: Merge coverage reports (Linux)
