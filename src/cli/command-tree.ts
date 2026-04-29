@@ -48,6 +48,8 @@ import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
+import { integrateCopilot } from './commands/integrate/copilot';
+import { type IntegrateCopilotOptions } from './commands/integrate/copilot';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
 import {
   listIssues,
@@ -166,6 +168,16 @@ integrateCommand
     'Install hook globally for all repositories (sets git config --global core.hooksPath)',
   )
   .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
+
+integrateCommand
+  .command('copilot')
+  .description(
+    'Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
+  )
+  .authenticatedAction((_auth, _options: IntegrateCopilotOptions): Promise<void> => {
+    integrateCopilot(_auth, _options);
+    return Promise.resolve();
+  });
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');
