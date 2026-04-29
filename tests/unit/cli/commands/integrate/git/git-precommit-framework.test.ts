@@ -29,8 +29,11 @@ import {
   hasSonarHookInPreCommitConfig,
   installViaPreCommitFramework,
   PRE_COMMIT_CONFIG_FILE,
+  PRE_COMMIT_LEGACY_REPO,
+  type PreCommitConfig,
+  removeLegacyHook,
   runPreCommitInstall,
-  upsertPreCommitConfig,
+  upsertSonarHook,
 } from '../../../../../../src/cli/commands/integrate/git/git-precommit-framework';
 import * as processLib from '../../../../../../src/lib/process.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui/mock';
@@ -40,12 +43,118 @@ const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-
 const PRE_COMMIT_OK = { exitCode: 0, stdout: '', stderr: '' };
 const PRE_COMMIT_FAIL = { exitCode: 1, stdout: '', stderr: 'something went wrong' };
 
-function readConfig(): Record<string, unknown> {
-  return yaml.load(readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8')) as Record<
-    string,
-    unknown
-  >;
-}
+describe('removeLegacyHook', () => {
+  it('removes the legacy repo entry and returns true', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: PRE_COMMIT_LEGACY_REPO,
+          hooks: [{ id: 'sonar-secrets', name: 'x', entry: 'e', language: 'system' }],
+        },
+      ],
+    };
+    expect(removeLegacyHook(config)).toBe(true);
+    expect(config.repos).toHaveLength(0);
+  });
+
+  it('returns false when no legacy repo is present', () => {
+    const config: PreCommitConfig = { repos: [] };
+    expect(removeLegacyHook(config)).toBe(false);
+  });
+
+  it('preserves unrelated repos', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        { repo: PRE_COMMIT_LEGACY_REPO, hooks: [] },
+        { repo: 'https://github.com/pre-commit/pre-commit-hooks', hooks: [] },
+      ],
+    };
+    removeLegacyHook(config);
+    expect(config.repos).toHaveLength(1);
+    expect(config.repos[0].repo).toBe('https://github.com/pre-commit/pre-commit-hooks');
+  });
+});
+
+describe('upsertSonarHook', () => {
+  it('creates a local repo with the sonar-secrets hook when no repos exist', () => {
+    const config: PreCommitConfig = { repos: [] };
+    upsertSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
+  });
+
+  it('sets stage to pre-commit', () => {
+    const config: PreCommitConfig = { repos: [] };
+    upsertSonarHook(config, 'pre-commit');
+    const hook = config.repos
+      .find((r) => r.repo === 'local')
+      ?.hooks.find((h) => h.id === 'sonar-secrets');
+    expect(hook?.stages).toEqual(['pre-commit']);
+  });
+
+  it('sets stage to pre-push', () => {
+    const config: PreCommitConfig = { repos: [] };
+    upsertSonarHook(config, 'pre-push');
+    const hook = config.repos
+      .find((r) => r.repo === 'local')
+      ?.hooks.find((h) => h.id === 'sonar-secrets');
+    expect(hook?.stages).toEqual(['pre-push']);
+  });
+
+  it('appends a local repo when only unrelated repos exist', () => {
+    const config: PreCommitConfig = {
+      repos: [{ repo: 'https://github.com/pre-commit/pre-commit-hooks', hooks: [] }],
+    };
+    upsertSonarHook(config, 'pre-commit');
+    expect(config.repos).toHaveLength(2);
+    expect(
+      config.repos.find((r) => r.repo === 'local')?.hooks.some((h) => h.id === 'sonar-secrets'),
+    ).toBe(true);
+  });
+
+  it('adds the hook to an existing local repo that has no sonar-secrets hook yet', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        { repo: 'local', hooks: [{ id: 'other-hook', name: 'x', entry: 'e', language: 'system' }] },
+      ],
+    };
+    upsertSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks).toHaveLength(2);
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
+    expect(localRepo?.hooks.some((h) => h.id === 'other-hook')).toBe(true);
+  });
+
+  it('replaces the existing sonar-secrets hook in place without duplicating it', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-secrets',
+              name: 'old',
+              entry: 'old',
+              language: 'system',
+              stages: ['pre-push'],
+            },
+          ],
+        },
+      ],
+    };
+    upsertSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    const sonarHooks = localRepo?.hooks.filter((h) => h.id === 'sonar-secrets');
+    expect(sonarHooks).toHaveLength(1);
+    expect(sonarHooks?.[0].stages).toEqual(['pre-commit']);
+  });
+
+  it('preserves top-level keys that are not repos', () => {
+    const config: PreCommitConfig = { default_install_hook_types: ['pre-commit'], repos: [] };
+    upsertSonarHook(config, 'pre-commit');
+    expect(config.default_install_hook_types).toEqual(['pre-commit']);
+  });
+});
 
 describe('hasSonarHookInPreCommitConfig', () => {
   beforeEach(() => mkdirSync(TEMP_DIR, { recursive: true }));
@@ -106,176 +215,6 @@ describe('hasSonarHookInPreCommitConfig', () => {
       }),
     );
     expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(false);
-  });
-});
-
-describe('upsertPreCommitConfig — parsing', () => {
-  beforeEach(() => mkdirSync(TEMP_DIR, { recursive: true }));
-  afterEach(() => rmSync(TEMP_DIR, { recursive: true, force: true }));
-
-  it('creates a new config file with a local repo and the sonar-secrets hook', () => {
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    expect(Array.isArray(config.repos)).toBe(true);
-    const repos = config.repos as Array<{ repo: string; hooks: Array<{ id: string }> }>;
-    const localRepo = repos.find((r) => r.repo === 'local');
-    expect(localRepo).toBeDefined();
-    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
-  });
-
-  it('sets the stage to pre-commit when called with pre-commit', () => {
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{
-      repo: string;
-      hooks: Array<{ id: string; stages: string[] }>;
-    }>;
-    const hook = repos.find((r) => r.repo === 'local')?.hooks.find((h) => h.id === 'sonar-secrets');
-    expect(hook?.stages).toEqual(['pre-commit']);
-  });
-
-  it('sets the stage to pre-push when called with pre-push', () => {
-    upsertPreCommitConfig(TEMP_DIR, 'pre-push');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{
-      repo: string;
-      hooks: Array<{ id: string; stages: string[] }>;
-    }>;
-    const hook = repos.find((r) => r.repo === 'local')?.hooks.find((h) => h.id === 'sonar-secrets');
-    expect(hook?.stages).toEqual(['pre-push']);
-  });
-
-  it('appends a local repo with the hook to a config that already has unrelated repos', () => {
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      yaml.dump({
-        repos: [
-          {
-            repo: 'https://github.com/pre-commit/pre-commit-hooks',
-            rev: 'v4.5.0',
-            hooks: [{ id: 'trailing-whitespace' }],
-          },
-        ],
-      }),
-    );
-
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{ repo: string; hooks: Array<{ id: string }> }>;
-    expect(repos).toHaveLength(2);
-    expect(repos.some((r) => r.repo === 'https://github.com/pre-commit/pre-commit-hooks')).toBe(
-      true,
-    );
-    const localRepo = repos.find((r) => r.repo === 'local');
-    expect(localRepo).toBeDefined();
-    expect(localRepo?.hooks).toHaveLength(1);
-    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
-  });
-
-  it('adds the hook to an existing local repo that has no sonar-secrets hook yet', () => {
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      yaml.dump({
-        repos: [
-          {
-            repo: 'local',
-            hooks: [{ id: 'other-hook', name: 'x', entry: 'e', language: 'system' }],
-          },
-        ],
-      }),
-    );
-
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{ repo: string; hooks: Array<{ id: string }> }>;
-    const localRepo = repos.find((r) => r.repo === 'local');
-    expect(localRepo?.hooks).toHaveLength(2);
-    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
-    expect(localRepo?.hooks.some((h) => h.id === 'other-hook')).toBe(true);
-  });
-
-  it('replaces the existing sonar-secrets hook in place without duplicating it', () => {
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      yaml.dump({
-        repos: [
-          {
-            repo: 'local',
-            hooks: [
-              {
-                id: 'sonar-secrets',
-                name: 'old name',
-                entry: 'old entry',
-                language: 'system',
-                stages: ['pre-push'],
-              },
-            ],
-          },
-        ],
-      }),
-    );
-
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{
-      repo: string;
-      hooks: Array<{ id: string; stages: string[] }>;
-    }>;
-    const localRepo = repos.find((r) => r.repo === 'local');
-    const sonarHooks = localRepo?.hooks.filter((h) => h.id === 'sonar-secrets');
-    expect(sonarHooks).toHaveLength(1);
-    expect(sonarHooks?.[0].stages).toEqual(['pre-commit']);
-  });
-
-  it('falls back to an empty repos list when the file contains invalid YAML', () => {
-    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), '{ invalid yaml :::');
-
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{ repo: string }>;
-    expect(repos.some((r) => r.repo === 'local')).toBe(true);
-  });
-
-  it('falls back to an empty repos list when the file is empty', () => {
-    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), '');
-
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{ repo: string }>;
-    expect(repos.some((r) => r.repo === 'local')).toBe(true);
-  });
-
-  it('treats a repos value that is not an array as an empty list', () => {
-    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), yaml.dump({ repos: 'not-an-array' }));
-
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    const repos = config.repos as Array<{ repo: string; hooks: Array<{ id: string }> }>;
-    const localRepo = repos.find((r) => r.repo === 'local');
-    expect(localRepo).toBeDefined();
-    expect(localRepo?.hooks).toHaveLength(1);
-    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
-  });
-
-  it('preserves top-level keys that are not repos', () => {
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      yaml.dump({ default_install_hook_types: ['pre-commit'], repos: [] }),
-    );
-
-    upsertPreCommitConfig(TEMP_DIR, 'pre-commit');
-
-    const config = readConfig();
-    expect(config.default_install_hook_types).toEqual(['pre-commit']);
   });
 });
 
@@ -370,6 +309,127 @@ describe('installViaPreCommitFramework', () => {
     try {
       await installViaPreCommitFramework(TEMP_DIR, 'pre-commit').catch(() => {});
       expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('installs the hook even when the existing file contains invalid YAML', async () => {
+    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), '{ invalid yaml :::');
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
+      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('installs the hook even when the existing file is empty', async () => {
+    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), '');
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
+      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('installs the hook when the existing file has a non-array repos value', async () => {
+    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), yaml.dump({ repos: 'not-an-array' }));
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
+      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('removes legacy repo, adds local hook, and prints a text message', async () => {
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      yaml.dump({
+        repos: [
+          {
+            repo: PRE_COMMIT_LEGACY_REPO,
+            rev: 'v2.41.0.10709',
+            hooks: [{ id: 'sonar-secrets', stages: ['pre-commit'] }],
+          },
+        ],
+      }),
+    );
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
+
+      const textCalls = getMockUiCalls().filter((c) => c.method === 'text');
+      expect(textCalls).toHaveLength(1);
+      expect(textCalls[0].args[0]).toBe(
+        `Removed legacy ${PRE_COMMIT_LEGACY_REPO} hook from ${PRE_COMMIT_CONFIG_FILE}.`,
+      );
+      const written = yaml.load(readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8')) as {
+        repos: Array<{ repo: string; hooks: Array<{ id: string }> }>;
+      };
+      expect(written.repos.some((r) => r.repo === PRE_COMMIT_LEGACY_REPO)).toBe(false);
+      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('removes legacy repo and installs hook alongside existing local hooks', async () => {
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      yaml.dump({
+        repos: [
+          {
+            repo: PRE_COMMIT_LEGACY_REPO,
+            rev: 'v2.41.0.10709',
+            hooks: [{ id: 'sonar-secrets', stages: ['pre-commit'] }],
+          },
+          {
+            repo: 'local',
+            hooks: [{ id: 'other-local-hook', name: 'x', entry: 'e', language: 'system' }],
+          },
+        ],
+      }),
+    );
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
+
+      const textCalls = getMockUiCalls().filter((c) => c.method === 'text');
+      expect(textCalls).toHaveLength(1);
+      expect(textCalls[0].args[0]).toBe(
+        `Removed legacy ${PRE_COMMIT_LEGACY_REPO} hook from ${PRE_COMMIT_CONFIG_FILE}.`,
+      );
+      const written = yaml.load(readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8')) as {
+        repos: Array<{ repo: string; hooks: Array<{ id: string }> }>;
+      };
+      expect(written.repos.some((r) => r.repo === PRE_COMMIT_LEGACY_REPO)).toBe(false);
+      const localRepo = written.repos.find((r) => r.repo === 'local');
+      expect(localRepo?.hooks).toHaveLength(2);
+      expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
+      expect(localRepo?.hooks.some((h) => h.id === 'other-local-hook')).toBe(true);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('prints no text message when there is no legacy repo', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
+
+      expect(getMockUiCalls().some((c) => c.method === 'text')).toBe(false);
     } finally {
       spawnSpy.mockRestore();
     }

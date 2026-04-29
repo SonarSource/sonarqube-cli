@@ -26,12 +26,13 @@ import { join } from 'node:path';
 import yaml from 'js-yaml';
 
 import { spawnProcess } from '../../../../lib/process';
-import { success } from '../../../../ui';
+import { success, text } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import type { GitHookType } from '.';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 const PRE_COMMIT_SONAR_HOOK_ID = 'sonar-secrets';
+export const PRE_COMMIT_LEGACY_REPO = 'https://github.com/SonarSource/sonar-secrets-pre-commit';
 
 interface PreCommitHookEntry {
   id: string;
@@ -48,13 +49,13 @@ interface PreCommitRepo {
   hooks: PreCommitHookEntry[];
 }
 
-interface PreCommitConfig {
+export interface PreCommitConfig {
   repos: PreCommitRepo[];
   [key: string]: unknown;
 }
 
 function buildSonarPreCommitHook(stage: GitHookType): PreCommitHookEntry {
-  const base: PreCommitHookEntry = {
+  return {
     id: PRE_COMMIT_SONAR_HOOK_ID,
     name: 'Sonar secrets scan',
     entry: 'sonar analyze secrets --',
@@ -62,7 +63,6 @@ function buildSonarPreCommitHook(stage: GitHookType): PreCommitHookEntry {
     pass_filenames: true,
     stages: [stage],
   };
-  return base;
 }
 
 function parsePreCommitConfig(raw: unknown): PreCommitConfig {
@@ -83,35 +83,50 @@ function isSonarHookEntry(hookEntry: unknown): hookEntry is PreCommitHookEntry {
   );
 }
 
-function findExistingSonarHook(configPath: string): {
-  config: PreCommitConfig;
-  repo: { hooks: unknown[] } | undefined;
-  index: number;
-} {
-  let config: PreCommitConfig;
+function readPreCommitConfig(root: string): PreCommitConfig {
   try {
-    config = parsePreCommitConfig(yaml.load(readFileSync(configPath, 'utf-8')));
+    return parsePreCommitConfig(
+      yaml.load(readFileSync(join(root, PRE_COMMIT_CONFIG_FILE), 'utf-8')),
+    );
   } catch {
-    config = { repos: [] };
+    return { repos: [] };
   }
-  const repo = config.repos.find((r) => r.repo === 'local' && Array.isArray(r.hooks)) as
-    | { hooks: unknown[] }
-    | undefined;
-  return { config, repo, index: repo ? repo.hooks.findIndex(isSonarHookEntry) : -1 };
 }
 
-/** Upsert the sonar-secrets hook into .pre-commit-config.yaml. */
-export function upsertPreCommitConfig(root: string, stage: GitHookType): void {
-  const configPath = join(root, PRE_COMMIT_CONFIG_FILE);
+function writePreCommitConfig(root: string, config: PreCommitConfig): void {
+  writeFileSync(join(root, PRE_COMMIT_CONFIG_FILE), yaml.dump(config, { lineWidth: -1 }), 'utf-8');
+}
+
+function findLocalRepo(config: PreCommitConfig): PreCommitRepo | undefined {
+  return config.repos.find((r) => r.repo === 'local' && Array.isArray(r.hooks));
+}
+
+/** Removes the legacy sonar-secrets-pre-commit repo entry. Returns true if anything was removed. */
+export function removeLegacyHook(config: PreCommitConfig): boolean {
+  const before = config.repos.length;
+  config.repos = config.repos.filter((r) => r.repo !== PRE_COMMIT_LEGACY_REPO);
+  return config.repos.length < before;
+}
+
+/** Upserts the sonar-secrets hook into the local repo entry of a config object. */
+export function upsertSonarHook(config: PreCommitConfig, stage: GitHookType): void {
   const sonarHook = buildSonarPreCommitHook(stage);
-  const { config, repo, index } = findExistingSonarHook(configPath);
-  if (repo) {
-    const idx = index >= 0 ? index : repo.hooks.length;
-    repo.hooks[idx] = sonarHook;
+  const localRepo = findLocalRepo(config);
+  if (localRepo) {
+    const index = localRepo.hooks.findIndex(isSonarHookEntry);
+    const idx = index >= 0 ? index : localRepo.hooks.length;
+    localRepo.hooks[idx] = sonarHook;
   } else {
     config.repos.push({ repo: 'local', hooks: [sonarHook] });
   }
-  writeFileSync(configPath, yaml.dump(config, { lineWidth: -1 }), 'utf-8');
+}
+
+/** Return true if .pre-commit-config.yaml already contains the sonar-secrets local hook. */
+export function hasSonarHookInPreCommitConfig(root: string): boolean {
+  if (!existsSync(join(root, PRE_COMMIT_CONFIG_FILE))) {
+    return false;
+  }
+  return findLocalRepo(readPreCommitConfig(root))?.hooks.some(isSonarHookEntry) ?? false;
 }
 
 async function runPreCommitCommand(args: string[], cwd: string): Promise<void> {
@@ -140,16 +155,14 @@ export async function runPreCommitInstall(root: string, hook: GitHookType): Prom
   }
 }
 
-/** Return true if .pre-commit-config.yaml already contains the sonar-secrets local hook. */
-export function hasSonarHookInPreCommitConfig(root: string): boolean {
-  const configPath = join(root, PRE_COMMIT_CONFIG_FILE);
-  if (!existsSync(configPath)) return false;
-  const { repo, index } = findExistingSonarHook(configPath);
-  return repo !== undefined && index >= 0;
-}
-
 export async function installViaPreCommitFramework(root: string, hook: GitHookType): Promise<void> {
-  upsertPreCommitConfig(root, hook);
+  const config = readPreCommitConfig(root);
+  const isLegacyHookRemoved = removeLegacyHook(config);
+  upsertSonarHook(config, hook);
+  writePreCommitConfig(root, config);
+  if (isLegacyHookRemoved) {
+    text(`Removed legacy ${PRE_COMMIT_LEGACY_REPO} hook from ${PRE_COMMIT_CONFIG_FILE}.`);
+  }
   try {
     await runPreCommitInstall(root, hook);
   } catch {
