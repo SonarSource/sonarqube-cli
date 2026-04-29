@@ -26,6 +26,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/sca-scanner.js';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
@@ -88,18 +90,73 @@ describe('analyze dependency-risks', () => {
       .withProject('demo')
       .withProjectSettings('demo', [])
       .start();
+    harness.state().withScaScannerBinaryInstalled();
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks --project demo --format json');
 
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
+    // Install pipeline prints status text to stdout before the JSON payload — slice it off.
+    const jsonStart = result.stdout.indexOf('{');
+    expect(JSON.parse(result.stdout.slice(jsonStart))).toEqual({
       project: 'demo',
       releases: [],
       parsedFiles: [],
       errors: [],
     });
   });
+
+  it(
+    'auto-installs sca-scanner-cli when binary is absent',
+    async () => {
+      await harness.newFakeBinariesServer().start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze dependency-risks --project demo --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        true,
+      );
+      const state = harness.stateJsonFile.asJson() as {
+        tools: { installed: Array<{ name: string; version: string }> };
+      };
+      const recorded = state.tools.installed.find((t) => t.name === 'sca-scanner-cli');
+      expect(recorded).toBeDefined();
+      expect(recorded?.version).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'aborts when sca-scanner-cli download fails',
+    async () => {
+      await harness.newFakeBinariesServer().noArtifacts().start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze dependency-risks --project demo --format json');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        false,
+      );
+    },
+    { timeout: 30000 },
+  );
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
     const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();

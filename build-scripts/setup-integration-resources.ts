@@ -19,10 +19,11 @@
  */
 
 /**
- * Downloads the sonar-secrets binary and its PGP signature for the current
- * platform from binaries.sonarsource.com and places them in
+ * Downloads the sonar-secrets and sca-scanner-cli binaries (plus PGP signatures)
+ * for the current platform from binaries.sonarsource.com and places them in
  * tests/integration/resources/ using the original versioned filenames
- * (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe).
+ * (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe). The fake binaries server
+ * in the integration harness serves these files locally.
  *
  * Run via: bun build-scripts/setup-integration-resources.ts
  * Or via:  bun run test:integration:prepare
@@ -32,14 +33,10 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { SONAR_SECRETS_DIST_PREFIX } from '../src/lib/config-constants.js';
-import { SECRETS_BINARY_NAME } from '../src/lib/install-types.js';
+import type { BinarySpec } from '../src/cli/commands/_common/install/binary.js';
+import { SCA_SCANNER_SPEC } from '../src/cli/commands/_common/install/sca-scanner.js';
+import { SECRETS_SPEC } from '../src/cli/commands/_common/install/secrets.js';
 import { detectPlatform } from '../src/lib/platform-detector.js';
-import {
-  SONAR_SECRETS_SIGNATURES,
-  SONAR_SECRETS_VERSION,
-  SONARSOURCE_PUBLIC_KEY,
-} from '../src/lib/signatures.js';
 import {
   buildDownloadUrl,
   downloadBinary,
@@ -48,50 +45,54 @@ import {
 
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
 const platform = detectPlatform();
-const downloadUrl = buildDownloadUrl(
-  SECRETS_BINARY_NAME,
-  SONAR_SECRETS_VERSION,
-  SONAR_SECRETS_DIST_PREFIX,
-  platform,
-);
-const signatureUrl = `${downloadUrl}.asc`;
-// Keep the original versioned filename so the fake binaries server can match requests exactly
-const downloadFilename = downloadUrl.split('/').at(-1)!;
-const destPath = join(RESOURCES_DIR, downloadFilename);
-const ascDestPath = join(RESOURCES_DIR, `${downloadFilename}.asc`);
 
-const binaryExists = existsSync(destPath);
-const ascExists = existsSync(ascDestPath);
-
-if (binaryExists && ascExists) {
-  console.log(`Resources already present at ${RESOURCES_DIR} — skipping download.`);
-  process.exit(0);
-}
+const FIXTURES: BinarySpec[] = [SECRETS_SPEC, SCA_SCANNER_SPEC];
 
 mkdirSync(RESOURCES_DIR, { recursive: true });
 
-if (!binaryExists) {
-  console.log(
-    `Downloading sonar-secrets ${SONAR_SECRETS_VERSION} for ${platform.os}-${platform.arch}`,
-  );
-  console.log(`  from ${downloadUrl}`);
-  await downloadBinary(downloadUrl, destPath);
-  console.log('  Download complete.');
-
-  console.log('Verifying PGP signature...');
-  await verifyBinarySignature(destPath, platform, SONAR_SECRETS_SIGNATURES, SONARSOURCE_PUBLIC_KEY);
-  console.log('  Signature verified.');
-
-  if (platform.os !== 'windows') {
-    await chmod(destPath, 0o755);
-  }
-
-  console.log(`sonar-secrets ready at ${destPath}`);
+for (const fixture of FIXTURES) {
+  await prepareBinaryFixture(fixture);
 }
 
-if (!ascExists) {
-  console.log(`Downloading PGP signature file...`);
-  console.log(`  from ${signatureUrl}`);
-  await downloadBinary(signatureUrl, ascDestPath);
-  console.log(`  Signature file ready at ${ascDestPath}`);
+async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
+  const downloadUrl = buildDownloadUrl(fixture.name, fixture.version, fixture.distPrefix, platform);
+  const signatureUrl = `${downloadUrl}.asc`;
+  // Keep the original versioned filename so the fake binaries server can match requests exactly
+  const downloadFilename = downloadUrl.split('/').at(-1)!;
+  const destPath = join(RESOURCES_DIR, downloadFilename);
+  const ascDestPath = join(RESOURCES_DIR, `${downloadFilename}.asc`);
+
+  const binaryExists = existsSync(destPath);
+  const ascExists = existsSync(ascDestPath);
+
+  if (binaryExists && ascExists) {
+    console.log(`${fixture.name} ${fixture.version} already present — skipping download.`);
+    return;
+  }
+
+  if (!binaryExists) {
+    console.log(
+      `Downloading ${fixture.name} ${fixture.version} for ${platform.os}-${platform.arch}`,
+    );
+    console.log(`  from ${downloadUrl}`);
+    await downloadBinary(downloadUrl, destPath);
+    console.log('  Download complete.');
+
+    console.log('Verifying PGP signature...');
+    await verifyBinarySignature(destPath, platform, fixture.signatures, fixture.publicKey);
+    console.log('  Signature verified.');
+
+    if (platform.os !== 'windows') {
+      await chmod(destPath, 0o755);
+    }
+
+    console.log(`${fixture.name} ready at ${destPath}`);
+  }
+
+  if (!ascExists) {
+    console.log(`Downloading PGP signature file...`);
+    console.log(`  from ${signatureUrl}`);
+    await downloadBinary(signatureUrl, ascDestPath);
+    console.log(`  Signature file ready at ${ascDestPath}`);
+  }
 }

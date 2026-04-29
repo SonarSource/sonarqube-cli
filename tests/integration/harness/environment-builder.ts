@@ -31,24 +31,21 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
-import { SONAR_SECRETS_DIST_PREFIX } from '../../../src/lib/config-constants.js';
-import { SECRETS_BINARY_NAME } from '../../../src/lib/install-types.js';
+import {
+  type BinarySpec,
+  buildLocalBinaryName,
+} from '../../../src/cli/commands/_common/install/binary';
+import { SCA_SCANNER_SPEC } from '../../../src/cli/commands/_common/install/sca-scanner';
+import { SECRETS_SPEC } from '../../../src/cli/commands/_common/install/secrets';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
-import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
-import type { CliState } from '../../../src/lib/state.js';
+import type { CliState, InstalledTool } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 
-function resolveSecretsBinarySource(): string {
+function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
-  const downloadUrl = buildDownloadUrl(
-    SECRETS_BINARY_NAME,
-    SONAR_SECRETS_VERSION,
-    SONAR_SECRETS_DIST_PREFIX,
-    platform,
-  );
+  const downloadUrl = buildDownloadUrl(fixture.name, fixture.version, fixture.distPrefix, platform);
   const filename = downloadUrl.split('/').at(-1)!;
   return join(import.meta.dir, '..', 'resources', filename);
 }
@@ -66,6 +63,7 @@ export class EnvironmentBuilder {
   private activeConnectionOrgKey?: string;
   private activeConnectionTokenName?: string;
   private _installSecretsBinary = false;
+  private _installScaScannerBinary = false;
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
@@ -129,6 +127,16 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Ensures sca-scanner-cli is available inside the isolated test environment.
+   * Copies the cached binary from tests/integration/resources/ into
+   * <tempDir>/bin/ and records it in state.tools.installed.
+   */
+  withScaScannerBinaryInstalled(): this {
+    this._installScaScannerBinary = true;
+    return this;
+  }
+
+  /**
    * Stores a token in the file-based keychain when writeTo() is called.
    */
   withKeychainToken(serverURL: string, token: string, org?: string): this {
@@ -181,18 +189,27 @@ export class EnvironmentBuilder {
       state.auth.activeConnectionId = connectionId;
     }
 
+    const installed: InstalledTool[] = [];
     if (this._installSecretsBinary) {
-      state.tools = {
-        installed: [
-          {
-            name: 'sonar-secrets',
-            version: SONAR_SECRETS_VERSION,
-            path: buildLocalBinaryName(detectPlatform()),
-            installedAt: new Date().toISOString(),
-            installedByCliVersion: 'integration-test',
-          },
-        ],
-      };
+      installed.push({
+        name: SECRETS_SPEC.name,
+        version: SECRETS_SPEC.version,
+        path: buildLocalBinaryName(SECRETS_SPEC, detectPlatform()),
+        installedAt: new Date().toISOString(),
+        installedByCliVersion: 'integration-test',
+      });
+    }
+    if (this._installScaScannerBinary) {
+      installed.push({
+        name: SCA_SCANNER_SPEC.name,
+        version: SCA_SCANNER_SPEC.version,
+        path: buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform()),
+        installedAt: new Date().toISOString(),
+        installedByCliVersion: 'integration-test',
+      });
+    }
+    if (installed.length > 0) {
+      state.tools = { installed };
     }
 
     for (const ext of this.sqaaExtensions) {
@@ -241,22 +258,35 @@ export class EnvironmentBuilder {
     }
 
     if (this._installSecretsBinary) {
-      const binDir = join(cliHome, 'bin');
-      mkdirSync(binDir, { recursive: true });
-
-      const source = resolveSecretsBinarySource();
-      const versionedName = buildLocalBinaryName(detectPlatform());
-      const destPath = join(binDir, versionedName);
-      if (!existsSync(destPath)) {
-        if (!existsSync(source)) {
-          throw new Error(
-            `sonar-secrets binary not found at: ${source}\n` +
-              `Run 'bun run test:integration:prepare' to download it.`,
-          );
-        }
-        copyFileSync(source, destPath);
-        chmodSync(destPath, 0o755);
-      }
+      copyBinaryFixtureInto(
+        cliHome,
+        SECRETS_SPEC,
+        buildLocalBinaryName(SECRETS_SPEC, detectPlatform()),
+      );
+    }
+    if (this._installScaScannerBinary) {
+      copyBinaryFixtureInto(
+        cliHome,
+        SCA_SCANNER_SPEC,
+        buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform()),
+      );
     }
   }
+}
+
+function copyBinaryFixtureInto(cliHome: string, fixture: BinarySpec, versionedName: string): void {
+  const binDir = join(cliHome, 'bin');
+  mkdirSync(binDir, { recursive: true });
+
+  const source = resolveBinaryFixturePath(fixture);
+  const destPath = join(binDir, versionedName);
+  if (existsSync(destPath)) return;
+  if (!existsSync(source)) {
+    throw new Error(
+      `${fixture.name} binary not found at: ${source}\n` +
+        `Run 'bun run pretest:integration' to download it.`,
+    );
+  }
+  copyFileSync(source, destPath);
+  chmodSync(destPath, 0o755);
 }

@@ -27,6 +27,7 @@ export interface PlatformInfo {
 }
 
 export const SECRETS_BINARY_NAME = 'sonar-secrets';
+export const SCA_SCANNER_BINARY_NAME = 'sca-scanner-cli';
 
 export function buildPlatformSuffix(p: PlatformInfo): string {
   return `-${p.os}-${p.arch}${p.extension}`;

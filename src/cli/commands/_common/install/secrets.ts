@@ -36,7 +36,7 @@ import {
   resolveBinaryPath,
 } from './binary';
 
-const SECRETS_SPEC: BinarySpec = {
+export const SECRETS_SPEC: BinarySpec = {
   name: SECRETS_BINARY_NAME,
   version: SONAR_SECRETS_VERSION,
   distPrefix: SONAR_SECRETS_DIST_PREFIX,
