@@ -87,6 +87,8 @@ export const SONARCLOUD_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_API_URL ?? 'https://api.sonarcloud.io';
 export const SONARCLOUD_US_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_US_API_URL ?? 'https://api.sonarqube.us';
+export const SONARCLOUD_SCA_SCANNER_CDN_URL =
+  process.env.SONARQUBE_CLI_SONARCLOUD_SCANNER_URL ?? 'https://scanner.sonarcloud.io/tidelift-cli';
 
 // ---------------------------------------------------------------------------
 // Documentation
