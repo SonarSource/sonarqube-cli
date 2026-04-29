@@ -94,7 +94,9 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
-    expect(parsed).toEqual({ project: 'demo', risks: [] });
+    expect(parsed.project).toBe('demo');
+    expect(Array.isArray(parsed.packages)).toBe(true);
+    expect(parsed.packages.length).toBeGreaterThan(0);
     expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/enabled')).toBe(true);
     expect(
       server

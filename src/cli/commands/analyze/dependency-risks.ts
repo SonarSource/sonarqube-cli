@@ -18,11 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import logger from '../../../lib/logger';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { type ResolvedAuth, resolveFromEndpoint } from '../../../lib/auth-resolver';
+import { CLI_DIR } from '../../../lib/config-constants';
+import { getLogLevelConfig } from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
+import { MockScaScannerInstaller } from '../_common/install/sca-scanner.ts';
+import {
+  type ScaScannerInvocation,
+  ScaScannerRunner,
+} from './dependency-risk-helpers/sca-scanner.ts';
+import { MockScaScannerSpawner } from './dependency-risk-helpers/sca-scanner-spawner.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -58,10 +68,34 @@ export async function analyzeDependencyRisks(
   }
 
   const properties = await client.getProjectSettings(options.project);
-  logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
 
-  const stub = { project: options.project, risks: [] as unknown[] };
+  const invocation: ScaScannerInvocation = {
+    baseDir: process.cwd(),
+    // TODO(SCA wiring): --api-base-url is the executable-metadata host for
+    // tidelift-cli, not the SonarQube /api endpoint. Replace once the backend
+    // exposes the correct URL.
+    apiBaseUrl: resolveFromEndpoint(auth.serverUrl, '/sca') + '/sca', // todo
+    // TODO(SCA wiring): source --download-base-url from server config.
+    downloadBaseUrl:
+      auth.connectionType === 'cloud' ? 'https://scanner.sonarcloud.io/tidelift-cli' : '', // todo
+    sonarToken: auth.token,
+    projectKey: options.project,
+    cacheDir: join(CLI_DIR, 'cache', 'sca-scanner'),
+    workDir: join(tmpdir(), `sonar-sca-${Date.now()}`),
+    scannerProperties: properties.scaProperties,
+    excludedPaths: properties.exclusions,
+    includeGitIgnoredPaths: properties.includeGitIgnoredPaths,
+    debug: getLogLevelConfig() === 'DEBUG',
+  };
+
+  const result = await new ScaScannerRunner(
+    new MockScaScannerInstaller(),
+    new MockScaScannerSpawner(),
+  ).run(invocation);
+
   print(
-    format === 'json' ? JSON.stringify(stub, null, 2) : `Project: ${options.project}\n(no risks)`,
+    format === 'json'
+      ? JSON.stringify({ project: options.project, ...result }, null, 2)
+      : `Project: ${options.project}\n(no risks)`,
   );
 }
