@@ -18,12 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import logger from '../../../lib/logger';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { type ResolvedAuth } from '../../../lib/auth-resolver';
+import { CLI_DIR } from '../../../lib/config-constants';
+import logger, { getLogLevelConfig } from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { print } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
+import { NoopScaScannerInstaller } from '../_common/install/noop-sca-scanner-installer.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
+import { NoopScaScannerSpawner } from './dependency-risk-helpers/noop-sca-scanner-spawner.ts';
+import {
+  type ScaScannerInvocation,
+  ScaScannerRunner,
+} from './dependency-risk-helpers/sca-scanner.ts';
+import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
@@ -48,10 +59,26 @@ export async function analyzeDependencyRisks(
   const properties = parseAnalysisProperties(settings);
   logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
 
-  const stub = { project: options.project, risks: [] as unknown[] };
-  print(
-    options.format === 'json'
-      ? JSON.stringify(stub, null, 2)
-      : `Project: ${options.project}\n(no risks)`,
-  );
+  const { apiBaseUrl, downloadBaseUrl } = buildScaUrls(auth);
+
+  const invocation: ScaScannerInvocation = {
+    baseDir: process.cwd(),
+    apiBaseUrl,
+    downloadBaseUrl,
+    sonarToken: auth.token,
+    projectKey: options.project,
+    cacheDir: join(CLI_DIR, 'sca-scanner-cache'),
+    workDir: join(tmpdir(), `sonar-sca-${Date.now()}`),
+    scannerProperties: properties.scaProperties,
+    excludedPaths: properties.exclusions,
+    includeGitIgnoredPaths: properties.includeGitIgnoredPaths,
+    debug: getLogLevelConfig() === 'DEBUG',
+  };
+
+  const result = await new ScaScannerRunner(
+    new NoopScaScannerInstaller(),
+    new NoopScaScannerSpawner(),
+  ).run(invocation);
+
+  print(JSON.stringify({ project: options.project, ...result }, null, 2));
 }

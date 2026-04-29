@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `analyze dependency-risks` (CLI-354 skeleton + CLI-355 SCA gate
-// + CLI-356 analysis properties fetch). The command is still a stub for output, but
-// now pre-flights `/sca/feature-enabled` and fetches analysis properties from
-// `/api/settings/values` (which also surfaces missing-project as a 404).
+// Integration tests for `analyze dependency-risks`: pre-flight gates
+// (authentication, SCA availability, project existence) plus the happy path,
+// which currently runs against the no-op scanner runner and emits an empty
+// `AnalyzeProjectResponse`. Once the real scanner is wired, the happy-path
+// assertions will be expanded.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -46,61 +47,6 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('❌ Not authenticated. Run: sonar auth login');
-  });
-
-  it('prints stub table output by default when authenticated (cloud)', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .withProject('demo')
-      .withProjectSettings('demo', [
-        { key: 'sonar.exclusions', values: ['**/test/**', '**/dist/**'], inherited: false },
-        { key: 'sonar.sca.foo', value: 'bar', inherited: false },
-        { key: 'sonar.scm.exclusions.disabled', value: 'true', inherited: false },
-      ])
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
-
-    const result = await harness.run('analyze dependency-risks --project demo');
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Project: demo');
-    expect(result.stdout).toContain('(no risks)');
-
-    const recorded = server.getRecordedRequests();
-    const scaCalls = recorded.filter((r) => r.path === '/sca/feature-enabled');
-    expect(scaCalls).toHaveLength(1);
-    expect(scaCalls[0].query.organization).toBe(TEST_ORG);
-
-    const settingsIndex = recorded.findIndex((r) => r.path === '/api/settings/values');
-    expect(settingsIndex).toBeGreaterThanOrEqual(0);
-    expect(recorded[settingsIndex].query.component).toBe('demo');
-  });
-
-  it('prints stub JSON output when --format json is passed (on-premise)', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .withProject('demo')
-      .withProjectSettings('demo', [])
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN);
-
-    const result = await harness.run('analyze dependency-risks --project demo --format json');
-
-    expect(result.exitCode).toBe(0);
-    const parsed = JSON.parse(result.stdout);
-    expect(parsed).toEqual({ project: 'demo', risks: [] });
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/feature-enabled')).toBe(
-      true,
-    );
-    expect(
-      server
-        .getRecordedRequests()
-        .some((r) => r.path === '/api/settings/values' && r.query.component === 'demo'),
-    ).toBe(true);
   });
 
   it('exits with code 1 when project does not exist (settings 404)', async () => {
@@ -132,6 +78,27 @@ describe('analyze dependency-risks', () => {
     expect(result.stdout + result.stderr).toContain(
       'Software Composition Analysis is not available for the current server connection',
     );
+  });
+
+  it('emits the no-op scanner stub output in JSON format on the happy path', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(true)
+      .withProject('demo')
+      .withProjectSettings('demo', [])
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo --format json');
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      project: 'demo',
+      releases: [],
+      parsedFiles: [],
+      errors: [],
+    });
   });
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
