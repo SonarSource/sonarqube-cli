@@ -26,8 +26,6 @@ import { IS_WINDOWS } from '../../integration/harness';
 const CLAUDE_CODE_API_KEY = process.env.CLAUDE_CODE_API_KEY;
 
 export interface SetupOptions {
-  cwd: string;
-  userHome: string;
   env: Record<string, string>;
 }
 
@@ -138,16 +136,12 @@ function installClaudeCode(options: SetupOptions): string {
     throw new Error(`Claude install failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   }
 
-  const claudeBinary = join(
-    options.userHome,
-    '.local',
-    'bin',
-    IS_WINDOWS ? 'claude.exe' : 'claude',
-  );
+  const homeDir = env['HOME'];
+  const claudeBinary = join(homeDir, '.local', 'bin', IS_WINDOWS ? 'claude.exe' : 'claude');
   if (!existsSync(claudeBinary)) {
     throw new Error(
       [
-        `Claude binary not found under ${options.userHome}`,
+        `Claude binary not found under ${homeDir}`,
         `Installer stdout:\n${result.stdout}`,
         `Installer stderr:\n${result.stderr}`,
       ].join('\n\n'),

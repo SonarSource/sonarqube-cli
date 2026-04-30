@@ -113,14 +113,14 @@ export class TestHarness {
     if (!IS_WINDOWS) {
       chmodSync(sonarAlias, 0o755);
     }
-    this.systemEnvVars['PATH'] = this._pathWith([pathBinDir], this.systemEnvVars['PATH']);
+    this.systemEnvVars['PATH'] = this.pathWith([pathBinDir], this.systemEnvVars['PATH']);
     if (IS_WINDOWS) {
-      this.systemEnvVars['PATHEXT'] = this._pathWith(['.EXE'], this.systemEnvVars['PATHEXT']);
+      this.systemEnvVars['PATHEXT'] = this.pathWith(['.EXE'], this.systemEnvVars['PATHEXT']);
     }
     return this;
   }
 
-  _pathWith(extraDirs: string[], basePath: string | undefined): string {
+  private pathWith(extraDirs: string[], basePath: string | undefined): string {
     const pathSeparator = IS_WINDOWS ? ';' : ':';
     return [...extraDirs, basePath].filter(Boolean).join(pathSeparator);
   }

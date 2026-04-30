@@ -52,15 +52,11 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
 
     beforeAll(async () => {
       harness = await TestHarness.create();
-      mkdirSync(harness.cwd.path, { recursive: true });
-      mkdirSync(harness.cliHome.path, { recursive: true });
       const extraEnv = {
         DISABLE_AUTOUPDATER: '1',
         SONARQUBE_CLI_DISABLE_SENTRY: '1',
       };
       claude = setupClaude({
-        cwd: harness.cwd.path,
-        userHome: harness.userHome.path,
         env: harness.env({ extraEnv }),
       });
     });
