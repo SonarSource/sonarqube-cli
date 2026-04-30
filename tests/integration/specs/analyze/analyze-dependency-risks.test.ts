@@ -65,8 +65,19 @@ describe('analyze dependency-risks', () => {
     const result = await harness.run('analyze dependency-risks --project demo');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Project: demo');
-    expect(result.stdout).toContain('(no risks)');
+    expect(result.stdout).toMatch(/Scan Summary: \d+ dependencies checked\. \d+ risks found/);
+    expect(result.stdout).toMatch(/SEVERITY\s+STATUS\s+PACKAGE/);
+    expect(result.stdout).toMatch(/═{10,}/);
+    expect(result.stdout).toMatch(/── package-lock\.json \(\d+ risks?\) ─+/);
+    expect(result.stdout).toMatch(/CVE-\d{4}-\d+\s+→\s+Upgrade to/);
+    expect(result.stdout).toMatch(/GPL-3\.0\s+→\s+Review usage/);
+    expect(result.stdout).toMatch(/Malicious package\s+→\s+Remove dependency/);
+    expect(result.stdout).toMatch(/\[NEW\]/);
+    expect(result.stdout).toMatch(/Errors:/);
+    expect(result.stdout).toMatch(
+      /\[MISSING_LOCKFILE\] requirements\.txt: Lockfile not found for requirements\.txt/,
+    );
+    expect(result.stdout).toMatch(/\[INEXACT_VERSIONS\] Some dependencies use inexact version/);
 
     const recorded = server.getRecordedRequests();
     const scaCalls = recorded.filter((r) => r.path === '/sca/feature-enabled');
@@ -95,9 +106,45 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed.project).toBe('demo');
-    expect(Array.isArray(parsed.releases)).toBe(true);
-    expect(parsed.releases.length).toBeGreaterThan(0);
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/feature-enabled')).toBe(true);
+    expect(Array.isArray(parsed.risks)).toBe(true);
+    expect(parsed.risks.length).toBeGreaterThan(0);
+    expect(parsed.risks[0]).toHaveProperty('packageName');
+    expect(parsed.risks[0]).toHaveProperty('type');
+    expect(parsed.risks[0]).toHaveProperty('severity');
+    expect(parsed.risks[0]).toHaveProperty('quality');
+    expect(parsed.risks[0]).toHaveProperty('status');
+    expect(parsed.risks[0]).toHaveProperty('releaseKey');
+    expect(parsed.risks[0]).toHaveProperty('issueKey');
+    expect(Array.isArray(parsed.risks[0].dependencyFilePaths)).toBe(true);
+    expect(Array.isArray(parsed.risks[0].dependencyChains)).toBe(true);
+    const types = parsed.risks.map((r: { type: string }) => r.type);
+    expect(types).toEqual([
+      'MALWARE',
+      'VULNERABILITY',
+      'VULNERABILITY',
+      'VULNERABILITY',
+      'PROHIBITED_LICENSE',
+      'VULNERABILITY',
+    ]);
+    const packageNames = parsed.risks.map((r: { packageName: string }) => r.packageName);
+    expect(packageNames).toEqual([...packageNames].sort());
+    const licenseRisk = parsed.risks.find((r: { type: string }) => r.type === 'PROHIBITED_LICENSE');
+    expect(licenseRisk.licenseExpression).toBe('GPL-3.0');
+    const malwareRisk = parsed.risks.find((r: { type: string }) => r.type === 'MALWARE');
+    expect(malwareRisk.newlyIntroduced).toBe(true);
+    expect(Array.isArray(parsed.errors)).toBe(true);
+    expect(parsed.errors).toHaveLength(2);
+    expect(parsed.errors[0]).toEqual({
+      id: 'err-1',
+      code: 'MISSING_LOCKFILE',
+      path: 'requirements.txt',
+      message: 'Lockfile not found for requirements.txt',
+    });
+    expect(parsed.errors[1].code).toBe('INEXACT_VERSIONS');
+    expect(parsed.errors[1].path).toBeNull();
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/feature-enabled')).toBe(
+      true,
+    );
     expect(
       server
         .getRecordedRequests()

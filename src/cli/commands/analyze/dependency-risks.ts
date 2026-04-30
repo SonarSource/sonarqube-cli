@@ -29,6 +29,11 @@ import { print } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 import { MockScaScannerInstaller } from '../_common/install/mock-sca-scanner-installer.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
+import {
+  sortDependencyRisks,
+  toDependencyRisks,
+} from './dependency-risk-helpers/dependency-risk.ts';
+import { formatDependencyRisksTable } from './dependency-risk-helpers/format-dependency-risks-table.ts';
 import { MockScaScannerSpawner } from './dependency-risk-helpers/mock-sca-scanner-spawner.ts';
 import {
   type ScaScannerInvocation,
@@ -85,9 +90,10 @@ export async function analyzeDependencyRisks(
     new MockScaScannerSpawner(),
   ).run(invocation);
 
-  print(
-    options.format === 'json'
-      ? JSON.stringify({ project: options.project, ...result }, null, 2)
-      : `Project: ${options.project}\n(no risks)`,
-  );
+  const risks = sortDependencyRisks(toDependencyRisks(result));
+  if (options.format === 'json') {
+    print(JSON.stringify({ project: options.project, risks, errors: result.errors }, null, 2));
+  } else {
+    print(formatDependencyRisksTable(risks, result.releases.length, result.errors));
+  }
 }
