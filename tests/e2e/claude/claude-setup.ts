@@ -31,36 +31,11 @@ export interface SetupOptions {
   env: Record<string, string>;
 }
 
-interface ClaudeJsonResultBase {
+interface ClaudeOutput {
   is_error: boolean;
   num_turns: number;
-}
-
-export interface ClaudeSuccessJsonResult extends ClaudeJsonResultBase {
-  subtype: 'success';
   result: string;
-}
-
-export interface ClaudeErrorJsonResult extends ClaudeJsonResultBase {
-  subtype: 'error_max_turns' | 'error_during_execution';
-}
-
-export type ClaudeJsonResult = ClaudeSuccessJsonResult | ClaudeErrorJsonResult;
-
-interface ProcessResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-interface ClaudeRunResult extends ProcessResult {
-  diagnostic: string;
-  output: ClaudeJsonResult;
-}
-
-export interface SuccessfulClaudeRunResult extends ProcessResult {
-  diagnostic: string;
-  output: ClaudeSuccessJsonResult;
+  subtype: string;
 }
 
 export function isClaudeCodeEnvSetup(): boolean {
@@ -93,7 +68,7 @@ export class Claude {
     private readonly env: Record<string, string>,
   ) {}
 
-  async run(prompt: string, options: ClaudeRunOptions): Promise<SuccessfulClaudeRunResult> {
+  async run(prompt: string, options: ClaudeRunOptions) {
     const args = ['-p', '--output-format', 'json', ...(options.args ?? []), prompt];
     const proc = Bun.spawn([this.claudeBinary, ...args], {
       cwd: options.cwd,
@@ -109,31 +84,23 @@ export class Claude {
       new Response(proc.stderr).text(),
     ]);
 
-    const processResult = { exitCode, stdout, stderr };
-    const result: ClaudeRunResult = {
-      ...processResult,
-      diagnostic: `${processResult.stdout}\n${processResult.stderr}`,
-      output: this.parseClaudeJsonResult(processResult),
-    };
-    if (result.output.subtype !== 'success') {
-      throw new Error(result.diagnostic);
-    }
-    return {
-      ...result,
-      output: result.output,
-    };
-  }
-
-  private parseClaudeJsonResult(result: ProcessResult): ClaudeJsonResult {
+    const diagnostic = `${stdout}\n${stderr}`;
+    let output: ClaudeOutput;
     try {
-      return JSON.parse(result.stdout) as ClaudeJsonResult;
+      output = JSON.parse(stdout) as ClaudeOutput;
     } catch (err) {
       throw new Error(
-        `Claude did not emit JSON (exit ${result.exitCode})\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}\nparse error: ${
+        `Claude did not emit JSON (exit ${exitCode})\nstdout:\n${stdout}\nstderr:\n${stderr}\nparse error: ${
           (err as Error).message
         }`,
       );
     }
+
+    if (output.subtype !== 'success') {
+      throw new Error(diagnostic);
+    }
+
+    return { diagnostic, exitCode, output, stderr, stdout };
   }
 }
 
