@@ -27,21 +27,12 @@
 //
 // Only used when building the coverage-instrumented binary.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { serializeCoverageToFile } from './utils.js';
 
 const coverageOutputFile = process.env.COVERAGE_OUTPUT_FILE;
 if (coverageOutputFile) {
   process.on('exit', () => {
-    const cov = (globalThis as Record<string, unknown>).__coverage__;
-    if (cov) {
-      try {
-        mkdirSync(dirname(coverageOutputFile), { recursive: true });
-        writeFileSync(coverageOutputFile, JSON.stringify(cov));
-      } catch {
-        // best-effort: do not crash the process over coverage serialization
-      }
-    }
+    serializeCoverageToFile(coverageOutputFile);
   });
 }
 

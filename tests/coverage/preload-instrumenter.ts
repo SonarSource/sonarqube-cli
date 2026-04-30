@@ -34,11 +34,12 @@
 //   COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit \
 //   bun test --preload ./tests/coverage/preload-instrumenter.ts ./tests/unit/
 
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterAll } from 'bun:test';
 import { createInstrumenter } from 'istanbul-lib-instrument';
+
+import { serializeCoverageToFile } from './utils.js';
 
 const coverageRawUnitDir = process.env.COVERAGE_RAW_UNIT_DIR;
 
@@ -78,16 +79,8 @@ if (coverageRawUnitDir) {
   });
 
   afterAll(() => {
-    const cov = (globalThis as Record<string, unknown>).__coverage__;
-    if (cov) {
-      try {
-        mkdirSync(coverageRawUnitDir, { recursive: true });
-        const unique = `${Date.now()}-${process.pid}`;
-        const outputFile = join(coverageRawUnitDir, `coverage-${unique}.json`);
-        writeFileSync(outputFile, JSON.stringify(cov));
-      } catch {
-        // best-effort: do not crash the process over coverage serialization
-      }
-    }
+    const unique = `${Date.now()}-${process.pid}`;
+    const outputFile = join(coverageRawUnitDir, `coverage-${unique}.json`);
+    serializeCoverageToFile(outputFile);
   });
 }
