@@ -65,8 +65,15 @@ describe('analyze dependency-risks', () => {
     const result = await harness.run('analyze dependency-risks --project demo');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Project: demo');
-    expect(result.stdout).toContain('(no risks)');
+    expect(result.stdout).toContain(
+      'Note: SonarQube Server Status (Accepted, False Positive) is not currently displayed.',
+    );
+    expect(result.stdout).toMatch(/Scan Summary: \d+ dependencies checked\. \d+ risks found/);
+    expect(result.stdout).toMatch(/SEVERITY\s+TYPE\s+PACKAGE\s+MANIFEST\s+ISSUE\s+REMEDIATION/);
+    expect(result.stdout).toMatch(/package-lock\.json/);
+    expect(result.stdout).toMatch(/Vulnerability.*CVE-\d{4}-\d+/);
+    expect(result.stdout).toMatch(/License.*GPL-3\.0/);
+    expect(result.stdout).toMatch(/Malware.*Malicious package.*Remove dependency/);
 
     const recorded = server.getRecordedRequests();
     const scaCalls = recorded.filter((r) => r.path === '/sca/enabled');
@@ -95,8 +102,32 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed.project).toBe('demo');
-    expect(Array.isArray(parsed.packages)).toBe(true);
-    expect(parsed.packages.length).toBeGreaterThan(0);
+    expect(Array.isArray(parsed.risks)).toBe(true);
+    expect(parsed.risks.length).toBeGreaterThan(0);
+    expect(parsed.risks[0]).toHaveProperty('packageName');
+    expect(parsed.risks[0]).toHaveProperty('type');
+    expect(parsed.risks[0]).toHaveProperty('severity');
+    expect(parsed.risks[0]).toHaveProperty('quality');
+    expect(parsed.risks[0]).toHaveProperty('status');
+    expect(Array.isArray(parsed.risks[0].dependencyFilePaths)).toBe(true);
+    expect(Array.isArray(parsed.risks[0].dependencyChains)).toBe(true);
+    const types = parsed.risks.map((r: { type: string }) => r.type);
+    expect(types).toEqual([
+      'VULNERABILITY',
+      'PROHIBITED_LICENSE',
+      'MALWARE',
+      'VULNERABILITY',
+      'VULNERABILITY',
+      'VULNERABILITY',
+    ]);
+    const packageNames = parsed.risks.map((r: { packageName: string }) => r.packageName);
+    expect(packageNames).toEqual([...packageNames].sort());
+    const vulnIds = parsed.risks
+      .filter((r: { type: string }) => r.type === 'VULNERABILITY')
+      .map((r: { vulnerabilityId: string }) => r.vulnerabilityId);
+    expect(vulnIds).not.toContain('CVE-2024-WITHDRAWN');
+    const licenseRisk = parsed.risks.find((r: { type: string }) => r.type === 'PROHIBITED_LICENSE');
+    expect(licenseRisk.licenseExpression).toBe('GPL-3.0');
     expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/enabled')).toBe(true);
     expect(
       server
