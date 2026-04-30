@@ -19,11 +19,19 @@
  */
 
 /**
- * Reads all Istanbul JSON files from tests/coverage/reports/raw/, merges
- * them, and generates tests/coverage/reports/integration/lcov.info.
+ * Reads Istanbul JSON files from the raw dirs and generates LCOV reports.
  *
- * SonarQube is configured to read both this file and the unit lcov
- * (tests/coverage/reports/unit/lcov.info) separately via
+ * Integration: tests/coverage/reports/raw/ → tests/coverage/reports/integration/lcov.info
+ * Unit:        tests/coverage/reports/raw-unit/ → tests/coverage/reports/unit/lcov.info
+ *
+ * Each section is processed only when its raw dir exists and is non-empty,
+ * so the script can be called from either the unit-tests job (only unit raw
+ * data present) or the integration job (only integration raw data present),
+ * or both in the full test:coverage local run.
+ *
+ * At least one raw dir must have data, or the script exits with an error.
+ *
+ * SonarQube is configured to read both lcov files via
  * sonar.javascript.lcov.reportPaths in sonar-project.properties.
  *
  * Run via: bun build-scripts/report-coverage.ts
@@ -36,29 +44,43 @@ import { type CoverageMapData, createCoverageMap } from 'istanbul-lib-coverage';
 import { createContext } from 'istanbul-lib-report';
 import reports from 'istanbul-reports';
 
-import { COVERAGE_INTEGRATION_REPORT_DIR, COVERAGE_RAW_DIR } from '../tests/coverage/paths.js';
+import {
+  COVERAGE_INTEGRATION_REPORT_DIR,
+  COVERAGE_RAW_DIR,
+  COVERAGE_UNIT_RAW_DIR,
+  COVERAGE_UNIT_REPORT_DIR,
+} from '../tests/coverage/paths.js';
 
-if (!existsSync(COVERAGE_RAW_DIR)) {
-  console.error(`No integration coverage data found at ${COVERAGE_RAW_DIR}`);
-  console.error('Run the integration tests first with the coverage binary.');
+function processRawDir(rawDir: string, reportDir: string, label: string): boolean {
+  if (!existsSync(rawDir)) {
+    console.log(`No ${label} raw coverage dir found at ${rawDir}, skipping.`);
+    return false;
+  }
+  const jsonFiles = readdirSync(rawDir).filter((f) => f.endsWith('.json'));
+  if (jsonFiles.length === 0) {
+    console.log(`No JSON files found in ${rawDir}, skipping ${label} lcov.`);
+    return false;
+  }
+  console.log(`Processing ${jsonFiles.length} ${label} coverage file(s)...`);
+  const coverageMap = createCoverageMap({});
+  for (const file of jsonFiles) {
+    const data = JSON.parse(readFileSync(join(rawDir, file), 'utf-8')) as CoverageMapData;
+    coverageMap.merge(data);
+  }
+  const ctx = createContext({ coverageMap, dir: reportDir });
+  reports.create('lcov').execute(ctx);
+  console.log(`${label} lcov written to ${reportDir}/lcov.info`);
+  return true;
+}
+
+const wroteIntegration = processRawDir(
+  COVERAGE_RAW_DIR,
+  COVERAGE_INTEGRATION_REPORT_DIR,
+  'integration',
+);
+const wroteUnit = processRawDir(COVERAGE_UNIT_RAW_DIR, COVERAGE_UNIT_REPORT_DIR, 'unit');
+
+if (!wroteIntegration && !wroteUnit) {
+  console.error('No coverage data found in either raw dir. Run tests with coverage first.');
   process.exit(1);
 }
-
-const jsonFiles = readdirSync(COVERAGE_RAW_DIR).filter((f) => f.endsWith('.json'));
-if (jsonFiles.length === 0) {
-  console.error(`No JSON files found in ${COVERAGE_RAW_DIR}`);
-  process.exit(1);
-}
-
-console.log(`Processing ${jsonFiles.length} integration coverage file(s)...`);
-
-const coverageMap = createCoverageMap({});
-for (const file of jsonFiles) {
-  const data = JSON.parse(readFileSync(join(COVERAGE_RAW_DIR, file), 'utf-8')) as CoverageMapData;
-  coverageMap.merge(data);
-}
-
-const ctx = createContext({ coverageMap, dir: COVERAGE_INTEGRATION_REPORT_DIR });
-reports.create('lcov').execute(ctx);
-
-console.log(`Integration lcov written to ${COVERAGE_INTEGRATION_REPORT_DIR}/lcov.info`);

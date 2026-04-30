@@ -28,11 +28,13 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
-import { COVERAGE_RAW_DIR } from '../tests/coverage/paths.js';
+import { COVERAGE_RAW_DIR, COVERAGE_UNIT_RAW_DIR } from '../tests/coverage/paths.js';
 
-if (existsSync(COVERAGE_RAW_DIR)) {
-  rmSync(COVERAGE_RAW_DIR, { recursive: true, force: true });
-  console.log(`Cleared: ${COVERAGE_RAW_DIR}`);
-} else {
-  console.log(`Nothing to clear at: ${COVERAGE_RAW_DIR}`);
+for (const dir of [COVERAGE_RAW_DIR, COVERAGE_UNIT_RAW_DIR]) {
+  if (existsSync(dir)) {
+    rmSync(dir, { recursive: true, force: true });
+    console.log(`Cleared: ${dir}`);
+  } else {
+    console.log(`Nothing to clear at: ${dir}`);
+  }
 }

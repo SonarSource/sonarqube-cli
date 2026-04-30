@@ -352,7 +352,12 @@ jobs:
         if: matrix.os == 'linux'
         env:
           SONARQUBE_CLI_DISABLE_SENTRY: '1'
-        run: bun test --coverage --coverage-reporter=lcov --coverage-dir=tests/coverage/reports/unit ./tests/unit/
+          COVERAGE_RAW_UNIT_DIR: tests/coverage/reports/raw-unit
+        run: bun test --preload ./tests/coverage/preload-instrumenter.ts ./tests/unit/
+
+      - name: Generate unit lcov from Istanbul data (Linux)
+        if: matrix.os == 'linux'
+        run: bun build-scripts/report-coverage.ts
 
       - name: Upload unit coverage (Linux)
         if: matrix.os == 'linux'

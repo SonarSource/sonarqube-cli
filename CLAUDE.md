@@ -70,6 +70,17 @@ Before writing a test, find an existing spec for the same command area and follo
 
 Each test creates a fresh `TestHarness` and disposes it in `afterEach`. The harness runs the compiled binary in a fully isolated environment (temp dir, fake keychain, fake servers). For fine-grained state setup beyond `withAuth`, use `harness.state()` builder (see `tests/integration/harness/environment-builder.ts`). For git hook tests, use `initGitRepo` / `stageFile` from `tests/integration/specs/hook/git-test-helpers.ts`.
 
+### Coverage pipeline
+
+Both unit and integration tests use **Istanbul** (`istanbul-lib-instrument`) for coverage — **not** Bun's native `--coverage` flag.
+
+- **Unit**: `tests/coverage/preload-instrumenter.ts` is a Bun preload that instruments every `src/**/*.ts` file via `istanbul-lib-instrument` and writes a unique per-worker `coverage-<timestamp>-<pid>.json` to `COVERAGE_RAW_UNIT_DIR` on exit (each `bun test` worker runs in its own process). The `test:coverage` script sets `COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit`.
+- **Integration**: `build-scripts/build-coverage-binary.ts` builds an instrumented binary; each integration test run writes raw JSON to `tests/coverage/reports/raw/`.
+- **Merge**: `build-scripts/report-coverage.ts` reads both raw dirs (skipping any that are absent or empty) and writes `tests/coverage/reports/unit/lcov.info` and `tests/coverage/reports/integration/lcov.info` via `istanbul-reports`.
+- **Clear**: `build-scripts/clear-coverage-raw.ts` removes both raw dirs (`raw/` and `raw-unit/`) before a fresh run.
+
+Never switch unit tests back to `bun test --coverage`; the inaccurate LCOV will reintroduce false uncovered lines in SonarQube.
+
 ## Documentation
 
 When adding, removing, or changing commands, scripts, or project structure, update `CLAUDE.md`, and `AGENTS.md` to reflect the change before finishing.

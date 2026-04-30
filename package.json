@@ -15,7 +15,7 @@
     "test:integration": "bun test ./tests/integration/",
     "test:all": "bun run test:unit && bun run test:integration",
     "test:e2e": "bun test ./tests/e2e/",
-    "test:coverage": "bun build:binary && bun build-scripts/build-coverage-binary.ts && bun build-scripts/setup-integration-resources.ts && bun build-scripts/clear-coverage-raw.ts && bun test --parallel --coverage --coverage-reporter=lcov --coverage-dir=tests/coverage/reports/unit ./tests/unit/ && SONARQUBE_CLI_USE_COVERAGE=1 bun test ./tests/integration/ && bun build-scripts/report-coverage.ts",
+    "test:coverage": "bun build:binary && bun build-scripts/build-coverage-binary.ts && bun build-scripts/setup-integration-resources.ts && bun build-scripts/clear-coverage-raw.ts && COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit SONARQUBE_CLI_DISABLE_SENTRY=1 bun test --preload ./tests/coverage/preload-instrumenter.ts ./tests/unit/ && SONARQUBE_CLI_USE_COVERAGE=1 bun test ./tests/integration/ && bun build-scripts/report-coverage.ts",
     "lint": "eslint src/ tests/ build-scripts/",
     "lint:fix": "eslint src/ tests/ build-scripts/ --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"build-scripts/**/*.ts\"",

@@ -31,3 +31,5 @@ export const COVERAGE_INTEGRATION_REPORT_DIR = join(
   'reports',
   'integration',
 );
+export const COVERAGE_UNIT_RAW_DIR = join(PROJECT_ROOT, 'tests', 'coverage', 'reports', 'raw-unit');
+export const COVERAGE_UNIT_REPORT_DIR = join(PROJECT_ROOT, 'tests', 'coverage', 'reports', 'unit');
