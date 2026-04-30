@@ -25,11 +25,18 @@ import { type ResolvedAuth } from '../../../lib/auth-resolver';
 import { CLI_DIR } from '../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { print } from '../../../ui';
+import { error, print, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
+import {
+  applyStatusFilter,
+  countUnresolvedIssues,
+  type DependencyRisksStatusFilter,
+} from './dependency-risk-helpers/analysis-response.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
+import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
+import { formatDependencyRisksTable } from './dependency-risk-helpers/format-dependency-risks-table.ts';
 import {
   type ScaScannerInvocation,
   ScaScannerRunner,
@@ -38,9 +45,16 @@ import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
+export const VALID_STATUS_FILTERS: readonly DependencyRisksStatusFilter[] = ['all', 'open'];
+
+const EXIT_CODE_OK = 0;
+const EXIT_CODE_ERRORS_ONLY = 1;
+const EXIT_CODE_UNRESOLVED_RISKS = 51;
+
 export interface AnalyzeDependencyRisksOptions {
   project: string;
   format: string;
+  statusFilter: DependencyRisksStatusFilter;
 }
 
 export async function analyzeDependencyRisks(
@@ -84,5 +98,38 @@ export async function analyzeDependencyRisks(
     new DefaultScaScannerSpawner(),
   ).run(invocation);
 
-  print(JSON.stringify({ project: options.project, ...result }, null, 2));
+  const filtered = applyStatusFilter(result, options.statusFilter);
+
+  if (options.format === 'json') {
+    print(formatDependencyRisksJson(options.project, filtered));
+  } else {
+    print(formatDependencyRisksTable(filtered, result.releases));
+  }
+
+  handleResult(countUnresolvedIssues(result), result.errors.length);
+}
+
+function handleResult(unresolvedRisksCount: number, errorCount: number) {
+  function warnErrorsDuringAnalysis() {
+    if (errorCount > 0) {
+      warn(`Found ${errorCount} ${pluralize(errorCount, 'analysis error')}.`);
+    }
+  }
+
+  if (unresolvedRisksCount > 0) {
+    warnErrorsDuringAnalysis();
+    error(
+      `Found ${unresolvedRisksCount} ${pluralize(unresolvedRisksCount, 'unresolved dependency risk')}.`,
+    );
+    process.exitCode = EXIT_CODE_UNRESOLVED_RISKS;
+  } else if (errorCount > 0) {
+    warnErrorsDuringAnalysis();
+    process.exitCode = EXIT_CODE_ERRORS_ONLY;
+  } else {
+    process.exitCode = EXIT_CODE_OK;
+  }
+}
+
+function pluralize(count: number, singular: string): string {
+  return `${singular}${count === 1 ? '' : 's'}`;
 }

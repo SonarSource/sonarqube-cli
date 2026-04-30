@@ -34,6 +34,7 @@ import {
   analyzeDependencyRisks,
   type AnalyzeDependencyRisksOptions,
   VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
+  VALID_STATUS_FILTERS as DEPENDENCY_RISKS_STATUS_FILTERS,
 } from './commands/analyze/dependency-risks';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import {
@@ -330,11 +331,19 @@ const dependencyRisksFormatOption = new Option('--format <format>', 'Output form
   .choices(DEPENDENCY_RISKS_FORMATS)
   .default('table');
 
+const dependencyRisksStatusFilterOption = new Option(
+  '--status-filter <statusFilter>',
+  'Dependency risk status filter',
+)
+  .choices(DEPENDENCY_RISKS_STATUS_FILTERS)
+  .default('open');
+
 analyze
   .command('dependency-risks', { hidden: true })
   .description('Analyze project dependencies for security and license risks')
   .requiredOption('-p, --project <project>', 'Project key')
   .addOption(dependencyRisksFormatOption)
+  .addOption(dependencyRisksStatusFilterOption)
   .authenticatedAction((auth, options: AnalyzeDependencyRisksOptions) =>
     analyzeDependencyRisks(options, auth),
   );
