@@ -61,7 +61,12 @@ export async function runSqaaAnalysis(
   command?: Command,
 ): Promise<void> {
   const cloudAuth = resolveCloudAuth(auth, explicitProject);
-  if (!cloudAuth) return;
+  if (!cloudAuth) {
+    warn(
+      'SonarQube Agentic Analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
+    );
+    return;
+  }
 
   const projectKey = explicitProject ?? resolveSqaaProjectKey(command);
   if (!projectKey) {
@@ -77,7 +82,7 @@ export async function runSqaaAnalysis(
 
 /**
  * Validate that the resolved auth is for SonarQube Cloud.
- * Returns null when SQAA should be silently skipped (on-premise or missing orgKey without --project).
+ * Returns null when the connection is not Cloud and --project is not set.
  * Throws CommandFailedError when --project is set but the connection is not Cloud.
  */
 function resolveCloudAuth(
@@ -99,7 +104,7 @@ function resolveCloudAuth(
 
 /**
  * Look up the project key for the current directory from the agentExtensions registry.
- * Returns null when SQAA should be silently skipped.
+ * Returns null when SQAA should be skipped.
  */
 function resolveSqaaProjectKey(command?: Command): string | null {
   try {

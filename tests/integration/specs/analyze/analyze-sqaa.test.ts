@@ -94,7 +94,7 @@ describe('analyze sqaa', () => {
   );
 
   it(
-    'exits with code 0 and skips SQAA for on-premise server',
+    'exits with code 0, warns, and skips SQAA for on-premise server',
     async () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN);
@@ -104,7 +104,9 @@ describe('analyze sqaa', () => {
       const result = await harness.run('analyze sqaa --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
-      // SQAA is SonarCloud-only — should not call SQAA endpoint
+      expect(result.stdout + result.stderr).toContain(
+        'SonarQube Agentic Analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
+      );
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');

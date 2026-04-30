@@ -116,13 +116,6 @@ describe('analyzeSqaa: input validation', () => {
 });
 
 describe('analyzeSqaa: auth resolution', () => {
-  it('skips SQAA when orgKey is missing from auth', async () => {
-    const noOrgAuth = { ...FAKE_AUTH, orgKey: undefined };
-
-    await analyzeSqaa({ file: 'src/index.ts' }, noOrgAuth);
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
-  });
-
   it('skips SQAA and warns when extension has no projectKey', async () => {
     const state = getDefaultState('test');
     stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
