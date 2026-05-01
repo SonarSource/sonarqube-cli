@@ -371,6 +371,22 @@ export class SonarQubeClient {
   }
 
   /**
+   * Return the legacy alphanumeric ID for a project component key.
+   * The external AI agents API expects this ID (not the human-readable key) as `projectId`.
+   * Uses /api/navigation/component — same endpoint the web UI uses; `id` is always present there.
+   */
+  async getComponentId(componentKey: string): Promise<string | null> {
+    try {
+      const result = await this.get<{ id: string }>('/api/navigation/component', {
+        component: componentKey,
+      });
+      return result.id;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Check if organization exists and is accessible
    */
   async checkOrganization(organizationKey: string): Promise<boolean> {
@@ -404,6 +420,19 @@ export class SonarQubeClient {
   }
 
   /**
+   * Schedule an AI agent remediation job for a set of issues.
+   * SonarQube Cloud only — endpoint lives on the region-specific API host.
+   */
+  async scheduleAgentJob(request: AgentJobRequest): Promise<AgentJobResponse> {
+    const endpoint = '/fix-suggestions/ai-agent-scheduled-jobs';
+    return await this.post<AgentJobResponse>(
+      endpoint,
+      request,
+      resolveFromEndpoint(this.serverURL, endpoint),
+    );
+  }
+
+  /**
    * Run server-side SonarQube Agentic Analysis on a single file.
    * SonarQube Cloud only — endpoint lives on the region-specific API host.
    */
@@ -422,6 +451,15 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
     return { ...headers, Authorization: 'REDACTED' };
   }
   return headers;
+}
+
+export interface AgentJobRequest {
+  projectId: string;
+  issueKeys: string[];
+}
+
+export interface AgentJobResponse {
+  taskId: string;
 }
 
 export interface SqaaAnalysisRequest {

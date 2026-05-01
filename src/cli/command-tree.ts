@@ -60,6 +60,7 @@ import {
   VALID_STATUSES,
 } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { getBanner, getCustomRootHelp } from './root-help.js';
@@ -218,6 +219,15 @@ list
   .addOption(pageOption)
   .addOption(pageSizeOption)
   .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
+
+// Trigger AI remediation for eligible issues (SonarQube Cloud only)
+COMMAND_TREE.command('remediate')
+  .description('Trigger AI agent remediation for eligible issues (SonarQube Cloud only)')
+  .option(
+    '-p, --project <project>',
+    'SonarQube Cloud project key (overrides auto-detected project)',
+  )
+  .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
 
 // Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')

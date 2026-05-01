@@ -23,9 +23,10 @@
 export { note } from './components/note.js';
 export type { PhaseItem, StepStatus } from './components/phase.js';
 export { phase, phaseItem } from './components/phase.js';
-export type { SelectOption } from './components/prompts.js';
+export type { MultiSelectOption, SelectOption } from './components/prompts.js';
 export {
   confirmPrompt,
+  multiSelectPrompt,
   pressEnterKeyPrompt,
   selectPrompt,
   textPrompt,

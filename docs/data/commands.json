@@ -19,6 +19,7 @@
         "sonar-api",
         "sonar-integrate",
         "sonar-list",
+        "sonar-remediate",
         "sonar-analyze",
         "sonar-verify",
         "sonar-config",
@@ -552,6 +553,30 @@
           "description": "Paginate through projects"
         }
       ],
+      "children": []
+    },
+    {
+      "id": "sonar-remediate",
+      "name": "remediate",
+      "fullName": "sonar remediate",
+      "description": "Trigger AI agent remediation for eligible issues (SonarQube Cloud only)",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "SonarQube Cloud project key (overrides auto-detected project)",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [],
       "children": []
     },
     {

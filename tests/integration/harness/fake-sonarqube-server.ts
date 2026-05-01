@@ -33,6 +33,7 @@ export interface IssueConfig {
   status?: string;
   type?: string;
   line?: number;
+  fixableByAgent?: boolean;
 }
 
 export interface SqaaIssueConfig {
@@ -70,6 +71,7 @@ export class ProjectBuilder {
       status: issue.status ?? 'OPEN',
       type: issue.type ?? 'CODE_SMELL',
       line: issue.line ?? 1,
+      fixableByAgent: issue.fixableByAgent ?? false,
     });
     return this;
   }
@@ -122,6 +124,8 @@ export class FakeSonarQubeServerBuilder {
   private sqaaResponse?: SqaaResponseConfig;
   private scaEnabled?: boolean;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
+  private agentJobErrorCode?: number;
+  private agentJobErrorMessage?: string;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -163,6 +167,12 @@ export class FakeSonarQubeServerBuilder {
 
   withSqaaResponse(response: SqaaResponseConfig = {}): this {
     this.sqaaResponse = response;
+    return this;
+  }
+
+  withAgentJobError(statusCode: number, message: string): this {
+    this.agentJobErrorCode = statusCode;
+    this.agentJobErrorMessage = message;
     return this;
   }
 
@@ -215,6 +225,8 @@ export class FakeSonarQubeServerBuilder {
       sqaaEntitlementOrgs,
       scaEnabled,
       projectSettings,
+      agentJobErrorCode,
+      agentJobErrorMessage,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -298,10 +310,13 @@ export class FakeSonarQubeServerBuilder {
           const issueStatusFilter = query.issueStatuses ? query.issueStatuses.split(',') : null;
           const severityFilter = query.severities ? query.severities.split(',') : null;
 
+          const fixableByAgentFilter = query.fixableByAgent;
+
           const issues: SonarQubeIssue[] =
             projectData?.issues
               .filter((issue) => !issueStatusFilter || issueStatusFilter.includes(issue.status))
               .filter((issue) => !severityFilter || severityFilter.includes(issue.severity))
+              .filter((issue) => fixableByAgentFilter !== 'true' || issue.fixableByAgent)
               .map((issue) => ({
                 key: issue.key,
                 rule: issue.ruleKey,
@@ -457,6 +472,38 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/navigation/component') {
+          const componentKey = query.component;
+          const projectData = componentKey ? projects.get(componentKey) : undefined;
+          if (!projectData) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: `Component '${componentKey}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              id: `AY${componentKey}legacy`,
+              key: projectData.key,
+              name: projectData.name,
+              qualifier: 'TRK',
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/fix-suggestions/ai-agent-scheduled-jobs' && req.method === 'POST') {
+          if (agentJobErrorCode !== undefined) {
+            return new Response(JSON.stringify({ message: agentJobErrorMessage }), {
+              status: agentJobErrorCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ taskId: 'task-abc-123' }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/a3s-analysis/analyses' && req.method === 'POST') {

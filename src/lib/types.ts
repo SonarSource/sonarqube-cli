@@ -68,6 +68,7 @@ export interface IssuesSearchParams {
   branch?: string;
   pullRequest?: string;
   resolved?: boolean;
+  fixableByAgent?: boolean;
   s?: string;
   ps?: number;
   p?: number;
