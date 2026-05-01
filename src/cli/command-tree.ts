@@ -40,6 +40,7 @@ import {
 } from './commands/hook/agent-post-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
+import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
@@ -307,6 +308,11 @@ hookCommand
   .command('claude-pre-tool-use')
   .description('PreToolUse handler: scan files for secrets before agent reads them')
   .anonymousAction(() => claudePreToolUse());
+
+hookCommand
+  .command('copilot-pre-tool-use')
+  .description('PreToolUse handler for Copilot: scan files for secrets before agent reads them')
+  .anonymousAction(() => copilotPreToolUse());
 
 hookCommand
   .command('claude-prompt-submit')
