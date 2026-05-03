@@ -28,10 +28,9 @@ import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { info, success, text, warn } from '../../../../ui';
-import { readOrInitJson, writeHookScript } from '../_common/hooks';
+import { readOrInitJson, SONAR_SECRETS_MARKER, writeHookScript } from '../_common/hooks';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
 
-const SONAR_SECRETS_MARKER = 'sonar-secrets';
 const SCRIPT_REL_DIR = join(SONAR_SECRETS_MARKER, 'build-scripts');
 const SCRIPT_BASENAME = 'pretool-secrets';
 const HOOKS_JSON = 'hooks.json';

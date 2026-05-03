@@ -26,7 +26,7 @@ import { basename, dirname, join } from 'node:path';
 
 import logger from '../../../../lib/logger';
 import { info, warn } from '../../../../ui';
-import { readOrInitJson, writeHookScript } from '../_common/hooks';
+import { readOrInitJson, SONAR_SECRETS_MARKER, writeHookScript } from '../_common/hooks';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
@@ -38,7 +38,6 @@ import {
 
 const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
-const SONAR_SECRETS_MARKER = 'sonar-secrets';
 
 const AGENT_CONFIG_DIR: Record<string, string> = {
   claude: '.claude',

@@ -23,6 +23,7 @@ import { intro, print, success } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { setupMcpServer } from './mcp';
 import { installSecretsBinary } from '../../_common/install/secrets';
+import type { IntegrateAgentOptions } from '../_common/options';
 import { detectGlobalSecretsHook, installPreToolUseHook } from './hooks';
 import {
   detectGlobalPromptSecretsInstructions,
@@ -30,13 +31,7 @@ import {
 } from './instructions';
 import { updateCopilotState } from './state';
 
-export interface IntegrateCopilotOptions {
-  project?: string;
-  nonInteractive?: boolean;
-  global?: boolean;
-}
-
-export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateCopilotOptions) {
+export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {
     throw new InvalidOptionError(
       '--global and --project are mutually exclusive; please specify only one scope.',

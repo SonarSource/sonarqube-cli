@@ -34,17 +34,12 @@ import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
+import type { IntegrateAgentOptions } from '../_common/options';
 import { runHealthChecks } from './health';
 import { detectGlobalSecretsHook, installHooks } from './hooks';
 import { setupMcpServer } from './mcp';
 import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
-
-export interface IntegrateClaudeOptions {
-  project?: string;
-  nonInteractive?: boolean;
-  global?: boolean;
-}
 
 export interface ConfigurationData {
   serverURL: string;
@@ -57,7 +52,7 @@ export interface ConfigurationData {
  * Integrate command handler
  */
 export async function integrateClaude(
-  options: IntegrateClaudeOptions,
+  options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
   intro(`SonarQube Integration Setup for Claude`);
@@ -153,7 +148,7 @@ export async function integrateClaude(
  */
 function loadConfiguration(
   project: DiscoveredProject,
-  options: IntegrateClaudeOptions,
+  options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): ConfigurationData {
   if (!!auth.serverUrl && !!project.serverUrl && auth.serverUrl != project.serverUrl) {

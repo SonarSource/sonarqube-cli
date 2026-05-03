@@ -27,6 +27,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+export const SONAR_SECRETS_MARKER = 'sonar-secrets';
+
 export const UNIX_SONAR_COMMAND_GUARD = `if ! command -v sonar &> /dev/null; then
   exit 0
 fi`;
