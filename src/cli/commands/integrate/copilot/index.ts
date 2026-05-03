@@ -74,9 +74,10 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
     hookInstalled: !skipHookInstall,
     instructionsInstalled: !skipInstructions,
   });
-  reportInstallationOutcome(isGlobal, existingGlobalHookPath, existingGlobalInstructionsPath);
 
   await setupMcpServer(project, options.global ?? false, options.project || project.projectKey);
+
+  reportInstallationOutcome(isGlobal, existingGlobalHookPath, existingGlobalInstructionsPath);
 }
 
 /**
