@@ -113,10 +113,13 @@ export async function installPreToolUseHook(projectRoot: string, isGlobal: boole
   const hooksJsonPath = join(hooksDir, HOOKS_JSON);
   const hooksJson = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
 
-  // Project scope uses paths relative to the hooks dir so the config remains
-  // portable when the project is moved or shared via version control.
+  // Project scope uses paths relative to the project root so the config remains
+  // portable when the project is moved or shared via version control. Copilot
+  // CLI resolves relative `powershell`/`bash` entries against the session's
+  // working directory (the project root), not the hooks dir, so paths relative
+  // to the hooks dir silently fail to find the script on Windows.
   // Global scope uses absolute paths because `~/.copilot/hooks` is fixed.
-  const commandPath = isGlobal ? scriptPath : relative(hooksDir, scriptPath);
+  const commandPath = isGlobal ? scriptPath : relative(projectRoot, scriptPath);
 
   const newEntry: HookCommandEntry = {
     type: 'command',

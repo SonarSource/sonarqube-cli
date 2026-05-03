@@ -199,7 +199,7 @@ describe('installPreToolUseHook', () => {
     rmSync(projectRoot, { recursive: true, force: true });
   });
 
-  it('writes the script and a hooks.json with a relative-path preToolUse entry', async () => {
+  it('writes the script and a hooks.json with a project-root-relative preToolUse entry', async () => {
     await installPreToolUseHook(projectRoot, false);
 
     const scriptPath = join(
@@ -222,10 +222,12 @@ describe('installPreToolUseHook', () => {
 
     const command = entry?.[HOOK_FIELD];
     expect(command).toBeDefined();
-    // Relative paths use forward slashes on Windows (the production code
-    // normalises backslashes to '/').
-    const expectedSuffix = `sonar-secrets/build-scripts/pretool-secrets${SCRIPT_EXT}`;
-    expect(command?.endsWith(expectedSuffix)).toBe(true);
+    // Path must be relative to the project root (which is Copilot CLI's session
+    // cwd), not the hooks dir — Copilot CLI resolves relative entries against
+    // cwd, so a hooks-dir-relative path silently fails to find the script.
+    // Forward slashes on Windows (the production code normalises backslashes).
+    const expected = `.github/hooks/sonar-secrets/build-scripts/pretool-secrets${SCRIPT_EXT}`;
+    expect(command).toBe(expected);
     expect(command?.startsWith('/')).toBe(false);
     if (IS_WINDOWS) {
       expect(command?.includes('\\')).toBe(false);
