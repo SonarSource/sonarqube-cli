@@ -37,16 +37,17 @@ const GLOBAL_INSTRUCTIONS_DIR = join(homedir(), '.copilot', 'instructions');
 
 /**
  * Probe `~/.copilot/instructions/sonarqube.instructions.md` for an existing
- * global prompt-secrets instructions file.
+ * global prompt-secrets instructions file. Returns the path when present
+ * (caller should skip the project-level write), `undefined` otherwise.
  */
-export function detectGlobalPromptSecretsInstructions(): boolean {
+export function detectGlobalPromptSecretsInstructions(): string | undefined {
   const globalPath = join(GLOBAL_INSTRUCTIONS_DIR, INSTRUCTIONS_FILENAME);
-  if (!existsSync(globalPath)) return false;
+  if (!existsSync(globalPath)) return undefined;
 
   info(
     `Global prompt-secrets instructions already installed at ${globalPath}. Skipping project-level instructions to avoid duplication.`,
   );
-  return true;
+  return globalPath;
 }
 
 /**

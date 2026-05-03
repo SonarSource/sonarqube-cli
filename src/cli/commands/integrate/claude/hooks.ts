@@ -25,6 +25,7 @@ import * as fsPromises from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 import logger from '../../../../lib/logger';
+import { info, warn } from '../../../../ui';
 import { readOrInitJson, writeHookScript } from '../_common/hooks';
 import {
   getSecretPreToolTemplateUnix,
@@ -131,6 +132,8 @@ async function installHook(params: HookInstallParams): Promise<void> {
 
 /**
  * Result of probing for a Sonar secrets hook installation under a given root.
+ * Internal — surfaced to callers via {@link detectGlobalSecretsHook} (noisy,
+ * for the integrate flow) and {@link areHooksInstalled} (silent, for health).
  *
  *  - `installed`: settings entry references sonar-secrets AND the backing
  *    script directory exists. `hookDir` is the absolute path of that directory.
@@ -140,18 +143,15 @@ async function installHook(params: HookInstallParams): Promise<void> {
  *    surface it to the user.
  *  - `absent`:    no settings entry referencing sonar-secrets.
  */
-export type SecretsHookState =
+type SecretsHookState =
   | { kind: 'installed'; hookDir: string }
   | { kind: 'orphaned'; hookDir: string }
   | { kind: 'absent' };
 
 /**
- * Detect the state of the Sonar secrets hook installation under `hooksRoot`.
- *
- * This is the single source of truth for the install/orphaned/absent contract;
- * boolean and path-only helpers are thin wrappers over this function.
+ * Silent probe — single source of truth for the install/orphaned/absent contract.
  */
-export async function detectSecretsHook(hooksRoot: string): Promise<SecretsHookState> {
+async function probeSecretsHook(hooksRoot: string): Promise<SecretsHookState> {
   const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR.claude, SETTINGS_FILE);
 
   if (!nodeFs.existsSync(settingsPath)) {
@@ -175,9 +175,6 @@ export async function detectSecretsHook(hooksRoot: string): Promise<SecretsHookS
       return { kind: 'absent' };
     }
 
-    // Settings entry references sonar-secrets — verify the backing script directory.
-    // A missing directory means the install was partially deleted; we surface that
-    // as `orphaned` so callers can warn the user instead of silently re-installing.
     const hookDir = join(hooksRoot, AGENT_CONFIG_DIR.claude, HOOKS_DIR, SONAR_SECRETS_MARKER);
     if (!nodeFs.existsSync(hookDir)) {
       return { kind: 'orphaned', hookDir };
@@ -189,13 +186,41 @@ export async function detectSecretsHook(hooksRoot: string): Promise<SecretsHookS
 }
 
 /**
+ * Probe `hooksRoot` for an existing global sonar-secrets hook. Returns the
+ * hook directory when a healthy install is found (caller should skip
+ * project-level secrets hooks), and `undefined` otherwise.
+ *
+ *  - Healthy global install → silent, returns the hook dir.
+ *  - Orphaned install → `warn(...)` and returns `undefined`.
+ *  - No global install → silent, returns `undefined`.
+ *
+ * The "global hook already configured, skipping project-level" info is
+ * announced later by the caller alongside the rest of the install scope.
+ */
+export async function detectGlobalSecretsHook(hooksRoot: string): Promise<string | undefined> {
+  const state = await probeSecretsHook(hooksRoot);
+  if (state.kind === 'installed') {
+    info(
+      `A global secrets scanning hook is already configured for SonarQube at ${state.hookDir}. To avoid duplicate execution, project-level secrets hooks were skipped.`,
+    );
+    return state.hookDir;
+  }
+  if (state.kind === 'orphaned') {
+    warn(
+      `WARNING: Global hook configuration detected, but the source files are missing at ${state.hookDir}. Falling back to local project installation`,
+    );
+  }
+  return undefined;
+}
+
+/**
  * Check whether a Sonar secrets hook is fully installed under `hooksRoot`.
  *
- * Thin boolean wrapper around {@link detectSecretsHook} for callers that only
- * care about presence (e.g. the health check).
+ * Silent — used by health checks where probing must not emit user-facing
+ * messages.
  */
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
-  return (await detectSecretsHook(hooksRoot)).kind === 'installed';
+  return (await probeSecretsHook(hooksRoot)).kind === 'installed';
 }
 
 export interface InstallHooksOptions {

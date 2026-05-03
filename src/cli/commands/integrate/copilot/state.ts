@@ -18,14 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
-
-import { version as VERSION } from '../../../../../package.json';
-import logger from '../../../../lib/logger';
-import { loadState, saveState } from '../../../../lib/repository/state-repository';
-import { markAgentConfigured, upsertAgentExtension } from '../../../../lib/state-manager';
-import { warn } from '../../../../ui';
+import { type AgentExtensionSpec, recordAgentExtensions, withAgentState } from '../_common/state';
 
 const COPILOT_AGENT_ID = 'copilot-cli';
 
@@ -45,58 +38,21 @@ export interface UpdateCopilotStateOptions {
 }
 
 /**
- * Persist the Copilot integration in the CLI state file: mark the agent as
- * configured, register the legacy installed-hook entry, and upsert the
- * agent-extension registry entries for any artifacts that were actually
- * installed in this run.
- *
- * Failures are logged and warned but do not propagate — a state-write failure
- * does not undo the on-disk hook installation.
+ * Persist the Copilot integration in the CLI state file.
  */
-export function updateCopilotState(
+export async function updateCopilotState(
   projectRoot: string,
   isGlobal: boolean,
   { hookInstalled = false, instructionsInstalled = false }: UpdateCopilotStateOptions = {},
-): void {
-  try {
-    const state = loadState();
-
-    markAgentConfigured(state, COPILOT_AGENT_ID, VERSION);
-
-    const effectiveRoot = isGlobal ? homedir() : projectRoot;
-    const now = new Date().toISOString();
-
+): Promise<void> {
+  await withAgentState(COPILOT_AGENT_ID, (state) => {
+    const specs: AgentExtensionSpec[] = [];
     if (hookInstalled) {
-      upsertAgentExtension(state, {
-        id: randomUUID(),
-        kind: 'hook',
-        agentId: COPILOT_AGENT_ID,
-        name: 'sonar-secrets',
-        hookType: 'PreToolUse',
-        projectRoot: effectiveRoot,
-        global: isGlobal,
-        updatedByCliVersion: VERSION,
-        updatedAt: now,
-      });
+      specs.push({ kind: 'hook', name: 'sonar-secrets', hookType: 'PreToolUse' });
     }
-
     if (instructionsInstalled) {
-      upsertAgentExtension(state, {
-        id: randomUUID(),
-        kind: 'instructions',
-        agentId: COPILOT_AGENT_ID,
-        name: 'sonar-prompt-secrets',
-        projectRoot: effectiveRoot,
-        global: isGlobal,
-        updatedByCliVersion: VERSION,
-        updatedAt: now,
-      });
+      specs.push({ kind: 'instructions', name: 'sonar-prompt-secrets' });
     }
-
-    saveState(state);
-  } catch (err) {
-    const msg = (err as Error).message;
-    warn(`Failed to update configuration state: ${msg}`);
-    logger.warn(`Failed to update configuration state: ${msg}`);
-  }
+    recordAgentExtensions(state, COPILOT_AGENT_ID, projectRoot, isGlobal, specs);
+  });
 }

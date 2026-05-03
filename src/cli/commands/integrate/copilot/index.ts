@@ -19,7 +19,7 @@
  */
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
-import { intro, print } from '../../../../ui';
+import { intro, print, success } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { setupMcpServer } from './mcp';
 import { installSecretsBinary } from '../../_common/install/secrets';
@@ -56,12 +56,14 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateCo
   }
   // Detect existing configuration
   const isGlobal = options.global ?? false;
-  // For project-level installs, probe ~/.copilot/hooks for an existing global
-  // sonar-secrets hook so we don't double-scan every file the agent reads.
-  const skipHookInstall = !isGlobal && (await detectGlobalSecretsHook());
-  // Same rationale as the hook: a project-level instructions file would just
-  // duplicate the global one, so skip when the global file is already in place.
-  const skipInstructions = !isGlobal && detectGlobalPromptSecretsInstructions();
+  // For project-level installs, probe ~/.copilot for an existing global
+  // sonar-secrets hook / instructions file so we don't duplicate them.
+  const existingGlobalHookPath = isGlobal ? undefined : await detectGlobalSecretsHook();
+  const skipHookInstall = !!existingGlobalHookPath;
+  const existingGlobalInstructionsPath = isGlobal
+    ? undefined
+    : detectGlobalPromptSecretsInstructions();
+  const skipInstructions = !!existingGlobalInstructionsPath;
 
   // ============
   // Installation
@@ -73,10 +75,40 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateCo
   if (!skipInstructions) {
     await installPromptSecretsInstructions(project.rootDir, isGlobal);
   }
-  updateCopilotState(project.rootDir, isGlobal, {
+  await updateCopilotState(project.rootDir, isGlobal, {
     hookInstalled: !skipHookInstall,
     instructionsInstalled: !skipInstructions,
   });
+  reportInstallationOutcome(isGlobal, existingGlobalHookPath, existingGlobalInstructionsPath);
 
   await setupMcpServer(project, options.global ?? false, options.project || project.projectKey);
+}
+
+/**
+ * Print the scope-aware outcome after installation completes.
+ * Surfaces the existing global hook / instructions paths when project-level
+ * installs were skipped so the user knows where the active files live.
+ */
+function reportInstallationOutcome(
+  isGlobal: boolean,
+  existingGlobalHookPath: string | undefined,
+  existingGlobalInstructionsPath: string | undefined,
+): void {
+  if (existingGlobalHookPath) {
+    success(
+      `Copilot integration configured. Secrets scanning will use the existing global hook at: ${existingGlobalHookPath}`,
+    );
+    return;
+  }
+  if (existingGlobalInstructionsPath) {
+    success(
+      `Copilot integration configured. Prompt secrets instructions will use the existing global file at: ${existingGlobalInstructionsPath}`,
+    );
+    return;
+  }
+  if (isGlobal) {
+    success('Copilot integration successfully configured globally');
+  } else {
+    success('Copilot integration successfully configured at the project level');
+  }
 }
