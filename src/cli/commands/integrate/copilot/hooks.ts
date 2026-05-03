@@ -22,12 +22,14 @@
 // Writes a single OS-specific script and registers it in
 // the Copilot `hooks.json` config.
 
-import { existsSync, mkdirSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { info, success, text, warn } from '../../../../ui';
+import { readOrInitJson, writeHookScript } from '../_common/hooks';
+import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
 
 const SONAR_SECRETS_MARKER = 'sonar-secrets';
 const SCRIPT_REL_DIR = join(SONAR_SECRETS_MARKER, 'build-scripts');
@@ -65,15 +67,9 @@ interface HooksJson {
  *  - No global install → silent, return `false`.
  */
 export async function detectGlobalSecretsHook(): Promise<boolean> {
-  // Read hook.json
   const hooksJsonPath = join(GLOBAL_HOOKS_DIR, HOOKS_JSON);
   if (!existsSync(hooksJsonPath)) return false;
-  let parsed: HooksJson;
-  try {
-    parsed = JSON.parse(await readFile(hooksJsonPath, 'utf-8')) as HooksJson;
-  } catch {
-    return false;
-  }
+  const parsed = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
   const entries = parsed.hooks.preToolUse;
   const matchedEntry = Array.isArray(entries)
     ? entries.find((e) => entryReferencesSonarSecrets(e))
@@ -108,19 +104,17 @@ export async function installPreToolUseHook(projectRoot: string, isGlobal: boole
 
   const hooksDir = isGlobal ? GLOBAL_HOOKS_DIR : join(projectRoot, PROJECT_HOOKS_REL_DIR);
   const isWindows = process.platform === 'win32';
-  const ext = isWindows ? '.ps1' : '.sh';
 
   const scriptDir = join(hooksDir, SCRIPT_REL_DIR);
-  const scriptPath = join(scriptDir, `${SCRIPT_BASENAME}${ext}`);
-  mkdirSync(scriptDir, { recursive: true });
-  await writeFile(
-    scriptPath,
-    isWindows ? buildPowershellScript() : buildBashScript(),
-    isWindows ? undefined : { mode: 0o755 },
+  const scriptPath = await writeHookScript(
+    scriptDir,
+    SCRIPT_BASENAME,
+    getSecretPreToolTemplateUnix(),
+    getSecretPreToolTemplateWindows(),
   );
 
   const hooksJsonPath = join(hooksDir, HOOKS_JSON);
-  const hooksJson = await readOrInitHooksJson(hooksJsonPath);
+  const hooksJson = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
 
   // Project scope uses paths relative to the hooks dir so the config remains
   // portable when the project is moved or shared via version control.
@@ -150,41 +144,8 @@ export async function installPreToolUseHook(projectRoot: string, isGlobal: boole
   success(`Pre-tool-use hook installed (${hooksJsonPath})`);
 }
 
-async function readOrInitHooksJson(path: string): Promise<HooksJson> {
-  if (!existsSync(path)) {
-    return { version: 1, hooks: {} };
-  }
-  try {
-    const parsed = JSON.parse(await readFile(path, 'utf-8')) as HooksJson;
-    return {
-      version: parsed.version,
-      hooks: parsed.hooks,
-    };
-  } catch {
-    return { version: 1, hooks: {} };
-  }
-}
-
 function entryReferencesSonarSecrets(entry: HookCommandEntry): boolean {
   return Boolean(
     entry.bash?.includes(SONAR_SECRETS_MARKER) || entry.powershell?.includes(SONAR_SECRETS_MARKER),
   );
-}
-
-function buildBashScript(): string {
-  return `#!/bin/bash
-if ! command -v sonar &> /dev/null; then
-  exit 0
-fi
-sonar hook copilot-pre-tool-use
-`;
-}
-
-function buildPowershellScript(): string {
-  return `if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
-    exit 0
-}
-$stdinData = [Console]::In.ReadToEnd()
-$stdinData | & sonar hook copilot-pre-tool-use
-`;
 }

@@ -22,10 +22,10 @@
 
 import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import * as nodeOs from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
 import logger from '../../../../lib/logger';
+import { readOrInitJson, writeHookScript } from '../_common/hooks';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
@@ -71,14 +71,6 @@ interface HookInstallParams {
   timeout?: number;
 }
 
-function getPlatform(): 'windows' | 'unix' {
-  return nodeOs.platform() === 'win32' ? 'windows' : 'unix';
-}
-
-function getScriptExtension(): string {
-  return getPlatform() === 'windows' ? '.ps1' : '.sh';
-}
-
 function upsertHookEntry(
   settings: AgentSettings,
   eventType: string,
@@ -108,19 +100,17 @@ async function installHook(params: HookInstallParams): Promise<void> {
     timeout = 60,
   } = params;
 
-  const isWindows = getPlatform() === 'windows';
-  const scriptExt = getScriptExtension();
+  const isWindows = process.platform === 'win32';
   const configDir = AGENT_CONFIG_DIR[agent];
 
-  // Write script file
   const fullScriptDir = join(installDir, configDir, HOOKS_DIR, dirname(scriptPath));
-  nodeFs.mkdirSync(fullScriptDir, { recursive: true });
-  const fullScriptPath = join(fullScriptDir, `${basename(scriptPath)}${scriptExt}`);
-  await fsPromises.writeFile(
-    fullScriptPath,
-    isWindows ? scriptContentWindows : scriptContentUnix,
-    isWindows ? undefined : { mode: 0o755 },
+  const fullScriptPath = await writeHookScript(
+    fullScriptDir,
+    basename(scriptPath),
+    scriptContentUnix,
+    scriptContentWindows,
   );
+  const scriptExt = isWindows ? '.ps1' : '.sh';
 
   // Global: absolute path; project: relative to installDir (portable when project is moved)
   const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${scriptExt}`);
@@ -132,13 +122,8 @@ async function installHook(params: HookInstallParams): Promise<void> {
   // Marker derived from first path segment (e.g. 'sonar-secrets' from 'sonar-secrets/build-scripts/pretool-secrets')
   const marker = scriptPath.split('/')[0];
 
-  // Update settings.json
   const settingsPath = join(installDir, configDir, SETTINGS_FILE);
-  let settings: AgentSettings = { hooks: {} };
-  if (nodeFs.existsSync(settingsPath)) {
-    const data = await fsPromises.readFile(settingsPath, 'utf-8');
-    settings = JSON.parse(data) as AgentSettings;
-  }
+  const settings = await readOrInitJson<AgentSettings>(settingsPath, { hooks: {} });
   settings.hooks ??= {};
   upsertHookEntry(settings, eventType, marker, matcher, command, timeout);
   await fsPromises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');

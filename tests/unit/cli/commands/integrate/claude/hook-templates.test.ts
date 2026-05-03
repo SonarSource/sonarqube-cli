@@ -23,14 +23,16 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  UNIX_SONAR_COMMAND_GUARD,
+  WINDOWS_SONAR_COMMAND_GUARD,
+} from '../../../../../../src/cli/commands/integrate/_common/hooks';
+import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
   getSqaaPostToolTemplateUnix,
   getSqaaPostToolTemplateWindows,
-  UNIX_SONAR_COMMAND_GUARD,
-  WINDOWS_SONAR_COMMAND_GUARD,
 } from '../../../../../../src/cli/commands/integrate/claude/hook-templates';
 
 describe('Secret Scanning Hook Templates', () => {
