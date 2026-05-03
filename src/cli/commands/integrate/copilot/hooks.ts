@@ -54,8 +54,8 @@ interface HooksJson {
 }
 
 /**
- * Probe `~/.copilot/hooks` for an existing global sonar-secrets pre-tool-use
- * hook and emit a user-facing message describing what was found:
+ * Probe `~/.copilot/hooks` for an existing
+ * global sonar-secrets pre-tool-use hook.
  *
  *  - Healthy global install → `info(...)` and return `true` so the caller
  *    skips the project-level install (avoids double-scanning every file).
@@ -65,31 +65,33 @@ interface HooksJson {
  *  - No global install → silent, return `false`.
  */
 export async function detectGlobalSecretsHook(): Promise<boolean> {
+  // Read hook.json
   const hooksJsonPath = join(GLOBAL_HOOKS_DIR, HOOKS_JSON);
-  const hookDir = join(GLOBAL_HOOKS_DIR, SCRIPT_REL_DIR);
-
   if (!existsSync(hooksJsonPath)) return false;
-
   let parsed: HooksJson;
   try {
     parsed = JSON.parse(await readFile(hooksJsonPath, 'utf-8')) as HooksJson;
   } catch {
     return false;
   }
-
   const entries = parsed.hooks.preToolUse;
-  const referenced = Array.isArray(entries) && entries.some((e) => entryReferencesSonarSecrets(e));
-  if (!referenced) return false;
+  const matchedEntry = Array.isArray(entries)
+    ? entries.find((e) => entryReferencesSonarSecrets(e))
+    : undefined;
+  if (!matchedEntry) return false;
 
-  if (!existsSync(hookDir)) {
+  // Check the hook script file referenced by the entry
+  const scriptPath = matchedEntry.bash ?? matchedEntry.powershell;
+  if (!scriptPath || !existsSync(scriptPath)) {
     warn(
-      `Global hook configuration detected at ${hooksJsonPath} but the backing scripts are missing. Falling back to project-level installation.`,
+      `Global hook configuration detected at ${hooksJsonPath} but the backing script is missing. Falling back to project-level installation.`,
     );
     return false;
   }
 
+  // A global hook is already installed
   info(
-    `A global secrets scanning hook is already configured at ${hookDir}. Skipping project-level hook to avoid duplicate execution.`,
+    `A global secrets scanning hook is already configured at ${scriptPath}. Skipping project-level hook to avoid duplicate execution.`,
   );
   return true;
 }

@@ -45,32 +45,34 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateCo
 
   intro('SonarQube integration for Copilot');
 
+  // =========
+  // Discovery
+  // =========
+
+  // Discover project
   const project = await discoverProject(process.cwd());
   for (const configSource of project.configSources) {
     print(`Found ${configSource}`);
   }
-
+  // Detect existing configuration
   const isGlobal = options.global ?? false;
-
   // For project-level installs, probe ~/.copilot/hooks for an existing global
   // sonar-secrets hook so we don't double-scan every file the agent reads.
-  // The detector emits its own user-facing message describing what it found.
   const skipHookInstall = !isGlobal && (await detectGlobalSecretsHook());
-
   // Same rationale as the hook: a project-level instructions file would just
   // duplicate the global one, so skip when the global file is already in place.
   const skipInstructions = !isGlobal && detectGlobalPromptSecretsInstructions();
 
+  // ============
+  // Installation
+  // ============
   await installSecretsBinary();
-
   if (!skipHookInstall) {
     await installPreToolUseHook(project.rootDir, isGlobal);
   }
-
   if (!skipInstructions) {
     await installPromptSecretsInstructions(project.rootDir, isGlobal);
   }
-
   updateCopilotState(project.rootDir, isGlobal, {
     hookInstalled: !skipHookInstall,
     instructionsInstalled: !skipInstructions,

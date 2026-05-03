@@ -24,11 +24,7 @@ import { homedir } from 'node:os';
 import { version as VERSION } from '../../../../../package.json';
 import logger from '../../../../lib/logger';
 import { loadState, saveState } from '../../../../lib/repository/state-repository';
-import {
-  addInstalledHook,
-  markAgentConfigured,
-  upsertAgentExtension,
-} from '../../../../lib/state-manager';
+import { markAgentConfigured, upsertAgentExtension } from '../../../../lib/state-manager';
 import { warn } from '../../../../ui';
 
 const COPILOT_AGENT_ID = 'copilot-cli';
@@ -71,7 +67,6 @@ export function updateCopilotState(
     const now = new Date().toISOString();
 
     if (hookInstalled) {
-      addInstalledHook(state, COPILOT_AGENT_ID, 'sonar-secrets', 'PreToolUse');
       upsertAgentExtension(state, {
         id: randomUUID(),
         kind: 'hook',
