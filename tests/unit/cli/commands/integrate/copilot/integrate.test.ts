@@ -21,7 +21,11 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { InvalidOptionError } from '../../../../../../src/cli/commands/_common/error';
+import * as secrets from '../../../../../../src/cli/commands/_common/install/secrets';
 import { integrateCopilot } from '../../../../../../src/cli/commands/integrate/copilot';
+import * as hooks from '../../../../../../src/cli/commands/integrate/copilot/hooks';
+import * as instructions from '../../../../../../src/cli/commands/integrate/copilot/instructions';
+import * as state from '../../../../../../src/cli/commands/integrate/copilot/state';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
 import * as mcpHelper from '../../../../../../src/lib/mcp/mcp-helper';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
@@ -44,6 +48,12 @@ describe('integrateCopilot', () => {
     setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
       undefined,
     );
+    spyOn(secrets, 'installSecretsBinary').mockResolvedValue('/fake/sonar-secrets');
+    spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(undefined);
+    spyOn(hooks, 'installPreToolUseHook').mockResolvedValue(undefined);
+    spyOn(instructions, 'detectGlobalPromptSecretsInstructions').mockReturnValue(undefined);
+    spyOn(instructions, 'installPromptSecretsInstructions').mockResolvedValue(undefined);
+    spyOn(state, 'updateCopilotState').mockResolvedValue(undefined);
     mockDiscoveredProject({});
   });
 
