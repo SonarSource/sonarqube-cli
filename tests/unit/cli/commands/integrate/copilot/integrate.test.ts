@@ -41,6 +41,12 @@ const SERVER_AUTH: ResolvedAuth = {
 describe('integrateCopilot', () => {
   let discoverProjectSpy: ReturnType<typeof spyOn>;
   let setupMcpServerForAgentSpy: ReturnType<typeof spyOn>;
+  let installSecretsBinarySpy: ReturnType<typeof spyOn>;
+  let detectGlobalSecretsHookSpy: ReturnType<typeof spyOn>;
+  let installPreToolUseHookSpy: ReturnType<typeof spyOn>;
+  let detectGlobalPromptSecretsInstructionsSpy: ReturnType<typeof spyOn>;
+  let installPromptSecretsInstructionsSpy: ReturnType<typeof spyOn>;
+  let updateCopilotStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -54,6 +60,22 @@ describe('integrateCopilot', () => {
     spyOn(instructions, 'detectGlobalPromptSecretsInstructions').mockReturnValue(undefined);
     spyOn(instructions, 'installPromptSecretsInstructions').mockResolvedValue(undefined);
     spyOn(state, 'updateCopilotState').mockResolvedValue(undefined);
+    installSecretsBinarySpy = spyOn(secrets, 'installSecretsBinary').mockResolvedValue(
+      '/fake/sonar-secrets',
+    );
+    detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
+      undefined,
+    );
+    installPreToolUseHookSpy = spyOn(hooks, 'installPreToolUseHook').mockResolvedValue(undefined);
+    detectGlobalPromptSecretsInstructionsSpy = spyOn(
+      instructions,
+      'detectGlobalPromptSecretsInstructions',
+    ).mockReturnValue(undefined);
+    installPromptSecretsInstructionsSpy = spyOn(
+      instructions,
+      'installPromptSecretsInstructions',
+    ).mockResolvedValue(undefined);
+    updateCopilotStateSpy = spyOn(state, 'updateCopilotState').mockResolvedValue(undefined);
     mockDiscoveredProject({});
   });
 
@@ -62,6 +84,12 @@ describe('integrateCopilot', () => {
     setMockUi(false);
     discoverProjectSpy.mockRestore();
     setupMcpServerForAgentSpy.mockRestore();
+    installSecretsBinarySpy.mockRestore();
+    detectGlobalSecretsHookSpy.mockRestore();
+    installPreToolUseHookSpy.mockRestore();
+    detectGlobalPromptSecretsInstructionsSpy.mockRestore();
+    installPromptSecretsInstructionsSpy.mockRestore();
+    updateCopilotStateSpy.mockRestore();
   });
 
   it('calls setupMcpServerForAgent with copilot, discovered rootDir, non-global, and discovered projectKey', async () => {
