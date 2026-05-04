@@ -20,9 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as mcp from '../../../../../../src/cli/commands/integrate/_common/mcp';
 import { integrateCopilot } from '../../../../../../src/cli/commands/integrate/copilot';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
+import * as mcpHelper from '../../../../../../src/lib/mcp/mcp-helper';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
 import { clearMockUiCalls, setMockUi } from '../../../../../../src/ui';
@@ -40,7 +40,9 @@ describe('integrateCopilot', () => {
   beforeEach(() => {
     setMockUi(true);
     discoverProjectSpy = spyOn(discovery, 'discoverProject');
-    setupMcpServerForAgentSpy = spyOn(mcp, 'setupMcpServerForAgent').mockResolvedValue(undefined);
+    setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
+      undefined,
+    );
     mockDiscoveredProject({});
   });
 

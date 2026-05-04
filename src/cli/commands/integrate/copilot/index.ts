@@ -20,7 +20,7 @@
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import { intro, print } from '../../../../ui';
-import { setupMcpServerForAgent } from '../_common/mcp';
+import { setupMcpServer } from './mcp';
 
 /*
  * SonarQube CLI
@@ -57,10 +57,5 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateCo
 
   // TODO setup hooks
 
-  await setupMcpServerForAgent(
-    'copilot',
-    project.rootDir,
-    options.global ?? false,
-    options.project || project.projectKey,
-  );
+  await setupMcpServer(project, options.global ?? false, options.project || project.projectKey);
 }
