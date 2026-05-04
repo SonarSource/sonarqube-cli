@@ -39,11 +39,6 @@ export async function analyzeDependencyRisks(
   }
 
   const format = (options.format ?? 'table').toLowerCase();
-  if (!VALID_FORMATS.includes(format)) {
-    throw new InvalidOptionError(
-      `Invalid format: '${options.format}'. Must be one of: ${VALID_FORMATS.join(', ')}`,
-    );
-  }
 
   const stub = { project: options.project, risks: [] as unknown[] };
   print(
