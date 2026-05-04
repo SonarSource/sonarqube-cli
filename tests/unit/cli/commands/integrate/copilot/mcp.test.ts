@@ -23,9 +23,19 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { setupMcpServerForAgent } from '../../../../../../src/cli/commands/integrate/_common/mcp';
+import { setupMcpServer } from '../../../../../../src/cli/commands/integrate/copilot/mcp';
 import { CLI_COMMAND } from '../../../../../../src/lib/config-constants';
+import { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import { getMockUiCalls, setMockUi } from '../../../../../../src/ui';
+
+const FAKE_PROJECT: DiscoveredProject = {
+  rootDir: '/fake/project',
+  isGitRepo: false,
+  serverUrl: 'https://sonarqube.example.com',
+  organization: 'my-org',
+  projectKey: 'my-project',
+  configSources: [],
+};
 
 describe('setupMcpServerForAgent (copilot)', () => {
   let writeSpy: ReturnType<typeof spyOn>;
@@ -42,7 +52,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
-    await setupMcpServerForAgent('copilot', '/fake/project', true, undefined);
+    await setupMcpServer(FAKE_PROJECT, true, undefined);
 
     const config = (writeSpy.mock.calls[0] as unknown[])[1] as { command: string; args: string[] };
     expect(config.command).toBe(CLI_COMMAND);
@@ -56,7 +66,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
-    await setupMcpServerForAgent('copilot', '/fake/project', true, undefined);
+    await setupMcpServer(FAKE_PROJECT, true, undefined);
 
     const filePath = (writeSpy.mock.calls[0] as unknown[])[0] as string;
     expect(filePath).toBe(join(homedir(), '.copilot', 'mcp-config.json'));
@@ -69,7 +79,7 @@ describe('setupMcpServerForAgent (copilot)', () => {
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
-    await setupMcpServerForAgent('copilot', '/fake/project', false, undefined);
+    await setupMcpServer(FAKE_PROJECT, false, undefined);
 
     const filePath = (writeSpy.mock.calls[0] as unknown[])[0] as string;
     expect(filePath).toBe(join('/fake/project', '.mcp.json'));
@@ -82,25 +92,25 @@ describe('setupMcpServerForAgent (copilot)', () => {
       'writeMcpServerEntry',
     ).mockResolvedValue(undefined);
 
-    await setupMcpServerForAgent('copilot', '/fake/project', false, 'my-project');
+    await setupMcpServer(FAKE_PROJECT, false, 'my-project');
 
     const config = (writeSpy.mock.calls[0] as unknown[])[1] as { args: string[] };
     expect(config.args).toContain('--project');
     expect(config.args).toContain('my-project');
   });
 
-  it('logs an error when writing the MCP entry fails', async () => {
+  it('warns when writing the MCP entry fails', async () => {
     setMockUi(true);
     writeSpy = spyOn(
       await import('../../../../../../src/lib/mcp/mcp-helper'),
       'writeMcpServerEntry',
     ).mockRejectedValue(new Error('disk full'));
 
-    await setupMcpServerForAgent('copilot', '/fake/project', false, undefined);
+    await setupMcpServer(FAKE_PROJECT, false, undefined);
 
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
+    const warns = getMockUiCalls()
+      .filter((c) => c.method === 'warn')
       .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('disk full'))).toBe(true);
+    expect(warns.some((m) => m.includes('disk full'))).toBe(true);
   });
 });
