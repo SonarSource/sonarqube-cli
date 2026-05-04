@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { InvalidOptionError } from '../../../../../../src/cli/commands/_common/error';
 import { integrateCopilot } from '../../../../../../src/cli/commands/integrate/copilot';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
 import * as mcpHelper from '../../../../../../src/lib/mcp/mcp-helper';
@@ -92,16 +93,11 @@ describe('integrateCopilot', () => {
     );
   });
 
-  it('passes isGlobal=true and project override when both --global and --project are set', async () => {
-    mockDiscoveredProject({ rootDir: '/project/root' });
-
-    await integrateCopilot(SERVER_AUTH, { global: true, project: 'my-project' });
-
-    expect(setupMcpServerForAgentSpy).toHaveBeenCalledWith(
-      'copilot',
-      '/project/root',
-      true,
-      'my-project',
+  it('throws InvalidOptionError when both --global and --project are provided', () => {
+    expect(integrateCopilot(SERVER_AUTH, { global: true, project: 'my-project' })).rejects.toThrow(
+      new InvalidOptionError(
+        '--global and --project are mutually exclusive; please specify only one scope.',
+      ),
     );
   });
 

@@ -20,6 +20,7 @@
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import { intro, print } from '../../../../ui';
+import { InvalidOptionError } from '../../_common/error';
 import { setupMcpServer } from './mcp';
 
 /*
@@ -48,6 +49,12 @@ export interface IntegrateCopilotOptions {
 }
 
 export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateCopilotOptions) {
+  if (options.global && options.project) {
+    throw new InvalidOptionError(
+      '--global and --project are mutually exclusive; please specify only one scope.',
+    );
+  }
+
   intro('SonarQube integration for Copilot');
 
   const project = await discoverProject(process.cwd());
