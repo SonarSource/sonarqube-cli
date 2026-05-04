@@ -350,10 +350,7 @@ jobs:
 
       - name: Run unit tests with coverage (Linux)
         if: matrix.os == 'linux'
-        env:
-          SONARQUBE_CLI_DISABLE_SENTRY: '1'
-          COVERAGE_RAW_UNIT_DIR: tests/coverage/reports/raw-unit
-        run: bun test --preload ./tests/coverage/preload-instrumenter.ts ./tests/unit/
+        run: bun run test:coverage:unit
 
       - name: Generate unit lcov from Istanbul data (Linux)
         if: matrix.os == 'linux'

@@ -70,16 +70,16 @@ Before writing a test, find an existing spec for the same command area and follo
 
 Each test creates a fresh `TestHarness` and disposes it in `afterEach`. The harness runs the compiled binary in a fully isolated environment (temp dir, fake keychain, fake servers). For fine-grained state setup beyond `withAuth`, use `harness.state()` builder (see `tests/integration/harness/environment-builder.ts`). For git hook tests, use `initGitRepo` / `stageFile` from `tests/integration/specs/hook/git-test-helpers.ts`.
 
-### Coverage pipeline
+### Coverage
 
-Both unit and integration tests use **Istanbul** (`istanbul-lib-instrument`) for coverage — **not** Bun's native `--coverage` flag.
+To run tests with coverage and produce the LCOV reports consumed by SonarQube, use:
 
-- **Unit**: `tests/coverage/preload-instrumenter.ts` is a Bun preload that instruments every `src/**/*.ts` file via `istanbul-lib-instrument` and writes a unique per-worker `coverage-<timestamp>-<pid>.json` to `COVERAGE_RAW_UNIT_DIR` on exit (each `bun test` worker runs in its own process). The `test:coverage` script sets `COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit`.
-- **Integration**: `build-scripts/build-coverage-binary.ts` builds an instrumented binary; each integration test run writes raw JSON to `tests/coverage/reports/raw/`.
-- **Merge**: `build-scripts/report-coverage.ts` reads both raw dirs (skipping any that are absent or empty) and writes `tests/coverage/reports/unit/lcov.info` and `tests/coverage/reports/integration/lcov.info` via `istanbul-reports`.
-- **Clear**: `build-scripts/clear-coverage-raw.ts` removes both raw dirs (`raw/` and `raw-unit/`) before a fresh run.
+```bash
+bun run test:coverage        # full pipeline: unit + integration + merge
+bun run test:coverage:unit   # unit only (faster, no binary build needed)
+```
 
-Never switch unit tests back to `bun test --coverage`; the inaccurate LCOV will reintroduce false uncovered lines in SonarQube.
+Do **not** use `bun test --coverage` directly — Bun's native LCOV reporter emits spurious entries on non-executable lines (signatures, braces, blank lines) that cause false positives in SonarQube.
 
 ## Documentation
 
