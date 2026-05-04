@@ -43,7 +43,7 @@ import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
-import type { IntegrateAgentOptions } from './commands/integrate/_common/options';
+import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateClaude } from './commands/integrate/claude';
 import { integrateCopilot } from './commands/integrate/copilot';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';

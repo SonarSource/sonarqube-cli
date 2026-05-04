@@ -34,7 +34,7 @@ import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { installSecretsBinary } from '../../_common/install/secrets';
-import type { IntegrateAgentOptions } from '../_common/options';
+import type { IntegrateAgentOptions } from '../_common/types';
 import { runHealthChecks } from './health';
 import { detectGlobalSecretsHook, installHooks } from './hooks';
 import { setupMcpServer } from './mcp';

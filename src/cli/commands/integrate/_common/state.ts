@@ -34,24 +34,28 @@ import { warn } from '../../../../ui';
 
 type ExtensionAttrs = Partial<Pick<BaseAgentExtension, 'projectKey' | 'orgKey' | 'serverUrl'>>;
 
-export type AgentExtensionSpec =
-  | {
-      kind: 'hook';
-      name: string;
-      hookType: HookType;
-      /** Override the projectRoot derived from (projectRoot, isGlobal). Used for SQAA, which is always project-scoped. */
-      projectRoot?: string;
-      /** Override the global flag for the same reason. */
-      global?: boolean;
-      attrs?: ExtensionAttrs;
-    }
-  | {
-      kind: 'instructions';
-      name: string;
-      projectRoot?: string;
-      global?: boolean;
-      attrs?: ExtensionAttrs;
-    };
+export interface HookExtensionSpec {
+  kind: 'hook';
+  hookType: HookType;
+  name: string;
+  /** Override the projectRoot derived from (projectRoot, isGlobal). Used for SQAA, which is always project-scoped. */
+  projectRoot?: string;
+  /** Override the global flag for the same reason. */
+  global?: boolean;
+  attrs?: ExtensionAttrs;
+}
+
+export interface InstructionExtensionSpec {
+  kind: 'instructions';
+  name: string;
+  /** Override the projectRoot derived from (projectRoot, isGlobal). Used for SQAA, which is always project-scoped. */
+  projectRoot?: string;
+  /** Override the global flag for the same reason. */
+  global?: boolean;
+  attrs?: ExtensionAttrs;
+}
+
+export type AgentExtensionSpec = HookExtensionSpec | InstructionExtensionSpec;
 
 /**
  * Upsert a list of agent extensions in `state`. The (projectRoot, isGlobal)
