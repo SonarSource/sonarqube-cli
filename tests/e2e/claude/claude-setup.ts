@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { IS_WINDOWS } from '../../integration/harness';
 
 const CLAUDE_CODE_API_KEY = process.env.CLAUDE_CODE_API_KEY;
+const CLAUDE_INSTALL_TIMEOUT_MS = 60_000;
 
 export interface SetupOptions {
   env: Record<string, string>;
@@ -102,15 +103,17 @@ export class Claude {
   }
 }
 
-function spawnSyncText(command: string[], env: Record<string, string>) {
+function spawnSyncText(command: string[], env: Record<string, string>, timeoutMs: number) {
   const result = Bun.spawnSync(command, {
     env,
+    timeout: timeoutMs,
     stdout: 'pipe',
     stderr: 'pipe',
   });
 
   return {
     exitCode: result.exitCode,
+    timedOut: result.exitedDueToTimeout ?? false,
     stdout: new TextDecoder().decode(result.stdout),
     stderr: new TextDecoder().decode(result.stderr),
   };
@@ -129,8 +132,21 @@ function installClaudeCode(options: SetupOptions): string {
           'irm https://claude.ai/install.ps1 | iex',
         ],
         env,
+        CLAUDE_INSTALL_TIMEOUT_MS,
       )
-    : spawnSyncText(['/bin/bash', '-lc', 'curl -fsSL https://claude.ai/install.sh | bash'], env);
+    : spawnSyncText(
+        ['/bin/bash', '-lc', 'curl -fsSL https://claude.ai/install.sh | bash'],
+        env,
+        CLAUDE_INSTALL_TIMEOUT_MS,
+      );
+
+  if (result.timedOut) {
+    throw new Error(
+      `Claude install timed out after ${CLAUDE_INSTALL_TIMEOUT_MS / 1000}s\nstdout:\n${
+        result.stdout
+      }\nstderr:\n${result.stderr}`,
+    );
+  }
 
   if (result.exitCode !== 0) {
     throw new Error(`Claude install failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);

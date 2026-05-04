@@ -63,18 +63,7 @@ export class TestHarness {
     this.cliHome = this.userHome.dir('.sonar', 'sonarqube-cli');
     this.stateJsonFile = this.cliHome.file('state.json');
     this.keychainJsonFile = join(this.cliHome.path, 'keychain.json');
-    for (const key of [
-      'PATH',
-      'PATHEXT',
-      'HOME',
-      'TMPDIR',
-      'USER',
-      'LOGNAME',
-      'SHELL',
-      'TERM',
-      'SystemRoot',
-      'ComSpec',
-    ]) {
+    for (const key of ['PATH', 'PATHEXT', 'HOME', 'TMPDIR', 'USER', 'LOGNAME', 'SHELL', 'TERM']) {
       const val = process.env[key];
       if (val !== undefined) this.systemEnvVars[key] = val;
     }
@@ -199,16 +188,8 @@ export class TestHarness {
       ? { SONARQUBE_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
       : {};
 
-    const appDataEnv: Record<string, string> = IS_WINDOWS
-      ? {
-          APPDATA: join(this.userHome.path, 'AppData', 'Roaming'),
-          LOCALAPPDATA: join(this.userHome.path, 'AppData', 'Local'),
-        }
-      : {};
-
     return {
       ...this.systemEnvVars,
-      ...appDataEnv,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,

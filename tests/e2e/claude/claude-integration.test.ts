@@ -25,12 +25,14 @@
  * `sonar integrate claude`, then uses real Claude Code to trigger our hooks and check the resulting Claude behavior.
  */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { TestHarness } from '../../integration/harness';
+import { IS_WINDOWS, TestHarness } from '../../integration/harness';
 import { type Claude, isClaudeCodeEnvSetup, setupClaude } from './claude-setup';
 
 setDefaultTimeout(180_000);
@@ -48,21 +50,26 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
   'sonar integrate claude with real Claude Code (e2e)',
   () => {
     let claude: Claude;
-    let harness: TestHarness;
+    let installHome: string;
 
-    beforeAll(async () => {
-      harness = await TestHarness.create();
+    beforeAll(() => {
+      installHome = mkdtempSync(join(tmpdir(), 'sonar-e2e-claude-install-'));
       const extraEnv = {
         DISABLE_AUTOUPDATER: '1',
         SONARQUBE_CLI_DISABLE_SENTRY: '1',
       };
       claude = setupClaude({
-        env: harness.env({ extraEnv }),
+        env: claudeInstallEnv(installHome, extraEnv),
       });
     });
 
     afterAll(async () => {
-      await harness.dispose();
+      await rm(installHome, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 1000,
+      });
     });
 
     testSuite('project hooks');
@@ -165,6 +172,42 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
       expect(login.exitCode, login.stderr).toBe(0);
       expect(integrate.exitCode, integrate.stderr).toBe(0);
       expect(integrate.stdout).toContain('Hooks installed');
+    }
+
+    function claudeInstallEnv(
+      userHome: string,
+      extraEnv: Record<string, string>,
+    ): Record<string, string> {
+      return {
+        ...systemEnv(['PATH', 'PATHEXT', 'SystemRoot', 'ComSpec']),
+        ...windowsAppDataEnv(userHome),
+        ...homeEnv(userHome),
+        ...extraEnv,
+      };
+    }
+
+    function systemEnv(keys: string[]): Record<string, string> {
+      const env: Record<string, string> = {};
+      for (const key of keys) {
+        const value = process.env[key];
+        if (value !== undefined) {
+          env[key] = value;
+        }
+      }
+      return env;
+    }
+
+    function homeEnv(userHome: string): Record<string, string> {
+      return IS_WINDOWS ? { HOME: userHome, USERPROFILE: userHome } : { HOME: userHome };
+    }
+
+    function windowsAppDataEnv(userHome: string): Record<string, string> {
+      return IS_WINDOWS
+        ? {
+            APPDATA: join(userHome, 'AppData', 'Roaming'),
+            LOCALAPPDATA: join(userHome, 'AppData', 'Local'),
+          }
+        : {};
     }
   },
 );

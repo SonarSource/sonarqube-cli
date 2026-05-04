@@ -15,7 +15,7 @@ bun run typecheck         # tsc --noEmit
 bun run test:unit         # All unit tests
 bun run test:integration  # All integration tests, no coverage (local development)
 bun run test:all          # Unit + integration
-bun run test:e2e          # E2E tests (install scripts, Claude Code, requires network)
+bun run test:e2e          # end-to-end tests
 ```
 
 ### Running a single test file
@@ -60,9 +60,9 @@ Please use the exception types defined in `src/cli/commands/_common/error.ts` fo
 
 Follow the structure of existing tests for the command or feature area you are working in.
 
-- Integration tests: `tests/integration/specs/<command>/` — run the compiled binary against fake servers. Use `TestHarness` from `tests/integration/harness/`.
 - Unit tests: `tests/unit/` — use `src/ui/mock.ts` for UI layer, `tests/unit/keychain/keychain-test-handle.ts` for keychain.
-- E2E tests: `tests/e2e/` — real external dependencies that cannot be faked: OS keychain, install scripts with real network, real SonarQube server calls, and integration with external agents (Claude Code, Codex, Cursor, etc.). Claude Code e2e tests under `tests/e2e/claude/` install Claude Code with the native installer and require `CLAUDE_CODE_API_KEY`; they skip when it is not set.
+- Integration tests: `tests/integration/specs/<command>/` — run the compiled binary against fake servers. Use `TestHarness` from `tests/integration/harness/`.
+- E2E tests: `tests/e2e/` — real external dependencies that cannot be faked: OS keychain, install scripts with real network, real SonarQube server calls, and integration with external tools. Those tests are black-box tests and exercise the product from the outside.
 
 Before writing a test, find an existing spec for the same command area and follow its structure.
 
