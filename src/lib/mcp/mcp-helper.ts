@@ -24,6 +24,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '../auth-resolver';
+import { CLI_COMMAND } from '../config-constants';
 import { normalizePath } from '../fs-utils';
 import type { ContainerRuntime } from '../tool-detector';
 
@@ -163,4 +164,19 @@ export function getMcpConfigFilePath(
       : join(projectRoot, '.mcp.json');
   }
   throw new Error(`Unsupported agent: ${agent}`);
+}
+
+export async function setupMcpServerForAgent(
+  agent: 'claude' | 'copilot',
+  projectRoot: string,
+  isGlobal: boolean,
+  projectKey: string | undefined,
+): Promise<void> {
+  const targetFile = getMcpConfigFilePath(agent, isGlobal, projectRoot);
+  const serverConfig = getMcpConfig(
+    CLI_COMMAND,
+    isGlobal ? { withFsMount: false } : { withFsMount: true, projectRoot, projectKey },
+  );
+
+  await writeMcpServerEntry(targetFile, serverConfig);
 }

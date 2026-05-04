@@ -17,36 +17,22 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+import { setupMcpServerForAgent } from '../../../../lib/mcp/mcp-helper';
+import { type DiscoveredProject } from '../../../../lib/project-workspace';
+import { info, success, warn } from '../../../../ui';
 
-import { CLI_COMMAND } from '../../../../lib/config-constants';
-import {
-  getMcpConfig,
-  getMcpConfigFilePath,
-  writeMcpServerEntry,
-} from '../../../../lib/mcp/mcp-helper';
-import { error, info, success } from '../../../../ui';
-
-export async function setupMcpServerForAgent(
-  agent: 'claude' | 'copilot',
-  projectRoot: string,
+export async function setupMcpServer(
+  project: DiscoveredProject,
   isGlobal: boolean,
   projectKey: string | undefined,
 ): Promise<void> {
-  info(`Setting up SonarQube MCP Server for ${agent}...`);
-
-  const targetFile = getMcpConfigFilePath(agent, isGlobal, projectRoot);
-  const serverConfig = getMcpConfig(
-    CLI_COMMAND,
-    isGlobal ? { withFsMount: false } : { withFsMount: true, projectRoot, projectKey },
-  );
-
+  info(`Setting up SonarQube MCP Server...`);
   try {
-    await writeMcpServerEntry(targetFile, serverConfig);
-  } catch (e: unknown) {
-    if (e instanceof Error) {
-      error(`Failed to configure SonarQube MCP Server in ${targetFile}: ${e.message}`);
+    await setupMcpServerForAgent('copilot', project.rootDir, isGlobal, projectKey);
+    success(`SonarQube MCP Server configured`);
+  } catch (error) {
+    if (error instanceof Error) {
+      warn(`Failed to setup MCP server: ${error.message}`);
     }
-    return;
   }
-  success(`SonarQube MCP Server configured in ${targetFile}`);
 }

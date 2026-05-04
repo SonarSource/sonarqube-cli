@@ -24,7 +24,6 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import * as installSecrets from '../../../../../../src/cli/commands/_common/install/secrets';
-import * as mcp from '../../../../../../src/cli/commands/integrate/_common/mcp';
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
 import * as health from '../../../../../../src/cli/commands/integrate/claude/health';
 import { HealthCheckResult } from '../../../../../../src/cli/commands/integrate/claude/health';
@@ -33,6 +32,7 @@ import * as repair from '../../../../../../src/cli/commands/integrate/claude/rep
 import * as state from '../../../../../../src/cli/commands/integrate/claude/state';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
 import * as authResolver from '../../../../../../src/lib/auth-resolver';
+import * as mcpHelper from '../../../../../../src/lib/mcp/mcp-helper';
 import * as migration from '../../../../../../src/lib/migration';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
@@ -92,7 +92,7 @@ describe('integrateCommand', () => {
     Extract<(typeof installSecrets)['resolveSecretsBinary'], (...args: any[]) => any>
   >;
   let setupMcpServerForAgentSpy: Mock<
-    Extract<(typeof mcp)['setupMcpServerForAgent'], (...args: any[]) => any>
+    Extract<(typeof mcpHelper)['setupMcpServerForAgent'], (...args: any[]) => any>
   >;
 
   beforeEach(() => {
@@ -100,7 +100,9 @@ describe('integrateCommand', () => {
 
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
     hasSqaaEntitlementSpy.mockResolvedValue(false);
-    setupMcpServerForAgentSpy = spyOn(mcp, 'setupMcpServerForAgent').mockResolvedValue(undefined);
+    setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
+      undefined,
+    );
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
