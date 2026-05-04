@@ -20,13 +20,12 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { print } from '../../../ui';
-import { InvalidOptionError } from '../_common/error.js';
 
 export const VALID_FORMATS = ['json', 'table'];
 
 export interface AnalyzeDependencyRisksOptions {
-  project?: string;
-  format?: string;
+  project: string;
+  format: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await -- stub; real async work lands in CLI-355/356/352
@@ -34,14 +33,11 @@ export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   _auth: ResolvedAuth,
 ): Promise<void> {
-  if (!options.project) {
-    throw new InvalidOptionError('--project is required');
-  }
-
-  const format = (options.format ?? 'table').toLowerCase();
-
   const stub = { project: options.project, risks: [] as unknown[] };
+
   print(
-    format === 'json' ? JSON.stringify(stub, null, 2) : `Project: ${options.project}\n(no risks)`,
+    options.format === 'json'
+      ? JSON.stringify(stub, null, 2)
+      : `Project: ${options.project}\n(no risks)`,
   );
 }
