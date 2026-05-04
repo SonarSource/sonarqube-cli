@@ -30,10 +30,13 @@
 //     (no `hookSpecificOutput` wrapper)
 //   - Outputs nothing when the file is clean, tool is not `view`, or args/file are missing
 
+import { chmodSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { TestHarness } from '../../harness';
 
 // sonar-ignore-next-line S6769
@@ -217,5 +220,30 @@ describe('sonar hook copilot-pre-tool-use', () => {
       expect(result.stdout).not.toContain('hookSpecificOutput');
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'exits 0 and emits no deny when the binary spawn fails mid-scan',
+    async () => {
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      const filePath = join(harness.cwd.path, 'secret.js');
+
+      // Place a non-executable file at the binary path so spawnProcess throws EACCES.
+      // This exercises the catch block in copilotPreToolUse: the hook contract requires
+      // exit 0 and no deny output when the binary itself errors (killed mid-scan, OOM, etc.).
+      const binaryName = buildLocalBinaryName(detectPlatform());
+      harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
+      chmodSync(harness.cliHome.file('bin', binaryName).path, 0o644);
+
+      const result = await harness.run('hook copilot-pre-tool-use', {
+        stdin: viewPayload(filePath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('"deny"');
+      expect(result.stdout).not.toContain('"permissionDecision"');
+    },
+    { timeout: 15000 },
   );
 });

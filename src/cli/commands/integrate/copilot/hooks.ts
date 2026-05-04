@@ -48,7 +48,8 @@ interface HookCommandEntry {
 
 interface HooksJson {
   version: number;
-  hooks: {
+  hooks?: {
+    // Optional because a user-authored hooks.json may be a bare `{}` with no top-level `hooks` key
     preToolUse?: HookCommandEntry[];
     [eventType: string]: HookCommandEntry[] | undefined;
   };
@@ -69,7 +70,7 @@ export async function detectGlobalSecretsHook(): Promise<string | undefined> {
   const hooksJsonPath = join(GLOBAL_HOOKS_DIR, HOOKS_JSON);
   if (!existsSync(hooksJsonPath)) return undefined;
   const parsed = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
-  const entries = parsed.hooks.preToolUse;
+  const entries = parsed.hooks?.preToolUse;
   const matchedEntry = Array.isArray(entries)
     ? entries.find((e) => entryReferencesSonarSecrets(e))
     : undefined;
@@ -112,6 +113,7 @@ export async function installPreToolUseHook(projectRoot: string, isGlobal: boole
 
   const hooksJsonPath = join(hooksDir, HOOKS_JSON);
   const hooksJson = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
+  hooksJson.hooks ??= {};
 
   // Project scope uses paths relative to the project root so the config remains
   // portable when the project is moved or shared via version control. Copilot
