@@ -21,7 +21,6 @@ import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import { intro, print, success } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
-import { setupMcpServer } from './mcp';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import type { IntegrateAgentOptions } from '../_common/options';
 import { detectGlobalSecretsHook, installPreToolUseHook } from './hooks';
@@ -29,6 +28,7 @@ import {
   detectGlobalPromptSecretsInstructions,
   installPromptSecretsInstructions,
 } from './instructions';
+import { setupMcpServer } from './mcp';
 import { updateCopilotState } from './state';
 
 export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAgentOptions) {
@@ -75,7 +75,7 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
     instructionsInstalled: !skipInstructions,
   });
 
-  await setupMcpServer(project, options.global ?? false, options.project || project.projectKey);
+  await setupMcpServer(project, isGlobal, options.project || project.projectKey);
 
   reportInstallationOutcome(isGlobal, existingGlobalHookPath, existingGlobalInstructionsPath);
 }
@@ -94,12 +94,13 @@ function reportInstallationOutcome(
     success(
       `Copilot integration configured. Secrets scanning will use the existing global hook at: ${existingGlobalHookPath}`,
     );
-    return;
   }
   if (existingGlobalInstructionsPath) {
     success(
       `Copilot integration configured. Prompt secrets instructions will use the existing global file at: ${existingGlobalInstructionsPath}`,
     );
+  }
+  if (existingGlobalHookPath || existingGlobalInstructionsPath) {
     return;
   }
   if (isGlobal) {
