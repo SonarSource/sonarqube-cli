@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Interactive prompts — text input, confirmation, press-to-continue
+// Interactive prompts - text input, confirmation, press-to-continue
 
 import { ConfirmPrompt, isCancel, Prompt, SelectPrompt, TextPrompt } from '@clack/core';
 
@@ -50,7 +50,7 @@ export async function textPrompt(message: string): Promise<string | null> {
 
   const result = await prompt.prompt();
   if (isCancel(result)) return null;
-  return result!;
+  return result ?? null;
 }
 
 /**
@@ -78,7 +78,7 @@ export async function confirmPrompt(message: string): Promise<boolean | null> {
 
   const result = await prompt.prompt();
   if (isCancel(result)) return null;
-  return result!;
+  return result ?? null;
 }
 
 export interface SelectOption<T> {
@@ -184,7 +184,7 @@ export async function multiSelectPrompt<T>(
         const atCap = selected.length >= MULTISELECT_MAX_SELECTED;
         const hint = atCap
           ? dim(
-              `(${MULTISELECT_MAX_SELECTED}/${MULTISELECT_MAX_SELECTED} — deselect to choose others)`,
+              `(${MULTISELECT_MAX_SELECTED}/${MULTISELECT_MAX_SELECTED} - deselect to choose others)`,
             )
           : dim('(Space to toggle, Enter to confirm, q to quit)');
 

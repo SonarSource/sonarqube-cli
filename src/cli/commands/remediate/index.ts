@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Remediate command — triggers AI agent remediation for eligible issues
+// Remediate command - triggers AI agent remediation for eligible issues
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { discoverProject } from '../../../lib/project-workspace';
@@ -36,6 +36,9 @@ export interface RemediateOptions {
 
 const SEVERITY_ORDER = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'] as const;
 
+const AI_REMEDIATION_DOCS_URL =
+  'https://docs.sonarsource.com/sonarqube-cloud/administering-sonarcloud/ai-features/sonarqube-remediation-agent';
+
 const SEVERITY_COLORS: Record<string, (s: string) => string> = {
   BLOCKER: red,
   CRITICAL: red,
@@ -47,8 +50,28 @@ const SEVERITY_COLORS: Record<string, (s: string) => string> = {
 export async function remediate(options: RemediateOptions, auth: ResolvedAuth): Promise<void> {
   if (auth.connectionType !== 'cloud') {
     throw new CommandFailedError(
-      'sonar remediate requires SonarCloud — AI remediation is not supported on SonarQube Server.',
+      'sonar remediate requires SonarQube Cloud - The Remediation Agent is not supported on SonarQube Server.',
     );
+  }
+
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+
+  if (!auth.orgKey) {
+    throw new CommandFailedError('Cannot verify the Remediation Agent entitlements.');
+  }
+  const { status: entitlement, orgName } = await client.checkAiRemediationEntitlement(auth.orgKey);
+  const displayOrg = orgName ?? auth.orgKey;
+  if (entitlement === 'not_eligible') {
+    print(`The Remediation Agent is not available for your organization (${displayOrg}).`);
+    print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
+    blank();
+    throw new CommandFailedError('The Remediation Agent is not available for this organization.');
+  }
+  if (entitlement === 'not_enabled') {
+    print(`The Remediation Agent is not enabled for your organization (${displayOrg}).`);
+    print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
+    blank();
+    throw new CommandFailedError('The Remediation Agent is not available for this organization.');
   }
 
   let projectKey = options.project;
@@ -62,7 +85,6 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     );
   }
 
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const issuesClient = new IssuesClient(client);
 
   // Step 1: Fetch eligible issues
@@ -118,7 +140,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     });
     taskId = response.taskId;
   } catch (err) {
-    const lines = mapErrorMessage((err as Error).message, auth.orgKey, auth.serverUrl);
+    const lines = mapErrorMessage((err as Error).message, displayOrg);
     print(`  failed: ${lines[0]}`);
     for (let i = 1; i < lines.length; i++) {
       print(`    ${lines[i]}`);
@@ -166,26 +188,19 @@ function formatIssueLabel(issue: SonarQubeIssue, projectKey: string): string {
     issue.message.length > maxDescriptionLength
       ? `${issue.message.slice(0, maxDescriptionLength - elispsisLength)}...`
       : issue.message;
-  return `${severity}  ${rule}  ${path} — ${msg}`;
+  return `${severity}  ${rule}  ${path} - ${msg}`;
 }
 
-function mapErrorMessage(raw: string, orgKey: string | undefined, serverUrl: string): string[] {
+function mapErrorMessage(raw: string, displayOrg: string): string[] {
   if (raw.includes('Organization does not have allowance for AI agent jobs')) {
-    const lines = ['Your organization plan does not include AI remediation.'];
-    if (orgKey) {
-      const billingUrl = `${serverUrl}/organizations/${orgKey}/billing`;
-      lines.push(`Upgrade your plan: ${billingUrl}`);
-    }
-    return lines;
+    return [
+      `Your organization plan does not include the Remediation Agent (${displayOrg}).`,
+      `Learn more: ${AI_REMEDIATION_DOCS_URL}`,
+    ];
   }
 
-  const lines = ['AI remediation is not enabled for this organization.'];
-  if (orgKey) {
-    const aiCapabilitiesUrl = `${serverUrl}/organization/${orgKey}/ai_capabilities`;
-    lines.push(`Ask an admin to set it up: ${aiCapabilitiesUrl}`);
-  }
-  lines.push(
-    `If already enabled, your token may lack access — run \`sonar auth login\` to re-authenticate.`,
-  );
-  return lines;
+  return [
+    `The Remediation Agent is not enabled for your organization (${displayOrg}).`,
+    `Learn more: ${AI_REMEDIATION_DOCS_URL}`,
+  ];
 }

@@ -49,7 +49,7 @@ describe('sonar remediate', () => {
       const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('requires SonarCloud');
+      expect(result.stdout + result.stderr).toContain('requires SonarQube Cloud');
     },
     { timeout: 15000 },
   );
@@ -61,6 +61,56 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('sonar auth login');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 and shows not-available message when org is not eligible for AI remediation',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT, (p) => {
+          p.withIssue({ ruleKey: 'java:S100', message: 'Fixable issue', fixableByAgent: true });
+        })
+        .withOrgEntitlement(false, false)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('The Remediation Agent is not available for your organization');
+      expect(output).toContain(TEST_ORG);
+      expect(output).toContain('docs.sonarsource.com');
+      expect(output).not.toContain('Which issues');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 and shows not-enabled message when delegate issues is disabled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT, (p) => {
+          p.withIssue({ ruleKey: 'java:S100', message: 'Fixable issue', fixableByAgent: true });
+        })
+        .withOrgEntitlement(true, false)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('The Remediation Agent is not enabled for your organization');
+      expect(output).toContain(TEST_ORG);
+      expect(output).toContain('docs.sonarsource.com');
+      expect(output).not.toContain('Which issues');
     },
     { timeout: 15000 },
   );
@@ -247,8 +297,8 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('organization plan does not include');
-      expect(output).toContain(`/organizations/${TEST_ORG}/billing`);
+      expect(output).toContain('organization plan does not include the Remediation Agent');
+      expect(output).toContain('docs.sonarsource.com');
     },
     { timeout: 15000 },
   );
@@ -276,9 +326,8 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('not enabled for this organization');
-      expect(output).toContain(`/organization/${TEST_ORG}/ai_capabilities`);
-      expect(output).toContain('sonar auth login');
+      expect(output).toContain('The Remediation Agent is not enabled for your organization');
+      expect(output).toContain('docs.sonarsource.com');
     },
     { timeout: 15000 },
   );
@@ -389,7 +438,7 @@ describe('sonar remediate', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      // Space selects the first item in the list — must be the BLOCKER after sorting
+      // Space selects the first item in the list - must be the BLOCKER after sorting
       await harness.run(`remediate --project ${TEST_PROJECT}`, {
         stdinChunks: [' ', '\r'],
       });

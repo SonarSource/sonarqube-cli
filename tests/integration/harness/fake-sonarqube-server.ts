@@ -126,6 +126,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
+  private remediationAgentEntitlement = { eligible: true, delegateIssuesEnabled: true };
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -173,6 +174,11 @@ export class FakeSonarQubeServerBuilder {
   withAgentJobError(statusCode: number, message: string): this {
     this.agentJobErrorCode = statusCode;
     this.agentJobErrorMessage = message;
+    return this;
+  }
+
+  withOrgEntitlement(eligible: boolean, delegateIssuesEnabled: boolean): this {
+    this.remediationAgentEntitlement = { eligible, delegateIssuesEnabled };
     return this;
   }
 
@@ -227,6 +233,7 @@ export class FakeSonarQubeServerBuilder {
       projectSettings,
       agentJobErrorCode,
       agentJobErrorMessage,
+      remediationAgentEntitlement,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -417,15 +424,28 @@ export class FakeSonarQubeServerBuilder {
         if (path === '/organizations/organizations') {
           const orgKey = query.organizationKey;
           const entitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
-          if (!entitlement) {
-            return new Response(JSON.stringify([]), {
-              headers: { 'Content-Type': 'application/json' },
-            });
+          if (entitlement) {
+            return new Response(
+              JSON.stringify([
+                { id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey, name: orgKey },
+              ]),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
           }
-          return new Response(
-            JSON.stringify([{ id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey }]),
-            { headers: { 'Content-Type': 'application/json' } },
-          );
+          if (orgKey) {
+            // Default: return a valid org so the AI remediation pre-flight passes in tests
+            // that don't configure SQAA entitlement. SQAA checks still return false because
+            // /a3s-analysis/org-config/{uuid} returns 404 for unconfigured orgs.
+            return new Response(
+              JSON.stringify([
+                { id: orgKey, uuidV4: `${orgKey}-uuid-v4`, key: orgKey, name: orgKey },
+              ]),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(JSON.stringify([]), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/settings/values' && req.method === 'GET') {
@@ -527,6 +547,18 @@ export class FakeSonarQubeServerBuilder {
               id: `sqaa-analysis-${Date.now()}`,
               issues,
               errors: sqaaResponse.errors ?? null,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path.startsWith('/fix-suggestions/organization-configs/')) {
+          return new Response(
+            JSON.stringify({
+              codeReviewAgent: {
+                organizationEligible: remediationAgentEntitlement.eligible,
+                delegateIssuesEnabled: remediationAgentEntitlement.delegateIssuesEnabled,
+              },
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

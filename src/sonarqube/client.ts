@@ -323,6 +323,33 @@ export class SonarQubeClient {
     return this.checkSqaaEntitlement(uuid);
   }
 
+  async checkAiRemediationEntitlement(
+    orgKey: string,
+  ): Promise<{ status: 'not_eligible' | 'not_enabled' | 'ok'; orgName?: string }> {
+    try {
+      const orgsEndpoint = '/organizations/organizations';
+      const orgs = await this.get<Array<{ id: string; uuidV4: string; name?: string }>>(
+        orgsEndpoint,
+        { organizationKey: orgKey, excludeEligibility: 'true' },
+        resolveFromEndpoint(this.serverURL, orgsEndpoint),
+      );
+      const org = orgs[0];
+      if (!org.id) return { status: 'not_eligible' };
+
+      const configEndpoint = `/fix-suggestions/organization-configs/${org.id}`;
+      const config = await this.get<{
+        codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
+      }>(configEndpoint, undefined, resolveFromEndpoint(this.serverURL, configEndpoint));
+
+      const orgName = org.name;
+      if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible', orgName };
+      if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled', orgName };
+      return { status: 'ok', orgName };
+    } catch {
+      return { status: 'ok' };
+    }
+  }
+
   async listUserOrganizations(): Promise<{
     organizations: Array<{ key: string; name: string }>;
     total: number;
@@ -373,7 +400,7 @@ export class SonarQubeClient {
   /**
    * Return the legacy alphanumeric ID for a project component key.
    * The external AI agents API expects this ID (not the human-readable key) as `projectId`.
-   * Uses /api/navigation/component — same endpoint the web UI uses; `id` is always present there.
+   * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.
    */
   async getComponentId(componentKey: string): Promise<string | null> {
     try {
@@ -421,7 +448,7 @@ export class SonarQubeClient {
 
   /**
    * Schedule an AI agent remediation job for a set of issues.
-   * SonarQube Cloud only — endpoint lives on the region-specific API host.
+   * SonarQube Cloud only - endpoint lives on the region-specific API host.
    */
   async scheduleAgentJob(request: AgentJobRequest): Promise<AgentJobResponse> {
     const endpoint = '/fix-suggestions/ai-agent-scheduled-jobs';
@@ -434,7 +461,7 @@ export class SonarQubeClient {
 
   /**
    * Run server-side SonarQube Agentic Analysis on a single file.
-   * SonarQube Cloud only — endpoint lives on the region-specific API host.
+   * SonarQube Cloud only - endpoint lives on the region-specific API host.
    */
   async analyzeFile(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
     const endpoint = '/a3s-analysis/analyses';
