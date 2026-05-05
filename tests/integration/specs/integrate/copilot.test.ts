@@ -307,6 +307,32 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'prints a project-level outcome message with the written hook and instructions paths',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(
+          'Copilot integration successfully configured at the project level',
+        );
+        const hookLine = result.stdout.split('\n').find((line) => line.startsWith('Hook:'));
+        expect(hookLine).toBeDefined();
+        expect(hookLine).toContain('sonar-secrets');
+        expect(hookLine).toContain('pretool-secrets');
+        const instructionsLine = result.stdout
+          .split('\n')
+          .find((line) => line.startsWith('Instructions:'));
+        expect(instructionsLine).toBeDefined();
+        expect(instructionsLine).toContain('sonarqube.instructions.md');
+        expect(normalizePath(instructionsLine ?? '')).toContain('.github/instructions');
+      },
+      { timeout: 30000 },
+    );
   });
 
   // ─── Global install (-g) ────────────────────────────────────────────────────
@@ -419,6 +445,33 @@ describe('integrate copilot', () => {
         expect(body).toContain('# SonarQube prompt-secrets protocol');
         expect(result.stdout).not.toContain(
           'Global prompt-secrets instructions already installed at',
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'prints a global outcome message with the written hook and instructions paths under ~/.copilot/',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+
+        const result = await harness.run('integrate copilot -g');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Copilot integration successfully configured globally');
+        const homePathNorm = normalizePath(harness.userHome.path);
+        const hookLine = result.stdout.split('\n').find((line) => line.startsWith('Hook:'));
+        expect(hookLine).toBeDefined();
+        expect(normalizePath(hookLine ?? '')).toContain(
+          `${homePathNorm}/.copilot/hooks/sonar-secrets`,
+        );
+        const instructionsLine = result.stdout
+          .split('\n')
+          .find((line) => line.startsWith('Instructions:'));
+        expect(instructionsLine).toBeDefined();
+        expect(normalizePath(instructionsLine ?? '')).toContain(
+          `${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`,
         );
       },
       { timeout: 30000 },
@@ -600,11 +653,38 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'surfaces the pre-existing global instructions path on the outcome Instructions line',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        harness.userHome.writeFile(
+          '.copilot/instructions/sonarqube.instructions.md',
+          '# pre-existing global instructions\n',
+        );
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        const homePathNorm = normalizePath(harness.userHome.path);
+        const instructionsLine = result.stdout
+          .split('\n')
+          .find((line) => line.startsWith('Instructions:'));
+        expect(instructionsLine).toBeDefined();
+        // Outcome surfaces the existing global path, not a project path.
+        expect(normalizePath(instructionsLine ?? '')).toContain(
+          `${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`,
+        );
+        expect(normalizePath(instructionsLine ?? '')).not.toContain('.github/instructions');
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe('project-level install when both global hook and global instructions already exist', () => {
     it(
-      'skips both project-level writes and records neither extension in state',
+      'skips both project-level writes, records neither extension, and surfaces both global paths in the outcome message',
       async () => {
         const server = await harness.newFakeServer().withAuthToken('tok').start();
         harness.withAuth(server.baseUrl(), 'tok');
@@ -627,8 +707,43 @@ describe('integrate copilot', () => {
         expect(
           exts.find((e) => e.kind === 'instructions' && e.name === 'sonar-prompt-secrets'),
         ).toBeUndefined();
+
+        // Outcome line surfaces the pre-existing global paths (not project paths).
+        const homePathNorm = normalizePath(harness.userHome.path);
+        const hookLine = result.stdout.split('\n').find((line) => line.startsWith('Hook:'));
+        expect(hookLine).toBeDefined();
+        expect(normalizePath(hookLine ?? '')).toContain(
+          `${homePathNorm}/.copilot/hooks/sonar-secrets`,
+        );
+        const instructionsLine = result.stdout
+          .split('\n')
+          .find((line) => line.startsWith('Instructions:'));
+        expect(instructionsLine).toBeDefined();
+        expect(normalizePath(instructionsLine ?? '')).toContain(
+          `${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`,
+        );
       },
       { timeout: 30000 },
+    );
+  });
+
+  // ─── Option validation ──────────────────────────────────────────────────────
+
+  describe('option validation', () => {
+    it(
+      'exits with code 1 when both --global and --project are provided',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+
+        const result = await harness.run('integrate copilot --global --project foo');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain(
+          '--global and --project are mutually exclusive',
+        );
+      },
+      { timeout: 15000 },
     );
   });
 
