@@ -575,6 +575,36 @@ describe('integrate copilot', () => {
     );
   });
 
+  describe('project-level install when both global hook and global instructions already exist', () => {
+    it(
+      'skips both project-level writes and records neither extension in state',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        writeExistingGlobalHook();
+        harness.userHome.writeFile(
+          '.copilot/instructions/sonarqube.instructions.md',
+          '# pre-existing global instructions\n',
+        );
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists('.github', 'hooks')).toBe(false);
+        expect(harness.cwd.exists('.github', 'instructions')).toBe(false);
+
+        const state = harness.stateJsonFile.asJson();
+        expect(state.agents?.['copilot-cli']?.configured).toBe(true);
+        const exts = (state.agentExtensions ?? []) as Array<{ kind: string; name: string }>;
+        expect(exts.find((e) => e.kind === 'hook' && e.name === 'sonar-secrets')).toBeUndefined();
+        expect(
+          exts.find((e) => e.kind === 'instructions' && e.name === 'sonar-prompt-secrets'),
+        ).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+  });
+
   // ─── Auth gate ──────────────────────────────────────────────────────────────
 
   describe('auth gate', () => {
