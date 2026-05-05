@@ -21,6 +21,7 @@
 // Remediate command - triggers AI agent remediation for eligible issues
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import logger from '../../../lib/logger';
 import { discoverProject } from '../../../lib/project-workspace';
 import type { SonarQubeIssue } from '../../../lib/types';
 import { SonarQubeClient } from '../../../sonarqube/client';
@@ -126,21 +127,22 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   }
 
   // Step 4: Resolve the project's legacy ID (component.id) required by the AI agent API
-  const projectId = (await client.getComponentId(projectKey)) ?? projectKey;
+  const resolvedId = await client.getComponentId(projectKey);
+  logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
+  const projectId = resolvedId ?? projectKey;
 
   // Step 5: Submit one job with all selected issue keys
   blank();
   print(`Submitting 1 remediation job...`);
 
+  const jobRequest = { projectId, issueKeys: selectedKeys, triggerSource: 'CLI' as const };
+  logger.debug(`scheduleAgentJob request: ${JSON.stringify(jobRequest)}`);
   let taskId: string;
   try {
-    const response = await client.scheduleAgentJob({
-      projectId,
-      issueKeys: selectedKeys,
-      triggerSource: 'CLI',
-    });
+    const response = await client.scheduleAgentJob(jobRequest);
     taskId = response.taskId;
   } catch (err) {
+    logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
     const lines = mapErrorMessage((err as Error).message, displayOrg);
     print(`  failed: ${lines[0]}`);
     for (let i = 1; i < lines.length; i++) {
