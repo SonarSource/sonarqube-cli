@@ -21,7 +21,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { InvalidOptionError } from '../../../../../../src/cli/commands/_common/error';
-import * as secrets from '../../../../../../src/cli/commands/_common/install/secrets';
 import { integrateCopilot } from '../../../../../../src/cli/commands/integrate/copilot';
 import * as hooks from '../../../../../../src/cli/commands/integrate/copilot/hooks';
 import * as instructions from '../../../../../../src/cli/commands/integrate/copilot/instructions';
@@ -38,20 +37,33 @@ const SERVER_AUTH: ResolvedAuth = {
   connectionType: 'on-premise',
 };
 
+const DEFAULT_HOOK_PATH = '/fake/hook';
+const DEFAULT_INSTRUCTIONS_PATH = '/fake/instructions';
+
 function getSuccessMessages(): string[] {
   return getMockUiCalls()
     .filter((call) => call.method === 'success')
     .map((call) => call.args[0] as string);
 }
 
+/**
+ * The reportInstallationOutcome message is the multi-line success() that
+ * starts with "Copilot integration successfully configured". It is one of two
+ * success messages emitted (the other one is from setupMcpServer).
+ */
+function getOutcomeMessage(): string {
+  const messages = getSuccessMessages().filter((m) =>
+    m.startsWith('Copilot integration successfully configured'),
+  );
+  expect(messages).toHaveLength(1);
+  return messages[0];
+}
+
 describe('integrateCopilot', () => {
   let discoverProjectSpy: ReturnType<typeof spyOn>;
   let setupMcpServerForAgentSpy: ReturnType<typeof spyOn>;
-  let installSecretsBinarySpy: ReturnType<typeof spyOn>;
-  let detectGlobalSecretsHookSpy: ReturnType<typeof spyOn>;
-  let installPreToolUseHookSpy: ReturnType<typeof spyOn>;
-  let detectGlobalPromptSecretsInstructionsSpy: ReturnType<typeof spyOn>;
-  let installPromptSecretsInstructionsSpy: ReturnType<typeof spyOn>;
+  let installHooksSpy: ReturnType<typeof spyOn>;
+  let installInstructionsSpy: ReturnType<typeof spyOn>;
   let updateCopilotStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
@@ -60,27 +72,14 @@ describe('integrateCopilot', () => {
     setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
       undefined,
     );
-    spyOn(secrets, 'installSecretsBinary').mockResolvedValue('/fake/sonar-secrets');
-    spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(undefined);
-    spyOn(hooks, 'installPreToolUseHook').mockResolvedValue(undefined);
-    spyOn(instructions, 'detectGlobalPromptSecretsInstructions').mockReturnValue(undefined);
-    spyOn(instructions, 'installPromptSecretsInstructions').mockResolvedValue(undefined);
-    spyOn(state, 'updateCopilotState').mockResolvedValue(undefined);
-    installSecretsBinarySpy = spyOn(secrets, 'installSecretsBinary').mockResolvedValue(
-      '/fake/sonar-secrets',
-    );
-    detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
-      undefined,
-    );
-    installPreToolUseHookSpy = spyOn(hooks, 'installPreToolUseHook').mockResolvedValue(undefined);
-    detectGlobalPromptSecretsInstructionsSpy = spyOn(
-      instructions,
-      'detectGlobalPromptSecretsInstructions',
-    ).mockReturnValue(undefined);
-    installPromptSecretsInstructionsSpy = spyOn(
-      instructions,
-      'installPromptSecretsInstructions',
-    ).mockResolvedValue(undefined);
+    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue({
+      hookPath: DEFAULT_HOOK_PATH,
+      hookInstalled: true,
+    });
+    installInstructionsSpy = spyOn(instructions, 'installInstructions').mockResolvedValue({
+      instructionsPath: DEFAULT_INSTRUCTIONS_PATH,
+      instructionsInstalled: true,
+    });
     updateCopilotStateSpy = spyOn(state, 'updateCopilotState').mockResolvedValue(undefined);
     mockDiscoveredProject({});
   });
@@ -90,11 +89,8 @@ describe('integrateCopilot', () => {
     setMockUi(false);
     discoverProjectSpy.mockRestore();
     setupMcpServerForAgentSpy.mockRestore();
-    installSecretsBinarySpy.mockRestore();
-    detectGlobalSecretsHookSpy.mockRestore();
-    installPreToolUseHookSpy.mockRestore();
-    detectGlobalPromptSecretsInstructionsSpy.mockRestore();
-    installPromptSecretsInstructionsSpy.mockRestore();
+    installHooksSpy.mockRestore();
+    installInstructionsSpy.mockRestore();
     updateCopilotStateSpy.mockRestore();
   });
 
@@ -159,58 +155,77 @@ describe('integrateCopilot', () => {
   });
 
   describe('reportInstallationOutcome', () => {
-    it('reports a fresh project-level install when no global hook or instructions exist', async () => {
+    it('reports a fresh project-level install with the returned hook and instructions paths', async () => {
       mockDiscoveredProject({ rootDir: '/project/root' });
 
       await integrateCopilot(SERVER_AUTH, {});
 
-      expect(getSuccessMessages()).toContain(
-        'Copilot integration successfully configured at the project level',
-      );
+      const message = getOutcomeMessage();
+      expect(message).toContain('configured at the project level');
+      expect(message).toContain(`Hook: ${DEFAULT_HOOK_PATH}`);
+      expect(message).toContain(`Instructions: ${DEFAULT_INSTRUCTIONS_PATH}`);
+      expect(updateCopilotStateSpy).toHaveBeenCalledWith('/project/root', false, {
+        hookInstalled: true,
+        instructionsInstalled: true,
+      });
     });
 
-    it('reports a fresh global install when --global is set and nothing pre-exists', async () => {
+    it('reports a fresh global install with the returned paths when --global is set', async () => {
       mockDiscoveredProject({ rootDir: '/project/root' });
 
       await integrateCopilot(SERVER_AUTH, { global: true });
 
-      expect(getSuccessMessages()).toContain(
-        'Copilot integration successfully configured globally',
-      );
+      const message = getOutcomeMessage();
+      expect(message).toContain('configured globally');
+      expect(message).toContain(`Hook: ${DEFAULT_HOOK_PATH}`);
+      expect(message).toContain(`Instructions: ${DEFAULT_INSTRUCTIONS_PATH}`);
     });
 
     it('surfaces the existing global instructions path when only instructions are pre-installed', async () => {
+      const existingGlobalInstructions =
+        '/home/user/.copilot/instructions/sonarqube.instructions.md';
       mockDiscoveredProject({ rootDir: '/project/root' });
-      detectGlobalPromptSecretsInstructionsSpy.mockReturnValue(
-        '/home/user/.copilot/instructions/sonarqube.instructions.md',
-      );
+      installInstructionsSpy.mockResolvedValue({
+        instructionsPath: existingGlobalInstructions,
+        instructionsInstalled: false,
+      });
 
       await integrateCopilot(SERVER_AUTH, {});
 
-      expect(getSuccessMessages()).toContain(
-        'Copilot integration configured. Prompt secrets instructions will use the existing global file at: /home/user/.copilot/instructions/sonarqube.instructions.md',
-      );
-      expect(installPromptSecretsInstructionsSpy).not.toHaveBeenCalled();
+      const message = getOutcomeMessage();
+      expect(message).toContain('configured at the project level');
+      expect(message).toContain(`Hook: ${DEFAULT_HOOK_PATH}`);
+      expect(message).toContain(`Instructions: ${existingGlobalInstructions}`);
+      expect(updateCopilotStateSpy).toHaveBeenCalledWith('/project/root', false, {
+        hookInstalled: true,
+        instructionsInstalled: false,
+      });
     });
 
     it('surfaces both the existing global hook and instructions paths when both pre-exist', async () => {
+      const existingGlobalHook =
+        '/home/user/.copilot/hooks/sonar-secrets/build-scripts/pretool-secrets.sh';
+      const existingGlobalInstructions =
+        '/home/user/.copilot/instructions/sonarqube.instructions.md';
       mockDiscoveredProject({ rootDir: '/project/root' });
-      detectGlobalSecretsHookSpy.mockResolvedValue('/home/user/.copilot/hooks/hooks.json');
-      detectGlobalPromptSecretsInstructionsSpy.mockReturnValue(
-        '/home/user/.copilot/instructions/sonarqube.instructions.md',
-      );
+      installHooksSpy.mockResolvedValue({
+        hookPath: existingGlobalHook,
+        hookInstalled: false,
+      });
+      installInstructionsSpy.mockResolvedValue({
+        instructionsPath: existingGlobalInstructions,
+        instructionsInstalled: false,
+      });
 
       await integrateCopilot(SERVER_AUTH, {});
 
-      const messages = getSuccessMessages();
-      expect(messages).toContain(
-        'Copilot integration configured. Secrets scanning will use the existing global hook at: /home/user/.copilot/hooks/hooks.json',
-      );
-      expect(messages).toContain(
-        'Copilot integration configured. Prompt secrets instructions will use the existing global file at: /home/user/.copilot/instructions/sonarqube.instructions.md',
-      );
-      expect(installPreToolUseHookSpy).not.toHaveBeenCalled();
-      expect(installPromptSecretsInstructionsSpy).not.toHaveBeenCalled();
+      const message = getOutcomeMessage();
+      expect(message).toContain(`Hook: ${existingGlobalHook}`);
+      expect(message).toContain(`Instructions: ${existingGlobalInstructions}`);
+      expect(updateCopilotStateSpy).toHaveBeenCalledWith('/project/root', false, {
+        hookInstalled: false,
+        instructionsInstalled: false,
+      });
     });
   });
 

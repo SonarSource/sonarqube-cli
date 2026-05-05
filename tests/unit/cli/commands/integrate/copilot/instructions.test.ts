@@ -26,59 +26,31 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  detectGlobalPromptSecretsInstructions,
-  installPromptSecretsInstructions,
-} from '../../../../../../src/cli/commands/integrate/copilot/instructions';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
+import { installInstructions } from '../../../../../../src/cli/commands/integrate/copilot/instructions';
+import { clearMockUiCalls, findMockUiCall, setMockUi } from '../../../../../../src/ui';
 
 const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
 const GLOBAL_PATH = join(homedir(), '.copilot', 'instructions', INSTRUCTIONS_FILENAME);
+const PROJECT_REL = join('.github', 'instructions', INSTRUCTIONS_FILENAME);
 
-describe('detectGlobalPromptSecretsInstructions', () => {
-  let existsSyncSpy: ReturnType<typeof spyOn>;
+/**
+ * Run `fn` while `nodeFs.existsSync` reports the global instructions file as
+ * present (`true`) or absent (`false`). The spy is restored before `fn`'s
+ * return value is yielded, so any post-call assertion sees the real fs.
+ */
+async function withGlobalInstructionsExisting<T>(
+  exists: boolean,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const spy = spyOn(nodeFs, 'existsSync').mockReturnValue(exists);
+  try {
+    return await fn();
+  } finally {
+    spy.mockRestore();
+  }
+}
 
-  beforeEach(() => {
-    setMockUi(true);
-  });
-
-  afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
-    existsSyncSpy?.mockRestore();
-  });
-
-  it('returns undefined and stays silent when the global instructions file does not exist', () => {
-    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockImplementation(
-      (p: nodeFs.PathLike) => String(p) !== GLOBAL_PATH,
-    );
-
-    const result = detectGlobalPromptSecretsInstructions();
-
-    expect(result).toBeUndefined();
-    const noisy = getMockUiCalls().filter((c) => c.method === 'info');
-    expect(noisy).toHaveLength(0);
-  });
-
-  it('returns the path and emits info(...) when the global instructions file exists', () => {
-    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockImplementation(
-      (p: nodeFs.PathLike) => String(p) === GLOBAL_PATH,
-    );
-
-    const result = detectGlobalPromptSecretsInstructions();
-
-    expect(result).toBe(GLOBAL_PATH);
-    const infoCall = getMockUiCalls().find(
-      (c) =>
-        c.method === 'info' &&
-        (c.args[0] as string).includes('Global prompt-secrets instructions already installed at') &&
-        (c.args[0] as string).includes('Skipping project-level instructions to avoid duplication'),
-    );
-    expect(infoCall).toBeDefined();
-  });
-});
-
-describe('installPromptSecretsInstructions', () => {
+describe('installInstructions', () => {
   let projectRoot: string;
 
   beforeEach(() => {
@@ -92,43 +64,71 @@ describe('installPromptSecretsInstructions', () => {
     rmSync(projectRoot, { recursive: true, force: true });
   });
 
-  it('project scope: writes the file, creates the dir, and body contains the protocol heading', async () => {
-    await installPromptSecretsInstructions(projectRoot, false);
+  describe('project scope', () => {
+    it('performs project-level install when no global file exists, returning the project path', async () => {
+      const result = await withGlobalInstructionsExisting(false, () =>
+        installInstructions(projectRoot, false),
+      );
 
-    const filePath = join(projectRoot, '.github', 'instructions', INSTRUCTIONS_FILENAME);
-    expect(nodeFs.existsSync(filePath)).toBe(true);
-    expect(statSync(filePath).isFile()).toBe(true);
-    expect(statSync(join(projectRoot, '.github', 'instructions')).isDirectory()).toBe(true);
-    const body = readFileSync(filePath, 'utf-8');
-    expect(body).toContain('# SonarQube prompt-secrets protocol');
-    expect(body).toContain('API keys and access tokens');
-    expect(body).toContain('do not proceed');
-    expect(body).toContain('rotate the leaked credential');
+      const expectedPath = join(projectRoot, PROJECT_REL);
+      expect(result).toEqual({ instructionsPath: expectedPath, instructionsInstalled: true });
+      expect(statSync(expectedPath).isFile()).toBe(true);
+      const body = readFileSync(expectedPath, 'utf-8');
+      expect(body).toContain('# SonarQube prompt-secrets protocol');
+      expect(body).toContain('API keys and access tokens');
+    });
+
+    it('skips project install and returns the global path when a global file exists', async () => {
+      const result = await withGlobalInstructionsExisting(true, () =>
+        installInstructions(projectRoot, false),
+      );
+
+      expect(result).toEqual({ instructionsPath: GLOBAL_PATH, instructionsInstalled: false });
+      expect(nodeFs.existsSync(join(projectRoot, PROJECT_REL))).toBe(false);
+      expect(
+        findMockUiCall('info', 'Global prompt-secrets instructions already installed at'),
+      ).toBeDefined();
+    });
   });
 
-  it('global scope: writes the file to ~/.copilot/instructions/ and creates the dir recursively', async () => {
-    // Spy out fs calls to avoid polluting the real homedir.
-    const mkdirSpy = spyOn(nodeFs, 'mkdirSync').mockReturnValue(undefined);
-    const writeFileSpy = spyOn(fsPromises, 'writeFile').mockResolvedValue(undefined);
+  // The global-scope tests would write under the real `~/.copilot/instructions`
+  // dir; spy `mkdirSync`/`writeFile` at the describe level to swallow those
+  // writes.
+  describe('global scope', () => {
+    let mkdirSpy: ReturnType<typeof spyOn>;
+    let writeFileSpy: ReturnType<typeof spyOn>;
 
-    try {
-      await installPromptSecretsInstructions('/unused/project', true);
+    beforeEach(() => {
+      mkdirSpy = spyOn(nodeFs, 'mkdirSync').mockReturnValue(undefined);
+      writeFileSpy = spyOn(fsPromises, 'writeFile').mockResolvedValue(undefined);
+    });
 
-      const writeCall = (writeFileSpy.mock.calls as Array<[string, unknown, unknown]>).find(([p]) =>
-        p.endsWith(INSTRUCTIONS_FILENAME),
-      );
-      expect(writeCall).toBeDefined();
-      expect(writeCall?.[0]).toBe(GLOBAL_PATH);
-
-      const expectedDir = join(homedir(), '.copilot', 'instructions');
-      const dirCall = (mkdirSpy.mock.calls as Array<[string, unknown]>).find(
-        ([p]) => p === expectedDir,
-      );
-      expect(dirCall).toBeDefined();
-      expect(dirCall?.[1]).toEqual({ recursive: true });
-    } finally {
+    afterEach(() => {
       mkdirSpy.mockRestore();
       writeFileSpy.mockRestore();
-    }
+    });
+
+    it('performs a global install when no global file exists yet', async () => {
+      const result = await withGlobalInstructionsExisting(false, () =>
+        installInstructions('/unused/project', true),
+      );
+
+      expect(result).toEqual({ instructionsPath: GLOBAL_PATH, instructionsInstalled: true });
+      expect(mkdirSpy).toHaveBeenCalledWith(join(homedir(), '.copilot', 'instructions'), {
+        recursive: true,
+      });
+      expect(writeFileSpy).toHaveBeenCalledWith(GLOBAL_PATH, expect.any(String), 'utf-8');
+    });
+
+    it('short-circuits the existing-global detection (re-installs without "already installed" notice)', async () => {
+      const result = await withGlobalInstructionsExisting(true, () =>
+        installInstructions('/unused/project', true),
+      );
+
+      expect(result).toEqual({ instructionsPath: GLOBAL_PATH, instructionsInstalled: true });
+      expect(
+        findMockUiCall('info', 'Global prompt-secrets instructions already installed at'),
+      ).toBeUndefined();
+    });
   });
 });

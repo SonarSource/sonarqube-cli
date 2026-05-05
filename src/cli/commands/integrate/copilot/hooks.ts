@@ -28,8 +28,14 @@ import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { info, success, text, warn } from '../../../../ui';
+import { installSecretsBinary } from '../../_common/install/secrets';
 import { readOrInitJson, SONAR_SECRETS_MARKER, writeHookScript } from '../_common/hooks';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
+
+export interface HookInstallResult {
+  hookPath: string;
+  hookInstalled: boolean;
+}
 
 const SCRIPT_REL_DIR = join(SONAR_SECRETS_MARKER, 'build-scripts');
 const SCRIPT_BASENAME = 'pretool-secrets';
@@ -66,7 +72,7 @@ interface HooksJson {
  *    script is missing) → `warn(...)` and return `undefined`.
  *  - No global install → silent, return `undefined`.
  */
-export async function detectGlobalSecretsHook(): Promise<string | undefined> {
+async function detectGlobalSecretsHook(): Promise<string | undefined> {
   const hooksJsonPath = join(GLOBAL_HOOKS_DIR, HOOKS_JSON);
   if (!existsSync(hooksJsonPath)) return undefined;
   const parsed = await readOrInitJson<HooksJson>(hooksJsonPath, { version: 1, hooks: {} });
@@ -97,7 +103,7 @@ export async function detectGlobalSecretsHook(): Promise<string | undefined> {
  *
  * Emits user-facing progress messages directly.
  */
-export async function installPreToolUseHook(projectRoot: string, isGlobal: boolean): Promise<void> {
+async function installPreToolUseHook(projectRoot: string, isGlobal: boolean): Promise<string> {
   text('Installing pre-tool-use secrets hook...');
 
   const hooksDir = isGlobal ? GLOBAL_HOOKS_DIR : join(projectRoot, PROJECT_HOOKS_REL_DIR);
@@ -144,6 +150,22 @@ export async function installPreToolUseHook(projectRoot: string, isGlobal: boole
   await writeFile(hooksJsonPath, JSON.stringify(hooksJson, null, 2) + '\n', 'utf-8');
 
   success(`Pre-tool-use hook installed (${hooksJsonPath})`);
+  return scriptPath;
+}
+
+export async function installHooks(
+  projectRoot: string,
+  isGlobal: boolean,
+): Promise<HookInstallResult> {
+  await installSecretsBinary();
+  if (!isGlobal) {
+    const existingGlobalHookPath = await detectGlobalSecretsHook();
+    if (existingGlobalHookPath) {
+      return { hookPath: existingGlobalHookPath, hookInstalled: false };
+    }
+  }
+  const hookPath = await installPreToolUseHook(projectRoot, isGlobal);
+  return { hookPath, hookInstalled: true };
 }
 
 function entryReferencesSonarSecrets(entry: HookCommandEntry): boolean {

@@ -31,6 +31,11 @@ import { join } from 'node:path';
 
 import { info, success, text } from '../../../../ui';
 
+export interface InstructionsInstallResult {
+  instructionsPath: string;
+  instructionsInstalled: boolean;
+}
+
 const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
 const PROJECT_INSTRUCTIONS_REL_DIR = join('.github', 'instructions');
 const GLOBAL_INSTRUCTIONS_DIR = join(homedir(), '.copilot', 'instructions');
@@ -40,7 +45,7 @@ const GLOBAL_INSTRUCTIONS_DIR = join(homedir(), '.copilot', 'instructions');
  * global prompt-secrets instructions file. Returns the path when present
  * (caller should skip the project-level write), `undefined` otherwise.
  */
-export function detectGlobalPromptSecretsInstructions(): string | undefined {
+function detectGlobalPromptSecretsInstructions(): string | undefined {
   const globalPath = join(GLOBAL_INSTRUCTIONS_DIR, INSTRUCTIONS_FILENAME);
   if (!existsSync(globalPath)) return undefined;
 
@@ -53,10 +58,10 @@ export function detectGlobalPromptSecretsInstructions(): string | undefined {
 /**
  * Write the prompt-secrets instructions file for the requested scope.
  */
-export async function installPromptSecretsInstructions(
+async function installPromptSecretsInstructions(
   projectRoot: string,
   isGlobal: boolean,
-): Promise<void> {
+): Promise<string> {
   text('Installing prompt-secrets instructions...');
 
   const dir = isGlobal ? GLOBAL_INSTRUCTIONS_DIR : join(projectRoot, PROJECT_INSTRUCTIONS_REL_DIR);
@@ -66,6 +71,21 @@ export async function installPromptSecretsInstructions(
   await writeFile(filePath, buildInstructionsBody(), 'utf-8');
 
   success(`Prompt-secrets instructions installed (${filePath})`);
+  return filePath;
+}
+
+export async function installInstructions(
+  projectRoot: string,
+  isGlobal: boolean,
+): Promise<InstructionsInstallResult> {
+  if (!isGlobal) {
+    const existingGlobalInstructionsPath = detectGlobalPromptSecretsInstructions();
+    if (existingGlobalInstructionsPath) {
+      return { instructionsPath: existingGlobalInstructionsPath, instructionsInstalled: false };
+    }
+  }
+  const instructionsPath = await installPromptSecretsInstructions(projectRoot, isGlobal);
+  return { instructionsPath, instructionsInstalled: true };
 }
 
 function buildInstructionsBody(): string {
