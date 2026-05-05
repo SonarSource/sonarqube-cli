@@ -22,6 +22,14 @@
 // before the agent reads them. Output schema differs from the Claude one
 // (`permissionDecision`/`permissionDecisionReason` vs `decision`/`reason`),
 // so this handler cannot be reused across agents.
+//
+// Behaviour contract (differs from the Claude hook):
+//   - Always exits 0 (hook must never crash Copilot CLI)
+//   - Stdin payload is { toolName: "view", toolArgs: "<JSON-encoded string>" }
+//     (camelCase; toolArgs is a stringified JSON, not a nested object)
+//   - Outputs {"permissionDecision":"deny","permissionDecisionReason":"..."} on a hit
+//     (no `hookSpecificOutput` wrapper)
+//   - Outputs nothing when the file is clean, tool is not `view`, or args/file are missing
 
 import { existsSync } from 'node:fs';
 
