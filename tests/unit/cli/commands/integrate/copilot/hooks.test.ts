@@ -269,6 +269,26 @@ describe('installPreToolUseHook', () => {
     expect(otherEntry).toBeDefined();
   });
 
+  it('handles a pre-existing hooks.json that lacks a top-level `hooks` key', async () => {
+    // Exercises the `hooksJson.hooks ??= {}` guard: readOrInitJson returns the
+    // parsed object as-is when the file is valid JSON, so a bare `{"version":1}`
+    // leaves `hooks` undefined and the install must initialise it.
+    const hooksDir = join(projectRoot, '.github', 'hooks');
+    nodeFs.mkdirSync(hooksDir, { recursive: true });
+    nodeFs.writeFileSync(join(hooksDir, 'hooks.json'), JSON.stringify({ version: 1 }));
+
+    await installPreToolUseHook(projectRoot, false);
+
+    const json = JSON.parse(
+      readFileSync(join(hooksDir, 'hooks.json'), 'utf-8'),
+    ) as CopilotHooksJson;
+    expect(json.version).toBe(1);
+    expect(json.hooks.preToolUse).toHaveLength(1);
+    const entry = json.hooks.preToolUse?.[0];
+    expect(entry?.[HOOK_FIELD]).toBeDefined();
+    expect(entry?.[HOOK_FIELD]?.includes('sonar-secrets')).toBe(true);
+  });
+
   it('global scope: writes a hooks.json entry with an absolute path under ~/.copilot/hooks/', async () => {
     // Spy out fs calls to avoid polluting the real homedir.
     const mkdirSpy = spyOn(nodeFs, 'mkdirSync').mockReturnValue(undefined);
