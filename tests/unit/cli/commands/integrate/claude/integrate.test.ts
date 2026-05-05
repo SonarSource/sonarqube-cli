@@ -493,9 +493,7 @@ describe('integrateCommand', () => {
 
     beforeEach(() => {
       // detectGlobalSecretsHook returns the hook directory path when a healthy
-      // global install is found. The user-facing info(...) message is emitted
-      // inside detectGlobalSecretsHook itself (see hooks.test.ts), so it does
-      // not fire here because the spy mocks the function away.
+      // global install is found.
       detectGlobalSecretsHookSpy.mockResolvedValue(GLOBAL_HOOK_PATH);
     });
 
