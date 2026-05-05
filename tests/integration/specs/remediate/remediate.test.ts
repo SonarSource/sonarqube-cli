@@ -239,10 +239,12 @@ describe('sonar remediate', () => {
       const body = JSON.parse(agentJobCalls[0].body ?? '{}') as {
         projectId: string;
         issueKeys: string[];
+        triggerSource: string;
       };
       // projectId must be the legacy component ID returned by /api/navigation/component
       expect(body.projectId).toBe(`AY${TEST_PROJECT}legacy`);
       expect(body.issueKeys).toEqual(['ISSUE-42']);
+      expect(body.triggerSource).toBe('CLI');
     },
     { timeout: 15000 },
   );

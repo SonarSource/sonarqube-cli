@@ -483,6 +483,7 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
 export interface AgentJobRequest {
   projectId: string;
   issueKeys: string[];
+  triggerSource: 'CLI';
 }
 
 export interface AgentJobResponse {

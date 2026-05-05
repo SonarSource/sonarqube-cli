@@ -137,6 +137,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     const response = await client.scheduleAgentJob({
       projectId,
       issueKeys: selectedKeys,
+      triggerSource: 'CLI',
     });
     taskId = response.taskId;
   } catch (err) {
