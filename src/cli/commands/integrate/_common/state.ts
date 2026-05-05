@@ -34,7 +34,7 @@ import { warn } from '../../../../ui';
 
 type ExtensionAttrs = Partial<Pick<BaseAgentExtension, 'projectKey' | 'orgKey' | 'serverUrl'>>;
 
-export interface HookExtensionSpec {
+export interface HookExtension {
   kind: 'hook';
   hookType: HookType;
   name: string;
@@ -45,7 +45,7 @@ export interface HookExtensionSpec {
   attrs?: ExtensionAttrs;
 }
 
-export interface InstructionExtensionSpec {
+export interface InstructionExtension {
   kind: 'instructions';
   name: string;
   /** Override the projectRoot derived from (projectRoot, isGlobal). Used for SQAA, which is always project-scoped. */
@@ -55,11 +55,11 @@ export interface InstructionExtensionSpec {
   attrs?: ExtensionAttrs;
 }
 
-export type AgentExtensionSpec = HookExtensionSpec | InstructionExtensionSpec;
+export type AgentExtension = HookExtension | InstructionExtension;
 
 /**
  * Upsert a list of agent extensions in `state`. The (projectRoot, isGlobal)
- * pair sets the default scope; individual specs may override it (SQAA is
+ * pair sets the default scope; individual extensions may override it (SQAA is
  * always project-scoped even for a global Claude install).
  */
 export function recordAgentExtensions(
@@ -67,32 +67,32 @@ export function recordAgentExtensions(
   agentId: string,
   projectRoot: string,
   isGlobal: boolean,
-  specs: AgentExtensionSpec[],
+  extensions: AgentExtension[],
 ): void {
   const effectiveRoot = isGlobal ? homedir() : projectRoot;
   const now = new Date().toISOString();
-  for (const spec of specs) {
+  for (const extension of extensions) {
     const base: BaseAgentExtension = {
       id: randomUUID(),
       agentId,
-      projectRoot: spec.projectRoot ?? effectiveRoot,
-      global: spec.global ?? isGlobal,
+      projectRoot: extension.projectRoot ?? effectiveRoot,
+      global: extension.global ?? isGlobal,
       updatedByCliVersion: VERSION,
       updatedAt: now,
-      ...spec.attrs,
+      ...extension.attrs,
     };
-    if (spec.kind === 'hook') {
+    if (extension.kind === 'hook') {
       upsertAgentExtension(state, {
         ...base,
         kind: 'hook',
-        name: spec.name,
-        hookType: spec.hookType,
+        name: extension.name,
+        hookType: extension.hookType,
       });
     } else {
       upsertAgentExtension(state, {
         ...base,
         kind: 'instructions',
-        name: spec.name,
+        name: extension.name,
       });
     }
   }

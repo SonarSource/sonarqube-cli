@@ -21,7 +21,7 @@
 import { cloudRegionFromUrl, isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { deleteStaleTokens } from '../../../../lib/keychain';
 import { addInstalledHook, addOrUpdateConnection } from '../../../../lib/state-manager';
-import { type AgentExtensionSpec, recordAgentExtensions, withAgentState } from '../_common/state';
+import { type AgentExtension, recordAgentExtensions, withAgentState } from '../_common/state';
 import type { ConfigurationData } from './index';
 
 const CLAUDE_AGENT_ID = 'claude-code';
@@ -64,16 +64,16 @@ export async function updateStateAfterConfiguration(
       serverUrl: config.serverURL,
     };
 
-    const specs: AgentExtensionSpec[] = [];
+    const extensions: AgentExtension[] = [];
     if (!skipSecretsHooks) {
-      specs.push(
+      extensions.push(
         { kind: 'hook', name: 'sonar-secrets', hookType: 'PreToolUse', attrs },
         { kind: 'hook', name: 'sonar-secrets', hookType: 'UserPromptSubmit', attrs },
       );
     }
     // SQAA is always project-scoped, even on a global Claude install.
     if (sqaaEnabled) {
-      specs.push({
+      extensions.push({
         kind: 'hook',
         name: 'sonar-sqaa',
         hookType: 'PostToolUse',
@@ -82,7 +82,7 @@ export async function updateStateAfterConfiguration(
         attrs,
       });
     }
-    recordAgentExtensions(state, CLAUDE_AGENT_ID, projectRoot, isGlobal, specs);
+    recordAgentExtensions(state, CLAUDE_AGENT_ID, projectRoot, isGlobal, extensions);
 
     // Save connection so `sonar auth status` reports the active connection
     const isCloud = isSonarQubeCloud(config.serverURL);

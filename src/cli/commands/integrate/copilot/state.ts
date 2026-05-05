@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type AgentExtensionSpec, recordAgentExtensions, withAgentState } from '../_common/state';
+import { type AgentExtension, recordAgentExtensions, withAgentState } from '../_common/state';
 
 const COPILOT_AGENT_ID = 'copilot-cli';
 
@@ -46,13 +46,13 @@ export async function updateCopilotState(
   { hookInstalled = false, instructionsInstalled = false }: UpdateCopilotStateOptions = {},
 ): Promise<void> {
   await withAgentState(COPILOT_AGENT_ID, (state) => {
-    const specs: AgentExtensionSpec[] = [];
+    const extensions: AgentExtension[] = [];
     if (hookInstalled) {
-      specs.push({ kind: 'hook', name: 'sonar-secrets', hookType: 'PreToolUse' });
+      extensions.push({ kind: 'hook', name: 'sonar-secrets', hookType: 'PreToolUse' });
     }
     if (instructionsInstalled) {
-      specs.push({ kind: 'instructions', name: 'sonar-prompt-secrets' });
+      extensions.push({ kind: 'instructions', name: 'sonar-prompt-secrets' });
     }
-    recordAgentExtensions(state, COPILOT_AGENT_ID, projectRoot, isGlobal, specs);
+    recordAgentExtensions(state, COPILOT_AGENT_ID, projectRoot, isGlobal, extensions);
   });
 }
