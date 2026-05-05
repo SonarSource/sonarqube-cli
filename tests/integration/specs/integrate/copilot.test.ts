@@ -257,6 +257,56 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'preserves unrelated preToolUse entries in a pre-existing project hooks.json',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+
+        const unrelatedEntry: CopilotHookEntry = { type: 'command', timeoutSec: 30 };
+        unrelatedEntry[HOOK_FIELD] = '/other/tool/run.sh';
+        harness.cwd.writeFile(
+          '.github/hooks/hooks.json',
+          JSON.stringify({ version: 1, hooks: { preToolUse: [unrelatedEntry] } }),
+        );
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        const json: CopilotHooksJson = harness.cwd.file('.github', 'hooks', 'hooks.json').asJson();
+        const entries = json.hooks.preToolUse ?? [];
+        expect(entries).toHaveLength(2);
+        const unrelated = entries.find((e) => (e[HOOK_FIELD] ?? '').includes('/other/tool/'));
+        const sonar = entries.find((e) => (e[HOOK_FIELD] ?? '').includes('sonar-secrets'));
+        expect(unrelated).toBeDefined();
+        expect(sonar).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'initialises the hooks key when a pre-existing hooks.json lacks it',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+
+        // Bare hooks.json with no top-level `hooks` key. The install must
+        // initialise `hooks` (via `hooksJson.hooks ??= {}`) without crashing
+        // and without dropping the existing `version` field.
+        harness.cwd.writeFile('.github/hooks/hooks.json', JSON.stringify({ version: 1 }));
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        const json: CopilotHooksJson = harness.cwd.file('.github', 'hooks', 'hooks.json').asJson();
+        expect(json.version).toBe(1);
+        const entries = json.hooks.preToolUse ?? [];
+        expect(entries).toHaveLength(1);
+        expect(entries[0][HOOK_FIELD] ?? '').toContain('sonar-secrets');
+      },
+      { timeout: 30000 },
+    );
   });
 
   // ─── Global install (-g) ────────────────────────────────────────────────────
@@ -445,6 +495,44 @@ describe('integrate copilot', () => {
           'Falling back to project-level installation',
         );
         expect(harness.cwd.exists('.github', 'hooks', 'hooks.json')).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'performs a project-level install when global hooks.json has only an unrelated preToolUse entry',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+
+        // The marker check matches sonar-secrets entries by path substring;
+        // an unrelated tool's entry must not short-circuit our install.
+        const unrelatedEntry: CopilotHookEntry = { type: 'command', timeoutSec: 30 };
+        unrelatedEntry[HOOK_FIELD] = '/some/other-tool/script.sh';
+        const globalJson: CopilotHooksJson = {
+          version: 1,
+          hooks: { preToolUse: [unrelatedEntry] },
+        };
+        harness.userHome.writeFile('.copilot/hooks/hooks.json', JSON.stringify(globalJson));
+        const before = harness.userHome.file('.copilot', 'hooks', 'hooks.json').asText();
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        // Project install proceeded.
+        expect(harness.cwd.exists('.github', 'hooks', 'hooks.json')).toBe(true);
+        const projectJson: CopilotHooksJson = harness.cwd
+          .file('.github', 'hooks', 'hooks.json')
+          .asJson();
+        const projectEntries = projectJson.hooks.preToolUse ?? [];
+        expect(projectEntries.some((e) => (e[HOOK_FIELD] ?? '').includes('sonar-secrets'))).toBe(
+          true,
+        );
+        // No "already configured" notice was emitted.
+        expect(result.stdout).not.toContain('A global secrets scanning hook is already configured');
+        // Global hooks.json was not touched.
+        const after = harness.userHome.file('.copilot', 'hooks', 'hooks.json').asText();
+        expect(after).toBe(before);
       },
       { timeout: 30000 },
     );
