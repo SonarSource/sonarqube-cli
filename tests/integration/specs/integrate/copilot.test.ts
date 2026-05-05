@@ -396,6 +396,33 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'overwrites pre-existing global instructions and does not print the already-installed notice',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('tok').start();
+        harness.withAuth(server.baseUrl(), 'tok');
+        // Seed a sentinel file at the global instructions path. The
+        // existing-global short-circuit applies only to project scope, so a
+        // global re-install must overwrite the file with real content.
+        harness.userHome.writeFile(
+          '.copilot/instructions/sonarqube.instructions.md',
+          '# pre-existing\n',
+        );
+
+        const result = await harness.run('integrate copilot -g');
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.userHome
+          .file('.copilot', 'instructions', 'sonarqube.instructions.md')
+          .asText();
+        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(result.stdout).not.toContain(
+          'Global prompt-secrets instructions already installed at',
+        );
+      },
+      { timeout: 30000 },
+    );
   });
 
   // ─── Skip-on-existing-global ────────────────────────────────────────────────
