@@ -55,7 +55,7 @@ export async function integrateClaude(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  intro(`SonarQube Integration Setup for Claude`);
+  intro(`SonarQube Integration Setup for Claude Code`);
 
   blank();
   text('Phase 1/3: Discovery & Validation');
@@ -210,14 +210,14 @@ function reportHookInstallationOutcome(
 ): void {
   if (existingGlobalHookPath) {
     success(
-      `Claude integration configured. Secrets scanning will use the existing global hook at: ${existingGlobalHookPath}`,
+      `Claude Code integration configured. Secrets scanning will use the existing global hook at: ${existingGlobalHookPath}`,
     );
     return;
   }
   if (isGlobal) {
-    success('Claude integration successfully configured globally');
+    success('Claude Code integration successfully configured globally');
   } else {
-    success('Claude integration successfully configured at the project level');
+    success('Claude Code integration successfully configured at the project level');
   }
 }
 
