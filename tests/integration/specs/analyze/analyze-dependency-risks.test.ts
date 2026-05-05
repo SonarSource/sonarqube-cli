@@ -20,7 +20,7 @@
 
 // Integration tests for `analyze dependency-risks` (CLI-354 skeleton + CLI-355 SCA gate).
 // At this stage the command is still a stub: no analysis logic, but it now
-// pre-flights `/sca/enabled` (cloud) or `/api/v2/sca/enabled` (on-premise).
+// pre-flights `/sca/feature-enabled` (cloud) or `/api/v2/sca/feature-enabled` (on-premise).
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -60,7 +60,7 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Project: demo');
     expect(result.stdout).toContain('(no risks)');
-    const scaCalls = server.getRecordedRequests().filter((r) => r.path === '/sca/enabled');
+    const scaCalls = server.getRecordedRequests().filter((r) => r.path === '/sca/feature-enabled');
     expect(scaCalls).toHaveLength(1);
     expect(scaCalls[0].query.organization).toBe(TEST_ORG);
   });
@@ -78,7 +78,9 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toEqual({ project: 'demo', risks: [] });
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/enabled')).toBe(true);
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/feature-enabled')).toBe(
+      true,
+    );
   });
 
   it('exits with code 1 when SCA is disabled on the server', async () => {

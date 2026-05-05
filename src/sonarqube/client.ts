@@ -271,15 +271,15 @@ export class SonarQubeClient {
 
   /**
    * Check whether Sonar Advanced Security (SCA) is enabled on the connected
-   * server. SonarCloud exposes this at `/sca/enabled?organization=<key>`
-   * (api.sonarcloud.io); SonarQube Server at `/api/v2/sca/enabled`. Any
+   * server. SonarCloud exposes this at `/sca/feature-enabled?organization=<key>`
+   * (api.sonarcloud.io); SonarQube Server at `/api/v2/sca/feature-enabled`. Any
    * failure (404, network, unauthorized) is treated as "not available" so
    * callers can gate analysis with a friendly error.
    */
   async checkScaEnabled(connectionType: 'cloud' | 'on-premise', orgKey?: string): Promise<boolean> {
     try {
       const isCloud = connectionType === 'cloud';
-      const endpoint = isCloud ? '/sca/enabled' : '/api/v2/sca/enabled';
+      const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
       const params = isCloud && orgKey ? { organization: orgKey } : undefined;
       const result = await this.get<{ enabled: boolean }>(
         endpoint,

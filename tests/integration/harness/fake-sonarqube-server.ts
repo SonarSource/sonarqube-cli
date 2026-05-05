@@ -179,7 +179,7 @@ export class FakeSonarQubeServerBuilder {
 
   /**
    * Configure the response of the SCA availability endpoints
-   * (`/sca/enabled` for cloud, `/api/v2/sca/enabled` for on-premise).
+   * (`/sca/feature-enabled` for cloud, `/api/v2/sca/feature-enabled` for on-premise).
    * When unset (default), both endpoints return 404 to simulate a server
    * without Sonar Advanced Security installed.
    */
@@ -400,7 +400,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/sca/enabled' || path === '/api/v2/sca/enabled') {
+        if (path === '/sca/feature-enabled' || path === '/api/v2/sca/feature-enabled') {
           if (scaEnabled === undefined) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
               status: 404,
