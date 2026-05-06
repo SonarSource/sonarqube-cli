@@ -60,19 +60,25 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   if (!auth.orgKey) {
     throw new CommandFailedError('Cannot verify the Remediation Agent entitlements.');
   }
-  const { status: entitlement, orgName } = await client.checkAiRemediationEntitlement(auth.orgKey);
-  const displayOrg = orgName ?? auth.orgKey;
+  const { status: entitlement } = await client.checkAiRemediationEntitlement(auth.orgKey);
   if (entitlement === 'not_eligible') {
-    print(`The Remediation Agent is not available for your organization (${displayOrg}).`);
+    print(`The Remediation Agent is not available for your organization (${auth.orgKey}).`);
     print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
     blank();
     throw new CommandFailedError('The Remediation Agent is not available for this organization.');
   }
   if (entitlement === 'not_enabled') {
-    print(`The Remediation Agent is not enabled for your organization (${displayOrg}).`);
+    print(`The Remediation Agent is not enabled for your organization (${auth.orgKey}).`);
     print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
     blank();
     throw new CommandFailedError('The Remediation Agent is not available for this organization.');
+  }
+  if (entitlement === 'unknown') {
+    print(
+      'Could not verify Remediation Agent entitlement. Please try again or contact support if the issue persists.',
+    );
+    blank();
+    throw new CommandFailedError('Unable to verify Remediation Agent entitlement.');
   }
 
   let projectKey = options.project;
@@ -143,7 +149,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     taskId = response.taskId;
   } catch (err) {
     logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
-    const lines = mapErrorMessage((err as Error).message, displayOrg);
+    const lines = mapErrorMessage((err as Error).message, auth.orgKey);
     print(`  failed: ${lines[0]}`);
     for (let i = 1; i < lines.length; i++) {
       print(`    ${lines[i]}`);
@@ -174,7 +180,7 @@ async function fetchEligibleIssues(
     issueStatuses: 'OPEN,CONFIRMED',
     fixableByAgent: true,
     ps: MAX_PAGE_SIZE,
-    p: 1,
+    p: 1, // One page is the intended behavior at the moment as it can be overwhelming to search for issues without additional filtering
   });
   return result.issues;
 }

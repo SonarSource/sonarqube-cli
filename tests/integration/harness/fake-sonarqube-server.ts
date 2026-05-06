@@ -127,6 +127,8 @@ export class FakeSonarQubeServerBuilder {
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
   private remediationAgentEntitlement = { eligible: true, delegateIssuesEnabled: true };
+  private orgsLookupReturnsEmpty = false;
+  private orgsLookupErrorCode?: number;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -182,6 +184,24 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Make `/organizations/organizations` return an empty array, simulating an
+   * `organizationKey` that does not match any visible org.
+   */
+  withMissingOrg(): this {
+    this.orgsLookupReturnsEmpty = true;
+    return this;
+  }
+
+  /**
+   * Make `/organizations/organizations` fail with the given HTTP status code,
+   * simulating a network/service error during entitlement pre-flight.
+   */
+  withOrgsLookupError(statusCode: number): this {
+    this.orgsLookupErrorCode = statusCode;
+    return this;
+  }
+
   withSqaaEntitlement(
     orgKey: string,
     uuid: string,
@@ -234,6 +254,8 @@ export class FakeSonarQubeServerBuilder {
       agentJobErrorCode,
       agentJobErrorMessage,
       remediationAgentEntitlement,
+      orgsLookupReturnsEmpty,
+      orgsLookupErrorCode,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -422,6 +444,17 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/organizations/organizations') {
+          if (orgsLookupErrorCode !== undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Org lookup failed' }] }), {
+              status: orgsLookupErrorCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (orgsLookupReturnsEmpty) {
+            return new Response(JSON.stringify([]), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
           const orgKey = query.organizationKey;
           const entitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
           if (entitlement) {

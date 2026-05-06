@@ -22,6 +22,7 @@
 
 import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
+import logger from '../lib/logger';
 import { print } from '../ui';
 import type { SettingsValue } from './settings-value';
 
@@ -325,7 +326,7 @@ export class SonarQubeClient {
 
   async checkAiRemediationEntitlement(
     orgKey: string,
-  ): Promise<{ status: 'not_eligible' | 'not_enabled' | 'ok'; orgName?: string }> {
+  ): Promise<{ status: 'not_eligible' | 'not_enabled' | 'ok' | 'unknown' }> {
     try {
       const orgsEndpoint = '/organizations/organizations';
       const orgs = await this.get<Array<{ id: string; uuidV4: string; name?: string }>>(
@@ -333,20 +334,20 @@ export class SonarQubeClient {
         { organizationKey: orgKey, excludeEligibility: 'true' },
         resolveFromEndpoint(this.serverURL, orgsEndpoint),
       );
-      const org = orgs[0];
-      if (!org.id) return { status: 'not_eligible' };
+      const org = orgs.at(0);
+      if (!org) return { status: 'not_eligible' };
 
       const configEndpoint = `/fix-suggestions/organization-configs/${org.id}`;
       const config = await this.get<{
         codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
       }>(configEndpoint, undefined, resolveFromEndpoint(this.serverURL, configEndpoint));
 
-      const orgName = org.name;
-      if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible', orgName };
-      if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled', orgName };
-      return { status: 'ok', orgName };
-    } catch {
+      if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
+      if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
       return { status: 'ok' };
+    } catch (err) {
+      logger.debug('AI remediation entitlement check failed', err);
+      return { status: 'unknown' };
     }
   }
 

@@ -116,6 +116,55 @@ describe('sonar remediate', () => {
   );
 
   it(
+    'exits with code 1 and shows not-available message when the org lookup returns an empty array',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT, (p) => {
+          p.withIssue({ ruleKey: 'java:S100', message: 'Fixable issue', fixableByAgent: true });
+        })
+        .withMissingOrg()
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('The Remediation Agent is not available for your organization');
+      expect(output).toContain(TEST_ORG);
+      expect(output).toContain('docs.sonarsource.com');
+      expect(output).not.toContain('Which issues');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 and shows could-not-verify message when the entitlement service returns 5xx',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT, (p) => {
+          p.withIssue({ ruleKey: 'java:S100', message: 'Fixable issue', fixableByAgent: true });
+        })
+        .withOrgsLookupError(503)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Could not verify Remediation Agent entitlement');
+      expect(output).not.toContain('docs.sonarsource.com');
+      expect(output).not.toContain('Which issues');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 0 and reports zero eligible issues when none are fixable by agent',
     async () => {
       const server = await harness
