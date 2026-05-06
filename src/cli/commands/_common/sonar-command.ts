@@ -26,7 +26,7 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import { resolveAuth } from '../../../lib/auth-resolver.js';
 import logger from '../../../lib/logger.js';
 import { blank, error } from '../../../ui';
-import { CommandFailedError } from './error.js';
+import { CliError, CommandFailedError } from './error.js';
 
 /**
  * Commander Command subclass for the Sonar CLI.
@@ -104,7 +104,7 @@ export class SonarCommand extends Command {
       blank();
       error((err as Error).message);
       logger.error((err as Error).message);
-      process.exitCode = err instanceof CommandFailedError ? err.exitCode : 1;
+      process.exitCode = err instanceof CliError ? err.exitCode : 1;
     }
   }
 }

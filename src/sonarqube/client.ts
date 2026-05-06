@@ -24,12 +24,15 @@ import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
 import logger from '../lib/logger';
 import { print } from '../ui';
+import { RateLimitError, ServiceUnavailableError } from './errors';
 import type { SettingsValue } from './settings-value';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
 const HTTP_STATUS_FORBIDDEN = 403;
 const HTTP_STATUS_NOT_FOUND = 404;
+const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
+const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
 
 export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const;
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
@@ -63,24 +66,29 @@ export class SonarQubeClient {
   }
 
   private async raiseForStatus(response: Response, method: HttpMethod) {
-    if (method === 'GET') {
-      if (!response.ok) {
-        if (
-          response.status === HTTP_STATUS_FORBIDDEN ||
-          response.status === HTTP_STATUS_NOT_FOUND
-        ) {
-          throw new Error(
-            `Access denied (HTTP ${response.status}). Check that the supplied token and organization are valid.`,
-          );
-        }
-        throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
-      }
-    } else if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`,
-      );
+    if (response.ok) return;
+
+    // Status-specific typed errors apply regardless of HTTP method.
+    if (response.status === HTTP_STATUS_TOO_MANY_REQUESTS) {
+      throw new RateLimitError();
     }
+    if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
+      throw new ServiceUnavailableError();
+    }
+
+    if (method === 'GET') {
+      if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
+        throw new Error(
+          `Access denied (HTTP ${response.status}). Check that the supplied token and organization are valid.`,
+        );
+      }
+      throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
+    }
+
+    const errorText = await response.text();
+    throw new Error(
+      `SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`,
+    );
   }
 
   /**

@@ -1,0 +1,139 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Resolves the set of local files to analyze from Git, honouring .gitignore.
+
+import { closeSync, openSync, readSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { spawnProcess } from '../../../lib/process';
+import { CommandFailedError } from '../_common/error';
+
+/** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
+export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+export interface ChangeSetOptions {
+  /** Staged files only (`--staged`). */
+  staged?: boolean;
+  /** Diff against this branch/ref (`--base <ref>`). */
+  base?: string;
+}
+
+/**
+ * Resolves the list of absolute file paths that belong to the local change set,
+ * filtering out git-ignored paths and binary files, capped at SQAA_MAX_FILE_BYTES per file.
+ *
+ * Modes:
+ *   - Default (no options): `git diff HEAD` (staged + unstaged) + untracked non-ignored files
+ *   - staged=true:          `git diff --cached` (staged only)
+ *   - base=<ref>:           `git diff <ref>` + untracked non-ignored files
+ */
+export async function resolveChangeSet(
+  cwd: string,
+  options: ChangeSetOptions = {},
+): Promise<string[]> {
+  const { staged, base } = options;
+
+  const diffFiles = await getDiffFiles(cwd, { staged, base });
+
+  const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(cwd);
+
+  const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(cwd, f));
+  const filtered = filterNonBinary(absolute);
+
+  return enforceMaxSize(filtered);
+}
+
+async function getDiffFiles(
+  cwd: string,
+  opts: { staged?: boolean; base?: string },
+): Promise<string[]> {
+  const args: string[] = ['diff', '--name-only', '--diff-filter=ACMR'];
+
+  if (opts.staged) {
+    args.push('--cached');
+  } else if (opts.base) {
+    args.push(opts.base);
+  } else {
+    args.push('HEAD');
+  }
+
+  const result = await runGit(args, cwd);
+  return parseLines(result);
+}
+
+async function getUntrackedNonIgnoredFiles(cwd: string): Promise<string[]> {
+  const result = await runGit(['ls-files', '--others', '--exclude-standard'], cwd);
+  return parseLines(result);
+}
+
+async function runGit(args: string[], cwd: string): Promise<string> {
+  let result;
+  try {
+    result = await spawnProcess('git', args, { cwd });
+  } catch (err) {
+    throw new CommandFailedError(`Failed to run git: ${(err as Error).message}`);
+  }
+  if (result.exitCode !== 0) {
+    throw new CommandFailedError(
+      `git ${args[0]} failed (exit ${result.exitCode}): ${result.stderr}`,
+    );
+  }
+  return result.stdout;
+}
+
+function parseLines(output: string): string[] {
+  return output
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+}
+
+/**
+ * Removes binary files from the list.
+ * We use a simple heuristic: read the first 8 KB; if it contains a NUL byte, it's binary.
+ */
+function filterNonBinary(files: string[]): string[] {
+  return files.filter((f) => {
+    try {
+      const buf = Buffer.alloc(8192);
+      const fd = openSync(f, 'r');
+      try {
+        const bytesRead = readSync(fd, buf, 0, buf.length, 0);
+        return !buf.subarray(0, bytesRead).includes(0x00);
+      } finally {
+        closeSync(fd);
+      }
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** Excludes files that exceed the per-file size limit. */
+function enforceMaxSize(files: string[]): string[] {
+  return files.filter((f) => {
+    try {
+      return statSync(f).size <= SQAA_MAX_FILE_BYTES;
+    } catch {
+      return false;
+    }
+  });
+}

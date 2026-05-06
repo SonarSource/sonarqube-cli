@@ -22,7 +22,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '../../../../../src/cli/commands/_common/error';
+import {
+  CommandFailedError,
+  InvalidOptionError,
+} from '../../../../../src/cli/commands/_common/error';
 import { SonarCommand } from '../../../../../src/cli/commands/_common/sonar-command';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
@@ -81,6 +84,14 @@ describe('SonarCommand', () => {
         throw new Error('boom');
       });
       expect(process.exitCode).toBe(1);
+    });
+
+    it('sets process.exitCode to 2 on InvalidOptionError', async () => {
+      const cmd = new SonarCommand();
+      await cmd.runCommand(() => {
+        throw new InvalidOptionError('bad flag');
+      });
+      expect(process.exitCode).toBe(2);
     });
 
     it('uses the exit code from CommandFailedError', async () => {

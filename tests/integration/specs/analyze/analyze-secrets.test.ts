@@ -171,14 +171,14 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'exits with code 1 when neither paths nor --stdin is provided',
+    'exits with code 2 when neither paths nor --stdin is provided',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
       const result = await harness.run('analyze secrets');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain(
         'Either provide file/directory paths or --stdin',
       );
@@ -187,14 +187,14 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'exits with code 1 for non-existent file path',
+    'exits with code 2 for non-existent file path',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
       const result = await harness.run('analyze secrets /nonexistent/path/file.txt');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Path not found');
     },
     { timeout: 15000 },
@@ -226,13 +226,13 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'exits with code 1 when both paths and --stdin are provided',
+    'exits with code 2 when both paths and --stdin are provided',
     async () => {
       harness.withAuth(FAKE_SERVER, 'fake-token');
 
       const result = await harness.run('analyze secrets somefile.js --stdin');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Cannot use both paths and --stdin');
     },
     { timeout: 15000 },

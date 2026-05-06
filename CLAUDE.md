@@ -42,6 +42,12 @@ By default, new commands should register a `authenticatedAction()`, only technic
 
 Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
 
+Error subclasses extend the abstract `CliError` and carry their own `exitCode`, which `SonarCommand.runCommand()` forwards to `process.exitCode`:
+
+- `InvalidOptionError` → exit code `2` (conflicting or invalid CLI options).
+- `CommandFailedError` → exit code `1` by default, or whatever is passed to the constructor.
+- Any other `Error` caught by `runCommand` → exit code `1`.
+
 ## State and auth
 
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.

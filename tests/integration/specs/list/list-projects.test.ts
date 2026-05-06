@@ -125,14 +125,14 @@ describe('list projects', () => {
   );
 
   it(
-    'exits with code 1 when --page-size is 0',
+    'exits with code 2 when --page-size is 0',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('list projects --page-size 0');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain(
         "Invalid --page-size option: '0'. Must be an integer between 1 and 500",
       );
@@ -141,14 +141,14 @@ describe('list projects', () => {
   );
 
   it(
-    'exits with code 1 when --page-size exceeds 500',
+    'exits with code 2 when --page-size exceeds 500',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('list projects --page-size 501');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain(
         "Invalid --page-size option: '501'. Must be an integer between 1 and 500",
       );

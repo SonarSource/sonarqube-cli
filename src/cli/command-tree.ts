@@ -256,18 +256,22 @@ analyze
     analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, auth),
   );
 
-analyze
-  .command('sqaa')
-  .description('Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)')
-  .requiredOption('--file <file>', 'File path to analyze')
-  .option('--branch <branch>', 'Branch name for analysis context')
-  .option(
-    '-p, --project <project>',
-    'SonarQube Cloud project key (overrides auto-detected project)',
-  )
-  .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
-    analyzeSqaa(options, auth, cmd),
-  );
+// Shared option set for `analyze sqaa` and its `verify` alias.
+function applySqaaOptions(cmd: SonarCommand): SonarCommand {
+  return cmd
+    .option('--file <file>', 'Analyze a single file (skips change set detection)')
+    .option('--staged', 'Analyze staged files only (git diff --cached)')
+    .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
+    .option('--branch <branch>', 'Branch name for analysis context')
+    .option(
+      '-p, --project <project>',
+      'SonarQube Cloud project key (overrides auto-detected project)',
+    )
+    .option('--force', 'Skip the large change set confirmation prompt')
+    .authenticatedAction((auth, options: AnalyzeSqaaOptions, innerCmd: Command) =>
+      analyzeSqaa(options, auth, innerCmd),
+    );
+}
 
 const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')
   .choices(DEPENDENCY_RISKS_FORMATS)
@@ -282,17 +286,18 @@ analyze
     analyzeDependencyRisks(options, auth),
   );
 
-COMMAND_TREE.command('verify')
-  .description('Analyze a file for issues')
-  .requiredOption('--file <file>', 'File path to analyze')
-  .option('--branch <branch>', 'Branch name for analysis context')
-  .option(
-    '-p, --project <project>',
-    'SonarQube Cloud project key (overrides auto-detected project)',
-  )
-  .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
-    analyzeSqaa(options, auth, cmd),
-  );
+applySqaaOptions(
+  analyze
+    .command('sqaa')
+    .description('Run server-side SonarQube Agentic Analysis (SonarQube Cloud only)'),
+);
+
+// `verify` is a user-facing alias for `analyze sqaa` that fits CI/pipeline vocabulary.
+applySqaaOptions(
+  COMMAND_TREE.command('verify').description(
+    'Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze sqaa`, SonarQube Cloud only)',
+  ),
+);
 
 // Configure things related to the CLI
 const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
