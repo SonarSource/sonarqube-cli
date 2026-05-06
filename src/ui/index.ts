@@ -33,10 +33,11 @@ export {
 export { intro, outro } from './components/sections.js';
 export { withSpinner } from './components/spinner.js';
 export { blank, discreetSuccess, error, info, print, success, text, warn } from './messages.js';
-export type { UiCall } from './mock.js';
+export type { UiCall, UiMethod } from './mock.js';
 export {
   clearMockResponses,
   clearMockUiCalls,
+  findMockUiCall,
   getMockUiCalls,
   isMockActive,
   queueMockResponse,

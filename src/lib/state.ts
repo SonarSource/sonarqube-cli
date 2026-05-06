@@ -154,9 +154,20 @@ export interface SkillExtension extends BaseAgentExtension {
 }
 
 /**
+ * A custom instructions markdown file installed for an agent.
+ * The on-disk path is reconstructable from `agentId`, `projectRoot`, `global`,
+ * and `name`, so we don't store it here (consistent with `HookExtension`).
+ */
+export interface InstructionsExtension extends BaseAgentExtension {
+  kind: 'instructions';
+  /** Logical name for the instructions entry (e.g. 'sonar-prompt-secrets') */
+  name: string;
+}
+
+/**
  * Union of all extension types stored in the registry
  */
-export type AgentExtension = HookExtension | SkillExtension;
+export type AgentExtension = HookExtension | SkillExtension | InstructionsExtension;
 
 export function agentExtensionEquals(a: AgentExtension, b: AgentExtension): boolean {
   if (a.agentId !== b.agentId || a.projectRoot !== b.projectRoot) return false;

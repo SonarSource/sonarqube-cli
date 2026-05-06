@@ -25,6 +25,16 @@ export interface UiCall {
   args: unknown[];
 }
 
+export type UiMethod =
+  | 'blank'
+  | 'discreetSuccess'
+  | 'error'
+  | 'info'
+  | 'print'
+  | 'success'
+  | 'text'
+  | 'warn';
+
 let mockActive = false;
 const calls: UiCall[] = [];
 const responseQueue: unknown[] = [];
@@ -51,6 +61,18 @@ export function getMockUiCalls(): UiCall[] {
 
 export function clearMockUiCalls(): void {
   calls.length = 0;
+}
+
+/**
+ * Find the first recorded UI call of `method` whose first argument (the
+ * message text) contains `substring`. Returns `undefined` when no match is
+ * found, which pairs naturally with `expect(...).toBeDefined()` /
+ * `expect(...).toBeUndefined()` assertions in tests.
+ */
+export function findMockUiCall(method: UiMethod, substring: string): UiCall | undefined {
+  return calls.find(
+    (c) => c.method === method && typeof c.args[0] === 'string' && c.args[0].includes(substring),
+  );
 }
 
 /**

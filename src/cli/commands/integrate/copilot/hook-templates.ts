@@ -18,30 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Hook script templates for Claude Code integration
+// Hook script templates for Copilot CLI integration
 
 import { unixTemplate, windowsTemplate } from '../_common/hooks';
 
 export function getSecretPreToolTemplateUnix(): string {
-  return unixTemplate('sonar hook claude-pre-tool-use');
+  return unixTemplate('sonar hook copilot-pre-tool-use');
 }
 
 export function getSecretPreToolTemplateWindows(): string {
-  return windowsTemplate('sonar hook claude-pre-tool-use');
-}
-
-export function getSecretPromptTemplateUnix(): string {
-  return unixTemplate('sonar hook claude-prompt-submit');
-}
-
-export function getSecretPromptTemplateWindows(): string {
-  return windowsTemplate('sonar hook claude-prompt-submit');
-}
-
-export function getSqaaPostToolTemplateUnix(projectKey: string): string {
-  return unixTemplate(`sonar hook claude-post-tool-use --project ${projectKey}`);
-}
-
-export function getSqaaPostToolTemplateWindows(projectKey: string): string {
-  return windowsTemplate(`sonar hook claude-post-tool-use --project ${projectKey}`);
+  return windowsTemplate('sonar hook copilot-pre-tool-use');
 }

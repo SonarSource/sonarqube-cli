@@ -20,15 +20,15 @@
 
 import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import * as nodeOs from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import {
   areHooksInstalled,
-  detectSecretsHook,
+  detectGlobalSecretsHook,
   installHooks,
 } from '../../../../../../src/cli/commands/integrate/claude/hooks';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
 const PROJECT_ROOT = '/fake/project';
 const GLOBAL_DIR = '/fake/global';
@@ -64,7 +64,7 @@ function getScriptPathFor(nameFragment: string): string | undefined {
 
 let writeFileSpy: Mock<Extract<(typeof fsPromises)['writeFile'], (...args: any[]) => any>>;
 
-describe('detectSecretsHook', () => {
+describe('detectGlobalSecretsHook', () => {
   let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
   let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
 
@@ -82,34 +82,43 @@ describe('detectSecretsHook', () => {
   };
 
   beforeEach(() => {
+    setMockUi(true);
     existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(true);
     readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{}');
   });
 
   afterEach(() => {
+    clearMockUiCalls();
+    setMockUi(false);
     existsSyncSpy.mockRestore();
     readFileSpy.mockRestore();
   });
 
-  it('returns { kind: "absent" } when settings.json does not exist', async () => {
+  it('returns undefined and stays silent when settings.json does not exist (absent)', async () => {
     existsSyncSpy.mockReturnValue(false);
 
-    expect(await detectSecretsHook(PROJECT_ROOT)).toEqual({ kind: 'absent' });
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
+    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(noisy).toHaveLength(0);
   });
 
-  it('returns { kind: "absent" } when no PreToolUse entry references sonar-secrets', async () => {
+  it('returns undefined and stays silent when no PreToolUse entry references sonar-secrets (absent)', async () => {
     readFileSpy.mockResolvedValue(JSON.stringify({ hooks: { PreToolUse: [] } }));
 
-    expect(await detectSecretsHook(PROJECT_ROOT)).toEqual({ kind: 'absent' });
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
+    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(noisy).toHaveLength(0);
   });
 
-  it('returns { kind: "absent" } when settings.json contains malformed JSON', async () => {
+  it('returns undefined and stays silent when settings.json contains malformed JSON (absent)', async () => {
     readFileSpy.mockResolvedValue('{ invalid json !!!');
 
-    expect(await detectSecretsHook(PROJECT_ROOT)).toEqual({ kind: 'absent' });
+    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
+    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
+    expect(noisy).toHaveLength(0);
   });
 
-  it('returns { kind: "orphaned", hookDir } when settings entry exists but the sonar-secrets script directory is missing', async () => {
+  it('returns undefined and emits warn(...) when settings entry exists but the sonar-secrets script directory is missing (orphaned)', async () => {
     readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
     existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
       const path = normPath(String(p));
@@ -117,27 +126,39 @@ describe('detectSecretsHook', () => {
       return path.endsWith('.claude/settings.json');
     });
 
-    const result = await detectSecretsHook(PROJECT_ROOT);
+    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
 
-    expect(result.kind).toBe('orphaned');
-    if (result.kind === 'orphaned') {
-      expect(normPath(result.hookDir)).toEndWith('.claude/hooks/sonar-secrets');
-    }
+    expect(result).toBeUndefined();
+    const warnCall = getMockUiCalls().find(
+      (c) =>
+        c.method === 'warn' &&
+        String(c.args[0]).includes(
+          'WARNING: Global hook configuration detected, but the source files are missing',
+        ),
+    );
+    expect(warnCall).toBeDefined();
   });
 
-  it('returns { kind: "installed", hookDir } when both settings entry and sonar-secrets script directory are present', async () => {
+  it('returns the hook dir and emits info(...) when both settings entry and sonar-secrets script directory are present (installed)', async () => {
     readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
     existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
       const path = normPath(String(p));
       return path.endsWith('.claude/settings.json') || path.endsWith('.claude/hooks/sonar-secrets');
     });
 
-    const result = await detectSecretsHook(PROJECT_ROOT);
+    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
 
-    expect(result.kind).toBe('installed');
-    if (result.kind === 'installed') {
-      expect(normPath(result.hookDir)).toEndWith('.claude/hooks/sonar-secrets');
-    }
+    expect(result).toBeDefined();
+    expect(normPath(result ?? '')).toEndWith('.claude/hooks/sonar-secrets');
+    const infoCall = getMockUiCalls().find(
+      (c) =>
+        c.method === 'info' &&
+        String(c.args[0]).includes(
+          'A global secrets scanning hook is already configured for SonarQube',
+        ) &&
+        String(c.args[0]).includes('project-level secrets hooks were skipped'),
+    );
+    expect(infoCall).toBeDefined();
   });
 });
 
@@ -185,17 +206,26 @@ describe('areHooksInstalled', () => {
 });
 
 describe('installHooks', () => {
+  // The production code reads `process.platform` directly,
+  // so platform-specific assertions branch on the real
+  // host platform.
+  const IS_WINDOWS = process.platform === 'win32';
+  // On Windows the registered command is `powershell -NoProfile -File .claude/...`
+  // (forward slashes via replaceAll); on Unix it is the bare `.claude/...` path.
+  const isProjectScopedCommand = (command: string): boolean =>
+    IS_WINDOWS
+      ? command.includes('powershell -NoProfile -File .claude/')
+      : command.startsWith('.claude/');
+
   let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
   let mkdirSyncSpy: Mock<Extract<(typeof nodeFs)['mkdirSync'], (...args: any[]) => any>>;
   let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
-  let platformSpy: Mock<Extract<(typeof nodeOs)['platform'], (...args: any[]) => any>>;
 
   beforeEach(() => {
     existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(false);
     mkdirSyncSpy = spyOn(nodeFs, 'mkdirSync').mockReturnValue(undefined);
     readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{"hooks":{}}');
     writeFileSpy = spyOn(fsPromises, 'writeFile').mockResolvedValue(undefined);
-    platformSpy = spyOn(nodeOs, 'platform').mockReturnValue('linux');
   });
 
   afterEach(() => {
@@ -203,7 +233,6 @@ describe('installHooks', () => {
     mkdirSyncSpy.mockRestore();
     readFileSpy.mockRestore();
     writeFileSpy.mockRestore();
-    platformSpy.mockRestore();
   });
 
   it('writes the pretool-secrets script file', async () => {
@@ -282,7 +311,7 @@ describe('installHooks', () => {
 
     const settings = getSettingsWriteFor('PreToolUse');
     const command = settings?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
-    expect(String(command).startsWith('.claude')).toBe(true);
+    expect(isProjectScopedCommand(String(command))).toBe(true);
   });
 
   it('uses an absolute command path for global scope (with globalDir)', async () => {
@@ -298,7 +327,7 @@ describe('installHooks', () => {
 
     const settings = getSettingsWriteFor('PostToolUse');
     const command = settings?.hooks?.PostToolUse?.[0]?.hooks?.[0]?.command;
-    expect(String(command).startsWith('.claude')).toBe(true);
+    expect(isProjectScopedCommand(String(command))).toBe(true);
   });
 
   it('preserves existing unrelated settings when settings.json already exists', async () => {
@@ -365,18 +394,11 @@ describe('installHooks', () => {
     expect(getScriptWriteFor('posttool-sqaa')).toContain(PROJECT_KEY);
   });
 
-  it('writes a .sh script on Unix platforms', async () => {
+  it('writes a script with the platform-appropriate extension', async () => {
     await installHooks(PROJECT_ROOT);
 
-    expect(getScriptPathFor('pretool-secrets')).toContain('.sh');
-  });
-
-  it('writes a .ps1 script on Windows platforms', async () => {
-    platformSpy.mockReturnValue('win32');
-
-    await installHooks(PROJECT_ROOT);
-
-    expect(getScriptPathFor('pretool-secrets')).toContain('.ps1');
+    const scriptExt = IS_WINDOWS ? '.ps1' : '.sh';
+    expect(getScriptPathFor('pretool-secrets')).toContain(scriptExt);
   });
 
   it('does not throw when a file system error occurs', async () => {

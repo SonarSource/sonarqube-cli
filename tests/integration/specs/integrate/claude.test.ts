@@ -997,7 +997,10 @@ describe('integrate claude — file placement (local vs global)', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain(
-          'A global secrets scanning hook is already configured for SonarQube. To avoid duplicate execution, project-level secrets hooks were skipped.',
+          'A global secrets scanning hook is already configured for SonarQube at',
+        );
+        expect(result.stdout).toContain(
+          'To avoid duplicate execution, project-level secrets hooks were skipped.',
         );
       },
       { timeout: 30000 },
