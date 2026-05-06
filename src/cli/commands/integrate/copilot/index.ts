@@ -68,11 +68,15 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
 
 function reportInstallationOutcome(
   isGlobal: boolean,
-  hookPath: string,
-  instructionsPath: string,
+  hookPath: string | undefined,
+  instructionsPath: string | undefined,
 ): void {
   const scope = isGlobal
     ? 'Copilot integration successfully configured globally'
     : 'Copilot integration successfully configured at the project level';
-  success(`${scope}\nHook: ${hookPath}\nInstructions: ${instructionsPath}`);
+  const hookLine = hookPath ? `Hook: ${hookPath}` : 'Hook: not installed (see warning above)';
+  const instructionsLine = instructionsPath
+    ? `Instructions: ${instructionsPath}`
+    : 'Instructions: not installed (see warning above)';
+  success(`${scope}\n${hookLine}\n${instructionsLine}`);
 }

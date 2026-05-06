@@ -58,6 +58,10 @@
 //   ├── describe('project-level install when both global hook and global instructions already exist')
 //   │   └── it: skips both writes, records neither extension, and surfaces both global paths in the outcome
 //   │
+//   ├── describe('installation failure handling')
+//   │   ├── it: warns and continues with MCP + instructions when the hook write fails
+//   │   └── it: warns and continues with MCP + hook when the instructions write fails
+//   │
 //   ├── describe('option validation')
 //   │   └── it: exits with code 1 when both --global and --project are provided
 //   │
@@ -79,6 +83,8 @@ import {
   HOOK_FIELD,
   makeHookEntry,
   McpJson,
+  obstructHooksJson,
+  obstructInstructionsFile,
   outcomeLine,
   PRETOOL_SECRETS_SCRIPT,
   PROJECT_HOOK_SCRIPT_PATH,
@@ -552,6 +558,74 @@ describe('integrate copilot', () => {
         expect(normalizePath(outcomeLine(result.stdout, 'Instructions:'))).toContain(
           `${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`,
         );
+      },
+      { timeout: 30000 },
+    );
+  });
+
+  // ─── Installation failure handling ──────────────────────────────────────────
+
+  // We force file-system failures by pre-creating the would-be artifact paths
+  // as directories. The integration's `writeFile`/`readFile` calls then fail,
+  // exercising the try/catch fallbacks.
+
+  describe('installation failure handling', () => {
+    it(
+      'warns and continues with MCP + instructions when the hook write fails',
+      async () => {
+        obstructHooksJson(harness);
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr + result.stdout).toContain(
+          'Failed to set up the pre-tool-use secrets hook',
+        );
+
+        // Hook artifact was not finalized; the registry must not claim it was.
+        expect(findSonarHookExt(harness)).toBeUndefined();
+        // Outcome line reflects the failure rather than printing a misleading path.
+        expect(outcomeLine(result.stdout, 'Hook:')).toContain('not installed (see warning above)');
+
+        // Instructions still installed.
+        const instructionsFile = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH);
+        expect(instructionsFile.exists()).toBe(true);
+        expect(instructionsFile.asText()).toContain('# SonarQube prompt-secrets protocol');
+        expect(findSonarInstructionsExt(harness)).toBeDefined();
+        expect(outcomeLine(result.stdout, 'Instructions:')).not.toContain('not installed');
+
+        // MCP still configured.
+        expect(harness.cwd.exists('.mcp.json')).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'warns and continues with MCP + hook when the instructions write fails',
+      async () => {
+        obstructInstructionsFile(harness);
+
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr + result.stdout).toContain(
+          'Failed to install prompt-secrets instructions',
+        );
+
+        // Instructions registry entry must not be recorded.
+        expect(findSonarInstructionsExt(harness)).toBeUndefined();
+        expect(outcomeLine(result.stdout, 'Instructions:')).toContain(
+          'not installed (see warning above)',
+        );
+
+        // Hook still installed.
+        const scriptFile = harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH);
+        expect(scriptFile.exists()).toBe(true);
+        expect(findSonarHookExt(harness)).toBeDefined();
+        expect(outcomeLine(result.stdout, 'Hook:')).not.toContain('not installed');
+
+        // MCP still configured.
+        expect(harness.cwd.exists('.mcp.json')).toBe(true);
       },
       { timeout: 30000 },
     );

@@ -29,10 +29,11 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { info, success, text } from '../../../../ui';
+import { info, success, text, warn } from '../../../../ui';
 
 export interface InstructionsInstallResult {
-  instructionsPath: string;
+  /* Absolute path of the active prompt-secrets instructions file. `undefined` when installation failed. */
+  instructionsPath?: string;
   instructionsInstalled: boolean;
 }
 
@@ -78,14 +79,22 @@ export async function installInstructions(
   projectRoot: string,
   isGlobal: boolean,
 ): Promise<InstructionsInstallResult> {
-  if (!isGlobal) {
-    const existingGlobalInstructionsPath = detectGlobalPromptSecretsInstructions();
-    if (existingGlobalInstructionsPath) {
-      return { instructionsPath: existingGlobalInstructionsPath, instructionsInstalled: false };
+  try {
+    if (!isGlobal) {
+      const existingGlobalInstructionsPath = detectGlobalPromptSecretsInstructions();
+      if (existingGlobalInstructionsPath) {
+        return { instructionsPath: existingGlobalInstructionsPath, instructionsInstalled: false };
+      }
     }
+    const instructionsPath = await installPromptSecretsInstructions(projectRoot, isGlobal);
+    return { instructionsPath, instructionsInstalled: true };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    warn(
+      `Failed to install prompt-secrets instructions: ${detail}. Prompt-secrets warnings will not be available.`,
+    );
+    return { instructionsInstalled: false };
   }
-  const instructionsPath = await installPromptSecretsInstructions(projectRoot, isGlobal);
-  return { instructionsPath, instructionsInstalled: true };
 }
 
 function buildInstructionsBody(): string {

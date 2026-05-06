@@ -33,7 +33,8 @@ import { readOrInitJson, SONAR_SECRETS_MARKER, writeHookScript } from '../_commo
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
 
 export interface HookInstallResult {
-  hookPath: string;
+  /* Absolute path of the active sonar-secrets hook script. `undefined` when installation failed. */
+  hookPath?: string;
   hookInstalled: boolean;
 }
 
@@ -157,15 +158,23 @@ export async function installHooks(
   projectRoot: string,
   isGlobal: boolean,
 ): Promise<HookInstallResult> {
-  await installSecretsBinary();
-  if (!isGlobal) {
-    const existingGlobalHookPath = await detectGlobalSecretsHook();
-    if (existingGlobalHookPath) {
-      return { hookPath: existingGlobalHookPath, hookInstalled: false };
+  try {
+    await installSecretsBinary();
+    if (!isGlobal) {
+      const existingGlobalHookPath = await detectGlobalSecretsHook();
+      if (existingGlobalHookPath) {
+        return { hookPath: existingGlobalHookPath, hookInstalled: false };
+      }
     }
+    const hookPath = await installPreToolUseHook(projectRoot, isGlobal);
+    return { hookPath, hookInstalled: true };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    warn(
+      `Failed to set up the pre-tool-use secrets hook: ${detail}. Secrets scanning will not run.`,
+    );
+    return { hookInstalled: false };
   }
-  const hookPath = await installPreToolUseHook(projectRoot, isGlobal);
-  return { hookPath, hookInstalled: true };
 }
 
 function entryReferencesSonarSecrets(entry: HookCommandEntry): boolean {

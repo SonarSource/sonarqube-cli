@@ -20,6 +20,8 @@
 
 // Shared helpers and types for copilot integration tests.
 
+import { mkdirSync } from 'node:fs';
+
 import { expect } from 'bun:test';
 
 import { hookScriptName, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
@@ -128,4 +130,24 @@ export function writeExistingGlobalInstructions(harness: TestHarness): void {
     '.copilot/instructions/sonarqube.instructions.md',
     '# pre-existing global instructions\n',
   );
+}
+
+/**
+ * Force the project-level hook write to fail by pre-creating `hooks.json` as a
+ * directory. The integration's `readOrInitJson` then fails with `EISDIR`,
+ * exercising the try/catch fallback in `installHooks`.
+ */
+export function obstructHooksJson(harness: TestHarness): void {
+  mkdirSync(harness.cwd.file('.github', 'hooks').path, { recursive: true });
+  mkdirSync(harness.cwd.file(...PROJECT_HOOKS_JSON_PATH).path);
+}
+
+/**
+ * Force the project-level instructions write to fail by pre-creating the
+ * target file path as a directory. The integration's `writeFile` then fails
+ * with `EISDIR`, exercising the try/catch fallback in `installInstructions`.
+ */
+export function obstructInstructionsFile(harness: TestHarness): void {
+  mkdirSync(harness.cwd.file('.github', 'instructions').path, { recursive: true });
+  mkdirSync(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).path);
 }
