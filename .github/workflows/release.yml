@@ -7,10 +7,6 @@ on:
         type: string
         description: Version
         required: true
-      releaseId:
-        type: string
-        description: Release ID
-        required: true
       dryRun:
         type: boolean
         description: Flag to enable the dry-run execution
@@ -25,7 +21,6 @@ jobs:
     uses: SonarSource/gh-action_release/.github/workflows/main.yaml@d9c158044abff69356475ff82b1f99b78dbd9d93 # 7.0.0
     with:
       version: ${{ inputs.version }}
-      releaseId: ${{ inputs.releaseId }}
       dryRun: ${{ inputs.dryRun }}
       publishToBinaries: true
       slackChannel: C02E6L5C01H # squad-devex-private
