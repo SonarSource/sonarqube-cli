@@ -149,7 +149,8 @@ describe('integrateCommand', () => {
     await integrateClaude({}, SERVER_AUTH);
 
     const introText = getMockUiCalls().find(
-      (c) => c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude',
+      (c) =>
+        c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude Code',
     );
     expect(introText).toBeDefined();
   });
@@ -504,7 +505,7 @@ describe('integrateCommand', () => {
         (c) =>
           c.method === 'success' &&
           String(c.args[0]) ===
-            `Claude integration configured. Secrets scanning will use the existing global hook at: ${GLOBAL_HOOK_PATH}`,
+            `Claude Code integration configured. Secrets scanning will use the existing global hook at: ${GLOBAL_HOOK_PATH}`,
       );
       expect(successMsg).toBeDefined();
     });
@@ -516,7 +517,7 @@ describe('integrateCommand', () => {
         (c) =>
           c.method === 'success' &&
           String(c.args[0]).includes(
-            'Claude integration successfully configured at the project level',
+            'Claude Code integration successfully configured at the project level',
           ),
       );
       expect(projectSuccess).toBeUndefined();
@@ -582,7 +583,8 @@ describe('integrateCommand', () => {
       const projectSuccess = getMockUiCalls().find(
         (c) =>
           c.method === 'success' &&
-          String(c.args[0]) === 'Claude integration successfully configured at the project level',
+          String(c.args[0]) ===
+            'Claude Code integration successfully configured at the project level',
       );
       expect(projectSuccess).toBeDefined();
     });
@@ -620,7 +622,7 @@ describe('integrateCommand', () => {
       const globalSuccess = getMockUiCalls().find(
         (c) =>
           c.method === 'success' &&
-          String(c.args[0]) === 'Claude integration successfully configured globally',
+          String(c.args[0]) === 'Claude Code integration successfully configured globally',
       );
       expect(globalSuccess).toBeDefined();
     });
