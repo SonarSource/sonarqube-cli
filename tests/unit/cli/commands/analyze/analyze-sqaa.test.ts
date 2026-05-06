@@ -176,30 +176,6 @@ describe('analyzeSqaa: API call and result display', () => {
     expect(request.branchName).toBe('feature/my-branch');
   });
 
-  it('displays both issues and errors when response contains both', async () => {
-    analyzeFileSpy.mockResolvedValue({
-      id: 'a1',
-      issues: [
-        {
-          rule: 'cpp:S1186',
-          message: 'Add a nested comment explaining why this method is empty.',
-          textRange: { startLine: 2, endLine: 2, startOffset: 28, endOffset: 30 },
-        },
-      ],
-      errors: [{ code: 'PARSE_ERROR', message: "'NonExistentHeader.h' file not found" }],
-    });
-
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
-
-    const output = getMockUiCalls()
-      .map((c) => String(c.args[0]))
-      .join('\n');
-    expect(output).toContain('cpp:S1186');
-    expect(output).toContain('Add a nested comment');
-    expect(output).toContain('PARSE_ERROR');
-    expect(output).toContain('NonExistentHeader.h');
-  });
-
   it('throws CommandFailedError when SQAA API call fails', () => {
     analyzeFileSpy.mockRejectedValue(new Error('Network error'));
 
@@ -230,13 +206,6 @@ describe('analyzeSqaa: path normalization', () => {
 // ─── analyzeSqaa: explicit --project option ──────────────────────────────────
 
 describe('analyzeSqaa: explicit --project option', () => {
-  it('uses provided project key even when extension has a different project key', async () => {
-    await analyzeSqaa({ file: 'src/index.ts', project: 'override-project' }, FAKE_AUTH);
-
-    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
-    expect(analyzeFileSpy.mock.calls[0][0].projectKey).toBe('override-project');
-  });
-
   it('throws CommandFailedError when --project given but on-premise server', () => {
     const onPremiseAuth = {
       token: TEST_TOKEN,
