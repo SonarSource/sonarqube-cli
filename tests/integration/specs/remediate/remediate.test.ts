@@ -465,6 +465,48 @@ describe('sonar remediate', () => {
   );
 
   it(
+    'caps the eligible-issues list at MAX_PAGE_SIZE (500) when the project has more',
+    async () => {
+      // The remediate command intentionally fetches a single page of up to 500
+      // eligible issues. This documents that cap: with 501 fixable issues the
+      // user sees exactly 500, requested with ps=500&p=1.
+      const totalIssues = 501;
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT, (p) => {
+          for (let i = 1; i <= totalIssues; i++) {
+            p.withIssue({
+              key: `ISSUE-${i}`,
+              ruleKey: 'java:S100',
+              message: `Fixable issue ${i}`,
+              fixableByAgent: true,
+            });
+          }
+        })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
+        stdinChunks: ['q'],
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('500 eligible issues found');
+      expect(output).not.toContain('501 eligible issues found');
+
+      const issuesSearchCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/issues/search');
+      expect(issuesSearchCalls).toHaveLength(1);
+      expect(issuesSearchCalls[0].query['ps']).toBe('500');
+      expect(issuesSearchCalls[0].query['p']).toBe('1');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'sorts issues by severity so BLOCKER appears first in the selector',
     async () => {
       const server = await harness

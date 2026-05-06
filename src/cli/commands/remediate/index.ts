@@ -174,13 +174,16 @@ async function fetchEligibleIssues(
   orgKey: string | undefined,
   projectKey: string,
 ): Promise<SonarQubeIssue[]> {
+  // We intentionally fetch a single page of up to MAX_PAGE_SIZE eligible issues:
+  // larger result sets are overwhelming in an interactive multi-select without
+  // additional filtering. Users can re-run the command after resolving some.
   const result = await issuesClient.searchIssues({
     projects: projectKey,
     organization: orgKey,
     issueStatuses: 'OPEN,CONFIRMED',
     fixableByAgent: true,
     ps: MAX_PAGE_SIZE,
-    p: 1, // One page is the intended behavior at the moment as it can be overwhelming to search for issues without additional filtering
+    p: 1,
   });
   return result.issues;
 }

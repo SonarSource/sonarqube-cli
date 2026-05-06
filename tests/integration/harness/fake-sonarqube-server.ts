@@ -360,6 +360,8 @@ export class FakeSonarQubeServerBuilder {
 
           const pageSize = Number.parseInt(query.ps ?? '500', 10);
           const page = Number.parseInt(query.p ?? '1', 10);
+          const start = (page - 1) * pageSize;
+          const pagedIssues = issues.slice(start, start + pageSize);
 
           return new Response(
             JSON.stringify({
@@ -367,7 +369,7 @@ export class FakeSonarQubeServerBuilder {
               p: page,
               ps: pageSize,
               paging: { pageIndex: page, pageSize, total: issues.length },
-              issues,
+              issues: pagedIssues,
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
