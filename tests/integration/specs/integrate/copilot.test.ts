@@ -19,54 +19,6 @@
  */
 
 // Integration tests for `sonar integrate copilot`
-//
-// Table of contents:
-//
-//   describe('integrate copilot')
-//   │
-//   ├── describe('project-level install (default)')
-//   │   ├── it: writes hook script (executable), hooks.json, instructions, and .mcp.json under .github/
-//   │   ├── it: writes a relative-path preToolUse entry in hooks.json with timeoutSec=60
-//   │   ├── it: does not touch ~/.copilot when running without --global
-//   │   ├── it: records sonar-secrets hook + sonar-prompt-secrets instructions in agentExtensions
-//   │   ├── it: running twice yields exactly one preToolUse entry in hooks.json
-//   │   ├── it: appends --project <key> to the MCP server args when --project is provided
-//   │   ├── it: pretool-secrets script uses the correct subcommand (sonar hook copilot-pre-tool-use)
-//   │   ├── it: preserves unrelated preToolUse entries in a pre-existing project hooks.json
-//   │   ├── it: initialises the hooks key when a pre-existing hooks.json lacks it
-//   │   └── it: prints a project-level outcome message with the written hook and instructions paths
-//   │
-//   ├── describe('global install (-g)')
-//   │   ├── it: writes hook script, hooks.json, instructions, and mcp-config.json under ~/.copilot/
-//   │   ├── it: uses an absolute path in the hooks.json preToolUse entry under ~/.copilot/hooks/
-//   │   ├── it: does not create .github/ inside the project directory when -g is set
-//   │   ├── it: records both extensions as global=true in state
-//   │   ├── it: overwrites pre-existing global instructions and does not print the already-installed notice
-//   │   └── it: prints a global outcome message with the written hook and instructions paths under ~/.copilot/
-//   │
-//   ├── describe('project-level install when a global Copilot hook already exists')
-//   │   ├── it: skips the project-level hook write and prints the "already configured" notice
-//   │   ├── it: does not record the sonar-secrets hook in state when the project-level write was skipped
-//   │   ├── it: leaves the pre-existing global hooks.json byte-identical
-//   │   ├── it: falls back to a project-level install (and warns) when the referenced global script is missing (orphaned)
-//   │   └── it: performs a project-level install when global hooks.json has only an unrelated preToolUse entry
-//   │
-//   ├── describe('project-level install when global Copilot instructions already exist')
-//   │   ├── it: skips the project-level instructions write and does not record them in state
-//   │   └── it: surfaces the pre-existing global instructions path on the outcome Instructions line
-//   │
-//   ├── describe('project-level install when both global hook and global instructions already exist')
-//   │   └── it: skips both writes, records neither extension, and surfaces both global paths in the outcome
-//   │
-//   ├── describe('installation failure handling')
-//   │   ├── it: warns and continues with MCP + instructions when the hook write fails
-//   │   └── it: warns and continues with MCP + hook when the instructions write fails
-//   │
-//   ├── describe('option validation')
-//   │   └── it: exits with code 1 when both --global and --project are provided
-//   │
-//   └── describe('auth gate')
-//       └── it: exits with code 1 and prompts to authenticate when no auth is configured
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
