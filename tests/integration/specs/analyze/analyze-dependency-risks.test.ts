@@ -20,8 +20,8 @@
 
 // Integration tests for `analyze dependency-risks` (CLI-354 skeleton + CLI-355 SCA gate
 // + CLI-356 analysis properties fetch). The command is still a stub for output, but
-// now pre-flights `/sca/feature-enabled`, validates the project, and fetches analysis
-// properties from `/api/settings/values`.
+// now pre-flights `/sca/feature-enabled` and fetches analysis properties from
+// `/api/settings/values` (which also surfaces missing-project as a 404).
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -73,10 +73,8 @@ describe('analyze dependency-risks', () => {
     expect(scaCalls).toHaveLength(1);
     expect(scaCalls[0].query.organization).toBe(TEST_ORG);
 
-    const componentShowIndex = recorded.findIndex((r) => r.path === '/api/components/show');
     const settingsIndex = recorded.findIndex((r) => r.path === '/api/settings/values');
-    expect(componentShowIndex).toBeGreaterThanOrEqual(0);
-    expect(settingsIndex).toBeGreaterThan(componentShowIndex);
+    expect(settingsIndex).toBeGreaterThanOrEqual(0);
     expect(recorded[settingsIndex].query.component).toBe('demo');
   });
 
@@ -105,7 +103,7 @@ describe('analyze dependency-risks', () => {
     ).toBe(true);
   });
 
-  it('exits with code 1 with "No project" when project does not exist', async () => {
+  it('exits with code 1 when project does not exist (settings 404)', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken(VALID_TOKEN)
@@ -116,9 +114,8 @@ describe('analyze dependency-risks', () => {
     const result = await harness.run('analyze dependency-risks --project demo');
 
     expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain('No project: demo');
-    // Settings fetch must be skipped when the project pre-check fails.
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(false);
+    expect(result.stdout + result.stderr).toContain('Project demo not found');
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(true);
   });
 
   it('exits with code 1 when SCA is disabled on the server', async () => {

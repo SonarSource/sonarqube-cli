@@ -415,6 +415,12 @@ export class FakeSonarQubeServerBuilder {
 
         if (path === '/api/settings/values' && req.method === 'GET') {
           const component = query.component;
+          if (component && !projects.has(component)) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: `Component '${component}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
           const settings = component ? (projectSettings.get(component) ?? []) : [];
           return new Response(JSON.stringify({ settings }), {
             headers: { 'Content-Type': 'application/json' },

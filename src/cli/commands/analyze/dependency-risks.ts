@@ -44,11 +44,6 @@ export async function analyzeDependencyRisks(
     );
   }
 
-  const componentExists = await client.checkComponent(options.project);
-  if (!componentExists) {
-    throw new CommandFailedError(`No project: ${options.project}`);
-  }
-
   const settings = await client.getProjectSettings(options.project);
   const properties = parseAnalysisProperties(settings);
   logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);

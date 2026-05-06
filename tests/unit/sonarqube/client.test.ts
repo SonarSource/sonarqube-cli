@@ -140,6 +140,82 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
+  // getSafe — non-throwing variant returns response + value
+  // -------------------------------------------------------------------------
+
+  describe('getSafe', () => {
+    it('returns response and parsed value on success', async () => {
+      fetchSpy = mockFetch({ valid: true });
+      const result = await client.getSafe<{ valid: boolean }>('/api/authentication/validate');
+      expect(result.response.ok).toBe(true);
+      expect(result.value).toEqual({ valid: true });
+    });
+
+    it('returns response with undefined value on non-ok status (does not throw)', async () => {
+      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
+      const result = await client.getSafe('/api/settings/values', { component: 'missing' });
+      expect(result.response.ok).toBe(false);
+      expect(result.response.status).toBe(404);
+      expect(result.value).toBeUndefined();
+    });
+
+    it('appends query parameters to the URL', async () => {
+      fetchSpy = mockFetch({});
+      await client.getSafe('/api/settings/values', { component: 'demo' });
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.searchParams.get('component')).toBe('demo');
+    });
+
+    it('uses provided baseUrl instead of serverURL', async () => {
+      fetchSpy = mockFetch({});
+      await client.getSafe('/foo', undefined, SONARCLOUD_API_URL);
+      expect(lastFetchUrl(fetchSpy)).toBe(`${SONARCLOUD_API_URL}/foo`);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getProjectSettings
+  // -------------------------------------------------------------------------
+
+  describe('getProjectSettings', () => {
+    it('returns the settings array on success', async () => {
+      const settings = [
+        { key: 'sonar.exclusions', values: ['**/test/**'], inherited: false },
+        { key: 'sonar.sca.foo', value: 'bar', inherited: false },
+      ];
+      fetchSpy = mockFetch({ settings });
+      expect(await client.getProjectSettings('demo')).toEqual(settings);
+    });
+
+    it('returns an empty array when the API omits settings', async () => {
+      fetchSpy = mockFetch({});
+      expect(await client.getProjectSettings('demo')).toEqual([]);
+    });
+
+    it('passes the project key as the component query param', async () => {
+      fetchSpy = mockFetch({ settings: [] });
+      await client.getProjectSettings('demo');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/settings/values');
+      expect(url.searchParams.get('component')).toBe('demo');
+    });
+
+    it('throws "Project ... not found" on 404', async () => {
+      fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getProjectSettings('missing')).rejects.toThrow(
+        'Project missing not found',
+      );
+    });
+
+    it('throws a generic API error on other non-ok statuses', async () => {
+      fetchSpy = mockFetch({}, false, 500);
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(client.getProjectSettings('demo')).rejects.toThrow('SonarQube API error: 500');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // post — shared request behaviour
   // -------------------------------------------------------------------------
 

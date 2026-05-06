@@ -146,6 +146,20 @@ export class SonarQubeClient {
     params?: Record<string, string | number | boolean>,
     baseUrl?: string,
   ): Promise<T> {
+    const result = await this.getSafe<T>(endpoint, params, baseUrl);
+
+    await this.raiseForStatus(result.response, 'GET');
+
+    return result.value!;
+  }
+
+  // false positive
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+  async getSafe<TValue>(
+    endpoint: string,
+    params?: Record<string, string | number | boolean>,
+    baseUrl?: string,
+  ): Promise<{ response: Response; value: TValue | undefined }> {
     const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
 
     if (params) {
@@ -160,9 +174,9 @@ export class SonarQubeClient {
       signal: AbortSignal.timeout(GET_REQUEST_TIMEOUT_MS),
     });
 
-    await this.raiseForStatus(response, 'GET');
+    const value = response.ok ? ((await response.json()) as TValue) : undefined;
 
-    return (await response.json()) as T;
+    return { response, value };
   }
 
   /**
@@ -330,19 +344,26 @@ export class SonarQubeClient {
    * returns global defaults. Callers project the raw entries into whatever
    * shape they need (e.g. `parseAnalysisProperties` for SCA).
    */
-  async getProjectSettings(componentKey: string): Promise<SettingsValue[]> {
-    const result = await this.get<{ settings?: SettingsValue[] }>('/api/settings/values', {
-      component: componentKey,
+  async getProjectSettings(projectKey: string): Promise<SettingsValue[]> {
+    const result = await this.getSafe<{ settings?: SettingsValue[] }>('/api/settings/values', {
+      component: projectKey,
     });
-    return result.settings ?? [];
+
+    if (result.response.status === HTTP_STATUS_NOT_FOUND) {
+      throw new Error(`Project ${projectKey} not found`);
+    }
+
+    await this.raiseForStatus(result.response, 'GET');
+
+    return result.value?.settings ?? [];
   }
 
   /**
    * Check if component (project) exists
    */
-  async checkComponent(componentKey: string): Promise<boolean> {
+  async checkComponent(projectKey: string): Promise<boolean> {
     try {
-      await this.get('/api/components/show', { component: componentKey });
+      await this.get('/api/components/show', { component: projectKey });
       return true;
     } catch {
       return false;
