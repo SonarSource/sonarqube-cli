@@ -21,6 +21,7 @@
 // Remediate command - triggers AI agent remediation for eligible issues
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { AI_REMEDIATION_DOCS_URL } from '../../../lib/config-constants';
 import logger from '../../../lib/logger';
 import { discoverProject } from '../../../lib/project-workspace';
 import type { SonarQubeIssue } from '../../../lib/types';
@@ -36,9 +37,6 @@ export interface RemediateOptions {
 }
 
 const SEVERITY_ORDER = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'] as const;
-
-const AI_REMEDIATION_DOCS_URL =
-  'https://docs.sonarsource.com/sonarqube-cloud/administering-sonarcloud/ai-features/sonarqube-remediation-agent';
 
 const SEVERITY_COLORS: Record<string, (s: string) => string> = {
   BLOCKER: red,
@@ -57,28 +55,30 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
-  if (!auth.orgKey) {
-    throw new CommandFailedError('Cannot verify the Remediation Agent entitlements.');
-  }
-  const { status: entitlement } = await client.checkAiRemediationEntitlement(auth.orgKey);
+  // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
+  // narrow once and reuse throughout this function.
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const orgKey = auth.orgKey!;
+
+  const { status: entitlement } = await client.checkAiRemediationEntitlement(orgKey);
   if (entitlement === 'not_eligible') {
-    print(`The Remediation Agent is not available for your organization (${auth.orgKey}).`);
+    print(`The Remediation Agent is not available for your organization (${orgKey}).`);
     print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
     blank();
-    throw new CommandFailedError('The Remediation Agent is not available for this organization.');
+    throw new CommandFailedError('Remediation Agent unavailable');
   }
   if (entitlement === 'not_enabled') {
-    print(`The Remediation Agent is not enabled for your organization (${auth.orgKey}).`);
+    print(`The Remediation Agent is not enabled for your organization (${orgKey}).`);
     print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
     blank();
-    throw new CommandFailedError('The Remediation Agent is not available for this organization.');
+    throw new CommandFailedError('Remediation Agent unavailable');
   }
   if (entitlement === 'unknown') {
     print(
       'Could not verify Remediation Agent entitlement. Please try again or contact support if the issue persists.',
     );
     blank();
-    throw new CommandFailedError('Unable to verify Remediation Agent entitlement.');
+    throw new CommandFailedError('Remediation Agent unavailable');
   }
 
   let projectKey = options.project;
@@ -97,7 +97,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   // Step 1: Fetch eligible issues
   process.stdout.write(`  Fetching issues for project ${projectKey}...`);
 
-  const issues = await fetchEligibleIssues(issuesClient, auth.orgKey, projectKey);
+  const issues = await fetchEligibleIssues(issuesClient, orgKey, projectKey);
 
   process.stdout.write(`  ${green('✓')}  ${issues.length} eligible issues found\n`);
 
@@ -149,7 +149,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     taskId = response.taskId;
   } catch (err) {
     logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
-    const lines = mapErrorMessage((err as Error).message, auth.orgKey);
+    const lines = mapErrorMessage((err as Error).message, orgKey);
     print(`  failed: ${lines[0]}`);
     for (let i = 1; i < lines.length; i++) {
       print(`    ${lines[i]}`);

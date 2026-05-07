@@ -346,7 +346,7 @@ export class SonarQubeClient {
       if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
       return { status: 'ok' };
     } catch (err) {
-      logger.debug('AI remediation entitlement check failed', err);
+      logger.warn('AI remediation entitlement check failed', err);
       return { status: 'unknown' };
     }
   }
