@@ -260,7 +260,7 @@ analyze
     analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, auth),
   );
 
-// Shared option set for `analyze sqaa` and its `verify` alias.
+// Shared option set for `analyze agentic` and its `verify` alias.
 const sqaaFormatOption = new Option('--format <format>', 'Output format')
   .choices(SQAA_FORMATS)
   .default('text');
@@ -296,15 +296,13 @@ analyze
   );
 
 applySqaaOptions(
-  analyze
-    .command('sqaa')
-    .description('Run server-side SonarQube Agentic Analysis (SonarQube Cloud only)'),
+  analyze.command('agentic').description('Run server-side Agentic Analysis (SonarQube Cloud only)'),
 );
 
-// `verify` is a user-facing alias for `analyze sqaa` that fits CI/pipeline vocabulary.
+// `verify` is a user-facing alias for `analyze agentic` that fits CI/pipeline vocabulary.
 applySqaaOptions(
   COMMAND_TREE.command('verify').description(
-    'Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze sqaa`, SonarQube Cloud only)',
+    'Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze agentic`, SonarQube Cloud only)',
   ),
 );
 
@@ -372,7 +370,7 @@ hookCommand
 
 hookCommand
   .command('claude-post-tool-use')
-  .description('PostToolUse handler: run SQAA analysis after agent edits or writes a file')
+  .description('PostToolUse handler: run Agentic Analysis after agent edits or writes a file')
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
 

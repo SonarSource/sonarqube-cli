@@ -46,7 +46,7 @@ describe('sonar hook claude-post-tool-use', () => {
   });
 
   it(
-    'exits 0 and outputs SQAA JSON when analysis returns no issues',
+    'exits 0 and outputs Agentic Analysis JSON when analysis returns no issues',
     async () => {
       const server = await harness
         .newFakeServer()

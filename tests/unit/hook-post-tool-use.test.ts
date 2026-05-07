@@ -248,6 +248,6 @@ describe('agentPostToolUse', () => {
     await agentPostToolUse({ project: 'my-project' });
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
-    expect(output.hookSpecificOutput.additionalContext).not.toContain('SQAA errors');
+    expect(output.hookSpecificOutput.additionalContext).not.toContain('Agentic Analysis errors');
   });
 });

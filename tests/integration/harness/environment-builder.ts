@@ -147,7 +147,7 @@ export class EnvironmentBuilder {
 
   /**
    * Registers a sonar-sqaa PostToolUse extension for a project.
-   * Required for `analyze sqaa` and `analyze` (full pipeline) to run SQAA.
+   * Required for `analyze agentic` and `analyze` (full pipeline) to run Agentic Analysis.
    */
   withSqaaExtension(
     projectRoot: string,

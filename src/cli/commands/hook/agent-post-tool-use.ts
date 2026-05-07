@@ -89,9 +89,9 @@ function formatSqaaResult(
   const lines: string[] = [];
 
   if (issues.length === 0) {
-    lines.push('SQAA analysis completed — no issues found.');
+    lines.push('Agentic Analysis completed — no issues found.');
   } else {
-    lines.push(`SQAA analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
+    lines.push(`Agentic Analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
     issues.forEach((issue, idx) => {
       const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
       lines.push(`  [${idx + 1}] ${issue.message}${location} [${issue.rule}]`);
@@ -99,7 +99,7 @@ function formatSqaaResult(
   }
 
   if (errors && errors.length > 0) {
-    lines.push('SQAA errors:');
+    lines.push('Agentic Analysis errors:');
     errors.forEach((e) => lines.push(`  [${e.code}] ${e.message}`));
   }
 

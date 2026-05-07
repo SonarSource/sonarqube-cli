@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `analyze sqaa` and `verify` commands.
+// Integration tests for `analyze agentic` and `verify` commands.
 
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -51,13 +51,13 @@ describe('analyze (no subcommand)', () => {
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
       expect(output).toContain('secrets');
-      expect(output).toContain('sqaa');
+      expect(output).toContain('agentic');
     },
     { timeout: 15000 },
   );
 });
 
-describe('analyze sqaa', () => {
+describe('analyze agentic', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -74,7 +74,7 @@ describe('analyze sqaa', () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run('analyze sqaa --file nonexistent.ts');
+      const result = await harness.run('analyze agentic --file nonexistent.ts');
 
       expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('File not found');
@@ -87,7 +87,7 @@ describe('analyze sqaa', () => {
     async () => {
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
@@ -105,7 +105,7 @@ describe('analyze sqaa', () => {
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
@@ -133,7 +133,7 @@ describe('analyze sqaa', () => {
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
@@ -162,7 +162,7 @@ describe('analyze sqaa', () => {
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
       const result = await harness.run(
-        `analyze sqaa --file src/index.ts --project ${TEST_PROJECT} --branch main`,
+        `analyze agentic --file src/index.ts --project ${TEST_PROJECT} --branch main`,
       );
 
       expect(result.exitCode).toBe(0);
@@ -191,7 +191,7 @@ describe('analyze sqaa', () => {
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('no issues found');
@@ -224,7 +224,7 @@ describe('analyze sqaa', () => {
 
       harness.cwd.writeFile('main.py', 'def foo():\n  pass\n');
 
-      const result = await harness.run('analyze sqaa --file main.py');
+      const result = await harness.run('analyze agentic --file main.py');
 
       expect(result.exitCode).toBe(51);
       const output = result.stdout + result.stderr;
@@ -255,7 +255,7 @@ describe('analyze sqaa', () => {
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -266,7 +266,7 @@ describe('analyze sqaa', () => {
   );
 });
 
-describe('analyze sqaa — change-set mode (no --file)', () => {
+describe('analyze agentic — change-set mode (no --file)', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -298,7 +298,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       // Empty repo: first commit with no changes after it.
       commitFile(harness.cwd.path, 'README.md', 'hello');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('no files in the change set');
@@ -328,7 +328,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       // Modify without staging — should appear in `git diff HEAD`
       harness.cwd.writeFile('app.ts', 'const a = 2;');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('change set is clean');
@@ -358,7 +358,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       // New untracked file — not in any commit, not ignored
       harness.cwd.writeFile('new-feature.ts', 'export const x = 1;');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('change set is clean');
@@ -388,7 +388,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       commitFile(harness.cwd.path, '.gitignore', '.claude/\ndist/\n');
       harness.cwd.writeFile('dist/bundle.js', 'console.log("built");');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       // No files to analyze (ignored file excluded, nothing else changed)
@@ -405,7 +405,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
 
-      const result = await harness.run('analyze sqaa --staged --base main');
+      const result = await harness.run('analyze agentic --staged --base main');
 
       expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain(
@@ -433,7 +433,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('large number of files (51)');
@@ -463,7 +463,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
-      const result = await harness.run('analyze sqaa --force');
+      const result = await harness.run('analyze agentic --force');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).not.toContain('large number of files');
@@ -494,7 +494,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       // Unstaged modification — should not be included
       harness.cwd.writeFile('unstaged.ts', 'const u = 1;');
 
-      const result = await harness.run('analyze sqaa --staged');
+      const result = await harness.run('analyze agentic --staged');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('change set is clean');
@@ -522,7 +522,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
 
-      const result = await harness.run('analyze sqaa --staged');
+      const result = await harness.run('analyze agentic --staged');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('no files in the change set');
@@ -554,7 +554,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       git(['checkout', '-b', 'feature'], harness.cwd.path);
       commitFile(harness.cwd.path, 'feature.ts', 'const f = 1;');
 
-      const result = await harness.run('analyze sqaa --base master');
+      const result = await harness.run('analyze agentic --base master');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('change set is clean');
@@ -585,7 +585,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('dirty.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(51);
       expect(result.stdout + result.stderr).toContain('Fix this');
@@ -602,7 +602,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('app.ts', 'const a = 1;');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
@@ -628,7 +628,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('app.ts', 'const a = 1;');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
@@ -660,7 +660,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       // Write a file with a NUL byte — detected as binary and excluded
       writeFileSync(join(harness.cwd.path, 'image.bin'), Buffer.from([0x89, 0x50, 0x00, 0x4e]));
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       // Binary file shown as IGNORED — no files to analyze
@@ -691,7 +691,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       // Write a file slightly over 10 MB
       writeFileSync(join(harness.cwd.path, 'huge.ts'), Buffer.alloc(10 * 1024 * 1024 + 1, 'a'));
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       // Oversized file shown as IGNORED — no files to analyze
@@ -724,7 +724,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       commitFile(harness.cwd.path, 'README.md', 'hello');
       stageFile(harness.cwd.path, 'staged.ts', 'const s = 1;');
 
-      const result = await harness.run('analyze sqaa --staged');
+      const result = await harness.run('analyze agentic --staged');
 
       const output = result.stdout + result.stderr;
       expect(output).toContain('NOT_ENTITLED');
@@ -750,7 +750,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
 
       bareHarness.cwd.writeFile('app.ts', 'const a = 1;');
 
-      const result = await bareHarness.run('analyze sqaa');
+      const result = await bareHarness.run('analyze agentic');
 
       await bareHarness.dispose();
 
@@ -896,7 +896,7 @@ describe('verify — change-set mode (no --file)', () => {
   );
 });
 
-describe('analyze sqaa — API error codes', () => {
+describe('analyze agentic — API error codes', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -923,7 +923,7 @@ describe('analyze sqaa — API error codes', () => {
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Rate limit reached');
@@ -947,7 +947,7 @@ describe('analyze sqaa — API error codes', () => {
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Server busy');
@@ -980,7 +980,7 @@ describe('analyze sqaa — API error codes', () => {
       harness.cwd.writeFile('a.ts', 'const a = 1;');
       harness.cwd.writeFile('b.ts', 'const b = 2;');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Server busy');
@@ -1009,7 +1009,7 @@ describe('analyze sqaa — API error codes', () => {
 
       harness.cwd.writeFile('src/index.ts', '// TODO: fix\nconst x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts');
+      const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(51);
       // Issue details are on stdout.
@@ -1021,7 +1021,7 @@ describe('analyze sqaa — API error codes', () => {
   );
 });
 
-describe('analyze sqaa — --format json', () => {
+describe('analyze agentic — --format json', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1050,7 +1050,7 @@ describe('analyze sqaa — --format json', () => {
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts --format json');
+      const result = await harness.run('analyze agentic --file src/index.ts --format json');
 
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout) as {
@@ -1088,7 +1088,7 @@ describe('analyze sqaa — --format json', () => {
 
       harness.cwd.writeFile('src/index.ts', '// TODO: fix\nconst x = 1;');
 
-      const result = await harness.run('analyze sqaa --file src/index.ts --format json');
+      const result = await harness.run('analyze agentic --file src/index.ts --format json');
 
       expect(result.exitCode).toBe(51);
       const report = JSON.parse(result.stdout) as {
@@ -1121,7 +1121,7 @@ describe('analyze sqaa — --format json', () => {
       // Binary file — should appear in ignored
       writeFileSync(join(harness.cwd.path, 'image.bin'), Buffer.from([0x89, 0x50, 0x00, 0x4e]));
 
-      const result = await harness.run('analyze sqaa --format json');
+      const result = await harness.run('analyze agentic --format json');
 
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout) as {
@@ -1163,7 +1163,7 @@ describe('analyze sqaa — --format json', () => {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
-      const result = await harness.run('analyze sqaa --format json');
+      const result = await harness.run('analyze agentic --format json');
 
       expect(result.exitCode).toBe(1);
       // JSON consumers should never see the interactive prompt warning.
@@ -1185,7 +1185,7 @@ describe('analyze sqaa — --format json', () => {
   );
 });
 
-describe('analyze sqaa — running from a subdirectory', () => {
+describe('analyze agentic — running from a subdirectory', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1220,7 +1220,7 @@ describe('analyze sqaa — running from a subdirectory', () => {
       harness.cwd.writeFile('src/ui/inside.ts', 'export const b = 2;');
 
       const subdir = join(harness.cwd.path, 'src', 'ui');
-      const result = await harness.run('analyze sqaa', { cwd: subdir });
+      const result = await harness.run('analyze agentic', { cwd: subdir });
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
@@ -1260,7 +1260,7 @@ describe('analyze sqaa — running from a subdirectory', () => {
       // Filename with a space — would be corrupted by the previous `.trim()`-based parser.
       harness.cwd.writeFile('with space.ts', 'export const x = 1;');
 
-      const result = await harness.run('analyze sqaa');
+      const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
