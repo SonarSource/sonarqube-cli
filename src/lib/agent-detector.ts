@@ -23,7 +23,7 @@
  * Best-effort: hook subprocesses often omit variables present in the agent's integrated terminal.
  */
 
-export type CallerAgent = 'cursor' | 'claude';
+export type CallerAgent = 'cursor' | 'claude' | 'copilot';
 
 /** Cursor IDE / agent terminal markers. */
 export function isCursorAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -39,12 +39,20 @@ export function isClaudeCodeAgentEnv(env: NodeJS.ProcessEnv = process.env): bool
   );
 }
 
+/** GitHub Copilot CLI / agent terminal markers. */
+export function isCopilotCliAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.COPILOT_CLI === '1' || Boolean(env.COPILOT_PROJECT_DIR);
+}
+
 /**
- * Claude Code markers take precedence when both families could be set.
+ * Precedence: Copilot CLI > Claude Code > Cursor.
+ * Copilot CLI vars are the most specific (unlikely to collide),
+ * Claude Code beats Cursor when both families could be set.
  *
  * @param env - Defaults to `process.env`; inject a custom object for tests.
  */
 export function detectCallerAgent(env: NodeJS.ProcessEnv = process.env): CallerAgent | null {
+  if (isCopilotCliAgentEnv(env)) return 'copilot';
   if (isClaudeCodeAgentEnv(env)) return 'claude';
   if (isCursorAgentEnv(env)) return 'cursor';
   return null;

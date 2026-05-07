@@ -287,7 +287,7 @@ export interface TelemetryEventPayload {
   organization_uuid_v4: string | null;
   /** Installation ID of the SonarQube Server, null when not authenticated or SQC */
   sqs_installation_id: string | null;
-  /** Inferred caller (Cursor vs Claude Code) from the process environment. See `detectCallerAgent`. */
+  /** Inferred caller (Cursor, Claude Code, or Copilot CLI) from the process environment. See `detectCallerAgent`. */
   caller_agent: CallerAgent | null;
 }
 

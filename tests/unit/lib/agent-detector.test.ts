@@ -23,6 +23,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   detectCallerAgent,
   isClaudeCodeAgentEnv,
+  isCopilotCliAgentEnv,
   isCursorAgentEnv,
 } from '../../../src/lib/agent-detector.js';
 
@@ -74,15 +75,47 @@ describe('agent-detector', () => {
     });
   });
 
+  describe('isCopilotCliAgentEnv', () => {
+    it('is true when COPILOT_CLI=1', () => {
+      expect(isCopilotCliAgentEnv(env({ COPILOT_CLI: '1' }))).toBe(true);
+    });
+
+    it('is false when COPILOT_CLI is not 1', () => {
+      expect(isCopilotCliAgentEnv(env({ COPILOT_CLI: '0' }))).toBe(false);
+      expect(isCopilotCliAgentEnv(env({}))).toBe(false);
+    });
+
+    it('is true when COPILOT_PROJECT_DIR is non-empty', () => {
+      expect(isCopilotCliAgentEnv(env({ COPILOT_PROJECT_DIR: '/p' }))).toBe(true);
+    });
+
+    it('is false when copilot vars are empty strings', () => {
+      expect(isCopilotCliAgentEnv(env({ COPILOT_CLI: '', COPILOT_PROJECT_DIR: '' }))).toBe(false);
+    });
+  });
+
   describe('detectCallerAgent', () => {
     it('returns null when no markers', () => {
       expect(detectCallerAgent(env({}))).toBeNull();
     });
 
-    it('prefers claude when both families are set', () => {
+    it('prefers claude over cursor when both families are set', () => {
       expect(
         detectCallerAgent(env({ CLAUDECODE: '1', CURSOR_TRACE_ID: 't', CLAUDE_PROJECT_DIR: '/x' })),
       ).toBe('claude');
+    });
+
+    it('prefers copilot over claude and cursor when all are set', () => {
+      expect(
+        detectCallerAgent(
+          env({
+            COPILOT_CLI: '1',
+            CLAUDECODE: '1',
+            CLAUDE_PROJECT_DIR: '/x',
+            CURSOR_TRACE_ID: 't',
+          }),
+        ),
+      ).toBe('copilot');
     });
   });
 });
