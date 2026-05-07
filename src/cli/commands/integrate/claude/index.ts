@@ -66,7 +66,7 @@ export async function integrateClaude(
     print(`Found ${configSource}`);
   }
   const config = loadConfiguration(project, options, auth);
-  validateConfiguration(project, config);
+  validateConfiguration(project, config, options.global ?? false);
 
   const isGlobal = options.global ?? false;
   // For project-level installs, probe the user home for a pre-existing global
@@ -171,7 +171,11 @@ function loadConfiguration(
   };
 }
 
-function validateConfiguration(project: DiscoveredProject, config: ConfigurationData): void {
+function validateConfiguration(
+  project: DiscoveredProject,
+  config: ConfigurationData,
+  isGlobal: boolean,
+): void {
   if (isSonarQubeCloud(config.serverURL) && !config.organization) {
     throw new CommandFailedError(
       'SonarQube Cloud requires an organization. Please run "sonar auth logout" and re-authenticate with an organization.',
@@ -193,8 +197,10 @@ function validateConfiguration(project: DiscoveredProject, config: Configuration
 
   if (config.projectKey) {
     text(`Project: ${config.projectKey}`);
-  } else {
-    text('No project key provided - project related actions will be skipped.');
+  } else if (!isGlobal) {
+    warn(
+      'No project key provided - project related actions will be skipped. Run sonar integrate claude --help for ways to define a project.',
+    );
   }
 }
 
