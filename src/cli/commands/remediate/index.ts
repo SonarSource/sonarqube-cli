@@ -163,8 +163,9 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   success(`Submitted ${selectedKeys.length} ${issueWord} for remediation\nJob: job/${taskId}`);
   blank();
   const activityUrl = `${auth.serverUrl}${AGENT_ACTIVITY_PATH}?id=${encodeURIComponent(projectKey)}`;
-  print('The agent will create pull requests for the selected issues. Track progress:');
-  print(`  ${activityUrl}`);
+  info(
+    `The agent will create pull requests for the selected issues. Track progress:\n${activityUrl}`,
+  );
 }
 
 async function fetchEligibleIssues(
