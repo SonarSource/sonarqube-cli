@@ -20,21 +20,7 @@
 
 // Hook script templates for Claude Code integration
 
-export const UNIX_SONAR_COMMAND_GUARD = `if ! command -v sonar &> /dev/null; then
-  exit 0
-fi`;
-
-export const WINDOWS_SONAR_COMMAND_GUARD = `if (-not (Get-Command sonar -ErrorAction SilentlyContinue)) {
-    exit 0
-}`;
-
-function unixTemplate(command: string): string {
-  return `#!/bin/bash\n${UNIX_SONAR_COMMAND_GUARD}\n${command}\n`;
-}
-
-function windowsTemplate(command: string): string {
-  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\n`;
-}
+import { unixTemplate, windowsTemplate } from '../_common/hooks';
 
 export function getSecretPreToolTemplateUnix(): string {
   return unixTemplate('sonar hook claude-pre-tool-use');

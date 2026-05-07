@@ -115,6 +115,15 @@ export class TestHarness {
   }
 
   /**
+   * Convenience: resets the active connection and any seeded keychain tokens.
+   * Equivalent to harness.state().clearAuth().
+   */
+  clearAuth(): this {
+    this.state().clearAuth();
+    return this;
+  }
+
+  /**
    * Creates a new FakeSonarQubeServerBuilder. Call .start() on the result to get a
    * running server. The server is stopped automatically when dispose() is called.
    */

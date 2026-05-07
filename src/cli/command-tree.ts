@@ -45,9 +45,12 @@ import {
 } from './commands/hook/agent-post-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
+import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
-import { integrateClaude, type IntegrateClaudeOptions } from './commands/integrate/claude';
+import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
+import { integrateClaude } from './commands/integrate/claude';
+import { integrateCopilot } from './commands/integrate/copilot';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
 import {
   listIssues,
@@ -142,13 +145,13 @@ integrateCommand
   .description(
     'Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
   )
-  .option('-p, --project <project>', 'Project key')
+  .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option(
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .authenticatedAction((auth, options: IntegrateClaudeOptions) => integrateClaude(options, auth));
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
 
 integrateCommand
   .command('git')
@@ -166,6 +169,18 @@ integrateCommand
     'Install hook globally for all repositories (sets git config --global core.hooksPath)',
   )
   .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
+
+integrateCommand
+  .command('copilot')
+  .description(
+    'Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
+  )
+  .option(
+    '-g, --global',
+    'Install hooks and config globally to ~/.copilot instead of project directory',
+  )
+  .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
+  .authenticatedAction((_auth, options: IntegrateAgentOptions) => integrateCopilot(_auth, options));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');
@@ -309,6 +324,11 @@ hookCommand
   .command('claude-pre-tool-use')
   .description('PreToolUse handler: scan files for secrets before agent reads them')
   .anonymousAction(() => claudePreToolUse());
+
+hookCommand
+  .command('copilot-pre-tool-use')
+  .description('PreToolUse handler for Copilot: scan files for secrets before agent reads them')
+  .anonymousAction(() => copilotPreToolUse());
 
 hookCommand
   .command('claude-prompt-submit')

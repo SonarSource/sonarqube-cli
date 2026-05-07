@@ -25,7 +25,7 @@ import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import { canonicalizePath } from '../../../lib/fs-utils.js';
-import { getMcpServerConfig, type McpServerContext } from '../../../lib/mcp/server-config.js';
+import { getMcpContainerCommand, type McpServerContext } from '../../../lib/mcp/mcp-helper.js';
 import { discoverProject } from '../../../lib/project-workspace/project-info.js';
 import { detectContainerRuntime } from '../../../lib/tool-detector.js';
 import { CommandFailedError } from '../_common/error.js';
@@ -48,16 +48,16 @@ export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): P
   const cwd = process.cwd();
   const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
   const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd);
-  const projectKey = options.project ?? discovered?.projectKey;
+  const projectKey = options.project || discovered?.projectKey;
   const discoveredRootIsHomeDir =
     discovered && canonicalizePath(discovered.rootDir) === canonicalizePath(homedir());
   const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.rootDir;
 
   const context: McpServerContext = projectRoot
-    ? { withFsMount: true, projectRoot, discoveredProjectKey: projectKey }
-    : { withFsMount: false, discoveredProjectKey: projectKey };
+    ? { withFsMount: true, projectRoot, projectKey }
+    : { withFsMount: false, projectKey };
 
-  const config = getMcpServerConfig(auth, runtime, context, options);
+  const config = getMcpContainerCommand(auth, runtime, context, options);
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(config.command, config.args, {

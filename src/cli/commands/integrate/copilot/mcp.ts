@@ -28,7 +28,7 @@ export async function setupMcpServer(
 ): Promise<void> {
   info(`Setting up SonarQube MCP Server...`);
   try {
-    await setupMcpServerForAgent('claude', project.rootDir, isGlobal, projectKey);
+    await setupMcpServerForAgent('copilot', project.rootDir, isGlobal, projectKey);
     success(`SonarQube MCP Server configured`);
   } catch (error) {
     if (error instanceof Error) {

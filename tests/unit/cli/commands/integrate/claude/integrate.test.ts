@@ -28,11 +28,11 @@ import { integrateClaude } from '../../../../../../src/cli/commands/integrate/cl
 import * as health from '../../../../../../src/cli/commands/integrate/claude/health';
 import { HealthCheckResult } from '../../../../../../src/cli/commands/integrate/claude/health';
 import * as hooks from '../../../../../../src/cli/commands/integrate/claude/hooks';
-import * as mcp from '../../../../../../src/cli/commands/integrate/claude/mcp';
 import * as repair from '../../../../../../src/cli/commands/integrate/claude/repair';
 import * as state from '../../../../../../src/cli/commands/integrate/claude/state';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
 import * as authResolver from '../../../../../../src/lib/auth-resolver';
+import * as mcpHelper from '../../../../../../src/lib/mcp/mcp-helper';
 import * as migration from '../../../../../../src/lib/migration';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
@@ -81,8 +81,8 @@ describe('integrateCommand', () => {
   >;
   let repairTokenSpy: Mock<Extract<(typeof repair)['repairToken'], (...args: any[]) => any>>;
   let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
-  let detectSecretsHookSpy: Mock<
-    Extract<(typeof hooks)['detectSecretsHook'], (...args: any[]) => any>
+  let detectGlobalSecretsHookSpy: Mock<
+    Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
   >;
   let runMigrationsSpy: Mock<Extract<(typeof migration)['runMigrations'], (...args: any[]) => any>>;
   let updateStateAfterConfigurationSpy: Mock<
@@ -91,14 +91,18 @@ describe('integrateCommand', () => {
   let resolveSecretsBinarySpy: Mock<
     Extract<(typeof installSecrets)['resolveSecretsBinary'], (...args: any[]) => any>
   >;
-  let setupMcpServerSpy: Mock<Extract<(typeof mcp)['setupMcpServer'], (...args: any[]) => any>>;
+  let setupMcpServerForAgentSpy: Mock<
+    Extract<(typeof mcpHelper)['setupMcpServerForAgent'], (...args: any[]) => any>
+  >;
 
   beforeEach(() => {
     setMockUi(true);
 
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
     hasSqaaEntitlementSpy.mockResolvedValue(false);
-    setupMcpServerSpy = spyOn(mcp, 'setupMcpServer').mockResolvedValue(undefined);
+    setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
+      undefined,
+    );
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
@@ -108,7 +112,9 @@ describe('integrateCommand', () => {
     discoverProjectSpy = spyOn(discovery, 'discoverProject');
     repairTokenSpy = spyOn(repair, 'repairToken');
     installHooksSpy = spyOn(hooks, 'installHooks');
-    detectSecretsHookSpy = spyOn(hooks, 'detectSecretsHook').mockResolvedValue({ kind: 'absent' });
+    detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
+      undefined,
+    );
     runMigrationsSpy = spyOn(migration, 'runMigrations');
     updateStateAfterConfigurationSpy = spyOn(state, 'updateStateAfterConfiguration');
 
@@ -132,18 +138,19 @@ describe('integrateCommand', () => {
     discoverProjectSpy.mockRestore();
     repairTokenSpy.mockRestore();
     installHooksSpy.mockRestore();
-    detectSecretsHookSpy.mockRestore();
+    detectGlobalSecretsHookSpy.mockRestore();
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
     resolveSecretsBinarySpy.mockRestore();
-    setupMcpServerSpy.mockRestore();
+    setupMcpServerForAgentSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
     await integrateClaude({}, SERVER_AUTH);
 
     const introText = getMockUiCalls().find(
-      (c) => c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude',
+      (c) =>
+        c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude Code',
     );
     expect(introText).toBeDefined();
   });
@@ -486,20 +493,9 @@ describe('integrateCommand', () => {
     const GLOBAL_HOOK_PATH = `${homedir()}/.claude/hooks/sonar-secrets`;
 
     beforeEach(() => {
-      detectSecretsHookSpy.mockResolvedValue({ kind: 'installed', hookDir: GLOBAL_HOOK_PATH });
-    });
-
-    it('shows the "already configured globally — project-level skipped" notice', async () => {
-      await integrateClaude({}, SERVER_AUTH);
-
-      const notice = getMockUiCalls().find(
-        (c) =>
-          c.method === 'info' &&
-          String(c.args[0]).includes(
-            'A global secrets scanning hook is already configured for SonarQube. To avoid duplicate execution, project-level secrets hooks were skipped.',
-          ),
-      );
-      expect(notice).toBeDefined();
+      // detectGlobalSecretsHook returns the hook directory path when a healthy
+      // global install is found.
+      detectGlobalSecretsHookSpy.mockResolvedValue(GLOBAL_HOOK_PATH);
     });
 
     it('prints the "configured. Secrets scanning will use the existing global hook at <path>" success message', async () => {
@@ -509,7 +505,7 @@ describe('integrateCommand', () => {
         (c) =>
           c.method === 'success' &&
           String(c.args[0]) ===
-            `Claude integration configured. Secrets scanning will use the existing global hook at: ${GLOBAL_HOOK_PATH}`,
+            `Claude Code integration configured. Secrets scanning will use the existing global hook at: ${GLOBAL_HOOK_PATH}`,
       );
       expect(successMsg).toBeDefined();
     });
@@ -521,7 +517,7 @@ describe('integrateCommand', () => {
         (c) =>
           c.method === 'success' &&
           String(c.args[0]).includes(
-            'Claude integration successfully configured at the project level',
+            'Claude Code integration successfully configured at the project level',
           ),
       );
       expect(projectSuccess).toBeUndefined();
@@ -570,66 +566,27 @@ describe('integrateCommand', () => {
       const healthCall = runHealthChecksSpy.mock.calls.at(-1)!;
       expect(healthCall[3]).toBe(homedir());
     });
-
-    it('does not print the "no global hook found" notice', async () => {
-      await integrateClaude({}, SERVER_AUTH);
-
-      const fallback = getMockUiCalls().find(
-        (c) => c.method === 'text' && String(c.args[0]).includes('No global Claude hook was found'),
-      );
-      expect(fallback).toBeUndefined();
-    });
   });
 
   describe('when no global Claude hook is configured', () => {
-    it('announces that configuration proceeds at project level', async () => {
-      detectSecretsHookSpy.mockResolvedValue({ kind: 'absent' });
-
-      await integrateClaude({}, SERVER_AUTH);
-
-      const notice = getMockUiCalls().find(
-        (c) =>
-          c.method === 'text' &&
-          String(c.args[0]) ===
-            'No global Claude hook was found. Configuring SonarQube for this project only.',
-      );
-      expect(notice).toBeDefined();
+    beforeEach(() => {
+      // detectGlobalSecretsHook returns undefined for both the absent and
+      // orphaned cases. The orphaned-vs-absent distinction (warn vs. silent) is
+      // emitted inside detectGlobalSecretsHook itself and covered in
+      // hooks.test.ts; the caller-side behaviour is identical.
+      detectGlobalSecretsHookSpy.mockResolvedValue(undefined);
     });
 
     it('prints the "configured at the project level" success on completion', async () => {
-      detectSecretsHookSpy.mockResolvedValue({ kind: 'absent' });
-
       await integrateClaude({}, SERVER_AUTH);
 
       const projectSuccess = getMockUiCalls().find(
         (c) =>
           c.method === 'success' &&
-          String(c.args[0]) === 'Claude integration successfully configured at the project level',
+          String(c.args[0]) ===
+            'Claude Code integration successfully configured at the project level',
       );
       expect(projectSuccess).toBeDefined();
-    });
-  });
-
-  describe('when the global Claude hook is in a broken/orphaned state', () => {
-    const ORPHAN_HOOK_DIR = `${homedir()}/.claude/hooks/sonar-secrets`;
-
-    beforeEach(() => {
-      detectSecretsHookSpy.mockResolvedValue({
-        kind: 'orphaned',
-        hookDir: ORPHAN_HOOK_DIR,
-      });
-    });
-
-    it('warns the user with the exact "source files are missing" message including the path', async () => {
-      await integrateClaude({}, SERVER_AUTH);
-
-      const warning = getMockUiCalls().find(
-        (c) =>
-          c.method === 'warn' &&
-          String(c.args[0]) ===
-            `WARNING: Global hook configuration detected, but the source files are missing at ${ORPHAN_HOOK_DIR}. Falling back to local project installation`,
-      );
-      expect(warning).toBeDefined();
     });
 
     it('falls back to a project-level install (does not skip secrets hooks)', async () => {
@@ -642,7 +599,7 @@ describe('integrateCommand', () => {
       });
     });
 
-    it('runs health checks against the project root, not the global root', async () => {
+    it('runs health checks against the project root', async () => {
       mockDiscoveredProject({ rootDir: '/project/root' });
 
       await integrateClaude({}, SERVER_AUTH);
@@ -650,24 +607,13 @@ describe('integrateCommand', () => {
       const healthCall = runHealthChecksSpy.mock.calls.at(-1)!;
       expect(healthCall[3]).toBe('/project/root');
     });
-
-    it('still prints the project-level success message on completion', async () => {
-      await integrateClaude({}, SERVER_AUTH);
-
-      const projectSuccess = getMockUiCalls().find(
-        (c) =>
-          c.method === 'success' &&
-          String(c.args[0]) === 'Claude integration successfully configured at the project level',
-      );
-      expect(projectSuccess).toBeDefined();
-    });
   });
 
   describe('when -g (global) is used', () => {
     it('does not probe for a pre-existing global hook', async () => {
       await integrateClaude({ global: true }, SERVER_AUTH);
 
-      expect(detectSecretsHookSpy).not.toHaveBeenCalled();
+      expect(detectGlobalSecretsHookSpy).not.toHaveBeenCalled();
     });
 
     it('prints the "configured globally" success on completion', async () => {
@@ -676,22 +622,18 @@ describe('integrateCommand', () => {
       const globalSuccess = getMockUiCalls().find(
         (c) =>
           c.method === 'success' &&
-          String(c.args[0]) === 'Claude integration successfully configured globally',
+          String(c.args[0]) === 'Claude Code integration successfully configured globally',
       );
       expect(globalSuccess).toBeDefined();
     });
 
-    it('does not print either scope notice (the "no global" text is for the project-level path only)', async () => {
+    it('does not print the "already configured globally" skip notice (no probe is run)', async () => {
       await integrateClaude({ global: true }, SERVER_AUTH);
 
-      const projectNotice = getMockUiCalls().find(
-        (c) => c.method === 'text' && String(c.args[0]).includes('No global Claude hook was found'),
-      );
       const skipNotice = getMockUiCalls().find(
         (c) =>
           c.method === 'info' && String(c.args[0]).includes('already configured for SonarQube'),
       );
-      expect(projectNotice).toBeUndefined();
       expect(skipNotice).toBeUndefined();
     });
   });

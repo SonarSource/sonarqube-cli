@@ -18,22 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
-
-import { version as VERSION } from '../../../../../package.json';
 import { cloudRegionFromUrl, isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { deleteStaleTokens } from '../../../../lib/keychain';
-import logger from '../../../../lib/logger';
-import { loadState, saveState } from '../../../../lib/repository/state-repository';
-import {
-  addInstalledHook,
-  addOrUpdateConnection,
-  markAgentConfigured,
-  upsertAgentExtension,
-} from '../../../../lib/state-manager';
-import { warn } from '../../../../ui';
+import { addInstalledHook, addOrUpdateConnection } from '../../../../lib/state-manager';
+import { type AgentExtension, recordAgentExtensions, withAgentState } from '../_common/state';
 import type { ConfigurationData } from './index';
+
+const CLAUDE_AGENT_ID = 'claude-code';
 
 export interface UpdateStateOptions {
   /**
@@ -54,80 +45,52 @@ export async function updateStateAfterConfiguration(
   sqaaEnabled: boolean,
   options: UpdateStateOptions = {},
 ): Promise<void> {
-  try {
-    const state = loadState();
-    const { skipSecretsHooks = false } = options;
+  const { skipSecretsHooks = false } = options;
 
-    // Mark agent as configured
-    markAgentConfigured(state, 'claude-code', VERSION);
-
+  await withAgentState(CLAUDE_AGENT_ID, async (state) => {
     // Track installed hooks (legacy format for backward compat).
     // Skip secrets entries when a pre-existing global hook owns that scope.
     if (!skipSecretsHooks) {
-      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'PreToolUse');
-      addInstalledHook(state, 'claude-code', 'sonar-secrets', 'UserPromptSubmit');
+      addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-secrets', 'PreToolUse');
+      addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-secrets', 'UserPromptSubmit');
     }
     if (sqaaEnabled) {
-      addInstalledHook(state, 'claude-code', 'sonar-sqaa', 'PostToolUse');
+      addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-sqaa', 'PostToolUse');
     }
 
-    // Register extensions in the new registry.
-    // For global installs, use homedir() as projectRoot so it doesn't collide with project-level entries.
-    const now = new Date().toISOString();
-    const effectiveRoot = isGlobal ? homedir() : projectRoot;
-    const baseExt = {
-      agentId: 'claude-code',
-      projectRoot: effectiveRoot,
-      global: isGlobal,
+    const attrs = {
       projectKey: config.projectKey,
       orgKey: config.organization,
       serverUrl: config.serverURL,
-      updatedByCliVersion: VERSION,
-      updatedAt: now,
     };
 
+    const extensions: AgentExtension[] = [];
     if (!skipSecretsHooks) {
-      upsertAgentExtension(state, {
-        ...baseExt,
-        id: randomUUID(),
-        kind: 'hook',
-        name: 'sonar-secrets',
-        hookType: 'PreToolUse',
-      });
-      upsertAgentExtension(state, {
-        ...baseExt,
-        id: randomUUID(),
-        kind: 'hook',
-        name: 'sonar-secrets',
-        hookType: 'UserPromptSubmit',
-      });
+      extensions.push(
+        { kind: 'hook', name: 'sonar-secrets', hookType: 'PreToolUse', attrs },
+        { kind: 'hook', name: 'sonar-secrets', hookType: 'UserPromptSubmit', attrs },
+      );
     }
-
-    const isCloud = isSonarQubeCloud(config.serverURL);
+    // SQAA is always project-scoped, even on a global Claude install.
     if (sqaaEnabled) {
-      upsertAgentExtension(state, {
-        ...baseExt,
-        projectRoot,
-        global: false,
-        id: randomUUID(),
+      extensions.push({
         kind: 'hook',
         name: 'sonar-sqaa',
         hookType: 'PostToolUse',
+        projectRoot,
+        global: false,
+        attrs,
       });
     }
+    recordAgentExtensions(state, CLAUDE_AGENT_ID, projectRoot, isGlobal, extensions);
 
     // Save connection so `sonar auth status` reports the active connection
+    const isCloud = isSonarQubeCloud(config.serverURL);
     const type = isCloud ? 'cloud' : 'on-premise';
     await deleteStaleTokens(state.auth.connections, config.serverURL, config.organization);
     addOrUpdateConnection(state, config.serverURL, type, {
       orgKey: config.organization,
       region: cloudRegionFromUrl(config.serverURL),
     });
-
-    saveState(state);
-  } catch (err) {
-    warn(`Failed to update configuration state: ${(err as Error).message}`);
-    logger.warn(`Failed to update configuration state: ${(err as Error).message}`);
-    // Don't fail the whole setup if state update fails
-  }
+  });
 }

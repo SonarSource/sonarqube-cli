@@ -104,6 +104,21 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Resets the active connection and any seeded keychain tokens. Use to undo
+   * a previously-configured `withAuth(...)` (e.g. when the outer `beforeEach`
+   * authenticates by default and a single test wants to exercise the
+   * unauthenticated path).
+   */
+  clearAuth(): this {
+    this.activeConnectionUrl = undefined;
+    this.activeConnectionType = 'on-premise';
+    this.activeConnectionOrgKey = undefined;
+    this.activeConnectionTokenName = undefined;
+    this.keychainTokens.length = 0;
+    return this;
+  }
+
+  /**
    * Ensures sonar-secrets is available inside the isolated test environment.
    * Copies the mock binary from tests/integration/resources/sonar-secrets
    * into <tempDir>/bin/sonar-secrets.

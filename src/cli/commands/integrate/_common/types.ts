@@ -17,22 +17,9 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { setupMcpServerForAgent } from '../../../../lib/mcp/mcp-helper';
-import { type DiscoveredProject } from '../../../../lib/project-workspace';
-import { info, success, warn } from '../../../../ui';
 
-export async function setupMcpServer(
-  project: DiscoveredProject,
-  isGlobal: boolean,
-  projectKey: string | undefined,
-): Promise<void> {
-  info(`Setting up SonarQube MCP Server...`);
-  try {
-    await setupMcpServerForAgent('claude', project.rootDir, isGlobal, projectKey);
-    success(`SonarQube MCP Server configured`);
-  } catch (error) {
-    if (error instanceof Error) {
-      warn(`Failed to setup MCP server: ${error.message}`);
-    }
-  }
+export interface IntegrateAgentOptions {
+  project?: string;
+  nonInteractive?: boolean;
+  global?: boolean;
 }

@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 0.11.0
+- Version: 0.12.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://cli.sonarqube.com/data/commands.json
@@ -87,7 +87,7 @@ Setup SonarQube integration for Claude Code. This will install secrets scanning 
 Usage: sonar integrate claude [-p <value>] [--non-interactive] [--global]
 
 Options:
-  --project, -p  <string>   Project key
+  --project, -p  <string>   Project key. Ignored when --global is used.
   --non-interactive   Non-interactive mode (no prompts)
   --global, -g   Install hooks and config globally to ~/.claude instead of project directory
 
@@ -106,6 +106,14 @@ Examples:
   sonar integrate git --hook pre-push
   sonar integrate git --global
   sonar integrate git --hook pre-push --global --non-interactive
+
+### sonar integrate copilot *
+Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
+Usage: sonar integrate copilot [--global] [-p <value>]
+
+Options:
+  --global, -g   Install hooks and config globally to ~/.copilot instead of project directory
+  --project, -p  <string>   Project key. Ignored when --global is used.
 
 ### sonar list
 List issues and projects from SonarQube
