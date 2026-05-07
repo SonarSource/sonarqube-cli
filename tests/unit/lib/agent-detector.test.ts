@@ -31,6 +31,18 @@ function env(overrides: Record<string, string | undefined>): NodeJS.ProcessEnv {
   return overrides;
 }
 
+/** Temporarily set a process.env var for a callback, restoring the original value after. */
+function withProcessEnv<T>(key: string, value: string, fn: () => T): T {
+  const original = process.env[key];
+  process.env[key] = value;
+  try {
+    return fn();
+  } finally {
+    if (original === undefined) delete process.env[key];
+    else process.env[key] = original;
+  }
+}
+
 describe('agent-detector', () => {
   describe('isCursorAgentEnv', () => {
     it('is true when CURSOR_AGENT=1', () => {
@@ -55,6 +67,12 @@ describe('agent-detector', () => {
         isCursorAgentEnv(env({ CURSOR_PROJECT_DIR: '', CURSOR_TRACE_ID: '', CURSOR_AGENT: '' })),
       ).toBe(false);
     });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('CURSOR_AGENT', '1', () => {
+        expect(isCursorAgentEnv()).toBe(true);
+      });
+    });
   });
 
   describe('isClaudeCodeAgentEnv', () => {
@@ -72,6 +90,12 @@ describe('agent-detector', () => {
 
     it('is true when CLAUDE_PROJECT_DIR is non-empty', () => {
       expect(isClaudeCodeAgentEnv(env({ CLAUDE_PROJECT_DIR: '/proj' }))).toBe(true);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('CLAUDECODE', '1', () => {
+        expect(isClaudeCodeAgentEnv()).toBe(true);
+      });
     });
   });
 
@@ -91,6 +115,12 @@ describe('agent-detector', () => {
 
     it('is false when copilot vars are empty strings', () => {
       expect(isCopilotCliAgentEnv(env({ COPILOT_CLI: '', COPILOT_PROJECT_DIR: '' }))).toBe(false);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('COPILOT_CLI', '1', () => {
+        expect(isCopilotCliAgentEnv()).toBe(true);
+      });
     });
   });
 
