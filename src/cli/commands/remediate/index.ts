@@ -183,16 +183,10 @@ async function fetchEligibleIssues(
 function formatIssueLabel(issue: SonarQubeIssue, projectKey: string): string {
   const severityColor = SEVERITY_COLORS[issue.severity] ?? dim;
   const severity = severityColor(issue.severity.padEnd(8));
-  const maxRuleLineLength = 14;
-  const rule = dim(issue.rule.padEnd(maxRuleLineLength));
+  const rule = dim(issue.rule);
   const path = issue.component.replace(`${projectKey}:`, '');
-  const maxDescriptionLength = 50;
-  const elispsisLength = 3;
-  const msg =
-    issue.message.length > maxDescriptionLength
-      ? `${issue.message.slice(0, maxDescriptionLength - elispsisLength)}...`
-      : issue.message;
-  return `${severity}  ${rule}  ${path} - ${msg}`;
+  const messageIndent = '          ';
+  return `${severity}  ${rule}  ${path}\n${messageIndent}${issue.message}`;
 }
 
 function mapErrorMessage(raw: string, displayOrg: string): string[] {
