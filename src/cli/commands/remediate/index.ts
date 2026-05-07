@@ -47,6 +47,12 @@ const SEVERITY_COLORS: Record<string, (s: string) => string> = {
 };
 
 export async function remediate(options: RemediateOptions, auth: ResolvedAuth): Promise<void> {
+  if (!process.stdin.isTTY && !process.env.SONARQUBE_CLI_MOCK_TTY) {
+    throw new CommandFailedError(
+      'sonar remediate requires an interactive terminal. Non-interactive mode is not yet supported.',
+    );
+  }
+
   if (auth.connectionType !== 'cloud') {
     throw new CommandFailedError(
       'sonar remediate requires SonarQube Cloud - The Remediation Agent is not supported on SonarQube Server.',
@@ -185,7 +191,7 @@ function formatIssueLabel(issue: SonarQubeIssue, projectKey: string): string {
   const severity = severityColor(issue.severity.padEnd(8));
   const rule = dim(issue.rule);
   const path = issue.component.replace(`${projectKey}:`, '');
-  const messageIndent = '          ';
+  const messageIndent = '         ';
   return `${severity}  ${rule}  ${path}\n${messageIndent}${issue.message}`;
 }
 

@@ -33,11 +33,30 @@ describe('sonar remediate', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    // Bypass the TTY guard for tests; specs verifying the guard itself
+    // override SONARQUBE_CLI_MOCK_TTY back to empty via extraEnv.
+    harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: '1' });
   });
 
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it(
+    'exits with code 1 and fails fast when stdin is not a TTY',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run(`remediate --project ${TEST_PROJECT}`, {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '' },
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('requires an interactive terminal');
+    },
+    { timeout: 15000 },
+  );
 
   it(
     'exits with code 1 and error when connected to an on-premise server',

@@ -94,6 +94,17 @@ export class TestHarness {
     return this;
   }
 
+  /**
+   * Adds environment variables that will be set for every CLI invocation made
+   * through this harness instance. Useful for opting whole test files into
+   * test-only behavior (e.g., TTY-guard bypasses) without repeating extraEnv on
+   * every `harness.run(...)` call.
+   */
+  withExtraEnv(env: Record<string, string>): this {
+    Object.assign(this.systemEnvVars, env);
+    return this;
+  }
+
   withCliInPath(): this {
     const pathBinDir = join(this.userHome.path, '.local', 'bin');
     mkdirSync(pathBinDir, { recursive: true });
