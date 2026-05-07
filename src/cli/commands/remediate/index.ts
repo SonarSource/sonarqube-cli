@@ -21,15 +21,15 @@
 // Remediate command - triggers AI agent remediation for eligible issues
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { AI_REMEDIATION_DOCS_URL } from '../../../lib/config-constants';
+import { AGENT_ACTIVITY_PATH, AI_REMEDIATION_DOCS_URL } from '../../../lib/config-constants';
 import logger from '../../../lib/logger';
 import { discoverProject } from '../../../lib/project-workspace';
 import type { SonarQubeIssue } from '../../../lib/types';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { IssuesClient } from '../../../sonarqube/issues';
 import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
-import { blank, multiSelectPrompt, print } from '../../../ui';
-import { cyan, dim, green, red, yellow } from '../../../ui/colors';
+import { blank, info, multiSelectPrompt, print, success, withSpinner } from '../../../ui';
+import { cyan, dim, red, yellow } from '../../../ui/colors';
 import { CommandFailedError } from '../_common/error';
 
 export interface RemediateOptions {
@@ -95,17 +95,16 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   const issuesClient = new IssuesClient(client);
 
   // Step 1: Fetch eligible issues
-  process.stdout.write(`  Fetching issues for project ${projectKey}...`);
-
-  const issues = await fetchEligibleIssues(issuesClient, orgKey, projectKey);
-
-  process.stdout.write(`  ${green('✓')}  ${issues.length} eligible issues found\n`);
+  const issues = await withSpinner(`Fetching eligible issues for ${projectKey}`, () =>
+    fetchEligibleIssues(issuesClient, orgKey, projectKey),
+  );
+  if (issues.length > 0) {
+    print(`  ${issues.length} eligible issues found`);
+  }
 
   if (issues.length === 0) {
     blank();
-    print('0 jobs created · 0 issues queued');
-    blank();
-    print(
+    info(
       'No eligible issues found. The agent may not support the languages or rules in this project.',
     );
     return;
@@ -139,32 +138,25 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
 
   // Step 5: Submit one job with all selected issue keys
   blank();
-  print(`Submitting 1 remediation job...`);
-
   const jobRequest = { projectId, issueKeys: selectedKeys, triggerSource: 'CLI' as const };
   logger.debug(`scheduleAgentJob request: ${JSON.stringify(jobRequest)}`);
   let taskId: string;
   try {
-    const response = await client.scheduleAgentJob(jobRequest);
+    const response = await withSpinner('Submitting remediation job', () =>
+      client.scheduleAgentJob(jobRequest),
+    );
     taskId = response.taskId;
   } catch (err) {
     logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
     const lines = mapErrorMessage((err as Error).message, orgKey);
-    print(`  failed: ${lines[0]}`);
-    for (let i = 1; i < lines.length; i++) {
-      print(`    ${lines[i]}`);
-    }
-    blank();
-    print(`0 jobs created · 0 issues queued · 1 job failed`);
-    throw new CommandFailedError('Remediation job submission failed.');
+    throw new CommandFailedError(`Remediation job submission failed.\n  ${lines.join('\n  ')}`);
   }
 
   const issueWord = selectedKeys.length === 1 ? 'issue' : 'issues';
-  print(`  job/${taskId}  ·  ${selectedKeys.length} ${issueWord}  ·  submitted`);
   blank();
-  print(`1 job created · ${selectedKeys.length} ${issueWord} queued · 0 skipped`);
+  success(`Submitted ${selectedKeys.length} ${issueWord} for remediation\nJob: job/${taskId}`);
   blank();
-  const activityUrl = `${auth.serverUrl}/project/agent_activity?id=${projectKey}`;
+  const activityUrl = `${auth.serverUrl}${AGENT_ACTIVITY_PATH}?id=${encodeURIComponent(projectKey)}`;
   print('The agent will create pull requests for the selected issues. Track progress:');
   print(`  ${activityUrl}`);
 }

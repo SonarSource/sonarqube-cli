@@ -180,8 +180,8 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('0 eligible issues found');
-      expect(output).toContain('0 jobs created');
+      expect(output).toContain('No eligible issues found');
+      expect(output).not.toContain('Which issues');
     },
     { timeout: 15000 },
   );
@@ -250,8 +250,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('1 job created');
-      expect(output).toContain('1 issue');
+      expect(output).toContain('Submitted 1 issue for remediation');
       expect(output).toContain('agent_activity');
       expect(output).toContain(TEST_PROJECT);
     },
@@ -448,7 +447,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('2 issues queued');
+      expect(output).toContain('Submitted 2 issues for remediation');
 
       const agentJobCalls = server
         .getRecordedRequests()
