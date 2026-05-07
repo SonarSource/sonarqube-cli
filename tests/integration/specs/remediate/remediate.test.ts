@@ -43,7 +43,7 @@ describe('sonar remediate', () => {
   });
 
   it(
-    'exits with code 1 and fails fast when stdin is not a TTY',
+    'exits with code 1 and points at --issues when stdin is not a TTY and --issues is missing',
     async () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
@@ -53,7 +53,9 @@ describe('sonar remediate', () => {
       });
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('requires an interactive terminal');
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Non-interactive mode requires --issues <issueIds>');
+      expect(output).toContain('sonar list issues --project <key>');
     },
     { timeout: 15000 },
   );
@@ -565,4 +567,363 @@ describe('sonar remediate', () => {
     },
     { timeout: 15000 },
   );
+
+  describe('--issues (non-interactive mode)', () => {
+    it(
+      'submits the supplied keys without consulting /api/issues/search in TTY mode',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1,k2,k3`);
+
+        expect(result.exitCode).toBe(0);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Submitted 3 issues for remediation');
+        expect(output).toContain('agent_activity');
+        expect(output).toContain(TEST_PROJECT);
+
+        const issuesSearchCalls = server
+          .getRecordedRequests()
+          .filter((r) => r.path === '/api/issues/search');
+        expect(issuesSearchCalls).toHaveLength(0);
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(1);
+        const body = JSON.parse(agentJobCalls[0].body ?? '{}') as {
+          projectId: string;
+          issueKeys: string[];
+          triggerSource: string;
+        };
+        expect(body.projectId).toBe(`AY${TEST_PROJECT}legacy`);
+        expect(body.issueKeys).toEqual(['k1', 'k2', 'k3']);
+        expect(body.triggerSource).toBe('CLI');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'submits the supplied keys when stdin is not a TTY',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1,k2`, {
+          extraEnv: { SONARQUBE_CLI_MOCK_TTY: '' },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('Submitted 2 issues for remediation');
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(1);
+        const body = JSON.parse(agentJobCalls[0].body ?? '{}') as { issueKeys: string[] };
+        expect(body.issueKeys).toEqual(['k1', 'k2']);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 when more than 20 issue keys are supplied',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const tooMany = Array.from({ length: 21 }, (_, i) => `k${i + 1}`).join(',');
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues ${tooMany}`);
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('--issues accepts at most 20 issue keys');
+        expect(output).toContain('got 21');
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 when --issues contains empty entries',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues "k1,,k2"`);
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Empty entries are not allowed');
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'silently deduplicates repeated issue keys before submitting',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1,k1,k2`);
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('Submitted 2 issues for remediation');
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(1);
+        const body = JSON.parse(agentJobCalls[0].body ?? '{}') as { issueKeys: string[] };
+        expect(body.issueKeys).toEqual(['k1', 'k2']);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'trims whitespace around each issue key',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(
+          `remediate --project ${TEST_PROJECT} --issues "k1, k2 , k3"`,
+        );
+
+        expect(result.exitCode).toBe(0);
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(1);
+        const body = JSON.parse(agentJobCalls[0].body ?? '{}') as { issueKeys: string[] };
+        expect(body.issueKeys).toEqual(['k1', 'k2', 'k3']);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'short-circuits on entitlement failure before submitting any keys',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .withOrgEntitlement(true, false)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1`);
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain(
+          'The Remediation Agent is not enabled for your organization',
+        );
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'still trips the cloud-only check when --issues is supplied',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+        // No org → on-premise connection
+        harness.withAuth(server.baseUrl(), VALID_TOKEN);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1`);
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain('requires SonarQube Cloud');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'fails with the cap error before the cloud-only check when --issues is malformed',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+        // No org → on-premise connection. Format validation runs ahead of the
+        // cloud check, so the user sees the actionable input error first.
+        harness.withAuth(server.baseUrl(), VALID_TOKEN);
+
+        const tooMany = Array.from({ length: 21 }, (_, i) => `k${i + 1}`).join(',');
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues ${tooMany}`);
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('--issues accepts at most 20 issue keys');
+        expect(output).not.toContain('requires SonarQube Cloud');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'surfaces the "no allowance" server error via mapErrorMessage',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .withAgentJobError(403, 'Organization does not have allowance for AI agent jobs')
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1`);
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('organization plan does not include the Remediation Agent');
+        expect(output).toContain('docs.sonarsource.com');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'accepts exactly 20 issue keys at the cap boundary',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const exactlyAtCap = Array.from({ length: 20 }, (_, i) => `k${i + 1}`).join(',');
+        const result = await harness.run(
+          `remediate --project ${TEST_PROJECT} --issues ${exactlyAtCap}`,
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('Submitted 20 issues for remediation');
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(1);
+        const body = JSON.parse(agentJobCalls[0].body ?? '{}') as { issueKeys: string[] };
+        expect(body.issueKeys).toHaveLength(20);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'rejects a degenerate --issues value with the empty-entries error in non-TTY mode',
+      async () => {
+        // Regression guard: in non-TTY, a user who passes --issues with an empty
+        // value used to hit the misleading "Non-interactive mode requires --issues"
+        // guard. With validation now upfront, parseIssueKeys produces the accurate
+        // "Empty entries are not allowed" message instead.
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues ,`, {
+          extraEnv: { SONARQUBE_CLI_MOCK_TTY: '' },
+        });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Empty entries are not allowed');
+        expect(output).not.toContain('Non-interactive mode requires');
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'submits using --issues with a project key auto-discovered from sonar-project.properties',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withProject(TEST_PROJECT)
+          .start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+
+        const result = await harness.run('remediate --issues k1,k2');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('Submitted 2 issues for remediation');
+
+        const agentJobCalls = server
+          .getRecordedRequests()
+          .filter(
+            (r) => r.path === '/fix-suggestions/ai-agent-scheduled-jobs' && r.method === 'POST',
+          );
+        expect(agentJobCalls).toHaveLength(1);
+        const body = JSON.parse(agentJobCalls[0].body ?? '{}') as {
+          projectId: string;
+          issueKeys: string[];
+        };
+        expect(body.projectId).toBe(`AY${TEST_PROJECT}legacy`);
+        expect(body.issueKeys).toEqual(['k1', 'k2']);
+      },
+      { timeout: 15000 },
+    );
+  });
 });

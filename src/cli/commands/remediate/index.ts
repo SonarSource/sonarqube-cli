@@ -30,10 +30,11 @@ import { IssuesClient } from '../../../sonarqube/issues';
 import { MAX_PAGE_SIZE } from '../../../sonarqube/projects';
 import { blank, info, multiSelectPrompt, print, success, withSpinner } from '../../../ui';
 import { cyan, dim, red, yellow } from '../../../ui/colors';
-import { CommandFailedError } from '../_common/error';
+import { CommandFailedError, InvalidOptionError } from '../_common/error';
 
 export interface RemediateOptions {
   project?: string;
+  issues?: string;
 }
 
 const SEVERITY_ORDER = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'] as const;
@@ -46,16 +47,28 @@ const SEVERITY_COLORS: Record<string, (s: string) => string> = {
   INFO: dim,
 };
 
+// Mirrors MULTISELECT_MAX_SELECTED in src/ui/components/prompts.ts. Kept local
+// to avoid coupling the command surface to a UI implementation constant.
+const MAX_REMEDIATION_ISSUES = 20;
+
 export async function remediate(options: RemediateOptions, auth: ResolvedAuth): Promise<void> {
-  if (!process.stdin.isTTY && !process.env.SONARQUBE_CLI_MOCK_TTY) {
-    throw new CommandFailedError(
-      'sonar remediate requires an interactive terminal. Non-interactive mode is not yet supported.',
-    );
-  }
+  // Pure validation first (no I/O): catches malformed --issues with zero round-trips.
+  const suppliedIssueKeys =
+    options.issues === undefined ? undefined : parseIssueKeys(options.issues);
 
   if (auth.connectionType !== 'cloud') {
     throw new CommandFailedError(
       'sonar remediate requires SonarQube Cloud - The Remediation Agent is not supported on SonarQube Server.',
+    );
+  }
+
+  if (
+    !process.stdin.isTTY &&
+    !process.env.SONARQUBE_CLI_MOCK_TTY &&
+    suppliedIssueKeys === undefined
+  ) {
+    throw new CommandFailedError(
+      "Non-interactive mode requires --issues <issueIds>. Run 'sonar list issues --project <key>' to find issue keys.",
     );
   }
 
@@ -98,51 +111,20 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     );
   }
 
-  const issuesClient = new IssuesClient(client);
-
-  // Step 1: Fetch eligible issues
-  const issues = await withSpinner(`Fetching eligible issues for ${projectKey}`, () =>
-    fetchEligibleIssues(issuesClient, orgKey, projectKey),
-  );
-  if (issues.length > 0) {
-    print(`  ${issues.length} eligible issues found`);
+  let selectedKeys: string[];
+  if (suppliedIssueKeys === undefined) {
+    const interactive = await selectIssuesInteractively(client, orgKey, projectKey);
+    if (interactive === null) return;
+    selectedKeys = interactive;
+  } else {
+    selectedKeys = suppliedIssueKeys;
   }
 
-  if (issues.length === 0) {
-    blank();
-    info(
-      'No eligible issues found. The agent may not support the languages or rules in this project.',
-    );
-    return;
-  }
-
-  // Step 2: Sort by severity descending (BLOCKER first)
-  const sorted = [...issues].sort(
-    (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
-  );
-
-  // Step 3: Interactive multi-selector
-  blank();
-  const selectedKeys = await multiSelectPrompt(
-    'Which issues should the agent fix?',
-    sorted.map((issue) => ({
-      value: issue.key,
-      label: formatIssueLabel(issue, projectKey),
-    })),
-  );
-
-  if (!selectedKeys || selectedKeys.length === 0) {
-    blank();
-    print('No issues selected.');
-    return;
-  }
-
-  // Step 4: Resolve the project's legacy ID (component.id) required by the AI agent API
+  // The AI agent API requires the project's legacy component ID, not its key.
   const resolvedId = await client.getComponentId(projectKey);
   logger.debug(`getComponentId(${projectKey}) => ${resolvedId ?? 'null (falling back to key)'}`);
   const projectId = resolvedId ?? projectKey;
 
-  // Step 5: Submit one job with all selected issue keys
   blank();
   const jobRequest = { projectId, issueKeys: selectedKeys, triggerSource: 'CLI' as const };
   logger.debug(`scheduleAgentJob request: ${JSON.stringify(jobRequest)}`);
@@ -185,6 +167,67 @@ async function fetchEligibleIssues(
     p: 1,
   });
   return result.issues;
+}
+
+function parseIssueKeys(raw: string): string[] {
+  const trimmed = raw.split(',').map((k) => k.trim());
+  if (trimmed.some((k) => k.length === 0)) {
+    throw new InvalidOptionError(
+      `Invalid --issues option: '${raw}'. Empty entries are not allowed.`,
+    );
+  }
+  const deduped = Array.from(new Set(trimmed));
+  if (deduped.length > MAX_REMEDIATION_ISSUES) {
+    throw new InvalidOptionError(
+      `--issues accepts at most ${MAX_REMEDIATION_ISSUES} issue keys (got ${deduped.length}).`,
+    );
+  }
+  return deduped;
+}
+
+// Returns null when no eligible issues exist or the user dismisses the prompt;
+// the user-facing message is already printed in those branches.
+async function selectIssuesInteractively(
+  client: SonarQubeClient,
+  orgKey: string,
+  projectKey: string,
+): Promise<string[] | null> {
+  const issuesClient = new IssuesClient(client);
+
+  const issues = await withSpinner(`Fetching eligible issues for ${projectKey}`, () =>
+    fetchEligibleIssues(issuesClient, orgKey, projectKey),
+  );
+  if (issues.length > 0) {
+    print(`  ${issues.length} eligible issues found`);
+  }
+
+  if (issues.length === 0) {
+    blank();
+    info(
+      'No eligible issues found. The agent may not support the languages or rules in this project.',
+    );
+    return null;
+  }
+
+  const sorted = [...issues].sort(
+    (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
+  );
+
+  blank();
+  const selection = await multiSelectPrompt(
+    'Which issues should the agent fix?',
+    sorted.map((issue) => ({
+      value: issue.key,
+      label: formatIssueLabel(issue, projectKey),
+    })),
+  );
+
+  if (!selection || selection.length === 0) {
+    blank();
+    print('No issues selected.');
+    return null;
+  }
+  return selection;
 }
 
 function formatIssueLabel(issue: SonarQubeIssue, projectKey: string): string {

@@ -233,6 +233,10 @@ COMMAND_TREE.command('remediate')
     '-p, --project <project>',
     'SonarQube Cloud project key (overrides auto-detected project)',
   )
+  .option(
+    '--issues <issueIds>',
+    'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
+  )
   .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
 
 // Analyze code for quality and security issues
