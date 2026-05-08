@@ -22,6 +22,7 @@
 
 import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
+import logger from '../lib/logger';
 import { print } from '../ui';
 import type { SettingsValue } from './settings-value';
 
@@ -323,6 +324,33 @@ export class SonarQubeClient {
     return this.checkSqaaEntitlement(uuid);
   }
 
+  async checkAiRemediationEntitlement(
+    orgKey: string,
+  ): Promise<{ status: 'not_eligible' | 'not_enabled' | 'ok' | 'unknown' }> {
+    try {
+      const orgsEndpoint = '/organizations/organizations';
+      const orgs = await this.get<Array<{ id: string; uuidV4: string; name?: string }>>(
+        orgsEndpoint,
+        { organizationKey: orgKey, excludeEligibility: 'true' },
+        resolveFromEndpoint(this.serverURL, orgsEndpoint),
+      );
+      const org = orgs.at(0);
+      if (!org) return { status: 'not_eligible' };
+
+      const configEndpoint = `/fix-suggestions/organization-configs/${org.id}`;
+      const config = await this.get<{
+        codeReviewAgent: { organizationEligible: boolean; delegateIssuesEnabled?: boolean };
+      }>(configEndpoint, undefined, resolveFromEndpoint(this.serverURL, configEndpoint));
+
+      if (!config.codeReviewAgent.organizationEligible) return { status: 'not_eligible' };
+      if (!config.codeReviewAgent.delegateIssuesEnabled) return { status: 'not_enabled' };
+      return { status: 'ok' };
+    } catch (err) {
+      logger.warn('AI remediation entitlement check failed', err);
+      return { status: 'unknown' };
+    }
+  }
+
   async listUserOrganizations(): Promise<{
     organizations: Array<{ key: string; name: string }>;
     total: number;
@@ -371,6 +399,22 @@ export class SonarQubeClient {
   }
 
   /**
+   * Return the legacy alphanumeric ID for a project component key.
+   * The external AI agents API expects this ID (not the human-readable key) as `projectId`.
+   * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.
+   */
+  async getComponentId(componentKey: string): Promise<string | null> {
+    try {
+      const result = await this.get<{ id: string }>('/api/navigation/component', {
+        component: componentKey,
+      });
+      return result.id;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Check if organization exists and is accessible
    */
   async checkOrganization(organizationKey: string): Promise<boolean> {
@@ -404,8 +448,21 @@ export class SonarQubeClient {
   }
 
   /**
+   * Schedule an AI agent remediation job for a set of issues.
+   * SonarQube Cloud only - endpoint lives on the region-specific API host.
+   */
+  async scheduleAgentJob(request: AgentJobRequest): Promise<AgentJobResponse> {
+    const endpoint = '/fix-suggestions/ai-agent-scheduled-jobs';
+    return await this.post<AgentJobResponse>(
+      endpoint,
+      request,
+      resolveFromEndpoint(this.serverURL, endpoint),
+    );
+  }
+
+  /**
    * Run server-side SonarQube Agentic Analysis on a single file.
-   * SonarQube Cloud only — endpoint lives on the region-specific API host.
+   * SonarQube Cloud only - endpoint lives on the region-specific API host.
    */
   async analyzeFile(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
     const endpoint = '/a3s-analysis/analyses';
@@ -422,6 +479,16 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
     return { ...headers, Authorization: 'REDACTED' };
   }
   return headers;
+}
+
+export interface AgentJobRequest {
+  projectId: string;
+  issueKeys: string[];
+  triggerSource: 'CLI';
+}
+
+export interface AgentJobResponse {
+  taskId: string;
 }
 
 export interface SqaaAnalysisRequest {

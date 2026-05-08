@@ -890,4 +890,101 @@ describe('SonarQubeClient', () => {
       ).rejects.toThrow('400');
     });
   });
+
+  // -------------------------------------------------------------------------
+  // getComponentId
+  // -------------------------------------------------------------------------
+
+  describe('getComponentId', () => {
+    it('returns the component id when found', async () => {
+      fetchSpy = mockFetch({ id: 'AYmy-projectlegacy', key: 'my-project' });
+      expect(await client.getComponentId('my-project')).toBe('AYmy-projectlegacy');
+    });
+
+    it('returns null when component is not found', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await client.getComponentId('missing-project')).toBeNull();
+    });
+
+    it('passes the component key as a query parameter to /api/navigation/component', async () => {
+      fetchSpy = mockFetch({ id: 'AYlegacy' });
+      await client.getComponentId('my-project');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/navigation/component');
+      expect(url.searchParams.get('component')).toBe('my-project');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // scheduleAgentJob
+  // -------------------------------------------------------------------------
+
+  describe('scheduleAgentJob', () => {
+    it('sends POST to SONARCLOUD_API_URL for EU Cloud', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ taskId: 'task-abc' });
+      await cloudClient.scheduleAgentJob({
+        projectId: 'proj-id',
+        issueKeys: ['KEY-1'],
+        triggerSource: 'CLI',
+      });
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SONARCLOUD_API_URL}/fix-suggestions/ai-agent-scheduled-jobs`,
+      );
+    });
+
+    it('sends POST to SONARCLOUD_US_API_URL for US Cloud', async () => {
+      const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
+      fetchSpy = mockFetch({ taskId: 'task-abc' });
+      await usClient.scheduleAgentJob({
+        projectId: 'proj-id',
+        issueKeys: ['KEY-1'],
+        triggerSource: 'CLI',
+      });
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SONARCLOUD_US_API_URL}/fix-suggestions/ai-agent-scheduled-jobs`,
+      );
+    });
+
+    it('sends projectId, issueKeys, and triggerSource in the JSON body', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ taskId: 'task-abc' });
+      await cloudClient.scheduleAgentJob({
+        projectId: 'proj-id',
+        issueKeys: ['KEY-1', 'KEY-2'],
+        triggerSource: 'CLI',
+      });
+      const body = JSON.parse(lastFetchInit(fetchSpy).body as string) as {
+        projectId: string;
+        issueKeys: string[];
+        triggerSource: string;
+      };
+      expect(body.projectId).toBe('proj-id');
+      expect(body.issueKeys).toEqual(['KEY-1', 'KEY-2']);
+      expect(body.triggerSource).toBe('CLI');
+    });
+
+    it('returns the parsed taskId from the response', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ taskId: 'task-xyz-789' });
+      const result = await cloudClient.scheduleAgentJob({
+        projectId: 'proj-id',
+        issueKeys: ['KEY-1'],
+        triggerSource: 'CLI',
+      });
+      expect(result.taskId).toBe('task-xyz-789');
+    });
+
+    it('throws on non-OK response', () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = mockFetch({ message: 'Insufficient privileges' }, false, 403);
+      expect(
+        cloudClient.scheduleAgentJob({
+          projectId: 'proj-id',
+          issueKeys: ['KEY-1'],
+          triggerSource: 'CLI',
+        }),
+      ).rejects.toThrow('403');
+    });
+  });
 });

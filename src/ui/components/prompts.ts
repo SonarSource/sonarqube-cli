@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Interactive prompts — text input, confirmation, press-to-continue
+// Interactive prompts - text input, confirmation, press-to-continue
 
-import { ConfirmPrompt, isCancel, SelectPrompt, TextPrompt } from '@clack/core';
+import { ConfirmPrompt, isCancel, Prompt, SelectPrompt, TextPrompt } from '@clack/core';
 
 import { cyan, dim, green, red } from '../colors.js';
 import { dequeueMockResponse, isMockActive, recordCall } from '../mock.js';
@@ -50,7 +50,7 @@ export async function textPrompt(message: string): Promise<string | null> {
 
   const result = await prompt.prompt();
   if (isCancel(result)) return null;
-  return result!;
+  return result ?? null;
 }
 
 /**
@@ -78,7 +78,7 @@ export async function confirmPrompt(message: string): Promise<boolean | null> {
 
   const result = await prompt.prompt();
   if (isCancel(result)) return null;
-  return result!;
+  return result ?? null;
 }
 
 export interface SelectOption<T> {
@@ -122,6 +122,138 @@ export async function selectPrompt<T>(
   return result as T;
 }
 
+export interface MultiSelectOption<T> {
+  value: T;
+  label: string;
+}
+
+const MULTISELECT_VIEWPORT_SIZE = 12;
+const MULTISELECT_MAX_SELECTED = 20;
+
+export function calculateViewport(
+  cursor: number,
+  total: number,
+  viewportSize: number,
+): { start: number; end: number } {
+  const start = Math.min(
+    Math.max(0, cursor - Math.floor(viewportSize / 2)),
+    Math.max(0, total - viewportSize),
+  );
+  const end = Math.min(start + viewportSize, total);
+  return { start, end };
+}
+
+export function toggleSelected<T>(selected: T[], val: T, max: number): void {
+  const idx = selected.indexOf(val);
+  if (idx >= 0) {
+    selected.splice(idx, 1);
+  } else if (selected.length < max) {
+    selected.push(val);
+  }
+}
+
+/**
+ * Multi-select prompt. Space to toggle, Enter to confirm. Max 20 selections.
+ * Returns the selected values array (may be empty) or null if cancelled (Ctrl+C or q).
+ * Renders a scrolling viewport when the option list exceeds MULTISELECT_VIEWPORT_SIZE.
+ */
+export async function multiSelectPrompt<T>(
+  message: string,
+  options: MultiSelectOption<T>[],
+): Promise<T[] | null> {
+  if (isMockActive()) {
+    const value = dequeueMockResponse<T[] | null>([]);
+    recordCall('multiSelectPrompt', message, value);
+    return value;
+  }
+
+  const selected: T[] = [];
+  let cursor = 0;
+
+  const prompt = new Prompt<T[]>(
+    {
+      render() {
+        if (this.state === 'submit') {
+          const selectedLabel = `${selected.length} selected`;
+          return `  ${green('✓')}  ${message} ${dim(selectedLabel)}`;
+        }
+        if (this.state === 'cancel') {
+          return `  ${red('✗')}  ${message}`;
+        }
+
+        const atCap = selected.length >= MULTISELECT_MAX_SELECTED;
+        const hint = atCap
+          ? dim(
+              `(${MULTISELECT_MAX_SELECTED}/${MULTISELECT_MAX_SELECTED} - deselect to choose others)`,
+            )
+          : dim('(Space to toggle, Enter to confirm, q to quit)');
+
+        const total = options.length;
+        const { start, end } = calculateViewport(cursor, total, MULTISELECT_VIEWPORT_SIZE);
+
+        const lines = [`  ${cyan('?')}  ${message}  ${hint}`];
+
+        if (start > 0) {
+          const more = `↑ ${start} more`;
+          lines.push(`      ${dim(more)}`);
+        }
+
+        for (let i = start; i < end; i++) {
+          const opt = options[i];
+          const isCursor = i === cursor;
+          const isSelected = selected.includes(opt.value);
+          const unavailable = atCap && !isSelected;
+          const checkbox = checkboxComponent(isSelected, unavailable);
+          const arrow = isCursor ? cyan('❯') : ' ';
+          const label = isCursor && !unavailable ? opt.label : dim(opt.label);
+          lines.push(`    ${arrow} ${checkbox}  ${label}`);
+        }
+
+        const more = `↓ ${total - end} more`;
+        if (end < total) lines.push(`      ${dim(more)}`);
+
+        return lines.join('\n');
+      },
+    },
+    false,
+  );
+
+  prompt.on('cursor', (dir) => {
+    if (dir === 'up') cursor = Math.max(0, cursor - 1);
+    else if (dir === 'down') cursor = Math.min(options.length - 1, cursor + 1);
+    else if (dir === 'space') {
+      const val = options[cursor]?.value;
+      if (val !== undefined) {
+        toggleSelected(selected, val, MULTISELECT_MAX_SELECTED);
+      }
+    }
+  });
+
+  prompt.on('key', (_key, s) => {
+    if (s.name === 'return') {
+      prompt.value = [...selected];
+    } else if (s.name === 'q') {
+      prompt.state = 'cancel';
+    }
+  });
+
+  const result = await prompt.prompt();
+  if (isCancel(result)) return null;
+  return result ?? [];
+}
+
+export function checkboxComponent(isSelected: boolean, unavailable: boolean): string {
+  if (isSelected) {
+    return cyan('◉');
+  }
+
+  if (unavailable) {
+    return dim('◯');
+  }
+
+  return '◯';
+}
+
 /**
  * Press-Enter-to-continue prompt using raw stdin.
  * Only Enter advances the prompt; all other keys are silently consumed.
@@ -148,7 +280,6 @@ export async function pressEnterKeyPrompt(message: string): Promise<void> {
         cleanup();
         process.stdout.write('\n');
         process.exit(EXIT_CODE_SIGINT);
-        return;
       }
       if (byte === ENTER_CR || byte === ENTER_LF) {
         // Enter (CR or LF)

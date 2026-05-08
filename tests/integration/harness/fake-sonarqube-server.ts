@@ -33,6 +33,7 @@ export interface IssueConfig {
   status?: string;
   type?: string;
   line?: number;
+  fixableByAgent?: boolean;
 }
 
 export interface SqaaIssueConfig {
@@ -70,6 +71,7 @@ export class ProjectBuilder {
       status: issue.status ?? 'OPEN',
       type: issue.type ?? 'CODE_SMELL',
       line: issue.line ?? 1,
+      fixableByAgent: issue.fixableByAgent ?? false,
     });
     return this;
   }
@@ -122,6 +124,11 @@ export class FakeSonarQubeServerBuilder {
   private sqaaResponse?: SqaaResponseConfig;
   private scaEnabled?: boolean;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
+  private agentJobErrorCode?: number;
+  private agentJobErrorMessage?: string;
+  private remediationAgentEntitlement = { eligible: true, delegateIssuesEnabled: true };
+  private orgsLookupReturnsEmpty = false;
+  private orgsLookupErrorCode?: number;
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -163,6 +170,35 @@ export class FakeSonarQubeServerBuilder {
 
   withSqaaResponse(response: SqaaResponseConfig = {}): this {
     this.sqaaResponse = response;
+    return this;
+  }
+
+  withAgentJobError(statusCode: number, message: string): this {
+    this.agentJobErrorCode = statusCode;
+    this.agentJobErrorMessage = message;
+    return this;
+  }
+
+  withOrgEntitlement(eligible: boolean, delegateIssuesEnabled: boolean): this {
+    this.remediationAgentEntitlement = { eligible, delegateIssuesEnabled };
+    return this;
+  }
+
+  /**
+   * Make `/organizations/organizations` return an empty array, simulating an
+   * `organizationKey` that does not match any visible org.
+   */
+  withMissingOrg(): this {
+    this.orgsLookupReturnsEmpty = true;
+    return this;
+  }
+
+  /**
+   * Make `/organizations/organizations` fail with the given HTTP status code,
+   * simulating a network/service error during entitlement pre-flight.
+   */
+  withOrgsLookupError(statusCode: number): this {
+    this.orgsLookupErrorCode = statusCode;
     return this;
   }
 
@@ -215,6 +251,11 @@ export class FakeSonarQubeServerBuilder {
       sqaaEntitlementOrgs,
       scaEnabled,
       projectSettings,
+      agentJobErrorCode,
+      agentJobErrorMessage,
+      remediationAgentEntitlement,
+      orgsLookupReturnsEmpty,
+      orgsLookupErrorCode,
     } = this;
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
@@ -298,10 +339,13 @@ export class FakeSonarQubeServerBuilder {
           const issueStatusFilter = query.issueStatuses ? query.issueStatuses.split(',') : null;
           const severityFilter = query.severities ? query.severities.split(',') : null;
 
+          const fixableByAgentFilter = query.fixableByAgent;
+
           const issues: SonarQubeIssue[] =
             projectData?.issues
               .filter((issue) => !issueStatusFilter || issueStatusFilter.includes(issue.status))
               .filter((issue) => !severityFilter || severityFilter.includes(issue.severity))
+              .filter((issue) => fixableByAgentFilter !== 'true' || issue.fixableByAgent)
               .map((issue) => ({
                 key: issue.key,
                 rule: issue.ruleKey,
@@ -316,6 +360,8 @@ export class FakeSonarQubeServerBuilder {
 
           const pageSize = Number.parseInt(query.ps ?? '500', 10);
           const page = Number.parseInt(query.p ?? '1', 10);
+          const start = (page - 1) * pageSize;
+          const pagedIssues = issues.slice(start, start + pageSize);
 
           return new Response(
             JSON.stringify({
@@ -323,7 +369,7 @@ export class FakeSonarQubeServerBuilder {
               p: page,
               ps: pageSize,
               paging: { pageIndex: page, pageSize, total: issues.length },
-              issues,
+              issues: pagedIssues,
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
@@ -400,17 +446,41 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/organizations/organizations') {
-          const orgKey = query.organizationKey;
-          const entitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
-          if (!entitlement) {
+          if (orgsLookupErrorCode !== undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Org lookup failed' }] }), {
+              status: orgsLookupErrorCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (orgsLookupReturnsEmpty) {
             return new Response(JSON.stringify([]), {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          return new Response(
-            JSON.stringify([{ id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey }]),
-            { headers: { 'Content-Type': 'application/json' } },
-          );
+          const orgKey = query.organizationKey;
+          const entitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
+          if (entitlement) {
+            return new Response(
+              JSON.stringify([
+                { id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey, name: orgKey },
+              ]),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          if (orgKey) {
+            // Default: return a valid org so the AI remediation pre-flight passes in tests
+            // that don't configure SQAA entitlement. SQAA checks still return false because
+            // /a3s-analysis/org-config/{uuid} returns 404 for unconfigured orgs.
+            return new Response(
+              JSON.stringify([
+                { id: orgKey, uuidV4: `${orgKey}-uuid-v4`, key: orgKey, name: orgKey },
+              ]),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(JSON.stringify([]), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/settings/values' && req.method === 'GET') {
@@ -459,6 +529,38 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
+        if (path === '/api/navigation/component') {
+          const componentKey = query.component;
+          const projectData = componentKey ? projects.get(componentKey) : undefined;
+          if (!projectData) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: `Component '${componentKey}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              id: `AY${componentKey}legacy`,
+              key: projectData.key,
+              name: projectData.name,
+              qualifier: 'TRK',
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/fix-suggestions/ai-agent-scheduled-jobs' && req.method === 'POST') {
+          if (agentJobErrorCode !== undefined) {
+            return new Response(JSON.stringify({ message: agentJobErrorMessage }), {
+              status: agentJobErrorCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ taskId: 'task-abc-123' }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
         if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
           if (!sqaaResponse) {
             return new Response(
@@ -480,6 +582,18 @@ export class FakeSonarQubeServerBuilder {
               id: `sqaa-analysis-${Date.now()}`,
               issues,
               errors: sqaaResponse.errors ?? null,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path.startsWith('/fix-suggestions/organization-configs/')) {
+          return new Response(
+            JSON.stringify({
+              codeReviewAgent: {
+                organizationEligible: remediationAgentEntitlement.eligible,
+                delegateIssuesEnabled: remediationAgentEntitlement.delegateIssuesEnabled,
+              },
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

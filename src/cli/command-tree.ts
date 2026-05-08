@@ -60,6 +60,7 @@ import {
   VALID_STATUSES,
 } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { getBanner, getCustomRootHelp } from './root-help.js';
@@ -140,6 +141,10 @@ const integrateCommand = COMMAND_TREE.command('integrate').description(
   'Setup SonarQube integration for AI coding agents, git and others.',
 );
 
+const projectKeyExtraHelp = `
+Instead of providing a project explicitly you can set up a sonar-project.properties in the project root with a sonar.projectKey property. 
+Otherwise, if you have a project connected and bound in SonarQube for IDE, project key is automatically picked up.
+`;
 integrateCommand
   .command('claude')
   .description(
@@ -151,6 +156,7 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
+  .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
 
 integrateCommand
@@ -179,7 +185,8 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.copilot instead of project directory',
   )
-  .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((_auth, options: IntegrateAgentOptions) => integrateCopilot(_auth, options));
 
 // List Sonar resources
@@ -218,6 +225,15 @@ list
   .addOption(pageOption)
   .addOption(pageSizeOption)
   .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
+
+// Trigger AI remediation for eligible issues (SonarQube Cloud only)
+COMMAND_TREE.command('remediate')
+  .description('Trigger AI agent remediation for eligible issues (SonarQube Cloud only)')
+  .option(
+    '-p, --project <project>',
+    'SonarQube Cloud project key (overrides auto-detected project)',
+  )
+  .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
 
 // Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')
@@ -305,7 +321,8 @@ runCommand
     '--toolsets <toolsets>',
     'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,cag,portfolios)',
   )
-  .option('-p, --project <project>', 'Project key (skips auto-discovery)')
+  .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
+  .addHelpText(`after`, projectKeyExtraHelp)
   .authenticatedAction(
     (auth, options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string }) =>
       runMcp(auth, options),

@@ -150,6 +150,13 @@ Examples:
   sonar list projects -q my-project
   sonar list projects --page 2 --page-size 50
 
+### sonar remediate *
+Trigger AI agent remediation for eligible issues (SonarQube Cloud only)
+Usage: sonar remediate [-p <value>]
+
+Options:
+  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
+
 ### sonar analyze
 Analyze code for quality and security issues
 

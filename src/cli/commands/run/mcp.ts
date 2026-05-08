@@ -28,6 +28,7 @@ import { canonicalizePath } from '../../../lib/fs-utils.js';
 import { getMcpContainerCommand, type McpServerContext } from '../../../lib/mcp/mcp-helper.js';
 import { discoverProject } from '../../../lib/project-workspace/project-info.js';
 import { detectContainerRuntime } from '../../../lib/tool-detector.js';
+import { warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 
 export interface McpRunOptions {
@@ -49,6 +50,11 @@ export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): P
   const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
   const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd);
   const projectKey = options.project || discovered?.projectKey;
+  if (!projectKey) {
+    warn(
+      'No project key found - project-scoped tools will be unavailable. Run sonar run mcp --help for ways to define a project.',
+    );
+  }
   const discoveredRootIsHomeDir =
     discovered && canonicalizePath(discovered.rootDir) === canonicalizePath(homedir());
   const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.rootDir;
