@@ -31,7 +31,7 @@ import {
 import type { CloudAuth } from './sqaa-auth';
 
 /** Maximum number of files analyzed concurrently. */
-export const SQAA_CONCURRENCY = 3;
+export const SQAA_CONCURRENCY = 20;
 
 export type FileSuccess = {
   file: string;

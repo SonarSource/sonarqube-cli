@@ -46,7 +46,7 @@ import {
 } from './sqaa-display';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
-const SQAA_LARGE_CHANGESET_THRESHOLD = 20;
+const SQAA_LARGE_CHANGESET_THRESHOLD = 50;
 
 export const VALID_FORMATS = ['text', 'json'] as const;
 export type OutputFormat = (typeof VALID_FORMATS)[number];

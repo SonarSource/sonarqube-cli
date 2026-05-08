@@ -429,18 +429,18 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
         .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
-      for (let i = 1; i <= 21; i++) {
+      for (let i = 1; i <= 51; i++) {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
       const result = await harness.run('analyze sqaa');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('large number of files (21)');
+      expect(result.stdout + result.stderr).toContain('large number of files (51)');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(21);
+      expect(sqaaCalls).toHaveLength(51);
     },
     { timeout: 30000 },
   );
@@ -459,7 +459,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
         .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
-      for (let i = 1; i <= 21; i++) {
+      for (let i = 1; i <= 51; i++) {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
@@ -470,7 +470,7 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(21);
+      expect(sqaaCalls).toHaveLength(51);
     },
     { timeout: 30000 },
   );
@@ -849,18 +849,18 @@ describe('verify — change-set mode (no --file)', () => {
         .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
-      for (let i = 1; i <= 21; i++) {
+      for (let i = 1; i <= 51; i++) {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
       const result = await harness.run('verify');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('large number of files (21)');
+      expect(result.stdout + result.stderr).toContain('large number of files (51)');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(21);
+      expect(sqaaCalls).toHaveLength(51);
     },
     { timeout: 30000 },
   );
@@ -879,7 +879,7 @@ describe('verify — change-set mode (no --file)', () => {
         .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
-      for (let i = 1; i <= 21; i++) {
+      for (let i = 1; i <= 51; i++) {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
@@ -890,7 +890,7 @@ describe('verify — change-set mode (no --file)', () => {
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(21);
+      expect(sqaaCalls).toHaveLength(51);
     },
     { timeout: 30000 },
   );
@@ -1157,9 +1157,9 @@ describe('analyze sqaa — --format json', () => {
         .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
-      // 21 files: > concurrency (3) so fail-fast leaves later files skipped,
-      // and > large-changeset threshold (20) so we also exercise the no-prompt path.
-      for (let i = 1; i <= 21; i++) {
+      // 51 files: > concurrency (20) so fail-fast leaves later files skipped,
+      // and > large-changeset threshold (50) so we also exercise the no-prompt path.
+      for (let i = 1; i <= 51; i++) {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
 
@@ -1179,7 +1179,7 @@ describe('analyze sqaa — --format json', () => {
       expect(report.skipped.length).toBeGreaterThan(0);
       expect(report.summary.totalSkipped).toBe(report.skipped.length);
       // Every staged file ends up in exactly one bucket (succeeded/failed/skipped).
-      expect(report.files.length + report.failures.length + report.skipped.length).toBe(21);
+      expect(report.files.length + report.failures.length + report.skipped.length).toBe(51);
     },
     { timeout: 30000 },
   );
