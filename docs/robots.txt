@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 
 Sitemap: https://cli.sonarqube.com/sitemap.xml
+
+Content-Signal: ai-train=no, search=yes, ai-input=yes
