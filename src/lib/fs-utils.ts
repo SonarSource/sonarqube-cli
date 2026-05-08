@@ -19,9 +19,20 @@
  */
 
 import { realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
+
+/**
+ * POSIX-style relative path under the current working directory.
+ * Returns null when `file` resolves outside cwd (path traversal) or to an
+ * absolute path.
+ */
+export function toRelativePosixPath(file: string): string | null {
+  const rel = normalizePath(relative(process.cwd(), file));
+  if (isAbsolute(rel) || rel.split('/').includes('..')) return null;
+  return rel;
+}
 
 /**
  * Returns the canonical, fully-resolved path for a directory.
