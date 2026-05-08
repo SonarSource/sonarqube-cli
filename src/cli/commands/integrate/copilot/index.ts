@@ -19,6 +19,7 @@
  */
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
+import { SonarQubeClient } from '../../../../sonarqube/client';
 import { intro, print, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -27,7 +28,7 @@ import { installInstructions } from './instructions';
 import { setupMcpServer } from './mcp';
 import { updateCopilotState } from './state';
 
-export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAgentOptions) {
+export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {
     throw new InvalidOptionError(
       '--global and --project are mutually exclusive; please specify only one scope.',
@@ -49,9 +50,11 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
   const projectKey = options.project || project.projectKey;
   if (!isGlobal && !projectKey) {
     warn(
-      'No project key provided - project related actions will be skipped. Run sonar integrate copilot --help for ways to define a project.',
+      'No project key provided - project related actions will be skipped. Run `sonar integrate copilot --help` for ways to define a project.',
     );
   }
+
+  const sqaaProjectKey = await resolveSqaaProjectKey(auth, isGlobal, projectKey);
 
   // ============
   // Installation
@@ -60,6 +63,7 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
   const { instructionsPath, instructionsInstalled } = await installInstructions(
     project.rootDir,
     isGlobal,
+    sqaaProjectKey,
   );
 
   await updateCopilotState(project.rootDir, isGlobal, {
@@ -70,6 +74,28 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
   await setupMcpServer(project, isGlobal, projectKey);
 
   reportInstallationOutcome(isGlobal, hookPath, instructionsPath);
+}
+
+/**
+ * Resolve the project key to bake into the SQAA section of the instructions
+ * file, or `undefined` when the SQAA section must not be installed.
+ *
+ * Returns the project key only when *all* are true:
+ *   1. project scope (SQAA needs a baked-in --project key, so no global)
+ *   2. project key resolvable (from --project flag or sonar-project.properties)
+ *   3. cloud + org auth with SQAA entitlement enabled
+ */
+async function resolveSqaaProjectKey(
+  auth: ResolvedAuth,
+  isGlobal: boolean,
+  projectKey: string | undefined,
+): Promise<string | undefined> {
+  if (isGlobal || !projectKey) {
+    return undefined;
+  }
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const entitled = await client.hasSqaaEntitlement(auth.orgKey);
+  return entitled ? projectKey : undefined;
 }
 
 function reportInstallationOutcome(
