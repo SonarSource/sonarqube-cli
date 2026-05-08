@@ -24,6 +24,7 @@
  */
 
 import crypto from 'node:crypto';
+import { relative } from 'node:path';
 
 export { loadState, saveState } from './repository/state-repository.js';
 
@@ -55,7 +56,7 @@ export function findExtensionsByProject(
   projectRoot: string,
 ): AgentExtension[] {
   return state.agentExtensions.filter(
-    (e) => e.agentId === agentId && e.projectRoot === projectRoot,
+    (e) => e.agentId === agentId && relative(e.projectRoot, projectRoot) === '',
   );
 }
 
