@@ -600,6 +600,124 @@ describe('integrate copilot', () => {
     );
   });
 
+  // ─── SQAA section in the instructions file ──────────────────────────────────
+
+  describe('SQAA section in the instructions file', () => {
+    const TEST_ORG = 'my-org';
+    const TEST_PROJECT = 'my-project';
+
+    /**
+     * Stand up a fake SonarQube Cloud server with SQAA entitlement configured
+     * for the test org, swap the harness auth to a cloud connection, and
+     * return env vars that point the CLI's hard-coded SonarCloud URL
+     * constants at the fake server (so `isSonarQubeCloud(serverUrl)` and the
+     * entitlement endpoint both resolve to the fake).
+     */
+    async function setupCloudWithEntitlement(
+      options: { eligible?: boolean; enabled?: boolean } = {},
+    ): Promise<{ extraEnv: Record<string, string> }> {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234', options)
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+      return {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      };
+    }
+
+    it(
+      'appends the SQAA section with the baked-in project key when org is entitled, project scope, and project key is provided',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
+          extraEnv,
+        });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube Agentic Analysis (SQAA) protocol');
+        // Project key is baked into the example command.
+        expect(body).toContain(`sonar analyze sqaa --project ${TEST_PROJECT} --file`);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section when --project is not provided and no sonar-project.properties exists',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run('integrate copilot', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section when the org is not entitled to SQAA',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement({
+          eligible: false,
+          enabled: false,
+        });
+
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
+          extraEnv,
+        });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section under -g (global scope) even when the org is entitled',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run('integrate copilot -g', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section on on-premise (no organization on the auth)',
+      async () => {
+        // Default beforeEach sets up on-premise auth (no org). hasSqaaEntitlement
+        // returns false fast without hitting the API in this case.
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`);
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
+    );
+  });
+
   // ─── Auth gate ──────────────────────────────────────────────────────────────
 
   describe('auth gate', () => {
