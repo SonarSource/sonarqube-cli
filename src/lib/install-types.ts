@@ -27,7 +27,19 @@ export interface PlatformInfo {
 }
 
 export const SECRETS_BINARY_NAME = 'sonar-secrets';
+export const CONTEXT_AUGMENTATION_BINARY_NAME = 'sonar-context-augmentation';
 
 export function buildPlatformSuffix(p: PlatformInfo): string {
   return `-${p.os}-${p.arch}${p.extension}`;
+}
+
+/**
+ * Platform suffix used by sonar-context-augmentation distribution archives.
+ * CAG publishes platforms as `linux-x64` / `windows-x64` (not `linux-x86-64`),
+ * so we map `x86-64` -> `x64` here. Only used for CAG download paths and the
+ * matching local cached filename — `buildPlatformSuffix` is unchanged.
+ */
+export function buildCagPlatformSuffix(p: PlatformInfo): string {
+  const arch = p.arch === 'x86-64' ? 'x64' : p.arch;
+  return `${p.os}-${arch}`;
 }

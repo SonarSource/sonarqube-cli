@@ -38,6 +38,12 @@ To add a new command: add it to `src/cli/command-tree.ts` and implement the logi
 Please declare commands using the type defined in `src/cli/commands/_common/sonar-command.ts`.
 By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
 
+### Context Augmentation
+
+`sonar context <action> [args...]` is a passthrough to the locally-installed `sonar-context-augmentation` binary (CAG). It forwards args verbatim, propagates the child exit code, and injects the resolved auth token via the `SONAR_TOKEN` env var. Implementation in `src/cli/commands/context/`. The binary is downloaded by `sonar integrate claude` / `sonar integrate copilot` (skip with `--skip-cag`); `sonar context` itself never auto-installs and emits a clear "not installed" error pointing the user back to integrate.
+
+The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) handles `.tar.gz` archives: download → verify detached `.asc` PGP signature → gunzip + USTAR-extract the inner binary into `~/.sonar/sonarqube-cli/bin/`. Tar reading is in `src/cli/commands/_common/install/tar.ts` (no external dep). The pinned CAG version is in `package.json#externalBinaries["sonar-context-augmentation"]` and `src/lib/signatures.ts`. The skill template's invocation prefix is overridden by passing `--invocation-prefix "sonar context"` to `sonar-context-augmentation skill --install <agent>` (requires the upstream CAG flag).
+
 ## Error handling
 
 Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.

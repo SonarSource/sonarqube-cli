@@ -31,15 +31,23 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
+import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
 import { buildLocalBinaryName } from '../../../src/cli/commands/_common/install/secrets';
 import { SONAR_SECRETS_DIST_PREFIX } from '../../../src/lib/config-constants.js';
-import { SECRETS_BINARY_NAME } from '../../../src/lib/install-types.js';
+import {
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  SECRETS_BINARY_NAME,
+} from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
-import { SONAR_SECRETS_VERSION } from '../../../src/lib/signatures.js';
+import {
+  SONAR_CONTEXT_AUGMENTATION_VERSION,
+  SONAR_SECRETS_VERSION,
+} from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
 import type { CliState } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
+import { IS_WINDOWS } from './platform';
 
 function resolveSecretsBinarySource(): string {
   const platform = detectPlatform();
@@ -66,6 +74,9 @@ export class EnvironmentBuilder {
   private activeConnectionOrgKey?: string;
   private activeConnectionTokenName?: string;
   private _installSecretsBinary = false;
+  private _installCagBinary = false;
+  private _cagInitExitCode = 0;
+  private _cagSkillExitCode = 0;
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
@@ -129,6 +140,29 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Writes a stub sonar-context-augmentation script under <cliHome>/bin so the
+   * `sonar context` passthrough and the integrate-flow CAG step can run without
+   * a real CAG binary.
+   *
+   * The stub:
+   *   - prints `sonar-context-augmentation 0.0.0-test` for `--version` (so the
+   *     installer's verifyInstallation() probe succeeds)
+   *   - appends one JSON line per invocation (argv + selected env vars) to
+   *     <cliHome>/cag-invocations.jsonl, which tests can read back to assert
+   *     the wrapper invoked the binary as expected
+   *   - exits with `_cagInitExitCode` for the `init` subcommand and
+   *     `_cagSkillExitCode` for the `skill` subcommand (defaults: 0/0).
+   */
+  withContextAugmentationBinaryInstalled(
+    options: { initExitCode?: number; skillExitCode?: number } = {},
+  ): this {
+    this._installCagBinary = true;
+    this._cagInitExitCode = options.initExitCode ?? 0;
+    this._cagSkillExitCode = options.skillExitCode ?? 0;
+    return this;
+  }
+
+  /**
    * Stores a token in the file-based keychain when writeTo() is called.
    */
   withKeychainToken(serverURL: string, token: string, org?: string): this {
@@ -182,17 +216,25 @@ export class EnvironmentBuilder {
     }
 
     if (this._installSecretsBinary) {
-      state.tools = {
-        installed: [
-          {
-            name: 'sonar-secrets',
-            version: SONAR_SECRETS_VERSION,
-            path: buildLocalBinaryName(detectPlatform()),
-            installedAt: new Date().toISOString(),
-            installedByCliVersion: 'integration-test',
-          },
-        ],
-      };
+      state.tools ??= { installed: [] };
+      state.tools.installed.push({
+        name: 'sonar-secrets',
+        version: SONAR_SECRETS_VERSION,
+        path: buildLocalBinaryName(detectPlatform()),
+        installedAt: new Date().toISOString(),
+        installedByCliVersion: 'integration-test',
+      });
+    }
+
+    if (this._installCagBinary) {
+      state.tools ??= { installed: [] };
+      state.tools.installed.push({
+        name: CONTEXT_AUGMENTATION_BINARY_NAME,
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        path: buildLocalCagBinaryName(detectPlatform()),
+        installedAt: new Date().toISOString(),
+        installedByCliVersion: 'integration-test',
+      });
     }
 
     for (const ext of this.sqaaExtensions) {
@@ -258,5 +300,84 @@ export class EnvironmentBuilder {
         chmodSync(destPath, 0o755);
       }
     }
+
+    if (this._installCagBinary) {
+      this.writeCagStub(cliHome);
+    }
   }
+
+  /**
+   * Writes a stub sonar-context-augmentation script. Records each invocation
+   * (argv + SONAR_TOKEN) to <cliHome>/cag-invocations.jsonl, one JSON object per line.
+   */
+  private writeCagStub(cliHome: string): void {
+    const binDir = join(cliHome, 'bin');
+    mkdirSync(binDir, { recursive: true });
+
+    const versionedName = buildLocalCagBinaryName(detectPlatform());
+    const destPath = join(binDir, versionedName);
+    const sentinelPath = join(cliHome, 'cag-invocations.jsonl');
+    const initExit = this._cagInitExitCode;
+    const skillExit = this._cagSkillExitCode;
+
+    if (IS_WINDOWS) {
+      writeFileSync(destPath, buildWindowsCagStub(sentinelPath, initExit, skillExit));
+    } else {
+      writeFileSync(destPath, buildPosixCagStub(sentinelPath, initExit, skillExit));
+      chmodSync(destPath, EXECUTABLE_PERMS);
+    }
+  }
+}
+
+const EXECUTABLE_PERMS = 0o755;
+
+const POSIX_QUOTE_ESCAPE = String.raw`'\''`;
+
+function shellQuote(s: string): string {
+  const escaped = s.replaceAll("'", POSIX_QUOTE_ESCAPE);
+  return "'" + escaped + "'";
+}
+
+function buildPosixCagStub(sentinelPath: string, initExit: number, skillExit: number): string {
+  // sed expression that JSON-escapes a string by doubling backslashes then
+  // escaping double-quotes. Written with String.raw so backslashes survive
+  // the TS string literal unchanged.
+  const sedEscape = String.raw`sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'`;
+  return [
+    '#!/bin/sh',
+    `INVOCATIONS=${shellQuote(sentinelPath)}`,
+    'if [ "$1" = "--version" ]; then',
+    '  echo "sonar-context-augmentation 0.0.0-test"',
+    '  exit 0',
+    'fi',
+    `json_esc() { printf '%s' "$1" | ${sedEscape}; }`,
+    'argv_json="["',
+    'first=1',
+    'for a in "$@"; do',
+    '  esc=$(json_esc "$a")',
+    '  if [ "$first" -eq 1 ]; then argv_json="${argv_json}\\"${esc}\\""; first=0; else argv_json="${argv_json},\\"${esc}\\""; fi',
+    'done',
+    'argv_json="${argv_json}]"',
+    'token_esc=$(json_esc "${SONAR_TOKEN-}")',
+    'echo "{\\"argv\\":${argv_json},\\"env\\":{\\"SONAR_TOKEN\\":\\"${token_esc}\\"}}" >> "$INVOCATIONS"',
+    `if [ "$1" = "init" ]; then exit ${initExit}; fi`,
+    `if [ "$1" = "skill" ]; then exit ${skillExit}; fi`,
+    'exit 0',
+    '',
+  ].join('\n');
+}
+
+function buildWindowsCagStub(sentinelPath: string, initExit: number, skillExit: number): string {
+  // CMD batch wrapper that delegates JSON serialization to PowerShell.
+  // PowerShell handles argv quoting and JSON escaping natively.
+  const psSentinel = sentinelPath.replaceAll(`'`, `''`);
+  const psCommand = String.raw`$entry = @{ argv = $args; env = @{ SONAR_TOKEN = $env:SONAR_TOKEN } } | ConvertTo-Json -Compress; Add-Content -LiteralPath '${psSentinel}' -Value $entry`;
+  return [
+    '@echo off',
+    'if "%~1"=="--version" (echo sonar-context-augmentation 0.0.0-test & exit /b 0)',
+    `powershell -NoProfile -Command "${psCommand}" %*`,
+    `if "%~1"=="init" exit /b ${initExit}`,
+    `if "%~1"=="skill" exit /b ${skillExit}`,
+    'exit /b 0',
+  ].join('\r\n');
 }

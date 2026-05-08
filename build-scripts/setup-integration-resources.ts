@@ -36,11 +36,13 @@ import { SONAR_SECRETS_DIST_PREFIX } from '../src/lib/config-constants.js';
 import { SECRETS_BINARY_NAME } from '../src/lib/install-types.js';
 import { detectPlatform } from '../src/lib/platform-detector.js';
 import {
+  SONAR_CONTEXT_AUGMENTATION_VERSION,
   SONAR_SECRETS_SIGNATURES,
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
 } from '../src/lib/signatures.js';
 import {
+  buildCagDownloadUrl,
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
@@ -94,4 +96,31 @@ if (!ascExists) {
   console.log(`  from ${signatureUrl}`);
   await downloadBinary(signatureUrl, ascDestPath);
   console.log(`  Signature file ready at ${ascDestPath}`);
+}
+
+// sonar-context-augmentation: best-effort download. Integration tests for the
+// CAG flow use a stub binary written directly into the test cliHome via
+// `withContextAugmentationBinaryInstalled()`; this download is only useful for
+// exercising the real archive/signature path against the fake binaries server.
+const cagArchiveUrl = buildCagDownloadUrl(SONAR_CONTEXT_AUGMENTATION_VERSION, platform);
+const cagAscUrl = `${cagArchiveUrl}.asc`;
+const cagArchiveFilename = cagArchiveUrl.split('/').at(-1)!;
+const cagArchivePath = join(RESOURCES_DIR, cagArchiveFilename);
+const cagAscPath = `${cagArchivePath}.asc`;
+
+if (!existsSync(cagArchivePath) || !existsSync(cagAscPath)) {
+  console.log(
+    `Downloading sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION} for ${platform.os}-${platform.arch}`,
+  );
+  console.log(`  from ${cagArchiveUrl}`);
+  try {
+    await downloadBinary(cagArchiveUrl, cagArchivePath);
+    await downloadBinary(cagAscUrl, cagAscPath);
+    console.log('  Download complete.');
+  } catch (err) {
+    console.log(
+      `  Skipped (artifact not available): ${(err as Error).message}\n` +
+        `  Integration tests will use a stub binary instead.`,
+    );
+  }
 }

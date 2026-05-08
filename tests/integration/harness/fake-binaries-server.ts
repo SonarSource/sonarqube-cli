@@ -32,6 +32,12 @@ function resourcesDir(): string {
   return join(import.meta.dir, '..', 'resources');
 }
 
+function pickContentType(filename: string): string {
+  if (filename.endsWith('.asc')) return 'text/plain';
+  if (filename.endsWith('.tar.gz')) return 'application/gzip';
+  return 'application/octet-stream';
+}
+
 export class FakeBinariesServer {
   private readonly server: ReturnType<typeof Bun.serve>;
   private readonly requests: RecordedRequest[];
@@ -70,12 +76,16 @@ export class FakeBinariesServerBuilder {
   start(): Promise<FakeBinariesServer> {
     const requests: RecordedRequest[] = [];
 
-    // Load versioned artifacts from resources (e.g. sonar-secrets-*-linux-x86-64.exe or *-linux-arm64.exe)
+    // Load versioned artifacts from resources (sonar-secrets .exe[.asc] and
+    // sonar-context-augmentation .tar.gz[.asc]).
     const files = new Map<string, Buffer>();
     if (this._loadArtifacts) {
       const dir = resourcesDir();
       for (const name of readdirSync(dir)) {
-        if (/^sonar-secrets-.*\.exe(\.asc)?$/.test(name)) {
+        if (
+          /^sonar-secrets-.*\.exe(\.asc)?$/.test(name) ||
+          /^sonar-context-augmentation-.*\.tar\.gz(\.asc)?$/.test(name)
+        ) {
           files.set(name, readFileSync(join(dir, name)));
         }
       }
@@ -112,7 +122,7 @@ export class FakeBinariesServerBuilder {
           return new Response('Not Found', { status: 404 });
         }
 
-        const contentType = filename.endsWith('.asc') ? 'text/plain' : 'application/octet-stream';
+        const contentType = pickContentType(filename);
         return new Response(fileBytes, { headers: { 'Content-Type': contentType } });
       },
     });

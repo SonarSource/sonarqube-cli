@@ -1,0 +1,115 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Shared installation helpers used by multiple binary installers (sonar-secrets,
+// sonar-context-augmentation). Lives separately so that installers with
+// different download/verify pipelines can still share state recording, cleanup,
+// and version probing.
+
+import { readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { version as VERSION } from '../../../../../package.json';
+import logger from '../../../../lib/logger';
+import { spawnProcess } from '../../../../lib/process';
+import { loadState, saveState } from '../../../../lib/repository/state-repository';
+import { warn } from '../../../../ui';
+import { CommandFailedError } from '../error';
+
+const VERSION_REGEX_MAX_SEGMENT = 20;
+
+/**
+ * Probe the binary's `--version` output and extract the version (3 or 4 segments).
+ * Returns null when the binary fails to respond or the output does not contain a version.
+ */
+export async function checkInstalledVersion(path: string): Promise<string | null> {
+  try {
+    const result = await spawnProcess(path, ['--version'], { stdout: 'pipe', stderr: 'pipe' });
+    if (result.exitCode === 0) {
+      const pattern = String.raw`(\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\.\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
+      const versionRegex = new RegExp(pattern);
+      const match = versionRegex.exec(result.stdout);
+      return match ? match[1] : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify the installation by probing the binary; throws when the binary does not
+ * respond to `--version`.
+ */
+export async function verifyInstallation(path: string): Promise<string> {
+  const version = await checkInstalledVersion(path);
+  if (!version) {
+    throw new CommandFailedError(
+      'Installation verification failed. Binary not responding to --version.',
+    );
+  }
+  return version;
+}
+
+/**
+ * Record an installed binary in state.json under `tools.installed[]`. Failures
+ * are logged but do not propagate — state writes must not fail an install.
+ */
+export function recordInstallationInState(name: string, version: string, path: string): void {
+  try {
+    const state = loadState();
+    state.tools ??= { installed: [] };
+    state.tools.installed = state.tools.installed.filter((t) => t.name !== name);
+    state.tools.installed.push({
+      name,
+      version,
+      path,
+      installedAt: new Date().toISOString(),
+      installedByCliVersion: VERSION,
+    });
+    saveState(state);
+  } catch (err) {
+    warn(`Failed to update state: ${(err as Error).message}`);
+    logger.warn(`Failed to update state: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Remove older versioned binaries left in `binDir` so the cache only keeps the
+ * current version. Matches files starting with `<binaryName>-` excluding
+ * `currentLocalName`.
+ */
+export function cleanupOldVersionBinaries(
+  binDir: string,
+  binaryName: string,
+  currentLocalName: string,
+): void {
+  try {
+    const oldFiles = readdirSync(binDir).filter(
+      (f) => f.startsWith(`${binaryName}-`) && f !== currentLocalName,
+    );
+    for (const file of oldFiles) {
+      rmSync(join(binDir, file), { force: true });
+      logger.debug(`Removed old ${binaryName} binary: ${file}`);
+    }
+  } catch (err) {
+    logger.debug(`Failed to clean up old ${binaryName} binaries: ${(err as Error).message}`);
+  }
+}

@@ -43,6 +43,7 @@ import { authLogout } from './commands/auth/logout';
 import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
+import { runContextPassthrough } from './commands/context';
 import {
   agentPostToolUse,
   type AgentPostToolUseOptions,
@@ -160,6 +161,7 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
+  .option('--skip-cag', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
 
@@ -190,8 +192,22 @@ integrateCommand
     'Install hooks and config globally to ~/.copilot instead of project directory',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--skip-cag', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
-  .authenticatedAction((_auth, options: IntegrateAgentOptions) => integrateCopilot(_auth, options));
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(auth, options));
+
+// `sonar context` — passthrough wrapper for sonar-context-augmentation.
+// Forwards arguments verbatim to the locally-installed CAG binary; install via
+// `sonar integrate claude` or `sonar integrate copilot`.
+COMMAND_TREE.command('context')
+  .description('Run Context Augmentation actions (analysis context for AI agents)')
+  .argument('<action>', 'Action forwarded to sonar-context-augmentation')
+  .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
+  .passThroughOptions()
+  .allowUnknownOption()
+  .authenticatedAction((auth, action: string, args: string[]) =>
+    runContextPassthrough(auth, [action, ...args]),
+  );
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');

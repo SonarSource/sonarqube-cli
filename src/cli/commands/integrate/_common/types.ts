@@ -22,4 +22,6 @@ export interface IntegrateAgentOptions {
   project?: string;
   nonInteractive?: boolean;
   global?: boolean;
+  /** Skip the sonar-context-augmentation install/init/skill step. */
+  skipCag?: boolean;
 }

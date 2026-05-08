@@ -21,13 +21,14 @@ import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import { intro, print, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
+import { setupContextAugmentation } from '../_common/context-augmentation';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { installHooks } from './hooks';
 import { installInstructions } from './instructions';
 import { setupMcpServer } from './mcp';
 import { updateCopilotState } from './state';
 
-export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAgentOptions) {
+export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {
     throw new InvalidOptionError(
       '--global and --project are mutually exclusive; please specify only one scope.',
@@ -68,6 +69,16 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
   });
 
   await setupMcpServer(project, isGlobal, projectKey);
+
+  if (!options.skipCag) {
+    await setupContextAugmentation({
+      auth,
+      agent: 'copilot',
+      projectRoot: project.rootDir,
+      projectKey: options.project || project.projectKey,
+      isGlobal,
+    });
+  }
 
   reportInstallationOutcome(isGlobal, hookPath, instructionsPath);
 }

@@ -74,6 +74,11 @@ export const GLOBAL_HOOKS_DIR = join(CLI_DIR, 'hooks');
 export const SONARSOURCE_BINARIES_URL =
   process.env.SONARQUBE_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
+/**
+ * Path prefix on binaries.sonarsource.com for sonar-context-augmentation. The full
+ * path embeds the platform: `${SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX}-${platform}/...`.
+ */
+export const SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX = 'Distribution/sonar-context-augmentation';
 export const UPDATE_SCRIPT_BASE_URL =
   'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
 

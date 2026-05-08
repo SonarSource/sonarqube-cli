@@ -45,10 +45,25 @@ interface Platform {
   arch: string;
 }
 
+type ArchiveFormat = 'tar.gz';
+type PlatformNamingScheme = 'x64';
+
 interface ExternalBinary {
   version: string;
   binaryPath: string;
   platforms: Platform[];
+  /**
+   * Optional archive format. When set, the artifact is `<binary>-<plat>-<ver>.<archive>`
+   * inside `${binaryPath}-<plat>/`, signed via `<artifact>.asc`. Default
+   * (undefined): single-file `<binary>-<ver>-<plat>.exe` directly under
+   * `${binaryPath}/`, signed via `<artifact>.asc`.
+   */
+  archive?: ArchiveFormat;
+  /**
+   * Optional platform naming override. When set to `'x64'`, `x86-64` is rewritten
+   * to `x64` in the URL (sonar-context-augmentation distribution convention).
+   */
+  platformNaming?: PlatformNamingScheme;
 }
 
 interface SignatureResult {
@@ -65,14 +80,13 @@ async function fetchSignatures(): Promise<void> {
   const pkg = JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8')) as {
     externalBinaries: Record<string, ExternalBinary>;
   };
-  for (const [binaryName, { version, binaryPath, platforms }] of Object.entries(
-    pkg.externalBinaries,
-  )) {
+  for (const [binaryName, externalBinary] of Object.entries(pkg.externalBinaries)) {
+    const { version, platforms } = externalBinary;
     console.log(`Fetching signatures for ${binaryName} v${version}\n`);
 
     const results = await Promise.all(
       platforms.map((platform) =>
-        fetchAndVerifySignature(platform, version, binaryPath, verificationKey),
+        fetchAndVerifySignature(platform, externalBinary, verificationKey),
       ),
     );
 
@@ -114,18 +128,36 @@ function patchSignaturesTs(
   console.log(`Patched ${outputPath.toString()}`);
 }
 
+function urlPlatformKey(platform: Platform, binary: ExternalBinary): string {
+  const arch =
+    binary.platformNaming === 'x64' && platform.arch === 'x86-64' ? 'x64' : platform.arch;
+  return `${platform.os}-${arch}`;
+}
+
+function buildAscUrl(platform: Platform, binary: ExternalBinary): string {
+  const platKey = urlPlatformKey(platform, binary);
+  const binaryName = binary.binaryPath.split('/').at(-1);
+  if (binary.archive === 'tar.gz') {
+    // e.g. Distribution/sonar-context-augmentation-macos-arm64/sonar-context-augmentation-macos-arm64-0.9.0.355.tar.gz.asc
+    return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}-${platKey}/${binaryName}-${platKey}-${binary.version}.tar.gz.asc`;
+  }
+  // e.g. CommercialDistribution/sonar-secrets/sonar-secrets-2.41.0.10709-macos-arm64.exe.asc
+  return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}/${binaryName}-${binary.version}-${platKey}.exe.asc`;
+}
+
 /** Returns { platform, armoredSignature } if distributed, null if skipped. */
 async function fetchAndVerifySignature(
   platform: Platform,
-  version: string,
-  distPrefix: string,
+  binary: ExternalBinary,
   verificationKey: openpgp.Key,
 ): Promise<SignatureResult | null> {
-  const platformKey = `${platform.os}-${platform.arch}`;
-  const binaryName = distPrefix.split('/').at(-1);
-  const ascUrl = `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${binaryName}-${version}-${platformKey}.exe.asc`;
+  const displayPlatformKey = `${platform.os}-${platform.arch}`;
+  // The map key must match the URL platform so runtime lookups in signatures.ts
+  // resolve correctly when a binary maps `x86-64 → x64` (CAG).
+  const mapPlatformKey = urlPlatformKey(platform, binary);
+  const ascUrl = buildAscUrl(platform, binary);
 
-  console.log(`  ${platformKey} … `);
+  console.log(`  ${displayPlatformKey} … `);
 
   const ascResponse = await fetch(ascUrl);
   if (!ascResponse.ok) {
@@ -134,7 +166,7 @@ async function fetchAndVerifySignature(
       return null;
     }
     throw new Error(
-      `${platformKey}: ASC download failed: ${ascResponse.status} ${ascResponse.statusText}`,
+      `${displayPlatformKey}: ASC download failed: ${ascResponse.status} ${ascResponse.statusText}`,
     );
   }
   const armoredSignature = await ascResponse.text();
@@ -149,12 +181,12 @@ async function fetchAndVerifySignature(
   const signatureKeyIDs = signature.packets.map((p) => p.issuerKeyID.toHex());
   if (!signatureKeyIDs.some((id) => trustedKeyIDs.has(id))) {
     throw new Error(
-      `${platformKey}: signature not issued by the trusted SonarSource key ` +
+      `${displayPlatformKey}: signature not issued by the trusted SonarSource key ` +
         `(got key IDs: ${signatureKeyIDs.join(', ')})`,
     );
   }
 
-  return { platform: platformKey, armoredSignature };
+  return { platform: mapPlatformKey, armoredSignature };
 }
 
 try {

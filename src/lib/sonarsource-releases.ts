@@ -23,8 +23,11 @@
 import { readFileSync } from 'node:fs';
 
 import { version as VERSION } from '../../package.json';
-import { SONARSOURCE_BINARIES_URL } from './config-constants.js';
-import type { PlatformInfo } from './install-types.js';
+import {
+  SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX,
+  SONARSOURCE_BINARIES_URL,
+} from './config-constants.js';
+import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.js';
 import logger from './logger.js';
 
 const DOWNLOAD_TIMEOUT_MS = 60000;
@@ -53,6 +56,22 @@ export function buildDownloadUrl(
 ): string {
   const filename = buildDownloadFilename(binaryName, version, platformInfo);
   return `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${filename}`;
+}
+
+/**
+ * Build the download URL for a sonar-context-augmentation .tar.gz archive.
+ *
+ * Path scheme differs from buildDownloadUrl: the platform appears in both the
+ * directory segment and the filename, and the order is `<name>-<plat>-<ver>`
+ * (instead of `<name>-<ver>-<plat>`).
+ *
+ * Example:
+ *   https://binaries.sonarsource.com/Distribution/sonar-context-augmentation-macos-arm64/sonar-context-augmentation-macos-arm64-0.9.0.355.tar.gz
+ */
+export function buildCagDownloadUrl(version: string, platform: PlatformInfo): string {
+  const platSuffix = buildCagPlatformSuffix(platform);
+  const filename = `sonar-context-augmentation-${platSuffix}-${version}.tar.gz`;
+  return `${SONARSOURCE_BINARIES_URL}/${SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX}-${platSuffix}/${filename}`;
 }
 
 /**

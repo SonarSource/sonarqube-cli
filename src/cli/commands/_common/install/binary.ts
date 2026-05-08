@@ -21,26 +21,25 @@
 // Generic install/resolve pipeline for SonarSource CLI binaries.sonarsource.com dependencies.
 // Per-binary modules wrap this with a fixed `BinarySpec`.
 
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { version as VERSION } from '../../../../../package.json';
 import { BIN_DIR } from '../../../../lib/config-constants';
 import { buildPlatformSuffix, type PlatformInfo } from '../../../../lib/install-types';
-import logger from '../../../../lib/logger';
 import { detectPlatform } from '../../../../lib/platform-detector';
-import { spawnProcess } from '../../../../lib/process';
-import { loadState, saveState } from '../../../../lib/repository/state-repository';
 import {
   buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
 } from '../../../../lib/sonarsource-releases';
-import { print, text, warn, withSpinner } from '../../../../ui';
-import { CommandFailedError } from '../error';
+import { print, text, withSpinner } from '../../../../ui';
+import {
+  cleanupOldVersionBinaries,
+  recordInstallationInState,
+  verifyInstallation,
+} from './state-helpers';
 
 const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
-const VERSION_REGEX_MAX_SEGMENT = 20;
 
 export interface BinarySpec {
   name: string;
@@ -143,66 +142,4 @@ function ensureBinDirectory(dir?: string): string {
 async function makeExecutable(path: string): Promise<void> {
   const { chmod } = await import('node:fs/promises');
   await chmod(path, FILE_EXECUTABLE_PERMS);
-}
-
-async function checkInstalledVersion(path: string): Promise<string | null> {
-  try {
-    const result = await spawnProcess(path, ['--version'], { stdout: 'pipe', stderr: 'pipe' });
-    if (result.exitCode === 0) {
-      const pattern = String.raw`(\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\.\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
-      const versionRegex = new RegExp(pattern);
-      const match = versionRegex.exec(result.stdout);
-      return match ? match[1] : null;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-async function verifyInstallation(path: string): Promise<string> {
-  const version = await checkInstalledVersion(path);
-  if (!version) {
-    throw new CommandFailedError(
-      'Installation verification failed. Binary not responding to --version.',
-    );
-  }
-  return version;
-}
-
-function recordInstallationInState(name: string, version: string, path: string): void {
-  try {
-    const state = loadState();
-    state.tools ??= { installed: [] };
-    state.tools.installed = state.tools.installed.filter((t) => t.name !== name);
-    state.tools.installed.push({
-      name,
-      version,
-      path,
-      installedAt: new Date().toISOString(),
-      installedByCliVersion: VERSION,
-    });
-    saveState(state);
-  } catch (err) {
-    warn(`Failed to update state: ${(err as Error).message}`);
-    logger.warn(`Failed to update state: ${(err as Error).message}`);
-  }
-}
-
-function cleanupOldVersionBinaries(
-  binDir: string,
-  binaryName: string,
-  currentLocalName: string,
-): void {
-  try {
-    const oldFiles = readdirSync(binDir).filter(
-      (f) => f.startsWith(`${binaryName}-`) && f !== currentLocalName,
-    );
-    for (const file of oldFiles) {
-      rmSync(join(binDir, file), { force: true });
-      logger.debug(`Removed old ${binaryName} binary: ${file}`);
-    }
-  } catch (err) {
-    logger.debug(`Failed to clean up old ${binaryName} binaries: ${(err as Error).message}`);
-  }
 }
