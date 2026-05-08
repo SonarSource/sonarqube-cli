@@ -130,10 +130,9 @@ describe('sonar hook claude-post-tool-use', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
-      // Force a Windows-style absolute path (with backslashes) for the file
-      // that already lives inside cwd. `path.relative` will produce a
-      // backslash relative path that the helper must rewrite to POSIX.
-      const filePath = join(harness.cwd.path, 'src', 'main.ts').replaceAll('/', '\\');
+      // On Windows, path.join produces backslash-separated paths.
+      // The helper must rewrite them to POSIX before sending to SQAA.
+      const filePath = join(harness.cwd.path, 'src', 'main.ts');
 
       const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
         stdin: postToolUseStdin(filePath),
