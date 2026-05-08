@@ -640,7 +640,7 @@ describe('sonar remediate', () => {
     );
 
     it(
-      'exits with code 1 when more than 20 issue keys are supplied',
+      'exits with code 2 when more than 20 issue keys are supplied',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -652,7 +652,7 @@ describe('sonar remediate', () => {
         const tooMany = Array.from({ length: 21 }, (_, i) => `k${i + 1}`).join(',');
         const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues ${tooMany}`);
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
         expect(output).toContain('--issues accepts at most 20 issue keys');
         expect(output).toContain('got 21');
@@ -668,7 +668,7 @@ describe('sonar remediate', () => {
     );
 
     it(
-      'exits with code 1 when --issues contains empty entries',
+      'exits with code 2 when --issues contains empty entries',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -679,7 +679,7 @@ describe('sonar remediate', () => {
 
         const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues "k1,,k2"`);
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
         expect(output).toContain('Empty entries are not allowed');
 
@@ -802,7 +802,7 @@ describe('sonar remediate', () => {
         const tooMany = Array.from({ length: 21 }, (_, i) => `k${i + 1}`).join(',');
         const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues ${tooMany}`);
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
         expect(output).toContain('--issues accepts at most 20 issue keys');
         expect(output).not.toContain('requires SonarQube Cloud');
@@ -879,7 +879,7 @@ describe('sonar remediate', () => {
           extraEnv: { SONARQUBE_CLI_MOCK_TTY: '' },
         });
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
         expect(output).toContain('Empty entries are not allowed');
         expect(output).not.toContain('Non-interactive mode requires');
