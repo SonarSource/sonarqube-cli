@@ -663,8 +663,8 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       const result = await harness.run('analyze sqaa');
 
       expect(result.exitCode).toBe(0);
-      // Binary file excluded → change set is empty
-      expect(result.stdout + result.stderr).toContain('no files in the change set');
+      // Binary file shown as IGNORED — no files to analyze
+      expect(result.stdout + result.stderr).toContain('all change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -694,8 +694,8 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
       const result = await harness.run('analyze sqaa');
 
       expect(result.exitCode).toBe(0);
-      // Oversized file excluded → change set is empty
-      expect(result.stdout + result.stderr).toContain('no files in the change set');
+      // Oversized file shown as IGNORED — no files to analyze
+      expect(result.stdout + result.stderr).toContain('all change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -1016,6 +1016,126 @@ describe('analyze sqaa — API error codes', () => {
       expect(result.stdout).toContain('TODO');
       // No Sonar error text should appear on stdout.
       expect(result.stdout).not.toContain('❌ SonarQube Agentic Analysis failed');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('analyze sqaa — --format json', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'outputs valid JSON report for a clean single file',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze sqaa --file src/index.ts --format json');
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout) as {
+        files: { path: string; issues: unknown[] }[];
+        ignored: unknown[];
+        failures: unknown[];
+        summary: { totalIssues: number; totalFailures: number };
+      };
+      expect(report.files).toHaveLength(1);
+      expect(report.files[0].path).toBe('src/index.ts');
+      expect(report.files[0].issues).toHaveLength(0);
+      expect(report.ignored).toHaveLength(0);
+      expect(report.failures).toHaveLength(0);
+      expect(report.summary.totalIssues).toBe(0);
+      expect(report.summary.totalFailures).toBe(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'outputs valid JSON report with issues for single file',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({
+          issues: [{ rule: 'ts:S1135', message: 'Fix this TODO', startLine: 1 }],
+        })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', '// TODO: fix\nconst x = 1;');
+
+      const result = await harness.run('analyze sqaa --file src/index.ts --format json');
+
+      expect(result.exitCode).toBe(51);
+      const report = JSON.parse(result.stdout) as {
+        files: { path: string; issues: { rule: string; message: string }[] }[];
+        summary: { totalIssues: number };
+      };
+      expect(report.files[0].issues).toHaveLength(1);
+      expect(report.files[0].issues[0].rule).toBe('ts:S1135');
+      expect(report.summary.totalIssues).toBe(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'outputs valid JSON report for change-set mode with ignored files',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+      // Binary file — should appear in ignored
+      writeFileSync(join(harness.cwd.path, 'image.bin'), Buffer.from([0x89, 0x50, 0x00, 0x4e]));
+
+      const result = await harness.run('analyze sqaa --format json');
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout) as {
+        files: { path: string }[];
+        ignored: { path: string; reason: string }[];
+        failures: unknown[];
+        summary: { totalIssues: number; totalFailures: number };
+      };
+      expect(report.files).toHaveLength(1);
+      expect(report.files[0].path).toBe('src/index.ts');
+      expect(report.ignored).toHaveLength(1);
+      expect(report.ignored[0].reason).toBe('binary');
+      expect(report.failures).toHaveLength(0);
+      expect(report.summary.totalIssues).toBe(0);
     },
     { timeout: 15000 },
   );

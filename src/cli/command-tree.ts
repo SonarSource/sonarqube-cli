@@ -32,7 +32,11 @@ import {
   VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
 } from './commands/analyze/dependency-risks';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
-import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
+import {
+  analyzeSqaa,
+  type AnalyzeSqaaOptions,
+  VALID_FORMATS as SQAA_FORMATS,
+} from './commands/analyze/sqaa';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
@@ -257,6 +261,10 @@ analyze
   );
 
 // Shared option set for `analyze sqaa` and its `verify` alias.
+const sqaaFormatOption = new Option('--format <format>', 'Output format')
+  .choices(SQAA_FORMATS)
+  .default('text');
+
 function applySqaaOptions(cmd: SonarCommand): SonarCommand {
   return cmd
     .option('--file <file>', 'Analyze a single file (skips change set detection)')
@@ -268,6 +276,7 @@ function applySqaaOptions(cmd: SonarCommand): SonarCommand {
       'SonarQube Cloud project key (overrides auto-detected project)',
     )
     .option('--force', 'Skip the large change set confirmation prompt')
+    .addOption(sqaaFormatOption)
     .authenticatedAction((auth, options: AnalyzeSqaaOptions, innerCmd: Command) =>
       analyzeSqaa(options, auth, innerCmd),
     );

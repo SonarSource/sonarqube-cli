@@ -36,6 +36,18 @@ export interface ChangeSetOptions {
   base?: string;
 }
 
+/** A file excluded from analysis with the reason it was skipped. */
+export interface IgnoredFile {
+  path: string;
+  reason: 'binary' | 'oversized';
+}
+
+/** Result of resolving a change set: files to analyze and files silently ignored. */
+export interface ChangeSetResult {
+  files: string[];
+  ignored: IgnoredFile[];
+}
+
 /**
  * Resolves the list of absolute file paths that belong to the local change set,
  * filtering out git-ignored paths and binary files, capped at SQAA_MAX_FILE_BYTES per file.
@@ -48,17 +60,17 @@ export interface ChangeSetOptions {
 export async function resolveChangeSet(
   cwd: string,
   options: ChangeSetOptions = {},
-): Promise<string[]> {
+): Promise<ChangeSetResult> {
   const { staged, base } = options;
 
   const diffFiles = await getDiffFiles(cwd, { staged, base });
-
   const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(cwd);
-
   const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(cwd, f));
-  const filtered = filterNonBinary(absolute);
 
-  return enforceMaxSize(filtered);
+  const { files: nonBinary, ignored: binaryIgnored } = partitionBinary(absolute);
+  const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
+
+  return { files, ignored: [...binaryIgnored, ...oversizedIgnored] };
 }
 
 async function getDiffFiles(
@@ -107,33 +119,47 @@ function parseLines(output: string): string[] {
 }
 
 /**
- * Removes binary files from the list.
- * We use a simple heuristic: read the first 8 KB; if it contains a NUL byte, it's binary.
+ * Separates binary files from text files.
+ * Heuristic: reads the first 8 KB; a NUL byte indicates binary content.
  */
-function filterNonBinary(files: string[]): string[] {
-  return files.filter((f) => {
+function partitionBinary(files: string[]): { files: string[]; ignored: IgnoredFile[] } {
+  const kept: string[] = [];
+  const ignored: IgnoredFile[] = [];
+  for (const f of files) {
     try {
       const buf = Buffer.alloc(8192);
       const fd = openSync(f, 'r');
       try {
         const bytesRead = readSync(fd, buf, 0, buf.length, 0);
-        return !buf.subarray(0, bytesRead).includes(0x00);
+        if (buf.subarray(0, bytesRead).includes(0x00)) {
+          ignored.push({ path: f, reason: 'binary' });
+        } else {
+          kept.push(f);
+        }
       } finally {
         closeSync(fd);
       }
     } catch {
-      return false;
+      // Unreadable files are silently skipped (e.g. permission errors, deleted between stat and read).
     }
-  });
+  }
+  return { files: kept, ignored };
 }
 
-/** Excludes files that exceed the per-file size limit. */
-function enforceMaxSize(files: string[]): string[] {
-  return files.filter((f) => {
+/** Separates files that exceed the per-file size limit. */
+function partitionBySize(files: string[]): { files: string[]; ignored: IgnoredFile[] } {
+  const kept: string[] = [];
+  const ignored: IgnoredFile[] = [];
+  for (const f of files) {
     try {
-      return statSync(f).size <= SQAA_MAX_FILE_BYTES;
+      if (statSync(f).size <= SQAA_MAX_FILE_BYTES) {
+        kept.push(f);
+      } else {
+        ignored.push({ path: f, reason: 'oversized' });
+      }
     } catch {
-      return false;
+      // Silently skip files that can't be stated.
     }
-  });
+  }
+  return { files: kept, ignored };
 }

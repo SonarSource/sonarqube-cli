@@ -25,7 +25,14 @@ import * as readline from 'node:readline';
 import { bold, cyan, dim, green, red, yellow } from '../colors.js';
 import { isMockActive, recordCall } from '../mock.js';
 
-export type FileStatus = 'waiting' | 'analyzing' | 'done' | 'failed' | 'retrying' | 'skipped';
+export type FileStatus =
+  | 'waiting'
+  | 'analyzing'
+  | 'done'
+  | 'failed'
+  | 'retrying'
+  | 'skipped'
+  | 'ignored';
 
 const BAR_WIDTH = 12;
 const FILLED = '⣿';
@@ -56,12 +63,14 @@ function statusLabel(status: FileStatus, retryLabel?: string): string {
       return yellow(retryLabel ?? '[RETRYING...]');
     case 'skipped':
       return dim('[SKIPPED]');
+    case 'ignored':
+      return dim('[IGNORED]');
   }
 }
 
 function statusIcon(status: FileStatus): string {
   if (status === 'waiting') return dim('○');
-  if (status === 'skipped') return dim('⊘');
+  if (status === 'skipped' || status === 'ignored') return dim('⊘');
   return '●';
 }
 
@@ -69,7 +78,7 @@ function statusIcon(status: FileStatus): string {
 function fileStatusIcon(status: FileStatus): string {
   if (status === 'done') return green('✓');
   if (status === 'failed') return red('✗');
-  if (status === 'skipped') return dim('⊘');
+  if (status === 'skipped' || status === 'ignored') return dim('⊘');
   return dim('○');
 }
 
@@ -100,11 +109,14 @@ export class SqaaProgress {
   /** Number of lines currently written to stdout (TTY mode only). */
   private linesRendered = 0;
 
-  constructor(opts: { files: string[]; isTTY?: boolean }) {
-    this.allFiles = opts.files;
-    this.statuses = opts.files.map(() => 'waiting');
+  constructor(opts: { files: string[]; ignoredFiles?: string[]; isTTY?: boolean }) {
+    const ignored = opts.ignoredFiles ?? [];
+    this.allFiles = [...opts.files, ...ignored];
+    const waiting: FileStatus = 'waiting';
+    const ignoredStatus: FileStatus = 'ignored';
+    this.statuses = [...opts.files.map(() => waiting), ...ignored.map(() => ignoredStatus)];
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
-    this.colWidth = Math.max(...opts.files.map((f) => f.length), 0) + 2;
+    this.colWidth = Math.max(...this.allFiles.map((f) => f.length), 0) + 2;
   }
 
   /**
