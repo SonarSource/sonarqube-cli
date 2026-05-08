@@ -133,6 +133,31 @@ describe('SqaaProgress — TTY mode', () => {
     const after = captureStdout(() => progress.update(0, 'done'));
     expect(after).not.toContain('[RETRYING...]');
   });
+
+  it('progress bar denominator excludes pre-ignored files', () => {
+    // 3 analyzable + 1 ignored. Bar total must be 3 (so 100% is reachable),
+    // not 4. Ignored files still appear in the listing below the bar.
+    const progress = new SqaaProgress({
+      files: FILES,
+      ignoredFiles: ['build/output.bin'],
+      isTTY: true,
+    });
+
+    const start = captureStdout(() => progress.start());
+    expect(start).toContain('0/3 files analyzed');
+    expect(start).not.toContain('0/4 files analyzed');
+
+    const afterDone = captureStdout(() => progress.update(0, 'done'));
+    expect(afterDone).toContain('1/3 files analyzed');
+
+    progress.update(1, 'done');
+    progress.update(2, 'done');
+    const finish = captureStdout(() => progress.finish(3));
+    expect(finish).toContain('3/3 files analyzed');
+    // Ignored entry is still listed below the summary bar.
+    expect(finish).toContain('build/output.bin');
+    expect(finish).toContain('[IGNORED]');
+  });
 });
 
 describe('SqaaProgress — mock mode', () => {

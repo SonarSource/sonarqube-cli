@@ -104,6 +104,13 @@ export class SqaaProgress {
   private readonly isTTY: boolean;
   /** When true, all rendering methods are no-ops (used by --format json). */
   private readonly silent: boolean;
+  /**
+   * Number of files the worker pool will actually analyze — i.e. `allFiles`
+   * minus pre-ignored entries. Used as the denominator of the progress bar and
+   * the `X/Y files analyzed` summary so 100% is reachable when ignored files
+   * are present.
+   */
+  private readonly processableTotal: number;
   /** Width of the path column — longest path length + 1 space minimum. */
   private readonly colWidth: number;
   /** Per-file dynamic label override (used for retry countdown). */
@@ -124,6 +131,7 @@ export class SqaaProgress {
     this.statuses = [...opts.files.map(() => waiting), ...ignored.map(() => ignoredStatus)];
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
     this.silent = opts.silent ?? false;
+    this.processableTotal = opts.files.length;
     this.colWidth = Math.max(...this.allFiles.map((f) => f.length), 0) + 2;
   }
 
@@ -145,8 +153,7 @@ export class SqaaProgress {
     } else {
       // Files counted are the ones the pool will process — exclude files already
       // marked as ignored (binary/oversized) at construction time.
-      const toProcess = this.statuses.filter((s) => s === 'waiting').length;
-      process.stdout.write(`\nAnalyzing ${toProcess} files...\n`);
+      process.stdout.write(`\nAnalyzing ${this.processableTotal} files...\n`);
     }
   }
 
@@ -271,8 +278,8 @@ export class SqaaProgress {
     }
     if (this.isTTY) {
       this.eraseTTY();
-      const bar = renderBar(processedTotal, this.allFiles.length);
-      process.stdout.write(`${bar} ${processedTotal}/${this.allFiles.length} files analyzed\n\n`);
+      const bar = renderBar(processedTotal, this.processableTotal);
+      process.stdout.write(`${bar} ${processedTotal}/${this.processableTotal} files analyzed\n\n`);
       for (let i = 0; i < this.allFiles.length; i++) {
         process.stdout.write(
           formatFileLine(
@@ -298,10 +305,10 @@ export class SqaaProgress {
 
   private buildLines(): string[] {
     const done = this.statuses.filter((s) => s === 'done' || s === 'failed').length;
-    const bar = renderBar(done, this.allFiles.length);
+    const bar = renderBar(done, this.processableTotal);
     const lines: string[] = [
       bold('SonarQube Agentic Analysis in progress...'),
-      `${bar} ${done}/${this.allFiles.length} files analyzed`,
+      `${bar} ${done}/${this.processableTotal} files analyzed`,
       '',
     ];
     for (let i = 0; i < this.allFiles.length; i++) {
