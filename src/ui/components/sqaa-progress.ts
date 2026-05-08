@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Live progress display for SQAA batch analysis.
+// Live progress display for the SQAA worker-pool run.
 
 import * as readline from 'node:readline';
 
@@ -74,7 +74,7 @@ function statusIcon(status: FileStatus): string {
   return '●';
 }
 
-/** Icon used in non-TTY per-file result lines after a batch commits or in finish(). */
+/** Icon used in non-TTY per-file result lines (rolling output and finish()). */
 function fileStatusIcon(status: FileStatus): string {
   if (status === 'done') return green('✓');
   if (status === 'failed') return red('✗');
@@ -89,19 +89,21 @@ function formatFileLine(path: string, icon: string, label: string, colWidth: num
 }
 
 /**
- * Single progress renderer for an entire multi-batch SQAA run.
+ * Single progress renderer for an entire SQAA worker-pool run.
  *
  * Initialized with all file paths upfront; all files are visible throughout the run.
- * Batching is purely a concurrency concern — the display always shows the full list,
- * with per-file statuses updated as each batch progresses.
  *
  * TTY: maintains one block on screen — erases and rewrites it in-place on every update.
- * Non-TTY: prints a static header per batch and per-file result lines on commitBatch.
+ * Non-TTY: prints a one-time `Analyzing <N> files...` header on `start()`, then a
+ *          per-file result line every time a file reaches a terminal status
+ *          (`done`/`failed`) — i.e. rolling output in completion order.
  */
 export class SqaaProgress {
   private readonly allFiles: string[];
   private readonly statuses: FileStatus[];
   private readonly isTTY: boolean;
+  /** When true, all rendering methods are no-ops (used by --format json). */
+  private readonly silent: boolean;
   /** Width of the path column — longest path length + 1 space minimum. */
   private readonly colWidth: number;
   /** Per-file dynamic label override (used for retry countdown). */
@@ -109,42 +111,56 @@ export class SqaaProgress {
   /** Number of lines currently written to stdout (TTY mode only). */
   private linesRendered = 0;
 
-  constructor(opts: { files: string[]; ignoredFiles?: string[]; isTTY?: boolean }) {
+  constructor(opts: {
+    files: string[];
+    ignoredFiles?: string[];
+    isTTY?: boolean;
+    silent?: boolean;
+  }) {
     const ignored = opts.ignoredFiles ?? [];
     this.allFiles = [...opts.files, ...ignored];
     const waiting: FileStatus = 'waiting';
     const ignoredStatus: FileStatus = 'ignored';
     this.statuses = [...opts.files.map(() => waiting), ...ignored.map(() => ignoredStatus)];
     this.isTTY = opts.isTTY ?? process.stdout.isTTY;
+    this.silent = opts.silent ?? false;
     this.colWidth = Math.max(...this.allFiles.map((f) => f.length), 0) + 2;
   }
 
   /**
-   * Signal the start of a new batch (identified by global offset into allFiles).
-   * TTY: redraws the full block.
-   * Non-TTY: prints a static "Analyzing files N–M of total..." header.
+   * Render the initial state of the progress block. Call this once before the
+   * worker pool spawns; subsequent transitions arrive via `update()`.
+   * TTY: draws the full block.
+   * Non-TTY: prints a one-time `Analyzing <N> files...` header.
    */
-  startBatch(batchOffset: number, batchSize: number): void {
+  start(): void {
+    if (this.silent) return;
     if (isMockActive()) {
-      recordCall('sqaaProgress.startBatch', batchOffset, batchSize);
+      recordCall('sqaaProgress.start');
       return;
     }
     if (this.isTTY) {
       this.eraseTTY();
       this.renderTTY();
     } else {
-      const from = batchOffset + 1;
-      const to = Math.min(batchOffset + batchSize, this.allFiles.length);
-      process.stdout.write(`\nAnalyzing files ${from}–${to} of ${this.allFiles.length}...\n`);
+      // Files counted are the ones the pool will process — exclude files already
+      // marked as ignored (binary/oversized) at construction time.
+      const toProcess = this.statuses.filter((s) => s === 'waiting').length;
+      process.stdout.write(`\nAnalyzing ${toProcess} files...\n`);
     }
   }
 
   /**
    * Update a file's status by its global index across all files.
    * TTY: redraws the full block.
-   * Non-TTY: no-op (deferred to commitBatch).
+   * Non-TTY: prints a per-file result line on terminal transitions
+   *          (`done`/`failed`); other transitions are absorbed silently.
    */
   update(globalIndex: number, status: FileStatus): void {
+    if (this.silent) {
+      this.statuses[globalIndex] = status;
+      return;
+    }
     if (isMockActive()) {
       recordCall('sqaaProgress.update', globalIndex, status);
       return;
@@ -153,6 +169,10 @@ export class SqaaProgress {
     if (this.isTTY) {
       this.eraseTTY();
       this.renderTTY();
+      return;
+    }
+    if (status === 'done' || status === 'failed') {
+      process.stdout.write(`  ${fileStatusIcon(status)}  ${this.allFiles[globalIndex]}\n`);
     }
   }
 
@@ -169,6 +189,13 @@ export class SqaaProgress {
     maxRetries: number,
     delayMs: number,
   ): Promise<void> {
+    if (this.silent) {
+      // Still wait so retry semantics are preserved without rendering.
+      this.statuses[globalIndex] = 'retrying';
+      await sleep(delayMs);
+      this.statuses[globalIndex] = 'analyzing';
+      return;
+    }
     if (isMockActive()) {
       recordCall('sqaaProgress.retrying', globalIndex, attempt, maxRetries, delayMs);
       return;
@@ -197,29 +224,19 @@ export class SqaaProgress {
   }
 
   /**
-   * Commit the current batch's final state.
-   * TTY: no-op (block stays on screen; next startBatch or finish will update it).
-   * Non-TTY: prints per-file ✓/✗ result lines for the batch slice.
-   */
-  commitBatch(batchOffset: number, batchSize: number): void {
-    if (isMockActive()) {
-      recordCall('sqaaProgress.commitBatch', batchOffset, batchSize);
-      return;
-    }
-    if (!this.isTTY) {
-      const end = Math.min(batchOffset + batchSize, this.allFiles.length);
-      for (let i = batchOffset; i < end; i++) {
-        process.stdout.write(`  ${fileStatusIcon(this.statuses[i])}  ${this.allFiles[i]}\n`);
-      }
-      process.stdout.write('\n');
-    }
-  }
-
-  /**
    * Mark all files from fromIndex onwards as skipped.
    * Call before finish() when fail-fast stops processing early.
    */
   skipRemaining(fromIndex: number): void {
+    if (this.silent) {
+      // Still record skips in internal state so callers can read them.
+      for (let i = fromIndex; i < this.allFiles.length; i++) {
+        if (this.statuses[i] === 'waiting') {
+          this.statuses[i] = 'skipped';
+        }
+      }
+      return;
+    }
     if (isMockActive()) {
       recordCall('sqaaProgress.skipRemaining', fromIndex);
       return;
@@ -232,12 +249,22 @@ export class SqaaProgress {
   }
 
   /**
-   * Called once after all batches are done (or fail-fast).
+   * Read-only access to file statuses by global index.
+   * Exposed for testing and introspection (e.g. verifying silent-mode state transitions).
+   */
+  getStatuses(): readonly FileStatus[] {
+    return this.statuses;
+  }
+
+  /**
+   * Called once after the worker pool has joined (success or fail-fast).
    * TTY: erases the live block, reprints the summary bar first, then the file list with
    *      final statuses — so the bar stays at the top and the list persists on screen.
-   * Non-TTY: prints any skipped files that were never committed (fail-fast path).
+   * Non-TTY: prints any skipped files that were never reached (fail-fast path);
+   *          non-skipped files were already printed in rolling order by `update()`.
    */
   finish(processedTotal: number): void {
+    if (this.silent) return;
     if (isMockActive()) {
       recordCall('sqaaProgress.finish', processedTotal);
       return;
@@ -259,7 +286,8 @@ export class SqaaProgress {
       process.stdout.write('\n');
       this.linesRendered = 0;
     } else {
-      // Print skipped files that were never reached by any batch's commitBatch.
+      // Print skipped files that the rolling per-file output never reached
+      // (fail-fast path — these files were never picked up by a worker).
       for (let i = 0; i < this.allFiles.length; i++) {
         if (this.statuses[i] === 'skipped') {
           process.stdout.write(`  ${fileStatusIcon('skipped')}  ${this.allFiles[i]}\n`);

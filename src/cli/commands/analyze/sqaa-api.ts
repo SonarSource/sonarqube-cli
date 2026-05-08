@@ -58,14 +58,14 @@ export function readSqaaFileContent(file: string): string {
 }
 
 /**
- * Compute a POSIX-style relative path under the current working directory.
- * Throws when the file is outside cwd (traversal) or on a different drive.
+ * Compute a path of `file` relative to `base` (defaults to the
+ * current working directory). Throws when the file is outside `base` (traversal) or on a different drive.
  */
-export function toRelativePosixPath(file: string): string {
-  const rel = normalizePath(relative(process.cwd(), file));
+export function toRelativePosixPath(file: string, base: string = process.cwd()): string {
+  const rel = normalizePath(relative(base, file));
 
   if (isAbsolute(rel) || rel.split('/').includes('..')) {
-    throw new InvalidOptionError(`File must be inside the current working directory: ${file}`);
+    throw new InvalidOptionError(`File must be inside ${base}: ${file}`);
   }
 
   return rel;
@@ -74,6 +74,10 @@ export function toRelativePosixPath(file: string): string {
 /**
  * Fetch the SQAA API response for a single file. Does not print anything.
  * Throws ServiceUnavailableError on 503 (caller handles retry), CommandFailedError on other failures.
+ *
+ * `pathBase` is the directory the SQAA-side file path is computed relative to.
+ * Defaults to `process.cwd()` for the single-file path; change-set callers
+ * pass the repository root so paths are stable regardless of where the user runs.
  */
 export async function fetchSqaaResponse(
   auth: CloudAuth,
@@ -81,8 +85,9 @@ export async function fetchSqaaResponse(
   file: string,
   fileContent: string,
   branch: string | undefined,
+  pathBase?: string,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
-  const filePath = toRelativePosixPath(file);
+  const filePath = toRelativePosixPath(file, pathBase);
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   try {
     return await client.analyzeFile({
@@ -108,10 +113,11 @@ export async function fetchWithRetry(
   fileContent: string,
   branch: string | undefined,
   onRetry?: (attempt: number) => Promise<void>,
+  pathBase?: string,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
   for (let attempt = 1; attempt <= MAX_503_RETRIES + 1; attempt++) {
     try {
-      return await fetchSqaaResponse(auth, projectKey, file, fileContent, branch);
+      return await fetchSqaaResponse(auth, projectKey, file, fileContent, branch, pathBase);
     } catch (err) {
       const shouldRetry = err instanceof ServiceUnavailableError && attempt <= MAX_503_RETRIES;
       if (!shouldRetry) throw err;

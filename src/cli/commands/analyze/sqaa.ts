@@ -22,24 +22,28 @@ import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { blank, print, setMockUi, text } from '../../../ui';
+import { blank, print, text } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import { InvalidOptionError } from '../_common/error.js';
-import type { BatchContext, BatchTally } from './sqaa-analysis';
-import { runBatches } from './sqaa-analysis';
+import type { RunContext } from './sqaa-analysis';
+import { runAnalyses } from './sqaa-analysis';
 import {
   callSqaaApiAndDisplay,
   fetchWithRetry,
   readSqaaFileContent,
   toRelativePosixPath,
 } from './sqaa-api';
+import type { CloudAuth } from './sqaa-auth';
 import { confirmLargeChangeset, resolveCloudAuthAndProject } from './sqaa-auth';
-import type { IgnoredFile } from './sqaa-changeset';
+import type { ChangeSetResult } from './sqaa-changeset';
 import { resolveChangeSet } from './sqaa-changeset';
-import { applyExitCode, printFileDetails, printJsonReport, printSummary } from './sqaa-display';
-
-/** Exit code when analysis succeeds and issues are found. */
-const EXIT_CODE_ISSUES_FOUND = 51;
+import {
+  applyExitCode,
+  EXIT_CODE_ISSUES_FOUND,
+  printFileDetails,
+  printJsonReport,
+  printSummary,
+} from './sqaa-display';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
 const SQAA_LARGE_CHANGESET_THRESHOLD = 20;
@@ -77,15 +81,15 @@ export async function analyzeSqaa(
   }
 
   // Change-set mode: resolve files from Git.
-  const { files, ignored } = await resolveChangeSet(process.cwd(), { staged, base });
+  const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
 
-  if (files.length === 0 && ignored.length === 0) {
+  if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
     blank();
     text('SonarQube Agentic Analysis: no files in the change set to analyze.');
     return;
   }
 
-  if (files.length === 0) {
+  if (changeSet.files.length === 0) {
     blank();
     text(
       'SonarQube Agentic Analysis: no files to analyze — all change set files were excluded (binary or oversized).',
@@ -93,12 +97,18 @@ export async function analyzeSqaa(
     return;
   }
 
-  if (!force && files.length > SQAA_LARGE_CHANGESET_THRESHOLD) {
-    const confirmed = await confirmLargeChangeset(files.length);
+  // Resolve cloud auth + project key BEFORE prompting.
+  // Pass repoRoot so we reuse the already-resolved root instead of spawning git again.
+  const resolved = await resolveCloudAuthAndProject(auth, project, command, changeSet.repoRoot);
+  if (!resolved) return;
+
+  // JSON mode is consumed by scripts/CI: never block on an interactive prompt
+  if (!force && format !== 'json' && changeSet.files.length > SQAA_LARGE_CHANGESET_THRESHOLD) {
+    const confirmed = await confirmLargeChangeset(changeSet.files.length);
     if (!confirmed) return;
   }
 
-  await runSqaaAnalysisOnFiles(files, ignored, auth, branch, project, command, format);
+  await runSqaaAnalysisOnFiles(changeSet, resolved, branch, format);
 }
 
 async function runSqaaAnalysis(
@@ -109,7 +119,7 @@ async function runSqaaAnalysis(
   command?: Command,
   format: OutputFormat = 'text',
 ): Promise<void> {
-  const resolved = resolveCloudAuthAndProject(auth, explicitProject, command);
+  const resolved = await resolveCloudAuthAndProject(auth, explicitProject, command);
   if (!resolved) return;
 
   const { cloudAuth, projectKey } = resolved;
@@ -123,7 +133,8 @@ async function runSqaaAnalysis(
         files: [{ path: filePath, issues: response.issues, errors: response.errors }],
         ignored: [],
         failures: [],
-        summary: { totalIssues: response.issues.length, totalFailures: 0 },
+        skipped: [],
+        summary: { totalIssues: response.issues.length, totalFailures: 0, totalSkipped: 0 },
       };
       print(JSON.stringify(report, null, 2));
       if (response.issues.length > 0) process.exitCode = EXIT_CODE_ISSUES_FOUND;
@@ -132,7 +143,8 @@ async function runSqaaAnalysis(
         files: [],
         ignored: [],
         failures: [{ path: filePath, message: (err as Error).message }],
-        summary: { totalIssues: 0, totalFailures: 1 },
+        skipped: [],
+        summary: { totalIssues: 0, totalFailures: 1, totalSkipped: 0 },
       };
       print(JSON.stringify(report, null, 2));
       process.exitCode = 1;
@@ -147,47 +159,46 @@ async function runSqaaAnalysis(
 }
 
 async function runSqaaAnalysisOnFiles(
-  files: string[],
-  ignored: IgnoredFile[],
-  auth: ResolvedAuth,
+  changeSet: ChangeSetResult,
+  resolved: { cloudAuth: CloudAuth; projectKey: string },
   branch?: string,
-  explicitProject?: string,
-  command?: Command,
   format: OutputFormat = 'text',
 ): Promise<void> {
-  const resolved = resolveCloudAuthAndProject(auth, explicitProject, command);
-  if (!resolved) return;
-
+  const { files, ignored, repoRoot } = changeSet;
   const { cloudAuth, projectKey } = resolved;
-  const allPaths = files.map(toRelativePosixPath);
+  const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
 
   if (format === 'json') {
-    // Run batches with all UI suppressed, then emit structured JSON.
-    const silentProgress = new SqaaProgress({ files: allPaths });
-    const ctx: BatchContext = {
+    // Suppress all UI rendering at the component level (no global mock state).
+    const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
+    const ctx: RunContext = {
       files,
       allPaths,
       cloudAuth,
       projectKey,
       branch,
       progress: silentProgress,
+      pathBase: repoRoot,
     };
-    setMockUi(true);
-    let tally: BatchTally;
-    try {
-      tally = await runBatches(ctx);
-    } finally {
-      setMockUi(false);
-    }
-    printJsonReport(tally, ignored);
+    const tally = await runAnalyses(ctx);
+    printJsonReport(tally, ignored, allPaths, repoRoot);
     applyExitCode(tally.totalIssues, tally.totalFailures);
     return;
   }
 
-  const ignoredPaths = ignored.map((f) => toRelativePosixPath(f.path));
+  const ignoredPaths = ignored.map((f) => toRelativePosixPath(f.path, repoRoot));
   const progress = new SqaaProgress({ files: allPaths, ignoredFiles: ignoredPaths });
-  const ctx: BatchContext = { files, allPaths, cloudAuth, projectKey, branch, progress };
-  const tally = await runBatches(ctx);
+  const ctx: RunContext = {
+    files,
+    allPaths,
+    cloudAuth,
+    projectKey,
+    branch,
+    progress,
+    pathBase: repoRoot,
+  };
+  progress.start();
+  const tally = await runAnalyses(ctx);
 
   progress.finish(tally.allResults.length);
   printFileDetails(tally.allResults);

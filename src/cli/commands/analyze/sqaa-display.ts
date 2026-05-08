@@ -22,12 +22,12 @@
 
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { blank, error, print, success, text } from '../../../ui';
-import type { BatchTally, FileFailure, FileResult, FileSuccess } from './sqaa-analysis';
+import type { FileFailure, FileResult, FileSuccess, RunTally } from './sqaa-analysis';
 import { toRelativePosixPath } from './sqaa-api';
 import type { IgnoredFile } from './sqaa-changeset';
 
 /** Exit code when analysis succeeds and issues are found. */
-const EXIT_CODE_ISSUES_FOUND = 51;
+export const EXIT_CODE_ISSUES_FOUND = 51;
 
 export interface SqaaJsonReport {
   files: Array<{
@@ -37,10 +37,17 @@ export interface SqaaJsonReport {
   }>;
   ignored: Array<{ path: string; reason: 'binary' | 'oversized' }>;
   failures: Array<{ path: string; message: string }>;
-  summary: { totalIssues: number; totalFailures: number };
+  /** Files in the change set that were never sent to the API (fail-fast skipped them). */
+  skipped: string[];
+  summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
 }
 
-export function printJsonReport(tally: BatchTally, ignored: IgnoredFile[]): void {
+export function printJsonReport(
+  tally: RunTally,
+  ignored: IgnoredFile[],
+  allPaths: string[],
+  pathBase?: string,
+): void {
   const files = tally.allResults
     .filter((r): r is FileSuccess => !('failure' in r))
     .map((r) => ({ path: r.filePath, issues: r.issues, errors: r.errors }));
@@ -49,11 +56,22 @@ export function printJsonReport(tally: BatchTally, ignored: IgnoredFile[]): void
     .filter((r): r is FileFailure => 'failure' in r)
     .map((r) => ({ path: r.filePath, message: r.failure.message }));
 
+  const processedPaths = new Set<string>(tally.allResults.map((r) => r.filePath));
+  const skipped = allPaths.filter((p) => !processedPaths.has(p));
+
   const report: SqaaJsonReport = {
     files,
-    ignored: ignored.map((f) => ({ path: toRelativePosixPath(f.path), reason: f.reason })),
+    ignored: ignored.map((f) => ({
+      path: toRelativePosixPath(f.path, pathBase),
+      reason: f.reason,
+    })),
     failures,
-    summary: { totalIssues: tally.totalIssues, totalFailures: tally.totalFailures },
+    skipped,
+    summary: {
+      totalIssues: tally.totalIssues,
+      totalFailures: tally.totalFailures,
+      totalSkipped: skipped.length,
+    },
   };
 
   print(JSON.stringify(report, null, 2));

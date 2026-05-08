@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Batch execution engine for SQAA change-set analysis.
+// Concurrent execution engine for SQAA change-set analysis
 
 import type { SqaaIssue } from '../../../sonarqube/client';
 import type { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
@@ -30,8 +30,8 @@ import {
 } from './sqaa-api';
 import type { CloudAuth } from './sqaa-auth';
 
-/** Number of files analyzed concurrently within a batch. */
-export const SQAA_BATCH_SIZE = 3;
+/** Maximum number of files analyzed concurrently. */
+export const SQAA_CONCURRENCY = 3;
 
 export type FileSuccess = {
   file: string;
@@ -42,94 +42,110 @@ export type FileSuccess = {
 export type FileFailure = { file: string; filePath: string; failure: Error };
 export type FileResult = FileSuccess | FileFailure;
 
-export interface BatchContext {
+export interface RunContext {
   files: string[];
   allPaths: string[];
   cloudAuth: CloudAuth;
   projectKey: string;
   branch: string | undefined;
   progress: SqaaProgress;
+  /** Directory used as the base for SQAA-side file paths (typically the git repo root). */
+  pathBase: string;
 }
 
-export interface BatchTally {
+export interface RunTally {
   allResults: FileResult[];
   totalIssues: number;
   totalErrors: number;
   totalFailures: number;
 }
 
-export async function runBatches(ctx: BatchContext): Promise<BatchTally> {
-  const batches = chunkArray(ctx.files, SQAA_BATCH_SIZE);
-  const tally: BatchTally = { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 };
+/**
+ * Run analyses through a worker pool of `SQAA_CONCURRENCY`. Returns the merged
+ * tally once every spawned worker has joined.
+ *
+ * Fail-fast contract: if any file fails, no worker will pick up a *new* file
+ * after that point. Workers already mid-flight finish their current file.
+ */
+export async function runAnalyses(ctx: RunContext): Promise<RunTally> {
+  const tally: RunTally = { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 };
+  if (ctx.files.length === 0) return tally;
 
-  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-    const batch = batches[batchIdx];
-    const batchOffset = batchIdx * SQAA_BATCH_SIZE;
-    const batchPaths = ctx.allPaths.slice(batchOffset, batchOffset + batch.length);
+  // Shared cursor and fail-fast flag.
+  // `next` is the count of indices claimed so far (each worker does `idx = next++`).
+  // `hadFailure` is the fail-fast signal: set when any file fails.
+  let next = 0;
+  let hadFailure = false;
 
-    ctx.progress.startBatch(batchOffset, batch.length);
-    const batchResponses = await executeBatch(batch, batchOffset, ctx);
-    ctx.progress.commitBatch(batchOffset, batch.length);
-
-    const { results, hadFailure } = collectBatchResults(batch, batchPaths, batchResponses);
-    tally.allResults.push(...results);
-    tallyResults(results, tally);
-
-    if (hadFailure) {
-      ctx.progress.skipRemaining(batchOffset + batch.length);
-      break;
+  const worker = async (): Promise<void> => {
+    while (!hadFailure) {
+      const idx = next++;
+      if (idx >= ctx.files.length) return;
+      const result = await processFile(ctx, idx);
+      tally.allResults.push(result);
+      tallyResults([result], tally);
+      if ('failure' in result) {
+        hadFailure = true;
+      }
     }
+  };
+
+  const workerCount = Math.min(SQAA_CONCURRENCY, ctx.files.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  // `next` equals the total number of indices claimed across all workers (including
+  // any that went past the end of the array). Cap it to get the first unclaimed index.
+  const firstUnpicked = Math.min(next, ctx.files.length);
+  if (firstUnpicked < ctx.files.length) {
+    ctx.progress.skipRemaining(firstUnpicked);
   }
+
+  // Workers complete in arbitrary order. Restore original file ordering so that
+  // downstream consumers (JSON report, text display) see a stable, predictable sequence.
+  const fileIndexMap = new Map(ctx.files.map((f, i) => [f, i]));
+  tally.allResults.sort(
+    (a, b) => (fileIndexMap.get(a.file) ?? 0) - (fileIndexMap.get(b.file) ?? 0),
+  );
 
   return tally;
 }
 
-async function executeBatch(
-  batch: string[],
-  batchOffset: number,
-  ctx: BatchContext,
-): Promise<
-  PromiseSettledResult<{
-    issues: SqaaIssue[];
-    errors?: Array<{ code: string; message: string }> | null;
-  }>[]
-> {
-  const responses = await Promise.allSettled(
-    batch.map(async (file, i) => {
-      const globalIdx = batchOffset + i;
-      ctx.progress.update(globalIdx, 'analyzing');
-      const fileContent = readSqaaFileContent(file);
-      const response = await fetchWithRetry(
-        ctx.cloudAuth,
-        ctx.projectKey,
-        file,
-        fileContent,
-        ctx.branch,
-        async (attempt) => {
-          await ctx.progress.retrying(
-            globalIdx,
-            attempt,
-            MAX_503_RETRIES,
-            RETRY_503_BASE_DELAY_MS * 2 ** (attempt - 1),
-          );
-          // retrying() already resets status to 'analyzing' when the countdown ends.
-        },
-      );
-      ctx.progress.update(globalIdx, 'done');
-      return response;
-    }),
-  );
-
-  for (let i = 0; i < responses.length; i++) {
-    if (responses[i].status === 'rejected') {
-      ctx.progress.update(batchOffset + i, 'failed');
-    }
+/**
+ * Process a single file end-to-end: read content, call the API with 503 retry,
+ * and emit progress transitions. Errors (including retry exhaustion) are caught and converted into a `FileFailure`.
+ */
+async function processFile(ctx: RunContext, idx: number): Promise<FileResult> {
+  const file = ctx.files[idx];
+  const filePath = ctx.allPaths[idx];
+  ctx.progress.update(idx, 'analyzing');
+  try {
+    const fileContent = readSqaaFileContent(file);
+    const response = await fetchWithRetry(
+      ctx.cloudAuth,
+      ctx.projectKey,
+      file,
+      fileContent,
+      ctx.branch,
+      async (attempt) => {
+        await ctx.progress.retrying(
+          idx,
+          attempt,
+          MAX_503_RETRIES,
+          RETRY_503_BASE_DELAY_MS * 2 ** (attempt - 1),
+        );
+        // retrying() already resets status to 'analyzing' when the countdown ends.
+      },
+      ctx.pathBase,
+    );
+    ctx.progress.update(idx, 'done');
+    return { file, filePath, issues: response.issues, errors: response.errors };
+  } catch (err) {
+    ctx.progress.update(idx, 'failed');
+    return { file, filePath, failure: err as Error };
   }
-
-  return responses;
 }
 
-export function tallyResults(results: FileResult[], tally: BatchTally): void {
+export function tallyResults(results: FileResult[], tally: RunTally): void {
   for (const r of results) {
     if ('failure' in r) {
       tally.totalFailures += 1;
@@ -138,39 +154,4 @@ export function tallyResults(results: FileResult[], tally: BatchTally): void {
       tally.totalErrors += r.errors?.length ?? 0;
     }
   }
-}
-
-export function collectBatchResults(
-  batch: string[],
-  batchPaths: string[],
-  batchResponses: PromiseSettledResult<{
-    issues: SqaaIssue[];
-    errors?: Array<{ code: string; message: string }> | null;
-  }>[],
-): { results: FileResult[]; hadFailure: boolean } {
-  const results: FileResult[] = [];
-  let hadFailure = false;
-
-  for (let i = 0; i < batchResponses.length; i++) {
-    const resp = batchResponses[i];
-    const file = batch[i];
-    const filePath = batchPaths[i];
-    if (resp.status === 'fulfilled') {
-      results.push({ file, filePath, issues: resp.value.issues, errors: resp.value.errors });
-    } else {
-      results.push({ file, filePath, failure: resp.reason as Error });
-      hadFailure = true;
-    }
-  }
-
-  return { results, hadFailure };
-}
-
-/** Split an array into chunks of at most `size` elements. */
-export function chunkArray<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
 }

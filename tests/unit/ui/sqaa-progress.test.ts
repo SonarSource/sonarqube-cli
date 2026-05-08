@@ -56,22 +56,36 @@ async function captureStdoutAsync(fn: () => Promise<void>): Promise<string> {
 }
 
 describe('SqaaProgress — non-TTY mode', () => {
-  it('prints batch header, file results, and skipped files on fail-fast', () => {
+  it('prints a one-time header, rolling per-file result lines, and skipped files on fail-fast', () => {
     const progress = new SqaaProgress({ files: FILES, isTTY: false });
 
-    const header = captureStdout(() => progress.startBatch(0, 2));
-    expect(header).toContain('Analyzing files 1–2 of 3');
+    const header = captureStdout(() => progress.start());
+    expect(header).toContain('Analyzing 3 files');
 
-    progress.update(0, 'done');
-    progress.update(1, 'failed');
-    const commit = captureStdout(() => progress.commitBatch(0, 2));
-    expect(commit).toContain('src/a.ts');
-    expect(commit).toContain('src/b.ts');
-    expect(commit.endsWith('\n\n')).toBe(true);
+    // Result lines arrive in completion order (rolling), one per terminal transition.
+    const aLine = captureStdout(() => progress.update(0, 'done'));
+    expect(aLine).toContain('src/a.ts');
+    // Intermediate transitions don't print anything in non-TTY mode.
+    expect(captureStdout(() => progress.update(1, 'analyzing'))).toBe('');
+    const bLine = captureStdout(() => progress.update(1, 'failed'));
+    expect(bLine).toContain('src/b.ts');
 
+    // Fail-fast: c.ts is never picked up, finish() flushes it as skipped.
     captureStdout(() => progress.skipRemaining(2));
     const finish = captureStdout(() => progress.finish(2));
-    expect(finish).toContain('src/c.ts'); // skipped file printed in finish
+    expect(finish).toContain('src/c.ts');
+  });
+
+  it('header counts only files the pool will process (excludes pre-ignored files)', () => {
+    const progress = new SqaaProgress({
+      files: FILES,
+      ignoredFiles: ['build/output.bin'],
+      isTTY: false,
+    });
+
+    const header = captureStdout(() => progress.start());
+    // Only the 3 waiting files count; the binary one is already accounted for elsewhere.
+    expect(header).toContain('Analyzing 3 files');
   });
 
   it('retrying prints a countdown line and resets status to analyzing', async () => {
@@ -86,7 +100,7 @@ describe('SqaaProgress — TTY mode', () => {
   it('renders full block with all statuses through a complete lifecycle', () => {
     const progress = new SqaaProgress({ files: FILES, isTTY: true });
 
-    const start = captureStdout(() => progress.startBatch(0, 3));
+    const start = captureStdout(() => progress.start());
     expect(start).toContain('SonarQube Agentic Analysis in progress');
     expect(start).toContain('0/3 files analyzed');
     expect(start).toContain('[WAITING]');
@@ -111,7 +125,7 @@ describe('SqaaProgress — TTY mode', () => {
 
   it('retrying shows live countdown label and resets to analyzing', async () => {
     const progress = new SqaaProgress({ files: FILES, isTTY: true });
-    captureStdout(() => progress.startBatch(0, 3));
+    captureStdout(() => progress.start());
     // 500ms rounds to 1s so the countdown loop body executes once.
     const output = await captureStdoutAsync(() => progress.retrying(0, 1, 3, 500));
     expect(output).toContain('RETRYING');
@@ -132,9 +146,8 @@ describe('SqaaProgress — mock mode', () => {
     const progress = new SqaaProgress({ files: FILES });
 
     const output = captureStdout(() => {
-      progress.startBatch(0, 3);
+      progress.start();
       progress.update(0, 'done');
-      progress.commitBatch(0, 3);
       progress.skipRemaining(1);
       progress.finish(3);
     });
@@ -142,11 +155,52 @@ describe('SqaaProgress — mock mode', () => {
 
     expect(output).toBe('');
     const methods = getMockUiCalls().map((c) => c.method);
-    expect(methods).toContain('sqaaProgress.startBatch');
+    expect(methods).toContain('sqaaProgress.start');
     expect(methods).toContain('sqaaProgress.update');
-    expect(methods).toContain('sqaaProgress.commitBatch');
     expect(methods).toContain('sqaaProgress.skipRemaining');
     expect(methods).toContain('sqaaProgress.finish');
     expect(methods).toContain('sqaaProgress.retrying');
+  });
+});
+
+describe('SqaaProgress — silent flag (used by --format json)', () => {
+  // Silent mode is the production replacement for setMockUi(true) in JSON mode:
+  // it must not write to stdout, must not record calls into the global mock
+  // buffer, and must still update internal status so consumers can read it.
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+  afterEach(() => setMockUi(false));
+
+  it('writes nothing to stdout and records no mock calls even when mock is active', async () => {
+    const progress = new SqaaProgress({ files: FILES, silent: true });
+
+    const output = await captureStdoutAsync(async () => {
+      progress.start();
+      progress.update(0, 'done');
+      progress.skipRemaining(1);
+      progress.finish(3);
+      await progress.retrying(2, 1, 3, 1);
+    });
+
+    expect(output).toBe('');
+    // Crucially: no entries pushed into the global mock buffer (the original
+    // setMockUi(true) approach grew this array unboundedly during JSON runs).
+    expect(getMockUiCalls()).toHaveLength(0);
+  });
+
+  it('still updates internal status for skipRemaining and retrying', async () => {
+    const progress = new SqaaProgress({ files: FILES, silent: true });
+
+    progress.update(0, 'done');
+    progress.skipRemaining(1);
+    expect(progress.getStatuses()).toEqual(['done', 'skipped', 'skipped']);
+
+    // retrying() preserves the wait so retry semantics are unchanged, and
+    // resets the status back to 'analyzing' on completion.
+    await progress.retrying(0, 1, 3, 1);
+    expect(progress.getStatuses()[0]).toBe('analyzing');
   });
 });

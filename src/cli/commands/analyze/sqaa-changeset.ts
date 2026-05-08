@@ -46,11 +46,17 @@ export interface IgnoredFile {
 export interface ChangeSetResult {
   files: string[];
   ignored: IgnoredFile[];
+  /** Repository root used to resolve git output. Useful for computing relative paths. */
+  repoRoot: string;
 }
 
 /**
  * Resolves the list of absolute file paths that belong to the local change set,
  * filtering out git-ignored paths and binary files, capped at SQAA_MAX_FILE_BYTES per file.
+ *
+ * All git commands are run from the repository top-level (resolved via
+ * `git rev-parse --show-toplevel`), so behavior is identical whether the user
+ * runs from the repo root or a subdirectory. Returned paths are absolute.
  *
  * Modes:
  *   - Default (no options): `git diff HEAD` (staged + unstaged) + untracked non-ignored files
@@ -63,21 +69,34 @@ export async function resolveChangeSet(
 ): Promise<ChangeSetResult> {
   const { staged, base } = options;
 
-  const diffFiles = await getDiffFiles(cwd, { staged, base });
-  const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(cwd);
-  const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(cwd, f));
+  const repoRoot = await resolveRepoRoot(cwd);
+
+  const diffFiles = await getDiffFiles(repoRoot, { staged, base });
+  const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(repoRoot);
+  const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(repoRoot, f));
 
   const { files: nonBinary, ignored: binaryIgnored } = partitionBinary(absolute);
   const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
 
-  return { files, ignored: [...binaryIgnored, ...oversizedIgnored] };
+  return { files, ignored: [...binaryIgnored, ...oversizedIgnored], repoRoot };
+}
+
+/**
+ * Resolve the absolute path of the repository top-level for `cwd`.
+ * Throws CommandFailedError when `cwd` is not inside a Git repository.
+ */
+async function resolveRepoRoot(cwd: string): Promise<string> {
+  const out = await runGit(['rev-parse', '--show-toplevel'], cwd);
+  return out.trim();
 }
 
 async function getDiffFiles(
   cwd: string,
   opts: { staged?: boolean; base?: string },
 ): Promise<string[]> {
-  const args: string[] = ['diff', '--name-only', '--diff-filter=ACMR'];
+  // -z: NUL-separated output, no path quoting — robust against unusual filenames
+  // (leading/trailing whitespace, newlines, non-ASCII bytes with core.quotePath=true).
+  const args: string[] = ['diff', '--name-only', '--diff-filter=ACMR', '-z'];
 
   if (opts.staged) {
     args.push('--cached');
@@ -88,12 +107,12 @@ async function getDiffFiles(
   }
 
   const result = await runGit(args, cwd);
-  return parseLines(result);
+  return parseNulSeparated(result);
 }
 
 async function getUntrackedNonIgnoredFiles(cwd: string): Promise<string[]> {
-  const result = await runGit(['ls-files', '--others', '--exclude-standard'], cwd);
-  return parseLines(result);
+  const result = await runGit(['ls-files', '-z', '--others', '--exclude-standard'], cwd);
+  return parseNulSeparated(result);
 }
 
 async function runGit(args: string[], cwd: string): Promise<string> {
@@ -111,11 +130,8 @@ async function runGit(args: string[], cwd: string): Promise<string> {
   return result.stdout;
 }
 
-function parseLines(output: string): string[] {
-  return output
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+function parseNulSeparated(output: string): string[] {
+  return output.split('\0').filter((p) => p.length > 0);
 }
 
 /**

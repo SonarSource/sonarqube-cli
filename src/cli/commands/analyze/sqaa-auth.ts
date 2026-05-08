@@ -24,6 +24,7 @@ import type { Command } from 'commander';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
+import { spawnProcess } from '../../../lib/process';
 import { loadState } from '../../../lib/repository/state-repository';
 import type { HookExtension } from '../../../lib/state';
 import { findExtensionsByProject } from '../../../lib/state-manager';
@@ -47,15 +48,16 @@ export interface CloudAuth {
  * Combines cloud-auth validation and project-key resolution.
  * Returns null (with a warning already printed) when SQAA should be skipped.
  */
-export function resolveCloudAuthAndProject(
+export async function resolveCloudAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
   command: Command | undefined,
-): { cloudAuth: CloudAuth; projectKey: string } | null {
+  projectRoot?: string,
+): Promise<{ cloudAuth: CloudAuth; projectKey: string } | null> {
   const cloudAuth = resolveCloudAuth(auth, explicitProject);
   if (!cloudAuth) return null;
 
-  const projectKey = explicitProject ?? resolveSqaaProjectKey(command);
+  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(command, projectRoot));
   if (!projectKey) {
     warn(
       'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
@@ -91,13 +93,25 @@ export function resolveCloudAuth(
 }
 
 /**
- * Look up the project key for the current directory from the agentExtensions registry.
- * Returns null when SQAA should be skipped.
+ * Look up the project key for the current project from the agentExtensions registry.
+ *
+ * The registry keys extensions by project root (the directory passed to
+ * `sonar integrate claude`), so when the user runs SQAA from a subdirectory we
+ * have to resolve the git repository top-level first — otherwise `process.cwd()`
+ * is a non-match against the registered root and we incorrectly skip with
+ * "no project configured".
+ *
+ * Falls back to `process.cwd()` when not inside a git repository so the
+ * single-file path still works outside git.
  */
-export function resolveSqaaProjectKey(command?: Command): string | null {
+export async function resolveSqaaProjectKey(
+  command?: Command,
+  projectRoot?: string,
+): Promise<string | null> {
   try {
+    const root = projectRoot ?? (await tryResolveRepoRoot(process.cwd()));
     const state = loadState();
-    const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
+    const extensions = findExtensionsByProject(state, 'claude-code', root);
     const sqaaExt = extensions.find(
       (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-sqaa',
     );
@@ -120,9 +134,25 @@ export function resolveSqaaProjectKey(command?: Command): string | null {
 }
 
 /**
+ * Resolve the git repository top-level for `cwd`, falling back to `cwd` itself
+ * when not inside a git repository (so non-git workflows still work).
+ */
+async function tryResolveRepoRoot(cwd: string): Promise<string> {
+  try {
+    const result = await spawnProcess('git', ['rev-parse', '--show-toplevel'], { cwd });
+    if (result.exitCode === 0) {
+      return result.stdout.trim();
+    }
+  } catch {
+    // git not installed or otherwise unavailable — fall through to cwd.
+  }
+  return cwd;
+}
+
+/**
  * Warn about a large change set and ask the user to confirm.
- * In non-TTY (agent/CI) mode, prints a warning and auto-proceeds.
- * Returns false only when the user explicitly declines in an interactive terminal.
+ * In non-interactive contexts (no stdin TTY — e.g. CI/agent runs), prints a
+ * warning and auto-proceeds. Returns false only when the user explicitly declines in an interactive terminal.
  */
 export async function confirmLargeChangeset(fileCount: number): Promise<boolean> {
   blank();
@@ -130,7 +160,7 @@ export async function confirmLargeChangeset(fileCount: number): Promise<boolean>
     `You are about to analyze a large number of files (${fileCount}). This may take longer to process.\n${LARGE_CHANGESET_HINT}`,
   );
 
-  if (!process.stdout.isTTY) {
+  if (!process.stdin.isTTY) {
     return true;
   }
 

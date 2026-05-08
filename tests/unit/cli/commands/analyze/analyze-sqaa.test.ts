@@ -29,6 +29,7 @@ import {
   InvalidOptionError,
 } from '../../../../../src/cli/commands/_common/error.js';
 import { analyzeSqaa } from '../../../../../src/cli/commands/analyze/sqaa';
+import * as processLib from '../../../../../src/lib/process.js';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
 import * as stateManager from '../../../../../src/lib/state-manager.js';
@@ -54,6 +55,7 @@ let saveStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let analyzeFileSpy: ReturnType<typeof spyOn>;
+let spawnProcessSpy: ReturnType<typeof spyOn>;
 
 /** Cloud state WITH a sonar-sqaa extension entry for the current project root */
 function makeCloudState() {
@@ -93,6 +95,16 @@ beforeEach(() => {
     issues: [],
     errors: null,
   });
+
+  // Mock the git-based repo-root resolver so unit tests don't shell out to git.
+  // Without this, parallel Bun test workers each spawn `git rev-parse --show-toplevel`
+  // and the OS-level contention causes intermittent flakes. We return process.cwd()
+  // so the registered extension's projectRoot still matches the lookup key.
+  spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    exitCode: 0,
+    stdout: process.cwd() + '\n',
+    stderr: '',
+  });
 });
 
 afterEach(() => {
@@ -102,6 +114,7 @@ afterEach(() => {
   existsSpy.mockRestore();
   readFileSpy.mockRestore();
   analyzeFileSpy.mockRestore();
+  spawnProcessSpy.mockRestore();
 });
 
 // ─── analyzeSqaa ─────────────────────────────────────────────────────────────

@@ -754,9 +754,9 @@ describe('analyze sqaa — change-set mode (no --file)', () => {
 
       await bareHarness.dispose();
 
-      // git diff HEAD fails with non-zero exit outside a git repo → CommandFailedError → exit 1
+      // git rev-parse --show-toplevel fails outside a git repo → CommandFailedError → exit 1
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('git diff failed');
+      expect(result.stdout + result.stderr).toContain('not a git repository');
     },
     { timeout: 15000 },
   );
@@ -1136,6 +1136,139 @@ describe('analyze sqaa — --format json', () => {
       expect(report.ignored[0].reason).toBe('binary');
       expect(report.failures).toHaveLength(0);
       expect(report.summary.totalIssues).toBe(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'JSON report surfaces files skipped on fail-fast and skips the large-changeset prompt',
+    async () => {
+      // 429 fails immediately (no retry), so the first worker to fail triggers
+      // fail-fast and later files are never picked up — without the long 503 backoff.
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(429)
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      // 21 files: > concurrency (3) so fail-fast leaves later files skipped,
+      // and > large-changeset threshold (20) so we also exercise the no-prompt path.
+      for (let i = 1; i <= 21; i++) {
+        harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
+      }
+
+      const result = await harness.run('analyze sqaa --format json');
+
+      expect(result.exitCode).toBe(1);
+      // JSON consumers should never see the interactive prompt warning.
+      expect(result.stderr).not.toContain('large number of files');
+
+      const report = JSON.parse(result.stdout) as {
+        files: unknown[];
+        failures: { path: string; message: string }[];
+        skipped: string[];
+        summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
+      };
+      expect(report.failures.length).toBeGreaterThan(0);
+      expect(report.skipped.length).toBeGreaterThan(0);
+      expect(report.summary.totalSkipped).toBe(report.skipped.length);
+      // Every staged file ends up in exactly one bucket (succeeded/failed/skipped).
+      expect(report.files.length + report.failures.length + report.skipped.length).toBe(21);
+    },
+    { timeout: 30000 },
+  );
+});
+
+describe('analyze sqaa — running from a subdirectory', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'resolves repo-root project key and full change set when invoked from a subdirectory',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        // Extension is registered against the repo root, just like `sonar integrate claude` does.
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      // One change above and one below the subdirectory, so we cover both
+      // sides of the previous join(cwd, repoRelativePath) bug.
+      harness.cwd.writeFile('top-level.ts', 'export const a = 1;');
+      harness.cwd.writeFile('src/ui/inside.ts', 'export const b = 2;');
+
+      const subdir = join(harness.cwd.path, 'src', 'ui');
+      const result = await harness.run('analyze sqaa', { cwd: subdir });
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      // Project must still be found — no fallthrough to the "no project configured" warning.
+      expect(output).not.toContain('no project configured');
+      expect(output).toContain('change set is clean');
+
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(2);
+
+      // Paths sent to SQAA are relative to the repo root regardless of cwd.
+      const filePaths = sqaaCalls
+        .map((c) => (JSON.parse(c.body ?? '{}') as { filePath?: string }).filePath)
+        .sort();
+      expect(filePaths).toEqual(['src/ui/inside.ts', 'top-level.ts']);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'handles paths containing whitespace via -z parsing',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      // Filename with a space — would be corrupted by the previous `.trim()`-based parser.
+      harness.cwd.writeFile('with space.ts', 'export const x = 1;');
+
+      const result = await harness.run('analyze sqaa');
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      const sentPath = (JSON.parse(sqaaCalls[0].body ?? '{}') as { filePath?: string }).filePath;
+      expect(sentPath).toBe('with space.ts');
     },
     { timeout: 15000 },
   );
