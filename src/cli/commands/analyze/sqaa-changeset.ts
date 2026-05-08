@@ -21,7 +21,7 @@
 // Resolves the set of local files to analyze from Git, honouring .gitignore.
 
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { spawnProcess } from '../../../lib/process';
 import { CommandFailedError } from '../_common/error';
@@ -87,7 +87,7 @@ export async function resolveChangeSet(
  */
 async function resolveRepoRoot(cwd: string): Promise<string> {
   const out = await runGit(['rev-parse', '--show-toplevel'], cwd);
-  return out.trim();
+  return resolve(out.trim());
 }
 
 async function getDiffFiles(

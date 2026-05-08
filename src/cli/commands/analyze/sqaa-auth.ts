@@ -20,6 +20,8 @@
 
 // Auth and project-key resolution for SQAA commands.
 
+import { resolve } from 'node:path';
+
 import type { Command } from 'commander';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
@@ -141,7 +143,7 @@ async function tryResolveRepoRoot(cwd: string): Promise<string> {
   try {
     const result = await spawnProcess('git', ['rev-parse', '--show-toplevel'], { cwd });
     if (result.exitCode === 0) {
-      return result.stdout.trim();
+      return resolve(result.stdout.trim());
     }
   } catch {
     // git not installed or otherwise unavailable — fall through to cwd.
