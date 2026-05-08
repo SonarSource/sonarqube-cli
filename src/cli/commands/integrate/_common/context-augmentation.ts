@@ -107,11 +107,21 @@ async function runCagSubprocess(
 ): Promise<boolean> {
   text(`  Running: sonar-context-augmentation ${args.join(' ')}`);
   return new Promise<boolean>((resolve) => {
-    const child = spawn(binaryPath, args, {
-      cwd: p.projectRoot,
-      stdio: 'inherit',
-      env: { ...process.env, SONAR_TOKEN: p.auth.token },
-    });
+    let child;
+    try {
+      child = spawn(binaryPath, args, {
+        cwd: p.projectRoot,
+        stdio: 'inherit',
+        env: { ...process.env, SONAR_TOKEN: p.auth.token },
+      });
+    } catch (err) {
+      // Some platforms (notably Windows when the binary is not a valid PE)
+      // surface spawn failures synchronously rather than via the 'error' event.
+      // Preserve the warn-on-failure contract by handling both shapes.
+      warn(`sonar-context-augmentation failed to start: ${(err as Error).message}`);
+      resolve(false);
+      return;
+    }
     child.on('error', (err) => {
       warn(`sonar-context-augmentation failed to start: ${err.message}`);
       resolve(false);

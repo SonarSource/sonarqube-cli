@@ -24,7 +24,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { CliState } from '../../../../src/lib/state.js';
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
+
+// The harness CAG stub is a CMD batch script written under a `.exe` filename
+// so it won't load as a PE binary. Tests that depend on the stub actually
+// running are skipped on Windows; production uses a real PE so the runtime
+// path is unaffected. Linux/macOS exercise the same orchestration code.
+const skipOnWindowsForStubExec = it.skipIf(IS_WINDOWS);
 
 interface CagInvocation {
   argv: string[];
@@ -71,7 +77,7 @@ describe('integrate claude — Context Augmentation', () => {
     await harness.dispose();
   });
 
-  it(
+  skipOnWindowsForStubExec(
     'invokes CAG init and skill --install when project key + org are present',
     async () => {
       const server = await harness
@@ -161,7 +167,7 @@ describe('integrate claude — Context Augmentation', () => {
     { timeout: 30000 },
   );
 
-  it(
+  skipOnWindowsForStubExec(
     'does not record the skill extension when CAG init fails',
     async () => {
       const server = await harness
@@ -210,7 +216,7 @@ describe('integrate copilot — Context Augmentation', () => {
     await harness.dispose();
   });
 
-  it(
+  skipOnWindowsForStubExec(
     'invokes CAG with copilot agent identifier',
     async () => {
       const server = await harness

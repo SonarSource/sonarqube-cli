@@ -23,7 +23,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
 
 interface CagInvocation {
   argv: string[];
@@ -51,7 +51,12 @@ describe('sonar context passthrough', () => {
     await harness.dispose();
   });
 
-  it(
+  // The harness writes a CMD batch script for the CAG stub on Windows, but
+  // resolveContextAugmentationBinaryPath() expects a `.exe`. Windows refuses to
+  // load text content as a PE binary, so spawn errors before the stub records
+  // anything. The production path uses a real PE; this test would need a
+  // compiled PE shim to cover Windows. Linux/macOS exercise the same code path.
+  it.skipIf(IS_WINDOWS)(
     'forwards args verbatim and injects SONAR_TOKEN from auth',
     async () => {
       const server = await harness.newFakeServer().start();
