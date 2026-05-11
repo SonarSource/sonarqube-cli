@@ -237,7 +237,7 @@ export class TestHarness {
       recursive: true,
       force: true,
       maxRetries: 5,
-      retryDelay: 1000,
+      retryDelay: 100,
     }).catch(() => {
       /* best-effort: temp dirs are cleaned up by the OS */
     });
