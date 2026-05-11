@@ -1,5 +1,5 @@
 {
-  "version": "0.12.0",
+  "version": "0.13.0",
   "commands": [
     {
       "id": "sonar",
@@ -385,7 +385,7 @@
           "flags": "-p, --project <project>",
           "long": "--project",
           "short": "-p",
-          "description": "Project key. Ignored when --global is used.",
+          "description": "Project key. Mutually exclusive with --global.",
           "type": "string",
           "required": false
         }
@@ -574,6 +574,13 @@
           "description": "SonarQube Cloud project key (overrides auto-detected project)",
           "type": "string",
           "required": false
+        },
+        {
+          "flags": "--issues <issueIds>",
+          "long": "--issues",
+          "description": "Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.",
+          "type": "string",
+          "required": false
         }
       ],
       "examples": [],
@@ -594,7 +601,7 @@
       "examples": [],
       "children": [
         "sonar-analyze-secrets",
-        "sonar-analyze-sqaa"
+        "sonar-analyze-agentic"
       ]
     },
     {
@@ -641,10 +648,10 @@
       "children": []
     },
     {
-      "id": "sonar-analyze-sqaa",
-      "name": "sqaa",
-      "fullName": "sonar analyze sqaa",
-      "description": "Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)",
+      "id": "sonar-analyze-agentic",
+      "name": "agentic",
+      "fullName": "sonar analyze agentic",
+      "description": "Run server-side Agentic Analysis (SonarQube Cloud only)",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -655,9 +662,23 @@
         {
           "flags": "--file <file>",
           "long": "--file",
-          "description": "File path to analyze",
+          "description": "Analyze a single file (skips change set detection)",
           "type": "string",
-          "required": true
+          "required": false
+        },
+        {
+          "flags": "--staged",
+          "long": "--staged",
+          "description": "Analyze staged files only (git diff --cached)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--base <ref>",
+          "long": "--base",
+          "description": "Analyze files changed vs a branch or ref (e.g. main)",
+          "type": "string",
+          "required": false
         },
         {
           "flags": "--branch <branch>",
@@ -673,6 +694,25 @@
           "description": "SonarQube Cloud project key (overrides auto-detected project)",
           "type": "string",
           "required": false
+        },
+        {
+          "flags": "--force",
+          "long": "--force",
+          "description": "Skip the large change set confirmation prompt",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "json"
+          ]
         }
       ],
       "examples": [],
@@ -682,7 +722,7 @@
       "id": "sonar-verify",
       "name": "verify",
       "fullName": "sonar verify",
-      "description": "Analyze a file for issues",
+      "description": "Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze agentic`, SonarQube Cloud only)",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -693,9 +733,23 @@
         {
           "flags": "--file <file>",
           "long": "--file",
-          "description": "File path to analyze",
+          "description": "Analyze a single file (skips change set detection)",
           "type": "string",
-          "required": true
+          "required": false
+        },
+        {
+          "flags": "--staged",
+          "long": "--staged",
+          "description": "Analyze staged files only (git diff --cached)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--base <ref>",
+          "long": "--base",
+          "description": "Analyze files changed vs a branch or ref (e.g. main)",
+          "type": "string",
+          "required": false
         },
         {
           "flags": "--branch <branch>",
@@ -711,6 +765,25 @@
           "description": "SonarQube Cloud project key (overrides auto-detected project)",
           "type": "string",
           "required": false
+        },
+        {
+          "flags": "--force",
+          "long": "--force",
+          "description": "Skip the large change set confirmation prompt",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "json"
+          ]
         }
       ],
       "examples": [],
