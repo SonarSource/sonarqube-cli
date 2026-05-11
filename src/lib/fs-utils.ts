@@ -29,7 +29,9 @@ export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
  * absolute path.
  */
 export function toRelativePosixPath(file: string): string | null {
-  const rel = normalizePath(relative(process.cwd(), file));
+  const canonicalFile = canonicalizePath(file);
+  const canonicalCwd = canonicalizePath(process.cwd());
+  const rel = normalizePath(relative(canonicalCwd, canonicalFile));
   if (isAbsolute(rel) || rel.split('/').includes('..')) return null;
   return rel;
 }
