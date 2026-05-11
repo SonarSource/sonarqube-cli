@@ -28,6 +28,7 @@
  * Or via:  bun run test:integration:prepare
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -123,4 +124,25 @@ if (!existsSync(cagArchivePath) || !existsSync(cagAscPath)) {
         `  Integration tests will use a stub binary instead.`,
     );
   }
+}
+
+// CAG stub binary: compile a tiny TS fixture to a real native executable so
+// Windows can spawn it as a PE. The harness copies this into each test's
+// isolated <cliHome>/bin under the CAG-versioned filename; per-test exit codes
+// and the sentinel path are passed via env vars (see tests/integration/resources/cag-stub.ts).
+const cagStubSource = join(RESOURCES_DIR, 'cag-stub.ts');
+const cagStubOutfile = join(RESOURCES_DIR, platform.os === 'windows' ? 'cag-stub.exe' : 'cag-stub');
+if (!existsSync(cagStubOutfile)) {
+  console.log(`Compiling CAG stub fixture for ${platform.os}-${platform.arch}`);
+  // Use process.execPath so we invoke the same bun runtime that's running this
+  // script, rather than resolving `bun` through PATH (also satisfies S4036).
+  const result = spawnSync(
+    process.execPath,
+    ['build', '--compile', cagStubSource, '--outfile', cagStubOutfile],
+    { stdio: 'inherit' },
+  );
+  if (result.status !== 0) {
+    throw new Error(`Failed to compile CAG stub: bun build exited with ${result.status}`);
+  }
+  console.log(`  CAG stub ready at ${cagStubOutfile}`);
 }

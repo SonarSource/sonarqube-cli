@@ -1,0 +1,57 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Test fixture compiled to a real executable via `bun build --compile` so
+// Windows can spawn it as a PE binary. The text scripts we used to write at
+// test time fail synchronously on Windows because the file is named `.exe`
+// but contains shell/CMD source.
+//
+// Parameterized by env vars set per-test via the harness:
+//   CAG_STUB_SENTINEL    — path to append one JSON line per non-version call
+//   CAG_STUB_INIT_EXIT   — exit code returned for `init` subcommand (default 0)
+//   CAG_STUB_SKILL_EXIT  — exit code returned for `skill` subcommand (default 0)
+
+import { appendFileSync } from 'node:fs';
+
+const args = process.argv.slice(2);
+
+if (args[0] === '--version') {
+  // Match what verifyInstallation() expects (3- or 4-segment dotted version).
+  console.log('sonar-context-augmentation 0.0.0-test');
+  process.exit(0);
+}
+
+const sentinel = process.env.CAG_STUB_SENTINEL;
+if (sentinel) {
+  const entry = JSON.stringify({
+    argv: args,
+    env: { SONAR_TOKEN: process.env.SONAR_TOKEN ?? '' },
+  });
+  appendFileSync(sentinel, entry + '\n');
+}
+
+const RADIX = 10;
+if (args[0] === 'init') {
+  process.exit(Number.parseInt(process.env.CAG_STUB_INIT_EXIT ?? '0', RADIX));
+}
+if (args[0] === 'skill') {
+  process.exit(Number.parseInt(process.env.CAG_STUB_SKILL_EXIT ?? '0', RADIX));
+}
+process.exit(0);

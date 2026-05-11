@@ -77,6 +77,7 @@ export class EnvironmentBuilder {
   private _installCagBinary = false;
   private _cagInitExitCode = 0;
   private _cagSkillExitCode = 0;
+  private _cagSentinelPath?: string;
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
@@ -140,18 +141,16 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Writes a stub sonar-context-augmentation script under <cliHome>/bin so the
-   * `sonar context` passthrough and the integrate-flow CAG step can run without
-   * a real CAG binary.
+   * Installs the pre-compiled CAG stub binary (built by
+   * `bun run pretest:integration`) into <cliHome>/bin so the `sonar context`
+   * passthrough and the integrate-flow CAG step can run without a real CAG
+   * binary. Uses a real native executable rather than a shell/CMD script so
+   * Windows can spawn it as a PE.
    *
-   * The stub:
-   *   - prints `sonar-context-augmentation 0.0.0-test` for `--version` (so the
-   *     installer's verifyInstallation() probe succeeds)
-   *   - appends one JSON line per invocation (argv + selected env vars) to
-   *     <cliHome>/cag-invocations.jsonl, which tests can read back to assert
-   *     the wrapper invoked the binary as expected
-   *   - exits with `_cagInitExitCode` for the `init` subcommand and
-   *     `_cagSkillExitCode` for the `skill` subcommand (defaults: 0/0).
+   * Each invocation appends one JSON line (argv + selected env vars) to
+   * <cliHome>/cag-invocations.jsonl, which tests can read back to assert
+   * the wrapper invoked the binary as expected. Per-subcommand exit codes
+   * are passed to the stub via env vars; see `getExtraEnv()`.
    */
   withContextAugmentationBinaryInstalled(
     options: { initExitCode?: number; skillExitCode?: number } = {},
@@ -160,6 +159,23 @@ export class EnvironmentBuilder {
     this._cagInitExitCode = options.initExitCode ?? 0;
     this._cagSkillExitCode = options.skillExitCode ?? 0;
     return this;
+  }
+
+  /**
+   * Returns env vars the harness should merge into every CLI invocation.
+   * Currently used to parameterize the CAG stub binary (sentinel path +
+   * per-subcommand exit codes). Populated after `writeTo()` runs because the
+   * sentinel path depends on the harness's cliHome.
+   */
+  getExtraEnv(): Record<string, string> {
+    if (!this._installCagBinary || !this._cagSentinelPath) {
+      return {};
+    }
+    return {
+      CAG_STUB_SENTINEL: this._cagSentinelPath,
+      CAG_STUB_INIT_EXIT: String(this._cagInitExitCode),
+      CAG_STUB_SKILL_EXIT: String(this._cagSkillExitCode),
+    };
   }
 
   /**
@@ -302,82 +318,41 @@ export class EnvironmentBuilder {
     }
 
     if (this._installCagBinary) {
-      this.writeCagStub(cliHome);
+      this.copyCagStub(cliHome);
+      this._cagSentinelPath = join(cliHome, 'cag-invocations.jsonl');
     }
   }
 
   /**
-   * Writes a stub sonar-context-augmentation script. Records each invocation
-   * (argv + SONAR_TOKEN) to <cliHome>/cag-invocations.jsonl, one JSON object per line.
+   * Copies the pre-compiled CAG stub binary (built by
+   * `bun run pretest:integration`) into <cliHome>/bin under the CAG-versioned
+   * filename. A real native executable rather than a shell/CMD script so
+   * Windows can spawn it as a PE. Per-test parameters (sentinel path,
+   * subcommand exit codes) reach the stub via env vars — see `getExtraEnv()`.
    */
-  private writeCagStub(cliHome: string): void {
+  private copyCagStub(cliHome: string): void {
     const binDir = join(cliHome, 'bin');
     mkdirSync(binDir, { recursive: true });
 
     const versionedName = buildLocalCagBinaryName(detectPlatform());
     const destPath = join(binDir, versionedName);
-    const sentinelPath = join(cliHome, 'cag-invocations.jsonl');
-    const initExit = this._cagInitExitCode;
-    const skillExit = this._cagSkillExitCode;
+    if (existsSync(destPath)) {
+      return;
+    }
 
-    if (IS_WINDOWS) {
-      writeFileSync(destPath, buildWindowsCagStub(sentinelPath, initExit, skillExit));
-    } else {
-      writeFileSync(destPath, buildPosixCagStub(sentinelPath, initExit, skillExit));
+    const stubFilename = IS_WINDOWS ? 'cag-stub.exe' : 'cag-stub';
+    const source = join(import.meta.dir, '..', 'resources', stubFilename);
+    if (!existsSync(source)) {
+      throw new Error(
+        `CAG stub binary not found at: ${source}\n` +
+          `Run 'bun run pretest:integration' to compile it.`,
+      );
+    }
+    copyFileSync(source, destPath);
+    if (!IS_WINDOWS) {
       chmodSync(destPath, EXECUTABLE_PERMS);
     }
   }
 }
 
 const EXECUTABLE_PERMS = 0o755;
-
-const POSIX_QUOTE_ESCAPE = String.raw`'\''`;
-
-function shellQuote(s: string): string {
-  const escaped = s.replaceAll("'", POSIX_QUOTE_ESCAPE);
-  return "'" + escaped + "'";
-}
-
-function buildPosixCagStub(sentinelPath: string, initExit: number, skillExit: number): string {
-  // sed expression that JSON-escapes a string by doubling backslashes then
-  // escaping double-quotes. Written with String.raw so backslashes survive
-  // the TS string literal unchanged.
-  const sedEscape = String.raw`sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'`;
-  return [
-    '#!/bin/sh',
-    `INVOCATIONS=${shellQuote(sentinelPath)}`,
-    'if [ "$1" = "--version" ]; then',
-    '  echo "sonar-context-augmentation 0.0.0-test"',
-    '  exit 0',
-    'fi',
-    `json_esc() { printf '%s' "$1" | ${sedEscape}; }`,
-    'argv_json="["',
-    'first=1',
-    'for a in "$@"; do',
-    '  esc=$(json_esc "$a")',
-    '  if [ "$first" -eq 1 ]; then argv_json="${argv_json}\\"${esc}\\""; first=0; else argv_json="${argv_json},\\"${esc}\\""; fi',
-    'done',
-    'argv_json="${argv_json}]"',
-    'token_esc=$(json_esc "${SONAR_TOKEN-}")',
-    'echo "{\\"argv\\":${argv_json},\\"env\\":{\\"SONAR_TOKEN\\":\\"${token_esc}\\"}}" >> "$INVOCATIONS"',
-    `if [ "$1" = "init" ]; then exit ${initExit}; fi`,
-    `if [ "$1" = "skill" ]; then exit ${skillExit}; fi`,
-    'exit 0',
-    '',
-  ].join('\n');
-}
-
-function buildWindowsCagStub(sentinelPath: string, initExit: number, skillExit: number): string {
-  // CMD batch wrapper that delegates JSON serialization to PowerShell.
-  // PowerShell handles argv quoting and JSON escaping natively.
-  const psSentinel = sentinelPath.replaceAll(`'`, `''`);
-  const psCommand = String.raw`$entry = @{ argv = $args; env = @{ SONAR_TOKEN = $env:SONAR_TOKEN } } | ConvertTo-Json -Compress; Add-Content -LiteralPath '${psSentinel}' -Value $entry`;
-  return [
-    '@echo off',
-    'if "%~1"=="--version" (echo sonar-context-augmentation 0.0.0-test & exit /b 0)',
-    `powershell -NoProfile -Command "${psCommand}" %*`,
-    `if "%~1"=="init" exit /b ${initExit}`,
-    `if "%~1"=="skill" exit /b ${skillExit}`,
-    'exit /b 0',
-  ].join('\r\n');
-}

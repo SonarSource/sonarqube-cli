@@ -197,6 +197,7 @@ export class TestHarness {
     if (this._envBuilder) {
       this._envBuilder.writeTo(this.cliHome.path, this.keychainJsonFile);
     }
+    const builderExtraEnv = this._envBuilder?.getExtraEnv() ?? {};
 
     const activeBinariesServer = this.binariesServers.at(-1);
     const fakeBinariesEnv: Record<string, string> = activeBinariesServer
@@ -210,6 +211,7 @@ export class TestHarness {
 
     return {
       ...this.systemEnvVars,
+      ...builderExtraEnv,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
