@@ -35,7 +35,7 @@ import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import { loadState, saveState, upsertAgentExtension } from '../../../../lib/state-manager';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import { blank, info, success, text, warn } from '../../../../ui';
+import { blank, info, print, success, text, warn } from '../../../../ui';
 import { installContextAugmentationBinary } from '../../_common/install/context-augmentation';
 
 export type ContextAugmentationAgent = 'claude-code' | 'copilot';
@@ -127,7 +127,7 @@ async function runCagSubprocess(
     try {
       child = spawn(binaryPath, args, {
         cwd: p.projectRoot,
-        stdio: 'inherit',
+        stdio: ['inherit', 'pipe', 'pipe'],
         env: { ...process.env, SONAR_TOKEN: p.auth.token },
       });
     } catch (err) {
@@ -138,14 +138,38 @@ async function runCagSubprocess(
       resolve(false);
       return;
     }
+
+    let stdoutBuf = '';
+    let stderrBuf = '';
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdoutBuf += chunk;
+    });
+    child.stderr?.on('data', (chunk: string) => {
+      stderrBuf += chunk;
+    });
+
     child.on('error', (err) => {
       warn(`sonar-context-augmentation failed to start: ${err.message}`);
       resolve(false);
     });
     child.on('exit', (code) => {
+      if (code !== 0) {
+        emitIndented(stdoutBuf, process.stdout);
+        emitIndented(stderrBuf, process.stderr);
+      }
       resolve(code === 0);
     });
   });
+}
+
+function emitIndented(buffer: string, target: NodeJS.WriteStream): void {
+  if (buffer.length === 0) return;
+  const trimmed = buffer.endsWith('\n') ? buffer.slice(0, -1) : buffer;
+  for (const line of trimmed.split('\n')) {
+    print(`  ${line}`, target);
+  }
 }
 
 function recordSkillExtension(p: SetupContextAugmentationParams): void {

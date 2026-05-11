@@ -24,9 +24,11 @@
 // but contains shell/CMD source.
 //
 // Parameterized by env vars set per-test via the harness:
-//   CAG_STUB_SENTINEL    — path to append one JSON line per non-version call
-//   CAG_STUB_INIT_EXIT   — exit code returned for `init` subcommand (default 0)
-//   CAG_STUB_SKILL_EXIT  — exit code returned for `skill` subcommand (default 0)
+//   CAG_STUB_SENTINEL     — path to append one JSON line per non-version call
+//   CAG_STUB_INIT_EXIT    — exit code returned for `init` subcommand (default 0)
+//   CAG_STUB_SKILL_EXIT   — exit code returned for `skill` subcommand (default 0)
+//   CAG_STUB_STDOUT_LINE  — a line emitted to stdout on every non-version call
+//   CAG_STUB_STDERR_LINE  — a line emitted to stderr on every non-version call
 
 import { appendFileSync } from 'node:fs';
 
@@ -46,6 +48,11 @@ if (sentinel) {
   });
   appendFileSync(sentinel, entry + '\n');
 }
+
+const stdoutLine = process.env.CAG_STUB_STDOUT_LINE;
+const stderrLine = process.env.CAG_STUB_STDERR_LINE;
+if (stdoutLine) process.stdout.write(stdoutLine + '\n');
+if (stderrLine) process.stderr.write(stderrLine + '\n');
 
 const RADIX = 10;
 if (args[0] === 'init') {

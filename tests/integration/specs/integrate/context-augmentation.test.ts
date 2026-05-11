@@ -257,6 +257,83 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
+    'suppresses CAG stdout/stderr on success',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled({
+        stdoutLine: 'cag-stdout-diagnostic',
+        stderrLine: 'cag-stderr-diagnostic',
+      });
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('cag-stdout-diagnostic');
+      expect(result.stderr).not.toContain('cag-stderr-diagnostic');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'surfaces indented CAG stdout/stderr when init fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled({
+        initExitCode: 1,
+        stdoutLine: 'cag-stdout-diagnostic',
+        stderrLine: 'cag-stderr-diagnostic',
+      });
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('  cag-stdout-diagnostic');
+      expect(result.stderr).toContain('  cag-stderr-diagnostic');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'does not record the skill extension when CAG init fails',
     async () => {
       const server = await harness
