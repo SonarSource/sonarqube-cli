@@ -141,12 +141,12 @@ async function runCagSubprocess(
 
     let stdoutBuf = '';
     let stderrBuf = '';
-    child.stdout?.setEncoding('utf8');
-    child.stderr?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => {
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
       stdoutBuf += chunk;
     });
-    child.stderr?.on('data', (chunk: string) => {
+    child.stderr.on('data', (chunk: string) => {
       stderrBuf += chunk;
     });
 
