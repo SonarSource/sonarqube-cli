@@ -24,6 +24,8 @@
  */
 
 import crypto from 'node:crypto';
+import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export { loadState, saveState } from './repository/state-repository.js';
 
@@ -46,6 +48,16 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
   return state.auth.connections.find((c) => c.id === state.auth.activeConnectionId);
 }
 
+function canonicalProjectRoot(projectRoot: string): string {
+  let canonical: string;
+  try {
+    canonical = realpathSync.native(projectRoot);
+  } catch {
+    canonical = resolve(projectRoot);
+  }
+  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+}
+
 /**
  * Find all extensions registered for a specific agent + project root combination.
  */
@@ -54,8 +66,9 @@ export function findExtensionsByProject(
   agentId: string,
   projectRoot: string,
 ): AgentExtension[] {
+  const target = canonicalProjectRoot(projectRoot);
   return state.agentExtensions.filter(
-    (e) => e.agentId === agentId && e.projectRoot === projectRoot,
+    (e) => e.agentId === agentId && canonicalProjectRoot(e.projectRoot) === target,
   );
 }
 

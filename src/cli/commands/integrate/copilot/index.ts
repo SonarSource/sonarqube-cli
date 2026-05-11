@@ -19,7 +19,7 @@
  */
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
-import { intro, print, success } from '../../../../ui';
+import { intro, print, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { installHooks } from './hooks';
@@ -46,6 +46,12 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
     print(`Found ${configSource}`);
   }
   const isGlobal = options.global ?? false;
+  const projectKey = options.project || project.projectKey;
+  if (!isGlobal && !projectKey) {
+    warn(
+      'No project key provided - project related actions will be skipped. Run sonar integrate copilot --help for ways to define a project.',
+    );
+  }
 
   // ============
   // Installation
@@ -61,7 +67,7 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
     instructionsInstalled,
   });
 
-  await setupMcpServer(project, isGlobal, options.project || project.projectKey);
+  await setupMcpServer(project, isGlobal, projectKey);
 
   reportInstallationOutcome(isGlobal, hookPath, instructionsPath);
 }

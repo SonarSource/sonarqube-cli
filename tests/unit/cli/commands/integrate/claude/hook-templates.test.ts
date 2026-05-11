@@ -95,7 +95,7 @@ describe('SQAA PostToolUse Hook Templates', () => {
   it('PostTool Unix hook: no embedded business logic', () => {
     const template = getSqaaPostToolTemplateUnix('my-project');
 
-    expect(template.includes('sonar analyze sqaa')).toBe(false);
+    expect(template.includes('sonar analyze agentic')).toBe(false);
     expect(template.includes('permissionDecision')).toBe(false);
     expect(template.includes('sed -n')).toBe(false);
   });
@@ -111,7 +111,7 @@ describe('SQAA PostToolUse Hook Templates', () => {
   it('PostTool Windows hook: no embedded business logic', () => {
     const template = getSqaaPostToolTemplateWindows('my-project');
 
-    expect(template.includes('sonar analyze sqaa')).toBe(false);
+    expect(template.includes('sonar analyze agentic')).toBe(false);
     expect(template.includes('permissionDecision')).toBe(false);
   });
 });

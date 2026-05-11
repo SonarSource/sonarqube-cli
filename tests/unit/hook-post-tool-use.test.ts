@@ -19,6 +19,7 @@
  */
 
 import * as fs from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -27,7 +28,8 @@ import * as stdinModule from '../../src/cli/commands/hook/stdin';
 import * as authResolver from '../../src/lib/auth-resolver';
 import * as clientModule from '../../src/sonarqube/client';
 
-const TEST_FILE = '/sonar-test/src/main.ts';
+// Real path inside cwd so realpathSync resolves consistently for file and cwd.
+const TEST_FILE = join(process.cwd(), 'src/index.ts');
 
 describe('agentPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
@@ -248,6 +250,6 @@ describe('agentPostToolUse', () => {
     await agentPostToolUse({ project: 'my-project' });
 
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
-    expect(output.hookSpecificOutput.additionalContext).not.toContain('SQAA errors');
+    expect(output.hookSpecificOutput.additionalContext).not.toContain('Agentic Analysis errors');
   });
 });

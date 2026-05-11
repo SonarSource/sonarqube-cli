@@ -36,11 +36,11 @@ describe('config telemetry', () => {
   });
 
   it(
-    'exits with code 1 when both --enabled and --disabled are provided',
+    'exits with code 2 when both --enabled and --disabled are provided',
     async () => {
       const result = await harness.run('config telemetry --enabled --disabled');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Cannot use both --enabled and --disabled');
     },
     { timeout: 15000 },

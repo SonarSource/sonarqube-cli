@@ -17,26 +17,48 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, relative } from 'node:path';
+import { existsSync } from 'node:fs';
 
 import type { Command } from 'commander';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { normalizePath } from '../../../lib/fs-utils';
-import logger from '../../../lib/logger';
-import { loadState } from '../../../lib/repository/state-repository';
-import type { HookExtension } from '../../../lib/state';
-import { findExtensionsByProject } from '../../../lib/state-manager';
-import type { SqaaIssue } from '../../../sonarqube/client';
-import { SonarQubeClient } from '../../../sonarqube/client';
-import { blank, error, success, text, warn } from '../../../ui';
-import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
+import { blank, print, text } from '../../../ui';
+import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
+import { InvalidOptionError } from '../_common/error.js';
+import type { RunContext } from './sqaa-analysis';
+import { runAnalyses } from './sqaa-analysis';
+import {
+  callSqaaApiAndDisplay,
+  fetchWithRetry,
+  readSqaaFileContent,
+  toRelativePosixPath,
+} from './sqaa-api';
+import type { CloudAuth } from './sqaa-auth';
+import { confirmLargeChangeset, resolveCloudAuthAndProject } from './sqaa-auth';
+import type { ChangeSetResult } from './sqaa-changeset';
+import { resolveChangeSet } from './sqaa-changeset';
+import {
+  applyExitCode,
+  EXIT_CODE_ISSUES_FOUND,
+  printFileDetails,
+  printJsonReport,
+  printSummary,
+} from './sqaa-display';
+
+/** Change-set size above which the user is prompted to confirm before proceeding. */
+const SQAA_LARGE_CHANGESET_THRESHOLD = 50;
+
+export const VALID_FORMATS = ['text', 'json'] as const;
+export type OutputFormat = (typeof VALID_FORMATS)[number];
 
 export interface AnalyzeSqaaOptions {
-  file: string;
+  file?: string;
+  staged?: boolean;
+  base?: string;
   branch?: string;
   project?: string;
+  force?: boolean;
+  format?: OutputFormat;
 }
 
 export async function analyzeSqaa(
@@ -44,178 +66,141 @@ export async function analyzeSqaa(
   auth: ResolvedAuth,
   command?: Command,
 ): Promise<void> {
-  const { file, branch, project } = options;
+  const { file, staged, base, branch, project, force, format = 'text' } = options;
 
-  if (!existsSync(file)) {
-    throw new InvalidOptionError(`File not found: ${file}`);
+  if (staged && base !== undefined) {
+    throw new InvalidOptionError('--staged and --base cannot be used together');
   }
 
-  await runSqaaAnalysis(file, auth, branch, project, command);
+  if (file !== undefined) {
+    if (!existsSync(file)) {
+      throw new InvalidOptionError(`File not found: ${file}`);
+    }
+    await runSqaaAnalysis(file, auth, branch, project, command, format);
+    return;
+  }
+
+  // Change-set mode: resolve files from Git.
+  const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
+
+  if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
+    blank();
+    text('SonarQube Agentic Analysis: no files in the change set to analyze.');
+    return;
+  }
+
+  if (changeSet.files.length === 0) {
+    blank();
+    text(
+      'SonarQube Agentic Analysis: no files to analyze — all change set files were excluded (binary or oversized).',
+    );
+    return;
+  }
+
+  // Resolve cloud auth + project key BEFORE prompting.
+  // Pass repoRoot so we reuse the already-resolved root instead of spawning git again.
+  const resolved = await resolveCloudAuthAndProject(auth, project, command, changeSet.repoRoot);
+  if (!resolved) return;
+
+  // JSON mode is consumed by scripts/CI: never block on an interactive prompt
+  if (!force && format !== 'json' && changeSet.files.length > SQAA_LARGE_CHANGESET_THRESHOLD) {
+    const confirmed = await confirmLargeChangeset(changeSet.files.length);
+    if (!confirmed) return;
+  }
+
+  await runSqaaAnalysisOnFiles(changeSet, resolved, branch, format);
 }
 
-export async function runSqaaAnalysis(
+async function runSqaaAnalysis(
   file: string,
   auth: ResolvedAuth,
   branch?: string,
   explicitProject?: string,
   command?: Command,
+  format: OutputFormat = 'text',
 ): Promise<void> {
-  const cloudAuth = resolveCloudAuth(auth, explicitProject);
-  if (!cloudAuth) {
-    warn(
-      'SonarQube Agentic Analysis skipped: a SonarQube Cloud connection is required. Run: sonar auth login (ensure you connect to SonarQube Cloud)',
-    );
-    return;
-  }
+  const resolved = await resolveCloudAuthAndProject(auth, explicitProject, command);
+  if (!resolved) return;
 
-  const projectKey = explicitProject ?? resolveSqaaProjectKey(command);
-  if (!projectKey) {
-    warn(
-      'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
-    );
-    return;
-  }
-
+  const { cloudAuth, projectKey } = resolved;
   const fileContent = readSqaaFileContent(file);
-  await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch);
-}
 
-/**
- * Validate that the resolved auth is for SonarQube Cloud.
- * Returns null when the connection is not Cloud and --project is not set.
- * Throws CommandFailedError when --project is set but the connection is not Cloud.
- */
-function resolveCloudAuth(
-  auth: ResolvedAuth,
-  explicitProject: string | undefined,
-): { serverUrl: string; token: string; orgKey: string } | null {
-  if (auth.connectionType != 'cloud' || auth.orgKey == null) {
-    if (explicitProject) {
-      throw new CommandFailedError(
-        'SonarQube Agentic Analysis requires a SonarQube Cloud connection. Run: sonar auth login',
-      );
+  if (format === 'json') {
+    const filePath = toRelativePosixPath(file);
+    try {
+      const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch);
+      const report = {
+        files: [{ path: filePath, issues: response.issues, errors: response.errors }],
+        ignored: [],
+        failures: [],
+        skipped: [],
+        summary: { totalIssues: response.issues.length, totalFailures: 0, totalSkipped: 0 },
+      };
+      print(JSON.stringify(report, null, 2));
+      if (response.issues.length > 0) process.exitCode = EXIT_CODE_ISSUES_FOUND;
+    } catch (err) {
+      const report = {
+        files: [],
+        ignored: [],
+        failures: [{ path: filePath, message: (err as Error).message }],
+        skipped: [],
+        summary: { totalIssues: 0, totalFailures: 1, totalSkipped: 0 },
+      };
+      print(JSON.stringify(report, null, 2));
+      process.exitCode = 1;
     }
-    logger.debug('SonarQube Agentic Analysis skipped: missing orgKey or on-premise server');
-    return null;
+    return;
   }
 
-  return { serverUrl: auth.serverUrl, token: auth.token, orgKey: auth.orgKey };
-}
-
-/**
- * Look up the project key for the current directory from the agentExtensions registry.
- * Returns null when SQAA should be skipped.
- */
-function resolveSqaaProjectKey(command?: Command): string | null {
-  try {
-    const state = loadState();
-    const extensions = findExtensionsByProject(state, 'claude-code', process.cwd());
-    const sqaaExt = extensions.find(
-      (e): e is HookExtension => e.kind === 'hook' && e.name === 'sonar-sqaa',
-    );
-
-    if (!sqaaExt?.projectKey) {
-      logger.debug(
-        'SonarQube Agentic Analysis skipped: no project key found in extensions registry',
-      );
-      if (process.stdin.isTTY) {
-        command?.outputHelp();
-      }
-      return null;
-    }
-
-    return sqaaExt.projectKey;
-  } catch {
-    logger.debug('SonarQube Agentic Analysis skipped: failed to resolve extensions');
-    return null;
+  const issueCount = await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch);
+  if (issueCount > 0) {
+    process.exitCode = EXIT_CODE_ISSUES_FOUND;
   }
 }
 
-/**
- * Read file content for SQAA analysis.
- * Throws CommandFailedError when the file cannot be read.
- */
-function readSqaaFileContent(file: string): string {
-  try {
-    return readFileSync(file, 'utf-8');
-  } catch (err) {
-    throw new CommandFailedError(`Failed to read file: ${(err as Error).message}`);
-  }
-}
-
-/**
- * Compute a POSIX-style relative path under the current working directory.
- * Throws when the file is outside cwd (traversal) or on a different drive.
- */
-function toRelativePosixPath(file: string): string {
-  const rel = normalizePath(relative(process.cwd(), file));
-
-  if (isAbsolute(rel) || rel.split('/').includes('..')) {
-    throw new InvalidOptionError(`File must be inside the current working directory: ${file}`);
-  }
-
-  return rel;
-}
-
-/**
- * Call the SQAA API and display the results.
- * Throws CommandFailedError on API failure.
- */
-async function callSqaaApiAndDisplay(
-  auth: { serverUrl: string; token: string; orgKey: string },
-  projectKey: string,
-  file: string,
-  fileContent: string,
-  branch: string | undefined,
+async function runSqaaAnalysisOnFiles(
+  changeSet: ChangeSetResult,
+  resolved: { cloudAuth: CloudAuth; projectKey: string },
+  branch?: string,
+  format: OutputFormat = 'text',
 ): Promise<void> {
-  const filePath = toRelativePosixPath(file);
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const { files, ignored, repoRoot } = changeSet;
+  const { cloudAuth, projectKey } = resolved;
+  const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
 
-  blank();
-  text('Running SonarQube Agentic Analysis...');
-
-  try {
-    const response = await client.analyzeFile({
-      organizationKey: auth.orgKey,
+  if (format === 'json') {
+    // Suppress all UI rendering at the component level (no global mock state).
+    const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
+    const ctx: RunContext = {
+      files,
+      allPaths,
+      cloudAuth,
       projectKey,
-      ...(branch ? { branchName: branch } : {}),
-      filePath,
-      fileContent,
-    });
-
-    displaySqaaResults(response.issues, response.errors);
-  } catch (err) {
-    throw new CommandFailedError(`SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`);
-  }
-}
-
-function displaySqaaResults(
-  issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
-): void {
-  blank();
-
-  if (issues.length === 0) {
-    success('SonarQube Agentic Analysis completed — no issues found.');
-  } else {
-    error(
-      `SonarQube Agentic Analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`,
-    );
-    blank();
-    issues.forEach((issue, idx) => {
-      const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
-      text(`  [${idx + 1}] ${issue.message}${location}`);
-      text(`      Rule: ${issue.rule}`);
-    });
+      branch,
+      progress: silentProgress,
+      pathBase: repoRoot,
+    };
+    const tally = await runAnalyses(ctx);
+    printJsonReport(tally, ignored, allPaths, repoRoot);
+    applyExitCode(tally.totalIssues, tally.totalFailures);
+    return;
   }
 
-  if (errors && errors.length > 0) {
-    blank();
-    error('SonarQube Agentic Analysis returned errors:');
-    errors.forEach((e) => {
-      text(`  [${e.code}] ${e.message}`);
-    });
-  }
+  const ignoredPaths = ignored.map((f) => toRelativePosixPath(f.path, repoRoot));
+  const progress = new SqaaProgress({ files: allPaths, ignoredFiles: ignoredPaths });
+  const ctx: RunContext = {
+    files,
+    allPaths,
+    cloudAuth,
+    projectKey,
+    branch,
+    progress,
+    pathBase: repoRoot,
+  };
+  progress.start();
+  const tally = await runAnalyses(ctx);
 
-  blank();
+  progress.finish(tally.allResults.length);
+  printFileDetails(tally.allResults);
+  printSummary(tally.totalIssues, tally.totalErrors, tally.totalFailures);
 }

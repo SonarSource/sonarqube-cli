@@ -19,9 +19,19 @@
  */
 
 /**
- * Thrown when the user provides invalid or conflicting command options.
+ * Base class for all CLI errors that carry an exit code.
+ * runCommand reads exitCode from any subclass — no instanceof checks needed per type.
  */
-export class InvalidOptionError extends Error {
+export abstract class CliError extends Error {
+  abstract readonly exitCode: number;
+}
+
+/**
+ * Thrown when the user provides invalid or conflicting command options.
+ * Always exits with code 2.
+ */
+export class InvalidOptionError extends CliError {
+  readonly exitCode = 2;
   constructor(reason: string) {
     super(reason);
     this.name = 'InvalidOptionError';
@@ -30,9 +40,9 @@ export class InvalidOptionError extends Error {
 
 /**
  * Thrown when the command (and options if any defined) are valid, but it failed to execute.
- * An optional exitCode overrides the default exit code of 1 set by runCommand.
+ * Defaults to exit code 1; pass a custom code when needed.
  */
-export class CommandFailedError extends Error {
+export class CommandFailedError extends CliError {
   readonly exitCode: number;
   constructor(message: string, exitCode = 1) {
     super(message);

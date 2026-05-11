@@ -32,7 +32,11 @@ import {
   VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
 } from './commands/analyze/dependency-risks';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
-import { analyzeSqaa, type AnalyzeSqaaOptions } from './commands/analyze/sqaa';
+import {
+  analyzeSqaa,
+  type AnalyzeSqaaOptions,
+  VALID_FORMATS as SQAA_FORMATS,
+} from './commands/analyze/sqaa';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
@@ -141,6 +145,10 @@ const integrateCommand = COMMAND_TREE.command('integrate').description(
   'Setup SonarQube integration for AI coding agents, git and others.',
 );
 
+const projectKeyExtraHelp = `
+Instead of providing a project explicitly you can set up a sonar-project.properties in the project root with a sonar.projectKey property. 
+Otherwise, if you have a project connected and bound in SonarQube for IDE, project key is automatically picked up.
+`;
 integrateCommand
   .command('claude')
   .description(
@@ -152,6 +160,7 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
+  .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
 
 integrateCommand
@@ -180,7 +189,8 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.copilot instead of project directory',
   )
-  .option('-p, --project <project>', 'Project key. Ignored when --global is used.')
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((_auth, options: IntegrateAgentOptions) => integrateCopilot(_auth, options));
 
 // List Sonar resources
@@ -227,6 +237,10 @@ COMMAND_TREE.command('remediate')
     '-p, --project <project>',
     'SonarQube Cloud project key (overrides auto-detected project)',
   )
+  .option(
+    '--issues <issueIds>',
+    'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
+  )
   .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
 
 // Analyze code for quality and security issues
@@ -246,18 +260,27 @@ analyze
     analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, auth),
   );
 
-analyze
-  .command('sqaa')
-  .description('Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)')
-  .requiredOption('--file <file>', 'File path to analyze')
-  .option('--branch <branch>', 'Branch name for analysis context')
-  .option(
-    '-p, --project <project>',
-    'SonarQube Cloud project key (overrides auto-detected project)',
-  )
-  .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
-    analyzeSqaa(options, auth, cmd),
-  );
+// Shared option set for `analyze agentic` and its `verify` alias.
+const sqaaFormatOption = new Option('--format <format>', 'Output format')
+  .choices(SQAA_FORMATS)
+  .default('text');
+
+function applySqaaOptions(cmd: SonarCommand): SonarCommand {
+  return cmd
+    .option('--file <file>', 'Analyze a single file (skips change set detection)')
+    .option('--staged', 'Analyze staged files only (git diff --cached)')
+    .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
+    .option('--branch <branch>', 'Branch name for analysis context')
+    .option(
+      '-p, --project <project>',
+      'SonarQube Cloud project key (overrides auto-detected project)',
+    )
+    .option('--force', 'Skip the large change set confirmation prompt')
+    .addOption(sqaaFormatOption)
+    .authenticatedAction((auth, options: AnalyzeSqaaOptions, innerCmd: Command) =>
+      analyzeSqaa(options, auth, innerCmd),
+    );
+}
 
 const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')
   .choices(DEPENDENCY_RISKS_FORMATS)
@@ -272,17 +295,16 @@ analyze
     analyzeDependencyRisks(options, auth),
   );
 
-COMMAND_TREE.command('verify')
-  .description('Analyze a file for issues')
-  .requiredOption('--file <file>', 'File path to analyze')
-  .option('--branch <branch>', 'Branch name for analysis context')
-  .option(
-    '-p, --project <project>',
-    'SonarQube Cloud project key (overrides auto-detected project)',
-  )
-  .authenticatedAction((auth, options: AnalyzeSqaaOptions, cmd: Command) =>
-    analyzeSqaa(options, auth, cmd),
-  );
+applySqaaOptions(
+  analyze.command('agentic').description('Run server-side Agentic Analysis (SonarQube Cloud only)'),
+);
+
+// `verify` is a user-facing alias for `analyze agentic` that fits CI/pipeline vocabulary.
+applySqaaOptions(
+  COMMAND_TREE.command('verify').description(
+    'Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze agentic`, SonarQube Cloud only)',
+  ),
+);
 
 // Configure things related to the CLI
 const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
@@ -315,7 +337,8 @@ runCommand
     '--toolsets <toolsets>',
     'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,cag,portfolios)',
   )
-  .option('-p, --project <project>', 'Project key (skips auto-discovery)')
+  .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
+  .addHelpText(`after`, projectKeyExtraHelp)
   .authenticatedAction(
     (auth, options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string }) =>
       runMcp(auth, options),
@@ -347,7 +370,7 @@ hookCommand
 
 hookCommand
   .command('claude-post-tool-use')
-  .description('PostToolUse handler: run SQAA analysis after agent edits or writes a file')
+  .description('PostToolUse handler: run Agentic Analysis after agent edits or writes a file')
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
 

@@ -47,65 +47,65 @@ describe('api', () => {
   );
 
   it(
-    'exits with code 1 for an invalid HTTP method',
+    'exits with code 2 for an invalid HTTP method',
     async () => {
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('api trace /api/system/status');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain("Invalid HTTP method 'trace'");
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 1 when endpoint does not start with /',
+    'exits with code 2 when endpoint does not start with /',
     async () => {
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('api get api/system/status');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain("Endpoint must start with '/'");
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 1 when --data is used with GET',
+    'exits with code 2 when --data is used with GET',
     async () => {
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run(`api get /api/system/status --data '{"k":"v"}'`);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('--data is only valid for');
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 1 when --data is used with DELETE',
+    'exits with code 2 when --data is used with DELETE',
     async () => {
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run(`api delete /api/system/status --data '{"k":"v"}'`);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('--data is only valid for');
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 1 when --data is not valid JSON',
+    'exits with code 2 when --data is not valid JSON',
     async () => {
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('api post /api/system/status --data not-json');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('--data must be valid JSON');
     },
     { timeout: 15000 },

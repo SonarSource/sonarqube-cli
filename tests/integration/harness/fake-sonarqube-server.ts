@@ -24,6 +24,8 @@ import type { SonarQubeIssue } from '../../../src/lib/types.js';
 import type { SettingsValue } from '../../../src/sonarqube/settings-value.js';
 import type { RecordedRequest } from './types.js';
 
+const HTTP_BAD_REQUEST = 400;
+
 export interface IssueConfig {
   key?: string;
   ruleKey: string;
@@ -122,6 +124,8 @@ export class FakeSonarQubeServerBuilder {
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
+  private sqaaStatusCode?: number;
+  private sqaaStatusBody?: string;
   private scaEnabled?: boolean;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
   private agentJobErrorCode?: number;
@@ -202,6 +206,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Force POST /a3s-analysis/analyses to return a specific HTTP status code.
+   * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
+   */
+  withSqaaStatusCode(status: number, body?: string): this {
+    this.sqaaStatusCode = status;
+    this.sqaaStatusBody = body;
+    return this;
+  }
+
   withSqaaEntitlement(
     orgKey: string,
     uuid: string,
@@ -248,6 +262,8 @@ export class FakeSonarQubeServerBuilder {
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
+      sqaaStatusCode,
+      sqaaStatusBody,
       sqaaEntitlementOrgs,
       scaEnabled,
       projectSettings,
@@ -324,7 +340,7 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/user_tokens/revoke' && req.method === 'POST') {
-          if (revokeTokenStatusCode >= 400) {
+          if (revokeTokenStatusCode >= HTTP_BAD_REQUEST) {
             return new Response(revokeTokenResponseBody, { status: revokeTokenStatusCode });
           }
 
@@ -562,6 +578,13 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/a3s-analysis/analyses' && req.method === 'POST') {
+          if (sqaaStatusCode !== undefined) {
+            return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
+              status: sqaaStatusCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
           if (!sqaaResponse) {
             return new Response(
               JSON.stringify({ errors: [{ msg: 'SQAA endpoint not configured' }] }),

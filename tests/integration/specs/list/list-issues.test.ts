@@ -233,14 +233,14 @@ describe('list issues — argument validation', () => {
   );
 
   it(
-    'exits with code 1 when --page-size is less than 1',
+    'exits with code 2 when --page-size is less than 1',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('list issues --project my-project --page-size 0');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain(
         "Invalid --page-size option: '0'. Must be an integer between 1 and 500",
       );
@@ -249,14 +249,14 @@ describe('list issues — argument validation', () => {
   );
 
   it(
-    'exits with code 1 when --page-size is greater than 500',
+    'exits with code 2 when --page-size is greater than 500',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('list issues --project my-project --page-size 501');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Invalid --page-size');
     },
     { timeout: 15000 },
@@ -279,14 +279,14 @@ describe('list issues — argument validation', () => {
   );
 
   it(
-    'exits with code 1 when --severities is not a recognised value',
+    'exits with code 2 when --severities is not a recognised value',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('list issues --project my-project --severities UNKNOWN');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Invalid severity');
     },
     { timeout: 15000 },
@@ -344,14 +344,14 @@ describe('list issues — argument validation', () => {
   );
 
   it(
-    'exits with code 1 when --statuses is not a recognised value',
+    'exits with code 2 when --statuses is not a recognised value',
     async () => {
       // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('list issues --project my-project --statuses UNKNOWN');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Invalid status(es)');
     },
     { timeout: 15000 },

@@ -587,11 +587,11 @@ describe('integrate copilot', () => {
 
   describe('option validation', () => {
     it(
-      'exits with code 1 when both --global and --project are provided',
+      'exits with code 2 when both --global and --project are provided',
       async () => {
         const result = await harness.run('integrate copilot --global --project foo');
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(2);
         expect(result.stdout + result.stderr).toContain(
           '--global and --project are mutually exclusive',
         );

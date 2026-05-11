@@ -52,11 +52,11 @@ describe('auth login', () => {
   });
 
   it(
-    'exits with code 1 when --server is not a valid URL',
+    'exits with code 2 when --server is not a valid URL',
     async () => {
       const result = await harness.run('auth login --server not-a-url --with-token mytoken');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Invalid server URL');
     },
     { timeout: 15000 },
