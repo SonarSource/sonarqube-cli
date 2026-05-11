@@ -131,7 +131,7 @@ export async function integrateClaude(
 
   if (!options.skipContext) {
     await setupContextAugmentation({
-      auth,
+      auth: { ...auth, token },
       agent: 'claude-code',
       projectRoot: project.rootDir,
       projectKey: options.project || project.projectKey,

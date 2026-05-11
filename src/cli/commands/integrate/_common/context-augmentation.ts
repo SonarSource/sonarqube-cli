@@ -54,6 +54,12 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
   blank();
   info('Setting up SonarQube Context Augmentation...');
 
+  const isCloud = isSonarQubeCloud(p.auth.serverUrl);
+  if (!isCloud) {
+    text('Skipping Context Augmentation: not available on SonarQube Server.');
+    return;
+  }
+
   if (!p.projectKey || !p.auth.orgKey) {
     warn(
       'Skipping Context Augmentation: a project key and organization are required (configure your project or pass --project).',
@@ -61,17 +67,12 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     return;
   }
 
-  const isCloud = isSonarQubeCloud(p.auth.serverUrl);
   const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
   const enabled = await client.hasCagEntitlement(p.auth.orgKey);
   if (!enabled) {
-    if (isCloud) {
-      warn(
-        'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
-      );
-    } else {
-      text('Skipping Context Augmentation: not available on SonarQube Server.');
-    }
+    warn(
+      'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
+    );
     return;
   }
 

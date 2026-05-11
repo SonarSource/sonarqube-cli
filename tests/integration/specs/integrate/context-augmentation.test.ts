@@ -375,6 +375,37 @@ describe('integrate claude — Context Augmentation', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'emits info (not warn) and skips CAG on SonarQube Server without an org',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .start();
+      // No org — SonarQube Server auth
+      harness.withAuth(server.baseUrl(), TOKEN);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, `sonar.projectKey=${PROJECT_KEY}`].join('\n'),
+      );
+
+      // No SONARQUBE_CLI_SONARCLOUD_URL override → localhost is treated as SQS
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      // No CAG subprocesses invoked
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      // "not available on SonarQube Server" info line must appear, not the
+      // misleading "organization required" warning
+      expect(result.stdout + result.stderr).toContain('not available on SonarQube Server');
+      expect(result.stdout + result.stderr).not.toContain('organization are required');
+    },
+    { timeout: 30000 },
+  );
 });
 
 describe('integrate copilot — Context Augmentation', () => {

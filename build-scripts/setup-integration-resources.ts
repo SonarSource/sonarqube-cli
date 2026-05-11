@@ -66,12 +66,13 @@ const ascDestPath = join(RESOURCES_DIR, `${downloadFilename}.asc`);
 const binaryExists = existsSync(destPath);
 const ascExists = existsSync(ascDestPath);
 
-if (binaryExists && ascExists) {
-  console.log(`Resources already present at ${RESOURCES_DIR} — skipping download.`);
-  process.exit(0);
-}
-
 mkdirSync(RESOURCES_DIR, { recursive: true });
+
+if (binaryExists && ascExists) {
+  console.log(
+    `sonar-secrets resources already present at ${RESOURCES_DIR} — skipping secrets download.`,
+  );
+}
 
 if (!binaryExists) {
   console.log(
