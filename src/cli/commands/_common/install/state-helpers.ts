@@ -113,3 +113,10 @@ export function cleanupOldVersionBinaries(
     logger.debug(`Failed to clean up old ${binaryName} binaries: ${(err as Error).message}`);
   }
 }
+
+const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
+
+export async function makeExecutable(path: string): Promise<void> {
+  const { chmod } = await import('node:fs/promises');
+  await chmod(path, FILE_EXECUTABLE_PERMS);
+}

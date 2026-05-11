@@ -50,12 +50,11 @@ import { print, success, text, withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../error';
 import {
   cleanupOldVersionBinaries,
+  makeExecutable,
   recordInstallationInState,
   verifyInstallation,
 } from './state-helpers';
 import { extractFileFromTarGz } from './tar';
-
-const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
 
 export interface ContextAugmentationInstallOptions {
   force?: boolean;
@@ -106,10 +105,9 @@ export async function installContextAugmentationBinary(): Promise<string> {
  */
 export async function resolveContextAugmentationBinary(
   options: ContextAugmentationInstallOptions,
-  { binDir }: { binDir?: string } = {},
 ): Promise<ContextAugmentationInstallResult> {
   const platform = detectPlatform();
-  const resolvedBinDir = ensureBinDirectory(binDir ?? options.binDir);
+  const resolvedBinDir = ensureBinDirectory(options.binDir);
   const localName = buildLocalCagBinaryName(platform);
   const binaryPath = join(resolvedBinDir, localName);
 
@@ -176,11 +174,6 @@ function ensureBinDirectory(dir?: string): string {
     mkdirSync(binDir, { recursive: true });
   }
   return binDir;
-}
-
-async function makeExecutable(path: string): Promise<void> {
-  const { chmod } = await import('node:fs/promises');
-  await chmod(path, FILE_EXECUTABLE_PERMS);
 }
 
 async function verifySignatureForPlatform(

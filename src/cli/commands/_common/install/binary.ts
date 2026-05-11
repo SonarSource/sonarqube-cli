@@ -35,11 +35,10 @@ import {
 import { print, text, withSpinner } from '../../../../ui';
 import {
   cleanupOldVersionBinaries,
+  makeExecutable,
   recordInstallationInState,
   verifyInstallation,
 } from './state-helpers';
-
-const FILE_EXECUTABLE_PERMS = 0o755; // rwxr-xr-x
 
 export interface BinarySpec {
   name: string;
@@ -137,9 +136,4 @@ function ensureBinDirectory(dir?: string): string {
     mkdirSync(binDir, { recursive: true });
   }
   return binDir;
-}
-
-async function makeExecutable(path: string): Promise<void> {
-  const { chmod } = await import('node:fs/promises');
-  await chmod(path, FILE_EXECUTABLE_PERMS);
 }
