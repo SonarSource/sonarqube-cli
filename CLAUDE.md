@@ -38,6 +38,8 @@ To add a new command: add it to `src/cli/command-tree.ts` and implement the logi
 Please declare commands using the type defined in `src/cli/commands/_common/sonar-command.ts`.
 By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
 
+Declarative integration registry helpers live in `src/cli/commands/integrate/_common/registry/index.ts`. New integration descriptors should use that public entrypoint for resource factories, operations, and registry validation. Command handlers should keep command-specific validation, prompts, and target resolution thin, then delegate feature selection, generic install messages, resource/operation application, and state recording to `src/cli/commands/integrate/_common/installer.ts`.
+
 ## Error handling
 
 Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
@@ -51,6 +53,7 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 ## State and auth
 
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.
+- Declarative integration installs are tracked as integration entries in the top-level `integrations.installed` state registry, with installed feature targets nested under each integration. This is the generic state surface for Git, Claude, Copilot, and future integrations; legacy `agents` and `agentExtensions` remain for compatibility.
 - Tokens are stored in the system keychain via `src/lib/keychain.ts` — never store tokens in plain files.
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.
 - Caller-agent hints (Cursor, Claude Code, or Copilot CLI) from the environment: `src/lib/agent-detector.ts` (`detectCallerAgent`, etc.).

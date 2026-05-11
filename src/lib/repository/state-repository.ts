@@ -58,6 +58,9 @@ function migrateState(raw: Record<string, unknown>): CliState {
   if (!raw.agentExtensions) {
     raw.agentExtensions = [];
   }
+  if (!raw.integrations) {
+    raw.integrations = { installed: [] };
+  }
   if (!raw.auth) {
     raw.auth = getDefaultState(VERSION).auth;
     return raw as unknown as CliState;

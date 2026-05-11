@@ -10,6 +10,7 @@ The state file persists configuration across CLI invocations and stores:
 - **Agent Configuration**: Integration status with Claude Code and other agents
 - **Installed Hooks**: Pre/Post tool use and session start hooks for agent interactions
 - **Installed Skills**: Custom Claude Code skills
+- **Declarative Integrations**: Generic records of installed integrations, features, resources, and operations
 - **Tool Metadata**: Installed external tools like sonar-secrets binary
 - **Telemetry data**: Anonymous usage statistics
 
@@ -23,14 +24,15 @@ The state file persists configuration across CLI invocations and stores:
 
 ### Root Level
 
-| Field         | Type                  | Description                                      |
-| ------------- | --------------------- | ------------------------------------------------ |
-| `version`     | string                | State format version (currently `"1.0"`)         |
-| `lastUpdated` | ISO 8601 timestamp    | When state was last modified                     |
-| `auth`        | AuthState             | Authentication and server connections            |
-| `agents`      | AgentsState           | Configuration for each agent (Claude Code, etc.) |
-| `config`      | CliConfig             | CLI configuration metadata                       |
-| `tools`       | ToolsState (optional) | Installed tools and binaries                     |
+| Field          | Type                  | Description                                      |
+| -------------- | --------------------- | ------------------------------------------------ |
+| `version`      | string                | State format version (currently `"1.0"`)         |
+| `lastUpdated`  | ISO 8601 timestamp    | When state was last modified                     |
+| `auth`         | AuthState             | Authentication and server connections            |
+| `agents`       | AgentsState           | Configuration for each agent (Claude Code, etc.) |
+| `config`       | CliConfig             | CLI configuration metadata                       |
+| `tools`        | ToolsState (optional) | Installed tools and binaries                     |
+| `integrations` | IntegrationsState     | Generic declarative integration install records  |
 
 ### Auth Section
 
@@ -97,6 +99,52 @@ The state file persists configuration across CLI invocations and stores:
 | `path`                  | string             | Full path to tool binary                |
 | `installedAt`           | ISO 8601 timestamp | Installation time                       |
 | `installedByCliVersion` | string             | CLI version that installed the tool     |
+
+### Integrations Section
+
+The `integrations.installed` registry is the generic state surface for declarative integrations such as Git, Claude, Copilot, and future tools. It records which integration has installed features and where each feature was installed.
+
+| Field       | Type                   | Description                        |
+| ----------- | ---------------------- | ---------------------------------- |
+| `installed` | InstalledIntegration[] | Installed declarative integrations |
+
+#### InstalledIntegration Fields
+
+| Field                   | Type                          | Description                                      |
+| ----------------------- | ----------------------------- | ------------------------------------------------ |
+| `id`                    | string                        | Stable state entry identifier                    |
+| `integrationId`         | string                        | Integration identifier                           |
+| `installedByCliVersion` | string                        | CLI version that first installed the integration |
+| `installedAt`           | ISO 8601 timestamp            | Initial installation time                        |
+| `updatedByCliVersion`   | string                        | CLI version that last updated the integration    |
+| `updatedAt`             | ISO 8601 timestamp            | Last update time                                 |
+| `features`              | InstalledIntegrationFeature[] | Features installed for this integration          |
+
+#### InstalledIntegrationFeature Fields
+
+| Field                   | Type                            | Description                                   |
+| ----------------------- | ------------------------------- | --------------------------------------------- |
+| `featureId`             | string                          | Feature identifier from the declaration       |
+| `scope`                 | `'project' \| 'global'`         | Installation scope                            |
+| `targetRoot`            | string                          | Root path associated with this feature target |
+| `installedByCliVersion` | string                          | CLI version that first installed the feature  |
+| `installedAt`           | ISO 8601 timestamp              | Initial installation time                     |
+| `updatedByCliVersion`   | string                          | CLI version that last updated the feature     |
+| `updatedAt`             | ISO 8601 timestamp              | Last update time                              |
+| `resources`             | InstalledIntegrationResource[]  | Resources applied for the feature             |
+| `operations`            | InstalledIntegrationOperation[] | Operations applied for the feature            |
+| `attrs`                 | object (optional)               | Command-specific scalar metadata              |
+
+#### InstalledIntegrationResource Fields
+
+| Field                 | Type               | Description                                 |
+| --------------------- | ------------------ | ------------------------------------------- |
+| `id`                  | string             | Resource identifier from the declaration    |
+| `resourceType`        | string             | Resource type, e.g. `whole-file` or `json`  |
+| `version`             | string (optional)  | Resource declaration version                |
+| `path`                | string (optional)  | Resolved path for resources written to disk |
+| `updatedByCliVersion` | string             | CLI version that last updated the resource  |
+| `updatedAt`           | ISO 8601 timestamp | Last resource update time                   |
 
 ---
 
