@@ -22,9 +22,9 @@
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { relative } from 'node:path';
 
 import { resolveAuth } from '../../../lib/auth-resolver';
+import { toRelativePosixPath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
@@ -59,15 +59,20 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
   const projectKey = options.project;
   if (!projectKey) return;
 
+  const normalizedPath = toRelativePosixPath(filePath);
+  if (normalizedPath == null) {
+    logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${filePath}`);
+    return;
+  }
+
   try {
     const fileContent = readFileSync(filePath, 'utf-8');
-    const filePath_ = relative(process.cwd(), filePath);
     const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
     const response = await client.analyzeFile({
       organizationKey: auth.orgKey,
       projectKey,
-      filePath: filePath_,
+      filePath: normalizedPath,
       fileContent,
     });
 

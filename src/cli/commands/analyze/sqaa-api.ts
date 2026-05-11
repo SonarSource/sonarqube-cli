@@ -21,9 +21,8 @@
 // HTTP API layer for SQAA: fetch, retry, and single-file display.
 
 import { readFileSync } from 'node:fs';
-import { isAbsolute, relative } from 'node:path';
 
-import { normalizePath } from '../../../lib/fs-utils';
+import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../../lib/fs-utils';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { ServiceUnavailableError } from '../../../sonarqube/errors.js';
@@ -58,16 +57,14 @@ export function readSqaaFileContent(file: string): string {
 }
 
 /**
- * Compute a path of `file` relative to `base` (defaults to the
- * current working directory). Throws when the file is outside `base` (traversal) or on a different drive.
+ * Throwing wrapper over `lib/fs-utils.toRelativePosixPath`.
+ * Throws when `file` is outside `base` (traversal) or on a different drive.
  */
 export function toRelativePosixPath(file: string, base: string = process.cwd()): string {
-  const rel = normalizePath(relative(base, file));
-
-  if (isAbsolute(rel) || rel.split('/').includes('..')) {
+  const rel = toRelativePosixPathOrNull(file, base);
+  if (rel == null) {
     throw new InvalidOptionError(`File must be inside ${base}: ${file}`);
   }
-
   return rel;
 }
 

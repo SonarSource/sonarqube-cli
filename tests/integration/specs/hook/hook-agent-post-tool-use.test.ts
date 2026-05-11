@@ -84,4 +84,68 @@ describe('sonar hook claude-post-tool-use', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'silently skips SQAA when the file is outside the current working directory',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      // Write a real file one level above cwd so `existsSync` succeeds and
+      // the handler reaches the path validation step. The file lives in the
+      // harness tempDir (sibling of cwd) and is cleaned up by dispose().
+      harness.cwd.writeFile('../outside.ts', 'const x = 1;');
+      const outsidePath = join(harness.cwd.path, '..', 'outside.ts');
+
+      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
+        stdin: postToolUseStdin(outsidePath),
+        extraEnv: { LOG_LEVEL: 'DEBUG' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(0);
+      const logFile = harness.cliHome.dir('logs').file('sonarqube-cli.log');
+      expect(logFile.exists()).toBe(true);
+      expect(logFile.asText()).toContain(
+        `PostToolUse SQAA skipped: file outside cwd: ${outsidePath}`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(process.platform !== 'win32')(
+    'POSIX-normalizes Windows-style separators before sending to SQAA',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      // On Windows, path.join produces backslash-separated paths.
+      // The helper must rewrite them to POSIX before sending to SQAA.
+      const filePath = join(harness.cwd.path, 'src', 'main.ts');
+
+      const result = await harness.run(`hook claude-post-tool-use --project ${TEST_PROJECT}`, {
+        stdin: postToolUseStdin(filePath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      const body = JSON.parse(sqaaCalls[0].body ?? '{}') as { filePath?: string };
+      expect(body.filePath).toBe('src/main.ts');
+    },
+    { timeout: 15000 },
+  );
 });
