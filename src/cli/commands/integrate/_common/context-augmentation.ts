@@ -31,10 +31,12 @@ import { homedir } from 'node:os';
 
 import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import { loadState, saveState, upsertAgentExtension } from '../../../../lib/state-manager';
 import { blank, info, success, text, warn } from '../../../../ui';
 import { installContextAugmentationBinary } from '../../_common/install/context-augmentation';
+import { SonarQubeClient } from '../../../../sonarqube/client';
 
 export type ContextAugmentationAgent = 'claude-code' | 'copilot';
 
@@ -56,6 +58,20 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     warn(
       'Skipping Context Augmentation: a project key and organization are required (configure your project or pass --project).',
     );
+    return;
+  }
+
+  const isCloud = isSonarQubeCloud(p.auth.serverUrl);
+  const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
+  const enabled = await client.hasCagEntitlement(p.auth.orgKey);
+  if (!enabled) {
+    if (isCloud) {
+      warn(
+        'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
+      );
+    } else {
+      text('Skipping Context Augmentation: not available on SonarQube Server.');
+    }
     return;
   }
 

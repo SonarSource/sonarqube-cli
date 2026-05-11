@@ -78,6 +78,7 @@ describe('integrate claude — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
         .start();
       harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
@@ -162,12 +163,49 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
+    'skips CAG with a warning when the org does not have it enabled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY, { enabled: false })
+        .start();
+      harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${server.baseUrl()}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      const state = loadState(harness);
+      expect(
+        state.agentExtensions.find(
+          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
+        ),
+      ).toBeUndefined();
+      expect(result.stderr).toContain('not enabled for your organization');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'does not record the skill extension when CAG init fails',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
         .start();
       harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled({ initExitCode: 1 });
@@ -217,6 +255,7 @@ describe('integrate copilot — Context Augmentation', () => {
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
         .start();
       harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();

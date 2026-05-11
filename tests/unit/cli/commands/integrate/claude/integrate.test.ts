@@ -71,6 +71,9 @@ describe('integrateCommand', () => {
   let hasSqaaEntitlementSpy: Mock<
     Extract<(typeof SonarQubeClient.prototype)['hasSqaaEntitlement'], (...args: any[]) => any>
   >;
+  let hasCagEntitlementSpy: Mock<
+    Extract<(typeof SonarQubeClient.prototype)['hasCagEntitlement'], (...args: any[]) => any>
+  >;
   let isEnvBasedAuthSpy: Mock<
     Extract<(typeof authResolver)['isEnvBasedAuth'], (...args: any[]) => any>
   >;
@@ -104,6 +107,8 @@ describe('integrateCommand', () => {
 
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
     hasSqaaEntitlementSpy.mockResolvedValue(false);
+    hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
+    hasCagEntitlementSpy.mockResolvedValue(true);
     setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
       undefined,
     );
@@ -141,6 +146,7 @@ describe('integrateCommand', () => {
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     hasSqaaEntitlementSpy.mockRestore();
+    hasCagEntitlementSpy.mockRestore();
     isEnvBasedAuthSpy.mockRestore();
     runHealthChecksSpy.mockRestore();
     discoverProjectSpy.mockRestore();

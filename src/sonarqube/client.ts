@@ -332,6 +332,31 @@ export class SonarQubeClient {
     return this.checkSqaaEntitlement(uuid);
   }
 
+  async checkCagEntitlement(organizationUuid: string): Promise<boolean> {
+    try {
+      const endpoint = `/a3s-analysis/cag-org-config/${organizationUuid}`;
+      const result = await this.get<{ id: string; enabled: boolean; eligible: boolean }>(
+        endpoint,
+        undefined,
+        resolveFromEndpoint(this.serverURL, endpoint),
+      );
+      return result.eligible && result.enabled;
+    } catch {
+      return false;
+    }
+  }
+
+  async hasCagEntitlement(organizationKey?: string): Promise<boolean> {
+    if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
+      return false;
+    }
+    const uuid = await this.getOrganizationId(organizationKey);
+    if (!uuid) {
+      return false;
+    }
+    return this.checkCagEntitlement(uuid);
+  }
+
   async checkAiRemediationEntitlement(
     orgKey: string,
   ): Promise<{ status: 'not_eligible' | 'not_enabled' | 'ok' | 'unknown' }> {

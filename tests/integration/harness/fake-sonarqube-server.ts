@@ -116,6 +116,8 @@ export class FakeSonarQubeServerBuilder {
     string,
     { uuid: string; eligible: boolean; enabled: boolean }
   > = new Map();
+  private readonly cagEntitlementOrgs: Map<string, { eligible: boolean; enabled: boolean }> =
+    new Map();
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '9.9.0.00001';
@@ -229,6 +231,17 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withCagEntitlement(
+    orgKey: string,
+    options: { eligible?: boolean; enabled?: boolean } = {},
+  ): this {
+    this.cagEntitlementOrgs.set(orgKey, {
+      eligible: options.eligible ?? true,
+      enabled: options.enabled ?? true,
+    });
+    return this;
+  }
+
   /**
    * Configure the response of the SCA availability endpoints
    * (`/sca/feature-enabled` for cloud, `/api/v2/sca/feature-enabled` for on-premise).
@@ -265,6 +278,7 @@ export class FakeSonarQubeServerBuilder {
       sqaaStatusCode,
       sqaaStatusBody,
       sqaaEntitlementOrgs,
+      cagEntitlementOrgs,
       scaEnabled,
       projectSettings,
       agentJobErrorCode,
@@ -529,6 +543,29 @@ export class FakeSonarQubeServerBuilder {
         if (orgConfigMatch) {
           const uuid = orgConfigMatch[1];
           const entitlement = [...sqaaEntitlementOrgs.values()].find((e) => e.uuid === uuid);
+          if (!entitlement) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(
+            JSON.stringify({
+              id: uuid,
+              eligible: entitlement.eligible,
+              enabled: entitlement.enabled,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        const cagOrgConfigMatch = /^\/a3s-analysis\/cag-org-config\/(.+)$/.exec(path);
+        if (cagOrgConfigMatch) {
+          const uuid = cagOrgConfigMatch[1];
+          // UUID is derived from org key as `${orgKey}-uuid-v4` (matches the default
+          // org UUID fallback in /organizations/organizations).
+          const orgKey = [...cagEntitlementOrgs.keys()].find((k) => `${k}-uuid-v4` === uuid);
+          const entitlement = orgKey ? cagEntitlementOrgs.get(orgKey) : undefined;
           if (!entitlement) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
               status: 404,
