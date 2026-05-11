@@ -34,9 +34,9 @@ import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import { loadState, saveState, upsertAgentExtension } from '../../../../lib/state-manager';
+import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, success, text, warn } from '../../../../ui';
 import { installContextAugmentationBinary } from '../../_common/install/context-augmentation';
-import { SonarQubeClient } from '../../../../sonarqube/client';
 
 export type ContextAugmentationAgent = 'claude-code' | 'copilot';
 

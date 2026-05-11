@@ -80,18 +80,24 @@ describe('integrate claude — Context Augmentation', () => {
         .withProject(PROJECT_KEY)
         .withCagEntitlement(ORG_KEY)
         .start();
-      harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [
-          `sonar.host.url=${server.baseUrl()}`,
+          `sonar.host.url=${serverUrl}`,
           `sonar.projectKey=${PROJECT_KEY}`,
           `sonar.organization=${ORG_KEY}`,
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
 
       expect(result.exitCode).toBe(0);
       const invocations = readInvocations(harness);
@@ -171,18 +177,24 @@ describe('integrate claude — Context Augmentation', () => {
         .withProject(PROJECT_KEY)
         .withCagEntitlement(ORG_KEY, { enabled: false })
         .start();
-      harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [
-          `sonar.host.url=${server.baseUrl()}`,
+          `sonar.host.url=${serverUrl}`,
           `sonar.projectKey=${PROJECT_KEY}`,
           `sonar.organization=${ORG_KEY}`,
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
 
       expect(result.exitCode).toBe(0);
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
@@ -207,18 +219,24 @@ describe('integrate claude — Context Augmentation', () => {
         .withProject(PROJECT_KEY)
         .withCagEntitlement(ORG_KEY)
         .start();
-      harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled({ initExitCode: 1 });
       harness.cwd.writeFile(
         'sonar-project.properties',
         [
-          `sonar.host.url=${server.baseUrl()}`,
+          `sonar.host.url=${serverUrl}`,
           `sonar.projectKey=${PROJECT_KEY}`,
           `sonar.organization=${ORG_KEY}`,
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive');
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
 
       // CAG failures must not abort integrate
       expect(result.exitCode).toBe(0);
@@ -257,18 +275,24 @@ describe('integrate copilot — Context Augmentation', () => {
         .withProject(PROJECT_KEY)
         .withCagEntitlement(ORG_KEY)
         .start();
-      harness.withAuth(server.baseUrl(), TOKEN, ORG_KEY);
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
       harness.state().withContextAugmentationBinaryInstalled();
       harness.cwd.writeFile(
         'sonar-project.properties',
         [
-          `sonar.host.url=${server.baseUrl()}`,
+          `sonar.host.url=${serverUrl}`,
           `sonar.projectKey=${PROJECT_KEY}`,
           `sonar.organization=${ORG_KEY}`,
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate copilot');
+      const result = await harness.run('integrate copilot', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
 
       expect(result.exitCode).toBe(0);
       const skill = findInvocation(readInvocations(harness), 'skill');
