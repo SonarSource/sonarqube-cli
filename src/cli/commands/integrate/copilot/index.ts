@@ -70,7 +70,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
 
   await setupMcpServer(project, isGlobal, projectKey);
 
-  if (!options.skipCag) {
+  if (!options.skipContext) {
     await setupContextAugmentation({
       auth,
       agent: 'copilot',

@@ -129,7 +129,7 @@ export async function integrateClaude(
 
   await setupMcpServer(project, isGlobal, options.project || project.projectKey);
 
-  if (!options.skipCag) {
+  if (!options.skipContext) {
     await setupContextAugmentation({
       auth,
       agent: 'claude-code',

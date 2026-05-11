@@ -161,7 +161,7 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
-  .option('--skip-cag', 'Skip the sonar-context-augmentation install/init/skill step')
+  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
 
@@ -192,7 +192,7 @@ integrateCommand
     'Install hooks and config globally to ~/.copilot instead of project directory',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
-  .option('--skip-cag', 'Skip the sonar-context-augmentation install/init/skill step')
+  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(auth, options));
 

@@ -127,7 +127,7 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG entirely when --skip-cag is passed',
+    'skips CAG entirely when --skip-context is passed',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -145,7 +145,7 @@ describe('integrate claude — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate claude --non-interactive --skip-cag');
+      const result = await harness.run('integrate claude --non-interactive --skip-context');
 
       expect(result.exitCode).toBe(0);
       // No init/skill invocations — only --version probes (if any) are allowed
