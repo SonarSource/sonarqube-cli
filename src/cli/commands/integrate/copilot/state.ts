@@ -31,10 +31,22 @@ export interface UpdateCopilotStateOptions {
    */
   hookInstalled?: boolean;
   /**
-   * When true, the prompt-secrets instructions file was written and a matching
-   * registry entry should be recorded.
+   * When true, the prompt-secrets instructions section was written and a
+   * matching registry entry should be recorded.
    */
-  instructionsInstalled?: boolean;
+  promptSecretsInstructionsInstalled?: boolean;
+  /**
+   * When true, the SQAA instructions section was written and a matching
+   * registry entry should be recorded. SQAA is always project-scoped even when
+   * the integration was invoked with --global.
+   */
+  sqaaInstructionsInstalled?: boolean;
+  /** Cloud project key associated with the SQAA section, if installed. */
+  projectKey?: string;
+  /** Cloud organization key associated with the SQAA section, if installed. */
+  orgKey?: string;
+  /** Server URL associated with the SQAA section, if installed. */
+  serverUrl?: string;
 }
 
 /**
@@ -43,15 +55,33 @@ export interface UpdateCopilotStateOptions {
 export async function updateCopilotState(
   projectRoot: string,
   isGlobal: boolean,
-  { hookInstalled = false, instructionsInstalled = false }: UpdateCopilotStateOptions = {},
+  options: UpdateCopilotStateOptions = {},
 ): Promise<void> {
+  const {
+    hookInstalled = false,
+    promptSecretsInstructionsInstalled = false,
+    sqaaInstructionsInstalled = false,
+    projectKey,
+    orgKey,
+    serverUrl,
+  } = options;
   await withAgentState(COPILOT_AGENT_ID, (state) => {
     const extensions: AgentExtension[] = [];
     if (hookInstalled) {
       extensions.push({ kind: 'hook', name: 'sonar-secrets', hookType: 'PreToolUse' });
     }
-    if (instructionsInstalled) {
+    if (promptSecretsInstructionsInstalled) {
       extensions.push({ kind: 'instructions', name: 'sonar-prompt-secrets' });
+    }
+    if (sqaaInstructionsInstalled) {
+      // SQAA is always project-scoped, even on a global Copilot install.
+      extensions.push({
+        kind: 'instructions',
+        name: 'sonar-sqaa',
+        projectRoot,
+        global: false,
+        attrs: { projectKey, orgKey, serverUrl },
+      });
     }
     recordAgentExtensions(state, COPILOT_AGENT_ID, projectRoot, isGlobal, extensions);
   });

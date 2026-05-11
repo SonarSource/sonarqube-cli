@@ -43,10 +43,49 @@ describe('updateCopilotState', () => {
     saveStateSpy.mockRestore();
   });
 
-  it('defaults both flags to false when no options are passed (records nothing)', async () => {
+  it('defaults all flags to false when no options are passed (records nothing)', async () => {
     await updateCopilotState(PROJECT_ROOT, false);
 
     expect(state.agentExtensions).toHaveLength(0);
     expect(state.agents[COPILOT_AGENT_ID]?.configured).toBe(true);
+  });
+
+  it('records sonar-prompt-secrets at the run scope', async () => {
+    await updateCopilotState(PROJECT_ROOT, false, { promptSecretsInstructionsInstalled: true });
+
+    const promptSecrets = state.agentExtensions.find(
+      (e) => e.kind === 'instructions' && e.name === 'sonar-prompt-secrets',
+    );
+    expect(promptSecrets).toBeDefined();
+    expect(promptSecrets?.global).toBe(false);
+    expect(promptSecrets?.projectRoot).toBe(PROJECT_ROOT);
+  });
+
+  it('records sonar-prompt-secrets as global when isGlobal is true', async () => {
+    await updateCopilotState(PROJECT_ROOT, true, { promptSecretsInstructionsInstalled: true });
+
+    const promptSecrets = state.agentExtensions.find(
+      (e) => e.kind === 'instructions' && e.name === 'sonar-prompt-secrets',
+    );
+    expect(promptSecrets?.global).toBe(true);
+  });
+
+  it('records sonar-sqaa as project-scoped even when isGlobal is true, with cloud attrs', async () => {
+    await updateCopilotState(PROJECT_ROOT, true, {
+      sqaaInstructionsInstalled: true,
+      projectKey: 'my-project',
+      orgKey: 'my-org',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    const sqaa = state.agentExtensions.find(
+      (e) => e.kind === 'instructions' && e.name === 'sonar-sqaa',
+    );
+    expect(sqaa).toBeDefined();
+    expect(sqaa?.global).toBe(false);
+    expect(sqaa?.projectRoot).toBe(PROJECT_ROOT);
+    expect(sqaa?.projectKey).toBe('my-project');
+    expect(sqaa?.orgKey).toBe('my-org');
+    expect(sqaa?.serverUrl).toBe('https://sonarcloud.io');
   });
 });

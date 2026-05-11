@@ -77,6 +77,10 @@ export interface AgentExt {
   name: string;
   hookType?: string;
   global?: boolean;
+  projectRoot?: string;
+  projectKey?: string;
+  orgKey?: string;
+  serverUrl?: string;
 }
 
 /** Builds a platform-correct `CopilotHookEntry` for the given command path. */
@@ -88,7 +92,10 @@ export function makeHookEntry(commandPath: string): CopilotHookEntry {
  * Returns the line in `stdout` that begins with `prefix` (e.g. `"Hook:"` or
  * `"Instructions:"`), asserting that exactly one such line exists.
  */
-export function outcomeLine(stdout: string, prefix: 'Hook:' | 'Instructions:'): string {
+export function outcomeLine(
+  stdout: string,
+  prefix: 'Hook:' | 'Instructions (prompt-secrets):' | 'Instructions (SonarQube Agentic Analysis):',
+): string {
   const line = stdout.split('\n').find((l) => l.startsWith(prefix));
   expect(line).toBeDefined();
   return line ?? '';
@@ -109,6 +116,13 @@ export function findSonarHookExt(harness: TestHarness): AgentExt | undefined {
 export function findSonarInstructionsExt(harness: TestHarness): AgentExt | undefined {
   return getStateExtensions(harness).find(
     (e) => e.kind === 'instructions' && e.name === 'sonar-prompt-secrets',
+  );
+}
+
+/** Finds the `sonar-sqaa` instructions extension in state, or `undefined` if absent. */
+export function findSonarSqaaInstructionsExt(harness: TestHarness): AgentExt | undefined {
+  return getStateExtensions(harness).find(
+    (e) => e.kind === 'instructions' && e.name === 'sonar-sqaa',
   );
 }
 
