@@ -23,6 +23,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation.js';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import type { CliState } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 
@@ -208,6 +210,50 @@ describe('integrate claude — Context Augmentation', () => {
       expect(result.stderr).toContain('not enabled for your organization');
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'downloads, verifies, and extracts CAG when the binary is absent',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      // No withContextAugmentationBinaryInstalled() — let the install pipeline run.
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      // CAG init/skill may fail against the fake server; integrate is warn-on-failure.
+      expect(result.exitCode).toBe(0);
+
+      // The versioned binary must be on disk under <cliHome>/bin.
+      const versionedName = buildLocalCagBinaryName(detectPlatform());
+      expect(harness.cliHome.file('bin', versionedName).exists()).toBe(true);
+
+      // state.json records the installation.
+      const state = loadState(harness);
+      const installed = state.tools?.installed.find((t) => t.name === 'sonar-context-augmentation');
+      expect(installed).toBeDefined();
+      expect(installed?.version).toMatch(/^\d+\.\d+/);
+    },
+    { timeout: 60000 },
   );
 
   it(
