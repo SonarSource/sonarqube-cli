@@ -38,18 +38,18 @@ describe('install-types', () => {
   });
 
   describe('buildCagPlatformSuffix (sonar-context-augmentation convention)', () => {
-    it('rewrites x86-64 to x64 and omits leading dash and extension', () => {
+    it('routes linux to alpine and rewrites x86-64 to x64', () => {
       expect(buildCagPlatformSuffix({ os: 'linux', arch: 'x86-64', extension: '' })).toBe(
-        'linux-x64',
+        'alpine-x64',
       );
       expect(buildCagPlatformSuffix({ os: 'windows', arch: 'x86-64', extension: '.exe' })).toBe(
         'windows-x64',
       );
     });
 
-    it('keeps arm64 unchanged', () => {
+    it('keeps arm64 unchanged but still routes linux to alpine', () => {
       expect(buildCagPlatformSuffix({ os: 'linux', arch: 'arm64', extension: '' })).toBe(
-        'linux-arm64',
+        'alpine-arm64',
       );
       expect(buildCagPlatformSuffix({ os: 'macos', arch: 'arm64', extension: '' })).toBe(
         'macos-arm64',

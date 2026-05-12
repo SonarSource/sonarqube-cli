@@ -58,11 +58,11 @@
       "platformNaming": "x64",
       "platforms": [
         {
-          "os": "linux",
+          "os": "alpine",
           "arch": "x86-64"
         },
         {
-          "os": "linux",
+          "os": "alpine",
           "arch": "arm64"
         },
         {

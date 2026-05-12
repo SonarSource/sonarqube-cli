@@ -55,17 +55,42 @@ export async function checkInstalledVersion(path: string): Promise<string | null
 }
 
 /**
- * Verify the installation by probing the binary; throws when the binary does not
- * respond to `--version`.
+ * Verify the installation by probing the binary; throws with captured stdout/stderr
+ * when the binary does not respond to `--version` or exits non-zero.
  */
 export async function verifyInstallation(path: string): Promise<string> {
-  const version = await checkInstalledVersion(path);
-  if (!version) {
+  let result: Awaited<ReturnType<typeof spawnProcess>>;
+  try {
+    result = await spawnProcess(path, ['--version'], { stdout: 'pipe', stderr: 'pipe' });
+  } catch (err) {
     throw new CommandFailedError(
-      'Installation verification failed. Binary not responding to --version.',
+      `Installation verification failed: could not spawn ${path} --version: ${(err as Error).message}`,
     );
   }
-  return version;
+
+  if (result.exitCode !== 0) {
+    throw new CommandFailedError(
+      `Installation verification failed: ${path} --version exited ${result.exitCode}.\n` +
+        formatSpawnOutput(result.stdout, result.stderr),
+    );
+  }
+
+  const pattern = String.raw`(\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\.\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
+  const match = new RegExp(pattern).exec(result.stdout);
+  if (!match) {
+    throw new CommandFailedError(
+      `Installation verification failed: could not parse version from --version output.\n` +
+        formatSpawnOutput(result.stdout, result.stderr),
+    );
+  }
+  return match[1];
+}
+
+function formatSpawnOutput(stdout: string, stderr: string): string {
+  const parts: string[] = [];
+  if (stdout.trim()) parts.push(`stdout:\n${stdout.trimEnd()}`);
+  if (stderr.trim()) parts.push(`stderr:\n${stderr.trimEnd()}`);
+  return parts.length ? parts.join('\n') : '(no output)';
 }
 
 /**

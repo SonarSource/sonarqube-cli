@@ -157,9 +157,15 @@ export async function resolveContextAugmentationBinary(
     await makeExecutable(binaryPath);
   }
 
-  const installedVersion = await withSpinner('Verifying installation', () =>
-    verifyInstallation(binaryPath),
-  );
+  let installedVersion: string;
+  try {
+    installedVersion = await withSpinner('Verifying installation', () =>
+      verifyInstallation(binaryPath),
+    );
+  } catch (err) {
+    rmSync(binaryPath, { force: true });
+    throw err;
+  }
   print(`  sonar-context-augmentation ${installedVersion}`);
 
   recordInstallationInState(CONTEXT_AUGMENTATION_BINARY_NAME, installedVersion, binaryPath);
@@ -184,13 +190,10 @@ async function verifySignatureForPlatform(
   const platSuffix = buildCagPlatformSuffix(platform);
   const expected = SONAR_CONTEXT_AUGMENTATION_SIGNATURES[platSuffix];
   if (!expected) {
-    // Pinned signatures are populated by `bun run fetch:signatures`. When the
-    // map is empty (e.g. before the first signature fetch on a fresh checkout),
-    // we still verify against the on-disk .asc — verifyPgpSignature confirms
-    // the signature was issued by the trusted SonarSource key. We don't insist
-    // on an exact match against the pinned signature when none is pinned.
-    await verifyPgpSignature(archiveBytes, armoredSignature, SONARSOURCE_PUBLIC_KEY);
-    return;
+    throw new CommandFailedError(
+      `No pinned signature available for sonar-context-augmentation on ${platSuffix}. ` +
+        `Refresh signatures with \`bun run fetch:signatures\` or check the release was published for this platform.`,
+    );
   }
   if (expected !== armoredSignature.trim()) {
     throw new CommandFailedError(
