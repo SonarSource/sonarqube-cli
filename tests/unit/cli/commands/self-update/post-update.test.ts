@@ -240,6 +240,29 @@ describe('migrateClaudeCodeHooks', () => {
     expect(installHooksSpy).not.toHaveBeenCalled();
   });
 
+  it('does not install hooks when registry contains only skill extensions', async () => {
+    const state = makeStateWithExtensions([]);
+    state.agentExtensions = [
+      {
+        id: 'skill-id',
+        agentId: 'claude-code',
+        kind: 'skill',
+        name: 'sonar-context-augmentation',
+        projectRoot: '/some/project',
+        global: false,
+        updatedByCliVersion: '1.0.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    loadStateSpy.mockReturnValue(state);
+    existsSyncSpy.mockReturnValue(false); // global hooks dir does not exist
+
+    await migrateClaudeCodeHooks(homedirFn);
+
+    expect(installHooksSpy).not.toHaveBeenCalled();
+    expect(migrateHookScriptsSpy).not.toHaveBeenCalled();
+  });
+
   it('installs hooks for each extension in the registry', async () => {
     const state = makeStateWithExtensions([makeExtension('/proj/root', false)]);
     loadStateSpy.mockReturnValue(state);

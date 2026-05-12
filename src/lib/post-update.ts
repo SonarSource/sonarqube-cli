@@ -34,7 +34,7 @@ import {
   removeObsoleteHookArtifacts,
 } from './migration.js';
 import { loadState, saveState, stateFileExists } from './repository/state-repository';
-import type { CliState } from './state.js';
+import type { CliState, HookExtension } from './state.js';
 import { isNewerVersion } from './version';
 
 /**
@@ -118,7 +118,9 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
   type Location = { projectRoot: string; globalDir: string | undefined };
   const locations: Location[] = [];
 
-  const extensions = state.agentExtensions.filter((e) => e.agentId === 'claude-code');
+  const extensions = state.agentExtensions.filter(
+    (e): e is HookExtension => e.agentId === 'claude-code' && e.kind === 'hook',
+  );
 
   if (extensions.length > 0) {
     // New format: use registry entries, deduplicate by (projectRoot, globalDir)
