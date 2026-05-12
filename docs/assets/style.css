@@ -1133,9 +1133,6 @@ body.commands-page { height: 100%; overflow: hidden; }
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.feedback-fab-popover {
-  position: relative;
-}
 .feedback-fab-x {
   position: absolute;
   top: 6px;
@@ -1164,28 +1161,12 @@ body.commands-page { height: 100%; overflow: hidden; }
   margin-bottom: 14px;
   color: var(--text);
 }
-.feedback-fab-sub {
-  display: none;
-}
 .feedback-fab-popover .btn {
   width: 100%;
   justify-content: center;
   padding: 10px 22px;
   font-size: 14px;
 }
-.feedback-fab-close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 0;
-}
-.feedback-fab-close:hover {
-  color: var(--text);
-}
-
 @media (max-width: 768px) {
   .app { flex-direction: column; height: auto; overflow: auto; }
   .sidebar { width: 100%; flex-shrink: 0; height: auto; border-right: none; border-bottom: 1px solid var(--border); }

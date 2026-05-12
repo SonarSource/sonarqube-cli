@@ -75,7 +75,9 @@ for (const cmd of data.commands) {
 }
 
 // Set version
-document.getElementById('nav-version').textContent = 'v' + data.version;
+const navV = document.getElementById('nav-version');
+navV.textContent = 'v' + data.version;
+navV.style.display = '';
 
 // ── State ────────────────────────────────────────────────────
 const collapsed = new Set(); // IDs of collapsed groups

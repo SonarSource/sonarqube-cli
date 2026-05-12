@@ -244,7 +244,9 @@
 
   // Inject version from data
   fetch('data/commands.json').then(r => r.json()).then(data => {
-    document.getElementById('nav-version').textContent = 'v' + data.version;
+    const navV = document.getElementById('nav-version');
+    navV.textContent = 'v' + data.version;
+    navV.style.display = '';
     document.getElementById('meta-version').setAttribute('content', data.version);
   });
 
@@ -282,48 +284,53 @@
       'scanning src/ for hardcoded secrets',
     ];
 
+    const BANNER_LINES = [
+      '█▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',
+      '▄█ █▄█ █ ▀█ █▀█ █▀▄ ▀▀█ █▄█ █▄█ ██▄   ▀█▄ ██▄ █',
+    ];
+
     const flows = [
       [ // sonar list issues --format table
         { t: '$ sonar list issues --project my-org_app --format table', cmd: true },
         tr('SEVERITY', 'RULE', 'MESSAGE', 'FILE', C.muted),
         tsep,
-        tr('BLOCKER',  'java:S2068', 'Hardcoded password detected',              'src/config.ts:12', C.error),
-        tr('CRITICAL', 'java:S3649', 'SQL injection vulnerability',               'src/db.ts:34',     C.error),
-        tr('MAJOR',    'java:S1764', 'Identical sub-expressions on both sides',   'src/auth.ts:78',   C.cmd  ),
-        tr('MINOR',    'java:S1135', 'Complete the task associated to this TODO', 'src/utils.ts:5',   C.muted),
+        tr('BLOCKER',  'secrets:S6290',    'Hardcoded password detected',              'src/config.ts:12', C.error),
+        tr('CRITICAL', 'typescript:S3649', 'SQL injection vulnerability',               'src/db.ts:34',     C.error),
+        tr('MAJOR',    'typescript:S1764', 'Identical sub-expressions on both sides',   'src/auth.ts:78',   C.cmd  ),
+        tr('MINOR',    'typescript:S1135', 'Complete the task associated to this TODO', 'src/utils.ts:5',   C.muted),
       ],
       [ // sonar auth login
         { t: '$ sonar auth login', cmd: true },
-        { t: 'Authenticating with: sonarcloud.io',  c: C.muted },
-        { t: '  ✓  Token received',                 c: C.success },
+        { t: 'Authenticating with: sonarcloud.io',  c: C.muted, d: 600 },
+        { t: '  ✓  Token received',                 c: C.success, d: 800 },
         { t: 'Using organization: my-org',           c: C.muted },
         { t: '✅ Authentication successful for: sonarcloud.io (my-org)', c: C.success },
       ],
       [ // sonar integrate claude
         { t: '$ sonar integrate claude', cmd: true },
-        { t: 'Phase 1/3: Discovery & Validation',    c: C.muted },
+        { t: 'Phase 1/3: Discovery & Validation',    c: C.muted, d: 500 },
         { t: 'Server: sonarcloud.io · Project: my-org_app', c: C.muted },
-        { t: 'Phase 2/3: Health Check & Repair',     c: C.muted },
+        { t: 'Phase 2/3: Health Check & Repair',     c: C.muted, d: 700 },
         { t: '✅ All checks passed! Configuration is healthy.', c: C.success },
-        { t: 'Installing claude code hooks...',       c: C.muted },
+        { t: 'Installing claude code hooks...',       c: C.muted, d: 600 },
         { t: '✅ Setup complete!',                   c: C.success },
       ],
       [ // sonar verify --file
         { t: '$ sonar verify --file src/auth.ts', cmd: true },
         { t: '' },
-        { t: 'Running SonarQube Agentic Analysis analysis...',              c: C.muted },
+        { t: 'Running SonarQube Agentic Analysis analysis...',              c: C.muted, d: 1200 },
         { t: '' },
         { t: '❌ SonarQube Agentic Analysis found 2 issues:',      c: C.error },
         { t: '' },
         { t: '  [1] SQL injection vulnerability (line 23)', c: C.cmd },
-        { t: '      Rule: java:S3649',               c: C.muted },
+        { t: '      Rule: typescript:S3649',         c: C.muted },
         { t: '  [2] Hardcoded password detected (line 45)', c: C.cmd },
-        { t: '      Rule: java:S2068',               c: C.muted },
+        { t: '      Rule: secrets:S6290',             c: C.muted },
       ],
       [ // sonar analyze secrets
         { t: '$ sonar analyze secrets src/', cmd: true },
         { t: '' },
-        { t: '✅ Scan completed successfully',        c: C.success },
+        { t: '✅ Scan completed successfully',        c: C.success, d: 900 },
         { t: '  Duration: 312ms',                    c: C.muted },
         { t: '  No issues detected',                 c: C.muted },
       ],
@@ -357,26 +364,15 @@
       }
     }
 
-    async function revealLine(body, text, color) {
-      const el = line(text, color);
-      el.style.width = '0';
-      el.style.transition = `width ${Math.max(80, text.length * 6)}ms steps(${Math.max(1, text.length)}, end)`;
-      body.appendChild(el);
-      await sleep(20);
-      el.style.width = '100%';
-      await sleep(Math.max(80, text.length * 6));
-    }
-
     async function runFlow(body, flow) {
       for (const item of flow) {
+        if (item.d) await sleep(item.d);
         if (item.cmd) {
           await typeLine(body, item.t, CHAR_MS);
-        } else if (item.t === '') {
-          body.appendChild(line('', item.c));
         } else {
-          await revealLine(body, item.t, item.c);
+          body.appendChild(line(item.t, item.c));
         }
-        await sleep(LINE_MS);
+        if (!item.d) await sleep(LINE_MS);
       }
     }
 
@@ -437,16 +433,31 @@
     async function cycle() {
       const body = document.getElementById('terminal-body');
       if (!body) return;
+
+      // Persistent banner
+      const bannerEl = document.createElement('div');
+      bannerEl.style.cssText = 'line-height:1.1;margin-bottom:1em;';
+      const bannerText = document.createElement('div');
+      bannerText.style.cssText = 'white-space:pre;font:inherit;color:#D4D4D4;';
+      bannerText.textContent = BANNER_LINES.join('\n');
+      bannerEl.appendChild(bannerText);
+      body.appendChild(bannerEl);
+
+      // Container for command output that fades in/out
+      const cmdArea = document.createElement('div');
+      cmdArea.style.cssText = 'transition:opacity ' + FADE_MS + 'ms;';
+      body.appendChild(cmdArea);
+
       let i = 0;
       while (true) {
-        body.innerHTML = '';
-        body.style.opacity = '1';
+        cmdArea.innerHTML = '';
+        cmdArea.style.opacity = '1';
         const emojiEl = document.getElementById('dev-emoji');
         if (emojiEl) emojiEl.textContent = DEV_EMOJIS[Math.floor(Math.random() * DEV_EMOJIS.length)];
         await typeIntent(i);
-        await runFlow(body, flows[i]);
+        await runFlow(cmdArea, flows[i]);
         await sleep(PAUSE_MS);
-        body.style.opacity = '0';
+        cmdArea.style.opacity = '0';
         clearIntent();
         await sleep(FADE_MS);
         i = (i + 1) % flows.length;
