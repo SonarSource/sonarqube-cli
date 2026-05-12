@@ -82,7 +82,9 @@ describe('integrate copilot', () => {
         // Instructions file: present with the expected heading.
         const instructionsFile = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH);
         expect(instructionsFile.exists()).toBe(true);
-        expect(instructionsFile.asText()).toContain('# SonarQube prompt-secrets protocol');
+        expect(instructionsFile.asText()).toContain(
+          '# SonarQube secrets scanning for prompts protocol',
+        );
 
         // .mcp.json: present and registers the sonarqube MCP server using
         // the platform CLI command.
@@ -236,7 +238,10 @@ describe('integrate copilot', () => {
         const hookLine = outcomeLine(result.stdout, 'Hook:');
         expect(hookLine).toContain('sonar-secrets');
         expect(hookLine).toContain('pretool-secrets');
-        const instructionsLine = outcomeLine(result.stdout, 'Instructions (prompt-secrets):');
+        const instructionsLine = outcomeLine(
+          result.stdout,
+          'Instructions (secrets scanning for prompts):',
+        );
         expect(instructionsLine).toContain('sonarqube.instructions.md');
         expect(normalizePath(instructionsLine)).toContain('.github/instructions');
       },
@@ -313,7 +318,7 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
         expect(body).not.toContain('# pre-existing');
-        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
       },
       { timeout: 30000 },
     );
@@ -325,7 +330,8 @@ describe('integrate copilot', () => {
         await harness.run('integrate copilot -g');
 
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        const headingCount = body.split('# SonarQube prompt-secrets protocol').length - 1;
+        const headingCount =
+          body.split('# SonarQube secrets scanning for prompts protocol').length - 1;
         expect(headingCount).toBe(1);
       },
       { timeout: 60000 },
@@ -343,7 +349,7 @@ describe('integrate copilot', () => {
           `${homePathNorm}/.copilot/hooks/sonar-secrets`,
         );
         expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (prompt-secrets):')),
+          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
         ).toContain(`${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`);
       },
       { timeout: 30000 },
@@ -469,7 +475,7 @@ describe('integrate copilot', () => {
         // Project file is written despite the global file existing.
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
         expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).toContain(
-          '# SonarQube prompt-secrets protocol',
+          '# SonarQube secrets scanning for prompts protocol',
         );
         // Global file is byte-identical (orphan; not touched).
         expect(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText()).toBe(before);
@@ -493,7 +499,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const instructionsLine = normalizePath(
-          outcomeLine(result.stdout, 'Instructions (prompt-secrets):'),
+          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
         );
         expect(instructionsLine).toContain('.github/instructions/sonarqube.instructions.md');
         expect(instructionsLine).not.toContain('.copilot/instructions');
@@ -529,7 +535,7 @@ describe('integrate copilot', () => {
           `${homePathNorm}/.copilot/hooks/sonar-secrets`,
         );
         expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (prompt-secrets):')),
+          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
         ).toContain('.github/instructions/sonarqube.instructions.md');
       },
       { timeout: 30000 },
@@ -563,11 +569,13 @@ describe('integrate copilot', () => {
         // Instructions still installed.
         const instructionsFile = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH);
         expect(instructionsFile.exists()).toBe(true);
-        expect(instructionsFile.asText()).toContain('# SonarQube prompt-secrets protocol');
-        expect(findSonarInstructionsExt(harness)).toBeDefined();
-        expect(outcomeLine(result.stdout, 'Instructions (prompt-secrets):')).not.toContain(
-          'not installed',
+        expect(instructionsFile.asText()).toContain(
+          '# SonarQube secrets scanning for prompts protocol',
         );
+        expect(findSonarInstructionsExt(harness)).toBeDefined();
+        expect(
+          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
+        ).not.toContain('not installed');
 
         // MCP still configured.
         expect(harness.cwd.exists('.mcp.json')).toBe(true);
@@ -587,9 +595,9 @@ describe('integrate copilot', () => {
 
         // Instructions registry entry must not be recorded.
         expect(findSonarInstructionsExt(harness)).toBeUndefined();
-        expect(outcomeLine(result.stdout, 'Instructions (prompt-secrets):')).toContain(
-          'not installed (see warning above)',
-        );
+        expect(
+          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
+        ).toContain('not installed (see warning above)');
 
         // Hook still installed.
         const scriptFile = harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH);
@@ -666,7 +674,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
         // Project key is baked into the example command.
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
@@ -696,14 +704,14 @@ describe('integrate copilot', () => {
 
         // Global file holds prompt-secrets, NOT SQAA.
         const globalBody = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(globalBody).toContain('# SonarQube prompt-secrets protocol');
+        expect(globalBody).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(globalBody).not.toContain('# SonarQube Agentic Analysis');
 
         // Project file holds SQAA, NOT prompt-secrets.
         const projectBody = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(projectBody).toContain('# SonarQube Agentic Analysis protocol');
         expect(projectBody).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
-        expect(projectBody).not.toContain('# SonarQube prompt-secrets protocol');
+        expect(projectBody).not.toContain('# SonarQube secrets scanning for prompts protocol');
 
         // State: prompt-secrets is global, SQAA is project-scoped.
         expect(findSonarInstructionsExt(harness)?.global).toBe(true);
@@ -712,7 +720,7 @@ describe('integrate copilot', () => {
         // Outcome shows both labeled lines pointing to their respective files.
         const homePathNorm = normalizePath(harness.userHome.path);
         expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (prompt-secrets):')),
+          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
         ).toContain(`${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`);
         expect(
           normalizePath(outcomeLine(result.stdout, 'Instructions (SonarQube Agentic Analysis):')),
@@ -730,7 +738,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).not.toContain('# SonarQube Agentic Analysis');
       },
       { timeout: 30000 },
@@ -750,7 +758,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).not.toContain('# SonarQube Agentic Analysis');
       },
       { timeout: 30000 },
@@ -768,7 +776,7 @@ describe('integrate copilot', () => {
         // section is skipped entirely — global file gets prompt-secrets only,
         // and no project-level file is written.
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).not.toContain('# SonarQube Agentic Analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
         expect(findSonarSqaaInstructionsExt(harness)).toBeUndefined();
@@ -785,7 +793,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).not.toContain('# SonarQube Agentic Analysis');
       },
       { timeout: 30000 },
@@ -814,7 +822,7 @@ describe('integrate copilot', () => {
 
         // Instructions file still written, but without the SQAA section.
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube prompt-secrets protocol');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).not.toContain('# SonarQube Agentic Analysis');
       },
       { timeout: 30000 },

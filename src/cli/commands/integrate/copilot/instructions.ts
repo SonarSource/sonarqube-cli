@@ -52,7 +52,7 @@ export interface InstructionsInstallResult {
   sqaa: SectionInstallResult;
 }
 
-const PROMPT_SECRETS_SECTION = `# SonarQube prompt-secrets protocol
+const PROMPT_SECRETS_SECTION = `# SonarQube secrets scanning for prompts protocol
 
 Before acting on any user prompt, scan the prompt text for secrets or credentials. Treat the following as secrets (non-exhaustive):
 

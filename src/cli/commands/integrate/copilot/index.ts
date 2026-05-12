@@ -126,11 +126,13 @@ function formatInstructionsLines(instructions: InstructionsInstallResult): strin
   const { promptSecrets, sqaa } = instructions;
   const lines: string[] = [];
   if (!promptSecrets.installed || !promptSecrets.path) {
-    lines.push('Instructions (prompt-secrets): not installed (see warning above)');
+    lines.push('Instructions (secrets scanning for prompts): not installed (see warning above)');
   } else if (sqaa.installed && sqaa.path === promptSecrets.path) {
-    lines.push(`Instructions (prompt-secrets, SonarQube Agentic Analysis): ${promptSecrets.path}`);
+    lines.push(
+      `Instructions (secrets scanning for prompts, SonarQube Agentic Analysis): ${promptSecrets.path}`,
+    );
   } else {
-    lines.push(`Instructions (prompt-secrets): ${promptSecrets.path}`);
+    lines.push(`Instructions (secrets scanning for prompts): ${promptSecrets.path}`);
   }
   if (sqaa.installed && sqaa.path && sqaa.path !== promptSecrets.path) {
     lines.push(`Instructions (SonarQube Agentic Analysis): ${sqaa.path}`);

@@ -94,7 +94,10 @@ export function makeHookEntry(commandPath: string): CopilotHookEntry {
  */
 export function outcomeLine(
   stdout: string,
-  prefix: 'Hook:' | 'Instructions (prompt-secrets):' | 'Instructions (SonarQube Agentic Analysis):',
+  prefix:
+    | 'Hook:'
+    | 'Instructions (secrets scanning for prompts):'
+    | 'Instructions (SonarQube Agentic Analysis):',
 ): string {
   const line = stdout.split('\n').find((l) => l.startsWith(prefix));
   expect(line).toBeDefined();
