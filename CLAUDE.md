@@ -40,7 +40,9 @@ By default, new commands should register a `authenticatedAction()`, only technic
 
 ### Context Augmentation
 
-`sonar context <action> [args...]` is a passthrough to the locally-installed `sonar-context-augmentation` binary (CAG). It forwards args verbatim, propagates the child exit code, and injects the resolved auth token via the `SONAR_TOKEN` env var. Implementation in `src/cli/commands/context/`. The binary is downloaded by `sonar integrate claude` / `sonar integrate copilot` (skip with `--skip-context`); `sonar context` itself never auto-installs and emits a clear "not installed" error pointing the user back to integrate.
+`sonar context [action] [args...]` is a passthrough to the locally-installed `sonar-context-augmentation` binary (CAG). It forwards args verbatim, propagates the child exit code, and injects the resolved auth token via the `SONAR_TOKEN` env var. Implementation in `src/cli/commands/context/`. The binary is downloaded by `sonar integrate claude` / `sonar integrate copilot` (skip with `--skip-context`); `sonar context` itself never auto-installs and emits a clear "not installed" error pointing the user back to integrate.
+
+`--help`, `-h`, and bare `sonar context` (no action) are forwarded to CAG and do not require authentication — `SONAR_TOKEN` is stripped from the child environment in those cases.
 
 Before installing, `sonar integrate claude|copilot` pre-flights the CAG entitlement check: `SonarQubeClient.hasCagEntitlement(orgKey)` resolves the org UUID via `/organizations/organizations` then calls `GET /a3s-analysis/cag-org-config/{uuid}` (SonarQube Cloud only). If `eligible && enabled` is false, CAG setup is skipped with a warning (cloud) or a plain info line (SonarQube Server). Any error in the check is treated as "not entitled". The `sonar context` passthrough is not gated — CAG itself enforces entitlement per-request.
 

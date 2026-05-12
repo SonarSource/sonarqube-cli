@@ -201,12 +201,13 @@ integrateCommand
 // `sonar integrate claude` or `sonar integrate copilot`.
 COMMAND_TREE.command('context')
   .description('Run Context Augmentation actions (analysis context for AI agents)')
-  .argument('<action>', 'Action forwarded to sonar-context-augmentation')
+  .argument('[action]', 'Action forwarded to sonar-context-augmentation')
   .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
+  .helpOption(false)
   .passThroughOptions()
   .allowUnknownOption()
-  .authenticatedAction((auth, action: string, args: string[]) =>
-    runContextPassthrough(auth, [action, ...args]),
+  .anonymousAction((action: string | undefined, args: string[]) =>
+    runContextPassthrough(action, args),
   );
 
 // List Sonar resources

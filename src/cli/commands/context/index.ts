@@ -21,15 +21,19 @@
 // `sonar context` — passthrough wrapper to the locally installed
 // sonar-context-augmentation binary. Forwards args verbatim, inherits stdio so
 // the child owns the user-facing output, and propagates the exit code. Auth is
-// injected via the SONAR_TOKEN env var (one of the three tokens CAG accepts).
+// injected via the SONAR_TOKEN env var for non-help invocations; --help and -h
+// are forwarded without auth so users can read docs without being logged in.
 
 import { spawn } from 'node:child_process';
 
-import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { resolveAuth } from '../../../lib/auth-resolver';
 import { CommandFailedError } from '../_common/error';
 import { resolveContextAugmentationBinaryPath } from '../_common/install/context-augmentation';
 
-export async function runContextPassthrough(auth: ResolvedAuth, args: string[]): Promise<void> {
+export async function runContextPassthrough(
+  action: string | undefined,
+  args: string[],
+): Promise<void> {
   const binaryPath = resolveContextAugmentationBinaryPath();
   if (!binaryPath) {
     throw new CommandFailedError(
@@ -37,11 +41,34 @@ export async function runContextPassthrough(auth: ResolvedAuth, args: string[]):
     );
   }
 
+  // Build the argv to forward: bare `sonar context` defaults to --help.
+  let forwarded: string[];
+  if (action) {
+    forwarded = [action, ...args];
+  } else if (args.length === 0) {
+    forwarded = ['--help'];
+  } else {
+    forwarded = args;
+  }
+
+  // --help / -h requests are anonymous: CAG help is static, no token needed.
+  const isHelp = forwarded.some((a) => a === '--help' || a === '-h');
+  let env: NodeJS.ProcessEnv;
+  if (isHelp) {
+    // Strip any ambient SONAR_TOKEN — the help output is static and does not
+    // require auth. This avoids leaking credentials to the CAG process.
+    const { SONAR_TOKEN: _token, ...envWithoutToken } = process.env;
+    env = envWithoutToken;
+  } else {
+    const auth = await resolveAuth();
+    if (!auth) {
+      throw new CommandFailedError('Not authenticated. Run: sonar auth login');
+    }
+    env = { ...process.env, SONAR_TOKEN: auth.token };
+  }
+
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(binaryPath, args, {
-      stdio: 'inherit',
-      env: { ...process.env, SONAR_TOKEN: auth.token },
-    });
+    const child = spawn(binaryPath, forwarded, { stdio: 'inherit', env });
 
     child.on('error', reject);
     child.on('exit', (code) => {

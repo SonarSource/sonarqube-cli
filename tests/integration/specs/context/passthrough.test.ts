@@ -96,4 +96,82 @@ describe('sonar context passthrough', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'forwards --help to CAG without requiring authentication',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('context --help');
+
+      expect(result.exitCode).toBe(0);
+      const invocations = readInvocations(harness);
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].argv).toEqual(['--help']);
+      expect(invocations[0].env.SONAR_TOKEN).toBe('');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'forwards -h to CAG without requiring authentication',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('context -h');
+
+      expect(result.exitCode).toBe(0);
+      const invocations = readInvocations(harness);
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].argv).toEqual(['-h']);
+      expect(invocations[0].env.SONAR_TOKEN).toBe('');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'forwards --help to CAG when no action is given (bare sonar context)',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('context');
+
+      expect(result.exitCode).toBe(0);
+      const invocations = readInvocations(harness);
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].argv).toEqual(['--help']);
+      expect(invocations[0].env.SONAR_TOKEN).toBe('');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'forwards <action> --help to CAG with SONAR_TOKEN injected',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.withAuth(server.baseUrl(), 'expected-token');
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run('context get-source --help');
+
+      expect(result.exitCode).toBe(0);
+      const invocations = readInvocations(harness);
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].argv).toEqual(['get-source', '--help']);
+      expect(invocations[0].env.SONAR_TOKEN).toBe('expected-token');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'fails with a helpful message when CAG is not installed and --help is requested',
+    async () => {
+      const result = await harness.run('context --help');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toLowerCase()).toContain('not installed');
+      expect(result.stderr).toContain('sonar integrate');
+    },
+    { timeout: 30000 },
+  );
 });
