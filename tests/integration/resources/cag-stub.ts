@@ -44,6 +44,7 @@ const sentinel = process.env.CAG_STUB_SENTINEL;
 if (sentinel) {
   const entry = JSON.stringify({
     argv: args,
+    argv0: process.argv[0],
     env: { SONAR_TOKEN: process.env.SONAR_TOKEN ?? '' },
   });
   appendFileSync(sentinel, entry + '\n');

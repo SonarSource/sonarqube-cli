@@ -71,7 +71,7 @@ export async function runContextPassthrough(
   }
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(binaryPath, forwarded, { stdio: 'inherit', env });
+    const child = spawn(binaryPath, forwarded, { stdio: 'inherit', env, argv0: 'sonar context' });
 
     child.on('error', reject);
     child.on('exit', (code) => {
