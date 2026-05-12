@@ -108,7 +108,7 @@ describe('integrateCommand', () => {
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
     hasSqaaEntitlementSpy.mockResolvedValue(false);
     hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
-    hasCagEntitlementSpy.mockResolvedValue(true);
+    hasCagEntitlementSpy.mockResolvedValue('enabled');
     setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
       undefined,
     );

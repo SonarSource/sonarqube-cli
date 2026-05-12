@@ -68,8 +68,14 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
   }
 
   const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
-  const enabled = await client.hasCagEntitlement(p.auth.orgKey);
-  if (!enabled) {
+  const entitlement = await client.hasCagEntitlement(p.auth.orgKey);
+  if (entitlement === 'check_failed') {
+    warn(
+      'Skipping Context Augmentation: could not verify entitlement (server unreachable or returned an error).',
+    );
+    return;
+  }
+  if (entitlement !== 'enabled') {
     warn(
       'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
     );

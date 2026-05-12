@@ -36,25 +36,6 @@ import { CommandFailedError } from '../error';
 const VERSION_REGEX_MAX_SEGMENT = 20;
 
 /**
- * Probe the binary's `--version` output and extract the version (3 or 4 segments).
- * Returns null when the binary fails to respond or the output does not contain a version.
- */
-export async function checkInstalledVersion(path: string): Promise<string | null> {
-  try {
-    const result = await spawnProcess(path, ['--version'], { stdout: 'pipe', stderr: 'pipe' });
-    if (result.exitCode === 0) {
-      const pattern = String.raw`(\d{1,${VERSION_REGEX_MAX_SEGMENT}}(?:\.\d{1,${VERSION_REGEX_MAX_SEGMENT}}){2,3})`;
-      const versionRegex = new RegExp(pattern);
-      const match = versionRegex.exec(result.stdout);
-      return match ? match[1] : null;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Verify the installation by probing the binary; throws with captured stdout/stderr
  * when the binary does not respond to `--version` or exits non-zero.
  */

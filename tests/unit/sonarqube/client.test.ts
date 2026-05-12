@@ -570,31 +570,31 @@ describe('SonarQubeClient', () => {
       cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
     });
 
-    it('returns false when organizationKey is not provided', async () => {
+    it('returns not_enabled when organizationKey is not provided', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasCagEntitlement(undefined)).toBe(false);
+      expect(await cloudClient.hasCagEntitlement(undefined)).toBe('not_enabled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns false when organizationKey is empty string', async () => {
+    it('returns not_enabled when organizationKey is empty string', async () => {
       fetchSpy = mockFetch({});
-      expect(await cloudClient.hasCagEntitlement('')).toBe(false);
+      expect(await cloudClient.hasCagEntitlement('')).toBe('not_enabled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns false when server is not SonarQube Cloud', async () => {
+    it('returns not_enabled when server is not SonarQube Cloud', async () => {
       const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
       fetchSpy = mockFetch({});
-      expect(await serverClient.hasCagEntitlement('my-org')).toBe(false);
+      expect(await serverClient.hasCagEntitlement('my-org')).toBe('not_enabled');
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns false when org UUID cannot be resolved', async () => {
+    it('returns check_failed when org UUID cannot be resolved', async () => {
       fetchSpy = mockFetch({}, false, 404);
-      expect(await cloudClient.hasCagEntitlement('unknown-org')).toBe(false);
+      expect(await cloudClient.hasCagEntitlement('unknown-org')).toBe('check_failed');
     });
 
-    it('returns true when org UUID is resolved and entitlement is eligible and enabled', async () => {
+    it('returns enabled when org UUID is resolved and entitlement is eligible and enabled', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -607,10 +607,10 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', eligible: true, enabled: true }),
         } as Response);
 
-      expect(await cloudClient.hasCagEntitlement('my-org')).toBe(true);
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('enabled');
     });
 
-    it('returns false when eligible but not enabled', async () => {
+    it('returns not_enabled when eligible but not enabled', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -623,10 +623,10 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', eligible: true, enabled: false }),
         } as Response);
 
-      expect(await cloudClient.hasCagEntitlement('my-org')).toBe(false);
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('not_enabled');
     });
 
-    it('returns false when enabled but not eligible', async () => {
+    it('returns not_enabled when enabled but not eligible', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -639,10 +639,10 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({ id: 'org-uuid', eligible: false, enabled: true }),
         } as Response);
 
-      expect(await cloudClient.hasCagEntitlement('my-org')).toBe(false);
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('not_enabled');
     });
 
-    it('returns false when the entitlement check fails with an API error', async () => {
+    it('returns check_failed when the entitlement check fails with an API error', async () => {
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
           ok: true,
@@ -656,7 +656,7 @@ describe('SonarQubeClient', () => {
           json: () => Promise.resolve({}),
         } as Response);
 
-      expect(await cloudClient.hasCagEntitlement('my-org')).toBe(false);
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('check_failed');
     });
 
     it('hits the correct CAG org config endpoint with the resolved UUID', async () => {
