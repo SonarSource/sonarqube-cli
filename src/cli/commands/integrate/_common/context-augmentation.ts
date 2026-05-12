@@ -88,6 +88,8 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     binaryPath,
     [
       'init',
+      '--url',
+      p.auth.serverUrl,
       '--org',
       p.auth.orgKey,
       '--project-key',

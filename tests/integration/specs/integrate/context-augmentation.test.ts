@@ -108,6 +108,8 @@ describe('integrate claude — Context Augmentation', () => {
       const skill = findInvocation(invocations, 'skill');
       expect(init.argv).toEqual([
         'init',
+        '--url',
+        serverUrl,
         '--org',
         ORG_KEY,
         '--project-key',
