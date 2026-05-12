@@ -15,4 +15,5 @@ tests/integration/resources/sonar-context-augmentation*
 tests/integration/resources/cag-stub
 tests/integration/resources/cag-stub.exe
 tests/unit/.integrate-git-repos/
+tests/unit/.git-precommit-run-tmp/
 .eslintcache
