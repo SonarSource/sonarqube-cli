@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 0.12.0
+- Version: 0.13.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://cli.sonarqube.com/data/commands.json
@@ -113,7 +113,7 @@ Usage: sonar integrate copilot [--global] [-p <value>]
 
 Options:
   --global, -g   Install hooks and config globally to ~/.copilot instead of project directory
-  --project, -p  <string>   Project key. Ignored when --global is used.
+  --project, -p  <string>   Project key. Mutually exclusive with --global.
 
 ### sonar list
 List issues and projects from SonarQube
@@ -152,10 +152,11 @@ Examples:
 
 ### sonar remediate *
 Trigger AI agent remediation for eligible issues (SonarQube Cloud only)
-Usage: sonar remediate [-p <value>]
+Usage: sonar remediate [-p <value>] [--issues <value>]
 
 Options:
   --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
+  --issues  <string>   Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.
 
 ### sonar analyze
 Analyze code for quality and security issues
@@ -172,23 +173,31 @@ Examples:
   sonar analyze secrets src/file1.ts src/file2.ts
   cat .env | sonar analyze secrets --stdin
 
-### sonar analyze sqaa *
-Run server-side SonarQube Agentic Analysis on a file (SonarQube Cloud only)
-Usage: sonar analyze sqaa [--file <value>] [--branch <value>] [-p <value>]
+### sonar analyze agentic *
+Run server-side Agentic Analysis (SonarQube Cloud only)
+Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [--branch <value>] [-p <value>] [--force] [--format <value>]
 
 Options:
-  --file  <string>   File path to analyze
+  --file  <string>   Analyze a single file (skips change set detection)
+  --staged   Analyze staged files only (git diff --cached)
+  --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
   --branch  <string>   Branch name for analysis context
   --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
+  --force   Skip the large change set confirmation prompt
+  --format  <string>   Output format
 
 ### sonar verify *
-Analyze a file for issues
-Usage: sonar verify [--file <value>] [--branch <value>] [-p <value>]
+Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze agentic`, SonarQube Cloud only)
+Usage: sonar verify [--file <value>] [--staged] [--base <value>] [--branch <value>] [-p <value>] [--force] [--format <value>]
 
 Options:
-  --file  <string>   File path to analyze
+  --file  <string>   Analyze a single file (skips change set detection)
+  --staged   Analyze staged files only (git diff --cached)
+  --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
   --branch  <string>   Branch name for analysis context
   --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
+  --force   Skip the large change set confirmation prompt
+  --format  <string>   Output format
 
 ### sonar config
 Configure CLI settings
