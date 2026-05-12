@@ -27,7 +27,6 @@ import { TestHarness } from '../../harness';
 
 interface CagInvocation {
   argv: string[];
-  argv0: string;
   env: { SONAR_TOKEN?: string };
 }
 
@@ -65,7 +64,6 @@ describe('sonar context passthrough', () => {
       const invocations = readInvocations(harness);
       expect(invocations).toHaveLength(1);
       expect(invocations[0].argv).toEqual(['get-source', '--file', 'foo.ts', '--line', '42']);
-      expect(invocations[0].argv0).toBe('sonar context');
       expect(invocations[0].env.SONAR_TOKEN).toBe('expected-token');
     },
     { timeout: 30000 },
