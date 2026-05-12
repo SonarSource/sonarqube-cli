@@ -17,16 +17,19 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-
-import type { SpawnResult } from '../../../../lib/process.ts';
+import { spawnProcessWithTimeout, type SpawnResult } from '../../../../lib/process.ts';
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
-export class NoopScaScannerSpawner implements ScaScannerSpawner {
-  spawn(): Promise<SpawnResult> {
-    return Promise.resolve({
-      exitCode: 0,
-      stdout: JSON.stringify({ releases: [], parsedFiles: [], errors: [] }),
-      stderr: '',
-    });
+const ThreeMinuteTimeoutMs = 3 * 60 * 1000;
+
+export class DefaultScaScannerSpawner implements ScaScannerSpawner {
+  spawn(binaryPath: string, args: string[]): Promise<SpawnResult> {
+    return spawnProcessWithTimeout(
+      binaryPath,
+      args,
+      { stdout: 'pipe', stderr: 'pipe' },
+      ThreeMinuteTimeoutMs,
+      'Dependency Risk scanner timed out',
+    );
   }
 }

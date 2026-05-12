@@ -29,7 +29,7 @@ import { print } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
-import { NoopScaScannerSpawner } from './dependency-risk-helpers/noop-sca-scanner-spawner.ts';
+import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import {
   type ScaScannerInvocation,
   ScaScannerRunner,
@@ -77,7 +77,7 @@ export async function analyzeDependencyRisks(
 
   const result = await new ScaScannerRunner(
     new DefaultScaScannerInstaller(),
-    new NoopScaScannerSpawner(),
+    new DefaultScaScannerSpawner(),
   ).run(invocation);
 
   print(JSON.stringify({ project: options.project, ...result }, null, 2));

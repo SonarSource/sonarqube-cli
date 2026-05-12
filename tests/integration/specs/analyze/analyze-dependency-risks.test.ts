@@ -32,6 +32,7 @@ import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
+const SCA_SCANNER_FAILURE_PREFIX = 'Dependency risk analysis error: sca-scanner exited with code';
 
 describe('analyze dependency-risks', () => {
   let harness: TestHarness;
@@ -82,7 +83,12 @@ describe('analyze dependency-risks', () => {
     );
   });
 
-  it('emits the no-op scanner stub output in JSON format on the happy path', async () => {
+  // todo: https://sonarsource.atlassian.net/browse/CLI-452 Add end-to-end tests
+  // The next two tests assert on scanner *failure* because the in-process
+  // fake server does not implement the SCA-scanner backend APIs. Move happy-path
+  // coverage to a real-backend e2e suite (e.g. SonarQube Cloud staging) once one
+  // exists.
+  it('reports a scanner failure when the SCA backend is unavailable', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken(VALID_TOKEN)
@@ -93,17 +99,12 @@ describe('analyze dependency-risks', () => {
     harness.state().withScaScannerBinaryInstalled();
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo --format json');
-
-    expect(result.exitCode).toBe(0);
-    // Install pipeline prints status text to stdout before the JSON payload — slice it off.
-    const jsonStart = result.stdout.indexOf('{');
-    expect(JSON.parse(result.stdout.slice(jsonStart))).toEqual({
-      project: 'demo',
-      releases: [],
-      parsedFiles: [],
-      errors: [],
+    const result = await harness.run('analyze dependency-risks --project demo --format json', {
+      timeoutMs: 30_000,
     });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(SCA_SCANNER_FAILURE_PREFIX);
   });
 
   it(
@@ -121,7 +122,8 @@ describe('analyze dependency-risks', () => {
 
       const result = await harness.run('analyze dependency-risks --project demo --format json');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(SCA_SCANNER_FAILURE_PREFIX);
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
         true,
       );
