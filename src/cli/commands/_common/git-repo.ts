@@ -25,7 +25,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { normalizePath } from '../../../lib/fs-utils';
 import { spawnProcess } from '../../../lib/process';
-import { PRE_COMMIT_CONFIG_FILE } from '../integrate/git/git-precommit-framework';
+import { PRE_COMMIT_CONFIG_FILE } from '../integrate/git/tools/pre-commit';
 import { CommandFailedError } from './error';
 
 /**

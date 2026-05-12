@@ -290,8 +290,48 @@ describe('integrate git (native hooks)', () => {
       const result = await harness.run('integrate git', { stdinChunks: ['y', '\r'] });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('pre-commit hook installed');
+      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'records project hook installation in state',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson();
+      const gitIntegration = state.integrations.installed.find(
+        (integration: { integrationId: string }) => integration.integrationId === 'native-git',
+      );
+      expect(gitIntegration).toBeDefined();
+      expect(gitIntegration.features).toHaveLength(1);
+      expect(gitIntegration.features[0]).toMatchObject({
+        featureId: 'pre-commit-hook',
+        scope: 'project',
+        targetRoot: harness.cwd.path,
+        attrs: {
+          hook: 'pre-commit',
+        },
+      });
+      expect(gitIntegration.features[0].resources).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'sonar-secrets',
+            resourceType: 'sonarsource-binary',
+          }),
+          expect.objectContaining({
+            id: 'hook-file',
+            resourceType: 'git-hook-file',
+          }),
+        ]),
+      );
+      expect(gitIntegration.features[0].operations).toEqual([]);
     },
     { timeout: 15000 },
   );
@@ -308,7 +348,7 @@ describe('integrate git (native hooks)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('pre-push hook installed');
+      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
     },
     { timeout: 15000 },
@@ -324,8 +364,41 @@ describe('integrate git (native hooks)', () => {
       const result = await harness.run('integrate git --global', { stdinChunks: ['y', '\r'] });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('pre-commit hook installed globally');
+      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('Applied global hooks path');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'records global hook installation in state',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const result = await harness.run('integrate git --global --hook pre-push --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson();
+      const gitIntegration = state.integrations.installed.find(
+        (integration: { integrationId: string }) => integration.integrationId === 'native-git',
+      );
+      expect(gitIntegration).toBeDefined();
+      expect(gitIntegration.features[0]).toMatchObject({
+        featureId: 'pre-push-hook',
+        scope: 'global',
+        targetRoot: harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks').path,
+        attrs: {
+          hook: 'pre-push',
+        },
+      });
+      expect(gitIntegration.features[0].operations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'configure-global-hooks-path',
+          }),
+        ]),
+      );
     },
     { timeout: 15000 },
   );
@@ -342,7 +415,8 @@ describe('integrate git (native hooks)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('pre-push hook installed globally');
+      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
+      expect(result.stdout + result.stderr).toContain('Applied global hooks path');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(true);
     },
     { timeout: 15000 },
@@ -370,9 +444,16 @@ describe('integrate git (husky)', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
-        'pre-commit hook installed (Husky detected: added to .husky/pre-commit).',
+        'Installing Husky integration: pre-commit hook',
       );
+      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
       expect(harness.cwd.exists('.husky', 'pre-commit')).toBe(true);
+      const state = harness.stateJsonFile.asJson();
+      expect(
+        state.integrations.installed.find(
+          (integration: { integrationId: string }) => integration.integrationId === 'husky',
+        ),
+      ).toBeDefined();
     },
     { timeout: 15000 },
   );
@@ -387,8 +468,9 @@ describe('integrate git (husky)', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
-        'pre-push hook installed (Husky detected: added to .husky/pre-push).',
+        'Installing Husky integration: pre-push hook',
       );
+      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
       expect(harness.cwd.exists('.husky', 'pre-push')).toBe(true);
     },
     { timeout: 15000 },
@@ -431,8 +513,15 @@ describe('integrate git (pre-commit framework)', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
-        'pre-commit hook installed (pre-commit framework: added to .pre-commit-config.yaml).',
+        'Installing pre-commit integration: pre-commit hook',
       );
+      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
+      const state = harness.stateJsonFile.asJson();
+      expect(
+        state.integrations.installed.find(
+          (integration: { integrationId: string }) => integration.integrationId === 'pre-commit',
+        ),
+      ).toBeDefined();
     },
     { timeout: 15000 },
   );
@@ -449,8 +538,9 @@ describe('integrate git (pre-commit framework)', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
-        'pre-push hook installed (pre-commit framework: added to .pre-commit-config.yaml).',
+        'Installing pre-commit integration: pre-push hook',
       );
+      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
     },
     { timeout: 15000 },
   );

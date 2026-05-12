@@ -23,15 +23,19 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { installViaHusky } from '../../../../../../src/cli/commands/integrate/git/git-husky';
 import {
   getHuskyPreCommitSnippet,
   getHuskyPrePushSnippet,
+  installViaHusky,
+} from '../../../../../../src/cli/commands/integrate/git/tools/husky';
+import {
   getPreCommitHookScript,
   getPrePushHookScript,
+} from '../../../../../../src/cli/commands/integrate/git/tools/native';
+import {
   HOOK_MARKER,
   SONAR_HOOK_SKIP_SECRETS_MESSAGE,
-} from '../../../../../../src/cli/commands/integrate/git/git-shell-fragments';
+} from '../../../../../../src/cli/commands/integrate/git/tools/shared';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-husky-tmp');

@@ -28,13 +28,14 @@ import { CommandFailedError } from '../../../../../../src/cli/commands/_common/e
 import {
   hasSonarHookInPreCommitConfig,
   installViaPreCommitFramework,
+  normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_LEGACY_REPO,
   type PreCommitConfig,
   removeLegacyHook,
   runPreCommitInstall,
   upsertSonarHook,
-} from '../../../../../../src/cli/commands/integrate/git/git-precommit-framework';
+} from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit/config';
 import * as processLib from '../../../../../../src/lib/process.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui/mock';
 
@@ -42,6 +43,24 @@ const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-
 
 const PRE_COMMIT_OK = { exitCode: 0, stdout: '', stderr: '' };
 const PRE_COMMIT_FAIL = { exitCode: 1, stdout: '', stderr: 'something went wrong' };
+
+describe('normalizePreCommitConfig', () => {
+  it('returns the default shape for non-object values', () => {
+    expect(normalizePreCommitConfig(undefined)).toEqual({ repos: [] });
+  });
+
+  it('preserves unrelated keys and normalizes invalid repos values', () => {
+    expect(
+      normalizePreCommitConfig({
+        default_install_hook_types: ['pre-commit'],
+        repos: 'not-an-array',
+      }),
+    ).toEqual({
+      default_install_hook_types: ['pre-commit'],
+      repos: [],
+    });
+  });
+});
 
 describe('removeLegacyHook', () => {
   it('removes the legacy repo entry and returns true', () => {
@@ -298,6 +317,12 @@ describe('installViaPreCommitFramework', () => {
       }
       expect(caughtError).toBeDefined();
       expect(caughtError).toBeInstanceOf(CommandFailedError);
+      expect((caughtError as CommandFailedError).message).toBe(
+        `Updated ${PRE_COMMIT_CONFIG_FILE} but pre-commit commands failed.`,
+      );
+      expect((caughtError as CommandFailedError).remediationHint).toBe(
+        "Install the pre-commit framework (for example 'pip install pre-commit') and run: pre-commit uninstall && pre-commit clean && pre-commit install",
+      );
     } finally {
       spawnSpy.mockRestore();
     }
