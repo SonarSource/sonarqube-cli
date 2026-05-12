@@ -51,20 +51,21 @@ export async function runContextPassthrough(
     forwarded = args;
   }
 
-  // --help / -h requests are anonymous: CAG help is static, no token needed.
-  const isHelp = forwarded.some((a) => a === '--help' || a === '-h');
+  // Skip auth only when no action was given (bare help request). When an action
+  // is present, inject auth even if --help is in the remaining args — CAG may
+  // need the token to show action-specific help with entitlement context.
   let env: NodeJS.ProcessEnv;
-  if (isHelp) {
-    // Strip any ambient SONAR_TOKEN — the help output is static and does not
-    // require auth. This avoids leaking credentials to the CAG process.
-    const { SONAR_TOKEN: _token, ...envWithoutToken } = process.env;
-    env = envWithoutToken;
-  } else {
+  if (action) {
     const auth = await resolveAuth();
     if (!auth) {
       throw new CommandFailedError('Not authenticated. Run: sonar auth login');
     }
     env = { ...process.env, SONAR_TOKEN: auth.token };
+  } else {
+    // Strip any ambient SONAR_TOKEN so we don't leak credentials for static
+    // top-level help output.
+    const { SONAR_TOKEN: _token, ...envWithoutToken } = process.env;
+    env = envWithoutToken;
   }
 
   await new Promise<void>((resolve, reject) => {
