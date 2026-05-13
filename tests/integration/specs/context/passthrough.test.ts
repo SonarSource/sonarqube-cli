@@ -51,19 +51,30 @@ describe('sonar context passthrough', () => {
     await harness.dispose();
   });
 
-  it(
-    'forwards args verbatim and injects SONAR_TOKEN from auth',
-    async () => {
+  it.each([
+    [
+      'forwards args verbatim and injects SONAR_TOKEN from auth',
+      'context get-source --file foo.ts --line 42',
+      ['get-source', '--file', 'foo.ts', '--line', '42'],
+    ],
+    [
+      'forwards <action> --help to CAG with SONAR_TOKEN injected',
+      'context get-source --help',
+      ['get-source', '--help'],
+    ],
+  ])(
+    '%s',
+    async (_title, command, expectedArgv) => {
       const server = await harness.newFakeServer().start();
       harness.withAuth(server.baseUrl(), 'expected-token');
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.run('context get-source --file foo.ts --line 42');
+      const result = await harness.run(command);
 
       expect(result.exitCode).toBe(0);
       const invocations = readInvocations(harness);
       expect(invocations).toHaveLength(1);
-      expect(invocations[0].argv).toEqual(['get-source', '--file', 'foo.ts', '--line', '42']);
+      expect(invocations[0].argv).toEqual(expectedArgv);
       expect(invocations[0].env.SONAR_TOKEN).toBe('expected-token');
     },
     { timeout: 30000 },
@@ -97,68 +108,22 @@ describe('sonar context passthrough', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'forwards --help to CAG without requiring authentication',
-    async () => {
+  it.each([
+    ['forwards --help to CAG without requiring authentication', 'context --help', ['--help']],
+    ['forwards -h to CAG without requiring authentication', 'context -h', ['-h']],
+    ['forwards --help to CAG when no action is given (bare sonar context)', 'context', ['--help']],
+  ])(
+    '%s',
+    async (_title, command, expectedArgv) => {
       harness.state().withContextAugmentationBinaryInstalled();
 
-      const result = await harness.run('context --help');
+      const result = await harness.run(command);
 
       expect(result.exitCode).toBe(0);
       const invocations = readInvocations(harness);
       expect(invocations).toHaveLength(1);
-      expect(invocations[0].argv).toEqual(['--help']);
+      expect(invocations[0].argv).toEqual(expectedArgv);
       expect(invocations[0].env.SONAR_TOKEN).toBe('');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'forwards -h to CAG without requiring authentication',
-    async () => {
-      harness.state().withContextAugmentationBinaryInstalled();
-
-      const result = await harness.run('context -h');
-
-      expect(result.exitCode).toBe(0);
-      const invocations = readInvocations(harness);
-      expect(invocations).toHaveLength(1);
-      expect(invocations[0].argv).toEqual(['-h']);
-      expect(invocations[0].env.SONAR_TOKEN).toBe('');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'forwards --help to CAG when no action is given (bare sonar context)',
-    async () => {
-      harness.state().withContextAugmentationBinaryInstalled();
-
-      const result = await harness.run('context');
-
-      expect(result.exitCode).toBe(0);
-      const invocations = readInvocations(harness);
-      expect(invocations).toHaveLength(1);
-      expect(invocations[0].argv).toEqual(['--help']);
-      expect(invocations[0].env.SONAR_TOKEN).toBe('');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'forwards <action> --help to CAG with SONAR_TOKEN injected',
-    async () => {
-      const server = await harness.newFakeServer().start();
-      harness.withAuth(server.baseUrl(), 'expected-token');
-      harness.state().withContextAugmentationBinaryInstalled();
-
-      const result = await harness.run('context get-source --help');
-
-      expect(result.exitCode).toBe(0);
-      const invocations = readInvocations(harness);
-      expect(invocations).toHaveLength(1);
-      expect(invocations[0].argv).toEqual(['get-source', '--help']);
-      expect(invocations[0].env.SONAR_TOKEN).toBe('expected-token');
     },
     { timeout: 30000 },
   );
