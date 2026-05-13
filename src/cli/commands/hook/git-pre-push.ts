@@ -21,11 +21,11 @@
 // git pre-push callback handler — scans files in new commits for secrets before push.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
-import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
 import { CommandFailedError } from '../_common/error';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
-import { resolveAuthAndSecrets } from './hook-dependencies';
+import type { HookDependencies } from './hook-dependencies';
+import { handleScanError, resolveAuthAndSecrets } from './hook-dependencies';
 import type { PushRef } from './stdin';
 import { readGitPushRefs } from './stdin';
 
@@ -41,28 +41,27 @@ export async function gitPrePush(): Promise<void> {
   const emptyTree = await getEmptyTree();
 
   for (const ref of refs) {
-    if (ref.localSha === GIT_NULL_OID) continue; // branch deletion — nothing to scan
+    await scanRef(ref, emptyTree, deps);
+  }
+}
 
-    const files = await getFilesForRef(ref, emptyTree);
-    if (files.length === 0) continue;
+async function scanRef(ref: PushRef, emptyTree: string, deps: HookDependencies): Promise<void> {
+  if (ref.localSha === GIT_NULL_OID) return; // branch deletion — nothing to scan
 
-    try {
-      const result = await runSecretsBinary(deps.binaryPath, files, deps.auth);
-      const exitCode = result.exitCode ?? 1;
-      if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-        throw new CommandFailedError('Secrets detected in pushed commits.', {
-          remediationHint:
-            'Remove the reported secret, amend the commit if needed, then retry the push.',
-        });
-      }
-    } catch (err) {
-      if (err instanceof CommandFailedError) throw err;
-      logger.debug(`git pre-push secrets scan failed: ${(err as Error).message}`);
-      throw new CommandFailedError('Secrets scan failed.', {
+  const files = await getFilesForRef(ref, emptyTree);
+  if (files.length === 0) return;
+
+  try {
+    const result = await runSecretsBinary(deps.binaryPath, files, deps.auth);
+    if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
+      throw new CommandFailedError('Secrets detected in pushed commits.', {
         remediationHint:
-          "Run 'sonar integrate' again or run 'sonar analyze secrets -- <files>' manually to debug the analyzer.",
+          'Remove the reported secret, amend the commit if needed, then retry the push.',
       });
     }
+  } catch (err) {
+    if (err instanceof CommandFailedError) throw err;
+    handleScanError('Push', err as Error);
   }
 }
 
