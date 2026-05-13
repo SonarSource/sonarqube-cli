@@ -25,12 +25,26 @@ detect_os() {
   esac
 }
 
+is_musl_linux() {
+  if command -v ldd &>/dev/null && { ldd --version 2>&1 || true; } | grep -qi musl; then
+    return 0
+  fi
+  if ls /lib/ld-musl-*.so.1 /usr/lib/ld-musl-*.so.1 &>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 detect_platform() {
   case "$(detect_os)" in
     linux)
+      local libc_suffix=""
+      if is_musl_linux; then
+        libc_suffix="-musl"
+      fi
       case "$(uname -m)" in
-        aarch64 | arm64) echo "linux-arm64" ;;
-        x86_64 | amd64) echo "linux-x86-64" ;;
+        aarch64 | arm64) echo "linux-arm64${libc_suffix}" ;;
+        x86_64 | amd64) echo "linux-x86-64${libc_suffix}" ;;
         *)
           echo "Unsupported Linux architecture: $(uname -m)" >&2
           exit 1
