@@ -379,6 +379,40 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
+    'skips CAG with a warning on SonarQube Cloud when no project key is configured',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      // No sonar-project.properties — projectKey is undefined.
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      const state = loadState(harness);
+      expect(
+        state.agentExtensions.find(
+          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
+        ),
+      ).toBeUndefined();
+      expect(result.stderr).toContain('a project key and organization are required');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'emits info (not warn) and skips CAG on SonarQube Server without an org',
     async () => {
       const server = await harness

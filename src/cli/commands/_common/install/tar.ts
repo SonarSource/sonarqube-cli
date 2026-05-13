@@ -22,6 +22,11 @@
 // where we only need to extract a single regular-file entry by basename.
 // Implements the USTAR header layout (POSIX 1003.1-1988): 512-byte aligned
 // blocks, octal-ASCII size at offset 124, typeflag at 156.
+//
+// Limitations: GNU tar long-name extensions (typeflag 'L' / 'K') are NOT
+// supported — the long-name payload would be misparsed as a header block and
+// the following real entry would be skipped. Any SonarSource archive with
+// paths exceeding 100 bytes must be repacked in USTAR-compatible form.
 
 import { gunzipSync } from 'node:zlib';
 
