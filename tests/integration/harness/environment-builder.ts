@@ -31,11 +31,11 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
 import {
   type BinarySpec,
   buildLocalBinaryName,
 } from '../../../src/cli/commands/_common/install/binary';
+import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
 import { SCA_SCANNER_SPEC } from '../../../src/cli/commands/_common/install/sca-scanner';
 import { SECRETS_SPEC } from '../../../src/cli/commands/_common/install/secrets';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
