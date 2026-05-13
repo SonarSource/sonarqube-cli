@@ -187,7 +187,9 @@ describe('ScaScannerRunner.run', () => {
       okInstaller,
       spawnerReturning({ exitCode: 2, stdout: '', stderr: 'boom' }),
     );
-    expect(runner.run(makeInvocation())).rejects.toThrow(/sca-scanner exited with code 2/);
+    expect(runner.run(makeInvocation())).rejects.toThrow(
+      /sca-scanner exited with code 2\. See logs for details:/,
+    );
   });
 
   it('wraps a spawner rejection into CommandFailedError', () => {

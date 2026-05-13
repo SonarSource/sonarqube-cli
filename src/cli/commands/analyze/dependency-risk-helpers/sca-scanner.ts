@@ -20,6 +20,7 @@
 
 import { rmSync } from 'node:fs';
 
+import { LOG_FILE } from '../../../../lib/config-constants.ts';
 import logger from '../../../../lib/logger.ts';
 import type { SpawnResult } from '../../../../lib/process.ts';
 import { warn } from '../../../../ui';
@@ -197,7 +198,7 @@ export class ScaScannerRunner {
 
   private handleScanFailure(exitCode: number): never {
     throw new CommandFailedError(
-      `Dependency risk analysis error: sca-scanner exited with code ${exitCode}`,
+      `Dependency risk analysis error: sca-scanner exited with code ${exitCode}. See logs for details: ${LOG_FILE}`,
     );
   }
 
