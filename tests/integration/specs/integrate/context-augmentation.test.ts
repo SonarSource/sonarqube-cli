@@ -459,6 +459,14 @@ describe('integrate copilot — Context Augmentation', () => {
         '--invocation-prefix',
         'sonar context',
       ]);
+
+      // State records the skill extension under the internal Copilot agent id
+      const state = loadState(harness);
+      const skillExt = state.agentExtensions.find(
+        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
+      );
+      expect(skillExt).toBeDefined();
+      expect(skillExt?.agentId).toBe('copilot-cli');
     },
     { timeout: 30000 },
   );

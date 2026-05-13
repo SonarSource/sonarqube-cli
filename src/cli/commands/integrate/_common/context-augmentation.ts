@@ -50,6 +50,13 @@ export interface SetupContextAugmentationParams {
 
 const SKILL_INVOCATION_PREFIX = 'sonar context';
 
+// Maps the CAG subprocess agent argument to the internal state agent id.
+// The CAG argument ('copilot') differs from the Copilot state id ('copilot-cli').
+const STATE_AGENT_ID: Record<ContextAugmentationAgent, string> = {
+  'claude-code': 'claude-code',
+  copilot: 'copilot-cli',
+};
+
 export async function setupContextAugmentation(p: SetupContextAugmentationParams): Promise<void> {
   blank();
   info('Setting up SonarQube Context Augmentation...');
@@ -186,7 +193,7 @@ function recordSkillExtension(p: SetupContextAugmentationParams): void {
     const state = loadState();
     upsertAgentExtension(state, {
       id: randomUUID(),
-      agentId: p.agent,
+      agentId: STATE_AGENT_ID[p.agent],
       projectRoot: p.isGlobal ? homedir() : p.projectRoot,
       global: p.isGlobal,
       projectKey: p.projectKey,
