@@ -478,7 +478,6 @@ describe('integrate <agent> --global — Context Augmentation', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     harness.state().withSecretsBinaryInstalled();
-    await harness.newFakeBinariesServer().start();
   });
 
   afterEach(async () => {
@@ -491,15 +490,9 @@ describe('integrate <agent> --global — Context Augmentation', () => {
   ])(
     'skips CAG entirely on "integrate %s --global"',
     async (_agent, command) => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken(TOKEN)
-        .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY)
-        .start();
+      const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
-      harness.state().withContextAugmentationBinaryInstalled();
 
       const result = await harness.run(command, {
         extraEnv: {
