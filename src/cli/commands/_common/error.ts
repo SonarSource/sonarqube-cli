@@ -24,6 +24,12 @@
  */
 export abstract class CliError extends Error {
   abstract readonly exitCode: number;
+  readonly remediationHint?: string;
+
+  protected constructor(message: string, remediationHint?: string) {
+    super(message);
+    this.remediationHint = remediationHint;
+  }
 }
 
 /**
@@ -44,8 +50,8 @@ export class InvalidOptionError extends CliError {
  */
 export class CommandFailedError extends CliError {
   readonly exitCode: number;
-  constructor(message: string, exitCode = 1) {
-    super(message);
+  constructor(message: string, exitCode = 1, remediationHint?: string) {
+    super(message, remediationHint);
     this.name = 'CommandFailedError';
     this.exitCode = exitCode;
   }

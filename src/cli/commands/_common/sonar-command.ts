@@ -25,7 +25,7 @@ import { Command } from 'commander';
 import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import { resolveAuth } from '../../../lib/auth-resolver.js';
 import logger from '../../../lib/logger.js';
-import { blank, error } from '../../../ui';
+import { blank, error, print } from '../../../ui';
 import { CliError, CommandFailedError } from './error.js';
 
 /**
@@ -101,10 +101,16 @@ export class SonarCommand extends Command {
     try {
       await fn();
     } catch (err) {
+      const thrownError = err instanceof Error ? err : new Error(String(err));
+      const cliError = err instanceof CliError ? err : undefined;
+
       blank();
-      error((err as Error).message);
-      logger.error((err as Error).message);
-      process.exitCode = err instanceof CliError ? err.exitCode : 1;
+      error(thrownError.message);
+      if (cliError?.remediationHint) {
+        print(`💡 ${cliError.remediationHint}`, process.stderr);
+      }
+      logger.error(thrownError.message);
+      process.exitCode = cliError?.exitCode ?? 1;
     }
   }
 }
