@@ -27,8 +27,15 @@
 import { spawn } from 'node:child_process';
 
 import { resolveAuth } from '../../../lib/auth-resolver';
+import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
 import { CommandFailedError } from '../_common/error';
 import { resolveContextAugmentationBinaryPath } from '../_common/install/context-augmentation';
+
+function buildForwardedArgs(action: string | undefined, args: string[]): string[] {
+  if (action) return [action, ...args];
+  if (args.length > 0) return args;
+  return ['--help'];
+}
 
 export async function runContextPassthrough(
   action: string | undefined,
@@ -41,26 +48,15 @@ export async function runContextPassthrough(
     );
   }
 
-  // Build the argv to forward: bare `sonar context` defaults to --help.
-  let forwarded: string[];
-  if (action) {
-    forwarded = [action, ...args];
-  } else if (args.length > 0) {
-    forwarded = args;
-  } else {
-    forwarded = ['--help'];
-  }
-
-  // Skip auth for top-level help requests. Commander may assign --help / -h to
-  // the optional [action] positional on some platforms instead of routing them
-  // to args, so we check both places.
-  const isTopLevelHelp = action === '--help' || action === '-h' || !action;
+  const forwarded = buildForwardedArgs(action, args);
+  // Commander may assign --help / -h to the optional [action] positional on some
+  // platforms instead of routing them to args, so check forwarded[0] as the single
+  // source of truth.
+  const isTopLevelHelp = forwarded[0] === '--help' || forwarded[0] === '-h';
   let env: NodeJS.ProcessEnv;
   if (isTopLevelHelp) {
-    // Help output is static — pass the environment through unchanged and skip auth.
     env = process.env;
   } else {
-    // A real action was given — inject auth so CAG has full context.
     const auth = await resolveAuth();
     if (!auth) {
       throw new CommandFailedError('Not authenticated. Run: sonar auth login');
@@ -69,7 +65,11 @@ export async function runContextPassthrough(
   }
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(binaryPath, forwarded, { stdio: 'inherit', env, argv0: 'sonar context' });
+    const child = spawn(binaryPath, forwarded, {
+      stdio: 'inherit',
+      env,
+      argv0: SONAR_CONTEXT_INVOCATION,
+    });
 
     child.on('error', reject);
     child.on('exit', (code) => {

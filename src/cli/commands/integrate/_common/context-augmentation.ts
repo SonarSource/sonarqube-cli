@@ -31,6 +31,7 @@ import { randomUUID } from 'node:crypto';
 import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
+import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import { loadState, saveState, upsertAgentExtension } from '../../../../lib/state-manager';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -46,8 +47,6 @@ export interface SetupContextAugmentationParams {
   projectKey: string | undefined;
   isGlobal: boolean;
 }
-
-const SKILL_INVOCATION_PREFIX = 'sonar context';
 
 // Maps the CAG subprocess agent argument to the internal state agent id.
 // The CAG argument ('copilot') differs from the Copilot state id ('copilot-cli').
@@ -88,7 +87,7 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     );
     return;
   }
-  if (entitlement !== 'enabled') {
+  if (entitlement === 'not_enabled') {
     warn(
       'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
     );
@@ -126,7 +125,7 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
 
   const skillOk = await runCagSubprocess(
     binaryPath,
-    ['skill', '--install', p.agent, '--invocation-prefix', SKILL_INVOCATION_PREFIX],
+    ['skill', '--install', p.agent, '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
     p,
   );
   if (!skillOk) {
