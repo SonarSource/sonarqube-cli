@@ -57,10 +57,8 @@ export async function runContextPassthrough(
   const isTopLevelHelp = action === '--help' || action === '-h' || !action;
   let env: NodeJS.ProcessEnv;
   if (isTopLevelHelp) {
-    // Strip any ambient SONAR_TOKEN so we don't leak credentials for static
-    // top-level help output.
-    const { SONAR_TOKEN: _token, ...envWithoutToken } = process.env;
-    env = envWithoutToken;
+    // Help output is static — pass the environment through unchanged and skip auth.
+    env = process.env;
   } else {
     // A real action was given — inject auth so CAG has full context.
     const auth = await resolveAuth();
