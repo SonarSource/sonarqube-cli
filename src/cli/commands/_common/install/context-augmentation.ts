@@ -163,8 +163,9 @@ async function verifySignatureForPlatform(
   const expected = SONAR_CONTEXT_AUGMENTATION_SIGNATURES[platSuffix];
   if (!expected) {
     throw new CommandFailedError(
-      `No pinned signature available for sonar-context-augmentation on ${platSuffix}. ` +
-        `Refresh signatures with \`bun run fetch:signatures\` or check the release was published for this platform.`,
+      `No pinned signature available for sonar-context-augmentation on ${platSuffix}.`,
+      1,
+      `Refresh signatures with \`bun run fetch:signatures\` or check the release was published for this platform.`,
     );
   }
   if (expected !== armoredSignature.trim()) {
