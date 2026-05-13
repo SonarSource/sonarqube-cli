@@ -82,7 +82,10 @@ export function resolveCloudAuth(
   if (auth.connectionType != 'cloud' || auth.orgKey == null) {
     if (explicitProject) {
       throw new CommandFailedError(
-        'SonarQube Agentic Analysis requires a SonarQube Cloud connection. Run: sonar auth login',
+        'SonarQube Agentic Analysis requires a SonarQube Cloud connection.',
+        {
+          remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
+        },
       );
     }
     warn(

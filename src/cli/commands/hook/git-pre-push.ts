@@ -50,12 +50,18 @@ export async function gitPrePush(): Promise<void> {
       const result = await runSecretsBinary(deps.binaryPath, files, deps.auth);
       const exitCode = result.exitCode ?? 1;
       if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-        throw new CommandFailedError('Secrets detected in pushed commits');
+        throw new CommandFailedError('Secrets detected in pushed commits.', {
+          remediationHint:
+            'Remove the reported secret, amend the commit if needed, then retry the push.',
+        });
       }
     } catch (err) {
       if (err instanceof CommandFailedError) throw err;
       logger.debug(`git pre-push secrets scan failed: ${(err as Error).message}`);
-      throw new CommandFailedError('Secrets scan failed');
+      throw new CommandFailedError('Secrets scan failed.', {
+        remediationHint:
+          "Run 'sonar integrate' again or run 'sonar analyze secrets -- <files>' manually to debug the analyzer.",
+      });
     }
   }
 }

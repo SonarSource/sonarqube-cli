@@ -123,12 +123,21 @@ describe('repairToken', () => {
     expect(validateTokenSpy).toHaveBeenCalledWith(SERVER_URL, NEW_TOKEN);
   });
 
-  it('throws when the generated token fails validation', () => {
+  it('throws when the generated token fails validation', async () => {
     validateTokenSpy.mockResolvedValue(false);
 
-    const actual = repairToken(SERVER_URL);
+    let caughtError: unknown;
+    try {
+      await repairToken(SERVER_URL);
+    } catch (err) {
+      caughtError = err;
+    }
 
-    expect(actual).rejects.toThrow('Generated token is invalid');
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error | undefined)?.message).toBe('Generated token is invalid.');
+    expect((caughtError as { remediationHint?: string } | undefined)?.remediationHint).toBe(
+      "Rerun the browser login flow or authenticate again with '--with-token'.",
+    );
   });
 
   it('does not save the token when validation fails', async () => {

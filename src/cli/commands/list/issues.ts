@@ -56,7 +56,7 @@ export interface ListIssuesOptions {
  */
 export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth): Promise<void> {
   if (!options.project) {
-    throw new InvalidOptionError('--project is required');
+    throw new InvalidOptionError('--project is required.', 'Add --project <key>.');
   }
 
   const format = options.format ?? 'json';

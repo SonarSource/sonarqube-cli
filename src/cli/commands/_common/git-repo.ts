@@ -59,12 +59,19 @@ export async function resolveGitHooksDir(root: string): Promise<string> {
     result = await spawnProcess('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new CommandFailedError(`Failed to run git [${message}]`);
+    throw new CommandFailedError(`Failed to run git [${message}]`, {
+      remediationHint:
+        'Ensure git is installed and available on PATH, then retry from a git repository.',
+    });
   }
   if (result.exitCode !== 0) {
     const detail = [result.stderr, result.stdout].filter((s) => s.length > 0).join('\n');
     throw new CommandFailedError(
       `Could not resolve git hooks directory (exit code ${result.exitCode}) ${detail}`,
+      {
+        remediationHint:
+          'Make sure you run this command inside a valid git repository, and check that the repository metadata (.git directory or worktree pointer) is not corrupted, then retry.',
+      },
     );
   }
   const resolved = result.stdout.trim();

@@ -70,7 +70,11 @@ describe('sonar remediate', () => {
       const result = await harness.run(`remediate --project ${TEST_PROJECT}`);
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('requires SonarQube Cloud');
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('requires a SonarQube Cloud connection');
+      expect(output).toContain(
+        "💡 Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+      );
     },
     { timeout: 15000 },
   );
@@ -786,7 +790,11 @@ describe('sonar remediate', () => {
         const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1`);
 
         expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain('requires SonarQube Cloud');
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('requires a SonarQube Cloud connection');
+        expect(output).toContain(
+          "💡 Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+        );
       },
       { timeout: 15000 },
     );
@@ -805,7 +813,7 @@ describe('sonar remediate', () => {
         expect(result.exitCode).toBe(2);
         const output = result.stdout + result.stderr;
         expect(output).toContain('--issues accepts at most 20 issue keys');
-        expect(output).not.toContain('requires SonarQube Cloud');
+        expect(output).not.toContain('requires a SonarQube Cloud connection');
       },
       { timeout: 15000 },
     );

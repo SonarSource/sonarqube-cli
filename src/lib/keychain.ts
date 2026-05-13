@@ -38,15 +38,18 @@ interface KeychainBackend {
 
 const tokenCache = new Map<string, string | null>();
 
-const KEYCHAIN_UNAVAILABLE_MESSAGE =
-  "Failed to access the system keychain. Please make sure your system's keychain or credential manager is available and unlocked and try again.";
+const KEYCHAIN_UNAVAILABLE_MESSAGE = 'Failed to access the system keychain.';
+const KEYCHAIN_UNAVAILABLE_HINT =
+  "Make sure your system's keychain or credential manager is available and unlocked, then try again.";
 
 async function wrapBunSecrets<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    throw new CommandFailedError(`${KEYCHAIN_UNAVAILABLE_MESSAGE}\n\nUnderlying error: ${detail}`);
+    throw new CommandFailedError(`${KEYCHAIN_UNAVAILABLE_MESSAGE}\n\nUnderlying error: ${detail}`, {
+      remediationHint: KEYCHAIN_UNAVAILABLE_HINT,
+    });
   }
 }
 

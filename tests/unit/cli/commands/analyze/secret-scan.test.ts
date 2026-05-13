@@ -286,31 +286,47 @@ describe('secretCheckCommand: scan failures', () => {
     }
   });
 
-  it('throws when binary exits 1 (error, not secrets found)', () => {
+  it('throws when binary exits 1 (error, not secrets found)', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'unexpected error' });
 
     const existsSpy = mockBinaryExists(true);
+    let caughtError: unknown;
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
-        new CommandFailedError('Scan error (exit code 1)', 1),
-      );
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe('Scan error (exit code 1)');
+    expect((caughtError as CommandFailedError).exitCode).toBe(1);
+    expect((caughtError as CommandFailedError).remediationHint).toBe(
+      "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
+    );
   });
 
-  it('displays stderr when scan fails with error output', () => {
+  it('displays stderr when scan fails with error output', async () => {
     const stderrMsg = 'Connection refused to auth server';
     spawnSpy.mockResolvedValue({ exitCode: 2, stdout: '', stderr: stderrMsg });
 
     const existsSpy = mockBinaryExists(true);
+    let caughtError: unknown;
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
-        new CommandFailedError('Scan error (exit code 2)', 2),
-      );
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe('Scan error (exit code 2)');
+    expect((caughtError as CommandFailedError).exitCode).toBe(2);
+    expect((caughtError as CommandFailedError).remediationHint).toBe(
+      "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
+    );
 
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
@@ -318,18 +334,26 @@ describe('secretCheckCommand: scan failures', () => {
     expect(prints.some((m) => m.includes(stderrMsg))).toBe(true);
   });
 
-  it('displays stdout when scan fails without stderr', () => {
+  it('displays stdout when scan fails without stderr', async () => {
     const stdoutMsg = '{"error":"auth_failed"}';
     spawnSpy.mockResolvedValue({ exitCode: 2, stdout: stdoutMsg, stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
+    let caughtError: unknown;
     try {
-      expect(analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH)).rejects.toThrow(
-        new CommandFailedError('Scan error (exit code 2)', 2),
-      );
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } catch (err) {
+      caughtError = err;
     } finally {
       existsSpy.mockRestore();
     }
+
+    expect(caughtError).toBeInstanceOf(CommandFailedError);
+    expect((caughtError as CommandFailedError).message).toBe('Scan error (exit code 2)');
+    expect((caughtError as CommandFailedError).exitCode).toBe(2);
+    expect((caughtError as CommandFailedError).remediationHint).toBe(
+      "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
+    );
 
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
@@ -355,8 +379,9 @@ describe('secretCheckCommand: scan error handling', () => {
     }
 
     expect(caughtError).toBeInstanceOf(CommandFailedError);
-    expect((caughtError as CommandFailedError).message).toBe(
-      'Error: Scan timed out after 30000ms\n\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.\n',
+    expect((caughtError as CommandFailedError).message).toBe('Error: Scan timed out after 30000ms');
+    expect((caughtError as CommandFailedError).remediationHint).toBe(
+      'Try scanning a smaller file or check system resources.',
     );
   });
 
@@ -375,7 +400,10 @@ describe('secretCheckCommand: scan error handling', () => {
 
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as CommandFailedError).message).toBe(
-      'Error: spawn ENOENT: no such file or directory\n\nThe secrets analyzer binary was not found or is not executable.\nRun: sonar integrate\n',
+      'Error: spawn ENOENT: no such file or directory',
+    );
+    expect((caughtError as CommandFailedError).remediationHint).toBe(
+      "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
     );
   });
 
@@ -394,7 +422,10 @@ describe('secretCheckCommand: scan error handling', () => {
 
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as CommandFailedError).message).toBe(
-      'Error: Something unexpected went wrong\n\nRun: sonar integrate\n',
+      'Error: Something unexpected went wrong',
+    );
+    expect((caughtError as CommandFailedError).remediationHint).toBe(
+      "Make sure the secrets analyzer is installed and executable on this machine; if needed, rerun 'sonar integrate', then retry.",
     );
   });
 });

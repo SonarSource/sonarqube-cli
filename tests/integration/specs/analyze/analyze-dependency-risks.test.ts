@@ -49,7 +49,9 @@ describe('analyze dependency-risks', () => {
     const result = await harness.run('analyze dependency-risks --project demo');
 
     expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain('❌ Not authenticated. Run: sonar auth login');
+    const output = result.stdout + result.stderr;
+    expect(output).toContain('❌ Not authenticated.');
+    expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
   });
 
   it('exits with code 1 when project does not exist (settings 404)', async () => {

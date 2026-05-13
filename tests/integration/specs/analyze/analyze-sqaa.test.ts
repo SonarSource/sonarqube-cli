@@ -90,9 +90,9 @@ describe('analyze agentic', () => {
       const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
-        '❌ Not authenticated. Run: sonar auth login',
-      );
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('❌ Not authenticated.');
+      expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
     },
     { timeout: 15000 },
   );
@@ -171,6 +171,28 @@ describe('analyze agentic', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 and names the file in the remediation hint when the --file path cannot be read as a file',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      harness.cwd.writeFile('src/.keep', '');
+
+      const result = await harness.run(`analyze agentic --file src --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Failed to read file');
+      expect(output).toContain("💡 Check that 'src' exists and is readable as a file, then retry.");
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
   );

@@ -66,13 +66,18 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 
   const response = await fetch(scriptUrl);
   if (!response.ok) {
-    throw new CommandFailedError(`Failed to fetch update script: HTTP ${response.status}`);
+    throw new CommandFailedError(`Failed to fetch update script: HTTP ${response.status}`, {
+      remediationHint: 'Check network access and retry.',
+    });
   }
 
   const scriptContent = await response.text();
   const latestVersion = extractVersion(scriptContent);
   if (latestVersion === null) {
-    throw new CommandFailedError('Could not determine the latest version from the install script');
+    throw new CommandFailedError(
+      'Could not determine the latest version from the install script.',
+      { remediationHint: 'Retry later or update manually using the installer script.' },
+    );
   }
 
   return {
@@ -154,6 +159,10 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
     if (result.status !== 0) {
       throw new CommandFailedError(
         `Update script exited with code ${String(result.status ?? 'unknown')}`,
+        {
+          remediationHint:
+            "Rerun 'sonar self-update --force' or update manually using the installer script.",
+        },
       );
     }
   }

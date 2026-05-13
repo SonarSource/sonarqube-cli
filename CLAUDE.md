@@ -48,6 +48,8 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 - `CommandFailedError` → exit code `1` by default, or whatever is passed to the constructor.
 - Any other `Error` caught by `runCommand` → exit code `1`.
 
+`CliError` also supports an optional `remediationHint`. When present, `SonarCommand.runCommand()` prints the error message first, then renders the hint on a separate `💡` line.
+
 ## State and auth
 
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.

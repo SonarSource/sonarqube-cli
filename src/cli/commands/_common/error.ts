@@ -38,10 +38,15 @@ export abstract class CliError extends Error {
  */
 export class InvalidOptionError extends CliError {
   readonly exitCode = 2;
-  constructor(reason: string) {
-    super(reason);
+  constructor(reason: string, remediationHint?: string) {
+    super(reason, remediationHint);
     this.name = 'InvalidOptionError';
   }
+}
+
+export interface CommandFailedErrorOptions {
+  exitCode?: number;
+  remediationHint?: string;
 }
 
 /**
@@ -50,9 +55,9 @@ export class InvalidOptionError extends CliError {
  */
 export class CommandFailedError extends CliError {
   readonly exitCode: number;
-  constructor(message: string, exitCode = 1, remediationHint?: string) {
-    super(message, remediationHint);
+  constructor(message: string, options?: CommandFailedErrorOptions) {
+    super(message, options?.remediationHint);
     this.name = 'CommandFailedError';
-    this.exitCode = exitCode;
+    this.exitCode = options?.exitCode ?? 1;
   }
 }

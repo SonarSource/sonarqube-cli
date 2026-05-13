@@ -158,9 +158,9 @@ async function getUserSelectedOrganization(
   }
 
   if (isNonInteractive) {
-    throw new CommandFailedError(
-      'Organization must be specified with -o/--org in non-interactive mode',
-    );
+    throw new CommandFailedError('Organization must be specified in non-interactive mode.', {
+      remediationHint: 'Use -o/--org <key> or rerun interactively to choose an organization.',
+    });
   }
 
   // No org memberships — prompt for manual entry
@@ -170,7 +170,9 @@ async function getUserSelectedOrganization(
       throw new CommandFailedError('Organization selection cancelled');
     }
     if (!manualOrg.trim()) {
-      throw new CommandFailedError('Organization key is required');
+      throw new CommandFailedError('Organization key is required.', {
+        remediationHint: 'Provide an organization key with -o/--org or enter one when prompted.',
+      });
     }
     return manualOrg.trim();
   }
@@ -198,7 +200,9 @@ async function getUserSelectedOrganization(
   if (choice === MANUAL_ENTRY) {
     const manualOrg = await textPrompt('Enter organization key');
     if (!manualOrg?.trim()) {
-      throw new CommandFailedError('Organization key is required');
+      throw new CommandFailedError('Organization key is required.', {
+        remediationHint: 'Provide an organization key with -o/--org or enter one when prompted.',
+      });
     }
     return manualOrg.trim();
   }
@@ -217,7 +221,10 @@ async function validateOrSelectOrganization(
   if (org) {
     const orgExists = await client.checkOrganization(org);
     if (!orgExists) {
-      throw new CommandFailedError(`Organization "${org}" not found or not accessible`);
+      throw new CommandFailedError(`Organization "${org}" not found or not accessible.`, {
+        remediationHint:
+          "Check the organization key and your access, then rerun 'sonar auth login'.",
+      });
     }
     print(`Using organization: ${org}`);
     return org;
@@ -239,20 +246,20 @@ async function validateLoginOptions(options: {
   withToken?: string;
 }) {
   if (options.org !== undefined && !options.org.trim()) {
-    throw new InvalidOptionError(
-      '--org value cannot be empty. Provide a valid organization key (e.g., --org my-org)',
-    );
+    throw new InvalidOptionError('--org value cannot be empty.', 'Use --org <organization-key>.');
   }
 
   if (options.withToken !== undefined && !options.withToken.trim()) {
     throw new InvalidOptionError(
-      '--with-token value cannot be empty. Provide a valid token or omit the flag for browser authentication',
+      '--with-token value cannot be empty.',
+      'Provide a token with --with-token or omit the flag to use browser authentication.',
     );
   }
 
   if (options.server !== undefined && !options.server.trim()) {
     throw new InvalidOptionError(
-      '--server value cannot be empty. Provide a valid URL (e.g., https://sonarcloud.io)',
+      '--server value cannot be empty.',
+      'Use --server <url> (for example https://sonarcloud.io).',
     );
   }
 
@@ -267,7 +274,8 @@ async function validateLoginOptions(options: {
       new URL(server);
     } catch {
       throw new InvalidOptionError(
-        `Invalid server URL: '${server}'. Provide a valid URL (e.g., https://sonarcloud.io)`,
+        `Invalid server URL: '${server}'.`,
+        'Provide a valid URL (for example https://sonarcloud.io).',
       );
     }
   }

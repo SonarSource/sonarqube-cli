@@ -177,9 +177,10 @@ function validateConfiguration(
   isGlobal: boolean,
 ): void {
   if (isSonarQubeCloud(config.serverURL) && !config.organization) {
-    throw new CommandFailedError(
-      'SonarQube Cloud requires an organization. Please run "sonar auth logout" and re-authenticate with an organization.',
-    );
+    throw new CommandFailedError('SonarQube Cloud requires an organization.', {
+      remediationHint:
+        "Run 'sonar auth logout' and then 'sonar auth login' with a SonarQube Cloud organization.",
+    });
   }
 
   blank();

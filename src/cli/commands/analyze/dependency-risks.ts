@@ -51,7 +51,11 @@ export async function analyzeDependencyRisks(
   const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
   if (!enabled) {
     throw new CommandFailedError(
-      'Software Composition Analysis is not available for the current server connection',
+      'Software Composition Analysis is not available for the current server connection.',
+      {
+        remediationHint:
+          'Use a connection where SCA is enabled, or verify your server edition, plan, and organization entitlements.',
+      },
     );
   }
 

@@ -165,6 +165,10 @@ async function verifyInstallation(path: string): Promise<string> {
   if (!version) {
     throw new CommandFailedError(
       'Installation verification failed. Binary not responding to --version.',
+      {
+        remediationHint:
+          'Reinstall the binary and ensure it can execute on this platform, then retry.',
+      },
     );
   }
   return version;

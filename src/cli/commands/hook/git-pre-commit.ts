@@ -40,13 +40,18 @@ export async function gitPreCommit(): Promise<void> {
     result = await runSecretsBinary(deps.binaryPath, stagedFiles, deps.auth);
   } catch (err) {
     logger.debug(`git pre-commit secrets scan failed: ${(err as Error).message}`);
-    throw new CommandFailedError('Secrets scan failed');
+    throw new CommandFailedError('Secrets scan failed.', {
+      remediationHint:
+        "Run 'sonar integrate' again or run 'sonar analyze secrets -- <files>' manually to debug the analyzer.",
+    });
   }
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
     const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
     if (output) print(output);
-    throw new CommandFailedError('Secrets detected in staged files');
+    throw new CommandFailedError('Secrets detected in staged files.', {
+      remediationHint: 'Remove the reported secret, then retry the commit.',
+    });
   }
 }
 

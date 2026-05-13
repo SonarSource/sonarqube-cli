@@ -41,9 +41,9 @@ export interface McpRunOptions {
 export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): Promise<void> {
   const runtime = await detectContainerRuntime();
   if (!runtime) {
-    throw new CommandFailedError(
-      'A container runtime (Docker/Podman/Nerdctl) is required. Please ensure one is installed and running.',
-    );
+    throw new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
+      remediationHint: 'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
+    });
   }
 
   const cwd = process.cwd();

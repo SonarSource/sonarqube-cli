@@ -120,11 +120,18 @@ async function runGit(args: string[], cwd: string): Promise<string> {
   try {
     result = await spawnProcess('git', args, { cwd });
   } catch (err) {
-    throw new CommandFailedError(`Failed to run git: ${(err as Error).message}`);
+    throw new CommandFailedError(`Failed to run git: ${(err as Error).message}`, {
+      remediationHint:
+        'Ensure git is installed and available on PATH, then retry from a git repository.',
+    });
   }
   if (result.exitCode !== 0) {
     throw new CommandFailedError(
       `git ${args[0]} failed (exit ${result.exitCode}): ${result.stderr}`,
+      {
+        remediationHint:
+          'Ensure git is installed and available on PATH, then retry from a git repository.',
+      },
     );
   }
   return result.stdout;

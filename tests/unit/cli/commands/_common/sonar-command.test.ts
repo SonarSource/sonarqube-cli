@@ -97,7 +97,7 @@ describe('SonarCommand', () => {
     it('uses the exit code from CommandFailedError', async () => {
       const cmd = new SonarCommand();
       await cmd.runCommand(() => {
-        throw new CommandFailedError('fail', 42);
+        throw new CommandFailedError('fail', { exitCode: 42 });
       });
       expect(process.exitCode).toBe(42);
     });
@@ -114,11 +114,9 @@ describe('SonarCommand', () => {
     it('outputs the remediation hint when the CLI error provides one', async () => {
       const cmd = new SonarCommand();
       await cmd.runCommand(() => {
-        throw new CommandFailedError(
-          'Authentication check failed',
-          1,
-          "Run 'sonar auth login' to reauthenticate.",
-        );
+        throw new CommandFailedError('Authentication check failed', {
+          remediationHint: "Run 'sonar auth login' to reauthenticate.",
+        });
       });
 
       const hintCall = getMockUiCalls().find((c) => c.method === 'print');
@@ -222,13 +220,15 @@ describe('SonarCommand', () => {
       await cmd.parseAsync([], { from: 'user' });
       const errCall = getMockUiCalls().find((c) => c.method === 'error');
       expect(errCall?.args[0]).toContain('Not authenticated');
+      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      expect(hintCall?.args[0]).toBe("💡 Run 'sonar auth login' to authenticate.");
     });
 
     it('catches handler errors and sets process.exitCode', async () => {
       resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue(FAKE_AUTH);
       const cmd = new SonarCommand();
       cmd.authenticatedAction(() => {
-        throw new CommandFailedError('handler failed', 5);
+        throw new CommandFailedError('handler failed', { exitCode: 5 });
       });
       await cmd.parseAsync([], { from: 'user' });
       expect(process.exitCode).toBe(5);
