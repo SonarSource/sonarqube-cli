@@ -110,6 +110,20 @@ describe('SonarCommand', () => {
       const errCall = getMockUiCalls().find((c) => c.method === 'error');
       expect(errCall?.args[0]).toBe('something went wrong');
     });
+
+    it('outputs the remediation hint when the CLI error provides one', async () => {
+      const cmd = new SonarCommand();
+      await cmd.runCommand(() => {
+        throw new CommandFailedError(
+          'Authentication check failed',
+          1,
+          "Run 'sonar auth login' to reauthenticate.",
+        );
+      });
+
+      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      expect(hintCall?.args[0]).toBe("💡 Run 'sonar auth login' to reauthenticate.");
+    });
   });
 
   // ─── requiresAuth ─────────────────────────────────────────────────────────

@@ -18,17 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `analyze dependency-risks` (CLI-354 skeleton + CLI-355 SCA gate
-// + CLI-356 analysis properties fetch). The command is still a stub for output, but
-// now pre-flights `/sca/feature-enabled` and fetches analysis properties from
-// `/api/settings/values` (which also surfaces missing-project as a 404).
+// Integration tests for `analyze dependency-risks`: pre-flight gates
+// (authentication, SCA availability, project existence) plus the happy path,
+// which currently runs against the no-op scanner runner and emits an empty
+// `AnalyzeProjectResponse`. Once the real scanner is wired, the happy-path
+// assertions will be expanded.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/sca-scanner.js';
+import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
+const SCA_SCANNER_FAILURE_PREFIX = 'Dependency risk analysis error: sca-scanner exited with code';
 
 describe('analyze dependency-risks', () => {
   let harness: TestHarness;
@@ -46,61 +50,6 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('❌ Not authenticated. Run: sonar auth login');
-  });
-
-  it('prints stub table output by default when authenticated (cloud)', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .withProject('demo')
-      .withProjectSettings('demo', [
-        { key: 'sonar.exclusions', values: ['**/test/**', '**/dist/**'], inherited: false },
-        { key: 'sonar.sca.foo', value: 'bar', inherited: false },
-        { key: 'sonar.scm.exclusions.disabled', value: 'true', inherited: false },
-      ])
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
-
-    const result = await harness.run('analyze dependency-risks --project demo');
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Project: demo');
-    expect(result.stdout).toContain('(no risks)');
-
-    const recorded = server.getRecordedRequests();
-    const scaCalls = recorded.filter((r) => r.path === '/sca/feature-enabled');
-    expect(scaCalls).toHaveLength(1);
-    expect(scaCalls[0].query.organization).toBe(TEST_ORG);
-
-    const settingsIndex = recorded.findIndex((r) => r.path === '/api/settings/values');
-    expect(settingsIndex).toBeGreaterThanOrEqual(0);
-    expect(recorded[settingsIndex].query.component).toBe('demo');
-  });
-
-  it('prints stub JSON output when --format json is passed (on-premise)', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .withProject('demo')
-      .withProjectSettings('demo', [])
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN);
-
-    const result = await harness.run('analyze dependency-risks --project demo --format json');
-
-    expect(result.exitCode).toBe(0);
-    const parsed = JSON.parse(result.stdout);
-    expect(parsed).toEqual({ project: 'demo', risks: [] });
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/v2/sca/feature-enabled')).toBe(
-      true,
-    );
-    expect(
-      server
-        .getRecordedRequests()
-        .some((r) => r.path === '/api/settings/values' && r.query.component === 'demo'),
-    ).toBe(true);
   });
 
   it('exits with code 1 when project does not exist (settings 404)', async () => {
@@ -133,6 +82,83 @@ describe('analyze dependency-risks', () => {
       'Software Composition Analysis is not available for the current server connection',
     );
   });
+
+  // todo: https://sonarsource.atlassian.net/browse/CLI-452 Add end-to-end tests
+  // The next two tests assert on scanner *failure* because the in-process
+  // fake server does not implement the SCA-scanner backend APIs. Move happy-path
+  // coverage to a real-backend e2e suite (e.g. SonarQube Cloud staging) once one
+  // exists.
+  it('reports a scanner failure when the SCA backend is unavailable', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(true)
+      .withProject('demo')
+      .withProjectSettings('demo', [])
+      .start();
+    harness.state().withScaScannerBinaryInstalled();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo --format json', {
+      timeoutMs: 30_000,
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(SCA_SCANNER_FAILURE_PREFIX);
+  });
+
+  it(
+    'auto-installs sca-scanner-cli when binary is absent',
+    async () => {
+      await harness.newFakeBinariesServer().start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze dependency-risks --project demo --format json');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(SCA_SCANNER_FAILURE_PREFIX);
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        true,
+      );
+      const state = harness.stateJsonFile.asJson() as {
+        tools: { installed: Array<{ name: string; version: string }> };
+      };
+      const recorded = state.tools.installed.find((t) => t.name === 'sca-scanner-cli');
+      expect(recorded).toBeDefined();
+      expect(recorded?.version).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'aborts when sca-scanner-cli download fails',
+    async () => {
+      await harness.newFakeBinariesServer().noArtifacts().start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze dependency-risks --project demo --format json');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        false,
+      );
+    },
+    { timeout: 30000 },
+  );
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
     const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();

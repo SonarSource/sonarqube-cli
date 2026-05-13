@@ -51,6 +51,28 @@
         }
       ]
     },
+    "sca-scanner-cli": {
+      "version": "2025.6.0.14354",
+      "binaryPath": "CommercialDistribution/sca-scanner-cli",
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86-64"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64"
+        },
+        {
+          "os": "macos",
+          "arch": "arm64"
+        },
+        {
+          "os": "windows",
+          "arch": "x86-64"
+        }
+      ]
+    },
     "sonar-context-augmentation": {
       "version": "0.9.0.631",
       "binaryPath": "Distribution/sonar-context-augmentation",

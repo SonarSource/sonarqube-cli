@@ -19,14 +19,25 @@
  */
 
 // Lightweight in-process fake binaries server (Bun.serve).
-// Simulates binaries.sonarsource.com so that sonar-secrets auto-install can be exercised
-// without real network calls. Serves versioned artifacts from tests/integration/resources/
-// — downloaded by setup-integration-resources.ts — and returns 404 for unknown paths.
+// Simulates binaries.sonarsource.com so that sonar-secrets and sca-scanner-cli
+// auto-install can be exercised without real network calls. Serves versioned
+// artifacts from tests/integration/resources/ — downloaded by
+// setup-integration-resources.ts — and returns 404 for unknown paths.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  SCA_SCANNER_BINARY_NAME,
+  SECRETS_BINARY_NAME,
+} from '../../../src/lib/install-types.js';
 import type { RecordedRequest } from './types.js';
+
+const ARTIFACT_FILENAME_PATTERN = new RegExp(
+  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME})-.*\.exe|` +
+    String.raw`${CONTEXT_AUGMENTATION_BINARY_NAME}-.*\.tar\.gz)(\.asc)?$`,
+);
 
 function resourcesDir(): string {
   return join(import.meta.dir, '..', 'resources');
@@ -76,16 +87,13 @@ export class FakeBinariesServerBuilder {
   start(): Promise<FakeBinariesServer> {
     const requests: RecordedRequest[] = [];
 
-    // Load versioned artifacts from resources (sonar-secrets .exe[.asc] and
+    // Load versioned artifacts from resources (sonar-secrets and sca-scanner-cli .exe[.asc],
     // sonar-context-augmentation .tar.gz[.asc]).
     const files = new Map<string, Buffer>();
     if (this._loadArtifacts) {
       const dir = resourcesDir();
       for (const name of readdirSync(dir)) {
-        if (
-          /^sonar-secrets-.*\.exe(\.asc)?$/.test(name) ||
-          /^sonar-context-augmentation-.*\.tar\.gz(\.asc)?$/.test(name)
-        ) {
+        if (ARTIFACT_FILENAME_PATTERN.test(name)) {
           files.set(name, readFileSync(join(dir, name)));
         }
       }

@@ -74,6 +74,7 @@ export const GLOBAL_HOOKS_DIR = join(CLI_DIR, 'hooks');
 export const SONARSOURCE_BINARIES_URL =
   process.env.SONARQUBE_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
+export const SCA_SCANNER_CLI_DIST_PREFIX = 'CommercialDistribution/sca-scanner-cli';
 /**
  * Path prefix on binaries.sonarsource.com for sonar-context-augmentation. The full
  * path embeds the platform: `${SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX}-${platform}/...`.
@@ -95,6 +96,9 @@ export const SONARCLOUD_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_API_URL ?? 'https://api.sonarcloud.io';
 export const SONARCLOUD_US_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_US_API_URL ?? 'https://api.sonarqube.us';
+export const SONARCLOUD_SCA_SCANNER_CDN_URL =
+  process.env.SONARQUBE_CLI_SONARCLOUD_SCA_SCANNER_CDN_URL ??
+  'https://scanner.sonarcloud.io/tidelift-cli';
 
 // ---------------------------------------------------------------------------
 // Documentation
