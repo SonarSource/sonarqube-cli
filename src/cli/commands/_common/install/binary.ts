@@ -21,7 +21,7 @@
 // Generic install/resolve pipeline for SonarSource CLI binaries.sonarsource.com dependencies.
 // Per-binary modules wrap this with a fixed `BinarySpec`.
 
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { BIN_DIR } from '../../../../lib/config-constants';
@@ -35,6 +35,7 @@ import {
 import { print, text, withSpinner } from '../../../../ui';
 import {
   cleanupOldVersionBinaries,
+  ensureBinDirectory,
   makeExecutable,
   recordInstallationInState,
   verifyInstallation,
@@ -128,12 +129,4 @@ async function downloadAndInstall(
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);
 
   return { skipped: false, binaryPath };
-}
-
-function ensureBinDirectory(dir?: string): string {
-  const binDir = dir ?? BIN_DIR;
-  if (!existsSync(binDir)) {
-    mkdirSync(binDir, { recursive: true });
-  }
-  return binDir;
 }

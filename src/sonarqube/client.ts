@@ -44,6 +44,7 @@ export class SonarQubeClient {
   private readonly serverURL: string;
   private readonly token: string;
   public readonly isCloud: boolean;
+  private readonly orgIdCache = new Map<string, Promise<string | null>>();
 
   constructor(serverURL: string, token: string) {
     this.serverURL = serverURL.replace(/\/$/, ''); // Remove trailing slash
@@ -264,6 +265,15 @@ export class SonarQubeClient {
    * Uses the region-specific Cloud API host (SonarQube Cloud only).
    */
   async getOrganizationId(organizationKey: string): Promise<string | null> {
+    let pending = this.orgIdCache.get(organizationKey);
+    if (!pending) {
+      pending = this.fetchOrganizationId(organizationKey);
+      this.orgIdCache.set(organizationKey, pending);
+    }
+    return pending;
+  }
+
+  private async fetchOrganizationId(organizationKey: string): Promise<string | null> {
     try {
       const endpoint = '/organizations/organizations';
       const result = await this.get<Array<{ id: string; uuidV4: string }>>(

@@ -18,13 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared CAG (Context Augmentation) install + bootstrap step used by
-// `sonar integrate claude` and `sonar integrate copilot`.
-//
-// All sub-steps are warn-on-failure: this function never throws. CAG is an
-// optional companion to the existing MCP/secrets setup, so a CAG failure must
-// not regress the existing user-facing behavior.
-
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 

@@ -18,18 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// sonar-context-augmentation install: download .tar.gz archive, verify
-// detached PGP signature, extract the inner binary, then record state.
-//
-// Distinct from src/cli/commands/_common/install/binary.ts (which assumes a
-// single-file artifact) because CAG ships .tar.gz archives. We share signature
-// verification and state-recording helpers but the download/extract pipeline is
-// custom.
-
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { BIN_DIR } from '../../../../lib/config-constants';
 import {
   buildCagPlatformSuffix,
   CONTEXT_AUGMENTATION_BINARY_NAME,
@@ -50,6 +41,7 @@ import { print, success, text, withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../error';
 import {
   cleanupOldVersionBinaries,
+  ensureBinDirectory,
   makeExecutable,
   recordInstallationInState,
   verifyInstallation,
@@ -77,17 +69,6 @@ export function buildLocalCagBinaryName(platform: PlatformInfo): string {
 }
 
 /**
- * Returns the path to the installed sonar-context-augmentation binary, or null
- * when not present. Never downloads — used by `sonar context` passthrough where
- * silent operation is required.
- */
-export function resolveContextAugmentationBinaryPath(): string | null {
-  const platform = detectPlatform();
-  const path = join(BIN_DIR, buildLocalCagBinaryName(platform));
-  return existsSync(path) ? path : null;
-}
-
-/**
  * Install sonar-context-augmentation when not already present, and report
  * success when freshly installed. Returns the binary path.
  */
@@ -101,7 +82,8 @@ export async function installContextAugmentationBinary(): Promise<string> {
 
 /**
  * Lower-level installer that supports forcing a re-download or installing into
- * a custom directory. Mirrors the shape of `installBinary` from binary.ts.
+ * a custom directory. Distinct from installBinary (binary.ts) because CAG ships
+ * .tar.gz archives requiring a separate detached signature and tar extraction.
  */
 export async function resolveContextAugmentationBinary(
   options: ContextAugmentationInstallOptions,
@@ -128,18 +110,16 @@ export async function resolveContextAugmentationBinary(
 
   await withSpinner(
     `Downloading sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
-    async () => {
-      await downloadBinary(archiveUrl, archivePath);
-      await downloadBinary(ascUrl, ascPath);
-    },
+    () => Promise.all([downloadBinary(archiveUrl, archivePath), downloadBinary(ascUrl, ascPath)]),
   );
 
+  const archiveBytes = readFileSync(archivePath);
+  const armoredSignature = readFileSync(ascPath, 'utf-8');
+
   try {
-    await withSpinner('Verifying signature', async () => {
-      const archiveBytes = readFileSync(archivePath);
-      const armoredSignature = readFileSync(ascPath, 'utf-8');
-      await verifySignatureForPlatform(archiveBytes, armoredSignature, platform);
-    });
+    await withSpinner('Verifying signature', () =>
+      verifySignatureForPlatform(archiveBytes, armoredSignature, platform),
+    );
   } catch (err) {
     rmSync(archivePath, { force: true });
     rmSync(ascPath, { force: true });
@@ -147,7 +127,7 @@ export async function resolveContextAugmentationBinary(
   }
 
   try {
-    extractCagBinary(archivePath, binaryPath, platform);
+    extractCagBinary(archiveBytes, binaryPath, platform);
   } finally {
     rmSync(archivePath, { force: true });
     rmSync(ascPath, { force: true });
@@ -174,14 +154,6 @@ export async function resolveContextAugmentationBinary(
   return { binaryPath, freshlyInstalled: true };
 }
 
-function ensureBinDirectory(dir?: string): string {
-  const binDir = dir ?? BIN_DIR;
-  if (!existsSync(binDir)) {
-    mkdirSync(binDir, { recursive: true });
-  }
-  return binDir;
-}
-
 async function verifySignatureForPlatform(
   archiveBytes: Buffer,
   armoredSignature: string,
@@ -204,13 +176,9 @@ async function verifySignatureForPlatform(
   await verifyPgpSignature(archiveBytes, armoredSignature, SONARSOURCE_PUBLIC_KEY);
 }
 
-/**
- * Extract the sonar-context-augmentation binary from a .tar.gz archive into
- * destPath. Throws CommandFailedError when the expected entry is missing.
- */
-function extractCagBinary(archivePath: string, destPath: string, platform: PlatformInfo): void {
+function extractCagBinary(archiveBytes: Buffer, destPath: string, platform: PlatformInfo): void {
   const expectedBasename = `${CONTEXT_AUGMENTATION_BINARY_NAME}${platform.extension}`;
-  const bytes = extractFileFromTarGz(readFileSync(archivePath), expectedBasename);
+  const bytes = extractFileFromTarGz(archiveBytes, expectedBasename);
   if (!bytes) {
     throw new CommandFailedError(
       `Failed to find ${expectedBasename} inside the sonar-context-augmentation archive.`,

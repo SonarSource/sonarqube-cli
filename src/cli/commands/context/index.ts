@@ -18,43 +18,41 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// `sonar context` — passthrough wrapper to the locally installed
-// sonar-context-augmentation binary. Forwards args verbatim, inherits stdio so
-// the child owns the user-facing output, and propagates the exit code. Auth is
-// injected via the SONAR_TOKEN env var for non-help invocations; --help and -h
-// are forwarded without auth so users can read docs without being logged in.
-
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
 
 import { resolveAuth } from '../../../lib/auth-resolver';
-import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
+import { BIN_DIR, SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
+import { detectPlatform } from '../../../lib/platform-detector';
 import { CommandFailedError } from '../_common/error';
-import { resolveContextAugmentationBinaryPath } from '../_common/install/context-augmentation';
+import { buildLocalCagBinaryName } from '../_common/install/context-augmentation';
 
-function buildForwardedArgs(action: string | undefined, args: string[]): string[] {
-  if (action) return [action, ...args];
-  if (args.length > 0) return args;
-  return ['--help'];
+// Commander may assign --help/-h to the optional [action] positional on some platforms.
+function buildForwardedArgs(
+  action: string | undefined,
+  args: string[],
+): { forwarded: string[]; isHelp: boolean } {
+  let forwarded: string[];
+  if (action) {
+    forwarded = [action, ...args];
+  } else if (args.length > 0) {
+    forwarded = args;
+  } else {
+    forwarded = ['--help'];
+  }
+  const isHelp = forwarded[0] === '--help' || forwarded[0] === '-h';
+  return { forwarded, isHelp };
 }
 
 export async function runContextPassthrough(
   action: string | undefined,
   args: string[],
 ): Promise<void> {
-  const binaryPath = resolveContextAugmentationBinaryPath();
-  if (!binaryPath) {
-    throw new CommandFailedError(
-      'Context Augmentation is not installed. Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
-    );
-  }
+  const binaryPath = join(BIN_DIR, buildLocalCagBinaryName(detectPlatform()));
+  const { forwarded, isHelp } = buildForwardedArgs(action, args);
 
-  const forwarded = buildForwardedArgs(action, args);
-  // Commander may assign --help / -h to the optional [action] positional on some
-  // platforms instead of routing them to args, so check forwarded[0] as the single
-  // source of truth.
-  const isTopLevelHelp = forwarded[0] === '--help' || forwarded[0] === '-h';
   let env: NodeJS.ProcessEnv;
-  if (isTopLevelHelp) {
+  if (isHelp) {
     env = process.env;
   } else {
     const auth = await resolveAuth();
@@ -71,7 +69,17 @@ export async function runContextPassthrough(
       argv0: SONAR_CONTEXT_INVOCATION,
     });
 
-    child.on('error', reject);
+    child.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') {
+        reject(
+          new CommandFailedError(
+            'Context Augmentation is not installed. Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
+          ),
+        );
+      } else {
+        reject(err);
+      }
+    });
     child.on('exit', (code) => {
       process.exitCode = code ?? 1;
       resolve();
