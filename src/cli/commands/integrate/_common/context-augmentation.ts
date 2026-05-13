@@ -27,7 +27,6 @@
 
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
 
 import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
@@ -64,6 +63,13 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
   const isCloud = isSonarQubeCloud(p.auth.serverUrl);
   if (!isCloud) {
     text('Skipping Context Augmentation: not available on SonarQube Server.');
+    return;
+  }
+
+  if (p.isGlobal) {
+    warn(
+      'Skipping Context Augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
+    );
     return;
   }
 
@@ -194,8 +200,8 @@ function recordSkillExtension(p: SetupContextAugmentationParams): void {
     upsertAgentExtension(state, {
       id: randomUUID(),
       agentId: STATE_AGENT_ID[p.agent],
-      projectRoot: p.isGlobal ? homedir() : p.projectRoot,
-      global: p.isGlobal,
+      projectRoot: p.projectRoot,
+      global: false,
       projectKey: p.projectKey,
       orgKey: p.auth.orgKey,
       serverUrl: p.auth.serverUrl,

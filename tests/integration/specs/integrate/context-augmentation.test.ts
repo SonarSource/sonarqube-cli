@@ -471,3 +471,54 @@ describe('integrate copilot — Context Augmentation', () => {
     { timeout: 30000 },
   );
 });
+
+describe('integrate <agent> --global — Context Augmentation', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+    await harness.newFakeBinariesServer().start();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it.each([
+    ['claude', 'integrate claude -g --non-interactive'],
+    ['copilot', 'integrate copilot -g'],
+  ])(
+    'skips CAG entirely on "integrate %s --global"',
+    async (_agent, command) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      const result = await harness.run(command, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      const state = loadState(harness);
+      expect(
+        state.agentExtensions.find(
+          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
+        ),
+      ).toBeUndefined();
+      expect(result.stderr).toContain('not supported with --global');
+    },
+    { timeout: 30000 },
+  );
+});
