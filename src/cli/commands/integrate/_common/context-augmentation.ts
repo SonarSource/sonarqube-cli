@@ -108,6 +108,8 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
       // We install the skill ourselves below with --invocation-prefix overridden,
       // so suppress init's default skill install (CAG-374).
       '--skip-skill-install',
+      // We've already resolved URL/org/project-key here — skip CAG's own probing.
+      '--no-detect',
     ],
     p,
   );

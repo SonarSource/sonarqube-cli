@@ -115,6 +115,7 @@ describe('integrate claude — Context Augmentation', () => {
         '--project-key',
         PROJECT_KEY,
         '--skip-skill-install',
+        '--no-detect',
       ]);
       expect(init.env.SONAR_TOKEN).toBe(TOKEN);
       expect(skill.argv).toEqual([
