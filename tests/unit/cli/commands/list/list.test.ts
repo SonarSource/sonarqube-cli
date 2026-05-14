@@ -654,12 +654,9 @@ describe('ProjectsClient', () => {
       const client = createMockClient(mockGet);
       const projectsClient = new ProjectsClient(client);
 
-      try {
-        await projectsClient.searchProjects({});
-        expect(true).toBe(false); // should not reach here
-      } catch (error) {
-        expect((error as Error).message).toContain('SonarQube API error: 401 Unauthorized');
-      }
+      await expect(projectsClient.searchProjects({})).rejects.toThrow(
+        'SonarQube API error: 401 Unauthorized',
+      );
     });
 
     it('should pass all params together', async () => {
