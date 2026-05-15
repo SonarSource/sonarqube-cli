@@ -12,6 +12,7 @@ plan.md
 tests/coverage/reports/
 tests/integration/resources/sonar-secrets*
 tests/integration/resources/sonar-context-augmentation*
+tests/integration/resources/sca-scanner-cli*
 tests/integration/resources/cag-stub
 tests/integration/resources/cag-stub.exe
 tests/unit/.integrate-git-repos/
