@@ -37,7 +37,19 @@ export interface IntegrationContext {
 
 export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   options: TOptions;
+  targetRoot: string;
+  scope: IntegrationScope;
+  force?: boolean;
+  attrs?: Record<string, IntegrationStateAttribute>;
 }
+
+export type FeatureTargetRoot<TOptions = Record<string, unknown>> =
+  | string
+  | ((invocation: IntegrationInvocation<TOptions>) => MaybePromise<string>);
+
+export type FeatureScope<TOptions = Record<string, unknown>> =
+  | IntegrationScope
+  | ((invocation: IntegrationInvocation<TOptions>) => MaybePromise<IntegrationScope>);
 
 export interface IntegrationDeclaration<TOptions = Record<string, unknown>> {
   id: string;
@@ -50,6 +62,8 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
   when?: (invocation: IntegrationInvocation<TOptions>) => boolean;
+  targetRoot?: FeatureTargetRoot<TOptions>;
+  scope?: FeatureScope<TOptions>;
   resources?: ResourceDeclaration[];
   operations?: FeatureOperation[];
 }

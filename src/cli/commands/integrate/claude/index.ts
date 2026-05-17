@@ -30,17 +30,20 @@ import {
   runMigrations,
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
+import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
-import { installSecretsBinary } from '../../_common/install/secrets';
 import { setupContextAugmentation } from '../_common/context-augmentation';
+import { installIntegration } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
+import { CLAUDE_INTEGRATION_ID, registerClaudeIntegration } from './declaration';
 import { runHealthChecks } from './health';
-import { detectGlobalSecretsHook, installHooks } from './hooks';
-import { setupMcpServer } from './mcp';
+import { detectGlobalSecretsHook } from './hooks';
 import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
+
+registerClaudeIntegration();
 
 export interface ConfigurationData {
   serverURL: string;
@@ -81,8 +84,6 @@ export async function integrateClaude(
 
   let token = config.token;
 
-  await installSecretsBinary();
-
   blank();
   text('Phase 2/3: Health Check & Repair');
   blank();
@@ -118,16 +119,29 @@ export async function integrateClaude(
   await runMigrations(project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
     skipSecretsHooks,
   });
-  await installHooks(project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
-    skipSecretsHooks,
+
+  const featureAttrs = buildIntegrationAttrs(config);
+  const installRoot = isGlobal ? homedir() : project.rootDir;
+  const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
+  await installIntegration({
+    integrationId: CLAUDE_INTEGRATION_ID,
+    options: {
+      ...options,
+      projectRoot: project.rootDir,
+      installBinary: true,
+      installSecretsHooks: !skipSecretsHooks,
+      installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
+      installMcp: true,
+    },
+    targetRoot: installRoot,
+    scope: installScope,
+    attrs: featureAttrs,
   });
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
   await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled, {
     skipSecretsHooks,
   });
   reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
-
-  await setupMcpServer(project, isGlobal, options.project || project.projectKey);
 
   if (!options.skipContext) {
     await setupContextAugmentation({
@@ -283,4 +297,14 @@ function printFinalVerificationResults(
     text('  Sonar will detect the token and block the prompt automatically.');
     blank();
   }
+}
+
+function buildIntegrationAttrs(
+  config: ConfigurationData,
+): Record<string, IntegrationStateAttribute> {
+  return {
+    orgKey: config.organization ?? null,
+    projectKey: config.projectKey ?? null,
+    serverUrl: config.serverURL,
+  };
 }

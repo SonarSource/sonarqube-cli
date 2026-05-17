@@ -23,8 +23,8 @@ import { homedir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
-import * as installSecrets from '../../../../../../src/cli/commands/_common/install/secrets';
 import * as contextAugmentation from '../../../../../../src/cli/commands/integrate/_common/context-augmentation';
+import * as registry from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
 import * as health from '../../../../../../src/cli/commands/integrate/claude/health';
 import { HealthCheckResult } from '../../../../../../src/cli/commands/integrate/claude/health';
@@ -33,7 +33,6 @@ import * as repair from '../../../../../../src/cli/commands/integrate/claude/rep
 import * as state from '../../../../../../src/cli/commands/integrate/claude/state';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
 import * as authResolver from '../../../../../../src/lib/auth-resolver';
-import * as mcpHelper from '../../../../../../src/lib/mcp/mcp-helper';
 import * as migration from '../../../../../../src/lib/migration';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import * as discovery from '../../../../../../src/lib/project-workspace';
@@ -84,19 +83,15 @@ describe('integrateCommand', () => {
     Extract<(typeof discovery)['discoverProject'], (...args: any[]) => any>
   >;
   let repairTokenSpy: Mock<Extract<(typeof repair)['repairToken'], (...args: any[]) => any>>;
-  let installHooksSpy: Mock<Extract<(typeof hooks)['installHooks'], (...args: any[]) => any>>;
+  let installIntegrationSpy: Mock<
+    Extract<(typeof registry)['installIntegration'], (...args: any[]) => any>
+  >;
   let detectGlobalSecretsHookSpy: Mock<
     Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: any[]) => any>
   >;
   let runMigrationsSpy: Mock<Extract<(typeof migration)['runMigrations'], (...args: any[]) => any>>;
   let updateStateAfterConfigurationSpy: Mock<
     Extract<(typeof state)['updateStateAfterConfiguration'], (...args: any[]) => any>
-  >;
-  let resolveSecretsBinarySpy: Mock<
-    Extract<(typeof installSecrets)['resolveSecretsBinary'], (...args: any[]) => any>
-  >;
-  let setupMcpServerForAgentSpy: Mock<
-    Extract<(typeof mcpHelper)['setupMcpServerForAgent'], (...args: any[]) => any>
   >;
   let setupContextAugmentationSpy: Mock<
     Extract<(typeof contextAugmentation)['setupContextAugmentation'], (...args: any[]) => any>
@@ -109,9 +104,6 @@ describe('integrateCommand', () => {
     hasSqaaEntitlementSpy.mockResolvedValue(false);
     hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
     hasCagEntitlementSpy.mockResolvedValue('enabled');
-    setupMcpServerForAgentSpy = spyOn(mcpHelper, 'setupMcpServerForAgent').mockResolvedValue(
-      undefined,
-    );
     setupContextAugmentationSpy = spyOn(
       contextAugmentation,
       'setupContextAugmentation',
@@ -124,17 +116,12 @@ describe('integrateCommand', () => {
     runHealthChecksSpy = spyOn(health, 'runHealthChecks');
     discoverProjectSpy = spyOn(discovery, 'discoverProject');
     repairTokenSpy = spyOn(repair, 'repairToken');
-    installHooksSpy = spyOn(hooks, 'installHooks');
+    installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,
     );
     runMigrationsSpy = spyOn(migration, 'runMigrations');
     updateStateAfterConfigurationSpy = spyOn(state, 'updateStateAfterConfiguration');
-
-    resolveSecretsBinarySpy = spyOn(installSecrets, 'resolveSecretsBinary').mockResolvedValue({
-      binaryPath: '/fake/path/sonar-secrets',
-      freshlyInstalled: false,
-    });
 
     mockDiscoveredProject({}); // Default mock to prevent tests from reading the real filesystem. Individual tests are overriding this with specific project data as needed.
     mockHealthCheck(); // Default mock to healthy checks. Individual tests are overriding this with specific health data as needed.
@@ -151,12 +138,10 @@ describe('integrateCommand', () => {
     runHealthChecksSpy.mockRestore();
     discoverProjectSpy.mockRestore();
     repairTokenSpy.mockRestore();
-    installHooksSpy.mockRestore();
+    installIntegrationSpy.mockRestore();
     detectGlobalSecretsHookSpy.mockRestore();
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
-    resolveSecretsBinarySpy.mockRestore();
-    setupMcpServerForAgentSpy.mockRestore();
     setupContextAugmentationSpy.mockRestore();
   });
 
@@ -491,7 +476,7 @@ describe('integrateCommand', () => {
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
-    resolveSecretsBinarySpy.mockRejectedValue(new Error('Network error'));
+    installIntegrationSpy.mockRejectedValueOnce(new Error('Network error'));
 
     let error: unknown;
     try {
@@ -501,7 +486,7 @@ describe('integrateCommand', () => {
     }
 
     expect((error as Error).message).toBe('Network error');
-    expect(installHooksSpy).not.toHaveBeenCalled();
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
   });
 
   describe('when a global Claude hook is already configured', () => {
@@ -538,13 +523,19 @@ describe('integrateCommand', () => {
       expect(projectSuccess).toBeUndefined();
     });
 
-    it('forwards skipSecretsHooks: true to installHooks, runMigrations and updateStateAfterConfiguration', async () => {
+    it('forwards skipSecretsHooks: true to migrations and skips the declarative secrets-hooks feature', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
 
       await integrateClaude({}, SERVER_AUTH);
 
-      expect(installHooksSpy).toHaveBeenCalledWith('/project/root', undefined, false, 'a-project', {
-        skipSecretsHooks: true,
+      expectClaudeInstallCall({
+        targetRoot: '/project/root',
+        scope: 'project',
+        auth: SERVER_AUTH,
+        projectRoot: '/project/root',
+        projectKey: 'a-project',
+        installSecretsHooks: false,
+        installSqaaHook: false,
       });
       expect(runMigrationsSpy).toHaveBeenCalledWith(
         '/project/root',
@@ -568,8 +559,14 @@ describe('integrateCommand', () => {
 
       await integrateClaude({}, CLOUD_AUTH);
 
-      expect(installHooksSpy).toHaveBeenCalledWith('/project/root', undefined, true, 'a-project', {
-        skipSecretsHooks: true,
+      expectClaudeInstallCall({
+        targetRoot: '/project/root',
+        scope: 'project',
+        auth: CLOUD_AUTH,
+        projectRoot: '/project/root',
+        projectKey: 'a-project',
+        installSecretsHooks: false,
+        installSqaaHook: true,
       });
     });
 
@@ -609,8 +606,14 @@ describe('integrateCommand', () => {
 
       await integrateClaude({}, SERVER_AUTH);
 
-      expect(installHooksSpy).toHaveBeenCalledWith('/project/root', undefined, false, 'a-project', {
-        skipSecretsHooks: false,
+      expectClaudeInstallCall({
+        targetRoot: '/project/root',
+        scope: 'project',
+        auth: SERVER_AUTH,
+        projectRoot: '/project/root',
+        projectKey: 'a-project',
+        installSecretsHooks: true,
+        installSqaaHook: false,
       });
     });
 
@@ -701,6 +704,8 @@ describe('integrateCommand', () => {
     globalDir: string | undefined,
     isGlobal: boolean,
     sqaaEnabled: boolean,
+    auth: ResolvedAuth = CLOUD_AUTH,
+    skipSecretsHooks = false,
   ): void {
     const expectedOptions = { skipSecretsHooks: false };
     expect(runMigrationsSpy).toHaveBeenCalledTimes(1);
@@ -711,14 +716,19 @@ describe('integrateCommand', () => {
       projectKey,
       expectedOptions,
     );
-    expect(installHooksSpy).toHaveBeenCalledTimes(1);
-    expect(installHooksSpy).toHaveBeenCalledWith(
-      projectRootDir,
-      globalDir,
-      sqaaEnabled,
+
+    const mainTargetRoot = globalDir ?? projectRootDir;
+    const mainScope = isGlobal ? 'global' : 'project';
+    expectClaudeInstallCall({
+      targetRoot: mainTargetRoot,
+      scope: mainScope,
+      auth,
+      projectRoot: projectRootDir,
       projectKey,
-      expectedOptions,
-    );
+      installSecretsHooks: !skipSecretsHooks,
+      installSqaaHook: sqaaEnabled && projectKey !== undefined,
+    });
+
     expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
     expect(updateStateAfterConfigurationSpy).toHaveBeenCalledWith(
       expect.anything(),
@@ -726,6 +736,47 @@ describe('integrateCommand', () => {
       isGlobal,
       sqaaEnabled,
       expectedOptions,
+    );
+  }
+
+  function expectClaudeInstallCall({
+    targetRoot,
+    scope,
+    auth,
+    projectRoot,
+    projectKey,
+    installSecretsHooks,
+    installSqaaHook,
+  }: {
+    targetRoot: string;
+    scope: 'global' | 'project';
+    auth: ResolvedAuth;
+    projectRoot: string;
+    projectKey?: string;
+    installSecretsHooks: boolean;
+    installSqaaHook: boolean;
+  }): void {
+    const attrs = {
+      orgKey: auth.orgKey ?? null,
+      projectKey: projectKey ?? null,
+      serverUrl: auth.serverUrl,
+    };
+
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
+    expect(installIntegrationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integrationId: 'claude-code',
+        options: expect.objectContaining({
+          projectRoot,
+          installBinary: true,
+          installSecretsHooks,
+          installSqaaHook,
+          installMcp: true,
+        }),
+        scope,
+        targetRoot,
+        attrs,
+      }),
     );
   }
 });

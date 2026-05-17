@@ -199,8 +199,18 @@ export class IntegrationInstaller {
       installedAt: existing?.installedAt ?? now,
       updatedByCliVersion: VERSION,
       updatedAt: now,
-      resources: this.upsertResources(existing?.resources ?? [], applied.resources, now),
-      operations: this.upsertOperations(existing?.operations ?? [], applied.operations, now),
+      resources: this.upsertResources(
+        existing?.resources ?? [],
+        applied.resources,
+        now,
+        new Set((feature.resources ?? []).map((resource) => resource.id)),
+      ),
+      operations: this.upsertOperations(
+        existing?.operations ?? [],
+        applied.operations,
+        now,
+        new Set((feature.operations ?? []).map((operation) => operation.id)),
+      ),
       attrs: context.attrs,
     };
 
@@ -242,8 +252,9 @@ export class IntegrationInstaller {
     existing: InstalledIntegrationResource[],
     applied: AppliedResource[],
     now: string,
+    declaredIds: Set<string>,
   ): InstalledIntegrationResource[] {
-    const resources = [...existing];
+    const resources = existing.filter((entry) => declaredIds.has(entry.id));
     for (const resource of applied) {
       const next: InstalledIntegrationResource = {
         ...resource,
@@ -264,8 +275,9 @@ export class IntegrationInstaller {
     existing: InstalledIntegrationOperation[],
     applied: AppliedOperation[],
     now: string,
+    declaredIds: Set<string>,
   ): InstalledIntegrationOperation[] {
-    const operations = [...existing];
+    const operations = existing.filter((entry) => declaredIds.has(entry.id));
     for (const operation of applied) {
       const next: InstalledIntegrationOperation = {
         ...operation,
@@ -295,14 +307,15 @@ export async function installIntegration<TOptions>({
   attrs,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
-  const features = integrationInstaller.selectFeaturesForInvocation(integration, { options });
+  const invocation = makeInvocation(options, targetRoot, scope, force, attrs);
+  const features = integrationInstaller.selectFeaturesForInvocation(integration, invocation);
   if (features.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
 
   const installedFeatures: InstalledIntegrationFeature[] = [];
   for (const feature of features) {
-    const context = makeContext(loadStateForInstallation(), targetRoot, scope, force, attrs);
+    const context = await resolveFeatureContext(loadStateForInstallation(), invocation, feature);
     const installedFeature = integrationInstaller.findInstalledFeature(
       context.state,
       context,
@@ -321,13 +334,7 @@ export async function installIntegration<TOptions>({
         success(`Applied ${operation.displayName ?? operation.id}`);
       },
     });
-    const installed = recordFeatureInstallation(integration, feature, {
-      targetRoot,
-      scope,
-      force,
-      attrs,
-      applied,
-    });
+    const installed = recordFeatureInstallation(integration, feature, context, applied);
     if (installed) {
       installedFeatures.push(installed);
     }
@@ -339,26 +346,21 @@ export async function installIntegration<TOptions>({
 function recordFeatureInstallation<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
-  {
-    targetRoot,
-    scope,
-    force,
-    attrs,
-    applied,
-  }: {
-    targetRoot: string;
-    scope: IntegrationScope;
-    force?: boolean;
-    attrs?: Record<string, IntegrationStateAttribute>;
-    applied: AppliedFeature;
-  },
+  context: Omit<IntegrationContext, 'state'>,
+  applied: AppliedFeature,
 ): InstalledIntegrationFeature | undefined {
   try {
     const state = loadState();
-    const context = makeContext(state, targetRoot, scope, force, attrs);
+    const featureContext = makeContext(
+      state,
+      context.targetRoot,
+      context.scope,
+      context.force,
+      context.attrs,
+    );
     const installed = integrationInstaller.recordInstalledFeature(
       state,
-      context,
+      featureContext,
       integration,
       feature,
       applied,
@@ -393,6 +395,58 @@ function loadStateForInstallation(): CliState {
     logger.warn(`Failed to read configuration state: ${msg}`);
     return getDefaultState(VERSION);
   }
+}
+
+function makeInvocation<TOptions>(
+  options: TOptions,
+  targetRoot: string,
+  scope: IntegrationScope,
+  force: boolean | undefined,
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+): IntegrationInvocation<TOptions> {
+  return {
+    options,
+    targetRoot,
+    scope,
+    force,
+    attrs,
+  };
+}
+
+async function resolveFeatureContext<TOptions>(
+  state: CliState,
+  invocation: IntegrationInvocation<TOptions>,
+  feature: FeatureDeclaration<TOptions>,
+): Promise<IntegrationContext> {
+  return makeContext(
+    state,
+    await resolveFeatureTargetRoot(invocation, feature),
+    await resolveFeatureScope(invocation, feature),
+    invocation.force,
+    invocation.attrs,
+  );
+}
+
+async function resolveFeatureTargetRoot<TOptions>(
+  invocation: IntegrationInvocation<TOptions>,
+  feature: FeatureDeclaration<TOptions>,
+): Promise<string> {
+  const { targetRoot } = feature;
+  if (typeof targetRoot === 'function') {
+    return targetRoot(invocation);
+  }
+  return targetRoot ?? invocation.targetRoot;
+}
+
+async function resolveFeatureScope<TOptions>(
+  invocation: IntegrationInvocation<TOptions>,
+  feature: FeatureDeclaration<TOptions>,
+): Promise<IntegrationScope> {
+  const { scope } = feature;
+  if (typeof scope === 'function') {
+    return scope(invocation);
+  }
+  return scope ?? invocation.scope;
 }
 
 function makeContext(

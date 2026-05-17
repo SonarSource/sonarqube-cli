@@ -21,6 +21,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
+import { CommandFailedError } from '../../../../_common/error';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
@@ -78,6 +79,8 @@ async function readJson(path: string, defaultValue: unknown): Promise<unknown> {
   try {
     return JSON.parse(await readFile(path, 'utf-8')) as unknown;
   } catch {
-    return defaultValue;
+    throw new CommandFailedError(
+      `${path} contains invalid JSON. Please fix or delete it and re-run.`,
+    );
   }
 }

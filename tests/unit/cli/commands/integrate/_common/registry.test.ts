@@ -242,12 +242,20 @@ describe('declarative integration framework', () => {
 
     expect(
       installer
-        .selectFeaturesForInvocation(integration, { options: {} })
+        .selectFeaturesForInvocation(integration, {
+          options: {},
+          targetRoot: tempDir,
+          scope: 'project',
+        })
         .map((feature) => feature.id),
     ).toEqual(['pre-commit', 'always']);
     expect(
       installer
-        .selectFeaturesForInvocation(integration, { options: { hook: 'pre-push' } })
+        .selectFeaturesForInvocation(integration, {
+          options: { hook: 'pre-push' },
+          targetRoot: tempDir,
+          scope: 'project',
+        })
         .map((feature) => feature.id),
     ).toEqual(['pre-push', 'always']);
   });
@@ -565,6 +573,47 @@ describe('declarative integration framework', () => {
     ).toEqual([join(tempDir, 'global'), join(tempDir, 'project')]);
   });
 
+  it('prunes stale feature state when declarations change from operations to resources', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const legacyFeature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      operations: [{ id: 'legacy-operation', apply: () => undefined }],
+    };
+    const currentFeature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      resources: [
+        jsonPatch({
+          id: 'json',
+          targetPath: join(tempDir, 'settings.json'),
+          patch: () => ({ enabled: true }),
+        }),
+      ],
+    };
+
+    await installer.applyAndRecordFeature(
+      context,
+      makeIntegration({ features: [legacyFeature] }),
+      legacyFeature,
+    );
+    const installed = await installer.applyAndRecordFeature(
+      context,
+      makeIntegration({ features: [currentFeature] }),
+      currentFeature,
+    );
+
+    expect(installed.operations).toEqual([]);
+    expect(installed.resources).toMatchObject([
+      {
+        id: 'json',
+        resourceType: 'json-patch',
+        path: join(tempDir, 'settings.json'),
+      },
+    ]);
+  });
+
   it('checks SonarSource binary resources by their descriptor', async () => {
     const state = getDefaultState('test');
     const binaryPath = join(tempDir, 'bin', 'sonar-secrets');
@@ -654,34 +703,40 @@ describe('declarative integration framework', () => {
     ).toBe(true);
   });
 
-  it('uses defaults when JSON and YAML files contain invalid content', async () => {
+  it('fails when JSON files contain invalid content', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
     const jsonPath = join(tempDir, 'settings.json');
-    const yamlPath = join(tempDir, 'settings.yml');
     await writeFile(jsonPath, '{ invalid json');
-    await writeFile(yamlPath, 'invalid: [yaml');
     const jsonResource = jsonPatch({
       id: 'json-invalid',
       targetPath: jsonPath,
       defaultValue: { fallback: true },
       patch: (document) => ({ ...(document as Record<string, unknown>), enabled: true }),
     });
+
+    expect(jsonResource.apply(context)).rejects.toThrow(
+      `${jsonPath} contains invalid JSON. Please fix or delete it and re-run.`,
+    );
+    expect(jsonResource.isApplied(context)).rejects.toThrow(
+      `${jsonPath} contains invalid JSON. Please fix or delete it and re-run.`,
+    );
+  });
+
+  it('uses defaults when YAML files contain invalid content', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const yamlPath = join(tempDir, 'settings.yml');
+    await writeFile(yamlPath, 'invalid: [yaml');
     const yamlResource = yamlPatch({
       id: 'yaml-invalid',
       targetPath: yamlPath,
       patch: (document) => ({ ...(document as Record<string, unknown>), enabled: true }),
     });
 
-    await jsonResource.apply(context);
     await yamlResource.apply(context);
 
-    expect(JSON.parse(await readFile(jsonPath, 'utf-8'))).toEqual({
-      fallback: true,
-      enabled: true,
-    });
     expect(await readFile(yamlPath, 'utf-8')).toBe('enabled: true\n');
-    expect(await jsonResource.isApplied(context)).toBe(true);
     expect(await yamlResource.isApplied(context)).toBe(true);
   });
 });
