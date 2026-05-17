@@ -45,7 +45,7 @@ export function yamlPatch(options: YamlPatchOptions): ResourceDeclaration {
 export class YamlPatch implements ResourceDeclaration {
   readonly id: string;
   readonly displayName?: string;
-  readonly resourceType = 'yaml';
+  readonly resourceType = 'yaml-patch';
   readonly version?: string;
 
   constructor(private readonly options: YamlPatchOptions) {

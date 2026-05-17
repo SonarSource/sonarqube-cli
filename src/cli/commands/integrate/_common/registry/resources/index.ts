@@ -32,7 +32,6 @@ export {
   type PlatformSpecificContent,
   wholeFile,
   type WholeFileContent,
-  type WholeFileOverwriteMode,
   WholeFileResource,
   type WholeFileResourceOptions,
 } from './whole-file';

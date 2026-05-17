@@ -21,13 +21,22 @@
 import { randomUUID } from 'node:crypto';
 
 import { version as VERSION } from '../../../../../../package.json';
+import logger from '../../../../../lib/logger';
+import { loadState, saveState } from '../../../../../lib/repository/state-repository';
 import type {
   CliState,
   InstalledIntegration,
   InstalledIntegrationFeature,
   InstalledIntegrationOperation,
   InstalledIntegrationResource,
+  IntegrationScope,
+  IntegrationStateAttribute,
 } from '../../../../../lib/state';
+import { getDefaultState } from '../../../../../lib/state';
+import { info, success, text, warn } from '../../../../../ui';
+import { CommandFailedError } from '../../../_common/error';
+import type { IntegrationRegistry } from './index';
+import { supportedIntegrations } from './index';
 import type { ResourceDeclaration } from './resources';
 import type {
   AppliedFeature,
@@ -39,6 +48,22 @@ import type {
   IntegrationDeclaration,
   IntegrationInvocation,
 } from './types';
+
+interface ApplyFeatureCallbacks {
+  onResourceInstalled?: (resource: ResourceDeclaration) => void;
+  onResourceSkipped?: (resource: ResourceDeclaration) => void;
+  onOperationApplied?: (operation: FeatureOperation) => void;
+}
+
+export interface InstallIntegrationOptions<TOptions> {
+  registry?: IntegrationRegistry;
+  integrationId: string;
+  options: TOptions;
+  targetRoot: string;
+  scope: IntegrationScope;
+  force?: boolean;
+  attrs?: Record<string, IntegrationStateAttribute>;
+}
 
 export class IntegrationInstaller {
   selectFeatures(integration: IntegrationDeclaration, featureIds: string[]): FeatureDeclaration[] {
@@ -107,13 +132,20 @@ export class IntegrationInstaller {
 
   async applyFeature<TOptions>(
     context: IntegrationContext,
+    installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
+    callbacks: ApplyFeatureCallbacks = {},
   ): Promise<AppliedFeature> {
     const resources: AppliedResource[] = [];
     const operations: AppliedOperation[] = [];
 
     for (const resource of feature.resources ?? []) {
+      if (!(await this.resourceNeedsApply(context, installedFeature, resource))) {
+        callbacks.onResourceSkipped?.(resource);
+        continue;
+      }
       resources.push(await resource.apply(context));
+      callbacks.onResourceInstalled?.(resource);
     }
 
     for (const operation of feature.operations ?? []) {
@@ -122,6 +154,7 @@ export class IntegrationInstaller {
       }
       await operation.apply(context);
       operations.push({ id: operation.id, version: operation.version });
+      callbacks.onOperationApplied?.(operation);
     }
 
     return { resources, operations };
@@ -131,8 +164,15 @@ export class IntegrationInstaller {
     context: IntegrationContext,
     integration: IntegrationDeclaration<TOptions>,
     feature: FeatureDeclaration<TOptions>,
+    callbacks: ApplyFeatureCallbacks = {},
   ): Promise<InstalledIntegrationFeature> {
-    const applied = await this.applyFeature(context, feature);
+    const installedFeature = this.findInstalledFeature(
+      context.state,
+      context,
+      integration,
+      feature,
+    );
+    const applied = await this.applyFeature(context, installedFeature, feature, callbacks);
     return this.recordInstalledFeature(context.state, context, integration, feature, applied);
   }
 
@@ -244,3 +284,129 @@ export class IntegrationInstaller {
 }
 
 export const integrationInstaller = new IntegrationInstaller();
+
+export async function installIntegration<TOptions>({
+  registry = supportedIntegrations,
+  integrationId,
+  options,
+  targetRoot,
+  scope,
+  force,
+  attrs,
+}: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
+  const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
+  const features = integrationInstaller.selectFeaturesForInvocation(integration, { options });
+  if (features.length === 0) {
+    throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
+  }
+
+  const installedFeatures: InstalledIntegrationFeature[] = [];
+  for (const feature of features) {
+    const context = makeContext(loadStateForInstallation(), targetRoot, scope, force, attrs);
+    const installedFeature = integrationInstaller.findInstalledFeature(
+      context.state,
+      context,
+      integration,
+      feature,
+    );
+    text(`Installing ${integration.displayName}: ${feature.displayName}`);
+    const applied = await integrationInstaller.applyFeature(context, installedFeature, feature, {
+      onResourceInstalled: (resource) => {
+        success(`Installed ${resource.displayName ?? resource.id}`);
+      },
+      onResourceSkipped: (resource) => {
+        info(`${resource.displayName ?? resource.id} already installed`);
+      },
+      onOperationApplied: (operation) => {
+        success(`Applied ${operation.displayName ?? operation.id}`);
+      },
+    });
+    const installed = recordFeatureInstallation(integration, feature, {
+      targetRoot,
+      scope,
+      force,
+      attrs,
+      applied,
+    });
+    if (installed) {
+      installedFeatures.push(installed);
+    }
+  }
+
+  return installedFeatures;
+}
+
+function recordFeatureInstallation<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  feature: FeatureDeclaration<TOptions>,
+  {
+    targetRoot,
+    scope,
+    force,
+    attrs,
+    applied,
+  }: {
+    targetRoot: string;
+    scope: IntegrationScope;
+    force?: boolean;
+    attrs?: Record<string, IntegrationStateAttribute>;
+    applied: AppliedFeature;
+  },
+): InstalledIntegrationFeature | undefined {
+  try {
+    const state = loadState();
+    const context = makeContext(state, targetRoot, scope, force, attrs);
+    const installed = integrationInstaller.recordInstalledFeature(
+      state,
+      context,
+      integration,
+      feature,
+      applied,
+    );
+    saveState(state);
+    return installed;
+  } catch (err) {
+    const msg = (err as Error).message;
+    warn(`Failed to update configuration state: ${msg}`);
+    logger.warn(`Failed to update configuration state: ${msg}`);
+    return undefined;
+  }
+}
+
+function getIntegrationDeclaration<TOptions>(
+  registry: IntegrationRegistry,
+  integrationId: string,
+): IntegrationDeclaration<TOptions> {
+  const integration = registry.get(integrationId);
+  if (!integration) {
+    throw new CommandFailedError(`Integration declaration is not registered: ${integrationId}`);
+  }
+  return integration as IntegrationDeclaration<TOptions>;
+}
+
+function loadStateForInstallation(): CliState {
+  try {
+    return loadState();
+  } catch (err) {
+    const msg = (err as Error).message;
+    warn(`Failed to read configuration state: ${msg}`);
+    logger.warn(`Failed to read configuration state: ${msg}`);
+    return getDefaultState(VERSION);
+  }
+}
+
+function makeContext(
+  state: CliState,
+  targetRoot: string,
+  scope: IntegrationScope,
+  force: boolean | undefined,
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+): IntegrationContext {
+  return {
+    state,
+    targetRoot,
+    scope,
+    force,
+    attrs,
+  };
+}

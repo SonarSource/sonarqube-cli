@@ -20,7 +20,12 @@
 
 import type { IntegrationDeclaration } from './types';
 
-export { IntegrationInstaller, integrationInstaller } from './installer';
+export {
+  installIntegration,
+  type InstallIntegrationOptions,
+  IntegrationInstaller,
+  integrationInstaller,
+} from './installer';
 export {
   jsonPatch,
   type JsonPatchOptions,
@@ -34,7 +39,6 @@ export {
   type TextSnippetResourceOptions,
   wholeFile,
   type WholeFileContent,
-  type WholeFileOverwriteMode,
   type WholeFileResourceOptions,
   yamlPatch,
   type YamlPatchOptions,

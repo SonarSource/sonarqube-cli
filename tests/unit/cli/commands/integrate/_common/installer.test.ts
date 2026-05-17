@@ -26,11 +26,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
-import { installIntegration } from '../../../../../../src/cli/commands/integrate/_common/installer';
 import {
   type FeatureDeclaration,
+  installIntegration,
   type IntegrationDeclaration,
-  supportedIntegrations,
+  IntegrationRegistry,
   wholeFile,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
@@ -39,11 +39,13 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../s
 
 describe('generic integration installer', () => {
   let tempDir: string;
+  let registry: IntegrationRegistry;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'sonar-cli-installer-'));
+    registry = new IntegrationRegistry();
     setMockUi(true);
     clearMockUiCalls();
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
@@ -61,7 +63,7 @@ describe('generic integration installer', () => {
     const state = getDefaultState('test');
     loadStateSpy.mockReturnValue(state);
     const operationCalls: string[] = [];
-    const integration = registerIntegration('installer-success', [
+    const integration = registerIntegration(registry, 'installer-success', [
       {
         id: 'feature',
         displayName: 'Feature',
@@ -86,6 +88,7 @@ describe('generic integration installer', () => {
     ]);
 
     const installed = await installIntegration({
+      registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
@@ -122,9 +125,10 @@ describe('generic integration installer', () => {
         }),
       ],
     };
-    const integration = registerIntegration('installer-skip-resource', [feature]);
+    const integration = registerIntegration(registry, 'installer-skip-resource', [feature]);
 
     await installIntegration({
+      registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
@@ -133,6 +137,7 @@ describe('generic integration installer', () => {
     clearMockUiCalls();
 
     const installed = await installIntegration({
+      registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
@@ -145,7 +150,7 @@ describe('generic integration installer', () => {
 
   it('does not run operations when shouldApply returns false', async () => {
     let called = false;
-    const integration = registerIntegration('installer-should-apply', [
+    const integration = registerIntegration(registry, 'installer-should-apply', [
       {
         id: 'feature',
         displayName: 'Feature',
@@ -163,6 +168,7 @@ describe('generic integration installer', () => {
     ]);
 
     const installed = await installIntegration({
+      registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
@@ -179,6 +185,7 @@ describe('generic integration installer', () => {
   it('throws when the integration is unknown or no feature matches the invocation', async () => {
     const missingError = await catchError(() =>
       installIntegration({
+        registry,
         integrationId: 'missing-integration',
         options: {},
         targetRoot: tempDir,
@@ -190,16 +197,21 @@ describe('generic integration installer', () => {
       'Integration declaration is not registered: missing-integration',
     );
 
-    const integration = registerIntegration<{ enabled?: boolean }>('installer-no-feature', [
-      {
-        id: 'feature',
-        displayName: 'Feature',
-        when: ({ options }) => options.enabled === true,
-      },
-    ]);
+    const integration = registerIntegration<{ enabled?: boolean }>(
+      registry,
+      'installer-no-feature',
+      [
+        {
+          id: 'feature',
+          displayName: 'Feature',
+          when: ({ options }) => options.enabled === true,
+        },
+      ],
+    );
 
     const noFeatureError = await catchError(() =>
       installIntegration({
+        registry,
         integrationId: integration.id,
         options: {},
         targetRoot: tempDir,
@@ -214,7 +226,7 @@ describe('generic integration installer', () => {
   it('passes force through the integration context for protected whole files', async () => {
     const targetPath = join(tempDir, 'hook.sh');
     await Bun.write(targetPath, '#!/bin/sh\necho user-defined\n');
-    const integration = registerIntegration('installer-force', [
+    const integration = registerIntegration(registry, 'installer-force', [
       {
         id: 'feature',
         displayName: 'Feature',
@@ -225,7 +237,7 @@ describe('generic integration installer', () => {
             targetPath,
             content: '#!/bin/sh\n# sonar-managed\necho sonar\n',
             executable: true,
-            overwriteMode: 'force',
+            requiresForce: true,
             managedMarker: '# sonar-managed',
           }),
         ],
@@ -234,6 +246,7 @@ describe('generic integration installer', () => {
 
     expect(
       installIntegration({
+        registry,
         integrationId: integration.id,
         options: {},
         targetRoot: tempDir,
@@ -244,6 +257,7 @@ describe('generic integration installer', () => {
     );
 
     await installIntegration({
+      registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
@@ -263,7 +277,7 @@ describe('generic integration installer', () => {
     saveStateSpy.mockImplementation(() => {
       throw new Error('write failed');
     });
-    const integration = registerIntegration('installer-state-failures', [
+    const integration = registerIntegration(registry, 'installer-state-failures', [
       {
         id: 'feature',
         displayName: 'Feature',
@@ -272,6 +286,7 @@ describe('generic integration installer', () => {
     ]);
 
     const installed = await installIntegration({
+      registry,
       integrationId: integration.id,
       options: {},
       targetRoot: tempDir,
@@ -298,6 +313,7 @@ async function catchError(fn: () => Promise<unknown>): Promise<Error | undefined
 }
 
 function registerIntegration<TOptions = Record<string, unknown>>(
+  registry: IntegrationRegistry,
   id: string,
   features: FeatureDeclaration<TOptions>[],
 ): IntegrationDeclaration<TOptions> {
@@ -306,6 +322,6 @@ function registerIntegration<TOptions = Record<string, unknown>>(
     displayName: 'Test Integration',
     features,
   };
-  supportedIntegrations.register(integration as IntegrationDeclaration);
+  registry.register(integration as IntegrationDeclaration);
   return integration;
 }

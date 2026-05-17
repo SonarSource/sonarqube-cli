@@ -372,7 +372,7 @@ describe('declarative integration framework', () => {
       targetPath,
       content: '#!/bin/sh\n# sonar-managed\necho sonar\n',
       executable: true,
-      overwriteMode: 'force',
+      requiresForce: true,
       managedMarker: '# sonar-managed',
     });
 

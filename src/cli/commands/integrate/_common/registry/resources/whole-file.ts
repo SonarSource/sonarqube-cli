@@ -39,13 +39,11 @@ export type WholeFileContent =
   | PlatformSpecificContent
   | ((context: IntegrationContext) => MaybePromise<string>);
 
-export type WholeFileOverwriteMode = 'replace' | 'force';
-
 export interface WholeFileResourceOptions extends BaseResourceOptions {
   targetPath: PathResolver;
   content: WholeFileContent;
   executable?: boolean;
-  overwriteMode?: WholeFileOverwriteMode;
+  requiresForce?: boolean;
   managedMarker?: string;
 }
 
@@ -99,7 +97,7 @@ export class WholeFileResource implements ResourceDeclaration {
     if (
       existing === undefined ||
       existing === content ||
-      this.options.overwriteMode !== 'force' ||
+      this.options.requiresForce !== true ||
       context.force === true ||
       this.isManaged(existing)
     ) {
