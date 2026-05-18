@@ -83,11 +83,6 @@ interface CommitEntry {
   subject: string;
 }
 
-interface PreviousReleaseExample {
-  tagName: string;
-  body: string;
-}
-
 interface JiraTicket {
   key: string;
   summary: string;
@@ -212,22 +207,51 @@ function listCommits(previousTag: string | undefined, tag: string): CommitEntry[
     .filter((c) => !COMMIT_NOISE_PATTERNS.some((rx) => rx.test(c.subject)));
 }
 
-function fetchPreviousReleaseExamples(currentTag: string): PreviousReleaseExample[] {
-  const raw = tryRunCmd('gh release list --limit 5 --json tagName,body,isDraft,isPrerelease');
-  if (!raw) return [];
-  let parsed: { tagName: string; body: string; isDraft: boolean; isPrerelease: boolean }[];
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    console.error(`Failed to parse \`gh release list\` output: ${describeError(err)}`);
-    return [];
-  }
-  return parsed
-    .filter((r) => !r.isDraft && !r.isPrerelease && r.tagName !== currentTag)
-    .slice(0, 2)
-    .map(({ tagName, body }) => ({ tagName, body: (body ?? '').trim() }))
-    .filter((r) => r.body.length > 0);
-}
+const RELEASE_NOTES_FORMAT_EXAMPLE = `\
+# SonarQube CLI v0.7.0
+
+This release introduces the \`sonar integrate git\` command for installing secrets \
+pre-commit/pre-push git hook. Also it adds MCP configuration for \`sonar integrate claude\` \
+and fixes some bugs.
+
+## Features
+
+* Secrets pre-commit and pre-push hooks — automatically scans staged files for secrets before each commit or push
+* Secrets binary auto-install — sonar integrate claude now installs the secrets scanner if not already present
+* MCP Server configuration — sonar integrate claude configures the SonarQube MCP Server automatically
+* Auth enforcement — feature commands now require active authentication
+
+## Bug Fixes
+
+* Fixed \`integrate claude\` incorrectly resolving organization from project context instead of auth
+* Fixed Agentic Analysis hook installation for \`sonar integrate claude\` command
+
+---
+
+# SonarQube CLI v0.10.0
+
+This release introduces several improvements and fixes some bugs.
+
+## New Features & Enhancements
+
+* **Platform Support:** Added support for Linux ARM64. Thanks to @mcfedr for the contribution!
+* **Issue Filtering:** Added the ability to filter issues by statuses and by severities simultaneously.
+* **Environment Variables in Auth:** \`sonar auth status\` now properly displays when a connection is being sourced from environment variables.
+* **Agentic analysis:** Added a clear warning when no project is configured for SonarQube Agentic Analysis.
+
+## Security & Authentication
+
+* **Token Validation & Generation:** \`sonar auth status\` now actively checks if the current token is valid.
+* Adjusted the token generation URL to support SonarQube Server 2026.2+.
+
+## Bug Fixes
+
+* **Hooks:** Fixed an issue to ensure pre-commit hooks are not duplicated.
+* **SonarQube Cloud US Region Support:** Fixed an issue where Cloud API calls were hardcoded to the EU base URL, breaking SQC US environments, and properly added SQC US auth/mentions to the CLI help and README.
+
+## Performance & Installation
+
+* **Windows Installation:** Sped up \`install.ps1\` by silencing the progress bar.`;
 
 function extractJiraKeys(commits: CommitEntry[]): string[] {
   const set = new Set<string>();
@@ -313,15 +337,10 @@ async function fetchJiraTickets(commits: CommitEntry[]): Promise<JiraTicket[]> {
 
 function buildPrompt(
   releasedVersion: string,
-  examples: PreviousReleaseExample[],
   commits: CommitEntry[],
   jiraTickets: JiraTicket[],
 ): string {
   const short = shortVersion(releasedVersion);
-  const examplesText =
-    examples.length === 0
-      ? '(No previous releases available for reference.)'
-      : examples.map((e) => `### Example: ${e.tagName}\n\n${e.body}`).join('\n\n---\n\n');
   const commitsText =
     commits.length === 0
       ? '(No commits found between the previous tag and this one.)'
@@ -341,9 +360,9 @@ function buildPrompt(
     'You are writing the GitHub release notes for the SonarQube CLI (`sonar`).',
     `The released version is **${short}** (full tag: \`${releasedVersion}\`).`,
     '',
-    'Below are previous release notes for tone and structure reference. Match their format closely:',
+    'Below are examples of previous release notes. Match their tone, structure, and level of detail exactly:',
     '',
-    examplesText,
+    RELEASE_NOTES_FORMAT_EXAMPLE,
     '',
     'Below is the list of commits included in this release (subject and short SHA).',
     'PR numbers like `(#123)` already inside subjects must be preserved verbatim.',
@@ -444,13 +463,10 @@ async function main(): Promise<void> {
   const commits = listCommits(previousTag, releasedVersion);
   console.error(`Collected ${commits.length} commit(s).`);
 
-  const examples = fetchPreviousReleaseExamples(releasedVersion);
-  console.error(`Using ${examples.length} previous release(s) as style examples.`);
-
   const jiraTickets = await fetchJiraTickets(commits);
   console.error(`Enriched with ${jiraTickets.length} JIRA ticket(s).`);
 
-  const prompt = buildPrompt(releasedVersion, examples, commits, jiraTickets);
+  const prompt = buildPrompt(releasedVersion, commits, jiraTickets);
 
   if (args.dryRun) {
     process.stdout.write(`${prompt}\n`);
