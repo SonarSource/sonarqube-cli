@@ -76,7 +76,7 @@
   },
   "dependencies": {
     "@clack/core": "^1.0.1",
-    "@sentry/bun": "^10.46.0",
+    "@sentry/bun": "^10.53.1",
     "@toon-format/toon": "^2.1.0",
     "commander": "^14.0.0",
     "js-yaml": "^4.1.1",

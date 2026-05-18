@@ -24,7 +24,7 @@ import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { initSentry } from '../../../src/lib/sentry.js';
+import { initSentry, resetSentry } from '../../../src/lib/sentry.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as userModule from '../../../src/telemetry/user.js';
 
@@ -63,6 +63,7 @@ let setUserSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
+  resetSentry();
   initSpy = spyOn(Sentry, 'init').mockImplementation(() => undefined);
   setUserSpy = spyOn(Sentry, 'setUser').mockImplementation(() => {});
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
@@ -145,6 +146,17 @@ describe('initSentry', () => {
       initSentry(getDefaultState('1.0.0'));
 
       expect(setUserSpy).toHaveBeenCalledWith({ id: 'my-machine-id' });
+    });
+
+    it('is a no-op on subsequent calls (Sentry.init invoked only once)', () => {
+      const state = getDefaultState('1.0.0');
+
+      initSentry(state);
+      initSentry(state);
+      initSentry(state);
+
+      expect(initSpy).toHaveBeenCalledTimes(1);
+      expect(setUserSpy).toHaveBeenCalledTimes(1);
     });
   });
 });
