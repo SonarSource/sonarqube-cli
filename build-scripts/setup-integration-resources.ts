@@ -21,9 +21,9 @@
 /**
  * Downloads the sonar-secrets and sca-scanner-cli binaries (plus PGP signatures)
  * for the current platform from binaries.sonarsource.com and places them in
- * tests/integration/resources/ using the original versioned filenames
- * (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe). The fake binaries server
- * in the integration harness serves these files locally.
+ * tests/integration/resources/dependency-artifacts/ using the original versioned
+ * filenames (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe). The fake binaries
+ * server in the integration harness serves these files locally.
  *
  * Run via: bun build-scripts/setup-integration-resources.ts
  * Or via:  bun run test:integration:prepare
@@ -43,7 +43,14 @@ import {
   verifyBinarySignature,
 } from '../src/lib/sonarsource-releases.js';
 
-const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
+const RESOURCES_DIR = join(
+  import.meta.dir,
+  '..',
+  'tests',
+  'integration',
+  'resources',
+  'dependency-artifacts',
+);
 const platform = detectPlatform();
 
 const FIXTURES: BinarySpec[] = [SECRETS_SPEC, SCA_SCANNER_SPEC];

@@ -21,8 +21,8 @@
 // Lightweight in-process fake binaries server (Bun.serve).
 // Simulates binaries.sonarsource.com so that sonar-secrets and sca-scanner-cli
 // auto-install can be exercised without real network calls. Serves versioned
-// artifacts from tests/integration/resources/ — downloaded by
-// setup-integration-resources.ts — and returns 404 for unknown paths.
+// artifacts from tests/integration/resources/dependency-artifacts/ — downloaded
+// by setup-integration-resources.ts — and returns 404 for unknown paths.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -35,7 +35,7 @@ const ARTIFACT_FILENAME_PATTERN = new RegExp(
 );
 
 function resourcesDir(): string {
-  return join(import.meta.dir, '..', 'resources');
+  return join(import.meta.dir, '..', 'resources', 'dependency-artifacts');
 }
 
 export class FakeBinariesServer {
