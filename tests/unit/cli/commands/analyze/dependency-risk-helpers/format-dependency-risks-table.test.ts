@@ -283,7 +283,7 @@ describe('formatDependencyRisksTable', () => {
     expect(row).toContain('BLOCKER');
     expect(row).toContain('OPEN');
     expect(row).toContain('Malicious package');
-    expect(row).toContain('Remove dependency');
+    expect(out).toContain('Remove dependency');
   });
 
   it('renders PROHIBITED_LICENSE issues with the spdxLicenseId and review remediation', () => {
@@ -296,7 +296,7 @@ describe('formatDependencyRisksTable', () => {
     expect(row).toContain('HIGH');
     expect(row).toContain('OPEN');
     expect(row).toContain('AGPL-3.0');
-    expect(row).toContain('Review usage');
+    expect(out).toContain('Review usage');
   });
 
   it('falls back to release.licenseExpression when the issue has no spdxLicenseId', () => {
@@ -313,7 +313,7 @@ describe('formatDependencyRisksTable', () => {
     const row = lineWith(out, 'AGPL-3.0');
     expect(row).toContain('HIGH');
     expect(row).toContain('AGPL-3.0');
-    expect(row).toContain('Review usage');
+    expect(out).toContain('Review usage');
   });
 
   it('uppercases lowercase severities at render time', () => {
@@ -379,8 +379,8 @@ describe('formatDependencyRisksTable', () => {
     );
     const row = lineWith(out, 'CVE-1');
     expect(row).toContain('CVE-1');
-    expect(row).toContain('Change version to');
-    expect(row).toContain('5.0.0 (complete fix)');
+    expect(out).toContain('Change version to');
+    expect(out).toContain('5.0.0 (complete fix)');
   });
 
   it('appends an Errors section with both path-qualified and path-less entries', () => {
@@ -444,9 +444,8 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-NO-FIX');
-    expect(row).toContain('CVE-NO-FIX');
-    expect(row).not.toContain('Change version to');
+    expect(out).toContain('CVE-NO-FIX');
+    expect(out).not.toContain('Change version to');
   });
 
   it('omits the remediation when versionOptions is an empty array', () => {
@@ -459,9 +458,8 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-EMPTY');
-    expect(row).toContain('CVE-EMPTY');
-    expect(row).not.toContain('Change version to');
+    expect(out).toContain('CVE-EMPTY');
+    expect(out).not.toContain('Change version to');
   });
 
   it('omits the remediation when every version option has fixLevel NONE', () => {
@@ -494,11 +492,10 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-ONLY-NONE');
-    expect(row).toContain('CVE-ONLY-NONE');
-    expect(row).not.toContain('Change version to');
-    expect(row).not.toContain('1.0.0');
-    expect(row).not.toContain('1.1.0');
+    expect(out).toContain('CVE-ONLY-NONE');
+    expect(out).not.toContain('Change version to');
+    expect(out).not.toContain('(complete fix)');
+    expect(out).not.toContain('(partial fix)');
   });
 
   it('orders upgrade options by descriptionCode priority and filters out VERSION_IN_USE and UNKNOWN', () => {
@@ -552,17 +549,17 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-SORT');
-    expect(row).toContain('5.0.0 (complete fix)');
-    expect(row).toContain('4.0.0 (complete fix)');
-    expect(row).toContain('7.0.0 (partial fix)');
-    const latestComplete = row.indexOf('5.0.0');
-    const nearestComplete = row.indexOf('4.0.0');
-    const nearestPartial = row.indexOf('7.0.0');
+    expect(out).toContain('CVE-SORT');
+    expect(out).toContain('5.0.0 (complete fix)');
+    expect(out).toContain('4.0.0 (complete fix)');
+    expect(out).toContain('7.0.0 (partial fix)');
+    const latestComplete = out.indexOf('5.0.0');
+    const nearestComplete = out.indexOf('4.0.0');
+    const nearestPartial = out.indexOf('7.0.0');
     expect(nearestComplete).toBeGreaterThan(latestComplete);
     expect(nearestPartial).toBeGreaterThan(nearestComplete);
-    expect(row).not.toContain('9.0.0');
-    expect(row).not.toContain('8.0.0');
+    expect(out).not.toContain('9.0.0');
+    expect(out).not.toContain('8.0.0');
   });
 
   it('caps the upgrade remediation at three options', () => {
@@ -616,15 +613,15 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-CAP');
-    expect(row).toContain('5.0.0 (complete fix)');
-    expect(row).toContain('3.0.0 (complete fix)');
-    expect(row).toContain('4.0.0 (complete fix)');
-    expect(row).not.toContain('1.0.0');
-    expect(row).not.toContain('2.0.0');
-    const latestStable = row.indexOf('5.0.0');
-    const latestComplete = row.indexOf('3.0.0');
-    const latestPartial = row.indexOf('4.0.0');
+    expect(out).toContain('CVE-CAP');
+    expect(out).toContain('5.0.0 (complete fix)');
+    expect(out).toContain('3.0.0 (complete fix)');
+    expect(out).toContain('4.0.0 (complete fix)');
+    expect(out).not.toContain('1.0.0 (complete fix)');
+    expect(out).not.toContain('2.0.0 (complete fix)');
+    const latestStable = out.indexOf('5.0.0');
+    const latestComplete = out.indexOf('3.0.0');
+    const latestPartial = out.indexOf('4.0.0');
     expect(latestComplete).toBeGreaterThan(latestStable);
     expect(latestPartial).toBeGreaterThan(latestComplete);
   });
@@ -831,5 +828,224 @@ describe('formatDependencyRisksTable', () => {
     ]);
 
     expect(out).toContain('via transit@1.0.0 → foo@1.0.0');
+  });
+
+  it('renders the remediation on its own indented line(s) under the CVE id', () => {
+    const out = fmt(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-LAYOUT',
+              versionOptions: [
+                {
+                  version: '2.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'LATEST_STABLE',
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const lines = out.split('\n');
+    const cveIndex = lines.findIndex((l) => l.includes('CVE-LAYOUT'));
+    expect(cveIndex).toBeGreaterThan(-1);
+    expect(lines[cveIndex]).not.toContain('Change version to');
+    expect(lines[cveIndex]).not.toContain('→');
+    expect(lines[cveIndex + 1]).toBe('                   Change version to 2.0.0 (complete fix)');
+  });
+
+  it('caps issues at three per release and appends "... and N more risks"', () => {
+    const out = fmt(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-1' }),
+            makeVulnIssue({ severity: 'HIGH', vulnerabilityId: 'CVE-2' }),
+            makeVulnIssue({ severity: 'MEDIUM', vulnerabilityId: 'CVE-3' }),
+            makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-4' }),
+            makeVulnIssue({ severity: 'INFO', vulnerabilityId: 'CVE-5' }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    expect(out).toContain('CVE-1');
+    expect(out).toContain('CVE-2');
+    expect(out).toContain('CVE-3');
+    expect(out).not.toContain('CVE-4');
+    expect(out).not.toContain('CVE-5');
+    expect(out).toContain('                   ... and 2 more risks (1 LOW, 1 INFO)');
+    const header = lineWith(out, 'foo@1.0.0');
+    expect(header).toContain('(5 risks)');
+  });
+
+  it('keeps only the top three issues by severity after sortReleases', () => {
+    const out = fmt(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-LOW' }),
+            makeVulnIssue({ severity: 'INFO', vulnerabilityId: 'CVE-INFO' }),
+            makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-BLK' }),
+            makeVulnIssue({ severity: 'HIGH', vulnerabilityId: 'CVE-HIGH' }),
+            makeVulnIssue({ severity: 'MEDIUM', vulnerabilityId: 'CVE-MED' }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    expect(out).toContain('CVE-BLK');
+    expect(out).toContain('CVE-HIGH');
+    expect(out).toContain('CVE-MED');
+    expect(out).not.toContain('CVE-LOW');
+    expect(out).not.toContain('CVE-INFO');
+    expect(out).toContain('... and 2 more risks (1 LOW, 1 INFO)');
+  });
+
+  it('breaks down hidden-risk counts by severity, skipping severities with zero hidden', () => {
+    const issues = [
+      // 3 BLOCKER take the visible slots
+      makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-V1' }),
+      makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-V2' }),
+      makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-V3' }),
+      // hidden: 2 HIGH, 0 MEDIUM, 3 LOW, 0 INFO
+      makeVulnIssue({ severity: 'HIGH', vulnerabilityId: 'CVE-H1' }),
+      makeVulnIssue({ severity: 'HIGH', vulnerabilityId: 'CVE-H2' }),
+      makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-L1' }),
+      makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-L2' }),
+      makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-L3' }),
+    ];
+    const out = fmt([makeRelease({ issues })], 1, []);
+    expect(out).toContain('... and 5 more risks (2 HIGH, 3 LOW)');
+    expect(out).not.toContain('MEDIUM');
+    expect(out).not.toContain('INFO');
+  });
+
+  it('omits the "... and N more risks" tail when there are at most three issues', () => {
+    const out = fmt(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({ vulnerabilityId: 'CVE-A' }),
+            makeVulnIssue({ vulnerabilityId: 'CVE-B' }),
+            makeVulnIssue({ vulnerabilityId: 'CVE-C' }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    expect(out).not.toContain('more risks');
+  });
+
+  it('wraps a remediation that exceeds 80 chars on the " | " boundary', () => {
+    const out = fmt(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-WRAP',
+              versionOptions: [
+                {
+                  version: '5.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'LATEST_STABLE',
+                },
+                {
+                  version: '4.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'NEAREST_COMPLETE',
+                },
+                {
+                  version: '3.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'PARTIAL',
+                  descriptionCode: 'NEAREST_PARTIAL',
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const lines = out.split('\n');
+    const cveIndex = lines.findIndex((l) => l.includes('CVE-WRAP'));
+    // Greedy pack: line 1 fits the first two fragments (80 chars total),
+    // line 2 carries the spillover starting with the "| " separator.
+    expect(lines[cveIndex + 1]).toBe(
+      '                   Change version to 5.0.0 (complete fix) | 4.0.0 (complete fix)',
+    );
+    expect(lines[cveIndex + 2]).toBe('                   | 3.0.0 (partial fix)');
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(80);
+    }
+  });
+
+  it('renders a short chain on a single via line without wrapping', () => {
+    const out = fmt(
+      [
+        makeRelease({
+          packageName: 'foo',
+          version: '1.0.0',
+          packageUrl: 'pkg:npm/foo@1.0.0',
+          dependencyChains: [['pkg:npm/a@1', 'pkg:npm/b@2', 'pkg:npm/foo@1.0.0']],
+          issues: [makeVulnIssue()],
+        }),
+      ],
+      1,
+      [],
+    );
+    const lines = out.split('\n');
+    const viaLine = lines.find((l) => l.startsWith('via '));
+    expect(viaLine).toBe('via pkg:npm/a@1 → pkg:npm/b@2 → foo@1.0.0');
+    expect(lines.some((l) => l.startsWith('    → '))).toBe(false);
+  });
+
+  it('wraps a chain that exceeds 80 chars with "    → " continuation', () => {
+    const long = '@scope-with-a-really-long-name/sub-package';
+    const a = `${long}-aaaa`;
+    const b = `${long}-bbbb`;
+    const out = fmt(
+      [
+        makeRelease({
+          packageName: 'foo',
+          version: '1.0.0',
+          packageUrl: 'pkg:npm/foo@1.0.0',
+          dependencyChains: [[`pkg:npm/${a}@1.0.0`, `pkg:npm/${b}@2.0.0`, 'pkg:npm/foo@1.0.0']],
+          issues: [makeVulnIssue()],
+        }),
+      ],
+      1,
+      [],
+    );
+    const lines = out.split('\n');
+    const viaLine = lines.find((l) => l.startsWith('via '));
+    expect(viaLine).toBeDefined();
+    expect(viaLine!.length).toBeLessThanOrEqual(80);
+    const continuation = lines.find((l) => l.startsWith('    → '));
+    expect(continuation).toBeDefined();
+    expect(continuation!.length).toBeLessThanOrEqual(80);
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(80);
+    }
+    expect(out).toContain(a);
+    expect(out).toContain(b);
+    expect(out).toContain('foo@1.0.0');
   });
 });

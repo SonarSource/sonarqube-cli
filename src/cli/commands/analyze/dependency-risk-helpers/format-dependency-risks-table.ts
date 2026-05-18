@@ -45,8 +45,13 @@ const EXCLUDED_DESCRIPTION_CODES: ReadonlySet<VersionOptionDescriptionCode> = ne
 
 const SEVERITY_WIDTH = 9;
 const STATUS_WIDTH = 8;
-const SEPARATOR_WIDTH = 70;
+const MAX_LINE_WIDTH = 80;
 const MAX_CHAINS_DISPLAYED = 3;
+const MAX_ISSUES_DISPLAYED = 3;
+const REMEDIATION_INDENT = ' '.repeat(SEVERITY_WIDTH + 1 + STATUS_WIDTH + 1);
+const CHAIN_CONTINUATION_INDENT = '    ';
+
+const SEVERITY_ORDER = ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO'] as const;
 
 export function formatDependencyRisksTable(
   filtered: AnalyzeProjectResponse,
@@ -55,42 +60,74 @@ export function formatDependencyRisksTable(
   const releaseByPurl = new Map(allReleases.map((r) => [r.packageUrl, r]));
   const displayedReleases = sortReleases(filtered.releases);
   const errors = filtered.errors;
-  const packagesScanned = allReleases.length;
+  const totalRisks = countTotalRisks(displayedReleases);
 
-  const totalRisks = displayedReleases.reduce((n, release) => n + release.issues.length, 0);
-  const lines: string[] = [
-    `Scan Summary: ${packagesScanned} dependencies checked. ${totalRisks} risks found`,
-  ];
+  const lines: string[] = [summaryLine(allReleases.length, totalRisks)];
 
-  if (totalRisks === 0) {
-    if (errors.length === 0) {
-      lines.push('No dependency risks found.');
-    } else {
-      appendErrors(lines, errors);
-    }
-    return lines.join('\n');
+  if (totalRisks > 0) {
+    appendReleases(displayedReleases, lines, releaseByPurl);
+  } else {
+    appendNoRisksTail(lines);
   }
 
-  for (const release of displayedReleases) {
-    if (release.issues.length === 0) continue;
-    lines.push('', packageHeader(release));
-    if (release.dependencyFilePaths.length > 0) {
-      lines.push(`in: ${release.dependencyFilePaths.join(', ')}`);
-    }
-    for (const line of transitiveChainLines(release.dependencyChains, releaseByPurl)) {
-      lines.push(line);
-    }
-
-    lines.push('');
-    for (const issue of release.issues) {
-      lines.push(issueLine(release, issue));
-    }
-  }
-
-  lines.push('', '═'.repeat(SEPARATOR_WIDTH));
+  lines.push('', '═'.repeat(MAX_LINE_WIDTH));
   appendErrors(lines, errors);
 
   return lines.join('\n');
+}
+
+function countTotalRisks(releases: AnalyzeProjectRelease[]): number {
+  return releases.reduce((n, release) => n + release.issues.length, 0);
+}
+
+function summaryLine(packagesScanned: number, totalRisks: number): string {
+  return `Scan Summary: ${packagesScanned} dependencies checked. ${totalRisks} risks found`;
+}
+
+function appendNoRisksTail(lines: string[]): void {
+  lines.push('No dependency risks found.');
+}
+
+function appendReleases(
+  displayedReleases: AnalyzeProjectRelease[],
+  lines: string[],
+  releaseByPurl: Map<string, AnalyzeProjectRelease>,
+) {
+  for (const release of displayedReleases) {
+    if (release.issues.length === 0) continue;
+    appendReleaseBlock(lines, release, releaseByPurl);
+  }
+}
+
+function appendReleaseBlock(
+  lines: string[],
+  release: AnalyzeProjectRelease,
+  releaseByPurl: Map<string, AnalyzeProjectRelease>,
+): void {
+  lines.push('', packageHeader(release));
+  if (release.dependencyFilePaths.length > 0) {
+    lines.push(`in: ${release.dependencyFilePaths.join(', ')}`);
+  }
+  for (const line of transitiveChainLines(release.dependencyChains, releaseByPurl)) {
+    lines.push(line);
+  }
+  lines.push('');
+  appendIssuesBlock(lines, release);
+}
+
+function appendIssuesBlock(lines: string[], release: AnalyzeProjectRelease): void {
+  const visibleIssues = release.issues.slice(0, MAX_ISSUES_DISPLAYED);
+  for (const issue of visibleIssues) {
+    for (const line of issueLines(release, issue)) {
+      lines.push(line);
+    }
+  }
+  const hiddenIssues = release.issues.slice(visibleIssues.length);
+  if (hiddenIssues.length > 0) {
+    lines.push(
+      `${REMEDIATION_INDENT}... and ${hiddenIssues.length} more risks${formatHiddenSeverityBreakdown(hiddenIssues)}`,
+    );
+  }
 }
 
 function getLabel(release: AnalyzeProjectRelease): string {
@@ -102,20 +139,49 @@ function packageHeader(release: AnalyzeProjectRelease): string {
   const name = release.newlyIntroduced ? `${baseName} [NEW]` : baseName;
   const count = release.issues.length;
   const label = `── ${name} (${count} risk${count === 1 ? '' : 's'}) `;
-  if (label.length >= SEPARATOR_WIDTH) {
+  if (label.length >= MAX_LINE_WIDTH) {
     return `${label}─`;
   }
-  return label + '─'.repeat(SEPARATOR_WIDTH - label.length);
+  return label + '─'.repeat(MAX_LINE_WIDTH - label.length);
 }
 
-function issueLine(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string {
+function issueLines(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string[] {
   const severity = issue.severity.toUpperCase().padEnd(SEVERITY_WIDTH);
   const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
   const status = (issue.status ?? fallback).toUpperCase().padEnd(STATUS_WIDTH);
   const issueText = issueCell(release, issue);
+  const out = [`${severity} ${status} ${issueText}`];
   const remediation = remediationCell(issue);
-  const detail = remediation ? `${issueText} → ${remediation}` : issueText;
-  return `${severity} ${status} ${detail}`;
+  if (remediation) {
+    for (const line of wrapRemediation(remediation, REMEDIATION_INDENT, MAX_LINE_WIDTH)) {
+      out.push(line);
+    }
+  }
+  return out;
+}
+
+function wrapRemediation(text: string, indent: string, maxWidth: number): string[] {
+  const parts = text.split(' | ');
+  const fragments = parts.map((part, idx) => (idx === 0 ? part : `| ${part}`));
+  const lines: string[] = [];
+  let current = '';
+  for (const fragment of fragments) {
+    if (current === '') {
+      current = fragment;
+      continue;
+    }
+    const candidate = `${current} ${fragment}`;
+    if (indent.length + candidate.length <= maxWidth) {
+      current = candidate;
+    } else {
+      lines.push(`${indent}${current}`);
+      current = fragment;
+    }
+  }
+  if (current !== '') {
+    lines.push(`${indent}${current}`);
+  }
+  return lines;
 }
 
 function appendErrors(lines: string[], errors: AnalysisErrorResource[]): void {
@@ -174,6 +240,25 @@ function chooseUpgradeRemediation(issue: AnalyzeProjectIssue): string {
   return `Change version to ${fixes.join(' | ')}`;
 }
 
+function formatHiddenSeverityBreakdown(hidden: AnalyzeProjectIssue[]): string {
+  const counts = new Map<string, number>();
+  for (const issue of hidden) {
+    const sev = issue.severity.toUpperCase();
+    counts.set(sev, (counts.get(sev) ?? 0) + 1);
+  }
+  const parts: string[] = [];
+  for (const sev of SEVERITY_ORDER) {
+    const n = counts.get(sev);
+    if (n) parts.push(`${n} ${sev}`);
+  }
+  for (const [sev, n] of counts) {
+    if (!SEVERITY_ORDER.includes(sev as (typeof SEVERITY_ORDER)[number]) && n > 0) {
+      parts.push(`${n} ${sev}`);
+    }
+  }
+  return parts.length > 0 ? ` (${parts.join(', ')})` : '';
+}
+
 function transitiveChainLines(
   chains: string[][],
   releaseByPurl: Map<string, AnalyzeProjectRelease>,
@@ -182,16 +267,38 @@ function transitiveChainLines(
     return [];
   }
   const shortest = [...chains].sort((a, b) => a.length - b.length).slice(0, MAX_CHAINS_DISPLAYED);
-  const lines = shortest.map((chain) => {
+  const lines: string[] = [];
+  for (const chain of shortest) {
     const labels = chain.map((purl) => {
       const release = releaseByPurl.get(purl);
       return release ? getLabel(release) : purl;
     });
-    return `via ${labels.join(' → ')}`;
-  });
+    for (const line of wrapChain(labels, MAX_LINE_WIDTH)) {
+      lines.push(line);
+    }
+  }
   const remaining = chains.length - shortest.length;
   if (remaining > 0) {
     lines.push(`and via ${remaining} others`);
   }
+  return lines;
+}
+
+function wrapChain(labels: string[], maxWidth: number): string[] {
+  if (labels.length === 0) {
+    return ['via '];
+  }
+  const lines: string[] = [];
+  let current = `via ${labels[0]}`;
+  for (let i = 1; i < labels.length; i++) {
+    const candidate = `${current} → ${labels[i]}`;
+    if (candidate.length <= maxWidth) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = `${CHAIN_CONTINUATION_INDENT}→ ${labels[i]}`;
+    }
+  }
+  lines.push(current);
   return lines;
 }
