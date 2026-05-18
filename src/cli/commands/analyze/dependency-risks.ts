@@ -45,7 +45,7 @@ import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
-export const VALID_STATUS_FILTERS: readonly DependencyRisksStatusFilter[] = ['all', 'open'];
+export const VALID_STATUS_FILTERS: readonly DependencyRisksStatusFilter[] = ['all', 'open', 'new'];
 
 const EXIT_CODE_OK = 0;
 const EXIT_CODE_ERRORS_ONLY = 1;
@@ -106,7 +106,7 @@ export async function analyzeDependencyRisks(
     print(formatDependencyRisksTable(filtered, result.releases));
   }
 
-  handleResult(countUnresolvedIssues(result), result.errors.length);
+  handleResult(countUnresolvedIssues(filtered), result.errors.length);
 }
 
 function handleResult(unresolvedRisksCount: number, errorCount: number) {

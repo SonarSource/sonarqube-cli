@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { sortReleases } from './analysis-response.ts';
+import { effectiveStatus, sortReleases } from './analysis-response.ts';
 import type {
   AnalysisErrorResource,
   AnalyzeProjectIssue,
@@ -147,8 +147,7 @@ function packageHeader(release: AnalyzeProjectRelease): string {
 
 function issueLine(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string {
   const severity = issue.severity.toUpperCase().padEnd(SEVERITY_WIDTH);
-  const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
-  const status = (issue.status ?? fallback).toUpperCase().padEnd(STATUS_WIDTH);
+  const status = effectiveStatus(release, issue).padEnd(STATUS_WIDTH);
   const cell = issueCell(release, issue);
   const inline = inlineRemediation(issue);
   const tail = inline ? ` → ${inline}` : '';
