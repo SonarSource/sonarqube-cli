@@ -24,6 +24,7 @@ import type {
   AnalyzeProjectIssue,
   AnalyzeProjectRelease,
   AnalyzeProjectResponse,
+  ScaIssueType,
   VersionOption,
   VersionOptionDescriptionCode,
 } from './sca-scanner.ts';
@@ -49,7 +50,12 @@ const STATUS_WIDTH = 8;
 const MAX_LINE_WIDTH = 80;
 const MAX_CHAINS_DISPLAYED = 3;
 const MAX_PACKAGE_FIXES = 2;
-const CHAIN_CONTINUATION_INDENT = '    ';
+const CHAIN_LINE_INDENT = '  ';
+const CHAIN_CONTINUATION_INDENT = `${CHAIN_LINE_INDENT}    `;
+
+const ISSUE_TYPES: ScaIssueType[] = ['MALWARE', 'PROHIBITED_LICENSE', 'VULNERABILITY'];
+const SEVERITIES = ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO'] as const;
+const TYPE_LABEL_WIDTH = 'PROHIBITED_LICENSE'.length;
 
 export function formatDependencyRisksTable(
   filtered: AnalyzeProjectResponse,
@@ -70,6 +76,7 @@ export function formatDependencyRisksTable(
 
   lines.push('', '═'.repeat(MAX_LINE_WIDTH));
   appendErrors(lines, errors);
+  appendSummaryBlock(lines, displayedReleases);
 
   return lines.join('\n');
 }
@@ -111,7 +118,7 @@ function appendReleaseBlock(
   }
   const fixLine = packageFixLine(release);
   if (fixLine !== null) {
-    lines.push(fixLine);
+    lines.push('', fixLine);
   }
   lines.push('');
   appendIssuesBlock(lines, release);
@@ -184,7 +191,7 @@ function packageFixLine(release: AnalyzeProjectRelease): string | null {
     return null;
   }
   const parts = fixes.map((o) => `${o.version} (complete fix)`);
-  return `Fix: Change version to ${parts.join(' | ')}`;
+  return `Recommended fix: Change version to ${parts.join(' | ')}`;
 }
 
 function packageCompleteFixes(release: AnalyzeProjectRelease): VersionOption[] {
@@ -265,6 +272,44 @@ function appendErrors(lines: string[], errors: AnalysisErrorResource[]): void {
   }
 }
 
+function appendSummaryBlock(lines: string[], releases: AnalyzeProjectRelease[]): void {
+  const counts = countsByTypeAndSeverity(releases);
+  lines.push('', 'Summary:');
+  for (const type of ISSUE_TYPES) {
+    lines.push(summaryLineForType(type, counts.get(type) ?? new Map()));
+  }
+}
+
+function countsByTypeAndSeverity(
+  releases: AnalyzeProjectRelease[],
+): Map<ScaIssueType, Map<string, number>> {
+  const out = new Map<ScaIssueType, Map<string, number>>();
+  for (const type of ISSUE_TYPES) {
+    const row = new Map<string, number>();
+    for (const sev of SEVERITIES) row.set(sev, 0);
+    out.set(type, row);
+  }
+  for (const release of releases) {
+    for (const issue of release.issues) {
+      const row = out.get(issue.type);
+      if (!row) continue;
+      const sev = issue.severity.toUpperCase();
+      if (!row.has(sev)) continue;
+      row.set(sev, (row.get(sev) ?? 0) + 1);
+    }
+  }
+  return out;
+}
+
+function summaryLineForType(type: ScaIssueType, counts: Map<string, number>): string {
+  const cells = SEVERITIES.map((sev) => severityCell(sev, counts.get(sev) ?? 0));
+  return `  ${type.padEnd(TYPE_LABEL_WIDTH)}  ${cells.join('    ')}`;
+}
+
+function severityCell(label: string, count: number): string {
+  return `${label} ${String(count).padStart(3)}`;
+}
+
 function issueCell(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string {
   switch (issue.type) {
     case 'VULNERABILITY':
@@ -296,17 +341,17 @@ function transitiveChainLines(
   }
   const remaining = chains.length - shortest.length;
   if (remaining > 0) {
-    lines.push(`and via ${remaining} others`);
+    lines.push(`${CHAIN_LINE_INDENT}and via ${remaining} others`);
   }
   return lines;
 }
 
 function wrapChain(labels: string[], maxWidth: number): string[] {
   if (labels.length === 0) {
-    return ['via '];
+    return [`${CHAIN_LINE_INDENT}via `];
   }
   const lines: string[] = [];
-  let current = `via ${labels[0]}`;
+  let current = `${CHAIN_LINE_INDENT}via ${labels[0]}`;
   for (let i = 1; i < labels.length; i++) {
     const candidate = `${current} → ${labels[i]}`;
     if (candidate.length <= maxWidth) {
