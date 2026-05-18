@@ -60,9 +60,9 @@ describe('analyze secrets', () => {
       const result = await harness.run('analyze secrets clean.js');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
-        '❌ Not authenticated. Run: sonar auth login',
-      );
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('❌ Not authenticated.');
+      expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
     },
     { timeout: 15000 },
   );

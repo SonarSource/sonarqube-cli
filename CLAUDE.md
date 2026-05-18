@@ -38,6 +38,8 @@ To add a new command: add it to `src/cli/command-tree.ts` and implement the logi
 Please declare commands using the type defined in `src/cli/commands/_common/sonar-command.ts`.
 By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
 
+Declarative integration registry helpers live in `src/cli/commands/integrate/_common/registry/index.ts`. New integration descriptors should use that public entrypoint for resource factories, operations, and registry validation. Command handlers should keep command-specific validation, prompts, and target resolution thin, then delegate feature selection, generic install messages, resource/operation application, and state recording to `src/cli/commands/integrate/_common/installer.ts`.
+
 ### Context Augmentation
 
 `sonar context [action] [args...]` is a passthrough to the locally-installed `sonar-context-augmentation` binary (CAG). It forwards args verbatim, propagates the child exit code, and injects the resolved auth token via the `SONAR_TOKEN` env var. Implementation in `src/cli/commands/context/`. The binary is downloaded by `sonar integrate claude` / `sonar integrate copilot` (skip with `--skip-context`); `sonar context` itself never auto-installs and emits a clear "not installed" error pointing the user back to integrate. `--global` integrations also skip CAG setup; install it by re-running `sonar integrate <agent>` from a project directory.
@@ -58,9 +60,12 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 - `CommandFailedError` → exit code `1` by default, or whatever is passed to the constructor.
 - Any other `Error` caught by `runCommand` → exit code `1`.
 
+`CliError` also supports an optional `remediationHint`. When present, `SonarCommand.runCommand()` prints the error message first, then renders the hint on a separate `💡` line.
+
 ## State and auth
 
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.
+- Declarative integration installs are tracked as integration entries in the top-level `integrations.installed` state registry, with installed feature targets nested under each integration. This is the generic state surface for Git, Claude, Copilot, and future integrations; legacy `agents` and `agentExtensions` remain for compatibility.
 - Tokens are stored in the system keychain via `src/lib/keychain.ts` — never store tokens in plain files.
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.
 - Caller-agent hints (Cursor, Claude Code, or Copilot CLI) from the environment: `src/lib/agent-detector.ts` (`detectCallerAgent`, etc.).

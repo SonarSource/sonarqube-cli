@@ -57,9 +57,9 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     options.issues === undefined ? undefined : parseIssueKeys(options.issues);
 
   if (auth.connectionType !== 'cloud') {
-    throw new CommandFailedError(
-      'sonar remediate requires SonarQube Cloud - The Remediation Agent is not supported on SonarQube Server.',
-    );
+    throw new CommandFailedError('sonar remediate requires a SonarQube Cloud connection.', {
+      remediationHint: "Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+    });
   }
 
   if (
@@ -67,9 +67,10 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     !process.env.SONARQUBE_CLI_MOCK_TTY &&
     suppliedIssueKeys === undefined
   ) {
-    throw new CommandFailedError(
-      "Non-interactive mode requires --issues <issueIds>. Run 'sonar list issues --project <key>' to find issue keys.",
-    );
+    throw new CommandFailedError('Non-interactive mode requires --issues <issueIds>.', {
+      remediationHint:
+        "Run 'sonar list issues --project <key>' to find issue keys, then pass them with --issues.",
+    });
   }
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
@@ -84,20 +85,26 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     print(`The Remediation Agent is not available for your organization (${orgKey}).`);
     print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
     blank();
-    throw new CommandFailedError('Remediation Agent unavailable');
+    throw new CommandFailedError('Remediation Agent unavailable.', {
+      remediationHint: `Ask an organization administrator to check eligibility and enable the feature. Learn more: ${AI_REMEDIATION_DOCS_URL}`,
+    });
   }
   if (entitlement === 'not_enabled') {
     print(`The Remediation Agent is not enabled for your organization (${orgKey}).`);
     print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
     blank();
-    throw new CommandFailedError('Remediation Agent unavailable');
+    throw new CommandFailedError('Remediation Agent unavailable.', {
+      remediationHint: `Ask an organization administrator to enable the feature. Learn more: ${AI_REMEDIATION_DOCS_URL}`,
+    });
   }
   if (entitlement === 'unknown') {
     print(
       'Could not verify Remediation Agent entitlement. Please try again or contact support if the issue persists.',
     );
     blank();
-    throw new CommandFailedError('Remediation Agent unavailable');
+    throw new CommandFailedError('Remediation Agent unavailable.', {
+      remediationHint: 'Retry, and contact support if the problem persists.',
+    });
   }
 
   let projectKey = options.project;
@@ -106,9 +113,9 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     projectKey = discovered.projectKey;
   }
   if (!projectKey) {
-    throw new CommandFailedError(
-      'Could not determine project key. Use --project <key> to specify it.',
-    );
+    throw new CommandFailedError('Could not determine project key.', {
+      remediationHint: 'Use --project <key> to specify it.',
+    });
   }
 
   let selectedKeys: string[];
@@ -136,8 +143,9 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
     taskId = response.taskId;
   } catch (err) {
     logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
-    const lines = mapErrorMessage((err as Error).message, orgKey);
-    throw new CommandFailedError(`Remediation job submission failed.\n  ${lines.join('\n  ')}`);
+    throw new CommandFailedError('Remediation job submission failed.', {
+      remediationHint: mapSubmissionFailureHint((err as Error).message, orgKey),
+    });
   }
 
   const issueWord = selectedKeys.length === 1 ? 'issue' : 'issues';
@@ -239,16 +247,10 @@ function formatIssueLabel(issue: SonarQubeIssue, projectKey: string): string {
   return `${severity}  ${rule}  ${path}\n${messageIndent}${issue.message}`;
 }
 
-function mapErrorMessage(raw: string, displayOrg: string): string[] {
+function mapSubmissionFailureHint(raw: string, displayOrg: string): string {
   if (raw.includes('Organization does not have allowance for AI agent jobs')) {
-    return [
-      `Your organization plan does not include the Remediation Agent (${displayOrg}).`,
-      `Learn more: ${AI_REMEDIATION_DOCS_URL}`,
-    ];
+    return `Your organization plan does not include the Remediation Agent (${displayOrg}). Learn more: ${AI_REMEDIATION_DOCS_URL}`;
   }
 
-  return [
-    `The Remediation Agent is not enabled for your organization (${displayOrg}).`,
-    `Learn more: ${AI_REMEDIATION_DOCS_URL}`,
-  ];
+  return `The Remediation Agent is not enabled for your organization (${displayOrg}). Learn more: ${AI_REMEDIATION_DOCS_URL}`;
 }

@@ -78,7 +78,9 @@ export class SonarCommand extends Command {
       this.runCommand(async () => {
         const auth = await resolveAuth();
         if (!auth) {
-          throw new CommandFailedError('Not authenticated. Run: sonar auth login');
+          throw new CommandFailedError('Not authenticated.', {
+            remediationHint: "Run 'sonar auth login' to authenticate.",
+          });
         }
         await fn(auth, ...args);
       }),

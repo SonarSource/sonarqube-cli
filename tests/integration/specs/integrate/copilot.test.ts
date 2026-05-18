@@ -613,9 +613,9 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot');
 
         expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain(
-          '❌ Not authenticated. Run: sonar auth login',
-        );
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('❌ Not authenticated.');
+        expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
       },
       { timeout: 15000 },
     );

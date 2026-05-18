@@ -253,6 +253,102 @@ export interface ToolsState {
 }
 
 /**
+ * Scope where an integration feature was installed.
+ */
+export type IntegrationScope = 'project' | 'global';
+
+/**
+ * Basic scalar attributes carried by integration feature state.
+ */
+export type IntegrationStateAttribute = string | number | boolean | null;
+
+/**
+ * Installed resource metadata for a declarative integration feature.
+ */
+export interface InstalledIntegrationResource {
+  /** Stable resource identifier from the integration declaration */
+  id: string;
+  /** Resource type from the integration declaration */
+  resourceType: string;
+  /** Resource declaration version, when versioned */
+  version?: string;
+  /** Resolved path for resources materialized on disk */
+  path?: string;
+  /** CLI version that last updated this resource */
+  updatedByCliVersion: string;
+  /** ISO timestamp of the last update */
+  updatedAt: string;
+}
+
+/**
+ * Installed operation metadata for a declarative integration feature.
+ */
+export interface InstalledIntegrationOperation {
+  /** Stable operation identifier from the integration declaration */
+  id: string;
+  /** Operation declaration version, when versioned */
+  version?: string;
+  /** CLI version that last ran this operation */
+  updatedByCliVersion: string;
+  /** ISO timestamp of the last run */
+  updatedAt: string;
+}
+
+/**
+ * Installed declarative integration feature.
+ */
+export interface InstalledIntegrationFeature {
+  /** Feature identifier from the integration declaration */
+  featureId: string;
+  /** Installation scope */
+  scope: IntegrationScope;
+  /** Root path associated with this feature installation target */
+  targetRoot: string;
+  /** CLI version that first installed the feature */
+  installedByCliVersion: string;
+  /** ISO timestamp when the feature was first installed */
+  installedAt: string;
+  /** CLI version that last updated the feature */
+  updatedByCliVersion: string;
+  /** ISO timestamp of the last update */
+  updatedAt: string;
+  /** Resources installed for this feature */
+  resources: InstalledIntegrationResource[];
+  /** Operations applied for this feature */
+  operations: InstalledIntegrationOperation[];
+  /** Optional command-specific metadata */
+  attrs?: Record<string, IntegrationStateAttribute>;
+}
+
+/**
+ * Installed declarative integration container.
+ */
+export interface InstalledIntegration {
+  /** Stable state entry id */
+  id: string;
+  /** Integration identifier, e.g. git, claude-code, copilot-cli */
+  integrationId: string;
+  /** CLI version that first installed the integration */
+  installedByCliVersion: string;
+  /** ISO timestamp when the integration was first installed */
+  installedAt: string;
+  /** CLI version that last updated the integration */
+  updatedByCliVersion: string;
+  /** ISO timestamp of the last update */
+  updatedAt: string;
+  /** Features installed for this integration */
+  features: InstalledIntegrationFeature[];
+}
+
+/**
+ * Registry of declarative integrations installed by the CLI.
+ */
+export interface IntegrationsState {
+  /** Installed declarative integrations */
+  installed: InstalledIntegration[];
+}
+
+/**
  * Metadata envelope for a telemetry event.
  */
 export interface TelemetryEventMetadata {
@@ -333,6 +429,8 @@ export interface CliState {
   telemetry: TelemetryState;
   /** Registry of all agent extensions (hooks, skills) installed per project */
   agentExtensions: AgentExtension[];
+  /** Registry of all declarative integrations installed per project */
+  integrations: IntegrationsState;
 }
 
 /**
@@ -373,5 +471,8 @@ export function getDefaultState(cliVersion: string): CliState {
       events: [],
     },
     agentExtensions: [],
+    integrations: {
+      installed: [],
+    },
   };
 }

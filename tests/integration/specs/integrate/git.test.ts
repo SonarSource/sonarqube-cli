@@ -198,6 +198,28 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
+    'exits with error when a malformed .git worktree pointer makes git rev-parse fail',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      // findGitRoot() accepts .git files (worktree pointers), but this one points
+      // to a non-existent gitdir so git rev-parse --git-path hooks fails.
+      harness.cwd.writeFile('.git', 'gitdir: not-a-real-git-dir\n');
+
+      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Could not resolve git hooks directory');
+      expect(output).toContain(
+        'Make sure you run this command inside a valid git repository, and check that the repository metadata (.git directory or worktree pointer) is not corrupted, then retry.',
+      );
+      expect(output).not.toContain('available on PATH');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'pre-commit hook blocks commit when staged file contains a secret',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });

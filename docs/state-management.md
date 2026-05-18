@@ -7,11 +7,11 @@ The SonarQube CLI maintains persistent state in `~/.sonar/sonarqube-cli/state.js
 The state file persists configuration across CLI invocations and stores:
 
 - **Authentication**: Server connections details. Tokens are stored securely in system keychain, NOT in the state file
-- **Agent Configuration**: Integration status with Claude Code and other agents
-- **Installed Hooks**: Pre/Post tool use and session start hooks for agent interactions
-- **Installed Skills**: Custom Claude Code skills
+- **Legacy Agent Configuration**: Backward-compatible agent status plus legacy hook and skill lists
+- **Agent Extension Registry**: Per-project/global hooks, skills, and instruction files installed for agents
+- **Declarative Integrations**: Generic records of installed integrations, features, resources, and operations
 - **Tool Metadata**: Installed external tools like sonar-secrets binary
-- **Telemetry data**: Anonymous usage statistics
+- **Telemetry Data**: Anonymous usage statistics and pending telemetry events
 
 ## Location
 
@@ -23,14 +23,17 @@ The state file persists configuration across CLI invocations and stores:
 
 ### Root Level
 
-| Field         | Type                  | Description                                      |
-| ------------- | --------------------- | ------------------------------------------------ |
-| `version`     | string                | State format version (currently `"1.0"`)         |
-| `lastUpdated` | ISO 8601 timestamp    | When state was last modified                     |
-| `auth`        | AuthState             | Authentication and server connections            |
-| `agents`      | AgentsState           | Configuration for each agent (Claude Code, etc.) |
-| `config`      | CliConfig             | CLI configuration metadata                       |
-| `tools`       | ToolsState (optional) | Installed tools and binaries                     |
+| Field             | Type                  | Description                                         |
+| ----------------- | --------------------- | --------------------------------------------------- |
+| `version`         | string                | State format version (currently `"1.0"`)            |
+| `lastUpdated`     | ISO 8601 timestamp    | When state was last modified                        |
+| `auth`            | AuthState             | Authentication and server connections               |
+| `agents`          | AgentsState           | Configuration for each agent (Claude Code, etc.)    |
+| `config`          | CliConfig             | CLI configuration metadata                          |
+| `tools`           | ToolsState (optional) | Installed tools and binaries                        |
+| `telemetry`       | TelemetryState        | Telemetry configuration and pending events          |
+| `agentExtensions` | AgentExtension[]      | Installed agent extensions per project/global scope |
+| `integrations`    | IntegrationsState     | Generic declarative integration install records     |
 
 ### Auth Section
 
@@ -55,6 +58,8 @@ The state file persists configuration across CLI invocations and stores:
 
 ### Agents Section
 
+The `agents` section is kept for compatibility with existing agent-specific setup flows. Newer integrations may also write to `agentExtensions` and `integrations`.
+
 | Field            | Type        | Description                     |
 | ---------------- | ----------- | ------------------------------- |
 | `claude-code`    | AgentConfig | Claude Code agent configuration |
@@ -75,6 +80,35 @@ The state file persists configuration across CLI invocations and stores:
 - `PreToolUse`: Executes before Claude Code invokes a tool
 - `PostToolUse`: Executes after Claude Code invokes a tool
 - `SessionStart`: Executes when Claude Code session starts
+- `UserPromptSubmit`: Executes when the user submits a prompt
+
+### Agent Extensions Section
+
+The `agentExtensions` registry stores per-project or global artifacts installed for an agent, such as hooks, skills, and instruction files.
+
+| Field             | Type             | Description                |
+| ----------------- | ---------------- | -------------------------- |
+| `agentExtensions` | AgentExtension[] | Installed agent extensions |
+
+#### Base Agent Extension Fields
+
+| Field                 | Type               | Description                                            |
+| --------------------- | ------------------ | ------------------------------------------------------ |
+| `id`                  | string             | Stable state entry identifier                          |
+| `agentId`             | string             | Agent identifier, e.g. `claude-code`                   |
+| `projectRoot`         | string             | Absolute path to the associated project or global root |
+| `global`              | boolean            | Whether the extension was installed globally           |
+| `projectKey`          | string (optional)  | SonarQube project key associated with the extension    |
+| `orgKey`              | string (optional)  | SonarQube Cloud organization key                       |
+| `serverUrl`           | string (optional)  | SonarQube server URL                                   |
+| `updatedByCliVersion` | string             | CLI version that last updated the extension            |
+| `updatedAt`           | ISO 8601 timestamp | Last update time                                       |
+
+#### Agent Extension Variants
+
+- `HookExtension`: `kind: 'hook'`, plus `name` and `hookType`
+- `SkillExtension`: `kind: 'skill'`, plus `name` and optional `version`
+- `InstructionsExtension`: `kind: 'instructions'`, plus `name`
 
 ### Config Section
 
@@ -98,9 +132,75 @@ The state file persists configuration across CLI invocations and stores:
 | `installedAt`           | ISO 8601 timestamp | Installation time                       |
 | `installedByCliVersion` | string             | CLI version that installed the tool     |
 
+### Telemetry Section
+
+| Field            | Type                   | Description                             |
+| ---------------- | ---------------------- | --------------------------------------- |
+| `enabled`        | boolean                | Whether telemetry collection is enabled |
+| `firstUseDate`   | ISO 8601 timestamp     | When the CLI was first used             |
+| `installationId` | string (optional)      | Stable installation identifier          |
+| `events`         | StoredTelemetryEvent[] | Pending telemetry events not yet sent   |
+
+### Integrations Section
+
+The `integrations.installed` registry is the generic state surface for declarative integrations such as Git, Claude, Copilot, and future tools. It records which integration has installed features and where each feature was installed.
+
+| Field       | Type                   | Description                        |
+| ----------- | ---------------------- | ---------------------------------- |
+| `installed` | InstalledIntegration[] | Installed declarative integrations |
+
+#### InstalledIntegration Fields
+
+| Field                   | Type                          | Description                                      |
+| ----------------------- | ----------------------------- | ------------------------------------------------ |
+| `id`                    | string                        | Stable state entry identifier                    |
+| `integrationId`         | string                        | Integration identifier                           |
+| `installedByCliVersion` | string                        | CLI version that first installed the integration |
+| `installedAt`           | ISO 8601 timestamp            | Initial installation time                        |
+| `updatedByCliVersion`   | string                        | CLI version that last updated the integration    |
+| `updatedAt`             | ISO 8601 timestamp            | Last update time                                 |
+| `features`              | InstalledIntegrationFeature[] | Features installed for this integration          |
+
+#### InstalledIntegrationFeature Fields
+
+| Field                   | Type                            | Description                                   |
+| ----------------------- | ------------------------------- | --------------------------------------------- |
+| `featureId`             | string                          | Feature identifier from the declaration       |
+| `scope`                 | `'project' \| 'global'`         | Installation scope                            |
+| `targetRoot`            | string                          | Root path associated with this feature target |
+| `installedByCliVersion` | string                          | CLI version that first installed the feature  |
+| `installedAt`           | ISO 8601 timestamp              | Initial installation time                     |
+| `updatedByCliVersion`   | string                          | CLI version that last updated the feature     |
+| `updatedAt`             | ISO 8601 timestamp              | Last update time                              |
+| `resources`             | InstalledIntegrationResource[]  | Resources applied for the feature             |
+| `operations`            | InstalledIntegrationOperation[] | Operations applied for the feature            |
+| `attrs`                 | object (optional)               | Command-specific scalar metadata              |
+
+#### InstalledIntegrationResource Fields
+
+| Field                 | Type               | Description                                                     |
+| --------------------- | ------------------ | --------------------------------------------------------------- |
+| `id`                  | string             | Resource identifier from the declaration                        |
+| `resourceType`        | string             | Resource type, e.g. `whole-file`, `json-patch`, or `yaml-patch` |
+| `version`             | string (optional)  | Resource declaration version                                    |
+| `path`                | string (optional)  | Resolved path for resources written to disk                     |
+| `updatedByCliVersion` | string             | CLI version that last updated the resource                      |
+| `updatedAt`           | ISO 8601 timestamp | Last resource update time                                       |
+
+#### InstalledIntegrationOperation Fields
+
+| Field                 | Type               | Description                               |
+| --------------------- | ------------------ | ----------------------------------------- |
+| `id`                  | string             | Operation identifier from the declaration |
+| `version`             | string (optional)  | Operation declaration version             |
+| `updatedByCliVersion` | string             | CLI version that last ran the operation   |
+| `updatedAt`           | ISO 8601 timestamp | Last operation execution time             |
+
 ---
 
 ## Examples
+
+The examples below focus on the fields relevant to each scenario and may omit unrelated sections for brevity.
 
 ### Example 1: SonarQube Cloud with Claude Code Integration
 
@@ -192,7 +292,7 @@ A user authenticated with a self-hosted SonarQube instance (no organization requ
 }
 ```
 
-### Example 3: Full Configuration with Hooks and Skills
+### Example 3: Expanded Example with Hooks and Skills
 
 A complete setup with SonarQube Cloud, multiple hooks, skills, and installed tools.
 
@@ -314,14 +414,17 @@ The state file is managed automatically by the CLI. Direct manual editing is not
 # Add authentication
 sonar auth login -s https://sonarcloud.io -o my-org
 
-# Configure agent
-sonar onboard-agent claude
+# Configure Claude Code integration
+sonar integrate claude --project my-project
 
-# Install hook
-sonar secret install
+# Install a Git hook integration
+sonar integrate git --hook pre-commit
 
 # Check status
 sonar auth status
+
+# Inspect or change telemetry configuration
+sonar config telemetry
 ```
 
 ### Backward Compatibility
@@ -334,7 +437,7 @@ When the CLI is upgraded, it automatically migrates the state to the new format 
 
 ### State File Not Found
 
-If `~/.sonar/sonarqube-cli/state.json` doesn't exist, it will be created automatically on first use.
+If `~/.sonar/sonarqube-cli/state.json` doesn't exist, the CLI falls back to a default in-memory state and creates the file the first time it persists configuration.
 
 ### Invalid JSON
 
@@ -344,17 +447,20 @@ If the state file becomes corrupted:
 # Backup the corrupted file
 cp ~/.sonar/sonarqube-cli/state.json ~/.sonar/sonarqube-cli/state.json.backup
 
-# Reset to default state (requires re-authentication)
+# Reset to a clean state (requires re-authentication)
 rm ~/.sonar/sonarqube-cli/state.json
 ```
 
+When the file cannot be parsed, the CLI falls back to a default in-memory state until it can write a new valid state file.
+
 ### Lost Authentication
 
-If connections are lost but tokens remain in keychain:
+If state entries are lost but tokens remain in the keychain:
 
 ```bash
-# List available tokens
+# Inspect the active connection
 sonar auth status
 
-# The tokens can be manually restored by re-authenticating
+# Re-authenticate to recreate the missing state entries
+sonar auth login -s https://sonarcloud.io -o my-org
 ```

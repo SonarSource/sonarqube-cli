@@ -208,9 +208,9 @@ export async function installViaGitHooks(
     if (!existing.includes(HOOK_MARKER) && !force) {
       warn(`A different ${hook} hook already exists at ${hookPath}.`);
       text('  Use --force to replace it.');
-      throw new CommandFailedError(
-        `Refusing to overwrite existing ${hook} hook at ${hookPath}. Use --force to replace.`,
-      );
+      throw new CommandFailedError(`Refusing to overwrite existing ${hook} hook at ${hookPath}.`, {
+        remediationHint: 'Use --force to replace the existing hook.',
+      });
     }
   }
   await fs.writeFile(hookPath, getHookScript(hook), { mode: 0o755 });
@@ -262,12 +262,18 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new CommandFailedError(`Failed to run git [${message}]`);
+    throw new CommandFailedError(`Failed to run git [${message}]`, {
+      remediationHint:
+        'Ensure git is installed and your global git configuration is writable, then retry.',
+    });
   }
   if (gitResult.exitCode !== 0) {
     const detail = [gitResult.stderr, gitResult.stdout].filter(Boolean).join('\n');
     const msg = `git config --global core.hooksPath failed (exit code ${gitResult.exitCode}): ${detail}`;
-    throw new CommandFailedError(msg);
+    throw new CommandFailedError(msg, {
+      remediationHint:
+        'Ensure git is installed and your global git configuration is writable, then retry.',
+    });
   }
 
   success(`${hook} hook installed globally at ${join(GLOBAL_HOOKS_DIR, hook)}`);
@@ -288,9 +294,10 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
 
   const { gitRoot, isGit } = findGitRoot(process.cwd());
   if (!isGit) {
-    const errorMessage =
-      'No git repository found. Please run this command from inside a git repository, or use --global to install a global hook.';
-    throw new CommandFailedError(errorMessage);
+    throw new CommandFailedError('No git repository found.', {
+      remediationHint:
+        'Run this command from inside a git repository, or use --global to install a global hook.',
+    });
   }
 
   text(`We will install the hook in this repository: ${gitRoot}`);

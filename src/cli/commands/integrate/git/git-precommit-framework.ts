@@ -33,6 +33,8 @@ import type { GitHookType } from '.';
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 const PRE_COMMIT_SONAR_HOOK_ID = 'sonar-secrets';
 export const PRE_COMMIT_LEGACY_REPO = 'https://github.com/SonarSource/sonar-secrets-pre-commit';
+const PRE_COMMIT_REMEDIATION_HINT =
+  "Install the pre-commit framework (for example 'pip install pre-commit') and ensure 'pre-commit' is on PATH, then retry.";
 
 interface PreCommitHookEntry {
   id: string;
@@ -135,12 +137,15 @@ async function runPreCommitCommand(args: string[], cwd: string): Promise<void> {
     result = await spawnProcess('pre-commit', args, { cwd });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new CommandFailedError(`Failed to run pre-commit [${message}]`);
+    throw new CommandFailedError(`Failed to run pre-commit [${message}]`, {
+      remediationHint: PRE_COMMIT_REMEDIATION_HINT,
+    });
   }
   if (result.exitCode !== 0) {
     const detail = [result.stderr, result.stdout].filter(Boolean).join('\n');
     throw new CommandFailedError(
       `pre-commit ${args.join(' ')} failed (exit code ${result.exitCode}) ${detail}`,
+      { remediationHint: PRE_COMMIT_REMEDIATION_HINT },
     );
   }
 }
@@ -166,8 +171,13 @@ export async function installViaPreCommitFramework(root: string, hook: GitHookTy
   try {
     await runPreCommitInstall(root, hook);
   } catch {
-    const errorMessage = `Updated ${PRE_COMMIT_CONFIG_FILE} but pre-commit commands failed. Install the pre-commit framework (e.g. pip install pre-commit) and run: pre-commit uninstall && pre-commit clean && pre-commit install${hook === 'pre-push' ? ' && pre-commit install --hook-type pre-push' : ''}`;
-    throw new CommandFailedError(errorMessage);
+    const installCommands = `pre-commit uninstall && pre-commit clean && pre-commit install${hook === 'pre-push' ? ' && pre-commit install --hook-type pre-push' : ''}`;
+    throw new CommandFailedError(
+      `Updated ${PRE_COMMIT_CONFIG_FILE} but pre-commit commands failed.`,
+      {
+        remediationHint: `Install the pre-commit framework (for example 'pip install pre-commit') and run: ${installCommands}`,
+      },
+    );
   }
   success(`${hook} hook installed (pre-commit framework: added to ${PRE_COMMIT_CONFIG_FILE}).`);
 }

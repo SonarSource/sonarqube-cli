@@ -82,7 +82,9 @@ export async function authStatus(): Promise<void> {
 
   if (state.auth.connections.length === 0) {
     print('No saved connection');
-    throw new CommandFailedError('Authentication check failed');
+    throw new CommandFailedError('Authentication check failed.', {
+      remediationHint: "Run 'sonar auth login' to authenticate.",
+    });
   }
 
   const conn = state.auth.connections[0];
@@ -90,7 +92,9 @@ export async function authStatus(): Promise<void> {
 
   if (token === null) {
     displayTokenMissing(conn.serverUrl, conn.orgKey);
-    throw new CommandFailedError('Authentication check failed');
+    throw new CommandFailedError('Authentication check failed.', {
+      remediationHint: "Run 'sonar auth login' to restore the token.",
+    });
   }
 
   const status = await withSpinner('Verifying token...', () =>
@@ -103,8 +107,16 @@ export async function authStatus(): Promise<void> {
     displayTokenStatus(conn.serverUrl, conn.orgKey, status);
   }
 
-  if (status === 'unreachable') throw new CommandFailedError('Connection check failed');
-  if (status !== 'valid') throw new CommandFailedError('Authentication check failed');
+  if (status === 'unreachable') {
+    throw new CommandFailedError('Connection check failed.', {
+      remediationHint: 'Check the server URL and network connectivity, then retry.',
+    });
+  }
+  if (status !== 'valid') {
+    throw new CommandFailedError('Authentication check failed.', {
+      remediationHint: "Run 'sonar auth login' to reauthenticate.",
+    });
+  }
 }
 
 function printConnected(serverUrl: string, source: string, orgKey?: string): void {

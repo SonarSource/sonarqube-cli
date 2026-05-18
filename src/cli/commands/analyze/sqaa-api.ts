@@ -52,7 +52,9 @@ export function readSqaaFileContent(file: string): string {
   try {
     return readFileSync(file, 'utf-8');
   } catch (err) {
-    throw new CommandFailedError(`Failed to read file: ${(err as Error).message}`);
+    throw new CommandFailedError(`Failed to read file: ${(err as Error).message}`, {
+      remediationHint: `Check that '${file}' exists and is readable as a file, then retry.`,
+    });
   }
 }
 
@@ -96,7 +98,13 @@ export async function fetchSqaaResponse(
     });
   } catch (err) {
     if (err instanceof ServiceUnavailableError) throw err;
-    throw new CommandFailedError(`SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`);
+    throw new CommandFailedError(
+      `SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`,
+      {
+        remediationHint:
+          'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.',
+      },
+    );
   }
 }
 
@@ -121,7 +129,13 @@ export async function fetchWithRetry(
       await waitBeforeRetry(attempt, onRetry);
     }
   }
-  throw new CommandFailedError('SonarQube Agentic Analysis failed: unexpected retry exhaustion.');
+  throw new CommandFailedError(
+    `SonarQube Agentic Analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
+    {
+      remediationHint:
+        'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.',
+    },
+  );
 }
 
 export async function waitBeforeRetry(

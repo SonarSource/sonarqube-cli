@@ -20,6 +20,7 @@
 
 import { describe, expect, it, mock } from 'bun:test';
 
+import { CommandFailedError } from '../../../../../src/cli/commands/_common/error.ts';
 import { ScaScannerInstaller } from '../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import {
   type AnalyzeProjectResponse,
@@ -27,6 +28,7 @@ import {
   ScaScannerRunner,
 } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaScannerSpawner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
+import { LOG_FILE } from '../../../../../src/lib/config-constants.ts';
 import type { SpawnResult } from '../../../../../src/lib/process.ts';
 
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
@@ -63,6 +65,24 @@ function makeInvocation(overrides: Partial<ScaScannerInvocation> = {}): ScaScann
     debug: false,
     ...overrides,
   };
+}
+
+async function expectCommandFailedError(
+  promise: Promise<unknown>,
+  messagePattern: RegExp,
+  remediationHint: string,
+): Promise<void> {
+  let caught: unknown;
+  try {
+    await promise;
+  } catch (err) {
+    caught = err;
+  }
+
+  expect(caught).toBeInstanceOf(CommandFailedError);
+  const commandError = caught as CommandFailedError;
+  expect(commandError.message).toMatch(messagePattern);
+  expect(commandError.remediationHint).toBe(remediationHint);
 }
 
 describe('ScaScannerRunner.buildArgs', () => {
@@ -174,28 +194,36 @@ describe('ScaScannerRunner.run', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('throws CommandFailedError on exit 0 with non-JSON stdout', () => {
+  it('throws CommandFailedError with a remediation hint on exit 0 with non-JSON stdout', async () => {
     const runner = new ScaScannerRunner(
       okInstaller,
       spawnerReturning({ exitCode: 0, stdout: 'not json', stderr: '' }),
     );
-    expect(runner.run(makeInvocation())).rejects.toThrow(/failed to parse output/);
+    await expectCommandFailedError(
+      runner.run(makeInvocation()),
+      /failed to parse output/,
+      `Inspect ${LOG_FILE} for the raw sca-scanner output, then retry.`,
+    );
   });
 
-  it('throws CommandFailedError on non-zero exit', () => {
+  it('throws CommandFailedError with a remediation hint on non-zero exit', async () => {
     const runner = new ScaScannerRunner(
       okInstaller,
       spawnerReturning({ exitCode: 2, stdout: '', stderr: 'boom' }),
     );
-    expect(runner.run(makeInvocation())).rejects.toThrow(
-      /sca-scanner exited with code 2\. See logs for details:/,
+    await expectCommandFailedError(
+      runner.run(makeInvocation()),
+      /sca-scanner exited with code 2\./,
+      `Inspect ${LOG_FILE} for the underlying sca-scanner error, fix the reported issue, then retry.`,
     );
   });
 
-  it('wraps a spawner rejection into CommandFailedError', () => {
+  it('wraps a spawner rejection into CommandFailedError with a remediation hint', async () => {
     const runner = new ScaScannerRunner(okInstaller, spawnerThrowing(new Error('spawn EACCES')));
-    expect(runner.run(makeInvocation())).rejects.toThrow(
+    await expectCommandFailedError(
+      runner.run(makeInvocation()),
       /Dependency risk analysis error: spawn EACCES/,
+      'Verify that the SCA scanner is installed and can run on this machine, then retry.',
     );
   });
 

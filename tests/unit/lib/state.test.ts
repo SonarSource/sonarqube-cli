@@ -44,6 +44,7 @@ describe('State Management', () => {
       expect(agent.skills.installed).toEqual([]);
       expect(agent.configuredAt).toBeUndefined();
       expect(agent.configuredByCliVersion).toBeUndefined();
+      expect(state.integrations.installed).toEqual([]);
     });
   });
 });

@@ -57,7 +57,9 @@ export async function runContextPassthrough(
   } else {
     const auth = await resolveAuth();
     if (!auth) {
-      throw new CommandFailedError('Not authenticated.', 1, 'Run: sonar auth login');
+      throw new CommandFailedError('Not authenticated.', {
+        remediationHint: 'Run: sonar auth login',
+      });
     }
     env = { ...process.env, SONAR_TOKEN: auth.token };
   }
@@ -72,11 +74,10 @@ export async function runContextPassthrough(
     child.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
         reject(
-          new CommandFailedError(
-            'Context Augmentation is not installed.',
-            1,
-            'Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
-          ),
+          new CommandFailedError('Context Augmentation is not installed.', {
+            remediationHint:
+              'Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
+          }),
         );
       } else {
         reject(err);

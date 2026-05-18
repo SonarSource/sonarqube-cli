@@ -39,6 +39,7 @@ const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 // Unreachable but well-formed server URL: binary handles connection-refused gracefully.
 const FAKE_SERVER = 'http://localhost:19999';
 const VALID_TOKEN = 'integration-test-token';
+const NON_EXECUTABLE_MODE = 0o644;
 
 function pushRefLine(localSha: string, remoteSha: string, branch = 'refs/heads/main'): string {
   return `${branch} ${localSha} ${branch} ${remoteSha}\n`;
@@ -193,7 +194,7 @@ describe('sonar hook git-pre-push', () => {
   );
 
   it(
-    'exits 1 when binary spawn fails (graceful error)',
+    'exits 1 when binary spawn fails with env-based auth (CI mode, fail hard)',
     async () => {
       initGitRepo(harness.cwd.path);
       const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
@@ -201,7 +202,28 @@ describe('sonar hook git-pre-push', () => {
       // Place a non-executable file at the binary path so spawnProcess throws
       const binaryName = buildLocalBinaryName(detectPlatform());
       harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
-      chmodSync(harness.cliHome.file('bin', binaryName).path, 0o644);
+      chmodSync(harness.cliHome.file('bin', binaryName).path, NON_EXECUTABLE_MODE);
+
+      const result = await harness.run('hook git-pre-push', {
+        stdin: pushRefLine(sha, GIT_NULL_OID),
+        extraEnv: { SONARQUBE_CLI_TOKEN: VALID_TOKEN, SONARQUBE_CLI_SERVER: FAKE_SERVER },
+      });
+
+      expect(result.exitCode).toBe(1);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'exits 0 when binary spawn fails with keychain auth (local mode, fail soft)',
+    async () => {
+      initGitRepo(harness.cwd.path);
+      const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
+
+      // Place a non-executable file at the binary path so spawnProcess throws
+      const binaryName = buildLocalBinaryName(detectPlatform());
+      harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
+      chmodSync(harness.cliHome.file('bin', binaryName).path, NON_EXECUTABLE_MODE);
 
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
@@ -209,7 +231,7 @@ describe('sonar hook git-pre-push', () => {
         stdin: pushRefLine(sha, GIT_NULL_OID),
       });
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
     },
     { timeout: 30000 },
   );

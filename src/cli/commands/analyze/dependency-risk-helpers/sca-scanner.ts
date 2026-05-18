@@ -29,6 +29,10 @@ import { type ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
 const REDACTED_TOKEN = '***';
+const SCA_SCANNER_START_FAILURE_HINT =
+  'Verify that the SCA scanner is installed and can run on this machine, then retry.';
+const SCA_SCANNER_PARSE_FAILURE_HINT = `Inspect ${LOG_FILE} for the raw sca-scanner output, then retry.`;
+const SCA_SCANNER_EXIT_FAILURE_HINT = `Inspect ${LOG_FILE} for the underlying sca-scanner error, fix the reported issue, then retry.`;
 
 export interface ScaScannerInvocation {
   baseDir: string;
@@ -136,7 +140,9 @@ export class ScaScannerRunner {
     try {
       result = await this.spawner.spawn(binaryPath, args);
     } catch (err) {
-      throw new CommandFailedError(`Dependency risk analysis error: ${(err as Error).message}`);
+      throw new CommandFailedError(`Dependency risk analysis error: ${(err as Error).message}`, {
+        remediationHint: SCA_SCANNER_START_FAILURE_HINT,
+      });
     } finally {
       this.cleanupWorkDir(invocation.workDir);
     }
@@ -192,13 +198,17 @@ export class ScaScannerRunner {
     } catch (err) {
       throw new CommandFailedError(
         `Dependency risk analysis error: failed to parse output (${(err as Error).message})`,
+        { remediationHint: SCA_SCANNER_PARSE_FAILURE_HINT },
       );
     }
   }
 
   private handleScanFailure(exitCode: number): never {
     throw new CommandFailedError(
-      `Dependency risk analysis error: sca-scanner exited with code ${exitCode}. See logs for details: ${LOG_FILE}`,
+      `Dependency risk analysis error: sca-scanner exited with code ${exitCode}.`,
+      {
+        remediationHint: SCA_SCANNER_EXIT_FAILURE_HINT,
+      },
     );
   }
 

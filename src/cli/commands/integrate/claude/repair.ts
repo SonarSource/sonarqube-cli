@@ -39,7 +39,9 @@ export async function repairToken(serverURL: string, organization?: string): Pro
   // Validate new token
   const valid = await validateToken(serverURL, newToken);
   if (!valid) {
-    throw new CommandFailedError('Generated token is invalid');
+    throw new CommandFailedError('Generated token is invalid.', {
+      remediationHint: "Rerun the browser login flow or authenticate again with '--with-token'.",
+    });
   }
 
   // Delete old token

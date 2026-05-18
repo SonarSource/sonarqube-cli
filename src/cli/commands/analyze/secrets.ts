@@ -211,10 +211,16 @@ function handleScanFailure(
   }
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-    throw new CommandFailedError(`Secrets found (${scanDurationMs}ms)`, exitCode);
+    throw new CommandFailedError(`Secrets found (${scanDurationMs}ms)`, {
+      exitCode,
+      remediationHint: 'Remove the reported secret, then rerun the scan.',
+    });
   }
 
-  throw new CommandFailedError(`Scan error (exit code ${exitCode})`, exitCode);
+  throw new CommandFailedError(`Scan error (exit code ${exitCode})`, {
+    exitCode,
+    remediationHint: "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
+  });
 }
 
 function handleScanError(err: unknown): void {
@@ -226,14 +232,13 @@ function handleScanError(err: unknown): void {
 
   let details: string;
   if (errorMessage.includes('timed out')) {
-    details =
-      '\nThe scan took longer than 30 seconds.\nTry scanning a smaller file or check system resources.';
+    details = 'Try scanning a smaller file or check system resources.';
   } else if (errorMessage.includes('ENOENT')) {
-    details =
-      '\nThe secrets analyzer binary was not found or is not executable.\nRun: sonar integrate';
+    details = "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.";
   } else {
-    details = '\nRun: sonar integrate';
+    details =
+      "Make sure the secrets analyzer is installed and executable on this machine; if needed, rerun 'sonar integrate', then retry.";
   }
 
-  throw new CommandFailedError(`Error: ${errorMessage}\n${details}\n`);
+  throw new CommandFailedError(`Error: ${errorMessage}`, { remediationHint: details });
 }
