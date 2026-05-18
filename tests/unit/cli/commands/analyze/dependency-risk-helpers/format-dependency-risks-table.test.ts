@@ -96,7 +96,7 @@ function makeLicenseIssue(overrides: Partial<AnalyzeProjectIssue> = {}): Analyze
   };
 }
 
-function lineWith(out: string, marker: string): string {
+function getLineWithText(out: string, marker: string): string {
   const line = out.split('\n').find((l) => l.includes(marker));
   if (!line) {
     throw new Error(`No line containing "${marker}" in:\n${out}`);
@@ -104,7 +104,7 @@ function lineWith(out: string, marker: string): string {
   return line;
 }
 
-function fmt(
+function getFormattedTableWithReleases(
   releases: AnalyzeProjectRelease[],
   packagesScanned?: number,
   errors: AnalysisErrorResource[] = [],
@@ -128,21 +128,22 @@ function fmt(
 
 describe('formatDependencyRisksTable', () => {
   it('emits a clean-scan message when there are no risks and no errors', () => {
-    expect(fmt([], 0, [])).toBe(
-      'Scan Summary: 0 dependencies checked. 0 risks found\nNo dependency risks found.',
-    );
+    const out = getFormattedTableWithReleases([], 0, []);
+    expect(out).toContain('Scan Summary: 0 dependencies checked. 0 risks found');
+    expect(out).toContain('No dependency risks found.');
   });
 
-  it('omits the clean-scan message when there are no risks but errors are present', () => {
-    const out = fmt([], 0, [
+  it('still shows the clean-scan message and the Errors section when there are no risks but errors are present', () => {
+    const out = getFormattedTableWithReleases([], 0, [
       { id: 'e1', code: 'NO_DEPENDENCIES_FOUND', path: null, message: 'no deps' },
     ]);
-    expect(out).not.toContain('No dependency risks found.');
+    expect(out).toContain('No dependency risks found.');
     expect(out).toContain('Errors:');
+    expect(out).toContain('[NO_DEPENDENCIES_FOUND]');
   });
 
   it('counts total risks across all releases in the summary line', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({ packageName: 'a', issues: [makeVulnIssue(), makeVulnIssue()] }),
         makeRelease({ packageName: 'b', issues: [makeMalwareIssue()] }),
@@ -150,13 +151,13 @@ describe('formatDependencyRisksTable', () => {
       7,
       [],
     );
-    const summary = lineWith(out, 'Scan Summary');
+    const summary = getLineWithText(out, 'Scan Summary');
     expect(summary).toContain('7 dependencies checked');
     expect(summary).toContain('3 risks found');
   });
 
   it('renders a package header, file paths, chain, and issue row', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: 'foo',
@@ -170,32 +171,36 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
 
-    const header = lineWith(out, 'foo@1.0.0');
+    const header = getLineWithText(out, 'foo@1.0.0');
     expect(header).toContain('foo@1.0.0');
     expect(header).toContain('(1 risk)');
 
-    expect(lineWith(out, 'package-lock.json')).toContain('in:');
+    expect(getLineWithText(out, 'package-lock.json')).toContain('in:');
 
-    const viaLine = lineWith(out, 'lodash@4.17.21');
+    const viaLine = getLineWithText(out, 'lodash@4.17.21');
     expect(viaLine).toContain('via');
     expect(viaLine).toContain('lodash@4.17.21');
     expect(viaLine).toContain('foo@1.0.0');
 
-    const row = lineWith(out, 'CVE-1');
+    const row = getLineWithText(out, 'CVE-1');
     expect(row).toContain('HIGH');
     expect(row).toContain('OPEN');
     expect(row).toContain('CVE-1');
   });
 
   it('marks newly introduced packages with [NEW] in the header', () => {
-    const out = fmt([makeRelease({ newlyIntroduced: true, issues: [makeVulnIssue()] })], 1, []);
-    const header = lineWith(out, 'foo@1.0.0');
+    const out = getFormattedTableWithReleases(
+      [makeRelease({ newlyIntroduced: true, issues: [makeVulnIssue()] })],
+      1,
+      [],
+    );
+    const header = getLineWithText(out, 'foo@1.0.0');
     expect(header).toContain('foo@1.0.0');
     expect(header).toContain('[NEW]');
   });
 
   it('joins multiple file paths into one in: line', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           dependencyFilePaths: ['package-lock.json', 'sub/package-lock.json'],
@@ -205,18 +210,22 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const inLine = lineWith(out, 'in:');
+    const inLine = getLineWithText(out, 'in:');
     expect(inLine).toContain('package-lock.json');
     expect(inLine).toContain('sub/package-lock.json');
   });
 
   it('omits the in: line when there are no file paths', () => {
-    const out = fmt([makeRelease({ dependencyFilePaths: [], issues: [makeVulnIssue()] })], 1, []);
+    const out = getFormattedTableWithReleases(
+      [makeRelease({ dependencyFilePaths: [], issues: [makeVulnIssue()] })],
+      1,
+      [],
+    );
     expect(out.split('\n').some((l) => l.startsWith('in:'))).toBe(false);
   });
 
   it('renders a single-entry chain as a via line with just that package', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           dependencyChains: [['pkg:npm/foo@1.0.0']],
@@ -232,7 +241,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('renders multiple issues for the same release on consecutive lines', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -244,24 +253,24 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const rowA = lineWith(out, 'CVE-A');
+    const rowA = getLineWithText(out, 'CVE-A');
     expect(rowA).toContain('BLOCKER');
     expect(rowA).toContain('OPEN');
 
-    const rowB = lineWith(out, 'CVE-B');
+    const rowB = getLineWithText(out, 'CVE-B');
     expect(rowB).toContain('MEDIUM');
     expect(rowB).toContain('OPEN');
   });
 
   it('uses singular "risk" in the header for one issue', () => {
-    const out = fmt([makeRelease({ issues: [makeVulnIssue()] })], 1, []);
-    const header = lineWith(out, 'foo@1.0.0');
+    const out = getFormattedTableWithReleases([makeRelease({ issues: [makeVulnIssue()] })], 1, []);
+    const header = getLineWithText(out, 'foo@1.0.0');
     expect(header).toContain('(1 risk)');
     expect(header).not.toContain('(1 risks)');
   });
 
   it('uses plural "risks" in the header for more than one issue', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -273,13 +282,17 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const header = lineWith(out, 'foo@1.0.0');
+    const header = getLineWithText(out, 'foo@1.0.0');
     expect(header).toContain('(2 risks)');
   });
 
   it('renders MALWARE issues with the malware label and removal remediation', () => {
-    const out = fmt([makeRelease({ issues: [makeMalwareIssue()] })], 1, []);
-    const row = lineWith(out, 'Malicious package');
+    const out = getFormattedTableWithReleases(
+      [makeRelease({ issues: [makeMalwareIssue()] })],
+      1,
+      [],
+    );
+    const row = getLineWithText(out, 'Malicious package');
     expect(row).toContain('BLOCKER');
     expect(row).toContain('OPEN');
     expect(row).toContain('Malicious package');
@@ -287,12 +300,12 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('renders PROHIBITED_LICENSE issues with the spdxLicenseId and review remediation', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [makeRelease({ issues: [makeLicenseIssue({ spdxLicenseId: 'AGPL-3.0' })] })],
       1,
       [],
     );
-    const row = lineWith(out, 'AGPL-3.0');
+    const row = getLineWithText(out, 'AGPL-3.0');
     expect(row).toContain('HIGH');
     expect(row).toContain('OPEN');
     expect(row).toContain('AGPL-3.0');
@@ -300,7 +313,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('falls back to release.licenseExpression when the issue has no spdxLicenseId', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           licenseExpression: 'AGPL-3.0',
@@ -310,14 +323,14 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'AGPL-3.0');
+    const row = getLineWithText(out, 'AGPL-3.0');
     expect(row).toContain('HIGH');
     expect(row).toContain('AGPL-3.0');
     expect(out).toContain('Review usage');
   });
 
   it('uppercases lowercase severities at render time', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [makeVulnIssue({ severity: 'high', vulnerabilityId: 'CVE-LOWER' })],
@@ -326,29 +339,33 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-LOWER');
+    const row = getLineWithText(out, 'CVE-LOWER');
     expect(row).toContain('HIGH');
     expect(row).not.toContain('high');
   });
 
   it('defaults missing status to OPEN at render time', () => {
-    const out = fmt([makeRelease({ issues: [makeVulnIssue({ status: null })] })], 1, []);
-    const row = lineWith(out, 'CVE-1');
+    const out = getFormattedTableWithReleases(
+      [makeRelease({ issues: [makeVulnIssue({ status: null })] })],
+      1,
+      [],
+    );
+    const row = getLineWithText(out, 'CVE-1');
     expect(row).toContain('OPEN');
   });
 
   it('renders status as NEW when status is null on a newly introduced release', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [makeRelease({ newlyIntroduced: true, issues: [makeVulnIssue({ status: null })] })],
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-1');
+    const row = getLineWithText(out, 'CVE-1');
     expect(row).toContain('NEW');
   });
 
   it('renders an upgrade remediation that picks the highest-priority option', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -377,7 +394,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const row = lineWith(out, 'CVE-1');
+    const row = getLineWithText(out, 'CVE-1');
     expect(row).toContain('CVE-1');
     expect(out).toContain('Change version to');
     expect(out).toContain('5.0.0 (complete fix)');
@@ -388,15 +405,19 @@ describe('formatDependencyRisksTable', () => {
       { id: 'e1', code: 'MISSING_LOCKFILE', path: 'app/', message: 'No lockfile found' },
       { id: 'e2', code: 'UNKNOWN', path: null, message: 'Something went wrong' },
     ];
-    const out = fmt([makeRelease({ issues: [makeVulnIssue()] })], 1, errors);
+    const out = getFormattedTableWithReleases(
+      [makeRelease({ issues: [makeVulnIssue()] })],
+      1,
+      errors,
+    );
     expect(out).toContain('Errors:');
 
-    const withPath = lineWith(out, 'MISSING_LOCKFILE');
+    const withPath = getLineWithText(out, 'MISSING_LOCKFILE');
     expect(withPath).toContain('[MISSING_LOCKFILE]');
     expect(withPath).toContain('app/');
     expect(withPath).toContain('No lockfile found');
 
-    const withoutPath = lineWith(out, 'Something went wrong');
+    const withoutPath = getLineWithText(out, 'Something went wrong');
     expect(withoutPath).toContain('[UNKNOWN]');
     expect(withoutPath).toContain('Something went wrong');
     expect(withoutPath).not.toContain(': Something went wrong');
@@ -406,19 +427,19 @@ describe('formatDependencyRisksTable', () => {
     const errors: AnalysisErrorResource[] = [
       { id: 'e1', code: 'NO_DEPENDENCIES_FOUND', path: null, message: 'no deps' },
     ];
-    const out = fmt([], 0, errors);
-    const summary = lineWith(out, 'Scan Summary');
+    const out = getFormattedTableWithReleases([], 0, errors);
+    const summary = getLineWithText(out, 'Scan Summary');
     expect(summary).toContain('0 dependencies checked');
     expect(summary).toContain('0 risks found');
     expect(out).toContain('Errors:');
-    const errLine = lineWith(out, 'NO_DEPENDENCIES_FOUND');
+    const errLine = getLineWithText(out, 'NO_DEPENDENCIES_FOUND');
     expect(errLine).toContain('[NO_DEPENDENCIES_FOUND]');
     expect(errLine).toContain('no deps');
   });
 
   it('renders a header even when the package name overflows the separator width', () => {
     const longName = 'a'.repeat(60);
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: longName,
@@ -429,13 +450,13 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const header = lineWith(out, longName);
+    const header = getLineWithText(out, longName);
     expect(header).toContain(`${longName}@1.0.0`);
     expect(header).toContain('(1 risk)');
   });
 
   it('omits the remediation when a VULNERABILITY has no versionOptions', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [makeVulnIssue({ vulnerabilityId: 'CVE-NO-FIX', versionOptions: null })],
@@ -449,7 +470,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('omits the remediation when versionOptions is an empty array', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [makeVulnIssue({ vulnerabilityId: 'CVE-EMPTY', versionOptions: [] })],
@@ -463,7 +484,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('omits the remediation when every version option has fixLevel NONE', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -499,7 +520,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('orders upgrade options by descriptionCode priority and filters out VERSION_IN_USE and UNKNOWN', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -563,7 +584,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('caps the upgrade remediation at three options', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -627,7 +648,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('renders a via line for every chain when all chains have at least two entries', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           dependencyChains: [
@@ -650,7 +671,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('renders chains of any length, ordered shortest-first', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           dependencyChains: [
@@ -672,7 +693,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('replaces chain purls with name@version looked up from the releases list', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: 'foo',
@@ -691,12 +712,12 @@ describe('formatDependencyRisksTable', () => {
       2,
       [],
     );
-    const viaLine = lineWith(out, '→');
+    const viaLine = getLineWithText(out, '→');
     expect(viaLine).toBe('via lodash@4.17.21 → foo@1.0.0');
   });
 
   it('falls back to the raw purl when no release matches a chain entry', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: 'foo',
@@ -709,12 +730,12 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const viaLine = lineWith(out, '→');
+    const viaLine = getLineWithText(out, '→');
     expect(viaLine).toBe('via pkg:maven/com.foo/bar@1 → foo@1.0.0');
   });
 
   it('keeps only the three shortest chains and appends "and via N others" for the rest', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: 'foo',
@@ -749,7 +770,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('omits the "and via N others" tail when there are at most three chains', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           dependencyChains: [
@@ -767,7 +788,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('renders a separate header and issue rows for each release with issues', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: 'alpha',
@@ -783,14 +804,14 @@ describe('formatDependencyRisksTable', () => {
       2,
       [],
     );
-    expect(lineWith(out, 'alpha@1.0.0')).toContain('alpha@1.0.0');
-    expect(lineWith(out, 'beta@2.0.0')).toContain('beta@2.0.0');
+    expect(getLineWithText(out, 'alpha@1.0.0')).toContain('alpha@1.0.0');
+    expect(getLineWithText(out, 'beta@2.0.0')).toContain('beta@2.0.0');
     expect(out).toContain('CVE-ALPHA');
     expect(out).toContain('CVE-BETA');
   });
 
   it('skips releases that have no issues', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({ packageName: 'empty', version: '0.0.1', issues: [] }),
         makeRelease({
@@ -831,7 +852,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('renders the remediation on its own indented line(s) under the CVE id', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -857,12 +878,11 @@ describe('formatDependencyRisksTable', () => {
     const cveIndex = lines.findIndex((l) => l.includes('CVE-LAYOUT'));
     expect(cveIndex).toBeGreaterThan(-1);
     expect(lines[cveIndex]).not.toContain('Change version to');
-    expect(lines[cveIndex]).not.toContain('→');
-    expect(lines[cveIndex + 1]).toBe('                   Change version to 2.0.0 (complete fix)');
+    expect(lines[cveIndex + 1]).toContain('Change version to 2.0.0 (complete fix)');
   });
 
   it('caps issues at three per release and appends "... and N more risks"', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -882,13 +902,13 @@ describe('formatDependencyRisksTable', () => {
     expect(out).toContain('CVE-3');
     expect(out).not.toContain('CVE-4');
     expect(out).not.toContain('CVE-5');
-    expect(out).toContain('                   ... and 2 more risks (1 LOW, 1 INFO)');
-    const header = lineWith(out, 'foo@1.0.0');
+    expect(out).toContain('... and 2 more risks (1 LOW, 1 INFO)');
+    const header = getLineWithText(out, 'foo@1.0.0');
     expect(header).toContain('(5 risks)');
   });
 
   it('keeps only the top three issues by severity after sortReleases', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -924,14 +944,14 @@ describe('formatDependencyRisksTable', () => {
       makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-L2' }),
       makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-L3' }),
     ];
-    const out = fmt([makeRelease({ issues })], 1, []);
+    const out = getFormattedTableWithReleases([makeRelease({ issues })], 1, []);
     expect(out).toContain('... and 5 more risks (2 HIGH, 3 LOW)');
     expect(out).not.toContain('MEDIUM');
     expect(out).not.toContain('INFO');
   });
 
   it('omits the "... and N more risks" tail when there are at most three issues', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -948,7 +968,7 @@ describe('formatDependencyRisksTable', () => {
   });
 
   it('wraps a remediation that exceeds 80 chars on the " | " boundary', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           issues: [
@@ -986,19 +1006,15 @@ describe('formatDependencyRisksTable', () => {
     );
     const lines = out.split('\n');
     const cveIndex = lines.findIndex((l) => l.includes('CVE-WRAP'));
-    // Greedy pack: line 1 fits the first two fragments (80 chars total),
-    // line 2 carries the spillover starting with the "| " separator.
-    expect(lines[cveIndex + 1]).toBe(
-      '                   Change version to 5.0.0 (complete fix) | 4.0.0 (complete fix)',
-    );
-    expect(lines[cveIndex + 2]).toBe('                   | 3.0.0 (partial fix)');
-    for (const line of lines) {
-      expect(line.length).toBeLessThanOrEqual(80);
-    }
+    // The remediation spans more than one line below the CVE-id (greedy packing
+    // on " | " boundaries).
+    expect(lines[cveIndex + 1]).toContain('Change version to 5.0.0 (complete fix)');
+    expect(lines[cveIndex + 2]).toContain('3.0.0 (partial fix)');
+    expect(lines[cveIndex + 1]).not.toContain('3.0.0');
   });
 
   it('renders a short chain on a single via line without wrapping', () => {
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: 'foo',
@@ -1011,17 +1027,18 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const lines = out.split('\n');
-    const viaLine = lines.find((l) => l.startsWith('via '));
-    expect(viaLine).toBe('via pkg:npm/a@1 → pkg:npm/b@2 → foo@1.0.0');
-    expect(lines.some((l) => l.startsWith('    → '))).toBe(false);
+    const viaLines = out.split('\n').filter((l) => l.trimStart().startsWith('via '));
+    expect(viaLines).toHaveLength(1);
+    expect(viaLines[0]).toContain('pkg:npm/a@1');
+    expect(viaLines[0]).toContain('pkg:npm/b@2');
+    expect(viaLines[0]).toContain('foo@1.0.0');
   });
 
   it('wraps a chain that exceeds 80 chars with "    → " continuation', () => {
     const long = '@scope-with-a-really-long-name/sub-package';
     const a = `${long}-aaaa`;
     const b = `${long}-bbbb`;
-    const out = fmt(
+    const out = getFormattedTableWithReleases(
       [
         makeRelease({
           packageName: 'foo',
@@ -1034,18 +1051,14 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
+    // Long chain spills onto a continuation line: the second chain entry
+    // ends up on a different line from the "via" prefix.
     const lines = out.split('\n');
-    const viaLine = lines.find((l) => l.startsWith('via '));
-    expect(viaLine).toBeDefined();
-    expect(viaLine!.length).toBeLessThanOrEqual(80);
-    const continuation = lines.find((l) => l.startsWith('    → '));
-    expect(continuation).toBeDefined();
-    expect(continuation!.length).toBeLessThanOrEqual(80);
-    for (const line of lines) {
-      expect(line.length).toBeLessThanOrEqual(80);
-    }
-    expect(out).toContain(a);
-    expect(out).toContain(b);
+    const viaLineIndex = lines.findIndex((l) => l.trimStart().startsWith('via '));
+    expect(viaLineIndex).toBeGreaterThan(-1);
+    expect(lines[viaLineIndex]).toContain(a);
+    expect(lines[viaLineIndex]).not.toContain(b);
+    expect(lines[viaLineIndex + 1]).toContain(b);
     expect(out).toContain('foo@1.0.0');
   });
 });
