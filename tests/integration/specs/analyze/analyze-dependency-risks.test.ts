@@ -47,7 +47,7 @@ describe('analyze dependency-risks', () => {
 
   it('exits with code 1 when not authenticated', async () => {
     const result = await harness.run('analyze dependency-risks --project demo');
-    const output = result.stdout + result.stderr;
+    const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
     expect(result.exitCode, output).toBe(1);
     expect(output, output).toContain('❌ Not authenticated.');
@@ -63,7 +63,7 @@ describe('analyze dependency-risks', () => {
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks --project demo');
-    const output = result.stdout + result.stderr;
+    const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
     expect(result.exitCode, output).toBe(1);
     expect(output, output).toContain('Project demo not found');
@@ -82,7 +82,7 @@ describe('analyze dependency-risks', () => {
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks --project demo');
-    const output = result.stdout + result.stderr;
+    const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
     expect(result.exitCode, output).toBe(1);
     expect(output, output).toContain(
@@ -109,7 +109,7 @@ describe('analyze dependency-risks', () => {
     const result = await harness.run('analyze dependency-risks --project demo --format json', {
       timeoutMs: 30_000,
     });
-    const output = result.stdout + result.stderr;
+    const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
     expect(result.exitCode, output).toBe(1);
     expect(result.stderr, output).toContain(SCA_SCANNER_FAILURE_PREFIX);
@@ -129,7 +129,7 @@ describe('analyze dependency-risks', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const result = await harness.run('analyze dependency-risks --project demo --format json');
-      const output = result.stdout + result.stderr;
+      const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
       expect(result.exitCode, output).toBe(1);
       expect(result.stderr, output).toContain(SCA_SCANNER_FAILURE_PREFIX);
@@ -161,7 +161,7 @@ describe('analyze dependency-risks', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       const result = await harness.run('analyze dependency-risks --project demo --format json');
-      const output = result.stdout + result.stderr;
+      const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
       expect(result.exitCode, output).not.toBe(0);
       expect(
@@ -177,7 +177,7 @@ describe('analyze dependency-risks', () => {
     harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
     const result = await harness.run('analyze dependency-risks --project demo');
-    const output = result.stdout + result.stderr;
+    const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
     expect(result.exitCode, output).toBe(1);
     expect(output, output).toContain(
