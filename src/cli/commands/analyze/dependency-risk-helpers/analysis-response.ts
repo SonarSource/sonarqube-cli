@@ -40,7 +40,7 @@ const TYPE_RANK: Record<string, number> = {
   VULNERABILITY: 2,
 };
 
-export type DependencyRisksStatusFilter = 'all' | 'open';
+export type DependencyRisksStatusFilter = 'all' | 'open' | 'new';
 
 export function applyStatusFilter(
   response: AnalyzeProjectResponse,
@@ -48,25 +48,38 @@ export function applyStatusFilter(
 ): AnalyzeProjectResponse {
   let releases = response.releases.filter((release) => release.issues.length > 0);
   if (statusFilter === 'open') {
-    releases = filterOutResolved(releases);
+    releases = filterIssues(releases, (r, i) => !isResolved(effectiveStatus(r, i)));
+  } else if (statusFilter === 'new') {
+    releases = filterIssues(releases, (r, i) => isNew(effectiveStatus(r, i)));
   }
   return { ...response, releases };
 }
 
-function filterOutResolved(releases: AnalyzeProjectRelease[]) {
+function filterIssues(
+  releases: AnalyzeProjectRelease[],
+  shouldKeep: (release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue) => boolean,
+): AnalyzeProjectRelease[] {
   return releases
     .map((release) => ({
       ...release,
-      issues: release.issues.filter((issue) => !isResolved(issue.status)),
+      issues: release.issues.filter((issue) => shouldKeep(release, issue)),
     }))
     .filter((release) => release.issues.length > 0);
+}
+
+export function effectiveStatus(
+  release: Pick<AnalyzeProjectRelease, 'newlyIntroduced'>,
+  issue: Pick<AnalyzeProjectIssue, 'status'>,
+): string {
+  const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
+  return (issue.status ?? fallback).toUpperCase();
 }
 
 export function countUnresolvedIssues(response: AnalyzeProjectResponse): number {
   let count = 0;
   for (const release of response.releases) {
     for (const issue of release.issues) {
-      if (!isResolved(issue.status)) count += 1;
+      if (!isResolved(effectiveStatus(release, issue))) count += 1;
     }
   }
   return count;
@@ -100,6 +113,10 @@ function severityRank(severity: string | undefined): number {
     : Number.MAX_SAFE_INTEGER;
 }
 
-function isResolved(status: string | null): boolean {
-  return status !== null && RESOLVED_STATUSES.has(status.toUpperCase());
+function isResolved(status: string): boolean {
+  return RESOLVED_STATUSES.has(status);
+}
+
+function isNew(status: string): boolean {
+  return status === 'NEW';
 }

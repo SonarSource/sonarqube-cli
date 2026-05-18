@@ -22,6 +22,8 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   applyStatusFilter,
+  countUnresolvedIssues,
+  effectiveStatus,
   sortReleases,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/analysis-response.ts';
 import type {
@@ -182,6 +184,90 @@ describe('applyStatusFilter', () => {
     });
   });
 
+  describe('with filter=new', () => {
+    it("keeps issues whose explicit status is 'NEW'", () => {
+      const release = makeRelease({
+        issues: [
+          makeVulnIssue({ key: 'new-issue', status: 'NEW' }),
+          makeVulnIssue({ key: 'open-issue', status: 'OPEN' }),
+        ],
+      });
+
+      const filtered = applyStatusFilter(makeResponse([release]), 'new');
+
+      expect(filtered.releases[0].issues.map((i) => i.key)).toEqual(['new-issue']);
+    });
+
+    it('keeps null-status issues when their release is newlyIntroduced', () => {
+      const release = makeRelease({
+        newlyIntroduced: true,
+        issues: [
+          makeVulnIssue({ key: 'null-status', status: null }),
+          makeVulnIssue({ key: 'open-status', status: 'OPEN' }),
+        ],
+      });
+
+      const filtered = applyStatusFilter(makeResponse([release]), 'new');
+
+      expect(filtered.releases[0].issues.map((i) => i.key)).toEqual(['null-status']);
+    });
+
+    it('drops null-status issues when their release is not newlyIntroduced', () => {
+      const release = makeRelease({
+        newlyIntroduced: false,
+        issues: [makeVulnIssue({ key: 'null-status', status: null })],
+      });
+
+      const filtered = applyStatusFilter(makeResponse([release]), 'new');
+
+      expect(filtered.releases).toEqual([]);
+    });
+
+    it('drops resolved and open issues even inside a newlyIntroduced release', () => {
+      const release = makeRelease({
+        newlyIntroduced: true,
+        issues: [
+          makeVulnIssue({ key: 'safe', status: 'SAFE' }),
+          makeVulnIssue({ key: 'fixed', status: 'FIXED' }),
+          makeVulnIssue({ key: 'accept', status: 'ACCEPT' }),
+          makeVulnIssue({ key: 'open', status: 'OPEN' }),
+          makeVulnIssue({ key: 'confirm', status: 'CONFIRM' }),
+        ],
+      });
+
+      const filtered = applyStatusFilter(makeResponse([release]), 'new');
+
+      expect(filtered.releases).toEqual([]);
+    });
+
+    it('drops releases that become issue-less after pruning to new', () => {
+      const response = makeResponse([
+        makeRelease({
+          packageName: 'all-open',
+          issues: [makeVulnIssue({ status: 'OPEN' })],
+        }),
+        makeRelease({
+          packageName: 'has-new',
+          issues: [makeVulnIssue({ status: 'NEW' })],
+        }),
+      ]);
+
+      const filtered = applyStatusFilter(response, 'new');
+
+      expect(filtered.releases.map((r) => r.packageName)).toEqual(['has-new']);
+    });
+
+    it("treats status case-insensitively (e.g. 'new')", () => {
+      const release = makeRelease({
+        issues: [makeVulnIssue({ key: 'lower-new', status: 'new' })],
+      });
+
+      const filtered = applyStatusFilter(makeResponse([release]), 'new');
+
+      expect(filtered.releases[0].issues.map((i) => i.key)).toEqual(['lower-new']);
+    });
+  });
+
   it('does not mutate the input response or its releases', () => {
     const release = makeRelease({
       packageName: 'foo',
@@ -270,5 +356,58 @@ describe('sortReleases', () => {
     sortReleases(releases);
 
     expect(releases.map((r) => r.packageName)).toEqual(before);
+  });
+});
+
+describe('countUnresolvedIssues', () => {
+  it('counts only unresolved issues across releases', () => {
+    const response = makeResponse([
+      makeRelease({
+        issues: [
+          makeVulnIssue({ status: 'OPEN' }),
+          makeVulnIssue({ status: 'NEW' }),
+          makeVulnIssue({ status: 'SAFE' }),
+          makeVulnIssue({ status: 'FIXED' }),
+          makeVulnIssue({ status: 'ACCEPT' }),
+          makeVulnIssue({ status: 'CONFIRM' }),
+        ],
+      }),
+    ]);
+
+    expect(countUnresolvedIssues(response)).toBe(3);
+  });
+
+  it("returns the count of new issues when applied to the 'new' filter result", () => {
+    const response = makeResponse([
+      makeRelease({
+        issues: [
+          makeVulnIssue({ status: 'NEW' }),
+          makeVulnIssue({ status: 'NEW' }),
+          makeVulnIssue({ status: 'OPEN' }),
+          makeVulnIssue({ status: 'SAFE' }),
+        ],
+      }),
+    ]);
+
+    expect(countUnresolvedIssues(applyStatusFilter(response, 'new'))).toBe(2);
+  });
+});
+
+describe('effectiveStatus', () => {
+  it('returns the explicit status uppercased', () => {
+    expect(effectiveStatus({ newlyIntroduced: false }, { status: 'OPEN' })).toBe('OPEN');
+    expect(effectiveStatus({ newlyIntroduced: true }, { status: 'safe' })).toBe('SAFE');
+  });
+
+  it('explicit status overrides the newlyIntroduced fallback', () => {
+    expect(effectiveStatus({ newlyIntroduced: true }, { status: 'OPEN' })).toBe('OPEN');
+  });
+
+  it("synthesizes 'NEW' for a null-status issue when the release is newlyIntroduced", () => {
+    expect(effectiveStatus({ newlyIntroduced: true }, { status: null })).toBe('NEW');
+  });
+
+  it("falls back to 'OPEN' for a null-status issue when the release is not newlyIntroduced", () => {
+    expect(effectiveStatus({ newlyIntroduced: false }, { status: null })).toBe('OPEN');
   });
 });
