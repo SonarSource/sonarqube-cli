@@ -237,7 +237,7 @@ describe('formatDependencyRisksTable', () => {
     );
     const viaLines = out.split('\n').filter((l) => l.trimStart().startsWith('via'));
     expect(viaLines).toHaveLength(1);
-    expect(viaLines[0]).toBe('via foo@1.0.0');
+    expect(viaLines[0].trimStart()).toBe('via foo@1.0.0');
   });
 
   it('renders multiple issues for the same release on consecutive lines', () => {
@@ -394,7 +394,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const fixLine = getLineWithText(out, 'Fix:');
+    const fixLine = getLineWithText(out, 'Recommended fix:');
     expect(fixLine).toContain('Change version to');
     expect(fixLine).toContain('5.0.0 (complete fix)');
   });
@@ -633,7 +633,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const fixLine = getLineWithText(out, 'Fix:');
+    const fixLine = getLineWithText(out, 'Recommended fix:');
     expect(fixLine).toContain('5.0.0 (complete fix)');
     expect(fixLine).toContain('3.0.0 (complete fix)');
     expect(fixLine).not.toContain('1.0.0');
@@ -681,7 +681,10 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const viaLines = out.split('\n').filter((l) => l.trimStart().startsWith('via'));
+    const viaLines = out
+      .split('\n')
+      .filter((l) => l.trimStart().startsWith('via'))
+      .map((l) => l.trimStart());
     expect(viaLines).toHaveLength(2);
     expect(viaLines[0]).toBe('via foo@1.0.0');
     expect(viaLines[1]).toContain('a@1');
@@ -710,7 +713,7 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const viaLine = getLineWithText(out, '→');
-    expect(viaLine).toBe('via lodash@4.17.21 → foo@1.0.0');
+    expect(viaLine.trimStart()).toBe('via lodash@4.17.21 → foo@1.0.0');
   });
 
   it('falls back to the raw purl when no release matches a chain entry', () => {
@@ -728,7 +731,7 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const viaLine = getLineWithText(out, '→');
-    expect(viaLine).toBe('via pkg:maven/com.foo/bar@1 → foo@1.0.0');
+    expect(viaLine.trimStart()).toBe('via pkg:maven/com.foo/bar@1 → foo@1.0.0');
   });
 
   it('keeps only the three shortest chains and appends "and via N others" for the rest', () => {
@@ -964,7 +967,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const fixLine = getLineWithText(out, 'Fix:');
+    const fixLine = getLineWithText(out, 'Recommended fix:');
     expect(fixLine).toContain('2.0.0 (complete fix)');
     // 1.5.0 only fixes CVE-A; 1.7.0 only fixes CVE-B — neither is in the intersection.
     expect(fixLine).not.toContain('1.5.0');
@@ -1006,7 +1009,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    expect(out).not.toContain('Fix:');
+    expect(out).not.toContain('Recommended fix:');
   });
 
   it('omits the Fix line when the release contains a non-vulnerability issue', () => {
@@ -1033,7 +1036,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    expect(out).not.toContain('Fix:');
+    expect(out).not.toContain('Recommended fix:');
   });
 
   it('appends → V (partial fix) inline when a vulnerability has a partial-fix option', () => {
@@ -1204,5 +1207,155 @@ describe('formatDependencyRisksTable', () => {
     expect(lines[viaLineIndex]).not.toContain(b);
     expect(lines[viaLineIndex + 1]).toContain(b);
     expect(out).toContain('foo@1.0.0');
+  });
+
+  describe('Summary block', () => {
+    it('emits the Summary block on a clean scan with three zero rows', () => {
+      const out = getFormattedTableWithReleases([], 0, []);
+      const summaryIdx = out.indexOf('\nSummary:');
+      expect(summaryIdx).toBeGreaterThan(-1);
+      const summary = out.slice(summaryIdx);
+      expect(summary).toContain('MALWARE');
+      expect(summary).toContain('PROHIBITED_LICENSE');
+      expect(summary).toContain('VULNERABILITY');
+      // Every cell is zero on a clean scan. Counts are right-padded to 3
+      // chars so columns stay aligned for up to 3-digit totals.
+      for (const sev of ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO']) {
+        expect(summary).toContain(`${sev}   0`);
+      }
+    });
+
+    it('renders the type rows in order MALWARE → PROHIBITED_LICENSE → VULNERABILITY', () => {
+      const out = getFormattedTableWithReleases([], 0, []);
+      const summary = out.slice(out.indexOf('\nSummary:'));
+      const malwareIdx = summary.indexOf('MALWARE');
+      const licenseIdx = summary.indexOf('PROHIBITED_LICENSE');
+      const vulnIdx = summary.indexOf('VULNERABILITY');
+      expect(malwareIdx).toBeGreaterThan(-1);
+      expect(licenseIdx).toBeGreaterThan(malwareIdx);
+      expect(vulnIdx).toBeGreaterThan(licenseIdx);
+    });
+
+    it('lays out all five severities in BLOCKER → INFO order on every row', () => {
+      const out = getFormattedTableWithReleases([], 0, []);
+      const summary = out.slice(out.indexOf('\nSummary:'));
+      const rows = summary
+        .split('\n')
+        .filter((l) => /^\s{2}(MALWARE|PROHIBITED_LICENSE|VULNERABILITY)/.test(l));
+      expect(rows).toHaveLength(3);
+      for (const row of rows) {
+        const blocker = row.indexOf('BLOCKER');
+        const high = row.indexOf('HIGH');
+        const medium = row.indexOf('MEDIUM');
+        const low = row.indexOf('LOW');
+        const info = row.indexOf('INFO');
+        expect(blocker).toBeGreaterThan(-1);
+        expect(high).toBeGreaterThan(blocker);
+        expect(medium).toBeGreaterThan(high);
+        expect(low).toBeGreaterThan(medium);
+        expect(info).toBeGreaterThan(low);
+      }
+    });
+
+    it('counts each issue under its (type, severity) cell', () => {
+      const out = getFormattedTableWithReleases(
+        [
+          makeRelease({
+            issues: [
+              makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-1' }),
+              makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-2' }),
+              makeVulnIssue({ severity: 'HIGH', vulnerabilityId: 'CVE-3' }),
+              makeLicenseIssue({ severity: 'MEDIUM', spdxLicenseId: 'AGPL-3.0' }),
+              makeMalwareIssue({ severity: 'BLOCKER' }),
+            ],
+          }),
+        ],
+        1,
+        [],
+      );
+      const summary = out.slice(out.indexOf('\nSummary:'));
+      const malwareRow = summary.split('\n').find((l) => l.trimStart().startsWith('MALWARE'));
+      const licenseRow = summary
+        .split('\n')
+        .find((l) => l.trimStart().startsWith('PROHIBITED_LICENSE'));
+      const vulnRow = summary.split('\n').find((l) => l.trimStart().startsWith('VULNERABILITY'));
+      expect(malwareRow).toContain('BLOCKER   1');
+      expect(malwareRow).toContain('HIGH   0');
+      expect(licenseRow).toContain('MEDIUM   1');
+      expect(licenseRow).toContain('BLOCKER   0');
+      expect(vulnRow).toContain('BLOCKER   2');
+      expect(vulnRow).toContain('HIGH   1');
+      expect(vulnRow).toContain('MEDIUM   0');
+      expect(vulnRow).toContain('LOW   0');
+    });
+
+    it('sums counts across multiple releases', () => {
+      const out = getFormattedTableWithReleases(
+        [
+          makeRelease({
+            packageName: 'a',
+            issues: [
+              makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-A1' }),
+              makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-A2' }),
+            ],
+          }),
+          makeRelease({
+            packageName: 'b',
+            packageUrl: 'pkg:npm/b@1.0.0',
+            issues: [makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-B1' })],
+          }),
+        ],
+        2,
+        [],
+      );
+      const vulnRow = out
+        .slice(out.indexOf('\nSummary:'))
+        .split('\n')
+        .find((l) => l.trimStart().startsWith('VULNERABILITY'));
+      expect(vulnRow).toContain('LOW   3');
+    });
+
+    it('places the Summary block below the ═ separator and any Errors section', () => {
+      const errors: AnalysisErrorResource[] = [
+        { id: 'e1', code: 'UNKNOWN', path: null, message: 'oops' },
+      ];
+      const out = getFormattedTableWithReleases(
+        [makeRelease({ issues: [makeVulnIssue()] })],
+        1,
+        errors,
+      );
+      const sepIdx = out.indexOf('═');
+      const errorsIdx = out.indexOf('Errors:');
+      const summaryIdx = out.indexOf('\nSummary:');
+      expect(sepIdx).toBeGreaterThan(-1);
+      expect(errorsIdx).toBeGreaterThan(sepIdx);
+      expect(summaryIdx).toBeGreaterThan(errorsIdx);
+    });
+
+    it('tallies only the filtered releases passed in, not the broader allReleases list', () => {
+      const transit = makeRelease({
+        key: 'transit',
+        packageName: 'transit',
+        packageUrl: 'pkg:npm/transit@1.0.0',
+        issues: [makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-TRANSIT' })],
+      });
+      const foo = makeRelease({
+        packageName: 'foo',
+        packageUrl: 'pkg:npm/foo@1.0.0',
+        issues: [makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-FOO' })],
+      });
+      const out = formatDependencyRisksTable({ releases: [foo], parsedFiles: [], errors: [] }, [
+        transit,
+        foo,
+      ]);
+      const vulnRow = out
+        .slice(out.indexOf('\nSummary:'))
+        .split('\n')
+        .find((l) => l.trimStart().startsWith('VULNERABILITY'));
+      // Only foo's LOW vuln is in the filtered set; transit's BLOCKER vuln must
+      // not appear in the summary even though it's present in allReleases.
+      expect(vulnRow).toContain('BLOCKER   0');
+      expect(vulnRow).toContain('LOW   1');
+    });
   });
 });
