@@ -34,6 +34,12 @@ const SEVERITY_RANK: Record<string, number> = {
   INFO: 4,
 };
 
+const TYPE_RANK: Record<string, number> = {
+  MALWARE: 0,
+  PROHIBITED_LICENSE: 1,
+  VULNERABILITY: 2,
+};
+
 export type DependencyRisksStatusFilter = 'all' | 'open';
 
 export function applyStatusFilter(
@@ -78,10 +84,14 @@ function packageLabel(release: AnalyzeProjectRelease): string {
 
 function sortIssues(issues: AnalyzeProjectIssue[]): AnalyzeProjectIssue[] {
   return [...issues].sort((a, b) => {
-    const sev = severityRank(a.severity) - severityRank(b.severity);
-    if (sev !== 0) return sev;
-    return a.type.localeCompare(b.type);
+    const typeDiff = typeRank(a.type) - typeRank(b.type);
+    if (typeDiff !== 0) return typeDiff;
+    return severityRank(a.severity) - severityRank(b.severity);
   });
+}
+
+function typeRank(type: string): number {
+  return TYPE_RANK[type] ?? Number.MAX_SAFE_INTEGER;
 }
 
 function severityRank(severity: string | undefined): number {

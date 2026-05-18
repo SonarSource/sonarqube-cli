@@ -213,20 +213,21 @@ describe('sortReleases', () => {
     ]);
   });
 
-  it('sorts issues within a release by severity rank then type', () => {
+  it('sorts issues within a release by type (MALWARE → PROHIBITED_LICENSE → VULNERABILITY) then severity', () => {
     const release = makeRelease({
       issues: [
-        makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-LOW' }),
         makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-BLOCK' }),
-        makeMalwareIssue({ severity: 'BLOCKER' }),
+        makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-LOW' }),
+        makeMalwareIssue({ severity: 'LOW' }),
         makeVulnIssue({ severity: 'MEDIUM', vulnerabilityId: 'CVE-MED' }),
       ],
     });
 
     const [sorted] = sortReleases([release]);
 
+    // Even a LOW malware issue outranks a BLOCKER vulnerability, because type wins.
     expect(sorted.issues.map((i) => `${i.severity}:${i.type}`)).toEqual([
-      'BLOCKER:MALWARE',
+      'LOW:MALWARE',
       'BLOCKER:VULNERABILITY',
       'MEDIUM:VULNERABILITY',
       'LOW:VULNERABILITY',

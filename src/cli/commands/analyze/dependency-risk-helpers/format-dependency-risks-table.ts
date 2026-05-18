@@ -24,6 +24,7 @@ import type {
   AnalyzeProjectIssue,
   AnalyzeProjectRelease,
   AnalyzeProjectResponse,
+  VersionOption,
   VersionOptionDescriptionCode,
 } from './sca-scanner.ts';
 
@@ -47,11 +48,8 @@ const SEVERITY_WIDTH = 9;
 const STATUS_WIDTH = 8;
 const MAX_LINE_WIDTH = 80;
 const MAX_CHAINS_DISPLAYED = 3;
-const MAX_ISSUES_DISPLAYED = 3;
-const REMEDIATION_INDENT = ' '.repeat(SEVERITY_WIDTH + 1 + STATUS_WIDTH + 1);
+const MAX_PACKAGE_FIXES = 2;
 const CHAIN_CONTINUATION_INDENT = '    ';
-
-const SEVERITY_ORDER = ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO'] as const;
 
 export function formatDependencyRisksTable(
   filtered: AnalyzeProjectResponse,
@@ -92,7 +90,7 @@ function appendReleases(
   displayedReleases: AnalyzeProjectRelease[],
   lines: string[],
   releaseByPurl: Map<string, AnalyzeProjectRelease>,
-) {
+): void {
   for (const release of displayedReleases) {
     if (release.issues.length === 0) continue;
     appendReleaseBlock(lines, release, releaseByPurl);
@@ -111,22 +109,17 @@ function appendReleaseBlock(
   for (const line of transitiveChainLines(release.dependencyChains, releaseByPurl)) {
     lines.push(line);
   }
+  const fixLine = packageFixLine(release);
+  if (fixLine !== null) {
+    lines.push(fixLine);
+  }
   lines.push('');
   appendIssuesBlock(lines, release);
 }
 
 function appendIssuesBlock(lines: string[], release: AnalyzeProjectRelease): void {
-  const visibleIssues = release.issues.slice(0, MAX_ISSUES_DISPLAYED);
-  for (const issue of visibleIssues) {
-    for (const line of issueLines(release, issue)) {
-      lines.push(line);
-    }
-  }
-  const hiddenIssues = release.issues.slice(visibleIssues.length);
-  if (hiddenIssues.length > 0) {
-    lines.push(
-      `${REMEDIATION_INDENT}... and ${hiddenIssues.length} more risks${formatHiddenSeverityBreakdown(hiddenIssues)}`,
-    );
+  for (const issue of release.issues) {
+    lines.push(issueLine(release, issue));
   }
 }
 
@@ -145,43 +138,120 @@ function packageHeader(release: AnalyzeProjectRelease): string {
   return label + '─'.repeat(MAX_LINE_WIDTH - label.length);
 }
 
-function issueLines(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string[] {
+function issueLine(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string {
   const severity = issue.severity.toUpperCase().padEnd(SEVERITY_WIDTH);
   const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
   const status = (issue.status ?? fallback).toUpperCase().padEnd(STATUS_WIDTH);
-  const issueText = issueCell(release, issue);
-  const out = [`${severity} ${status} ${issueText}`];
-  const remediation = remediationCell(issue);
-  if (remediation) {
-    for (const line of wrapRemediation(remediation, REMEDIATION_INDENT, MAX_LINE_WIDTH)) {
-      out.push(line);
+  const cell = issueCell(release, issue);
+  const inline = inlineRemediation(issue);
+  const tail = inline ? ` → ${inline}` : '';
+  return `${severity} ${status} ${cell}${tail}`;
+}
+
+function inlineRemediation(issue: AnalyzeProjectIssue): string | null {
+  switch (issue.type) {
+    case 'MALWARE':
+      return 'Remove dependency';
+    case 'PROHIBITED_LICENSE':
+      return 'Review usage';
+    case 'VULNERABILITY': {
+      const partial = chooseInlinePartialFix(issue);
+      return partial ? `${partial.version} (partial fix)` : null;
     }
+  }
+}
+
+function chooseInlinePartialFix(issue: AnalyzeProjectIssue): VersionOption | null {
+  const options = issue.versionOptions;
+  if (!options || options.length === 0) {
+    return null;
+  }
+  const partials = options.filter(
+    (o) => o.fixLevel === 'PARTIAL' && !EXCLUDED_DESCRIPTION_CODES.has(o.descriptionCode),
+  );
+  if (partials.length === 0) {
+    return null;
+  }
+  partials.sort(
+    (a, b) => DESCRIPTION_CODE_ORDER[a.descriptionCode] - DESCRIPTION_CODE_ORDER[b.descriptionCode],
+  );
+  return partials[0];
+}
+
+function packageFixLine(release: AnalyzeProjectRelease): string | null {
+  const fixes = packageCompleteFixes(release);
+  if (fixes.length === 0) {
+    return null;
+  }
+  const parts = fixes.map((o) => `${o.version} (complete fix)`);
+  return `Fix: Change version to ${parts.join(' | ')}`;
+}
+
+function packageCompleteFixes(release: AnalyzeProjectRelease): VersionOption[] {
+  const issues = release.issues;
+  if (issues.length === 0) return [];
+
+  const perIssueCompleteFixes = issues.map(completeFixesByVersion);
+  if (perIssueCompleteFixes.some((m) => m.size === 0)) return [];
+
+  const sharedVersions = intersectKeys(perIssueCompleteFixes);
+  if (sharedVersions.size === 0) return [];
+
+  const representatives: VersionOption[] = [];
+  for (const version of sharedVersions) {
+    representatives.push(bestRepresentative(version, perIssueCompleteFixes));
+  }
+  representatives.sort(
+    (a, b) => DESCRIPTION_CODE_ORDER[a.descriptionCode] - DESCRIPTION_CODE_ORDER[b.descriptionCode],
+  );
+  return representatives.slice(0, MAX_PACKAGE_FIXES);
+}
+
+function completeFixesByVersion(issue: AnalyzeProjectIssue): Map<string, VersionOption> {
+  const out = new Map<string, VersionOption>();
+  const options = issue.versionOptions;
+  if (!options) return out;
+  for (const option of options) {
+    if (option.fixLevel !== 'COMPLETE') continue;
+    if (EXCLUDED_DESCRIPTION_CODES.has(option.descriptionCode)) continue;
+    out.set(option.version, option);
   }
   return out;
 }
 
-function wrapRemediation(text: string, indent: string, maxWidth: number): string[] {
-  const parts = text.split(' | ');
-  const fragments = parts.map((part, idx) => (idx === 0 ? part : `| ${part}`));
-  const lines: string[] = [];
-  let current = '';
-  for (const fragment of fragments) {
-    if (current === '') {
-      current = fragment;
-      continue;
+function intersectKeys(maps: Map<string, VersionOption>[]): Set<string> {
+  if (maps.length === 0) return new Set();
+  let intersection = new Set(maps[0].keys());
+  for (let i = 1; i < maps.length; i++) {
+    const next = new Set<string>();
+    for (const key of intersection) {
+      if (maps[i].has(key)) next.add(key);
     }
-    const candidate = `${current} ${fragment}`;
-    if (indent.length + candidate.length <= maxWidth) {
-      current = candidate;
-    } else {
-      lines.push(`${indent}${current}`);
-      current = fragment;
-    }
+    intersection = next;
+    if (intersection.size === 0) break;
   }
-  if (current !== '') {
-    lines.push(`${indent}${current}`);
+  return intersection;
+}
+
+function bestRepresentative(
+  version: string,
+  perIssueCompleteFixes: Map<string, VersionOption>[],
+): VersionOption {
+  // Every map in `perIssueCompleteFixes` contains `version` by construction
+  // (it came from the intersection of their keys), so collect-then-sort is
+  // safe and lets the compiler narrow the result.
+  const candidates: VersionOption[] = [];
+  for (const map of perIssueCompleteFixes) {
+    const option = map.get(version);
+    if (option) candidates.push(option);
   }
-  return lines;
+  if (candidates.length === 0) {
+    throw new Error(`bestRepresentative invariant violated: ${version} missing from inputs`);
+  }
+  candidates.sort(
+    (a, b) => DESCRIPTION_CODE_ORDER[a.descriptionCode] - DESCRIPTION_CODE_ORDER[b.descriptionCode],
+  );
+  return candidates[0];
 }
 
 function appendErrors(lines: string[], errors: AnalysisErrorResource[]): void {
@@ -204,59 +274,6 @@ function issueCell(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): 
     case 'MALWARE':
       return 'Malicious package';
   }
-}
-
-function remediationCell(issue: AnalyzeProjectIssue): string {
-  switch (issue.type) {
-    case 'MALWARE':
-      return 'Remove dependency';
-    case 'PROHIBITED_LICENSE':
-      return 'Review usage';
-    case 'VULNERABILITY':
-      return chooseUpgradeRemediation(issue);
-  }
-}
-
-function chooseUpgradeRemediation(issue: AnalyzeProjectIssue): string {
-  const options = issue.versionOptions;
-  if (!options || options.length === 0) {
-    return '';
-  }
-
-  const sorted = options.filter(
-    (option) =>
-      option.fixLevel !== 'NONE' && !EXCLUDED_DESCRIPTION_CODES.has(option.descriptionCode),
-  );
-  sorted.sort(
-    (a, b) => DESCRIPTION_CODE_ORDER[a.descriptionCode] - DESCRIPTION_CODE_ORDER[b.descriptionCode],
-  );
-  const top = sorted.slice(0, 3);
-
-  if (top.length === 0) {
-    return '';
-  }
-
-  const fixes = top.map((option) => `${option.version} (${option.fixLevel.toLowerCase()} fix)`);
-  return `Change version to ${fixes.join(' | ')}`;
-}
-
-function formatHiddenSeverityBreakdown(hidden: AnalyzeProjectIssue[]): string {
-  const counts = new Map<string, number>();
-  for (const issue of hidden) {
-    const sev = issue.severity.toUpperCase();
-    counts.set(sev, (counts.get(sev) ?? 0) + 1);
-  }
-  const parts: string[] = [];
-  for (const sev of SEVERITY_ORDER) {
-    const n = counts.get(sev);
-    if (n) parts.push(`${n} ${sev}`);
-  }
-  for (const [sev, n] of counts) {
-    if (!SEVERITY_ORDER.includes(sev as (typeof SEVERITY_ORDER)[number]) && n > 0) {
-      parts.push(`${n} ${sev}`);
-    }
-  }
-  return parts.length > 0 ? ` (${parts.join(', ')})` : '';
 }
 
 function transitiveChainLines(
