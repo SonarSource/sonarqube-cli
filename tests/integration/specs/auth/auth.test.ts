@@ -57,7 +57,7 @@ describe('auth login', () => {
       const result = await harness.run('auth login --server not-a-url --with-token mytoken');
 
       expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain('Invalid server URL');
+      expect(result.stderr).toContain('Invalid server URL');
     },
     { timeout: 15000 },
   );
@@ -161,17 +161,18 @@ describe('auth login', () => {
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
-      const result = await harness.run('auth login --with-token my-token --org nonexistent-org', {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+      const result = await harness.run(
+        `auth login --with-token my-token --org nonexistent-org --server ${server.baseUrl()}`,
+        {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+            SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+          },
         },
-      });
+      );
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
-        'Organization "nonexistent-org" not found or not accessible',
-      );
+      expect(result.stderr).toContain('Organization "nonexistent-org" not found or not accessible');
     },
     { timeout: 15000 },
   );
@@ -313,7 +314,7 @@ describe('auth login — organization selection', () => {
       });
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain('Organization selection cancelled');
+      expect(result.stderr).toContain('Organization selection cancelled');
     },
     { timeout: 15000 },
   );
@@ -331,7 +332,7 @@ describe('auth login — organization selection', () => {
     });
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain('Organization key is required');
+    expect(result.stderr).toContain('Organization key is required');
   });
 
   it('lets user select an organization from a list when user is a member of multiple organizations', async () => {
@@ -420,7 +421,10 @@ describe('auth login — organization selection', () => {
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
         .start();
 
-      harness.cwd.writeFile('sonar-project.properties', 'sonar.organization=my-org\n');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${server.baseUrl()}\nsonar.organization=my-org\n`,
+      );
 
       const result = await harness.run('auth login', {
         extraEnv: {
@@ -432,6 +436,212 @@ describe('auth login — organization selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('my-org');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('auth login — server selection', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'prompts for server and logs in to SonarQube Cloud EU',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+
+      const result = await harness.run('auth login', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+        stdinChunks: ['\r', '\r'], // Enter (Cloud), Enter (EU)
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ region: string }> };
+      };
+      expect(state.auth.connections[0].region).toBe('eu');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prompts for server and logs in to SonarQube Cloud US',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'us-org', name: 'US Org' }])
+        .start();
+
+      const result = await harness.run('auth login', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_US_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+        stdinChunks: ['\r', '\x1b[B\r'], // Enter (Cloud), down+Enter (US)
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ region: string }> };
+      };
+      expect(state.auth.connections[0].region).toBe('us');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prompts for server, region, and org when all are unspecified',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([
+          { key: 'my-org', name: 'My Org' },
+          { key: 'my-org-2', name: 'My Org 2' },
+        ])
+        .start();
+
+      const result = await harness.run('auth login', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+        stdinChunks: ['\r', '\r', '\x1b[B\r'], // Enter (Cloud), Enter (EU), down+Enter (org 2)
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prompts for server and logs in to a self-hosted SonarQube Server',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run('auth login', {
+        browserToken: 'my-token',
+        stdinChunks: ['\x1b[B\r', `${server.baseUrl()}\r`], // down+Enter (Server), URL+Enter
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ serverUrl: string; type: string }> };
+      };
+      expect(state.auth.connections[0].serverUrl).toBe(server.baseUrl());
+      expect(state.auth.connections[0].type).toBe('on-premise');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'retries when self-hosted URL is blank and succeeds on valid input',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run('auth login', {
+        browserToken: 'my-token',
+        stdinChunks: ['\x1b[B\r', '\r', `${server.baseUrl()}\r`], // Server, blank, valid URL
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
+      );
+      expect(result.stdout).toContain('Authentication successful');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'retries when self-hosted URL is invalid and succeeds on valid input',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run('auth login', {
+        browserToken: 'my-token',
+        stdinChunks: ['\x1b[B\r', 'not-a-url\r', `${server.baseUrl()}\r`], // Server, invalid, valid URL
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
+      );
+      expect(result.stdout).toContain('Authentication successful');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows the error message for each invalid URL attempt before succeeding',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run('auth login', {
+        browserToken: 'my-token',
+        stdinChunks: [
+          '\x1b[B\r', // down+Enter (Server)
+          'bad-url-1\r', // invalid attempt 1
+          'bad-url-2\r', // invalid attempt 2
+          'bad-url-3\r', // invalid attempt 3
+          `${server.baseUrl()}\r`, // valid URL
+        ],
+      });
+
+      expect(result.exitCode).toBe(0);
+      const errorMsg =
+        'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).';
+      const occurrences = result.stdout.split(errorMsg).length - 1;
+      expect(occurrences).toBe(3);
+      expect(result.stdout).toContain('Authentication successful');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with error when user cancels the server selection prompt',
+    async () => {
+      const result = await harness.run('auth login', {
+        stdin: '\x03', // Ctrl+C
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Server selection cancelled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 when --with-token is provided but --server is not',
+    async () => {
+      const result = await harness.run('auth login --with-token my-token');
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--server is required when --with-token is provided');
     },
     { timeout: 15000 },
   );
