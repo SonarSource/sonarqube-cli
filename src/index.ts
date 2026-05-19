@@ -27,6 +27,11 @@ import * as Sentry from '@sentry/bun';
 import { COMMAND_TREE } from './cli/command-tree';
 import { SENTRY_FLUSH_TIMEOUT_MS } from './lib/config-constants';
 import * as postUpdate from './lib/post-update';
+import { loadState } from './lib/repository/state-repository';
+import { initSentry } from './lib/sentry';
+
+const state = loadState();
+initSentry(state);
 
 await postUpdate.runPostUpdateActions();
 
