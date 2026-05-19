@@ -27,13 +27,10 @@ import { getOrCreateUserId } from '../telemetry/user.js';
 import { SENTRY_DSN } from './config-constants.js';
 import type { CliState } from './state.js';
 
-let initialized = false;
-
 /**
  * Initialize Sentry if telemetry is enabled.
  */
 export function initSentry(state: CliState): void {
-  if (initialized) return;
   if (!state.telemetry.enabled || process.env.SONARQUBE_CLI_DISABLE_SENTRY) return;
 
   const environment = process.env.SONARSOURCE_DOGFOODING === '1' ? 'dogfood' : 'production';
@@ -46,12 +43,6 @@ export function initSentry(state: CliState): void {
   });
 
   Sentry.setUser({ id: getOrCreateUserId() });
-  initialized = true;
-}
-
-/** Test-only: clear the idempotency guard between unit tests. */
-export function resetSentry(): void {
-  initialized = false;
 }
 
 /**

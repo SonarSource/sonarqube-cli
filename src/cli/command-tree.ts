@@ -393,8 +393,11 @@ if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
 
 // Defer Sentry initialization until a command action is about to run, so that
 // non-execution paths like --help, --version, and unknown commands don't pay
-// for it. initSentry() is idempotent, so it's safe across nested commands.
+// for it. The guard avoids re-loading state and re-initializing on nested commands.
+let sentryInitialized = false;
 COMMAND_TREE.hook('preAction', () => {
+  if (sentryInitialized) return;
+  sentryInitialized = true;
   initSentry(loadState());
 });
 
