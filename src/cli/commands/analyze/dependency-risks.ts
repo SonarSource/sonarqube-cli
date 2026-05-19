@@ -101,10 +101,10 @@ export async function analyzeDependencyRisks(
 
   const filtered = applyStatusFilter(result, options.statusFilter);
 
+  const viewModel = buildDependencyRisksViewModel(filtered, result.releases);
   if (options.format === 'json') {
-    print(formatDependencyRisksJson(options.project, filtered));
+    print(formatDependencyRisksJson(options.project, viewModel));
   } else {
-    const viewModel = buildDependencyRisksViewModel(filtered, result.releases);
     print(formatDependencyRisksTable(viewModel, result.releases));
   }
 
