@@ -22,16 +22,11 @@
 
 // Main CLI entry point
 
-import * as Sentry from '@sentry/bun';
-
 import { COMMAND_TREE } from './cli/command-tree';
-import { SENTRY_FLUSH_TIMEOUT_MS } from './lib/config-constants';
 import * as postUpdate from './lib/post-update';
+import { flushSentry } from './lib/sentry';
 
 await postUpdate.runPostUpdateActions();
 
 await COMMAND_TREE.parseAsync(process.argv);
-// Skip flush when Sentry was never initialized (e.g. --help, --version, telemetry disabled).
-if (Sentry.getClient()) {
-  await Sentry.flush(SENTRY_FLUSH_TIMEOUT_MS);
-}
+await flushSentry();

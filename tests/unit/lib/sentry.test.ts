@@ -24,7 +24,7 @@ import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { initSentry } from '../../../src/lib/sentry.js';
+import { flushSentry, initSentry } from '../../../src/lib/sentry.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as userModule from '../../../src/telemetry/user.js';
 
@@ -61,11 +61,15 @@ function captureBeforeSend(): (event: ErrorEvent, hint: EventHint) => ErrorEvent
 let initSpy: ReturnType<typeof spyOn>;
 let setUserSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
+let flushSpy: ReturnType<typeof spyOn>;
+let getClientSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
   initSpy = spyOn(Sentry, 'init').mockImplementation(() => undefined);
   setUserSpy = spyOn(Sentry, 'setUser').mockImplementation(() => {});
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
+  flushSpy = spyOn(Sentry, 'flush').mockResolvedValue(true);
+  getClientSpy = spyOn(Sentry, 'getClient').mockReturnValue(undefined);
   delete process.env['SONARQUBE_CLI_DISABLE_SENTRY'];
 });
 
@@ -73,6 +77,8 @@ afterEach(() => {
   initSpy.mockRestore();
   setUserSpy.mockRestore();
   getUserIdSpy.mockRestore();
+  flushSpy.mockRestore();
+  getClientSpy.mockRestore();
   delete process.env['SONARSOURCE_DOGFOODING'];
   process.env['SONARQUBE_CLI_DISABLE_SENTRY'] = '1';
 });
@@ -146,6 +152,24 @@ describe('initSentry', () => {
 
       expect(setUserSpy).toHaveBeenCalledWith({ id: 'my-machine-id' });
     });
+  });
+});
+
+describe('flushSentry', () => {
+  it('flushes when a Sentry client is initialized', async () => {
+    getClientSpy.mockReturnValue({});
+
+    await flushSentry();
+
+    expect(flushSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not flush when no Sentry client was initialized', async () => {
+    getClientSpy.mockReturnValue(undefined);
+
+    await flushSentry();
+
+    expect(flushSpy).not.toHaveBeenCalled();
   });
 });
 
