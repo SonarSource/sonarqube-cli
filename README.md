@@ -66,9 +66,9 @@ The SonarQube CLI is designed for three distinct use cases:
 3. **⚙️ Scripting & Automation** — Integrate into scripts for reporting, dashboards, or automated quality gates
    ```bash
    # Generate a report of issues across all projects:
-   sonar list projects | while read project; do
+   sonar list projects | jq -r '.projects[].key' | while read project; do
      echo "Project: $project"
-     sonar list issues --project $project --format json | jq '.[] | .severity' | sort | uniq -c
+     sonar list issues --project "$project" | jq -r '.issues[].severity' | sort | uniq -c
    done
    ```
 
