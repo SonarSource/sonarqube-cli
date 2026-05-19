@@ -29,7 +29,7 @@ Avoid:
 
 ### Step 1 — Understand current coverage
 
-Read `tests/integration/specs/ux-report.test.ts` from top to bottom. This file is the single source of truth for the report. Each `uxDescribe('Section Name', ...)` is a report section; each `uxIt('label', ...)` inside it is one captured scenario.
+Read `build-scripts/docs/generate-ux-report.ts` from top to bottom. This file is the single source of truth for the report. Each `uxDescribe('Section Name', ...)` is a report section; each `uxIt('label', ...)` inside it is one captured scenario.
 
 Make a mental note of what commands and paths are already covered.
 
