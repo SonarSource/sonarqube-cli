@@ -115,7 +115,7 @@ sonar --version
 Connect to SonarQube Cloud EU (default):
 ```bash
 sonar auth login
-# Opens your browser to authenticate via OAuth
+# Opens your browser to sign in to SonarQube and generates a user token
 # Returns to terminal when complete
 ```
 
@@ -191,7 +191,7 @@ sonar list issues --project my-org_my-app --format table --page-size 3
 
 Supported formats: `json` (default), `table`, `toon`, `csv`.
 
-> **💡 Tip:** When running from a git repository linked to a SonarQube project, the `--project` flag is often optional—the CLI will auto-detect the project key from your repository configuration.
+> **💡 Tip:** The `--project` flag is often optional—if your working directory contains a `sonar-project.properties` file or a SonarLint connected-mode binding under `.sonarlint/`, the CLI picks the project key up from there.
 
 ### Step 4: Analyze Local Changes (SonarQube Cloud only)
 
