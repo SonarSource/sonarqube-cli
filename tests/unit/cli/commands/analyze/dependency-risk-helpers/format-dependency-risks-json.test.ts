@@ -22,6 +22,7 @@ import { describe, expect, it } from 'bun:test';
 
 import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/build-dependency-risks-view-model.ts';
 import { formatDependencyRisksJson } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/format-dependency-risks-json.ts';
+import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type {
   AnalyzeProjectRelease,
   AnalyzeProjectResponse,
@@ -52,7 +53,7 @@ function makeResponse(overrides: Partial<AnalyzeProjectResponse> = {}): AnalyzeP
 function render(project: string, response: AnalyzeProjectResponse): string {
   return formatDependencyRisksJson(
     project,
-    buildDependencyRisksViewModel(response, response.releases),
+    buildDependencyRisksViewModel(response, buildRiskFilter('all')),
   );
 }
 

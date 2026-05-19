@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { effectiveStatus, sortReleases } from './analysis-response.ts';
 import {
   type DependencyRisksViewModel,
   type ErrorVM,
@@ -37,6 +36,7 @@ import {
   type VulnerabilityGroupVM,
   type VulnerabilityRiskVM,
 } from './dependency-risks-view-model.ts';
+import type { RiskPredicate } from './risk-filter.ts';
 import type {
   AnalyzeProjectIssue,
   AnalyzeProjectRelease,
@@ -48,6 +48,14 @@ import type {
 
 const ISSUE_TYPES: ScaIssueType[] = ['MALWARE', 'PROHIBITED_LICENSE', 'VULNERABILITY'];
 const SUMMARY_SEVERITIES: SummarySeverity[] = ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
+
+const SEVERITY_RANK: Record<string, number> = {
+  BLOCKER: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+};
 
 const DESCRIPTION_CODE_ORDER: Record<VersionOptionDescriptionCode, number> = {
   LATEST_STABLE: 0,
@@ -66,29 +74,34 @@ const EXCLUDED_DESCRIPTION_CODES: ReadonlySet<VersionOptionDescriptionCode> = ne
 ]);
 
 export function buildDependencyRisksViewModel(
-  filtered: AnalyzeProjectResponse,
-  allReleases: AnalyzeProjectRelease[],
+  response: AnalyzeProjectResponse,
+  filter: RiskPredicate,
 ): DependencyRisksViewModel {
-  const sortedReleases = sortReleases(filtered.releases);
-  const packages = sortedReleases
-    .filter((release) => release.issues.length > 0)
-    .map(buildPackageVM);
+  const sortedReleases = sortReleases(response.releases);
+  const packages: PackageVM[] = [];
+  for (const release of sortedReleases) {
+    const pkg = buildPackageVM(release, filter);
+    if (pkg !== null) packages.push(pkg);
+  }
   return {
     packages,
-    errors: filtered.errors.map(buildErrorVM),
-    summary: buildSummaryVM(sortedReleases, allReleases.length),
+    errors: response.errors.map(buildErrorVM),
+    summary: buildSummaryVM(packages, response.releases.length),
   };
 }
 
-function buildPackageVM(release: AnalyzeProjectRelease): PackageVM {
+function buildPackageVM(release: AnalyzeProjectRelease, filter: RiskPredicate): PackageVM | null {
+  const groups = buildGroups(release, filter);
+  if (groups.length === 0) return null;
+  const riskCount = groups.reduce((n, g) => n + g.risks.length, 0);
   return {
     name: release.packageName,
     version: release.version,
     newlyIntroduced: release.newlyIntroduced,
-    riskCount: release.issues.length,
+    riskCount,
     filePaths: release.dependencyFilePaths,
     chains: sortChainsShortestFirst(release.dependencyChains),
-    groups: buildGroups(release),
+    groups,
   };
 }
 
@@ -96,15 +109,20 @@ function sortChainsShortestFirst(chains: string[][]): string[][] {
   return [...chains].sort((a, b) => a.length - b.length);
 }
 
-function buildGroups(release: AnalyzeProjectRelease): RiskGroupVM<RiskVM>[] {
+function buildGroups(release: AnalyzeProjectRelease, filter: RiskPredicate): RiskGroupVM<RiskVM>[] {
   const byType = groupIssuesByType(release.issues);
   const groups: RiskGroupVM<RiskVM>[] = [];
   for (const type of ISSUE_TYPES) {
-    const issues = byType.get(type) ?? [];
-    if (issues.length === 0) continue;
-    groups.push(buildGroup(type, release, issues));
+    const typed = byType.get(type) ?? [];
+    if (typed.length === 0) continue;
+    const group = buildGroup(type, release, sortBySeverity(typed), filter);
+    if (group !== null) groups.push(group);
   }
   return groups;
+}
+
+function sortBySeverity(issues: AnalyzeProjectIssue[]): AnalyzeProjectIssue[] {
+  return [...issues].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
 }
 
 function groupIssuesByType(
@@ -120,19 +138,39 @@ function buildGroup(
   type: ScaIssueType,
   release: AnalyzeProjectRelease,
   issues: AnalyzeProjectIssue[],
-): MalwareGroupVM | LicenseGroupVM | VulnerabilityGroupVM {
+  filter: RiskPredicate,
+): MalwareGroupVM | LicenseGroupVM | VulnerabilityGroupVM | null {
   switch (type) {
-    case 'MALWARE':
-      return { type, risks: issues.map((i) => buildMalwareRisk(release, i)) };
-    case 'PROHIBITED_LICENSE':
-      return { type, risks: issues.map((i) => buildLicenseRisk(release, i)) };
-    case 'VULNERABILITY':
+    case 'MALWARE': {
+      const risks = filterRisks(
+        issues.map((i) => buildMalwareRisk(release, i)),
+        filter,
+      );
+      return risks.length === 0 ? null : { type, risks };
+    }
+    case 'PROHIBITED_LICENSE': {
+      const risks = filterRisks(
+        issues.map((i) => buildLicenseRisk(release, i)),
+        filter,
+      );
+      return risks.length === 0 ? null : { type, risks };
+    }
+    case 'VULNERABILITY': {
+      const survivors = issues
+        .map((issue) => ({ issue, risk: buildVulnerabilityRisk(release, issue) }))
+        .filter(({ risk }) => filter(risk));
+      if (survivors.length === 0) return null;
       return {
         type,
-        risks: issues.map((i) => buildVulnerabilityRisk(release, i)),
-        packageFixes: selectPackageCompleteFixes(issues),
+        risks: survivors.map(({ risk }) => risk),
+        packageFixes: selectPackageCompleteFixes(survivors.map(({ issue }) => issue)),
       };
+    }
   }
+}
+
+function filterRisks<T extends RiskVM>(risks: T[], filter: RiskPredicate): T[] {
+  return risks.filter(filter);
 }
 
 function buildMalwareRisk(
@@ -207,14 +245,11 @@ function buildErrorVM(error: { code: string; path: string | null; message: strin
   return { code: error.code, path: error.path, message: error.message };
 }
 
-function buildSummaryVM(
-  sortedReleases: AnalyzeProjectRelease[],
-  packagesScanned: number,
-): SummaryVM {
-  const counts = summaryCountsByTypeAndSeverity(sortedReleases);
+function buildSummaryVM(packages: PackageVM[], packagesScanned: number): SummaryVM {
+  const counts = summaryCountsByTypeAndSeverity(packages);
   return {
     packagesScanned,
-    totalRisks: sortedReleases.reduce((n, r) => n + r.issues.length, 0),
+    totalRisks: packages.reduce((n, p) => n + p.riskCount, 0),
     rows: ISSUE_TYPES.map((type) => buildSummaryRow(type, counts.get(type))),
   };
 }
@@ -231,7 +266,7 @@ function buildSummaryRow(
 }
 
 function summaryCountsByTypeAndSeverity(
-  releases: AnalyzeProjectRelease[],
+  packages: PackageVM[],
 ): Map<ScaIssueType, Map<SummarySeverity, number>> {
   const out = new Map<ScaIssueType, Map<SummarySeverity, number>>();
   for (const type of ISSUE_TYPES) {
@@ -239,14 +274,38 @@ function summaryCountsByTypeAndSeverity(
     for (const sev of SUMMARY_SEVERITIES) row.set(sev, 0);
     out.set(type, row);
   }
-  for (const release of releases) {
-    for (const issue of release.issues) {
-      const row = out.get(issue.type);
+  for (const pkg of packages) {
+    for (const group of pkg.groups) {
+      const row = out.get(group.type);
       if (!row) continue;
-      const sev = issue.severity.toUpperCase() as SummarySeverity;
-      if (!row.has(sev)) continue;
-      row.set(sev, (row.get(sev) ?? 0) + 1);
+      for (const risk of group.risks) {
+        const sev = risk.severity as SummarySeverity;
+        if (!row.has(sev)) continue;
+        row.set(sev, (row.get(sev) ?? 0) + 1);
+      }
     }
   }
   return out;
+}
+
+function effectiveStatus(
+  release: Pick<AnalyzeProjectRelease, 'newlyIntroduced'>,
+  issue: Pick<AnalyzeProjectIssue, 'status'>,
+): string {
+  const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
+  return (issue.status ?? fallback).toUpperCase();
+}
+
+function sortReleases(releases: AnalyzeProjectRelease[]): AnalyzeProjectRelease[] {
+  return [...releases].sort((a, b) => packageLabel(a).localeCompare(packageLabel(b)));
+}
+
+function packageLabel(release: AnalyzeProjectRelease): string {
+  return `${release.packageName}@${release.version}`;
+}
+
+function severityRank(severity: string | undefined): number {
+  return severity
+    ? (SEVERITY_RANK[severity.toUpperCase()] ?? Number.MAX_SAFE_INTEGER)
+    : Number.MAX_SAFE_INTEGER;
 }

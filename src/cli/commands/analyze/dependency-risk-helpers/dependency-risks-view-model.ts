@@ -20,6 +20,8 @@
 
 import type { ScaIssueType, VersionOptionDescriptionCode } from './sca-scanner.ts';
 
+export type DependencyRisksStatusFilter = 'all' | 'open' | 'new';
+
 export interface DependencyRisksViewModel {
   packages: PackageVM[];
   errors: ErrorVM[];

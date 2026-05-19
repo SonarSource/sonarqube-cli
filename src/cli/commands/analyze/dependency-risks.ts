@@ -29,14 +29,14 @@ import { error, print, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
-import {
-  applyStatusFilter,
-  countUnresolvedIssues,
-  type DependencyRisksStatusFilter,
-} from './dependency-risk-helpers/analysis-response.ts';
 import { buildDependencyRisksViewModel } from './dependency-risk-helpers/build-dependency-risks-view-model.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
+import type {
+  DependencyRisksStatusFilter,
+  DependencyRisksViewModel,
+} from './dependency-risk-helpers/dependency-risks-view-model.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
+import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
 import {
   type ScaScannerInvocation,
   ScaScannerRunner,
@@ -99,16 +99,14 @@ export async function analyzeDependencyRisks(
     new DefaultScaScannerSpawner(),
   ).run(invocation);
 
-  const filtered = applyStatusFilter(result, options.statusFilter);
-
-  const viewModel = buildDependencyRisksViewModel(filtered, result.releases);
+  const viewModel = buildDependencyRisksViewModel(result, buildRiskFilter(options.statusFilter));
   if (options.format === 'json') {
     print(formatDependencyRisksJson(options.project, viewModel));
   } else {
     print(formatDependencyRisksTable(viewModel, result.releases));
   }
 
-  handleResult(countUnresolvedIssues(filtered), result.errors.length);
+  handleResult(countUnresolvedIssues(viewModel), result.errors.length);
 }
 
 function handleResult(unresolvedRisksCount: number, errorCount: number) {
@@ -134,4 +132,18 @@ function handleResult(unresolvedRisksCount: number, errorCount: number) {
 
 function pluralize(count: number, singular: string): string {
   return `${singular}${count === 1 ? '' : 's'}`;
+}
+
+const RESOLVED_STATUSES = new Set(['SAFE', 'FIXED', 'ACCEPT']);
+
+export function countUnresolvedIssues(vm: DependencyRisksViewModel): number {
+  let count = 0;
+  for (const pkg of vm.packages) {
+    for (const group of pkg.groups) {
+      for (const risk of group.risks) {
+        if (!RESOLVED_STATUSES.has(risk.status)) count += 1;
+      }
+    }
+  }
+  return count;
 }
