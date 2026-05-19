@@ -132,7 +132,11 @@ sonar auth login --server https://sonarqube.mycompany.com
 **Verify authentication:**
 ```bash
 sonar auth status
-# Shows: ✓ Authenticated as yourname@example.com
+# Verifying token......
+# [✓ Connected]
+# Server  https://sonarcloud.io
+# Org     my-org
+# Source  OS Keychain
 ```
 
 **For automation, CI/CD, and AI agents** (use token-based auth instead):
@@ -147,23 +151,45 @@ Generate a token: SonarQube → My Account → Security → Generate Token
 **List your projects:**
 ```bash
 sonar list projects
-# Output example:
-# my-app (my-org_my-app)
-# demo-project (my-org_demo)
+# {"projects":[{"key":"my-org_my-app","name":"my-app"},
+#              {"key":"my-org_demo","name":"demo-project"}],
+#  "paging":{"pageIndex":1,"pageSize":500,"total":2,"hasNextPage":false}}
 ```
+
+Output is JSON by default. Pipe through `jq` for ad-hoc filtering, e.g. `sonar list projects | jq -r '.projects[].key'`.
 
 **Scan a file for secrets:**
 ```bash
-echo 'const API_KEY = "sk_live_abc123"' > test.js
+cat > test.js <<'EOF'
+const STRIPE_KEY = "sk_live_<PASTE_A_REAL_STRIPE_KEY_HERE>";
+EOF
 sonar analyze secrets test.js
-# Output: ❌ Found 1 secret in test.js
+# Sonar Secrets CLI - BETA (2.43.0.11106)
+# Trying to authenticate to SonarQube Server or Cloud, in order to enable complete functionality
+# Authentication successful
+# Running analysis...
+# Found 1 secret
+# Stripe API Key
+# File: test.js
+# Location: [1:21-1:53]
+# Secret: sk_*****************************
+# ❌ Secrets found (227ms)
+# 💡 Remove the reported secret, then rerun the scan.
 ```
+
+When a secret is found, the command exits with code `51`.
 
 **Check issues in a project:**
 ```bash
-sonar list issues --project my-org_my-app
-# Shows open issues from your latest SonarQube scan
+sonar list issues --project my-org_my-app --format table --page-size 3
+# SEVERITY | RULE             | MESSAGE                                                 | FILE
+# ---------------------------------------------------------------------------------------------------------------
+# CRITICAL | typescript:S3776 | Refactor this function to reduce its Cognitive Complexity | src/preview.tsx:17
+# CRITICAL | typescript:S2004 | Refactor this code to not nest functions more than 4...   | src/Preview.tsx:235
+# CRITICAL | typescript:S3776 | Refactor this function to reduce its Cognitive Complexity | src/Description.tsx:43
 ```
+
+Supported formats: `json` (default), `table`, `toon`, `csv`.
 
 > **💡 Tip:** When running from a git repository linked to a SonarQube project, the `--project` flag is often optional—the CLI will auto-detect the project key from your repository configuration.
 
@@ -256,93 +282,66 @@ This installs:
 
 ```bash
 $ sonar analyze secrets src/config.ts
-
-Scanning 1 file...
-❌ Found 2 secrets in src/config.ts:
-
-  Line 12: Hardcoded API key detected
-    const API_KEY = "sk_live_abc123...";
-
-  Line 23: AWS access key detected
-    const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";
-
-Exit code: 1
+  sonar-secrets 2.43.0.11106 is already installed (latest)
+Sonar Secrets CLI - BETA (2.43.0.11106)
+Trying to authenticate to SonarQube Server or Cloud, in order to enable complete functionality
+Authentication successful
+Running analysis...
+Found 1 secret
+Stripe API Key
+File: src/config.ts
+Location: [5:20-5:52]
+Secret: sk_*****************************
+❌ Secrets found (227ms)
+💡 Remove the reported secret, then rerun the scan.
 ```
+
+Exit codes: `0` when no secrets are found, `51` when at least one is found.
 
 ### Listing Issues
 
+`sonar list issues` emits JSON by default; pass `--format table` for the human-readable view shown below.
+
 ```bash
-$ sonar list issues --project my-org_my-app --severities CRITICAL,BLOCKER
-
-Found 3 issues:
-
-🔴 BLOCKER • squid:S2068 • src/auth.js:12
-   Credentials should not be hard-coded
-
-🔴 CRITICAL • javascript:S3776 • src/utils.js:45
-   Cognitive Complexity too high (25, max: 15)
-
-🟠 CRITICAL • squid:S5042 • src/server.js:8
-   Server domains should be verified during SSL/TLS connections
+$ sonar list issues --project my-org_my-app --severities CRITICAL,BLOCKER --page-size 3 --format table
+SEVERITY | RULE             | MESSAGE                                                                              | FILE
+-------------------------------------------------------------------------------------------------------------------------
+CRITICAL | typescript:S3776 | Refactor this function to reduce its Cognitive Complexity from 26 to the 15 allowed. | code/addons/a11y/src/preview.tsx:17
+CRITICAL | typescript:S2004 | Refactor this code to not nest functions more than 4 levels deep.                    | code/addons/docs/src/blocks/components/Preview.tsx:235
+CRITICAL | typescript:S3776 | Refactor this function to reduce its Cognitive Complexity from 23 to the 15 allowed. | code/addons/vitest/src/components/Description.tsx:43
 ```
 
 ### Analyzing Local Changes
 
 ```bash
 $ sonar verify --staged
-
-Analyzing 3 staged files...
-✓ Analysis complete in 2.1s
-
-Found 1 new issue:
-
-🟡 MAJOR • typescript:S1481 • src/helpers.ts:15
-   Unused local variable 'temp'
-
-💡 Fix this before committing
+SonarQube Agentic Analysis: no files in the change set to analyze.
 ```
 
-### AI-Assisted Remediation (SonarQube Cloud)
-
-```bash
-$ sonar remediate --project my-org_my-app
-
-Select issue to remediate:
-  ❯ 🔴 SQL injection vulnerability (src/db.ts:42)
-    🟠 Hardcoded credential (src/config.ts:12)
-    🟡 Unused variable (src/utils.ts:88)
-
-Generating remediation...
-
-[AI-generated fix displayed here]
-
-Apply this fix? (y/n):
-```
+When there are staged changes against a project configured for SonarQube Cloud Agentic Analysis, the analyzer reports new issues introduced by the change set in the same `text`/`json` format selectable via `--format`.
 
 ### LLM-Optimized Output Format
 
-For AI coding assistants, use `--format toon`:
+For AI coding assistants, use `--format toon` — a token-efficient, YAML-flavored encoding of the same JSON payload:
 
 ```bash
-$ sonar list issues --project my-org_my-app --format toon
-
-[ISSUE]
-key: AXx1z2
-rule: squid:S2068
-severity: BLOCKER
-message: Credentials should not be hard-coded
-file: src/auth.js
-line: 12
-[/ISSUE]
-
-[ISSUE]
-key: BYy2a3
-rule: javascript:S3776
-severity: CRITICAL
-message: Cognitive Complexity too high
-file: src/utils.js
-line: 45
-[/ISSUE]
+$ sonar list issues --project my-org_my-app --severities BLOCKER --page-size 1 --format toon
+total: 88
+p: 1
+ps: 1
+paging:
+  pageIndex: 1
+  pageSize: 1
+  total: 88
+issues[1]:
+  - key: AZ0avojpNWh-T1cKsujg
+    rule: "typescript:S3516"
+    severity: BLOCKER
+    component: "my-org_my-app:src/ConfigFile.ts"
+    project: my-org_my-app
+    line: 377
+    message: "Refactor this function to not always return the same value."
+    type: CODE_SMELL
 ```
 
 This format is designed for parsing by LLMs and can be used with Claude Code, GitHub Copilot, or custom AI workflows.
@@ -355,13 +354,17 @@ This format is designed for parsing by LLMs and can be used with Claude Code, Gi
 
 **Cause:** Using the project display name instead of the project key.
 
-**Solution:** Use the exact project key (shown in parentheses):
+**Solution:** Use the exact project key from the JSON output of `sonar list projects`:
 ```bash
 # Find the correct key:
 sonar list projects -q my-project
-# Output: my-project (key: my-org_my-project)
+# {"projects":[{"key":"my-org_my-project","name":"my-project"}],
+#  "paging":{"pageIndex":1,"pageSize":500,"total":1,"hasNextPage":false}}
 
-# Use the key in parentheses:
+# Or, for just the keys:
+sonar list projects -q my-project | jq -r '.projects[].key'
+
+# Use the key value (not the name) for subsequent commands:
 sonar list issues --project my-org_my-project
 ```
 
