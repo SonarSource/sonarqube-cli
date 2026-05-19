@@ -32,14 +32,14 @@ import {
   downloadBinary,
   verifyBinarySignature,
 } from '../../../../lib/sonarsource-releases';
+import { recordInstallationInState } from '../../../../lib/state-manager';
 import { print, text, withSpinner } from '../../../../ui';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,
   makeExecutable,
-  recordInstallationInState,
   verifyInstallation,
-} from './state-helpers';
+} from './install-utils';
 
 export interface BinarySpec {
   name: string;

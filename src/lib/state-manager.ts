@@ -19,15 +19,20 @@
  */
 
 /**
- * Business logic for manipulating in-memory state.
- * File I/O (loadState, saveState) lives in ./repository/state-repository.ts.
+ * Business logic and service helpers for manipulating state.
+ * Low-level state.json I/O lives in ./repository/state-repository.ts.
  */
 
 import crypto from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-export { loadState, saveState } from './repository/state-repository.js';
+import { version as VERSION } from '../../package.json';
+import { warn } from '../ui';
+import logger from './logger';
+import { loadState, saveState } from './repository/state-repository.js';
+
+export { loadState, saveState };
 
 import {
   type AgentExtension,
@@ -36,6 +41,7 @@ import {
   type CliState,
   type CloudRegion,
   type HookType,
+  type SkillExtension,
 } from './state.js';
 
 /**
@@ -207,5 +213,53 @@ export function upsertAgentExtension(state: CliState, extension: AgentExtension)
     state.agentExtensions[idx] = { ...extension, id: state.agentExtensions[idx].id };
   } else {
     state.agentExtensions.push(extension);
+  }
+}
+
+/**
+ * Record an installed binary in state.json under `tools.installed[]`. Failures
+ * are logged but do not propagate — state writes must not fail an install.
+ */
+export function recordInstallationInState(name: string, version: string, path: string): void {
+  try {
+    const state = loadState();
+    state.tools ??= { installed: [] };
+    state.tools.installed = state.tools.installed.filter((t) => t.name !== name);
+    state.tools.installed.push({
+      name,
+      version,
+      path,
+      installedAt: new Date().toISOString(),
+      installedByCliVersion: VERSION,
+    });
+    saveState(state);
+  } catch (err) {
+    warn(`Failed to update state: ${(err as Error).message}`);
+    logger.warn(`Failed to update state: ${(err as Error).message}`);
+  }
+}
+
+type SkillExtensionStateInput = Omit<SkillExtension, 'id' | 'kind' | 'updatedAt'> & {
+  updatedAt?: string;
+};
+
+/**
+ * Persist a skill extension entry in the registry. Failures are logged but do
+ * not propagate because extension state writes must not fail integration setup.
+ */
+export function recordSkillExtensionInState(extension: SkillExtensionStateInput): void {
+  try {
+    const { updatedAt = new Date().toISOString(), ...rest } = extension;
+    const state = loadState();
+    upsertAgentExtension(state, {
+      id: crypto.randomUUID(),
+      kind: 'skill',
+      updatedAt,
+      ...rest,
+    });
+    saveState(state);
+  } catch (err) {
+    warn(`Failed to record ${extension.name} skill in state: ${(err as Error).message}`);
+    logger.warn(`Failed to record ${extension.name} skill in state: ${(err as Error).message}`);
   }
 }

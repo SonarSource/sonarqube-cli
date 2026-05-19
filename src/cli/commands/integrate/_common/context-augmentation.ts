@@ -19,14 +19,13 @@
  */
 
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 
 import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
-import { loadState, saveState, upsertAgentExtension } from '../../../../lib/state-manager';
+import { recordSkillExtensionInState } from '../../../../lib/state-manager';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, print, success, text, warn } from '../../../../ui';
 import { installContextAugmentationBinary } from '../../_common/install/context-augmentation';
@@ -128,7 +127,17 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     return;
   }
 
-  recordSkillExtension(p);
+  recordSkillExtensionInState({
+    agentId: STATE_AGENT_ID[p.agent],
+    projectRoot: p.projectRoot,
+    global: false,
+    projectKey: p.projectKey,
+    orgKey: p.auth.orgKey,
+    serverUrl: p.auth.serverUrl,
+    updatedByCliVersion: VERSION,
+    name: 'sonar-context-augmentation',
+    version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+  });
   success('SonarQube Context Augmentation configured');
 }
 
@@ -170,43 +179,25 @@ async function runCagSubprocess(
       warn(`sonar-context-augmentation failed to start: ${err.message}`);
       resolve(false);
     });
-    child.on('exit', (code) => {
+    child.on('exit', (code, signal) => {
       if (code !== 0) {
-        emitIndented(stdoutBuf, process.stdout);
-        emitIndented(stderrBuf, process.stderr);
+        warn(
+          `sonar-context-augmentation exited with ${
+            code === null ? `signal ${signal ?? 'unknown'}` : `code ${code}`
+          }.`,
+        );
+        printIndented(stdoutBuf, process.stdout);
+        printIndented(stderrBuf, process.stderr);
       }
       resolve(code === 0);
     });
   });
 }
 
-function emitIndented(buffer: string, target: NodeJS.WriteStream): void {
+function printIndented(buffer: string, target: NodeJS.WriteStream): void {
   if (buffer.length === 0) return;
   const trimmed = buffer.endsWith('\n') ? buffer.slice(0, -1) : buffer;
   for (const line of trimmed.split('\n')) {
     print(`  ${line}`, target);
-  }
-}
-
-function recordSkillExtension(p: SetupContextAugmentationParams): void {
-  try {
-    const state = loadState();
-    upsertAgentExtension(state, {
-      id: randomUUID(),
-      agentId: STATE_AGENT_ID[p.agent],
-      projectRoot: p.projectRoot,
-      global: false,
-      projectKey: p.projectKey,
-      orgKey: p.auth.orgKey,
-      serverUrl: p.auth.serverUrl,
-      updatedByCliVersion: VERSION,
-      updatedAt: new Date().toISOString(),
-      kind: 'skill',
-      name: 'sonar-context-augmentation',
-      version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-    });
-    saveState(state);
-  } catch (err) {
-    warn(`Failed to record Context Augmentation skill in state: ${(err as Error).message}`);
   }
 }

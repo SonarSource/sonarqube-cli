@@ -37,15 +37,15 @@ import {
   downloadBinary,
   verifyPgpSignature,
 } from '../../../../lib/sonarsource-releases';
+import { recordInstallationInState } from '../../../../lib/state-manager';
 import { print, success, text, withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../error';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,
   makeExecutable,
-  recordInstallationInState,
   verifyInstallation,
-} from './state-helpers';
+} from './install-utils';
 import { extractFileFromTarGz } from './tar';
 
 export interface ContextAugmentationInstallOptions {

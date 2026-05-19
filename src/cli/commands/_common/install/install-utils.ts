@@ -18,20 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared installation helpers used by multiple binary installers (sonar-secrets,
-// sonar-context-augmentation). Lives separately so that installers with
-// different download/verify pipelines can still share state recording, cleanup,
-// and version probing.
+// Shared installation filesystem helpers used by multiple binary installers
+// (sonar-secrets, sonar-context-augmentation). Lives separately so installers
+// with different download/verify pipelines can still share cleanup and version
+// probing.
 
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { version as VERSION } from '../../../../../package.json';
 import { BIN_DIR } from '../../../../lib/config-constants';
 import logger from '../../../../lib/logger';
 import { spawnProcess } from '../../../../lib/process';
-import { loadState, saveState } from '../../../../lib/repository/state-repository';
-import { warn } from '../../../../ui';
 import { CommandFailedError } from '../error';
 
 const VERSION_REGEX_MAX_SEGMENT = 20;
@@ -73,29 +70,6 @@ function formatSpawnOutput(stdout: string, stderr: string): string {
   if (stdout.trim()) parts.push(`stdout:\n${stdout.trimEnd()}`);
   if (stderr.trim()) parts.push(`stderr:\n${stderr.trimEnd()}`);
   return parts.length ? parts.join('\n') : '(no output)';
-}
-
-/**
- * Record an installed binary in state.json under `tools.installed[]`. Failures
- * are logged but do not propagate — state writes must not fail an install.
- */
-export function recordInstallationInState(name: string, version: string, path: string): void {
-  try {
-    const state = loadState();
-    state.tools ??= { installed: [] };
-    state.tools.installed = state.tools.installed.filter((t) => t.name !== name);
-    state.tools.installed.push({
-      name,
-      version,
-      path,
-      installedAt: new Date().toISOString(),
-      installedByCliVersion: VERSION,
-    });
-    saveState(state);
-  } catch (err) {
-    warn(`Failed to update state: ${(err as Error).message}`);
-    logger.warn(`Failed to update state: ${(err as Error).message}`);
-  }
 }
 
 /**
