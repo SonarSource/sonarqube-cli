@@ -20,12 +20,12 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { formatDependencyRisksTable } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/format-dependency-risks-table.ts';
 import type {
   AnalysisErrorResource,
   AnalyzeProjectIssue,
   AnalyzeProjectRelease,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { formatDependencyRisksTable } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/table/format-dependency-risks-table.ts';
 
 function makeRelease(overrides: Partial<AnalyzeProjectRelease> = {}): AnalyzeProjectRelease {
   return {
