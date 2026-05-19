@@ -296,7 +296,7 @@ describe('formatDependencyRisksTable', () => {
     expect(row).toContain('BLOCKER');
     expect(row).toContain('OPEN');
     expect(row).toContain('Malicious package');
-    expect(out).toContain('Remove dependency');
+    expect(out).toContain('Remove this package and notify your information security team');
   });
 
   it('renders PROHIBITED_LICENSE issues with the spdxLicenseId and review remediation', () => {
@@ -309,7 +309,7 @@ describe('formatDependencyRisksTable', () => {
     expect(row).toContain('HIGH');
     expect(row).toContain('OPEN');
     expect(row).toContain('AGPL-3.0');
-    expect(out).toContain('Review usage');
+    expect(out).toContain('Review the license usage');
   });
 
   it('falls back to release.licenseExpression when the issue has no spdxLicenseId', () => {
@@ -326,7 +326,7 @@ describe('formatDependencyRisksTable', () => {
     const row = getLineWithText(out, 'AGPL-3.0');
     expect(row).toContain('HIGH');
     expect(row).toContain('AGPL-3.0');
-    expect(out).toContain('Review usage');
+    expect(out).toContain('Review the license usage');
   });
 
   it('uppercases lowercase severities at render time', () => {
@@ -569,14 +569,12 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     expect(out).toContain('CVE-SORT');
-    expect(out).toContain('5.0.0 (latest)');
-    expect(out).toContain('4.0.0 (nearest)');
-    expect(out).toContain('7.0.0 (partial fix)');
-    const latestComplete = out.indexOf('5.0.0');
-    const nearestComplete = out.indexOf('4.0.0');
-    const nearestPartial = out.indexOf('7.0.0');
-    expect(nearestComplete).toBeGreaterThan(latestComplete);
-    expect(nearestPartial).toBeGreaterThan(nearestComplete);
+    const fixLine = getLineWithText(out, 'Recommended versions without known vulnerabilities:');
+    expect(fixLine).toContain('5.0.0 (latest)');
+    expect(fixLine).toContain('4.0.0 (nearest)');
+    expect(fixLine.indexOf('4.0.0')).toBeGreaterThan(fixLine.indexOf('5.0.0'));
+    const partialRow = getLineWithText(out, '7.0.0 (partial fix)');
+    expect(partialRow).toContain('CVE-SORT');
     expect(out).not.toContain('9.0.0');
     expect(out).not.toContain('8.0.0');
   });
@@ -1221,6 +1219,91 @@ describe('formatDependencyRisksTable', () => {
     expect(lines[viaLineIndex]).not.toContain(b);
     expect(lines[viaLineIndex + 1]).toContain(b);
     expect(out).toContain('foo@1.0.0');
+  });
+
+  it('separates non-empty type groups with a blank line and attaches the fix line to the bottom of the vulnerability group', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [
+            makeMalwareIssue({ severity: 'BLOCKER' }),
+            makeLicenseIssue({ severity: 'HIGH', spdxLicenseId: 'AGPL-3.0' }),
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-GROUPED',
+              versionOptions: [
+                {
+                  version: '2.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'LATEST_STABLE',
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const lines = out.split('\n');
+    const malwareIdx = lines.findIndex((l) => l.includes('Malicious package'));
+    const licenseIdx = lines.findIndex((l) => l.includes('AGPL-3.0'));
+    const vulnIdx = lines.findIndex((l) => l.includes('CVE-GROUPED'));
+    const malwareFooterIdx = lines.findIndex((l) =>
+      l.includes('Remove this package and notify your information security team'),
+    );
+    const licenseFooterIdx = lines.findIndex((l) => l.includes('Review the license usage'));
+    const fixIdx = lines.findIndex((l) =>
+      l.includes('Recommended versions without known vulnerabilities:'),
+    );
+
+    expect(malwareIdx).toBeGreaterThan(-1);
+    expect(licenseIdx).toBeGreaterThan(malwareIdx);
+    expect(vulnIdx).toBeGreaterThan(licenseIdx);
+    expect(malwareFooterIdx).toBe(malwareIdx + 1);
+    expect(licenseFooterIdx).toBe(licenseIdx + 1);
+    expect(fixIdx).toBe(vulnIdx + 1);
+
+    expect(lines[malwareFooterIdx + 1]).toBe('');
+    expect(lines[licenseIdx - 1]).toBe('');
+    expect(lines[licenseFooterIdx + 1]).toBe('');
+    expect(lines[vulnIdx - 1]).toBe('');
+  });
+
+  it('omits blank-line separators between absent groups and places the fix line on the line immediately after the last vulnerability row', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({
+              severity: 'HIGH',
+              vulnerabilityId: 'CVE-ONLY',
+              versionOptions: [
+                {
+                  version: '3.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'LATEST_STABLE',
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const lines = out.split('\n');
+    const vulnIdx = lines.findIndex((l) => l.includes('CVE-ONLY'));
+    const fixIdx = lines.findIndex((l) =>
+      l.includes('Recommended versions without known vulnerabilities:'),
+    );
+    expect(vulnIdx).toBeGreaterThan(-1);
+    expect(fixIdx).toBe(vulnIdx + 1);
+    expect(out).not.toContain('Malicious package');
+    expect(out).not.toContain('AGPL-3.0');
   });
 
   describe('Summary block', () => {
