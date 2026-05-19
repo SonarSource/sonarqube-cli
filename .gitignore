@@ -1,11 +1,13 @@
 node_modules/
+docs/cli-output-report.md
 dist/
 *.log
 .DS_Store
 *.sock
 .env
 .env.local
-.claude/
+.claude/*
+!.claude/commands/
 .idea/
 plan.md
 /coverage/
