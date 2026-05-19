@@ -20,13 +20,12 @@
 
 // Helpers for reading and writing .pre-commit-config.yaml and running the pre-commit framework CLI.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import yaml from 'js-yaml';
 
 import { spawnProcess } from '../../../../../../lib/process';
-import { success, text } from '../../../../../../ui';
 import { CommandFailedError } from '../../../../_common/error';
 import type { GitHookType } from '../../options';
 
@@ -93,10 +92,6 @@ function readPreCommitConfig(root: string): PreCommitConfig {
   } catch {
     return { repos: [] };
   }
-}
-
-function writePreCommitConfig(root: string, config: PreCommitConfig): void {
-  writeFileSync(join(root, PRE_COMMIT_CONFIG_FILE), yaml.dump(config, { lineWidth: -1 }), 'utf-8');
 }
 
 function findLocalRepo(config: PreCommitConfig): PreCommitRepo | undefined {
@@ -172,17 +167,4 @@ export async function activatePreCommitFramework(root: string, hook: GitHookType
       },
     );
   }
-}
-
-export async function installViaPreCommitFramework(root: string, hook: GitHookType): Promise<void> {
-  const config = readPreCommitConfig(root);
-  const isLegacyHookRemoved = removeLegacyHook(config);
-  upsertSonarHook(config, hook);
-  writePreCommitConfig(root, config);
-  if (isLegacyHookRemoved) {
-    text(`Removed legacy ${PRE_COMMIT_LEGACY_REPO} hook from ${PRE_COMMIT_CONFIG_FILE}.`);
-  }
-
-  await activatePreCommitFramework(root, hook);
-  success(`${hook} hook installed (pre-commit framework: added to ${PRE_COMMIT_CONFIG_FILE}).`);
 }

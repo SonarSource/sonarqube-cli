@@ -87,7 +87,7 @@ async function configureGlobalHooksPath(hooksDir: string): Promise<void> {
   if (gitResult.exitCode !== 0) {
     const detail = [gitResult.stderr, gitResult.stdout].filter(Boolean).join('\n');
     throw new CommandFailedError(
-      `git config --global core.hooksPath failed (exit code ${gitResult.exitCode}): ${detail}`,
+      `'git config --global core.hooksPath' failed (exit code ${gitResult.exitCode}): ${detail}`,
       { remediationHint: GLOBAL_GIT_CONFIG_REMEDIATION_HINT },
     );
   }

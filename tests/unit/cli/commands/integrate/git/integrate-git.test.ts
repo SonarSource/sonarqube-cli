@@ -784,7 +784,7 @@ describe('integrateGitGlobal', () => {
       }
       expect(caughtError).toBeInstanceOf(CommandFailedError);
       expect((caughtError as CommandFailedError).message).toContain(
-        'git config --global core.hooksPath failed',
+        "'git config --global core.hooksPath' failed",
       );
       expect((caughtError as CommandFailedError).remediationHint).toBe(
         'Ensure git is installed and your global git configuration is writable, then retry.',
