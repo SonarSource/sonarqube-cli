@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { green, red, STATUS_ICONS } from '../../../../ui/colors.js';
+import { bold, green, red, STATUS_ICONS } from '../../../../ui/colors.js';
 import { effectiveStatus, sortReleases } from './analysis-response.ts';
 import type {
   AnalysisErrorResource,
@@ -129,18 +129,70 @@ function appendReleaseBlock(
   for (const line of transitiveChainLines(release.dependencyChains, releaseByPurl)) {
     lines.push(line);
   }
-  const fixLine = packageFixLine(release);
-  if (fixLine !== null) {
-    lines.push('', fixLine);
-  }
   lines.push('');
   appendIssuesBlock(lines, release);
 }
 
 function appendIssuesBlock(lines: string[], release: AnalyzeProjectRelease): void {
-  for (const issue of release.issues) {
-    lines.push(issueLine(release, issue));
+  const byType = new Map<ScaIssueType, AnalyzeProjectIssue[]>();
+  for (const type of ISSUE_TYPES) byType.set(type, []);
+  for (const issue of release.issues) byType.get(issue.type)?.push(issue);
+
+  let firstGroupEmitted = false;
+  for (const type of ISSUE_TYPES) {
+    const issues = byType.get(type) ?? [];
+    if (issues.length === 0) continue;
+    if (firstGroupEmitted) lines.push('');
+    emitGroup(lines, release, type, issues);
+    firstGroupEmitted = true;
   }
+}
+
+function emitGroup(
+  lines: string[],
+  release: AnalyzeProjectRelease,
+  type: ScaIssueType,
+  issues: AnalyzeProjectIssue[],
+): void {
+  switch (type) {
+    case 'MALWARE':
+      appendMalwareGroup(lines, release, issues);
+      return;
+    case 'PROHIBITED_LICENSE':
+      appendLicenseGroup(lines, release, issues);
+      return;
+    case 'VULNERABILITY':
+      appendVulnerabilityGroup(lines, release, issues);
+      return;
+  }
+}
+
+function appendMalwareGroup(
+  lines: string[],
+  release: AnalyzeProjectRelease,
+  malware: AnalyzeProjectIssue[],
+): void {
+  for (const issue of malware) lines.push(issueLine(release, issue));
+  lines.push(red(bold('Remove this package and notify your information security team')));
+}
+
+function appendLicenseGroup(
+  lines: string[],
+  release: AnalyzeProjectRelease,
+  licenses: AnalyzeProjectIssue[],
+): void {
+  for (const issue of licenses) lines.push(issueLine(release, issue));
+  lines.push(bold('Review the license usage'));
+}
+
+function appendVulnerabilityGroup(
+  lines: string[],
+  release: AnalyzeProjectRelease,
+  vulnerabilities: AnalyzeProjectIssue[],
+): void {
+  for (const issue of vulnerabilities) lines.push(issueLine(release, issue));
+  const fixLine = packageFixLine(vulnerabilities);
+  if (fixLine !== null) lines.push(fixLine);
 }
 
 function getLabel(release: AnalyzeProjectRelease): string {
@@ -168,16 +220,9 @@ function issueLine(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): 
 }
 
 function inlineRemediation(issue: AnalyzeProjectIssue): string | null {
-  switch (issue.type) {
-    case 'MALWARE':
-      return 'Remove dependency';
-    case 'PROHIBITED_LICENSE':
-      return 'Review usage';
-    case 'VULNERABILITY': {
-      const partial = chooseInlinePartialFix(issue);
-      return partial ? `${partial.version} (partial fix)` : null;
-    }
-  }
+  if (issue.type !== 'VULNERABILITY') return null;
+  const partial = chooseInlinePartialFix(issue);
+  return partial ? `${partial.version} (partial fix)` : null;
 }
 
 function chooseInlinePartialFix(issue: AnalyzeProjectIssue): VersionOption | null {
@@ -197,13 +242,13 @@ function chooseInlinePartialFix(issue: AnalyzeProjectIssue): VersionOption | nul
   return partials[0];
 }
 
-function packageFixLine(release: AnalyzeProjectRelease): string | null {
-  const fixes = packageCompleteFixes(release);
+function packageFixLine(vulnerabilities: AnalyzeProjectIssue[]): string | null {
+  const fixes = packageCompleteFixes(vulnerabilities);
   if (fixes.length === 0) {
     return null;
   }
   const parts = fixes.map(formatVersionOption);
-  return `Recommended versions without known vulnerabilities: ${parts.join(' | ')}`;
+  return `${bold('Recommended versions without known vulnerabilities:')} ${parts.join(' | ')}`;
 }
 
 function formatVersionOption(option: VersionOption): string {
@@ -211,10 +256,7 @@ function formatVersionOption(option: VersionOption): string {
   return label ? `${option.version} (${label})` : option.version;
 }
 
-function packageCompleteFixes(release: AnalyzeProjectRelease): VersionOption[] {
-  const vulnerabilities = release.issues.filter((i) => i.type === 'VULNERABILITY');
-  if (vulnerabilities.length === 0) return [];
-
+function packageCompleteFixes(vulnerabilities: AnalyzeProjectIssue[]): VersionOption[] {
   const perIssueCompleteFixes = vulnerabilities.map(completeFixesByVersion);
   if (perIssueCompleteFixes.some((m) => m.size === 0)) return [];
 
