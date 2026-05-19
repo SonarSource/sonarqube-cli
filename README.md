@@ -105,7 +105,7 @@ irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/maste
 **Verify installation:**
 ```bash
 sonar --version
-# Expected output: 0.12.0 (or newer)
+# Example output: 1.0.0
 ```
 
 **Note:** You may need to restart your terminal for the `sonar` command to be available.
@@ -139,12 +139,25 @@ sonar auth status
 # Source  OS Keychain
 ```
 
-**For automation, CI/CD, and AI agents** (use token-based auth instead):
+**For automation, CI/CD, and AI agents**, pass the token via environment variables. The CLI picks it up at command time, so nothing is written to disk or to the OS keychain — and the token never appears on a command line, in shell history, or in process listings (where `--with-token` would expose it).
+
+Generate a token first: SonarQube → My Account → Security → Generate Token
+
+SonarQube Cloud (set `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`):
 ```bash
-sonar auth login --with-token YOUR_TOKEN
+export SONARQUBE_CLI_TOKEN="$YOUR_TOKEN"
+export SONARQUBE_CLI_ORG="my-org"
+sonar list projects
 ```
 
-Generate a token: SonarQube → My Account → Security → Generate Token
+Self-hosted SonarQube Server (set `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_SERVER`):
+```bash
+export SONARQUBE_CLI_TOKEN="$YOUR_TOKEN"
+export SONARQUBE_CLI_SERVER="https://sonarqube.mycompany.com"
+sonar list projects
+```
+
+In CI, store the token in your runner's secret store (GitHub Actions secrets, GitLab CI variables, etc.) and inject it as `SONARQUBE_CLI_TOKEN` — never commit it to the repo or pass it as a CLI argument.
 
 ### Step 3: Try Basic Commands
 
