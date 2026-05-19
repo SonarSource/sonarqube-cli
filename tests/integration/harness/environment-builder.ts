@@ -31,6 +31,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
+import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import {
   type BinarySpec,
   buildLocalBinaryName,
@@ -47,7 +48,7 @@ function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
   const downloadUrl = buildDownloadUrl(fixture.name, fixture.version, fixture.distPrefix, platform);
   const filename = downloadUrl.split('/').at(-1)!;
-  return join(import.meta.dir, '..', 'resources', 'dependency-artifacts', filename);
+  return join(DEPENDENCY_ARTIFACTS_DIR, filename);
 }
 
 interface SqaaExtensionConfig {
