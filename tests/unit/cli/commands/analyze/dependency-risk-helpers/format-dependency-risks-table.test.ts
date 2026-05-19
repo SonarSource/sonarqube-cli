@@ -920,7 +920,7 @@ describe('formatDependencyRisksTable', () => {
     expect(out).not.toContain('more');
   });
 
-  it('emits a Fix line listing only versions that completely fix every issue in the release', () => {
+  it('emits a Fix line as the union of every COMPLETE-fix option across issues (deduped by version)', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -942,13 +942,6 @@ describe('formatDependencyRisksTable', () => {
                   fixLevel: 'COMPLETE',
                   descriptionCode: 'LATEST_STABLE',
                 },
-                {
-                  version: '1.5.0',
-                  vulnerabilityIds: [],
-                  prerelease: false,
-                  fixLevel: 'COMPLETE',
-                  descriptionCode: 'NEAREST_COMPLETE',
-                },
               ],
             }),
             makeVulnIssue({
@@ -962,14 +955,7 @@ describe('formatDependencyRisksTable', () => {
                   descriptionCode: 'VERSION_IN_USE',
                 },
                 {
-                  version: '2.0.0',
-                  vulnerabilityIds: [],
-                  prerelease: false,
-                  fixLevel: 'COMPLETE',
-                  descriptionCode: 'LATEST_STABLE',
-                },
-                {
-                  version: '1.7.0',
+                  version: '1.5.0',
                   vulnerabilityIds: [],
                   prerelease: false,
                   fixLevel: 'COMPLETE',
@@ -984,13 +970,39 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const fixLine = getLineWithText(out, 'Recommended versions without known vulnerabilities:');
+    // Union: a COMPLETE option with vulnerabilityIds=[] is package-safe at that
+    // version, so versions from any issue qualify — no intersection required.
     expect(fixLine).toContain('2.0.0 (latest stable)');
-    // 1.5.0 only fixes CVE-A; 1.7.0 only fixes CVE-B — neither is in the intersection.
-    expect(fixLine).not.toContain('1.5.0');
-    expect(fixLine).not.toContain('1.7.0');
+    expect(fixLine).toContain('1.5.0 (nearest)');
   });
 
-  it('omits the Fix line entirely when the complete-fix intersection is empty', () => {
+  it('deduplicates by version when the same COMPLETE-fix option appears on multiple issues', () => {
+    const sharedFix: AnalyzeProjectIssue['versionOptions'] = [
+      {
+        version: '2.0.0',
+        vulnerabilityIds: [],
+        prerelease: false,
+        fixLevel: 'COMPLETE',
+        descriptionCode: 'LATEST_STABLE',
+      },
+    ];
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({ vulnerabilityId: 'CVE-A', versionOptions: sharedFix }),
+            makeVulnIssue({ vulnerabilityId: 'CVE-B', versionOptions: sharedFix }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const fixLine = getLineWithText(out, 'Recommended versions without known vulnerabilities:');
+    expect(fixLine.match(/2\.0\.0/g)).toHaveLength(1);
+  });
+
+  it('omits the Fix line when no vulnerability offers any COMPLETE fix', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -999,23 +1011,18 @@ describe('formatDependencyRisksTable', () => {
               vulnerabilityId: 'CVE-A',
               versionOptions: [
                 {
-                  version: '2.0.0',
-                  vulnerabilityIds: [],
+                  version: '1.0.0',
+                  vulnerabilityIds: ['CVE-A'],
                   prerelease: false,
-                  fixLevel: 'COMPLETE',
-                  descriptionCode: 'LATEST_STABLE',
+                  fixLevel: 'NONE',
+                  descriptionCode: 'VERSION_IN_USE',
                 },
-              ],
-            }),
-            makeVulnIssue({
-              vulnerabilityId: 'CVE-B',
-              versionOptions: [
                 {
-                  version: '3.0.0',
-                  vulnerabilityIds: [],
+                  version: '1.0.1',
+                  vulnerabilityIds: ['CVE-A'],
                   prerelease: false,
-                  fixLevel: 'COMPLETE',
-                  descriptionCode: 'LATEST_STABLE',
+                  fixLevel: 'PARTIAL',
+                  descriptionCode: 'NEAREST_PARTIAL',
                 },
               ],
             }),
