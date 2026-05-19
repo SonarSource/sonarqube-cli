@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { bold, green, red, STATUS_ICONS } from '../../../../ui/colors.js';
+import { bold, dim, green, red, STATUS_ICONS } from '../../../../ui/colors.js';
 import { effectiveStatus, sortReleases } from './analysis-response.ts';
 import type {
   AnalysisErrorResource,
@@ -127,7 +127,7 @@ function appendReleaseBlock(
     lines.push(`in: ${release.dependencyFilePaths.join(', ')}`);
   }
   for (const line of transitiveChainLines(release.dependencyChains, releaseByPurl)) {
-    lines.push(line);
+    lines.push(dim(line));
   }
   lines.push('');
   appendIssuesBlock(lines, release);
