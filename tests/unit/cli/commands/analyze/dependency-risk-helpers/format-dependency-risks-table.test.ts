@@ -453,7 +453,7 @@ describe('formatDependencyRisksTable', () => {
     expect(header).toContain('(1 risk)');
   });
 
-  it('omits the remediation when a VULNERABILITY has no versionOptions', () => {
+  it('renders "→ no known fix" when a VULNERABILITY has no versionOptions', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -463,11 +463,11 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    expect(out).toContain('CVE-NO-FIX');
-    expect(out).not.toContain('Change version to');
+    const row = getLineWithText(out, 'CVE-NO-FIX');
+    expect(row).toContain('→ no known fix');
   });
 
-  it('omits the remediation when versionOptions is an empty array', () => {
+  it('renders "→ no known fix" when versionOptions is an empty array', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -477,11 +477,11 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    expect(out).toContain('CVE-EMPTY');
-    expect(out).not.toContain('Change version to');
+    const row = getLineWithText(out, 'CVE-EMPTY');
+    expect(row).toContain('→ no known fix');
   });
 
-  it('omits the remediation when every version option has fixLevel NONE', () => {
+  it('renders "→ no known fix" when every version option has fixLevel NONE', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -511,10 +511,9 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    expect(out).toContain('CVE-ONLY-NONE');
-    expect(out).not.toContain('Change version to');
-    expect(out).not.toContain('(complete fix)');
-    expect(out).not.toContain('(partial fix)');
+    const row = getLineWithText(out, 'CVE-ONLY-NONE');
+    expect(row).toContain('→ no known fix');
+    expect(out).not.toContain('use recommended version');
   });
 
   it('orders upgrade options by descriptionCode priority and filters out VERSION_IN_USE and UNKNOWN', () => {
@@ -1115,7 +1114,7 @@ describe('formatDependencyRisksTable', () => {
     expect(row).toContain('→ 1.0.1 (fixes 1/2)');
   });
 
-  it('omits the inline tail when a vulnerability has no partial-fix option', () => {
+  it('renders "→ use recommended version" when a vulnerability has only a complete-fix option', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -1139,8 +1138,43 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const row = getLineWithText(out, 'CVE-COMPLETE-ONLY');
-    expect(row).not.toContain('→');
+    expect(row).toContain('→ use recommended version');
     expect(row).not.toContain('fixes');
+  });
+
+  it('appends "or use recommended version" when a vulnerability has both a partial and a complete fix', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-PARTIAL-AND-COMPLETE',
+              versionOptions: [
+                {
+                  version: '1.0.1',
+                  vulnerabilityIds: ['CVE-OTHER'],
+                  prerelease: false,
+                  fixLevel: 'PARTIAL',
+                  descriptionCode: 'NEAREST_PARTIAL',
+                },
+                {
+                  version: '2.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'LATEST_STABLE',
+                },
+              ],
+            }),
+            makeVulnIssue({ vulnerabilityId: 'CVE-OTHER', versionOptions: null }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const row = getLineWithText(out, 'CVE-PARTIAL-AND-COMPLETE');
+    expect(row).toContain('→ 1.0.1 (fixes 1/2) or use recommended version');
   });
 
   it('picks the highest-priority partial-fix option for the inline tail', () => {
