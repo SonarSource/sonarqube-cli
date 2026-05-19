@@ -31,4 +31,7 @@ import * as postUpdate from './lib/post-update';
 await postUpdate.runPostUpdateActions();
 
 await COMMAND_TREE.parseAsync(process.argv);
-await Sentry.flush(SENTRY_FLUSH_TIMEOUT_MS);
+// Skip flush when Sentry was never initialized (e.g. --help, --version, telemetry disabled).
+if (Sentry.getClient()) {
+  await Sentry.flush(SENTRY_FLUSH_TIMEOUT_MS);
+}
