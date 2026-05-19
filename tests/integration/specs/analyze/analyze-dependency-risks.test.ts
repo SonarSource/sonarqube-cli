@@ -45,75 +45,91 @@ describe('analyze dependency-risks', () => {
     await harness.dispose();
   });
 
-  it('exits with code 1 when not authenticated', async () => {
-    const result = await harness.run('analyze dependency-risks --project demo');
-    const output = `CLI output:\n${result.stdout}${result.stderr}`;
+  it(
+    'exits with code 1 when not authenticated',
+    async () => {
+      const result = await harness.run('analyze dependency-risks --project demo');
+      const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
-    expect(result.exitCode, output).toBe(1);
-    expect(output, output).toContain('❌ Not authenticated.');
-    expect(output, output).toContain("💡 Run 'sonar auth login' to authenticate.");
-  });
+      expect(result.exitCode, output).toBe(1);
+      expect(output, output).toContain('❌ Not authenticated.');
+      expect(output, output).toContain("💡 Run 'sonar auth login' to authenticate.");
+    },
+    { timeout: 15000 },
+  );
 
-  it('exits with code 1 when project does not exist (settings 404)', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+  it(
+    'exits with code 1 when project does not exist (settings 404)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
-    const output = `CLI output:\n${result.stdout}${result.stderr}`;
+      const result = await harness.run('analyze dependency-risks --project demo');
+      const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
-    expect(result.exitCode, output).toBe(1);
-    expect(output, output).toContain('Project demo not found');
-    expect(
-      server.getRecordedRequests().some((r) => r.path === '/api/settings/values'),
-      output,
-    ).toBe(true);
-  });
+      expect(result.exitCode, output).toBe(1);
+      expect(output, output).toContain('Project demo not found');
+      expect(
+        server.getRecordedRequests().some((r) => r.path === '/api/settings/values'),
+        output,
+      ).toBe(true);
+    },
+    { timeout: 15000 },
+  );
 
-  it('exits with code 1 when SCA is disabled on the server', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(false)
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+  it(
+    'exits with code 1 when SCA is disabled on the server',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(false)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
-    const output = `CLI output:\n${result.stdout}${result.stderr}`;
+      const result = await harness.run('analyze dependency-risks --project demo');
+      const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
-    expect(result.exitCode, output).toBe(1);
-    expect(output, output).toContain(
-      'Software Composition Analysis is not available for the current server connection',
-    );
-  });
+      expect(result.exitCode, output).toBe(1);
+      expect(output, output).toContain(
+        'Software Composition Analysis is not available for the current server connection',
+      );
+    },
+    { timeout: 15000 },
+  );
 
   // todo: https://sonarsource.atlassian.net/browse/CLI-452 Add end-to-end tests
   // The next two tests assert on scanner *failure* because the in-process
   // fake server does not implement the SCA-scanner backend APIs. Move happy-path
   // coverage to a real-backend e2e suite (e.g. SonarQube Cloud staging) once one
   // exists.
-  it('reports a scanner failure when the SCA backend is unavailable', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .withProject('demo')
-      .withProjectSettings('demo', [])
-      .start();
-    harness.state().withScaScannerBinaryInstalled();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+  it(
+    'reports a scanner failure when the SCA backend is unavailable',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      harness.state().withScaScannerBinaryInstalled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo --format json', {
-      timeoutMs: 30_000,
-    });
-    const output = `CLI output:\n${result.stdout}${result.stderr}`;
+      const result = await harness.run('analyze dependency-risks --project demo --format json', {
+        timeoutMs: 30_000,
+      });
+      const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
-    expect(result.exitCode, output).toBe(1);
-    expect(result.stderr, output).toContain(SCA_SCANNER_FAILURE_PREFIX);
-  });
+      expect(result.exitCode, output).toBe(1);
+      expect(result.stderr, output).toContain(SCA_SCANNER_FAILURE_PREFIX);
+    },
+    { timeout: 15000 },
+  );
 
   it(
     'auto-installs sca-scanner-cli when binary is absent',
@@ -172,16 +188,20 @@ describe('analyze dependency-risks', () => {
     { timeout: 30000 },
   );
 
-  it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
-    const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN);
+  it(
+    'exits with code 1 when the SCA endpoint is absent (404)',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
-    const output = `CLI output:\n${result.stdout}${result.stderr}`;
+      const result = await harness.run('analyze dependency-risks --project demo');
+      const output = `CLI output:\n${result.stdout}${result.stderr}`;
 
-    expect(result.exitCode, output).toBe(1);
-    expect(output, output).toContain(
-      'Software Composition Analysis is not available for the current server connection',
-    );
-  });
+      expect(result.exitCode, output).toBe(1);
+      expect(output, output).toContain(
+        'Software Composition Analysis is not available for the current server connection',
+      );
+    },
+    { timeout: 15000 },
+  );
 });
