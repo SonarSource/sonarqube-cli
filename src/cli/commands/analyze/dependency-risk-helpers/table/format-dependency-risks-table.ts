@@ -19,14 +19,19 @@
  */
 
 import { dim, green, red, STATUS_ICONS } from '../../../../../ui/colors.js';
-import { sortReleases } from '../analysis-response.ts';
 import type {
-  AnalysisErrorResource,
-  AnalyzeProjectIssue,
-  AnalyzeProjectRelease,
-  AnalyzeProjectResponse,
-  ScaIssueType,
-} from '../sca-scanner.ts';
+  DependencyRisksViewModel,
+  ErrorVM,
+  LicenseGroupVM,
+  MalwareGroupVM,
+  PackageVM,
+  RiskGroupVM,
+  RiskVM,
+  SummaryRowVM,
+  SummaryVM,
+  VulnerabilityGroupVM,
+} from '../dependency-risks-view-model.ts';
+import type { AnalyzeProjectRelease } from '../sca-scanner.ts';
 import { appendLicenseGroup } from './format-table-license-group.ts';
 import { appendMalwareGroup } from './format-table-malware-group.ts';
 import { appendVulnerabilityGroup } from './format-table-vulnerability-group.ts';
@@ -36,116 +41,86 @@ const MAX_CHAINS_DISPLAYED = 3;
 const CHAIN_LINE_INDENT = '  ';
 const CHAIN_CONTINUATION_INDENT = `${CHAIN_LINE_INDENT}    `;
 
-const ISSUE_TYPES: ScaIssueType[] = ['MALWARE', 'PROHIBITED_LICENSE', 'VULNERABILITY'];
-const SEVERITIES = ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO'] as const;
 const TYPE_LABEL_WIDTH = 'PROHIBITED_LICENSE'.length;
 
 export function formatDependencyRisksTable(
-  filtered: AnalyzeProjectResponse,
+  vm: DependencyRisksViewModel,
   allReleases: AnalyzeProjectRelease[],
 ): string {
-  const releaseByPurl = new Map(allReleases.map((r) => [r.packageUrl, r]));
-  const displayedReleases = sortReleases(filtered.releases);
-  const errors = filtered.errors;
-  const totalRisks = countTotalRisks(displayedReleases);
-
   const lines: string[] = [];
 
-  if (totalRisks > 0) {
-    appendReleases(displayedReleases, lines, releaseByPurl);
+  if (vm.packages.length > 0) {
+    const labelByPurl = buildLabelByPurl(allReleases);
+    appendPackages(lines, vm.packages, labelByPurl);
   } else {
-    appendNoRisksTail(lines);
+    lines.push('No dependency risks found.');
   }
 
   lines.push('', '═'.repeat(MAX_LINE_WIDTH));
-  appendErrors(lines, errors);
-  appendSummaryBlock(lines, displayedReleases, allReleases.length, totalRisks);
+  appendErrors(lines, vm.errors);
+  appendSummaryBlock(lines, vm.summary);
 
   return lines.join('\n');
 }
 
-function countTotalRisks(releases: AnalyzeProjectRelease[]): number {
-  return releases.reduce((n, release) => n + release.issues.length, 0);
+function buildLabelByPurl(releases: AnalyzeProjectRelease[]): Map<string, string> {
+  return new Map(
+    releases.map((r) => [r.packageUrl, packageLabel({ name: r.packageName, version: r.version })]),
+  );
 }
 
-function summaryHeader(packagesScanned: number, totalRisks: number): string {
-  return `Summary: ${packagesScanned} dependencies checked, ${totalRisks} risks found`;
-}
-
-function appendNoRisksTail(lines: string[]): void {
-  lines.push('No dependency risks found.');
-}
-
-function appendReleases(
-  displayedReleases: AnalyzeProjectRelease[],
+function appendPackages(
   lines: string[],
-  releaseByPurl: Map<string, AnalyzeProjectRelease>,
+  packages: PackageVM[],
+  labelByPurl: Map<string, string>,
 ): void {
-  for (const release of displayedReleases) {
-    if (release.issues.length === 0) continue;
-    appendReleaseBlock(lines, release, releaseByPurl);
+  for (const pkg of packages) {
+    appendPackageBlock(lines, pkg, labelByPurl);
   }
 }
 
-function appendReleaseBlock(
+function appendPackageBlock(
   lines: string[],
-  release: AnalyzeProjectRelease,
-  releaseByPurl: Map<string, AnalyzeProjectRelease>,
+  pkg: PackageVM,
+  labelByPurl: Map<string, string>,
 ): void {
   if (lines.length > 0) lines.push('');
-  lines.push(packageHeader(release));
-  if (release.dependencyFilePaths.length > 0) {
-    lines.push(`in: ${release.dependencyFilePaths.join(', ')}`);
+  lines.push(packageHeader(pkg));
+  if (pkg.filePaths.length > 0) {
+    lines.push(`in: ${pkg.filePaths.join(', ')}`);
   }
-  for (const line of transitiveChainLines(release.dependencyChains, releaseByPurl)) {
+  for (const line of transitiveChainLines(pkg.chains, labelByPurl)) {
     lines.push(dim(line));
   }
   lines.push('');
-  appendIssuesBlock(lines, release);
-}
-
-function appendIssuesBlock(lines: string[], release: AnalyzeProjectRelease): void {
-  const byType = new Map<ScaIssueType, AnalyzeProjectIssue[]>();
-  for (const type of ISSUE_TYPES) byType.set(type, []);
-  for (const issue of release.issues) byType.get(issue.type)?.push(issue);
-
-  let firstGroupEmitted = false;
-  for (const type of ISSUE_TYPES) {
-    const issues = byType.get(type) ?? [];
-    if (issues.length === 0) continue;
-    if (firstGroupEmitted) lines.push('');
-    emitGroup(lines, release, type, issues);
-    firstGroupEmitted = true;
+  for (let i = 0; i < pkg.groups.length; i++) {
+    if (i > 0) lines.push('');
+    appendGroup(lines, pkg.groups[i]);
   }
 }
 
-function emitGroup(
-  lines: string[],
-  release: AnalyzeProjectRelease,
-  type: ScaIssueType,
-  issues: AnalyzeProjectIssue[],
-): void {
-  switch (type) {
+function appendGroup(lines: string[], group: RiskGroupVM<RiskVM>): void {
+  switch (group.type) {
     case 'MALWARE':
-      appendMalwareGroup(lines, release, issues);
+      appendMalwareGroup(lines, group as MalwareGroupVM);
       return;
     case 'PROHIBITED_LICENSE':
-      appendLicenseGroup(lines, release, issues);
+      appendLicenseGroup(lines, group as LicenseGroupVM);
       return;
     case 'VULNERABILITY':
-      appendVulnerabilityGroup(lines, release, issues);
+      appendVulnerabilityGroup(lines, group as VulnerabilityGroupVM);
       return;
   }
 }
 
-function getLabel(release: AnalyzeProjectRelease): string {
-  return `${release.packageName}@${release.version}`;
+function packageLabel(pkg: Pick<PackageVM, 'name' | 'version'>): string {
+  return `${pkg.name}@${pkg.version}`;
 }
 
-function packageHeader(release: AnalyzeProjectRelease): string {
-  const baseName = getLabel(release);
-  const name = release.newlyIntroduced ? `${baseName} [NEW]` : baseName;
-  const count = release.issues.length;
+function packageHeader(pkg: PackageVM): string {
+  const baseName = packageLabel(pkg);
+  const name = pkg.newlyIntroduced ? `${baseName} [NEW]` : baseName;
+  const count = pkg.riskCount;
   const label = `── ${name} (${count} risk${count === 1 ? '' : 's'}) `;
   if (label.length >= MAX_LINE_WIDTH) {
     return `${label}─`;
@@ -153,7 +128,7 @@ function packageHeader(release: AnalyzeProjectRelease): string {
   return label + '─'.repeat(MAX_LINE_WIDTH - label.length);
 }
 
-function appendErrors(lines: string[], errors: AnalysisErrorResource[]): void {
+function appendErrors(lines: string[], errors: ErrorVM[]): void {
   if (errors.length === 0) {
     return;
   }
@@ -164,43 +139,20 @@ function appendErrors(lines: string[], errors: AnalysisErrorResource[]): void {
   }
 }
 
-function appendSummaryBlock(
-  lines: string[],
-  releases: AnalyzeProjectRelease[],
-  packagesScanned: number,
-  totalRisks: number,
-): void {
-  const counts = summaryCountsByTypeAndSeverity(releases);
-  lines.push('', summaryHeader(packagesScanned, totalRisks));
-  for (const type of ISSUE_TYPES) {
-    lines.push(summaryLineForType(type, counts.get(type) ?? new Map()));
+function appendSummaryBlock(lines: string[], summary: SummaryVM): void {
+  lines.push('', summaryHeader(summary));
+  for (const row of summary.rows) {
+    lines.push(summaryLineForType(row));
   }
 }
 
-function summaryCountsByTypeAndSeverity(
-  releases: AnalyzeProjectRelease[],
-): Map<ScaIssueType, Map<string, number>> {
-  const out = new Map<ScaIssueType, Map<string, number>>();
-  for (const type of ISSUE_TYPES) {
-    const row = new Map<string, number>();
-    for (const sev of SEVERITIES) row.set(sev, 0);
-    out.set(type, row);
-  }
-  for (const release of releases) {
-    for (const issue of release.issues) {
-      const row = out.get(issue.type);
-      if (!row) continue;
-      const sev = issue.severity.toUpperCase();
-      if (!row.has(sev)) continue;
-      row.set(sev, (row.get(sev) ?? 0) + 1);
-    }
-  }
-  return out;
+function summaryHeader(summary: SummaryVM): string {
+  return `Summary: ${summary.packagesScanned} dependencies checked, ${summary.totalRisks} risks found`;
 }
 
-function summaryLineForType(type: ScaIssueType, counts: Map<string, number>): string {
-  const cells = SEVERITIES.map((sev) => summarySeverityCell(sev, counts.get(sev) ?? 0));
-  return `  ${type.padEnd(TYPE_LABEL_WIDTH)}  ${cells.join('    ')}`;
+function summaryLineForType(row: SummaryRowVM): string {
+  const cells = row.counts.map(({ severity, count }) => summarySeverityCell(severity, count));
+  return `  ${row.type.padEnd(TYPE_LABEL_WIDTH)}  ${cells.join('    ')}`;
 }
 
 function summarySeverityCell(label: string, count: number): string {
@@ -208,25 +160,19 @@ function summarySeverityCell(label: string, count: number): string {
   return `${label} ${icon} ${String(count).padStart(3)}`;
 }
 
-function transitiveChainLines(
-  chains: string[][],
-  releaseByPurl: Map<string, AnalyzeProjectRelease>,
-): string[] {
+function transitiveChainLines(chains: string[][], labelByPurl: Map<string, string>): string[] {
   if (chains.length === 0) {
     return [];
   }
-  const shortest = [...chains].sort((a, b) => a.length - b.length).slice(0, MAX_CHAINS_DISPLAYED);
+  const displayed = chains.slice(0, MAX_CHAINS_DISPLAYED);
   const lines: string[] = [];
-  for (const chain of shortest) {
-    const labels = chain.map((purl) => {
-      const release = releaseByPurl.get(purl);
-      return release ? getLabel(release) : purl;
-    });
+  for (const chain of displayed) {
+    const labels = chain.map((purl) => labelByPurl.get(purl) ?? purl);
     for (const line of wrapChain(labels, MAX_LINE_WIDTH)) {
       lines.push(line);
     }
   }
-  const remaining = chains.length - shortest.length;
+  const remaining = chains.length - displayed.length;
   if (remaining > 0) {
     lines.push(`${CHAIN_LINE_INDENT}and via ${remaining} others`);
   }

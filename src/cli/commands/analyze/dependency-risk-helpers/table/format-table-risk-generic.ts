@@ -18,18 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { effectiveStatus } from '../analysis-response.ts';
-import type { AnalyzeProjectIssue, AnalyzeProjectRelease } from '../sca-scanner.ts';
+import type { RiskVM } from '../dependency-risks-view-model.ts';
 
 const SEVERITY_WIDTH = 9;
 const STATUS_WIDTH = 8;
 
-export function genericRiskInfo(
-  release: AnalyzeProjectRelease,
-  issue: AnalyzeProjectIssue,
-  body: string,
-): string {
-  const severity = issue.severity.toUpperCase().padEnd(SEVERITY_WIDTH);
-  const status = effectiveStatus(release, issue).padEnd(STATUS_WIDTH);
+export function genericRiskInfo(risk: RiskVM, body: string): string {
+  const severity = risk.severity.padEnd(SEVERITY_WIDTH);
+  const status = risk.status.padEnd(STATUS_WIDTH);
   return `${severity} ${status} ${body}`;
 }

@@ -19,22 +19,14 @@
  */
 
 import { bold } from '../../../../../ui/colors.js';
-import type { AnalyzeProjectIssue, AnalyzeProjectRelease } from '../sca-scanner.ts';
+import type { LicenseGroupVM, LicenseRiskVM } from '../dependency-risks-view-model.ts';
 import { genericRiskInfo } from './format-table-risk-generic.ts';
 
-export function appendLicenseGroup(
-  lines: string[],
-  release: AnalyzeProjectRelease,
-  licenses: AnalyzeProjectIssue[],
-): void {
-  for (const issue of licenses) lines.push(licenseRow(release, issue));
+export function appendLicenseGroup(lines: string[], group: LicenseGroupVM): void {
+  for (const risk of group.risks) lines.push(genericRiskInfo(risk, licenseCell(risk)));
   lines.push(bold('Review the license usage'));
 }
 
-function licenseRow(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string {
-  return genericRiskInfo(release, issue, licenseCell(release, issue));
-}
-
-function licenseCell(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string {
-  return issue.spdxLicenseId ?? release.licenseExpression ?? '';
+function licenseCell(risk: LicenseRiskVM): string {
+  return risk.spdxLicenseId ?? risk.releaseLicenseExpression ?? '';
 }

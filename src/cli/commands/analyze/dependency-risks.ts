@@ -34,6 +34,7 @@ import {
   countUnresolvedIssues,
   type DependencyRisksStatusFilter,
 } from './dependency-risk-helpers/analysis-response.ts';
+import { buildDependencyRisksViewModel } from './dependency-risk-helpers/build-dependency-risks-view-model.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
 import {
@@ -103,7 +104,8 @@ export async function analyzeDependencyRisks(
   if (options.format === 'json') {
     print(formatDependencyRisksJson(options.project, filtered));
   } else {
-    print(formatDependencyRisksTable(filtered, result.releases));
+    const viewModel = buildDependencyRisksViewModel(filtered, result.releases);
+    print(formatDependencyRisksTable(viewModel, result.releases));
   }
 
   handleResult(countUnresolvedIssues(filtered), result.errors.length);
