@@ -36,12 +36,12 @@ import {
 } from './dependency-risk-helpers/analysis-response.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
-import { formatDependencyRisksTable } from './dependency-risk-helpers/format-dependency-risks-table.ts';
 import {
   type ScaScannerInvocation,
   ScaScannerRunner,
 } from './dependency-risk-helpers/sca-scanner.ts';
 import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
+import { formatDependencyRisksTable } from './dependency-risk-helpers/table/format-dependency-risks-table.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
