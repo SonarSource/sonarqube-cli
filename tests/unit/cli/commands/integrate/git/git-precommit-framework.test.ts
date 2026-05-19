@@ -18,30 +18,46 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import yaml from 'js-yaml';
 
-import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import {
   hasSonarHookInPreCommitConfig,
-  installViaPreCommitFramework,
+  normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_LEGACY_REPO,
   type PreCommitConfig,
   removeLegacyHook,
   runPreCommitInstall,
   upsertSonarHook,
-} from '../../../../../../src/cli/commands/integrate/git/git-precommit-framework';
+} from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
 import * as processLib from '../../../../../../src/lib/process.js';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui/mock';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-tmp');
 
 const PRE_COMMIT_OK = { exitCode: 0, stdout: '', stderr: '' };
 const PRE_COMMIT_FAIL = { exitCode: 1, stdout: '', stderr: 'something went wrong' };
+
+describe('normalizePreCommitConfig', () => {
+  it('returns the default shape for non-object values', () => {
+    expect(normalizePreCommitConfig(undefined)).toEqual({ repos: [] });
+  });
+
+  it('preserves unrelated keys and normalizes invalid repos values', () => {
+    expect(
+      normalizePreCommitConfig({
+        default_install_hook_types: ['pre-commit'],
+        repos: 'not-an-array',
+      }),
+    ).toEqual({
+      default_install_hook_types: ['pre-commit'],
+      repos: [],
+    });
+  });
+});
 
 describe('removeLegacyHook', () => {
   it('removes the legacy repo entry and returns true', () => {
@@ -255,181 +271,6 @@ describe('runPreCommitInstall', () => {
       expect(runPreCommitInstall(TEMP_DIR, 'pre-commit')).rejects.toThrow(
         'pre-commit uninstall failed',
       );
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-});
-
-describe('installViaPreCommitFramework', () => {
-  beforeEach(() => {
-    mkdirSync(TEMP_DIR, { recursive: true });
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
-    rmSync(TEMP_DIR, { recursive: true, force: true });
-  });
-
-  it('writes the config file and shows a success message when pre-commit commands succeed', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-
-      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
-      expect(getMockUiCalls().some((c) => c.method === 'success')).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('throws CommandFailedError when pre-commit commands fail', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
-
-    try {
-      let caughtError: unknown;
-      try {
-        await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-      } catch (e) {
-        caughtError = e;
-      }
-      expect(caughtError).toBeDefined();
-      expect(caughtError).toBeInstanceOf(CommandFailedError);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('still writes the config file even when pre-commit commands fail', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit').catch(() => {});
-      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('installs the hook even when the existing file contains invalid YAML', async () => {
-    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), '{ invalid yaml :::');
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('installs the hook even when the existing file is empty', async () => {
-    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), '');
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('installs the hook when the existing file has a non-array repos value', async () => {
-    writeFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), yaml.dump({ repos: 'not-an-array' }));
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('removes legacy repo, adds local hook, and prints a text message', async () => {
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      yaml.dump({
-        repos: [
-          {
-            repo: PRE_COMMIT_LEGACY_REPO,
-            rev: 'v2.41.0.10709',
-            hooks: [{ id: 'sonar-secrets', stages: ['pre-commit'] }],
-          },
-        ],
-      }),
-    );
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-
-      const textCalls = getMockUiCalls().filter((c) => c.method === 'text');
-      expect(textCalls).toHaveLength(1);
-      expect(textCalls[0].args[0]).toBe(
-        `Removed legacy ${PRE_COMMIT_LEGACY_REPO} hook from ${PRE_COMMIT_CONFIG_FILE}.`,
-      );
-      const written = yaml.load(readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8')) as {
-        repos: Array<{ repo: string; hooks: Array<{ id: string }> }>;
-      };
-      expect(written.repos.some((r) => r.repo === PRE_COMMIT_LEGACY_REPO)).toBe(false);
-      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('removes legacy repo and installs hook alongside existing local hooks', async () => {
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      yaml.dump({
-        repos: [
-          {
-            repo: PRE_COMMIT_LEGACY_REPO,
-            rev: 'v2.41.0.10709',
-            hooks: [{ id: 'sonar-secrets', stages: ['pre-commit'] }],
-          },
-          {
-            repo: 'local',
-            hooks: [{ id: 'other-local-hook', name: 'x', entry: 'e', language: 'system' }],
-          },
-        ],
-      }),
-    );
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-
-      const textCalls = getMockUiCalls().filter((c) => c.method === 'text');
-      expect(textCalls).toHaveLength(1);
-      expect(textCalls[0].args[0]).toBe(
-        `Removed legacy ${PRE_COMMIT_LEGACY_REPO} hook from ${PRE_COMMIT_CONFIG_FILE}.`,
-      );
-      const written = yaml.load(readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8')) as {
-        repos: Array<{ repo: string; hooks: Array<{ id: string }> }>;
-      };
-      expect(written.repos.some((r) => r.repo === PRE_COMMIT_LEGACY_REPO)).toBe(false);
-      const localRepo = written.repos.find((r) => r.repo === 'local');
-      expect(localRepo?.hooks).toHaveLength(2);
-      expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
-      expect(localRepo?.hooks.some((h) => h.id === 'other-local-hook')).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-    }
-  });
-
-  it('prints no text message when there is no legacy repo', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-
-    try {
-      await installViaPreCommitFramework(TEMP_DIR, 'pre-commit');
-
-      expect(getMockUiCalls().some((c) => c.method === 'text')).toBe(false);
     } finally {
       spawnSpy.mockRestore();
     }

@@ -20,48 +20,37 @@
 
 // Integrate command - install git hooks for secrets scanning
 
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import * as fs from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { join } from 'node:path';
 
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
-import { spawnProcess } from '../../../../lib/process';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import {
-  blank,
-  confirmPrompt,
-  info,
-  intro,
-  note,
-  selectPrompt,
-  success,
-  text,
-  warn,
-} from '../../../../ui';
+import { blank, confirmPrompt, info, intro, note, selectPrompt, text, warn } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
-import { installSecretsBinary } from '../../_common/install/secrets';
-import { installViaHusky } from './git-husky';
+import { installIntegration } from '../_common/registry';
+import type { GitHookType, IntegrateGitOptions } from './options';
 import {
   hasSonarHookInPreCommitConfig,
-  installViaPreCommitFramework,
+  HOOK_MARKER,
+  HUSKY_INTEGRATION_ID,
+  NATIVE_GIT_INTEGRATION_ID,
   PRE_COMMIT_CONFIG_FILE,
-} from './git-precommit-framework';
-import { getHookScript, HOOK_MARKER } from './git-shell-fragments';
+  PRE_COMMIT_INTEGRATION_ID,
+  registerGitIntegrations,
+} from './tools';
 
-export type GitHookType = 'pre-commit' | 'pre-push';
+registerGitIntegrations();
+
+export type { GitHookType, IntegrateGitOptions } from './options';
+export { installViaGitHooks } from './tools';
+
+type GitIntegrationId = 'native-git' | 'husky' | 'pre-commit';
 
 export function isGitHookType(s: string): s is GitHookType {
   return s === 'pre-commit' || s === 'pre-push';
-}
-
-export interface IntegrateGitOptions {
-  hook?: GitHookType;
-  force?: boolean;
-  nonInteractive?: boolean;
-  global?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,10 +130,6 @@ export async function resolveHookType(options: IntegrateGitOptions): Promise<Git
   return choice;
 }
 
-async function ensureSonarSecrets(): Promise<void> {
-  await installSecretsBinary();
-}
-
 export function showPostInstallInfo(hook: GitHookType): void {
   blank();
   text(
@@ -192,35 +177,6 @@ export async function showInstallationStatus(root: string): Promise<void> {
   blank();
 }
 
-// ---------------------------------------------------------------------------
-// Install strategies
-// ---------------------------------------------------------------------------
-
-export async function installViaGitHooks(
-  hooksDir: string,
-  hook: GitHookType,
-  force?: boolean,
-): Promise<void> {
-  mkdirSync(hooksDir, { recursive: true });
-  const hookPath = join(hooksDir, hook);
-  if (existsSync(hookPath)) {
-    const existing = await fs.readFile(hookPath, 'utf-8');
-    if (!existing.includes(HOOK_MARKER) && !force) {
-      warn(`A different ${hook} hook already exists at ${hookPath}.`);
-      text('  Use --force to replace it.');
-      throw new CommandFailedError(`Refusing to overwrite existing ${hook} hook at ${hookPath}.`, {
-        remediationHint: 'Use --force to replace the existing hook.',
-      });
-    }
-  }
-  await fs.writeFile(hookPath, getHookScript(hook), { mode: 0o755 });
-  success(`${hook} hook installed at ${hookPath}`);
-}
-
-// ---------------------------------------------------------------------------
-// Public command handlers
-// ---------------------------------------------------------------------------
-
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   validateHookOption(options.hook);
 
@@ -248,36 +204,7 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   text(`Hook: ${hook}`);
   blank();
 
-  await ensureSonarSecrets();
-
-  await installViaGitHooks(GLOBAL_HOOKS_DIR, hook, options.force);
-
-  let gitResult;
-  try {
-    gitResult = await spawnProcess('git', [
-      'config',
-      '--global',
-      'core.hooksPath',
-      normalizePath(GLOBAL_HOOKS_DIR),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new CommandFailedError(`Failed to run git [${message}]`, {
-      remediationHint:
-        'Ensure git is installed and your global git configuration is writable, then retry.',
-    });
-  }
-  if (gitResult.exitCode !== 0) {
-    const detail = [gitResult.stderr, gitResult.stdout].filter(Boolean).join('\n');
-    const msg = `git config --global core.hooksPath failed (exit code ${gitResult.exitCode}): ${detail}`;
-    throw new CommandFailedError(msg, {
-      remediationHint:
-        'Ensure git is installed and your global git configuration is writable, then retry.',
-    });
-  }
-
-  success(`${hook} hook installed globally at ${join(GLOBAL_HOOKS_DIR, hook)}`);
-  success(`git config --global core.hooksPath set to: ${GLOBAL_HOOKS_DIR}`);
+  await installGitFeatures({ ...options, hook }, GLOBAL_HOOKS_DIR, 'global');
   showPostInstallInfo(hook);
   showVerificationGuide(hook);
 }
@@ -311,22 +238,49 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   }
   blank();
 
-  const gitRepo = new GitRepo(gitRoot);
   const hook = await resolveHookType(options);
   text(`Hook: ${hook}`);
   blank();
 
-  await ensureSonarSecrets();
-
-  if (gitRepo.usesPreCommitFramework()) {
-    await installViaPreCommitFramework(gitRepo.rootDir, hook);
-  } else if (await gitRepo.usesHusky()) {
-    await installViaHusky(gitRepo.getHuskyHookPath(hook), hook);
-  } else {
-    await installViaGitHooks(await gitRepo.getHooksDir(), hook, options.force);
-  }
+  await installGitFeatures({ ...options, hook }, gitRoot, 'project');
 
   showPostInstallInfo(hook);
   await showInstallationStatus(gitRoot);
   showVerificationGuide(hook);
+}
+
+async function installGitFeatures(
+  options: IntegrateGitOptions & { hook: GitHookType },
+  targetRoot: string,
+  scope: 'project' | 'global',
+): Promise<void> {
+  const integrationId = await resolveGitIntegrationId(targetRoot, scope);
+  await installIntegration({
+    integrationId,
+    options,
+    targetRoot,
+    scope,
+    force: options.force,
+    attrs: {
+      hook: options.hook,
+    },
+  });
+}
+
+async function resolveGitIntegrationId(
+  targetRoot: string,
+  scope: 'project' | 'global',
+): Promise<GitIntegrationId> {
+  if (scope === 'global') {
+    return NATIVE_GIT_INTEGRATION_ID;
+  }
+
+  const gitRepo = new GitRepo(targetRoot);
+  if (gitRepo.usesPreCommitFramework()) {
+    return PRE_COMMIT_INTEGRATION_ID;
+  }
+  if (await gitRepo.usesHusky()) {
+    return HUSKY_INTEGRATION_ID;
+  }
+  return NATIVE_GIT_INTEGRATION_ID;
 }
