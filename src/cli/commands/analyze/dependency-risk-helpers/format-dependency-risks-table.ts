@@ -212,10 +212,10 @@ function formatVersionOption(option: VersionOption): string {
 }
 
 function packageCompleteFixes(release: AnalyzeProjectRelease): VersionOption[] {
-  const issues = release.issues;
-  if (issues.length === 0) return [];
+  const vulnerabilities = release.issues.filter((i) => i.type === 'VULNERABILITY');
+  if (vulnerabilities.length === 0) return [];
 
-  const perIssueCompleteFixes = issues.map(completeFixesByVersion);
+  const perIssueCompleteFixes = vulnerabilities.map(completeFixesByVersion);
   if (perIssueCompleteFixes.some((m) => m.size === 0)) return [];
 
   const sharedVersions = intersectKeys(perIssueCompleteFixes);

@@ -1011,7 +1011,7 @@ describe('formatDependencyRisksTable', () => {
     expect(out).not.toContain('Recommended versions without known vulnerabilities:');
   });
 
-  it('omits the Fix line when the release contains a non-vulnerability issue', () => {
+  it('computes the Fix line from vulnerabilities only, ignoring malware and license issues in the same release', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -1029,7 +1029,22 @@ describe('formatDependencyRisksTable', () => {
               ],
             }),
             makeMalwareIssue(),
+            makeLicenseIssue(),
           ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const fixLine = getLineWithText(out, 'Recommended versions without known vulnerabilities:');
+    expect(fixLine).toContain('2.0.0');
+  });
+
+  it('omits the Fix line when the release contains only malware and license issues', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [makeMalwareIssue(), makeLicenseIssue()],
         }),
       ],
       1,
