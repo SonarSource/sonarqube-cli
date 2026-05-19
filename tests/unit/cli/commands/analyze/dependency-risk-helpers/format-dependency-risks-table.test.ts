@@ -21,6 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/build-dependency-risks-view-model.ts';
+import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type {
   AnalysisErrorResource,
   AnalyzeProjectIssue,
@@ -37,7 +38,7 @@ function renderTable(
   allReleases: AnalyzeProjectRelease[],
 ): string {
   return formatDependencyRisksTable(
-    buildDependencyRisksViewModel(response, allReleases),
+    buildDependencyRisksViewModel(response, buildRiskFilter('all')),
     allReleases,
   );
 }
@@ -138,7 +139,7 @@ function getFormattedTableWithReleases(
       }),
     ),
   ];
-  return renderTable({ releases, parsedFiles: [], errors }, allReleases);
+  return renderTable({ releases: allReleases, parsedFiles: [], errors }, allReleases);
 }
 
 describe('formatDependencyRisksTable', () => {
