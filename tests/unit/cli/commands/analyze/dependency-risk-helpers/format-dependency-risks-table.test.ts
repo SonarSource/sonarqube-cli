@@ -541,11 +541,30 @@ describe('formatDependencyRisksTable', () => {
                 },
                 {
                   version: '7.0.0',
-                  vulnerabilityIds: [],
+                  vulnerabilityIds: ['CVE-OTHER'],
                   prerelease: false,
                   fixLevel: 'PARTIAL',
                   descriptionCode: 'NEAREST_PARTIAL',
                 },
+                {
+                  version: '5.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'LATEST_COMPLETE',
+                },
+                {
+                  version: '4.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'NEAREST_COMPLETE',
+                },
+              ],
+            }),
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-OTHER',
+              versionOptions: [
                 {
                   version: '5.0.0',
                   vulnerabilityIds: [],
@@ -573,7 +592,7 @@ describe('formatDependencyRisksTable', () => {
     expect(fixLine).toContain('5.0.0 (latest)');
     expect(fixLine).toContain('4.0.0 (nearest)');
     expect(fixLine.indexOf('4.0.0')).toBeGreaterThan(fixLine.indexOf('5.0.0'));
-    const partialRow = getLineWithText(out, '7.0.0 (partial fix)');
+    const partialRow = getLineWithText(out, '7.0.0 (fixes 1/2)');
     expect(partialRow).toContain('CVE-SORT');
     expect(out).not.toContain('9.0.0');
     expect(out).not.toContain('8.0.0');
@@ -1068,12 +1087,16 @@ describe('formatDependencyRisksTable', () => {
                 },
                 {
                   version: '1.0.1',
-                  vulnerabilityIds: [],
+                  vulnerabilityIds: ['CVE-OTHER'],
                   prerelease: false,
                   fixLevel: 'PARTIAL',
                   descriptionCode: 'NEAREST_PARTIAL',
                 },
               ],
+            }),
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-OTHER',
+              versionOptions: null,
             }),
           ],
         }),
@@ -1082,7 +1105,7 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const row = getLineWithText(out, 'CVE-PARTIAL');
-    expect(row).toContain('→ 1.0.1 (partial fix)');
+    expect(row).toContain('→ 1.0.1 (fixes 1/2)');
   });
 
   it('omits the inline tail when a vulnerability has no partial-fix option', () => {
@@ -1110,7 +1133,7 @@ describe('formatDependencyRisksTable', () => {
     );
     const row = getLineWithText(out, 'CVE-COMPLETE-ONLY');
     expect(row).not.toContain('→');
-    expect(row).not.toContain('partial fix');
+    expect(row).not.toContain('fixes');
   });
 
   it('picks the highest-priority partial-fix option for the inline tail', () => {
@@ -1123,19 +1146,23 @@ describe('formatDependencyRisksTable', () => {
               versionOptions: [
                 {
                   version: '1.5.0',
-                  vulnerabilityIds: [],
+                  vulnerabilityIds: ['CVE-OTHER'],
                   prerelease: false,
                   fixLevel: 'PARTIAL',
                   descriptionCode: 'NEAREST_PARTIAL',
                 },
                 {
                   version: '1.9.0',
-                  vulnerabilityIds: [],
+                  vulnerabilityIds: ['CVE-OTHER'],
                   prerelease: false,
                   fixLevel: 'PARTIAL',
                   descriptionCode: 'LATEST_PARTIAL',
                 },
               ],
+            }),
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-OTHER',
+              versionOptions: null,
             }),
           ],
         }),
@@ -1145,7 +1172,7 @@ describe('formatDependencyRisksTable', () => {
     );
     const row = getLineWithText(out, 'CVE-MANY-PARTIALS');
     // LATEST_PARTIAL (rank 3) beats NEAREST_PARTIAL (rank 5) in DESCRIPTION_CODE_ORDER.
-    expect(row).toContain('→ 1.9.0 (partial fix)');
+    expect(row).toContain('→ 1.9.0 (fixes 1/2)');
     expect(row).not.toContain('1.5.0');
   });
 

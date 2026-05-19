@@ -214,15 +214,21 @@ function issueLine(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): 
   const severity = issue.severity.toUpperCase().padEnd(SEVERITY_WIDTH);
   const status = effectiveStatus(release, issue).padEnd(STATUS_WIDTH);
   const cell = issueCell(release, issue);
-  const inline = inlineRemediation(issue);
+  const inline = inlineRemediation(release, issue);
   const tail = inline ? ` → ${inline}` : '';
   return `${severity} ${status} ${cell}${tail}`;
 }
 
-function inlineRemediation(issue: AnalyzeProjectIssue): string | null {
+function inlineRemediation(
+  release: AnalyzeProjectRelease,
+  issue: AnalyzeProjectIssue,
+): string | null {
   if (issue.type !== 'VULNERABILITY') return null;
   const partial = chooseInlinePartialFix(issue);
-  return partial ? `${partial.version} (partial fix)` : null;
+  if (!partial) return null;
+  const total = release.issues.reduce((n, i) => (i.type === 'VULNERABILITY' ? n + 1 : n), 0);
+  const fixed = total - partial.vulnerabilityIds.length;
+  return `${partial.version} (fixes ${fixed}/${total})`;
 }
 
 function chooseInlinePartialFix(issue: AnalyzeProjectIssue): VersionOption | null {
