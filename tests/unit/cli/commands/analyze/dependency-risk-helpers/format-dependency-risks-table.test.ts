@@ -20,12 +20,27 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/build-dependency-risks-view-model.ts';
 import type {
   AnalysisErrorResource,
   AnalyzeProjectIssue,
   AnalyzeProjectRelease,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/table/format-dependency-risks-table.ts';
+
+function renderTable(
+  response: {
+    releases: AnalyzeProjectRelease[];
+    parsedFiles: string[];
+    errors: AnalysisErrorResource[];
+  },
+  allReleases: AnalyzeProjectRelease[],
+): string {
+  return formatDependencyRisksTable(
+    buildDependencyRisksViewModel(response, allReleases),
+    allReleases,
+  );
+}
 
 function makeRelease(overrides: Partial<AnalyzeProjectRelease> = {}): AnalyzeProjectRelease {
   return {
@@ -123,7 +138,7 @@ function getFormattedTableWithReleases(
       }),
     ),
   ];
-  return formatDependencyRisksTable({ releases, parsedFiles: [], errors }, allReleases);
+  return renderTable({ releases, parsedFiles: [], errors }, allReleases);
 }
 
 describe('formatDependencyRisksTable', () => {
@@ -858,10 +873,7 @@ describe('formatDependencyRisksTable', () => {
       issues: [makeVulnIssue({ status: 'OPEN', vulnerabilityId: 'CVE-1' })],
     });
 
-    const out = formatDependencyRisksTable({ releases: [foo], parsedFiles: [], errors: [] }, [
-      transit,
-      foo,
-    ]);
+    const out = renderTable({ releases: [foo], parsedFiles: [], errors: [] }, [transit, foo]);
 
     expect(out).toContain('via transit@1.0.0 → foo@1.0.0');
   });
@@ -1600,10 +1612,7 @@ describe('formatDependencyRisksTable', () => {
         packageUrl: 'pkg:npm/foo@1.0.0',
         issues: [makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-FOO' })],
       });
-      const out = formatDependencyRisksTable({ releases: [foo], parsedFiles: [], errors: [] }, [
-        transit,
-        foo,
-      ]);
+      const out = renderTable({ releases: [foo], parsedFiles: [], errors: [] }, [transit, foo]);
       const vulnRow = out
         .slice(out.indexOf('\nSummary:'))
         .split('\n')
