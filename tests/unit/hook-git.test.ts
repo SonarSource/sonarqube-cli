@@ -115,16 +115,27 @@ describe('gitPreCommit', () => {
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('throws CommandFailedError when scan throws', async () => {
+  it('throws CommandFailedError when scan throws with env-based auth (CI mode)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
+    process.env.SONARQUBE_CLI_TOKEN = 'tok';
+    process.env.SONARQUBE_CLI_SERVER = 'https://sonar.example.com';
 
     let thrown: unknown;
     try {
       await gitPreCommit();
     } catch (e) {
       thrown = e;
+    } finally {
+      delete process.env.SONARQUBE_CLI_TOKEN;
+      delete process.env.SONARQUBE_CLI_SERVER;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
+  });
+
+  it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
+    runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
+
+    await gitPreCommit(); // must not throw
   });
 
   it('skips scan when git spawn throws while listing staged files', async () => {
@@ -243,16 +254,37 @@ describe('gitPrePush', () => {
     expect(runSecretsBinarySpy).not.toHaveBeenCalled();
   });
 
-  it('throws CommandFailedError when scan throws', async () => {
+  it('throws CommandFailedError when scan throws with env-based auth (CI mode)', async () => {
     runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
+    process.env.SONARQUBE_CLI_TOKEN = 'tok';
+    process.env.SONARQUBE_CLI_SERVER = 'https://sonar.example.com';
 
     let thrown: unknown;
     try {
       await gitPrePush();
     } catch (e) {
       thrown = e;
+    } finally {
+      delete process.env.SONARQUBE_CLI_TOKEN;
+      delete process.env.SONARQUBE_CLI_SERVER;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
+  });
+
+  it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
+    runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
+
+    await gitPrePush(); // must not throw
+  });
+
+  it('continues scanning remaining refs after crash with keychain auth (fail soft)', async () => {
+    const secondRef = { ...FAKE_REF, localSha: 'def456' };
+    readGitPushRefsSpy.mockResolvedValue([FAKE_REF, secondRef]);
+    runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
+
+    await gitPrePush();
+
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(2);
   });
 
   it('proceeds normally when git mktree throws (falls back to null OID as empty tree)', async () => {

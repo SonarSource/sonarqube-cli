@@ -22,12 +22,26 @@
 // unavailable so handlers can exit gracefully without repeating the same boilerplate.
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { resolveAuth } from '../../../lib/auth-resolver';
+import { isEnvBasedAuth, resolveAuth } from '../../../lib/auth-resolver';
+import { warn } from '../../../ui';
+import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
 
 export interface HookDependencies {
   auth: ResolvedAuth;
   binaryPath: string;
+}
+
+export function handleScanError(context: 'Commit' | 'Push', err: Error): void {
+  if (isEnvBasedAuth()) {
+    throw new CommandFailedError('Secrets scan failed.', {
+      remediationHint:
+        "Run 'sonar integrate' again or run 'sonar analyze secrets -- <files>' manually to debug the analyzer.",
+    });
+  }
+  warn(
+    `Secrets scan failed. ${context} is not blocked, but secrets were not checked. Reason: ${err.message}`,
+  );
 }
 
 export async function resolveAuthAndSecrets(): Promise<HookDependencies | null> {

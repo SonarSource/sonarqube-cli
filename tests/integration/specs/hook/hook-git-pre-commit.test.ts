@@ -38,6 +38,7 @@ const CLEAN_CONTENT = 'const greeting = "hello world";';
 // Unreachable but well-formed server URL: binary handles connection-refused gracefully.
 const FAKE_SERVER = 'http://localhost:19999';
 const VALID_TOKEN = 'integration-test-token';
+const NON_EXECUTABLE_MODE = 0o644;
 
 describe('sonar hook git-pre-commit', () => {
   let harness: TestHarness;
@@ -141,7 +142,27 @@ describe('sonar hook git-pre-commit', () => {
   );
 
   it(
-    'exits 1 when binary spawn fails (graceful error)',
+    'exits 1 when binary spawn fails with env-based auth (CI mode, fail hard)',
+    async () => {
+      initGitRepo(harness.cwd.path);
+      stageFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
+
+      // Place a non-executable file at the binary path so spawnProcess throws
+      const binaryName = buildLocalBinaryName(detectPlatform());
+      harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
+      chmodSync(harness.cliHome.file('bin', binaryName).path, NON_EXECUTABLE_MODE);
+
+      const result = await harness.run('hook git-pre-commit', {
+        extraEnv: { SONARQUBE_CLI_TOKEN: VALID_TOKEN, SONARQUBE_CLI_SERVER: FAKE_SERVER },
+      });
+
+      expect(result.exitCode).toBe(1);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'exits 0 when binary spawn fails with keychain auth (local mode, fail soft)',
     async () => {
       initGitRepo(harness.cwd.path);
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
@@ -150,11 +171,11 @@ describe('sonar hook git-pre-commit', () => {
       // Place a non-executable file at the binary path so spawnProcess throws
       const binaryName = buildLocalBinaryName(detectPlatform());
       harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
-      chmodSync(harness.cliHome.file('bin', binaryName).path, 0o644);
+      chmodSync(harness.cliHome.file('bin', binaryName).path, NON_EXECUTABLE_MODE);
 
       const result = await harness.run('hook git-pre-commit');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
     },
     { timeout: 30000 },
   );

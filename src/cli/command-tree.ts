@@ -146,8 +146,8 @@ const integrateCommand = COMMAND_TREE.command('integrate').description(
 );
 
 const projectKeyExtraHelp = `
-Instead of providing a project explicitly you can set up a sonar-project.properties in the project root with a sonar.projectKey property. 
-Otherwise, if you have a project connected and bound in SonarQube for IDE, project key is automatically picked up.
+Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
+Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for example .sonarlint/connectedMode.json) that includes projectKey.
 `;
 integrateCommand
   .command('claude')

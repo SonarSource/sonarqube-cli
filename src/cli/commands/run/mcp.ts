@@ -25,6 +25,7 @@ import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import { canonicalizePath } from '../../../lib/fs-utils.js';
+import logger from '../../../lib/logger';
 import { getMcpContainerCommand, type McpServerContext } from '../../../lib/mcp/mcp-helper.js';
 import { discoverProject } from '../../../lib/project-workspace/project-info.js';
 import { detectContainerRuntime } from '../../../lib/tool-detector.js';
@@ -36,6 +37,11 @@ export interface McpRunOptions {
   readOnly?: boolean;
   toolsets?: string;
   project?: string;
+}
+
+function debugLog(message: string): void {
+  logger.debug(message);
+  process.stderr.write(`[sonarqube-cli] DEBUG ${message}\n`);
 }
 
 export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): Promise<void> {
@@ -64,6 +70,13 @@ export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): P
     : { withFsMount: false, projectKey };
 
   const config = getMcpContainerCommand(auth, runtime, context, options);
+
+  if (options.debug) {
+    debugLog(`runtime: ${runtime}`);
+    debugLog(`projectRoot: ${projectRoot ?? '(none)'}`);
+    debugLog(`projectKey: ${projectKey ?? '(none)'}`);
+    debugLog(`launching: ${config.command} ${config.args.join(' ')}`);
+  }
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(config.command, config.args, {

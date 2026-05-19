@@ -29,6 +29,7 @@ import {
   CopilotHooksJson,
   findSonarHookExt,
   findSonarInstructionsExt,
+  findSonarSqaaInstructionsExt,
   GLOBAL_HOOK_SCRIPT_PATH,
   GLOBAL_HOOKS_JSON_PATH,
   GLOBAL_INSTRUCTIONS_PATH,
@@ -81,7 +82,9 @@ describe('integrate copilot', () => {
         // Instructions file: present with the expected heading.
         const instructionsFile = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH);
         expect(instructionsFile.exists()).toBe(true);
-        expect(instructionsFile.asText()).toContain('# SonarQube prompt-secrets protocol');
+        expect(instructionsFile.asText()).toContain(
+          '# SonarQube secrets scanning for prompts protocol',
+        );
 
         // .mcp.json: present and registers the sonarqube MCP server using
         // the platform CLI command.
@@ -235,7 +238,10 @@ describe('integrate copilot', () => {
         const hookLine = outcomeLine(result.stdout, 'Hook:');
         expect(hookLine).toContain('sonar-secrets');
         expect(hookLine).toContain('pretool-secrets');
-        const instructionsLine = outcomeLine(result.stdout, 'Instructions:');
+        const instructionsLine = outcomeLine(
+          result.stdout,
+          'Instructions (secrets scanning for prompts):',
+        );
         expect(instructionsLine).toContain('sonarqube.instructions.md');
         expect(normalizePath(instructionsLine)).toContain('.github/instructions');
       },
@@ -298,10 +304,10 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'overwrites pre-existing global instructions and does not print the already-installed notice',
+      'overwrites pre-existing global instructions (CLI-owned file)',
       async () => {
-        // The existing-global short-circuit applies only to project scope, so
-        // a global re-install must overwrite the file with real content.
+        // sonarqube.instructions.md is CLI-owned, so any pre-existing content
+        // is replaced with the freshly rendered prompt-secrets section.
         harness.userHome.writeFile(
           '.copilot/instructions/sonarqube.instructions.md',
           '# pre-existing\n',
@@ -310,14 +316,25 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot -g');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText()).toContain(
-          '# SonarQube prompt-secrets protocol',
-        );
-        expect(result.stdout).not.toContain(
-          'Global prompt-secrets instructions already installed at',
-        );
+        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+        expect(body).not.toContain('# pre-existing');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
       },
       { timeout: 30000 },
+    );
+
+    it(
+      'is idempotent: running -g twice yields exactly one prompt-secrets section',
+      async () => {
+        await harness.run('integrate copilot -g');
+        await harness.run('integrate copilot -g');
+
+        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+        const headingCount =
+          body.split('# SonarQube secrets scanning for prompts protocol').length - 1;
+        expect(headingCount).toBe(1);
+      },
+      { timeout: 60000 },
     );
 
     it(
@@ -331,9 +348,9 @@ describe('integrate copilot', () => {
         expect(normalizePath(outcomeLine(result.stdout, 'Hook:'))).toContain(
           `${homePathNorm}/.copilot/hooks/sonar-secrets`,
         );
-        expect(normalizePath(outcomeLine(result.stdout, 'Instructions:'))).toContain(
-          `${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`,
-        );
+        expect(
+          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
+        ).toContain(`${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`);
       },
       { timeout: 30000 },
     );
@@ -443,11 +460,11 @@ describe('integrate copilot', () => {
     );
   });
 
-  // ─── Skip-on-existing-global instructions ───────────────────────────────────
+  // ─── Project-level install when global instructions already exist ──────────
 
   describe('project-level install when global Copilot instructions already exist', () => {
     it(
-      'skips the project-level instructions write and does not record them in state',
+      'writes the project-level instructions file, leaves the global file untouched, and warns about it',
       async () => {
         writeExistingGlobalInstructions(harness);
         const before = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
@@ -455,39 +472,47 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Global prompt-secrets instructions already installed at');
-        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
+        // Project file is written despite the global file existing.
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
+        expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).toContain(
+          '# SonarQube secrets scanning for prompts protocol',
+        );
+        // Global file is byte-identical (orphan; not touched).
         expect(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText()).toBe(before);
-        expect(findSonarInstructionsExt(harness)).toBeUndefined();
+        // State records the project-scoped prompt-secrets entry.
+        expect(findSonarInstructionsExt(harness)?.global).toBe(false);
+        // Orphan warning surfaces the stale global file path.
+        expect(result.stderr + result.stdout).toContain('Found existing Copilot instructions at');
+        expect(normalizePath(result.stderr + result.stdout)).toContain(
+          '.copilot/instructions/sonarqube.instructions.md',
+        );
       },
       { timeout: 30000 },
     );
 
     it(
-      'surfaces the pre-existing global instructions path on the outcome Instructions line',
+      'surfaces the project-level instructions path on the outcome Instructions line',
       async () => {
         writeExistingGlobalInstructions(harness);
 
         const result = await harness.run('integrate copilot');
 
         expect(result.exitCode).toBe(0);
-        const homePathNorm = normalizePath(harness.userHome.path);
-        const instructionsLine = normalizePath(outcomeLine(result.stdout, 'Instructions:'));
-        // Outcome surfaces the existing global path, not a project path.
-        expect(instructionsLine).toContain(
-          `${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`,
+        const instructionsLine = normalizePath(
+          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
         );
-        expect(instructionsLine).not.toContain('.github/instructions');
+        expect(instructionsLine).toContain('.github/instructions/sonarqube.instructions.md');
+        expect(instructionsLine).not.toContain('.copilot/instructions');
       },
       { timeout: 30000 },
     );
   });
 
-  // ─── Skip-on-existing-global hook + instructions ────────────────────────────
+  // ─── Project-level install when both global hook and instructions exist ────
 
   describe('project-level install when both global hook and global instructions already exist', () => {
     it(
-      'skips both writes, records neither extension, and surfaces both global paths in the outcome',
+      'short-circuits the hook only — instructions still install at the project level',
       async () => {
         writeExistingGlobalHook(harness);
         writeExistingGlobalInstructions(harness);
@@ -495,21 +520,23 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot');
 
         expect(result.exitCode).toBe(0);
+        // Hook is short-circuited; no project-level hook artifacts.
         expect(harness.cwd.exists('.github', 'hooks')).toBe(false);
-        expect(harness.cwd.exists('.github', 'instructions')).toBe(false);
+        // Instructions are independent — the project-level file is written.
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
 
         const state = harness.stateJsonFile.asJson();
         expect(state.agents?.['copilot-cli']?.configured).toBe(true);
         expect(findSonarHookExt(harness)).toBeUndefined();
-        expect(findSonarInstructionsExt(harness)).toBeUndefined();
+        expect(findSonarInstructionsExt(harness)?.global).toBe(false);
 
         const homePathNorm = normalizePath(harness.userHome.path);
         expect(normalizePath(outcomeLine(result.stdout, 'Hook:'))).toContain(
           `${homePathNorm}/.copilot/hooks/sonar-secrets`,
         );
-        expect(normalizePath(outcomeLine(result.stdout, 'Instructions:'))).toContain(
-          `${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`,
-        );
+        expect(
+          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
+        ).toContain('.github/instructions/sonarqube.instructions.md');
       },
       { timeout: 30000 },
     );
@@ -542,9 +569,13 @@ describe('integrate copilot', () => {
         // Instructions still installed.
         const instructionsFile = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH);
         expect(instructionsFile.exists()).toBe(true);
-        expect(instructionsFile.asText()).toContain('# SonarQube prompt-secrets protocol');
+        expect(instructionsFile.asText()).toContain(
+          '# SonarQube secrets scanning for prompts protocol',
+        );
         expect(findSonarInstructionsExt(harness)).toBeDefined();
-        expect(outcomeLine(result.stdout, 'Instructions:')).not.toContain('not installed');
+        expect(
+          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
+        ).not.toContain('not installed');
 
         // MCP still configured.
         expect(harness.cwd.exists('.mcp.json')).toBe(true);
@@ -560,15 +591,13 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stderr + result.stdout).toContain(
-          'Failed to install prompt-secrets instructions',
-        );
+        expect(result.stderr + result.stdout).toContain('Failed to install Copilot instructions');
 
         // Instructions registry entry must not be recorded.
         expect(findSonarInstructionsExt(harness)).toBeUndefined();
-        expect(outcomeLine(result.stdout, 'Instructions:')).toContain(
-          'not installed (see warning above)',
-        );
+        expect(
+          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
+        ).toContain('not installed (see warning above)');
 
         // Hook still installed.
         const scriptFile = harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH);
@@ -597,6 +626,206 @@ describe('integrate copilot', () => {
         );
       },
       { timeout: 15000 },
+    );
+  });
+
+  // ─── SQAA section in the instructions file ──────────────────────────────────
+
+  describe('SQAA section in the instructions file', () => {
+    const TEST_ORG = 'my-org';
+    const TEST_PROJECT = 'my-project';
+    const HTTP_SERVICE_UNAVAILABLE = 503;
+
+    /**
+     * Stand up a fake SonarQube Cloud server with SQAA entitlement configured
+     * for the test org, swap the harness auth to a cloud connection, and
+     * return env vars that point the CLI's hard-coded SonarCloud URL
+     * constants at the fake server (so `isSonarQubeCloud(serverUrl)` and the
+     * entitlement endpoint both resolve to the fake).
+     */
+    async function setupCloudWithEntitlement(
+      options: { eligible?: boolean; enabled?: boolean } = {},
+    ): Promise<{ extraEnv: Record<string, string> }> {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234', options)
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+      return {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      };
+    }
+
+    it(
+      'merges the SQAA section into the project file when org is entitled, project scope, and project key is provided',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
+          extraEnv,
+        });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).toContain('# SonarQube Agentic Analysis protocol');
+        // Project key is baked into the example command.
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+
+        // Both sections recorded in state with the SQAA entry carrying the cloud attrs.
+        const promptSecrets = findSonarInstructionsExt(harness);
+        expect(promptSecrets?.global).toBe(false);
+        const sqaa = findSonarSqaaInstructionsExt(harness);
+        expect(sqaa?.global).toBe(false);
+        expect(sqaa?.projectKey).toBe(TEST_PROJECT);
+        expect(sqaa?.orgKey).toBe(TEST_ORG);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes the SQAA section to the project file under -g when org is entitled and a project key is discoverable from sonar-project.properties',
+      async () => {
+        // `--global` and `--project` are mutually exclusive on the CLI, so the
+        // project key must be discovered from disk in the global flow.
+        const { extraEnv } = await setupCloudWithEntitlement();
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+
+        const result = await harness.run('integrate copilot -g', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+
+        // Global file holds prompt-secrets, NOT SQAA.
+        const globalBody = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+        expect(globalBody).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(globalBody).not.toContain('# SonarQube Agentic Analysis');
+
+        // Project file holds SQAA, NOT prompt-secrets.
+        const projectBody = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(projectBody).toContain('# SonarQube Agentic Analysis protocol');
+        expect(projectBody).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+        expect(projectBody).not.toContain('# SonarQube secrets scanning for prompts protocol');
+
+        // State: prompt-secrets is global, SQAA is project-scoped.
+        expect(findSonarInstructionsExt(harness)?.global).toBe(true);
+        expect(findSonarSqaaInstructionsExt(harness)?.global).toBe(false);
+
+        // Outcome shows both labeled lines pointing to their respective files.
+        const homePathNorm = normalizePath(harness.userHome.path);
+        expect(
+          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
+        ).toContain(`${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`);
+        expect(
+          normalizePath(outcomeLine(result.stdout, 'Instructions (SonarQube Agentic Analysis):')),
+        ).toContain('.github/instructions/sonarqube.instructions.md');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section when --project is not provided and no sonar-project.properties exists',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run('integrate copilot', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section when the org is not entitled to SQAA',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement({
+          eligible: false,
+          enabled: false,
+        });
+
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
+          extraEnv,
+        });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section under -g when no project key is provided, even with an entitled org',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run('integrate copilot -g', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        // Without a project key the SQAA section cannot bake one in, so the
+        // section is skipped entirely — global file gets prompt-secrets only,
+        // and no project-level file is written.
+        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
+        expect(findSonarSqaaInstructionsExt(harness)).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section on on-premise (no organization on the auth)',
+      async () => {
+        // Default beforeEach sets up on-premise auth (no org). hasSqaaEntitlement
+        // returns false fast without hitting the API in this case.
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`);
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA section and still succeeds when the entitlement API returns a 5xx',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrgsLookupError(HTTP_SERVICE_UNAVAILABLE)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        // Command must not abort — degraded success.
+        expect(result.exitCode).toBe(0);
+
+        // Instructions file still written, but without the SQAA section.
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis');
+      },
+      { timeout: 30000 },
     );
   });
 

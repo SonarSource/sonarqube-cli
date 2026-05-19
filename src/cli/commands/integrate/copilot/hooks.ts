@@ -27,7 +27,7 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 
-import { info, success, text, warn } from '../../../../ui';
+import { info, success, warn } from '../../../../ui';
 import { installSecretsBinary } from '../../_common/install/secrets';
 import { readOrInitJson, SONAR_SECRETS_MARKER, writeHookScript } from '../_common/hooks';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
@@ -105,7 +105,7 @@ async function detectGlobalSecretsHook(): Promise<string | undefined> {
  * Emits user-facing progress messages directly.
  */
 async function installPreToolUseHook(projectRoot: string, isGlobal: boolean): Promise<string> {
-  text('Installing pre-tool-use secrets hook...');
+  info('Installing pre-tool-use secrets hook...');
 
   const hooksDir = isGlobal ? GLOBAL_HOOKS_DIR : join(projectRoot, PROJECT_HOOKS_REL_DIR);
   const isWindows = process.platform === 'win32';

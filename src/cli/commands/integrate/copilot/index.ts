@@ -19,15 +19,17 @@
  */
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
+import { SonarQubeClient } from '../../../../sonarqube/client';
 import { intro, print, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { installHooks } from './hooks';
+import type { InstructionsInstallResult } from './instructions';
 import { installInstructions } from './instructions';
 import { setupMcpServer } from './mcp';
 import { updateCopilotState } from './state';
 
-export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAgentOptions) {
+export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {
     throw new InvalidOptionError(
       '--global and --project are mutually exclusive; please specify only one scope.',
@@ -49,40 +51,91 @@ export async function integrateCopilot(_auth: ResolvedAuth, options: IntegrateAg
   const projectKey = options.project || project.projectKey;
   if (!isGlobal && !projectKey) {
     warn(
-      'No project key provided - project related actions will be skipped. Run sonar integrate copilot --help for ways to define a project.',
+      'No project key provided - project related actions will be skipped. Run `sonar integrate copilot --help` for ways to define a project.',
     );
   }
+
+  const sqaaProjectKey = await resolveSqaaProjectKey(auth, projectKey);
 
   // ============
   // Installation
   // ============
   const { hookPath, hookInstalled } = await installHooks(project.rootDir, isGlobal);
-  const { instructionsPath, instructionsInstalled } = await installInstructions(
-    project.rootDir,
-    isGlobal,
-  );
+  const instructions = await installInstructions(project.rootDir, isGlobal, sqaaProjectKey);
 
   await updateCopilotState(project.rootDir, isGlobal, {
     hookInstalled,
-    instructionsInstalled,
+    promptSecretsInstructionsInstalled: instructions.promptSecrets.installed,
+    sqaaInstructionsInstalled: instructions.sqaa.installed,
+    projectKey: instructions.sqaa.installed ? sqaaProjectKey : undefined,
+    orgKey: instructions.sqaa.installed ? auth.orgKey : undefined,
+    serverUrl: instructions.sqaa.installed ? auth.serverUrl : undefined,
   });
 
   await setupMcpServer(project, isGlobal, projectKey);
 
-  reportInstallationOutcome(isGlobal, hookPath, instructionsPath);
+  reportInstallationOutcome(isGlobal, hookPath, instructions);
+}
+
+/**
+ * Resolve the project key to bake into the SQAA section of the instructions
+ * file, or `undefined` when the SQAA section must not be installed.
+ *
+ * SQAA is project-scoped (the section carries a baked-in --project key) but is
+ * written to the project file regardless of --global, so global installs can
+ * still get SQAA when a project key is known.
+ *
+ * Returns the project key only when *all* are true:
+ *   1. project key resolvable (from --project flag or sonar-project.properties)
+ *   2. cloud + org auth with SQAA entitlement enabled
+ */
+async function resolveSqaaProjectKey(
+  auth: ResolvedAuth,
+  projectKey: string | undefined,
+): Promise<string | undefined> {
+  if (!projectKey) {
+    return undefined;
+  }
+  try {
+    const client = new SonarQubeClient(auth.serverUrl, auth.token);
+    const entitled = await client.hasSqaaEntitlement(auth.orgKey);
+    return entitled ? projectKey : undefined;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    warn(
+      `Could not determine SonarQube Agentic Analysis entitlement — skipping instructions setup: ${detail}`,
+    );
+    return undefined;
+  }
 }
 
 function reportInstallationOutcome(
   isGlobal: boolean,
   hookPath: string | undefined,
-  instructionsPath: string | undefined,
+  instructions: InstructionsInstallResult,
 ): void {
   const scope = isGlobal
     ? 'Copilot integration successfully configured globally'
     : 'Copilot integration successfully configured at the project level';
   const hookLine = hookPath ? `Hook: ${hookPath}` : 'Hook: not installed (see warning above)';
-  const instructionsLine = instructionsPath
-    ? `Instructions: ${instructionsPath}`
-    : 'Instructions: not installed (see warning above)';
-  success(`${scope}\n${hookLine}\n${instructionsLine}`);
+  const instructionsLines = formatInstructionsLines(instructions);
+  success([scope, hookLine, ...instructionsLines].join('\n'));
+}
+
+function formatInstructionsLines(instructions: InstructionsInstallResult): string[] {
+  const { promptSecrets, sqaa } = instructions;
+  const lines: string[] = [];
+  if (!promptSecrets.installed || !promptSecrets.path) {
+    lines.push('Instructions (secrets scanning for prompts): not installed (see warning above)');
+  } else if (sqaa.installed && sqaa.path === promptSecrets.path) {
+    lines.push(
+      `Instructions (secrets scanning for prompts, SonarQube Agentic Analysis): ${promptSecrets.path}`,
+    );
+  } else {
+    lines.push(`Instructions (secrets scanning for prompts): ${promptSecrets.path}`);
+  }
+  if (sqaa.installed && sqaa.path && sqaa.path !== promptSecrets.path) {
+    lines.push(`Instructions (SonarQube Agentic Analysis): ${sqaa.path}`);
+  }
+  return lines;
 }
