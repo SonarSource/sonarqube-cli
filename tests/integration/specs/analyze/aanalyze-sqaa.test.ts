@@ -46,7 +46,7 @@ describe('analyze agentic', () => {
   it(
     'exits with code 1 and prompts to authenticate when no active connection',
     async () => {
-      // harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
       const result = await harness.run('analyze agentic --file src/index.ts');
 
