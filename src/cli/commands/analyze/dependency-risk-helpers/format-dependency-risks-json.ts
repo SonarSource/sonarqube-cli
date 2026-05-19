@@ -18,20 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { AnalyzeProjectResponse } from './sca-scanner.ts';
+import type { DependencyRisksViewModel } from './dependency-risks-view-model.ts';
 
-export function formatDependencyRisksJson(
-  project: string,
-  filtered: AnalyzeProjectResponse,
-): string {
-  return JSON.stringify(
-    {
-      project,
-      releases: filtered.releases,
-      parsedFiles: filtered.parsedFiles,
-      errors: filtered.errors,
-    },
-    null,
-    2,
-  );
+export function formatDependencyRisksJson(project: string, vm: DependencyRisksViewModel): string {
+  return JSON.stringify({ project, ...vm }, null, 2);
 }
