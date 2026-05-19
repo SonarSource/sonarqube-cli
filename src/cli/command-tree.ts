@@ -21,6 +21,8 @@
 import { type Command, Help, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
+import { loadState } from '../lib/repository/state-repository';
+import { initSentry } from '../lib/sentry';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
@@ -388,6 +390,13 @@ hookCommand
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
   COMMAND_TREE.command('flush-telemetry', { hidden: true }).anonymousAction(flushTelemetry);
 }
+
+// Defer Sentry initialization until a command action is about to run, so that
+// non-execution paths like --help, --version, and unknown commands don't pay
+// for it. initSentry() is idempotent, so it's safe across nested commands.
+COMMAND_TREE.hook('preAction', () => {
+  initSentry(loadState());
+});
 
 // Collect a telemetry event after every command action.
 COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
