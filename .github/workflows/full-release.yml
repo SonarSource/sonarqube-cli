@@ -120,6 +120,8 @@ jobs:
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Generate release notes
+        id: generate
+        continue-on-error: true
         env:
           RELEASED_VERSION: ${{ needs.release.outputs.released-version }}
           CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
@@ -129,6 +131,7 @@ jobs:
         run: bun build-scripts/generate-release-notes.ts --out release-notes.md
 
       - name: Update GitHub release body
+        if: steps.generate.outcome == 'success'
         env:
           RELEASED_VERSION: ${{ needs.release.outputs.released-version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
