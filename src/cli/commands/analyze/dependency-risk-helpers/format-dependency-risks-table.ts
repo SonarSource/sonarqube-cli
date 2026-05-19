@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { green, red, STATUS_ICONS } from '../../../../ui/colors.js';
 import { effectiveStatus, sortReleases } from './analysis-response.ts';
 import type {
   AnalysisErrorResource,
@@ -45,6 +46,17 @@ const EXCLUDED_DESCRIPTION_CODES: ReadonlySet<VersionOptionDescriptionCode> = ne
   'UNKNOWN',
 ]);
 
+const DESCRIPTION_CODE_LABEL: Record<VersionOptionDescriptionCode, string | null> = {
+  LATEST_STABLE: 'latest stable',
+  LATEST_COMPLETE: 'latest',
+  LATEST_PRERELEASE: 'latest prerelease',
+  LATEST_PARTIAL: 'latest',
+  NEAREST_COMPLETE: 'nearest',
+  NEAREST_PARTIAL: 'nearest',
+  VERSION_IN_USE: null,
+  UNKNOWN: null,
+};
+
 const SEVERITY_WIDTH = 9;
 const STATUS_WIDTH = 8;
 const MAX_LINE_WIDTH = 80;
@@ -66,7 +78,7 @@ export function formatDependencyRisksTable(
   const errors = filtered.errors;
   const totalRisks = countTotalRisks(displayedReleases);
 
-  const lines: string[] = [summaryLine(allReleases.length, totalRisks)];
+  const lines: string[] = [];
 
   if (totalRisks > 0) {
     appendReleases(displayedReleases, lines, releaseByPurl);
@@ -76,7 +88,7 @@ export function formatDependencyRisksTable(
 
   lines.push('', '═'.repeat(MAX_LINE_WIDTH));
   appendErrors(lines, errors);
-  appendSummaryBlock(lines, displayedReleases);
+  appendSummaryBlock(lines, displayedReleases, allReleases.length, totalRisks);
 
   return lines.join('\n');
 }
@@ -85,8 +97,8 @@ function countTotalRisks(releases: AnalyzeProjectRelease[]): number {
   return releases.reduce((n, release) => n + release.issues.length, 0);
 }
 
-function summaryLine(packagesScanned: number, totalRisks: number): string {
-  return `Scan Summary: ${packagesScanned} dependencies checked. ${totalRisks} risks found`;
+function summaryHeader(packagesScanned: number, totalRisks: number): string {
+  return `Summary: ${packagesScanned} dependencies checked, ${totalRisks} risks found`;
 }
 
 function appendNoRisksTail(lines: string[]): void {
@@ -109,7 +121,8 @@ function appendReleaseBlock(
   release: AnalyzeProjectRelease,
   releaseByPurl: Map<string, AnalyzeProjectRelease>,
 ): void {
-  lines.push('', packageHeader(release));
+  if (lines.length > 0) lines.push('');
+  lines.push(packageHeader(release));
   if (release.dependencyFilePaths.length > 0) {
     lines.push(`in: ${release.dependencyFilePaths.join(', ')}`);
   }
@@ -189,8 +202,13 @@ function packageFixLine(release: AnalyzeProjectRelease): string | null {
   if (fixes.length === 0) {
     return null;
   }
-  const parts = fixes.map((o) => `${o.version} (complete fix)`);
-  return `Recommended fix: Change version to ${parts.join(' | ')}`;
+  const parts = fixes.map(formatVersionOption);
+  return `Recommended versions without known vulnerabilities: ${parts.join(' | ')}`;
+}
+
+function formatVersionOption(option: VersionOption): string {
+  const label = DESCRIPTION_CODE_LABEL[option.descriptionCode];
+  return label ? `${option.version} (${label})` : option.version;
 }
 
 function packageCompleteFixes(release: AnalyzeProjectRelease): VersionOption[] {
@@ -271,9 +289,14 @@ function appendErrors(lines: string[], errors: AnalysisErrorResource[]): void {
   }
 }
 
-function appendSummaryBlock(lines: string[], releases: AnalyzeProjectRelease[]): void {
+function appendSummaryBlock(
+  lines: string[],
+  releases: AnalyzeProjectRelease[],
+  packagesScanned: number,
+  totalRisks: number,
+): void {
   const counts = countsByTypeAndSeverity(releases);
-  lines.push('', 'Summary:');
+  lines.push('', summaryHeader(packagesScanned, totalRisks));
   for (const type of ISSUE_TYPES) {
     lines.push(summaryLineForType(type, counts.get(type) ?? new Map()));
   }
@@ -306,7 +329,8 @@ function summaryLineForType(type: ScaIssueType, counts: Map<string, number>): st
 }
 
 function severityCell(label: string, count: number): string {
-  return `${label} ${String(count).padStart(3)}`;
+  const icon = count === 0 ? green(STATUS_ICONS.done) : red(STATUS_ICONS.failed);
+  return `${label} ${icon} ${String(count).padStart(3)}`;
 }
 
 function issueCell(release: AnalyzeProjectRelease, issue: AnalyzeProjectIssue): string {

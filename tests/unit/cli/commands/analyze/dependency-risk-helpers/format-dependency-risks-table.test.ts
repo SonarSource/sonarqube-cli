@@ -129,7 +129,7 @@ function getFormattedTableWithReleases(
 describe('formatDependencyRisksTable', () => {
   it('emits a clean-scan message when there are no risks and no errors', () => {
     const out = getFormattedTableWithReleases([], 0, []);
-    expect(out).toContain('Scan Summary: 0 dependencies checked. 0 risks found');
+    expect(out).toContain('Summary: 0 dependencies checked, 0 risks found');
     expect(out).toContain('No dependency risks found.');
   });
 
@@ -151,7 +151,7 @@ describe('formatDependencyRisksTable', () => {
       7,
       [],
     );
-    const summary = getLineWithText(out, 'Scan Summary');
+    const summary = getLineWithText(out, 'Summary:');
     expect(summary).toContain('7 dependencies checked');
     expect(summary).toContain('3 risks found');
   });
@@ -394,9 +394,8 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const fixLine = getLineWithText(out, 'Recommended fix:');
-    expect(fixLine).toContain('Change version to');
-    expect(fixLine).toContain('5.0.0 (complete fix)');
+    const fixLine = getLineWithText(out, 'Recommended versions without known vulnerabilities:');
+    expect(fixLine).toContain('5.0.0 (nearest)');
   });
 
   it('appends an Errors section with both path-qualified and path-less entries', () => {
@@ -427,7 +426,7 @@ describe('formatDependencyRisksTable', () => {
       { id: 'e1', code: 'NO_DEPENDENCIES_FOUND', path: null, message: 'no deps' },
     ];
     const out = getFormattedTableWithReleases([], 0, errors);
-    const summary = getLineWithText(out, 'Scan Summary');
+    const summary = getLineWithText(out, 'Summary:');
     expect(summary).toContain('0 dependencies checked');
     expect(summary).toContain('0 risks found');
     expect(out).toContain('Errors:');
@@ -570,8 +569,8 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     expect(out).toContain('CVE-SORT');
-    expect(out).toContain('5.0.0 (complete fix)');
-    expect(out).toContain('4.0.0 (complete fix)');
+    expect(out).toContain('5.0.0 (latest)');
+    expect(out).toContain('4.0.0 (nearest)');
     expect(out).toContain('7.0.0 (partial fix)');
     const latestComplete = out.indexOf('5.0.0');
     const nearestComplete = out.indexOf('4.0.0');
@@ -633,9 +632,9 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const fixLine = getLineWithText(out, 'Recommended fix:');
-    expect(fixLine).toContain('5.0.0 (complete fix)');
-    expect(fixLine).toContain('3.0.0 (complete fix)');
+    const fixLine = getLineWithText(out, 'Recommended versions without known vulnerabilities:');
+    expect(fixLine).toContain('5.0.0 (latest stable)');
+    expect(fixLine).toContain('3.0.0 (latest)');
     expect(fixLine).not.toContain('1.0.0');
     expect(fixLine).not.toContain('2.0.0');
     expect(fixLine).not.toContain('4.0.0');
@@ -967,8 +966,8 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    const fixLine = getLineWithText(out, 'Recommended fix:');
-    expect(fixLine).toContain('2.0.0 (complete fix)');
+    const fixLine = getLineWithText(out, 'Recommended versions without known vulnerabilities:');
+    expect(fixLine).toContain('2.0.0 (latest stable)');
     // 1.5.0 only fixes CVE-A; 1.7.0 only fixes CVE-B — neither is in the intersection.
     expect(fixLine).not.toContain('1.5.0');
     expect(fixLine).not.toContain('1.7.0');
@@ -1009,7 +1008,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    expect(out).not.toContain('Recommended fix:');
+    expect(out).not.toContain('Recommended versions without known vulnerabilities:');
   });
 
   it('omits the Fix line when the release contains a non-vulnerability issue', () => {
@@ -1036,7 +1035,7 @@ describe('formatDependencyRisksTable', () => {
       1,
       [],
     );
-    expect(out).not.toContain('Recommended fix:');
+    expect(out).not.toContain('Recommended versions without known vulnerabilities:');
   });
 
   it('appends → V (partial fix) inline when a vulnerability has a partial-fix option', () => {
@@ -1221,7 +1220,7 @@ describe('formatDependencyRisksTable', () => {
       // Every cell is zero on a clean scan. Counts are right-padded to 3
       // chars so columns stay aligned for up to 3-digit totals.
       for (const sev of ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO']) {
-        expect(summary).toContain(`${sev}   0`);
+        expect(summary).toContain(`${sev} ✓   0`);
       }
     });
 
@@ -1279,14 +1278,14 @@ describe('formatDependencyRisksTable', () => {
         .split('\n')
         .find((l) => l.trimStart().startsWith('PROHIBITED_LICENSE'));
       const vulnRow = summary.split('\n').find((l) => l.trimStart().startsWith('VULNERABILITY'));
-      expect(malwareRow).toContain('BLOCKER   1');
-      expect(malwareRow).toContain('HIGH   0');
-      expect(licenseRow).toContain('MEDIUM   1');
-      expect(licenseRow).toContain('BLOCKER   0');
-      expect(vulnRow).toContain('BLOCKER   2');
-      expect(vulnRow).toContain('HIGH   1');
-      expect(vulnRow).toContain('MEDIUM   0');
-      expect(vulnRow).toContain('LOW   0');
+      expect(malwareRow).toContain('BLOCKER ✗   1');
+      expect(malwareRow).toContain('HIGH ✓   0');
+      expect(licenseRow).toContain('MEDIUM ✗   1');
+      expect(licenseRow).toContain('BLOCKER ✓   0');
+      expect(vulnRow).toContain('BLOCKER ✗   2');
+      expect(vulnRow).toContain('HIGH ✗   1');
+      expect(vulnRow).toContain('MEDIUM ✓   0');
+      expect(vulnRow).toContain('LOW ✓   0');
     });
 
     it('sums counts across multiple releases', () => {
@@ -1312,7 +1311,7 @@ describe('formatDependencyRisksTable', () => {
         .slice(out.indexOf('\nSummary:'))
         .split('\n')
         .find((l) => l.trimStart().startsWith('VULNERABILITY'));
-      expect(vulnRow).toContain('LOW   3');
+      expect(vulnRow).toContain('LOW ✗   3');
     });
 
     it('places the Summary block below the ═ separator and any Errors section', () => {
@@ -1354,8 +1353,8 @@ describe('formatDependencyRisksTable', () => {
         .find((l) => l.trimStart().startsWith('VULNERABILITY'));
       // Only foo's LOW vuln is in the filtered set; transit's BLOCKER vuln must
       // not appear in the summary even though it's present in allReleases.
-      expect(vulnRow).toContain('BLOCKER   0');
-      expect(vulnRow).toContain('LOW   1');
+      expect(vulnRow).toContain('BLOCKER ✓   0');
+      expect(vulnRow).toContain('LOW ✗   1');
     });
   });
 });
