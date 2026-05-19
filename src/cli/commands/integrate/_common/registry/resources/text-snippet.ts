@@ -73,9 +73,16 @@ export class TextSnippet implements ResourceDeclaration {
     const pattern = new RegExp(
       String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
     );
-    return pattern.test(existing)
-      ? existing.replace(pattern, managedBlock)
-      : appendBlock(existing, managedBlock);
+    if (pattern.test(existing)) {
+      return existing.replace(pattern, managedBlock);
+    }
+
+    const startMarkerIndex = existing.indexOf(this.startMarker);
+    if (startMarkerIndex >= 0) {
+      return `${existing.slice(0, startMarkerIndex)}${managedBlock}\n`;
+    }
+
+    return appendBlock(existing, managedBlock);
   }
 
   private renderManagedBlock(): string {

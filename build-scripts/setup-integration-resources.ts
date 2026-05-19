@@ -21,9 +21,9 @@
 /**
  * Downloads the sonar-secrets and sca-scanner-cli binaries (plus PGP signatures)
  * for the current platform from binaries.sonarsource.com and places them in
- * tests/integration/resources/ using the original versioned filenames
- * (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe). The fake binaries server
- * in the integration harness serves these files locally.
+ * tests/integration/resources/dependency-artifacts/ using the original versioned
+ * filenames (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe). The fake binaries
+ * server in the integration harness serves these files locally.
  *
  * Run via: bun build-scripts/setup-integration-resources.ts
  * Or via:  bun run test:integration:prepare
@@ -42,13 +42,13 @@ import {
   downloadBinary,
   verifyBinarySignature,
 } from '../src/lib/sonarsource-releases.js';
+import { DEPENDENCY_ARTIFACTS_DIR } from './dependency-artifacts-path.js';
 
-const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
 const platform = detectPlatform();
 
 const FIXTURES: BinarySpec[] = [SECRETS_SPEC, SCA_SCANNER_SPEC];
 
-mkdirSync(RESOURCES_DIR, { recursive: true });
+mkdirSync(DEPENDENCY_ARTIFACTS_DIR, { recursive: true });
 
 for (const fixture of FIXTURES) {
   await prepareBinaryFixture(fixture);
@@ -59,8 +59,8 @@ async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
   const signatureUrl = `${downloadUrl}.asc`;
   // Keep the original versioned filename so the fake binaries server can match requests exactly
   const downloadFilename = downloadUrl.split('/').at(-1)!;
-  const destPath = join(RESOURCES_DIR, downloadFilename);
-  const ascDestPath = join(RESOURCES_DIR, `${downloadFilename}.asc`);
+  const destPath = join(DEPENDENCY_ARTIFACTS_DIR, downloadFilename);
+  const ascDestPath = join(DEPENDENCY_ARTIFACTS_DIR, `${downloadFilename}.asc`);
 
   const binaryExists = existsSync(destPath);
   const ascExists = existsSync(ascDestPath);

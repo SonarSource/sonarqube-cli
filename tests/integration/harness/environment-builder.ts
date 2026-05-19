@@ -31,6 +31,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
+import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import {
   type BinarySpec,
   buildLocalBinaryName,
@@ -47,7 +48,7 @@ function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
   const downloadUrl = buildDownloadUrl(fixture.name, fixture.version, fixture.distPrefix, platform);
   const filename = downloadUrl.split('/').at(-1)!;
-  return join(import.meta.dir, '..', 'resources', filename);
+  return join(DEPENDENCY_ARTIFACTS_DIR, filename);
 }
 
 interface SqaaExtensionConfig {
@@ -118,7 +119,7 @@ export class EnvironmentBuilder {
 
   /**
    * Ensures sonar-secrets is available inside the isolated test environment.
-   * Copies the mock binary from tests/integration/resources/sonar-secrets
+   * Copies the mock binary from tests/integration/resources/dependency-artifacts/
    * into <tempDir>/bin/sonar-secrets.
    */
   withSecretsBinaryInstalled(): this {
@@ -128,8 +129,8 @@ export class EnvironmentBuilder {
 
   /**
    * Ensures sca-scanner-cli is available inside the isolated test environment.
-   * Copies the cached binary from tests/integration/resources/ into
-   * <tempDir>/bin/ and records it in state.tools.installed.
+   * Copies the cached binary from tests/integration/resources/dependency-artifacts/
+   * into <tempDir>/bin/ and records it in state.tools.installed.
    */
   withScaScannerBinaryInstalled(): this {
     this._installScaScannerBinary = true;

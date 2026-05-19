@@ -10,6 +10,6 @@ dist/
 plan.md
 /coverage/
 tests/coverage/reports/
-tests/integration/resources/sonar-secrets*
+tests/integration/resources/dependency-artifacts/
 tests/unit/.integrate-git-repos/
 .eslintcache

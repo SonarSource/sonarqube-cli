@@ -22,9 +22,10 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 
-import { info, success } from '../../../../ui';
-import type { GitHookType } from '.';
-import { getHuskySnippet, HOOK_MARKER } from './git-shell-fragments';
+import { info, success } from '../../../../../../ui';
+import type { GitHookType } from '../../options';
+import { HOOK_MARKER } from '../shared';
+import { getHuskySnippet } from './shell-fragments';
 
 export async function installViaHusky(huskyHookPath: string, hook: GitHookType): Promise<void> {
   let content: string;

@@ -456,6 +456,34 @@ describe('declarative integration framework', () => {
     );
   });
 
+  it('replaces legacy text snippets that only contain the start marker', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const targetPath = join(tempDir, 'legacy.txt');
+    await writeFile(
+      targetPath,
+      [
+        '#!/bin/sh',
+        '# sonar:begin append',
+        'old managed content',
+        '"$SONAR_BIN" hook git-pre-commit',
+        '',
+      ].join('\n'),
+    );
+    const resource = textSnippet({
+      id: 'append',
+      targetPath,
+      content: 'managed content',
+      startMarker: '# sonar:begin append',
+    });
+
+    await resource.apply(context);
+
+    expect(await readFile(targetPath, 'utf-8')).toBe(
+      ['#!/bin/sh', '# sonar:begin append', 'managed content', '# sonar:end append', ''].join('\n'),
+    );
+  });
+
   it('skips operations when shouldApply returns false', async () => {
     const state = getDefaultState('test');
     let called = false;

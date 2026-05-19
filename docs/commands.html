@@ -16,6 +16,7 @@
   <meta name="twitter:title" content="Commands — SonarQube CLI">
   <meta name="twitter:description" content="Full command reference for the SonarQube CLI. Browse all commands, options, and examples. Machine-readable schema available at /data/commands.json.">
   <link rel="alternate" type="application/json" href="data/commands.json" title="Command Reference (JSON)">
+  <link rel="alternate" type="text/markdown" href="llms.txt" title="Command Reference (Markdown)">
   <link rel="stylesheet" href="assets/style.css">
   <script>if(localStorage.getItem('clidoc-theme')==='light')document.documentElement.setAttribute('data-theme','light');</script>
 </head>
@@ -57,6 +58,16 @@
 
   <!-- Main panel -->
   <main class="main-panel" id="detail">
+    <noscript>
+      <div class="empty-state">
+        <p>This interactive command browser requires JavaScript.</p>
+        <p>For the full command reference without JavaScript, see:</p>
+        <ul>
+          <li><a href="llms.txt">llms.txt</a> — full reference in Markdown</li>
+          <li><a href="data/commands.json">commands.json</a> — structured JSON schema</li>
+        </ul>
+      </div>
+    </noscript>
     <div class="empty-state">Loading…</div>
   </main>
 </div>
