@@ -33,7 +33,7 @@
  * The script:
  *   1. Resolves the previous release tag with `git describe`.
  *   2. Collects commit subjects between the previous tag and the released one.
- *   3. Pulls the 2 most recent published GitHub releases as style examples (via `gh`).
+ *   3. Send two GitHub releases as style examples (hardcoded).
  *   4. Extracts JIRA keys from commit subjects and fetches their title/description
  *      from the Atlassian REST API when JIRA_USER / JIRA_TOKEN are set.
  *   5. Sends a prompt to the Anthropic Messages API and writes the Markdown result.
