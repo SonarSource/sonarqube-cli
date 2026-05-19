@@ -38,7 +38,7 @@ import {
   verifyPgpSignature,
 } from '../../../../lib/sonarsource-releases';
 import { recordInstallationInState } from '../../../../lib/state-manager';
-import { print, success, text, withSpinner } from '../../../../ui';
+import { text, withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../error';
 import {
   cleanupOldVersionBinaries,
@@ -69,14 +69,11 @@ export function buildLocalCagBinaryName(platform: PlatformInfo): string {
 }
 
 /**
- * Install sonar-context-augmentation when not already present, and report
- * success when freshly installed. Returns the binary path.
+ * Install sonar-context-augmentation when not already present. Returns the
+ * binary path.
  */
 export async function installContextAugmentationBinary(): Promise<string> {
-  const { binaryPath, freshlyInstalled } = await resolveContextAugmentationBinary({});
-  if (freshlyInstalled) {
-    success(`sonar-context-augmentation installed at ${binaryPath}`);
-  }
+  const { binaryPath } = await resolveContextAugmentationBinary({});
   return binaryPath;
 }
 
@@ -94,9 +91,6 @@ export async function resolveContextAugmentationBinary(
   const binaryPath = join(resolvedBinDir, localName);
 
   if (!options.force && existsSync(binaryPath)) {
-    text(
-      `  sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION} is already installed (latest)`,
-    );
     return { binaryPath, freshlyInstalled: false };
   }
 
@@ -146,7 +140,6 @@ export async function resolveContextAugmentationBinary(
     rmSync(binaryPath, { force: true });
     throw err;
   }
-  print(`  sonar-context-augmentation ${installedVersion}`);
 
   recordInstallationInState(CONTEXT_AUGMENTATION_BINARY_NAME, installedVersion, binaryPath);
   cleanupOldVersionBinaries(resolvedBinDir, CONTEXT_AUGMENTATION_BINARY_NAME, localName);

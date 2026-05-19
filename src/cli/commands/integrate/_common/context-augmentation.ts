@@ -27,7 +27,16 @@ import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import { recordSkillExtensionInState } from '../../../../lib/state-manager';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import { blank, info, print, success, text, warn } from '../../../../ui';
+import {
+  blank,
+  discreetSuccess,
+  info,
+  print,
+  success,
+  text,
+  warn,
+  withSpinner,
+} from '../../../../ui';
 import { installContextAugmentationBinary } from '../../_common/install/context-augmentation';
 
 export type ContextAugmentationAgent = 'claude-code' | 'copilot';
@@ -45,6 +54,11 @@ export interface SetupContextAugmentationParams {
 const STATE_AGENT_ID: Record<ContextAugmentationAgent, string> = {
   'claude-code': 'claude-code',
   copilot: 'copilot-cli',
+};
+
+const AGENT_DISPLAY_NAME: Record<ContextAugmentationAgent, string> = {
+  'claude-code': 'Claude Code',
+  copilot: 'Copilot',
 };
 
 export async function setupContextAugmentation(p: SetupContextAugmentationParams): Promise<void> {
@@ -94,7 +108,8 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     return;
   }
 
-  const initOk = await runCagSubprocess(
+  const initOk = await runCagStep(
+    `sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
     binaryPath,
     [
       'init',
@@ -117,7 +132,8 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     return;
   }
 
-  const skillOk = await runCagSubprocess(
+  const skillOk = await runCagStep(
+    `Context skill configured for ${AGENT_DISPLAY_NAME[p.agent]}`,
     binaryPath,
     ['skill', '--install', p.agent, '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
     p,
@@ -141,13 +157,58 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
   success('SonarQube Context Augmentation configured');
 }
 
-async function runCagSubprocess(
+interface CagSubprocessResult {
+  ok: boolean;
+  failureMessage?: string;
+  stdout: string;
+  stderr: string;
+}
+
+class CagStepFailedError extends Error {
+  constructor(readonly result: CagSubprocessResult) {
+    super('sonar-context-augmentation step failed');
+  }
+}
+
+async function runCagStep(
+  successMessage: string,
   binaryPath: string,
   args: string[],
   p: SetupContextAugmentationParams,
 ): Promise<boolean> {
-  text(`  Running: sonar-context-augmentation ${args.join(' ')}`);
-  return new Promise<boolean>((resolve) => {
+  if (process.stdout.isTTY) {
+    try {
+      await withSpinner(successMessage, async () => {
+        const result = await runCagSubprocess(binaryPath, args, p);
+        if (!result.ok) {
+          throw new CagStepFailedError(result);
+        }
+      });
+      return true;
+    } catch (err) {
+      if (err instanceof CagStepFailedError) {
+        reportCagFailure(err.result);
+        return false;
+      }
+      throw err;
+    }
+  }
+
+  const result = await runCagSubprocess(binaryPath, args, p);
+  if (!result.ok) {
+    reportCagFailure(result);
+    return false;
+  }
+  discreetSuccess(successMessage);
+  return true;
+}
+
+async function runCagSubprocess(
+  binaryPath: string,
+  args: string[],
+  p: SetupContextAugmentationParams,
+): Promise<CagSubprocessResult> {
+  return new Promise<CagSubprocessResult>((resolve) => {
     let child;
     try {
       child = spawn(binaryPath, args, {
@@ -159,8 +220,12 @@ async function runCagSubprocess(
       // Some platforms (notably Windows when the binary is not a valid PE)
       // surface spawn failures synchronously rather than via the 'error' event.
       // Preserve the warn-on-failure contract by handling both shapes.
-      warn(`sonar-context-augmentation failed to start: ${(err as Error).message}`);
-      resolve(false);
+      resolve({
+        ok: false,
+        failureMessage: `sonar-context-augmentation failed to start: ${(err as Error).message}`,
+        stdout: '',
+        stderr: '',
+      });
       return;
     }
 
@@ -176,22 +241,36 @@ async function runCagSubprocess(
     });
 
     child.on('error', (err) => {
-      warn(`sonar-context-augmentation failed to start: ${err.message}`);
-      resolve(false);
+      resolve({
+        ok: false,
+        failureMessage: `sonar-context-augmentation failed to start: ${err.message}`,
+        stdout: stdoutBuf,
+        stderr: stderrBuf,
+      });
     });
     child.on('exit', (code, signal) => {
       if (code !== 0) {
-        warn(
-          `sonar-context-augmentation exited with ${
+        resolve({
+          ok: false,
+          failureMessage: `sonar-context-augmentation exited with ${
             code === null ? `signal ${signal ?? 'unknown'}` : `code ${code}`
           }.`,
-        );
-        printIndented(stdoutBuf, process.stdout);
-        printIndented(stderrBuf, process.stderr);
+          stdout: stdoutBuf,
+          stderr: stderrBuf,
+        });
+        return;
       }
-      resolve(code === 0);
+      resolve({ ok: true, stdout: stdoutBuf, stderr: stderrBuf });
     });
   });
+}
+
+function reportCagFailure(result: CagSubprocessResult): void {
+  if (result.failureMessage) {
+    warn(result.failureMessage);
+  }
+  printIndented(result.stdout, process.stdout);
+  printIndented(result.stderr, process.stderr);
 }
 
 function printIndented(buffer: string, target: NodeJS.WriteStream): void {

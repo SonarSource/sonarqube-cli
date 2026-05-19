@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
 import type { CliState } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 
@@ -126,6 +127,11 @@ describe('integrate claude — Context Augmentation', () => {
         'sonar context',
       ]);
       expect(skill.env.SONAR_TOKEN).toBe(TOKEN);
+      expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
+      expect(result.stdout).toContain(
+        `✓  sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
+      );
+      expect(result.stdout).toContain('✓  Context skill configured for Claude Code');
 
       // State records the skill extension
       const state = loadState(harness);
@@ -494,6 +500,8 @@ describe('integrate copilot — Context Augmentation', () => {
         '--invocation-prefix',
         'sonar context',
       ]);
+      expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
+      expect(result.stdout).toContain('✓  Context skill configured for Copilot');
 
       // State records the skill extension under the internal Copilot agent id
       const state = loadState(harness);
