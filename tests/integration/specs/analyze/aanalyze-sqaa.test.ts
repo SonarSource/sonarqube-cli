@@ -32,6 +32,31 @@ const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
 const TEST_PROJECT = 'my-project';
 
+describe('analyze (no subcommand)', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'exits with code 0 and displays help with subcommands listed',
+    async () => {
+      const result = await harness.run('analyze');
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('secrets');
+      expect(output).toContain('agentic');
+    },
+    { timeout: 15000 },
+  );
+});
+
 describe('analyze agentic', () => {
   let harness: TestHarness;
 
@@ -44,6 +69,20 @@ describe('analyze agentic', () => {
   });
 
   it(
+    'exits with code 2 when file does not exist',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze agentic --file nonexistent.ts');
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain('File not found');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 and prompts to authenticate when no active connection',
     async () => {
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
@@ -54,20 +93,6 @@ describe('analyze agentic', () => {
       const output = result.stdout + result.stderr;
       expect(output).toContain('❌ Not authenticated.');
       expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 2 when file does not exist',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
-      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
-
-      const result = await harness.run('analyze agentic --file nonexistent.ts');
-
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain('File not found');
     },
     { timeout: 15000 },
   );
@@ -1266,31 +1291,6 @@ describe('analyze agentic — running from a subdirectory', () => {
       expect(sqaaCalls).toHaveLength(1);
       const sentPath = (JSON.parse(sqaaCalls[0].body ?? '{}') as { filePath?: string }).filePath;
       expect(sentPath).toBe('with space.ts');
-    },
-    { timeout: 15000 },
-  );
-});
-
-describe('analyze (no subcommand)', () => {
-  let harness: TestHarness;
-
-  beforeEach(async () => {
-    harness = await TestHarness.create();
-  });
-
-  afterEach(async () => {
-    await harness.dispose();
-  });
-
-  it(
-    'exits with code 0 and displays help with subcommands listed',
-    async () => {
-      const result = await harness.run('analyze');
-
-      expect(result.exitCode).toBe(0);
-      const output = result.stdout + result.stderr;
-      expect(output).toContain('secrets');
-      expect(output).toContain('agentic');
     },
     { timeout: 15000 },
   );
