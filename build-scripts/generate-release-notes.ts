@@ -469,6 +469,9 @@ async function main(): Promise<void> {
   const prompt = buildPrompt(releasedVersion, commits, jiraTickets);
 
   if (args.dryRun) {
+    if (args.out) {
+      console.error('Note: --out is ignored in --dry-run mode (prompt is written to stdout).');
+    }
     process.stdout.write(`${prompt}\n`);
     return;
   }
