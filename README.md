@@ -139,25 +139,22 @@ sonar auth status
 # Source  OS Keychain
 ```
 
-**For automation, CI/CD, and AI agents**, pass the token via environment variables. The CLI picks it up at command time, so nothing is written to disk or to the OS keychain — and the token never appears on a command line, in shell history, or in process listings (where `--with-token` would expose it).
+**For automation, CI/CD, and AI agents**, pass the token via environment variables. The CLI reads them at command time, so nothing is written to disk or the OS keychain, and the token does not appear in process listings (where `--with-token` would expose it via `ps aux`).
 
-Generate a token first: SonarQube → My Account → Security → Generate Token
+Generate a token first: SonarQube → My Account → Security → Generate Token.
 
-SonarQube Cloud (set `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`):
+Then define the following environment variables before invoking `sonar` (use your runner's secret store in CI, or your preferred local mechanism — direnv, an untracked `.env` file, a password manager CLI, etc.):
+
+- SonarQube Cloud: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`
+- Self-hosted SonarQube Server: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_SERVER`
+
+With those exported, any command works without further configuration:
+
 ```bash
-export SONARQUBE_CLI_TOKEN="$YOUR_TOKEN"
-export SONARQUBE_CLI_ORG="my-org"
 sonar list projects
 ```
 
-Self-hosted SonarQube Server (set `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_SERVER`):
-```bash
-export SONARQUBE_CLI_TOKEN="$YOUR_TOKEN"
-export SONARQUBE_CLI_SERVER="https://sonarqube.mycompany.com"
-sonar list projects
-```
-
-In CI, store the token in your runner's secret store (GitHub Actions secrets, GitLab CI variables, etc.) and inject it as `SONARQUBE_CLI_TOKEN` — never commit it to the repo or pass it as a CLI argument.
+Set both variables — if only `SONARQUBE_CLI_TOKEN` is present, the CLI prints a warning on stderr and falls back to keychain credentials, which is rarely what automation wants. Never commit the token or pass it as a CLI argument.
 
 ### Step 3: Try Basic Commands
 
