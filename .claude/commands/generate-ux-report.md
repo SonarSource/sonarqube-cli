@@ -102,7 +102,7 @@ Run:
 bun test ./build-scripts/docs/generate-ux-report.ts
 ```
 
-This runs all scenarios in `tests/integration/specs/ux-report.test.ts` (takes 20–60 seconds) and writes `docs/cli-output-report.md`.
+This runs all scenarios in `build-scripts/docs/generate-ux-report.ts` (takes 20–60 seconds) and writes `docs/cli-output-report.md`.
 
 **If this step fails:**
 - If individual test cases fail, the report is still written with the scenarios that succeeded. Check whether the failure is in a newly added scenario (fix it and rerun) or a pre-existing one (note it to the user and continue)
