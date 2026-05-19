@@ -1183,6 +1183,97 @@ describe('formatDependencyRisksTable', () => {
     expect(row).not.toContain('1.5.0');
   });
 
+  it('prepends CVSS X.Y before the CVE id when cvssScore is set', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [makeVulnIssue({ vulnerabilityId: 'CVE-WITH-CVSS', cvssScore: '9.8' })],
+        }),
+      ],
+      1,
+      [],
+    );
+    const row = getLineWithText(out, 'CVE-WITH-CVSS');
+    expect(row).toContain('CVSS 9.8 CVE-WITH-CVSS');
+  });
+
+  it('renders 10.0 as " 10" so the score column stays 3 chars wide', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [makeVulnIssue({ vulnerabilityId: 'CVE-TEN', cvssScore: '10.0' })],
+        }),
+      ],
+      1,
+      [],
+    );
+    const row = getLineWithText(out, 'CVE-TEN');
+    expect(row).toContain('CVSS  10 CVE-TEN');
+  });
+
+  it('replaces the whole CVSS prefix with equivalent blank space when cvssScore is null', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [makeVulnIssue({ vulnerabilityId: 'CVE-NULL-SCORE', cvssScore: null })],
+        }),
+      ],
+      1,
+      [],
+    );
+    const row = getLineWithText(out, 'CVE-NULL-SCORE');
+    expect(row).toContain('         CVE-NULL-SCORE');
+    expect(row).not.toContain('CVSS');
+  });
+
+  it('renders the CVSS prefix before the id and the inline partial-fix tail after it', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [
+            makeVulnIssue({
+              vulnerabilityId: 'CVE-CVSS-AND-PARTIAL',
+              cvssScore: '7.5',
+              versionOptions: [
+                {
+                  version: '1.0.1',
+                  vulnerabilityIds: ['CVE-OTHER'],
+                  prerelease: false,
+                  fixLevel: 'PARTIAL',
+                  descriptionCode: 'NEAREST_PARTIAL',
+                },
+              ],
+            }),
+            makeVulnIssue({ vulnerabilityId: 'CVE-OTHER', versionOptions: null }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const row = getLineWithText(out, 'CVE-CVSS-AND-PARTIAL');
+    expect(row).toContain('CVSS 7.5 CVE-CVSS-AND-PARTIAL → 1.0.1 (fixes 1/2)');
+  });
+
+  it('does not add a CVSS prefix to non-vulnerability rows even if cvssScore is set', () => {
+    const out = getFormattedTableWithReleases(
+      [
+        makeRelease({
+          issues: [
+            makeMalwareIssue({ cvssScore: '9.0' }),
+            makeLicenseIssue({ spdxLicenseId: 'AGPL-3.0', cvssScore: '8.0' }),
+          ],
+        }),
+      ],
+      1,
+      [],
+    );
+    const malwareRow = getLineWithText(out, 'Malicious package');
+    expect(malwareRow).not.toContain('CVSS');
+    const licenseRow = getLineWithText(out, 'AGPL-3.0');
+    expect(licenseRow).not.toContain('CVSS');
+  });
+
   it('orders issues by type first (MALWARE → PROHIBITED_LICENSE → VULNERABILITY) within a release', () => {
     const out = getFormattedTableWithReleases(
       [
