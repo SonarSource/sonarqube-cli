@@ -96,7 +96,7 @@ function appendGroup(lines: string[], group: RiskGroupVM<RiskVM>): void {
 }
 
 function packageHeader(pkg: PackageVM): string {
-  const baseName = pkg.identity.label();
+  const baseName = pkg.package.label();
   const name = pkg.newlyIntroduced ? `${baseName} [NEW]` : baseName;
   const count = pkg.riskCount;
   const label = `── ${name} (${count} risk${count === 1 ? '' : 's'}) `;
