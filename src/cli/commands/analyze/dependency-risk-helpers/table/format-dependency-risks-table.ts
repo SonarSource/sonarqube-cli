@@ -41,6 +41,7 @@ const CHAIN_LINE_INDENT = '  ';
 const CHAIN_CONTINUATION_INDENT = `${CHAIN_LINE_INDENT}    `;
 
 const TYPE_LABEL_WIDTH = 'PROHIBITED_LICENSE'.length;
+const SEVERITY_COUNT_WIDTH = 3;
 
 export function formatDependencyRisksTable(vm: DependencyRisksViewModel): string {
   const lines: string[] = [];
@@ -134,7 +135,7 @@ function summaryLineForType(type: string, counts: Map<string, number>): string {
 
 function summarySeverityCell(label: string, count: number): string {
   const icon = count === 0 ? green(STATUS_ICONS.done) : red(STATUS_ICONS.failed);
-  return `${label} ${icon} ${String(count).padStart(3)}`;
+  return `${label} ${icon} ${String(count).padStart(SEVERITY_COUNT_WIDTH)}`;
 }
 
 function transitiveChainLines(chains: PackageIdentity[][]): string[] {
