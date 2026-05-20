@@ -29,19 +29,21 @@ import type {
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 
 function makeRelease(overrides: Partial<AnalyzeProjectRelease> = {}): AnalyzeProjectRelease {
+  const packageName = overrides.packageName ?? 'foo';
+  const version = overrides.version ?? '1.0.0';
   return {
-    key: 'release-foo',
-    packageUrl: 'pkg:npm/foo@1.0.0',
+    key: `release-${packageName}`,
+    packageUrl: `pkg:npm/${packageName}@${version}`,
     packageManager: 'npm',
-    packageName: 'foo',
-    version: '1.0.0',
+    packageName,
+    version,
     licenseExpression: null,
     known: true,
     knownPackage: true,
     newlyIntroduced: false,
     issues: [],
     dependencyFilePaths: ['package-lock.json'],
-    dependencyChains: [['pkg:npm/foo@1.0.0']],
+    dependencyChains: [[`pkg:npm/${packageName}@${version}`]],
     ...overrides,
   };
 }
@@ -109,11 +111,18 @@ describe('formatDependencyRisksJson', () => {
     });
 
     const parsed = JSON.parse(render('demo', filtered)) as {
-      packages: { name: string; version: string; groups: { type: string; risks: unknown[] }[] }[];
+      packages: {
+        identity: { purl: string; name: string; version: string; packageManager: string };
+        groups: { type: string; risks: unknown[] }[];
+      }[];
     };
 
     expect(parsed.packages).toHaveLength(1);
-    expect(parsed.packages[0]).toMatchObject({ name: 'lodash', version: '1.0.0' });
+    expect(parsed.packages[0].identity).toMatchObject({
+      name: 'lodash',
+      version: '1.0.0',
+      packageManager: 'npm',
+    });
     expect(parsed.packages[0].groups).toHaveLength(1);
     expect(parsed.packages[0].groups[0]).toMatchObject({ type: 'VULNERABILITY' });
   });

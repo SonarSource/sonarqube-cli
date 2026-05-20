@@ -103,7 +103,7 @@ export async function analyzeDependencyRisks(
   if (options.format === 'json') {
     print(formatDependencyRisksJson(options.project, viewModel));
   } else {
-    print(formatDependencyRisksTable(viewModel, result.releases));
+    print(formatDependencyRisksTable(viewModel));
   }
 
   handleResult(countUnresolvedIssues(viewModel), result.errors.length);

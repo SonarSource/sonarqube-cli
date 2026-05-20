@@ -24,6 +24,7 @@ import type {
   ErrorVM,
   LicenseGroupVM,
   MalwareGroupVM,
+  PackageIdentity,
   PackageVM,
   RiskGroupVM,
   RiskVM,
@@ -31,7 +32,6 @@ import type {
   SummaryVM,
   VulnerabilityGroupVM,
 } from '../dependency-risks-view-model.ts';
-import type { AnalyzeProjectRelease } from '../sca-scanner.ts';
 import { appendLicenseGroup } from './format-table-license-group.ts';
 import { appendMalwareGroup } from './format-table-malware-group.ts';
 import { appendVulnerabilityGroup } from './format-table-vulnerability-group.ts';
@@ -43,15 +43,11 @@ const CHAIN_CONTINUATION_INDENT = `${CHAIN_LINE_INDENT}    `;
 
 const TYPE_LABEL_WIDTH = 'PROHIBITED_LICENSE'.length;
 
-export function formatDependencyRisksTable(
-  vm: DependencyRisksViewModel,
-  allReleases: AnalyzeProjectRelease[],
-): string {
+export function formatDependencyRisksTable(vm: DependencyRisksViewModel): string {
   const lines: string[] = [];
 
   if (vm.packages.length > 0) {
-    const labelByPurl = buildLabelByPurl(allReleases);
-    appendPackages(lines, vm.packages, labelByPurl);
+    appendPackages(lines, vm.packages);
   } else {
     lines.push('No dependency risks found.');
   }
@@ -63,33 +59,19 @@ export function formatDependencyRisksTable(
   return lines.join('\n');
 }
 
-function buildLabelByPurl(releases: AnalyzeProjectRelease[]): Map<string, string> {
-  return new Map(
-    releases.map((r) => [r.packageUrl, packageLabel({ name: r.packageName, version: r.version })]),
-  );
-}
-
-function appendPackages(
-  lines: string[],
-  packages: PackageVM[],
-  labelByPurl: Map<string, string>,
-): void {
+function appendPackages(lines: string[], packages: PackageVM[]): void {
   for (const pkg of packages) {
-    appendPackageBlock(lines, pkg, labelByPurl);
+    appendPackageBlock(lines, pkg);
   }
 }
 
-function appendPackageBlock(
-  lines: string[],
-  pkg: PackageVM,
-  labelByPurl: Map<string, string>,
-): void {
+function appendPackageBlock(lines: string[], pkg: PackageVM): void {
   if (lines.length > 0) lines.push('');
   lines.push(packageHeader(pkg));
   if (pkg.filePaths.length > 0) {
     lines.push(`in: ${pkg.filePaths.join(', ')}`);
   }
-  for (const line of transitiveChainLines(pkg.chains, labelByPurl)) {
+  for (const line of transitiveChainLines(pkg.chains)) {
     lines.push(dim(line));
   }
   lines.push('');
@@ -113,12 +95,8 @@ function appendGroup(lines: string[], group: RiskGroupVM<RiskVM>): void {
   }
 }
 
-function packageLabel(pkg: Pick<PackageVM, 'name' | 'version'>): string {
-  return `${pkg.name}@${pkg.version}`;
-}
-
 function packageHeader(pkg: PackageVM): string {
-  const baseName = packageLabel(pkg);
+  const baseName = pkg.identity.label();
   const name = pkg.newlyIntroduced ? `${baseName} [NEW]` : baseName;
   const count = pkg.riskCount;
   const label = `── ${name} (${count} risk${count === 1 ? '' : 's'}) `;
@@ -160,14 +138,14 @@ function summarySeverityCell(label: string, count: number): string {
   return `${label} ${icon} ${String(count).padStart(3)}`;
 }
 
-function transitiveChainLines(chains: string[][], labelByPurl: Map<string, string>): string[] {
+function transitiveChainLines(chains: PackageIdentity[][]): string[] {
   if (chains.length === 0) {
     return [];
   }
   const displayed = chains.slice(0, MAX_CHAINS_DISPLAYED);
   const lines: string[] = [];
   for (const chain of displayed) {
-    const labels = chain.map((purl) => labelByPurl.get(purl) ?? purl);
+    const labels = chain.map((id) => id.label());
     for (const line of wrapChain(labels, MAX_LINE_WIDTH)) {
       lines.push(line);
     }
