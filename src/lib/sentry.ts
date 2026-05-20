@@ -24,12 +24,11 @@ import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 
 import { getOrCreateUserId } from '../telemetry/user.js';
-import { SENTRY_DSN } from './config-constants.js';
+import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from './config-constants.js';
 import type { CliState } from './state.js';
 
 /**
  * Initialize Sentry if telemetry is enabled.
- * Must be called before any other code that may throw.
  */
 export function initSentry(state: CliState): void {
   if (!state.telemetry.enabled || process.env.SONARQUBE_CLI_DISABLE_SENTRY) return;
@@ -44,6 +43,15 @@ export function initSentry(state: CliState): void {
   });
 
   Sentry.setUser({ id: getOrCreateUserId() });
+}
+
+/**
+ * Flush pending Sentry events, but only if a client was initialized.
+ */
+export async function flushSentry(): Promise<void> {
+  if (Sentry.getClient()) {
+    await Sentry.flush(SENTRY_FLUSH_TIMEOUT_MS);
+  }
 }
 
 /**

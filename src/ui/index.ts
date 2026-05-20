@@ -28,6 +28,7 @@ export {
   confirmPrompt,
   multiSelectPrompt,
   pressEnterKeyPrompt,
+  promptUntilValid,
   selectPrompt,
   textPrompt,
 } from './components/prompts.js';

@@ -24,11 +24,11 @@
  * Driven by the `generate-release-notes` job in .github/workflows/full-release.yml.
  * Can also be run locally for preview:
  *
- *   bun build-scripts/generate-release-notes.ts --tag 0.12.0.1512 --dry-run
+ *   bun .github/scripts/generate-release-notes.ts --tag 0.12.0.1512 --dry-run
  *
  * In CI (RELEASED_VERSION + CLAUDE_CODE_API_KEY set):
  *
- *   bun build-scripts/generate-release-notes.ts --out release-notes.md
+ *   bun .github/scripts/generate-release-notes.ts --out release-notes.md
  *
  * The script:
  *   1. Resolves the previous release tag with `git describe`.
@@ -98,7 +98,7 @@ interface AnthropicMessagesResponse {
 function printUsageAndExit(code: number): never {
   console.error(
     [
-      'Usage: bun build-scripts/generate-release-notes.ts [options]',
+      'Usage: bun .github/scripts/generate-release-notes.ts [options]',
       '',
       'Options:',
       '  --tag <tag>     Released version tag (overrides RELEASED_VERSION env).',

@@ -131,6 +131,9 @@ export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 export const SENTRY_DSN =
   'https://cff421c13bc1b079963fd6dfa5bf80e5@o1316750.ingest.us.sentry.io/4511110855000064';
 
+/** Max time to wait for Sentry to flush queued events on shutdown. */
+export const SENTRY_FLUSH_TIMEOUT_MS = 500;
+
 // ---------------------------------------------------------------------------
 // Auth loopback server
 //
