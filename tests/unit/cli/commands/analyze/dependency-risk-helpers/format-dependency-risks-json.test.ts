@@ -112,17 +112,15 @@ describe('formatDependencyRisksJson', () => {
 
     const parsed = JSON.parse(render('demo', filtered)) as {
       packages: {
-        identity: { purl: string; name: string; version: string; packageManager: string };
+        package: string;
+        chains: string[][];
         groups: { type: string; risks: unknown[] }[];
       }[];
     };
 
     expect(parsed.packages).toHaveLength(1);
-    expect(parsed.packages[0].identity).toMatchObject({
-      name: 'lodash',
-      version: '1.0.0',
-      packageManager: 'npm',
-    });
+    expect(parsed.packages[0].package).toBe('pkg:npm/lodash@1.0.0');
+    expect(parsed.packages[0].chains).toEqual([['pkg:npm/lodash@1.0.0']]);
     expect(parsed.packages[0].groups).toHaveLength(1);
     expect(parsed.packages[0].groups[0]).toMatchObject({ type: 'VULNERABILITY' });
   });

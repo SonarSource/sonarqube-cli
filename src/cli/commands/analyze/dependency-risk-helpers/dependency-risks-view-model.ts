@@ -43,10 +43,14 @@ export class PackageIdentity {
   compareTo(other: PackageIdentity): number {
     return this.purl.localeCompare(other.purl);
   }
+
+  toJSON(): string {
+    return this.purl;
+  }
 }
 
 export interface PackageVM {
-  identity: PackageIdentity;
+  package: PackageIdentity;
   newlyIntroduced: boolean;
   riskCount: number;
   filePaths: string[];

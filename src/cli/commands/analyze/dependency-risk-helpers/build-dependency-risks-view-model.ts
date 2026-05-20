@@ -85,7 +85,7 @@ export function buildDependencyRisksViewModel(
     const pkg = buildPackageVM(release, filter, identityByPurl);
     if (pkg !== null) packages.push(pkg);
   }
-  packages.sort((a, b) => a.identity.compareTo(b.identity));
+  packages.sort((a, b) => a.package.compareTo(b.package));
   return {
     packages,
     errors: response.errors.map(buildErrorVM),
@@ -118,7 +118,7 @@ function buildPackageVM(
   if (groups.length === 0) return null;
   const riskCount = groups.reduce((n, g) => n + g.risks.length, 0);
   return {
-    identity: identityByPurl.get(release.packageUrl)!,
+    package: identityByPurl.get(release.packageUrl)!,
     newlyIntroduced: release.newlyIntroduced,
     riskCount,
     filePaths: release.dependencyFilePaths,
