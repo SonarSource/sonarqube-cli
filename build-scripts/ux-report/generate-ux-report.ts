@@ -26,7 +26,7 @@
  *
  * Run:
  *   bun run pretest:integration                          # build binary + resources (once)
- *   bun test ./build-scripts/docs/generate-ux-report.ts   # generate the report
+ *   bun test ./build-scripts/ux-report/generate-ux-report.ts   # generate the report
  *
  * To add a scenario: add a uxIt() inside the appropriate uxDescribe() block,
  * or add a new uxDescribe() block at the bottom.
