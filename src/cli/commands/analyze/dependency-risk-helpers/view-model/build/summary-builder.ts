@@ -22,7 +22,8 @@ import type { ScaIssueType, Severity } from '../../sca-scanner.ts';
 import type { PackageVM } from '../package.ts';
 import type { RiskVM } from '../risk.ts';
 import type { SummaryVM } from '../summary.ts';
-import { compareSeverity } from './severity.ts';
+import { ISSUE_TYPES } from './issue-types.ts';
+import { SEVERITIES } from './severity.ts';
 
 export function buildSummaryVM(packages: PackageVM[], packagesScanned: number): SummaryVM {
   return {
@@ -33,36 +34,19 @@ export function buildSummaryVM(packages: PackageVM[], packagesScanned: number): 
 }
 
 function countsByTypeAndSeverity(packages: PackageVM[]): Map<ScaIssueType, Map<Severity, number>> {
-  const byType = new Map<ScaIssueType, Map<Severity, number>>();
+  const byType = new Map<ScaIssueType, Map<Severity, number>>(
+    ISSUE_TYPES.map((type) => [type, new Map(SEVERITIES.map((sev) => [sev, 0]))]),
+  );
   for (const pkg of packages) {
     for (const group of pkg.groups) {
-      addRiskCounts(getOrCreateRow(byType, group.type), group.risks);
+      addRiskCounts(byType.get(group.type)!, group.risks);
     }
   }
-  for (const row of byType.values()) sortBySeverityInPlace(row);
   return byType;
-}
-
-function getOrCreateRow(
-  byType: Map<ScaIssueType, Map<Severity, number>>,
-  type: ScaIssueType,
-): Map<Severity, number> {
-  let row = byType.get(type);
-  if (row === undefined) {
-    row = new Map<Severity, number>();
-    byType.set(type, row);
-  }
-  return row;
 }
 
 function addRiskCounts(row: Map<Severity, number>, risks: RiskVM[]): void {
   for (const risk of risks) {
     row.set(risk.severity, (row.get(risk.severity) ?? 0) + 1);
   }
-}
-
-function sortBySeverityInPlace(row: Map<Severity, number>): void {
-  const sorted = [...row.entries()].sort(([a], [b]) => compareSeverity(a, b));
-  row.clear();
-  for (const [sev, count] of sorted) row.set(sev, count);
 }

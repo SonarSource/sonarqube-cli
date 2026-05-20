@@ -28,6 +28,8 @@ const SEVERITY_RANK: Record<Severity, number> = {
   INFO: 4,
 };
 
+export const SEVERITIES = Object.keys(SEVERITY_RANK) as Severity[];
+
 export function severityRank(severity: Severity): number {
   const ranks: Partial<Record<Severity, number>> = SEVERITY_RANK;
   return ranks[severity] ?? Number.MAX_SAFE_INTEGER;
