@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import logger from '../../../../lib/logger.ts';
 import {
   type DependencyRisksViewModel,
   type ErrorVM,
@@ -26,6 +27,7 @@ import {
   type LicenseRiskVM,
   type MalwareGroupVM,
   type MalwareRiskVM,
+  PackageIdentity,
   type PackageVM,
   type RiskGroupVM,
   type RiskVM,
@@ -77,12 +79,13 @@ export function buildDependencyRisksViewModel(
   response: AnalyzeProjectResponse,
   filter: RiskPredicate,
 ): DependencyRisksViewModel {
-  const sortedReleases = sortReleases(response.releases);
+  const identityByPurl = buildPackageIdentityMap(response.releases);
   const packages: PackageVM[] = [];
-  for (const release of sortedReleases) {
-    const pkg = buildPackageVM(release, filter);
+  for (const release of response.releases) {
+    const pkg = buildPackageVM(release, filter, identityByPurl);
     if (pkg !== null) packages.push(pkg);
   }
+  packages.sort((a, b) => a.identity.compareTo(b.identity));
   return {
     packages,
     errors: response.errors.map(buildErrorVM),
@@ -90,23 +93,67 @@ export function buildDependencyRisksViewModel(
   };
 }
 
-function buildPackageVM(release: AnalyzeProjectRelease, filter: RiskPredicate): PackageVM | null {
+function buildPackageIdentityMap(releases: AnalyzeProjectRelease[]): Map<string, PackageIdentity> {
+  const out = new Map<string, PackageIdentity>();
+  for (const release of releases) {
+    out.set(
+      release.packageUrl,
+      new PackageIdentity(
+        release.packageUrl,
+        release.packageName,
+        release.version,
+        release.packageManager,
+      ),
+    );
+  }
+  return out;
+}
+
+function buildPackageVM(
+  release: AnalyzeProjectRelease,
+  filter: RiskPredicate,
+  identityByPurl: Map<string, PackageIdentity>,
+): PackageVM | null {
   const groups = buildGroups(release, filter);
   if (groups.length === 0) return null;
   const riskCount = groups.reduce((n, g) => n + g.risks.length, 0);
   return {
-    name: release.packageName,
-    version: release.version,
+    identity: identityByPurl.get(release.packageUrl)!,
     newlyIntroduced: release.newlyIntroduced,
     riskCount,
     filePaths: release.dependencyFilePaths,
-    chains: sortChainsShortestFirst(release.dependencyChains),
+    chains: resolveChains(release, identityByPurl),
     groups,
   };
 }
 
-function sortChainsShortestFirst(chains: string[][]): string[][] {
-  return [...chains].sort((a, b) => a.length - b.length);
+function resolveChains(
+  release: AnalyzeProjectRelease,
+  identityByPurl: Map<string, PackageIdentity>,
+): PackageIdentity[][] {
+  const resolved: PackageIdentity[][] = [];
+  for (const chain of release.dependencyChains) {
+    const ids = resolveChain(chain, release, identityByPurl);
+    if (ids !== null) resolved.push(ids);
+  }
+  return resolved.sort((a, b) => a.length - b.length);
+}
+
+function resolveChain(
+  chain: string[],
+  release: AnalyzeProjectRelease,
+  identityByPurl: Map<string, PackageIdentity>,
+): PackageIdentity[] | null {
+  const ids: PackageIdentity[] = [];
+  for (const purl of chain) {
+    const id = identityByPurl.get(purl);
+    if (id === undefined) {
+      logger.debug(`Skipping dependency chain for ${release.packageUrl}: unknown purl ${purl}`);
+      return null;
+    }
+    ids.push(id);
+  }
+  return ids;
 }
 
 function buildGroups(release: AnalyzeProjectRelease, filter: RiskPredicate): RiskGroupVM<RiskVM>[] {
@@ -294,14 +341,6 @@ function effectiveStatus(
 ): string {
   const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
   return (issue.status ?? fallback).toUpperCase();
-}
-
-function sortReleases(releases: AnalyzeProjectRelease[]): AnalyzeProjectRelease[] {
-  return [...releases].sort((a, b) => packageLabel(a).localeCompare(packageLabel(b)));
-}
-
-function packageLabel(release: AnalyzeProjectRelease): string {
-  return `${release.packageName}@${release.version}`;
 }
 
 function severityRank(severity: string | undefined): number {

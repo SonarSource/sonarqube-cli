@@ -28,13 +28,29 @@ export interface DependencyRisksViewModel {
   summary: SummaryVM;
 }
 
+export class PackageIdentity {
+  constructor(
+    readonly purl: string,
+    readonly name: string,
+    readonly version: string,
+    readonly packageManager: string,
+  ) {}
+
+  label(): string {
+    return this.version ? `${this.name}@${this.version}` : this.name;
+  }
+
+  compareTo(other: PackageIdentity): number {
+    return this.purl.localeCompare(other.purl);
+  }
+}
+
 export interface PackageVM {
-  name: string;
-  version: string;
+  identity: PackageIdentity;
   newlyIntroduced: boolean;
   riskCount: number;
   filePaths: string[];
-  chains: string[][];
+  chains: PackageIdentity[][];
   groups: RiskGroupVM<RiskVM>[];
 }
 

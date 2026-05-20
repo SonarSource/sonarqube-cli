@@ -42,19 +42,21 @@ function makeResponse(
 }
 
 function makeRelease(overrides: Partial<AnalyzeProjectRelease> = {}): AnalyzeProjectRelease {
+  const packageName = overrides.packageName ?? 'lodash';
+  const version = overrides.version ?? '4.17.21';
   return {
-    key: 'release-lodash',
-    packageUrl: 'pkg:npm/lodash@4.17.21',
+    key: `release-${packageName}`,
+    packageUrl: `pkg:npm/${packageName}@${version}`,
     packageManager: 'npm',
-    packageName: 'lodash',
-    version: '4.17.21',
+    packageName,
+    version,
     licenseExpression: null,
     known: true,
     knownPackage: true,
     newlyIntroduced: false,
     issues: [],
     dependencyFilePaths: ['package-lock.json'],
-    dependencyChains: [['pkg:npm/lodash@4.17.21']],
+    dependencyChains: [[`pkg:npm/${packageName}@${version}`]],
     ...overrides,
   };
 }
@@ -103,7 +105,7 @@ describe('buildDependencyRisksViewModel — status filtering', () => {
 
       const vm = buildVM(response, filter);
 
-      expect(vm.packages.map((p) => p.name)).toEqual(['b']);
+      expect(vm.packages.map((p) => p.identity.name)).toEqual(['b']);
     });
 
     it('passes errors through unchanged (sans the legacy id field)', () => {
@@ -165,7 +167,7 @@ describe('buildDependencyRisksViewModel — status filtering', () => {
 
       const vm = buildVM(response, 'open');
 
-      expect(vm.packages.map((p) => p.name)).toEqual(['still-open']);
+      expect(vm.packages.map((p) => p.identity.name)).toEqual(['still-open']);
     });
   });
 
@@ -187,7 +189,7 @@ describe('buildDependencyRisksViewModel — status filtering', () => {
 
       const vm = buildVM(response, 'all');
 
-      expect(vm.packages.map((p) => p.name)).toEqual(['all-resolved', 'still-open']);
+      expect(vm.packages.map((p) => p.identity.name)).toEqual(['all-resolved', 'still-open']);
       const group = vm.packages[0].groups[0];
       expect((group.risks as { status: string }[]).map((r) => r.status)).toEqual(['SAFE', 'FIXED']);
     });
@@ -259,7 +261,7 @@ describe('buildDependencyRisksViewModel — status filtering', () => {
 
       const vm = buildVM(response, 'new');
 
-      expect(vm.packages.map((p) => p.name)).toEqual(['has-new']);
+      expect(vm.packages.map((p) => p.identity.name)).toEqual(['has-new']);
     });
 
     it("treats status case-insensitively (e.g. 'new')", () => {
@@ -299,7 +301,7 @@ describe('buildDependencyRisksViewModel — status filtering', () => {
     const vm = buildVM(response, 'open');
 
     expect(vm.summary.packagesScanned).toBe(3);
-    expect(vm.packages.map((p) => p.name)).toEqual(['b']);
+    expect(vm.packages.map((p) => p.identity.name)).toEqual(['b']);
   });
 
   it('summary.totalRisks reflects the post-filter set', () => {
@@ -324,7 +326,7 @@ describe('buildDependencyRisksViewModel — ordering', () => {
 
     const vm = buildVM(response, 'all');
 
-    expect(vm.packages.map((p) => `${p.name}@${p.version}`)).toEqual([
+    expect(vm.packages.map((p) => `${p.identity.name}@${p.identity.version}`)).toEqual([
       'alpha@2.0.0',
       'mid@0.0.1',
       'zeta@1.0.0',

@@ -29,34 +29,32 @@ import type {
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/table/format-dependency-risks-table.ts';
 
-function renderTable(
-  response: {
-    releases: AnalyzeProjectRelease[];
-    parsedFiles: string[];
-    errors: AnalysisErrorResource[];
-  },
-  allReleases: AnalyzeProjectRelease[],
-): string {
+function renderTable(response: {
+  releases: AnalyzeProjectRelease[];
+  parsedFiles: string[];
+  errors: AnalysisErrorResource[];
+}): string {
   return formatDependencyRisksTable(
     buildDependencyRisksViewModel(response, buildRiskFilter('all')),
-    allReleases,
   );
 }
 
 function makeRelease(overrides: Partial<AnalyzeProjectRelease> = {}): AnalyzeProjectRelease {
+  const packageName = overrides.packageName ?? 'foo';
+  const version = overrides.version ?? '1.0.0';
   return {
-    key: 'release-foo',
-    packageUrl: 'pkg:npm/foo@1.0.0',
+    key: `release-${packageName}`,
+    packageUrl: `pkg:npm/${packageName}@${version}`,
     packageManager: 'npm',
-    packageName: 'foo',
-    version: '1.0.0',
+    packageName,
+    version,
     licenseExpression: null,
     known: true,
     knownPackage: true,
     newlyIntroduced: false,
     issues: [],
     dependencyFilePaths: ['package-lock.json'],
-    dependencyChains: [['pkg:npm/foo@1.0.0']],
+    dependencyChains: [[`pkg:npm/${packageName}@${version}`]],
     ...overrides,
   };
 }
@@ -125,10 +123,11 @@ function getFormattedTableWithReleases(
   packagesScanned?: number,
   errors: AnalysisErrorResource[] = [],
 ): string {
-  const total = packagesScanned ?? releases.length;
-  const padding = Math.max(0, total - releases.length);
+  const withChainTargets = withChainTargetReleases(releases);
+  const total = packagesScanned ?? withChainTargets.length;
+  const padding = Math.max(0, total - withChainTargets.length);
   const allReleases: AnalyzeProjectRelease[] = [
-    ...releases,
+    ...withChainTargets,
     ...Array.from({ length: padding }, (_, i) =>
       makeRelease({
         key: `pad-${i}`,
@@ -139,7 +138,50 @@ function getFormattedTableWithReleases(
       }),
     ),
   ];
-  return renderTable({ releases: allReleases, parsedFiles: [], errors }, allReleases);
+  return renderTable({ releases: allReleases, parsedFiles: [], errors });
+}
+
+/**
+ * Adds zero-issue stub releases for every purl referenced in any chain that isn't
+ * already covered by `releases`. Keeps test fixtures concise — fixtures only have
+ * to declare the packages whose data they actually care about.
+ */
+function withChainTargetReleases(releases: AnalyzeProjectRelease[]): AnalyzeProjectRelease[] {
+  const knownPurls = new Set(releases.map((r) => r.packageUrl));
+  const stubs: AnalyzeProjectRelease[] = [];
+  for (const release of releases) {
+    for (const chain of release.dependencyChains) {
+      for (const purl of chain) {
+        if (knownPurls.has(purl)) continue;
+        knownPurls.add(purl);
+        stubs.push(stubReleaseForPurl(purl));
+      }
+    }
+  }
+  return [...releases, ...stubs];
+}
+
+function stubReleaseForPurl(purl: string): AnalyzeProjectRelease {
+  const { packageManager, name, version } = parsePurl(purl);
+  return makeRelease({
+    key: `stub-${purl}`,
+    packageUrl: purl,
+    packageManager,
+    packageName: name,
+    version,
+    issues: [],
+    dependencyChains: [],
+  });
+}
+
+function parsePurl(purl: string): { packageManager: string; name: string; version: string } {
+  const atIdx = purl.lastIndexOf('@');
+  const version = atIdx > 0 ? purl.slice(atIdx + 1) : '';
+  const rest = atIdx > 0 ? purl.slice(0, atIdx) : purl;
+  const match = /^pkg:([^/]+)\/(.+)$/.exec(rest);
+  return match
+    ? { packageManager: match[1], name: match[2], version }
+    : { packageManager: '', name: purl, version: '' };
 }
 
 describe('formatDependencyRisksTable', () => {
@@ -747,24 +789,6 @@ describe('formatDependencyRisksTable', () => {
     expect(viaLine.trimStart()).toBe('via lodash@4.17.21 → foo@1.0.0');
   });
 
-  it('falls back to the raw purl when no release matches a chain entry', () => {
-    const out = getFormattedTableWithReleases(
-      [
-        makeRelease({
-          packageName: 'foo',
-          version: '1.0.0',
-          packageUrl: 'pkg:npm/foo@1.0.0',
-          dependencyChains: [['pkg:maven/com.foo/bar@1', 'pkg:npm/foo@1.0.0']],
-          issues: [makeVulnIssue()],
-        }),
-      ],
-      1,
-      [],
-    );
-    const viaLine = getLineWithText(out, '→');
-    expect(viaLine.trimStart()).toBe('via pkg:maven/com.foo/bar@1 → foo@1.0.0');
-  });
-
   it('keeps only the three shortest chains and appends "and via N others" for the rest', () => {
     const out = getFormattedTableWithReleases(
       [
@@ -874,7 +898,7 @@ describe('formatDependencyRisksTable', () => {
       issues: [makeVulnIssue({ status: 'OPEN', vulnerabilityId: 'CVE-1' })],
     });
 
-    const out = renderTable({ releases: [foo], parsedFiles: [], errors: [] }, [transit, foo]);
+    const out = renderTable({ releases: [transit, foo], parsedFiles: [], errors: [] });
 
     expect(out).toContain('via transit@1.0.0 → foo@1.0.0');
   });
@@ -1360,8 +1384,8 @@ describe('formatDependencyRisksTable', () => {
     );
     const viaLines = out.split('\n').filter((l) => l.trimStart().startsWith('via '));
     expect(viaLines).toHaveLength(1);
-    expect(viaLines[0]).toContain('pkg:npm/a@1');
-    expect(viaLines[0]).toContain('pkg:npm/b@2');
+    expect(viaLines[0]).toContain('a@1');
+    expect(viaLines[0]).toContain('b@2');
     expect(viaLines[0]).toContain('foo@1.0.0');
   });
 
@@ -1599,29 +1623,6 @@ describe('formatDependencyRisksTable', () => {
       expect(sepIdx).toBeGreaterThan(-1);
       expect(errorsIdx).toBeGreaterThan(sepIdx);
       expect(summaryIdx).toBeGreaterThan(errorsIdx);
-    });
-
-    it('tallies only the filtered releases passed in, not the broader allReleases list', () => {
-      const transit = makeRelease({
-        key: 'transit',
-        packageName: 'transit',
-        packageUrl: 'pkg:npm/transit@1.0.0',
-        issues: [makeVulnIssue({ severity: 'BLOCKER', vulnerabilityId: 'CVE-TRANSIT' })],
-      });
-      const foo = makeRelease({
-        packageName: 'foo',
-        packageUrl: 'pkg:npm/foo@1.0.0',
-        issues: [makeVulnIssue({ severity: 'LOW', vulnerabilityId: 'CVE-FOO' })],
-      });
-      const out = renderTable({ releases: [foo], parsedFiles: [], errors: [] }, [transit, foo]);
-      const vulnRow = out
-        .slice(out.indexOf('\nSummary:'))
-        .split('\n')
-        .find((l) => l.trimStart().startsWith('VULNERABILITY'));
-      // Only foo's LOW vuln is in the filtered set; transit's BLOCKER vuln must
-      // not appear in the summary even though it's present in allReleases.
-      expect(vulnRow).toContain('BLOCKER ✓   0');
-      expect(vulnRow).toContain('LOW ✗   1');
     });
   });
 });
