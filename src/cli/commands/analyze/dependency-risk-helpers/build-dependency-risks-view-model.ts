@@ -315,19 +315,18 @@ function buildSummaryRow(
 function summaryCountsByTypeAndSeverity(
   packages: PackageVM[],
 ): Map<ScaIssueType, Map<SummarySeverity, number>> {
+  const validSeverities = new Set<string>(SUMMARY_SEVERITIES);
   const out = new Map<ScaIssueType, Map<SummarySeverity, number>>();
-  for (const type of ISSUE_TYPES) {
-    const row = new Map<SummarySeverity, number>();
-    for (const sev of SUMMARY_SEVERITIES) row.set(sev, 0);
-    out.set(type, row);
-  }
   for (const pkg of packages) {
     for (const group of pkg.groups) {
-      const row = out.get(group.type);
-      if (!row) continue;
+      let row = out.get(group.type);
+      if (!row) {
+        row = new Map();
+        out.set(group.type, row);
+      }
       for (const risk of group.risks) {
+        if (!validSeverities.has(risk.severity)) continue;
         const sev = risk.severity as SummarySeverity;
-        if (!row.has(sev)) continue;
         row.set(sev, (row.get(sev) ?? 0) + 1);
       }
     }
