@@ -18,13 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { RiskVM } from '../view-model/dependency-risks-view-model.ts';
+import type { ErrorVM } from '../error.ts';
 
-const SEVERITY_WIDTH = 9;
-const STATUS_WIDTH = 8;
-
-export function genericRiskInfo(risk: RiskVM, body: string): string {
-  const severity = risk.severity.padEnd(SEVERITY_WIDTH);
-  const status = risk.status.padEnd(STATUS_WIDTH);
-  return `${severity} ${status} ${body}`;
+export function buildErrorVM(error: {
+  code: string;
+  path: string | null;
+  message: string;
+}): ErrorVM {
+  return { code: error.code, path: error.path, message: error.message };
 }

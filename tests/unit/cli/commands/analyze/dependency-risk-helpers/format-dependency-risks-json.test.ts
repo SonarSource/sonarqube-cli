@@ -20,13 +20,13 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/build-dependency-risks-view-model.ts';
 import { formatDependencyRisksJson } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/format-dependency-risks-json.ts';
 import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type {
   AnalyzeProjectRelease,
   AnalyzeProjectResponse,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
 
 function makeRelease(overrides: Partial<AnalyzeProjectRelease> = {}): AnalyzeProjectRelease {
   const packageName = overrides.packageName ?? 'foo';

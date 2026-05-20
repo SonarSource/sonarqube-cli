@@ -18,13 +18,25 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { RiskVM } from '../view-model/dependency-risks-view-model.ts';
+import type { AnalyzeProjectIssue, Severity } from '../../sca-scanner.ts';
 
-const SEVERITY_WIDTH = 9;
-const STATUS_WIDTH = 8;
+const SEVERITY_RANK: Record<Severity, number> = {
+  BLOCKER: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+  INFO: 4,
+};
 
-export function genericRiskInfo(risk: RiskVM, body: string): string {
-  const severity = risk.severity.padEnd(SEVERITY_WIDTH);
-  const status = risk.status.padEnd(STATUS_WIDTH);
-  return `${severity} ${status} ${body}`;
+export function severityRank(severity: Severity): number {
+  const ranks: Partial<Record<Severity, number>> = SEVERITY_RANK;
+  return ranks[severity] ?? Number.MAX_SAFE_INTEGER;
+}
+
+export function compareSeverity(a: Severity, b: Severity): number {
+  return severityRank(a) - severityRank(b);
+}
+
+export function sortBySeverity(issues: AnalyzeProjectIssue[]): AnalyzeProjectIssue[] {
+  return [...issues].sort((a, b) => compareSeverity(a.severity, b.severity));
 }

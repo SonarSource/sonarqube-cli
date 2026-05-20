@@ -30,7 +30,7 @@ import type {
   RiskVM,
   SummaryVM,
   VulnerabilityGroupVM,
-} from '../dependency-risks-view-model.ts';
+} from '../view-model/dependency-risks-view-model.ts';
 import { appendLicenseGroup } from './format-table-license-group.ts';
 import { appendMalwareGroup } from './format-table-malware-group.ts';
 import { appendVulnerabilityGroup } from './format-table-vulnerability-group.ts';

@@ -19,7 +19,7 @@
  */
 
 import { bold } from '../../../../../ui/colors.js';
-import type { LicenseGroupVM, LicenseRiskVM } from '../dependency-risks-view-model.ts';
+import type { LicenseGroupVM, LicenseRiskVM } from '../view-model/dependency-risks-view-model.ts';
 import { genericRiskInfo } from './format-table-risk-generic.ts';
 
 export function appendLicenseGroup(lines: string[], group: LicenseGroupVM): void {

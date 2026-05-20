@@ -18,41 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ScaIssueType, Severity, VersionOptionDescriptionCode } from './sca-scanner.ts';
-
-export type DependencyRisksStatusFilter = 'all' | 'open' | 'new';
-
-export interface DependencyRisksViewModel {
-  packages: PackageVM[];
-  errors: ErrorVM[];
-  summary: SummaryVM;
-}
-
-export class PackageIdentity {
-  constructor(
-    readonly purl: string,
-    readonly name: string,
-    readonly version: string,
-    readonly packageManager: string,
-  ) {}
-
-  label(): string {
-    return this.version ? `${this.name}@${this.version}` : this.name;
-  }
-
-  compareTo(other: PackageIdentity): number {
-    return this.purl.localeCompare(other.purl);
-  }
-}
-
-export interface PackageVM {
-  package: PackageIdentity;
-  newlyIntroduced: boolean;
-  riskCount: number;
-  filePaths: string[];
-  chains: PackageIdentity[][];
-  groups: RiskGroupVM<RiskVM>[];
-}
+import type { ScaIssueType, Severity } from '../sca-scanner.ts';
+import type { FixVersionVM } from './fix-version.ts';
 
 export interface RiskVM {
   severity: Severity;
@@ -88,22 +55,4 @@ export interface LicenseGroupVM extends RiskGroupVM<LicenseRiskVM> {
 export interface VulnerabilityGroupVM extends RiskGroupVM<VulnerabilityRiskVM> {
   type: 'VULNERABILITY';
   packageFixes: FixVersionVM[];
-}
-
-export interface FixVersionVM {
-  version: string;
-  descriptionCode: VersionOptionDescriptionCode;
-  vulnerabilityIds: string[];
-}
-
-export interface ErrorVM {
-  code: string;
-  path: string | null;
-  message: string;
-}
-
-export interface SummaryVM {
-  packagesScanned: number;
-  totalRisks: number;
-  byType: Map<ScaIssueType, Map<Severity, number>>;
 }

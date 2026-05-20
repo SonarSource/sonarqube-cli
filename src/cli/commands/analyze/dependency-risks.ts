@@ -29,12 +29,7 @@ import { error, print, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
-import { buildDependencyRisksViewModel } from './dependency-risk-helpers/build-dependency-risks-view-model.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
-import type {
-  DependencyRisksStatusFilter,
-  DependencyRisksViewModel,
-} from './dependency-risk-helpers/dependency-risks-view-model.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
 import {
@@ -43,6 +38,11 @@ import {
 } from './dependency-risk-helpers/sca-scanner.ts';
 import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table/format-dependency-risks-table.ts';
+import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
+import type {
+  DependencyRisksStatusFilter,
+  DependencyRisksViewModel,
+} from './dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 

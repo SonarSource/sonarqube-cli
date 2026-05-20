@@ -18,13 +18,30 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { RiskVM } from '../view-model/dependency-risks-view-model.ts';
+import type { RiskGroupVM, RiskVM } from './risk.ts';
 
-const SEVERITY_WIDTH = 9;
-const STATUS_WIDTH = 8;
+export class PackageIdentity {
+  constructor(
+    readonly purl: string,
+    readonly name: string,
+    readonly version: string,
+    readonly packageManager: string,
+  ) {}
 
-export function genericRiskInfo(risk: RiskVM, body: string): string {
-  const severity = risk.severity.padEnd(SEVERITY_WIDTH);
-  const status = risk.status.padEnd(STATUS_WIDTH);
-  return `${severity} ${status} ${body}`;
+  label(): string {
+    return this.version ? `${this.name}@${this.version}` : this.name;
+  }
+
+  compareTo(other: PackageIdentity): number {
+    return this.purl.localeCompare(other.purl);
+  }
+}
+
+export interface PackageVM {
+  package: PackageIdentity;
+  newlyIntroduced: boolean;
+  riskCount: number;
+  filePaths: string[];
+  chains: PackageIdentity[][];
+  groups: RiskGroupVM<RiskVM>[];
 }

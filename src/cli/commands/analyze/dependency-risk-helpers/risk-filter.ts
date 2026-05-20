@@ -18,7 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { DependencyRisksStatusFilter, RiskVM } from './dependency-risks-view-model.ts';
+import type {
+  DependencyRisksStatusFilter,
+  RiskVM,
+} from './view-model/dependency-risks-view-model.ts';
 
 export type RiskPredicate = (risk: RiskVM) => boolean;
 
