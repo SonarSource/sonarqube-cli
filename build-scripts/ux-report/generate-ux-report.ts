@@ -37,9 +37,9 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, it } from 'bun:test';
 
-import { TestHarness } from '../../tests/integration/harness/index.js';
-import type { CliResult } from '../../tests/integration/harness/types.js';
-import { commitFile, initGitRepo } from '../../tests/integration/specs/hook/git-test-helpers.js';
+import { TestHarness } from '../../tests/integration/harness';
+import type { CliResult } from '../../tests/integration/harness/types.ts';
+import { commitFile, initGitRepo } from '../../tests/integration/specs/hook/git-test-helpers.ts';
 
 const OUTPUT_PATH = join(import.meta.dir, '../../docs/cli-output-report.md');
 const DEFAULT_TIMEOUT = 30000;
