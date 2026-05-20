@@ -20,8 +20,6 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/build-dependency-risks-view-model.ts';
-import type { DependencyRisksStatusFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/dependency-risks-view-model.ts';
 import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type {
   AnalyzeProjectIssue,
@@ -29,6 +27,8 @@ import type {
   AnalyzeProjectResponse,
   Severity,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
+import type { DependencyRisksStatusFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
 import { countUnresolvedIssues } from '../../../../../../src/cli/commands/analyze/dependency-risks.ts';
 
 function buildVM(response: AnalyzeProjectResponse, filter: DependencyRisksStatusFilter) {

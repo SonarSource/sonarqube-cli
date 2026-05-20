@@ -18,13 +18,28 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { RiskVM } from '../view-model/dependency-risks-view-model.ts';
+import type { ErrorVM } from './error.ts';
+import type { PackageVM } from './package.ts';
+import type { SummaryVM } from './summary.ts';
 
-const SEVERITY_WIDTH = 9;
-const STATUS_WIDTH = 8;
+export type { ErrorVM } from './error.ts';
+export type { FixVersionVM } from './fix-version.ts';
+export { PackageIdentity, type PackageVM } from './package.ts';
+export type {
+  LicenseGroupVM,
+  LicenseRiskVM,
+  MalwareGroupVM,
+  MalwareRiskVM,
+  RiskGroupVM,
+  RiskVM,
+  VulnerabilityGroupVM,
+  VulnerabilityRiskVM,
+} from './risk.ts';
+export type { DependencyRisksStatusFilter } from './status-filter.ts';
+export type { SummaryVM } from './summary.ts';
 
-export function genericRiskInfo(risk: RiskVM, body: string): string {
-  const severity = risk.severity.padEnd(SEVERITY_WIDTH);
-  const status = risk.status.padEnd(STATUS_WIDTH);
-  return `${severity} ${status} ${body}`;
+export interface DependencyRisksViewModel {
+  packages: PackageVM[];
+  errors: ErrorVM[];
+  summary: SummaryVM;
 }
