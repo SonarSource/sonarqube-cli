@@ -23,6 +23,7 @@
 import { ConfirmPrompt, isCancel, Prompt, SelectPrompt, TextPrompt } from '@clack/core';
 
 import { cyan, dim, green, red } from '../colors.js';
+import { print } from '../messages.js';
 import { dequeueMockResponse, isMockActive, recordCall } from '../mock.js';
 
 const CTRL_C = 0x03;
@@ -252,6 +253,27 @@ export function checkboxComponent(isSelected: boolean, unavailable: boolean): st
   }
 
   return '◯';
+}
+
+/**
+ * Calls textPrompt in a loop until isValid returns true, printing errorMessage on each invalid
+ * attempt. Returns null if the user cancels (Ctrl+C).
+ */
+export async function promptUntilValid(
+  message: string,
+  isValid: (value: string) => boolean,
+  errorMessage: string,
+): Promise<string | null> {
+  for (;;) {
+    const value = await textPrompt(message);
+    if (value === null) {
+      return null;
+    }
+    if (isValid(value)) {
+      return value;
+    }
+    print(errorMessage);
+  }
 }
 
 /**

@@ -5,7 +5,7 @@ on:
 
 jobs:
   cleanup:
-    runs-on: sonar-xs-public
+    runs-on: sonar-xs
     name: Cleanup
     permissions:
       actions: write

@@ -26,7 +26,13 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { confirmPrompt, multiSelectPrompt, pressEnterKeyPrompt, textPrompt } from '../../../src/ui';
+import {
+  confirmPrompt,
+  multiSelectPrompt,
+  pressEnterKeyPrompt,
+  promptUntilValid,
+  textPrompt,
+} from '../../../src/ui';
 import {
   clearMockResponses,
   clearMockUiCalls,
@@ -227,6 +233,60 @@ describe('multiSelectPrompt: mock mode', () => {
     queueMockResponse(null);
     const result = await multiSelectPrompt('Pick options', [{ value: 'a', label: 'A' }]);
     expect(result).toBeNull();
+  });
+});
+
+// ─── promptUntilValid ────────────────────────────────────────────────────────
+
+describe('promptUntilValid: mock mode', () => {
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    clearMockResponses();
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+  });
+
+  it('returns the value immediately when the first input is valid', async () => {
+    queueMockResponse('valid-input');
+    const result = await promptUntilValid('Enter value', (v) => v === 'valid-input', 'Try again.');
+    expect(result).toBe('valid-input');
+  });
+
+  it('retries until a valid value is provided and returns it', async () => {
+    queueMockResponse('bad');
+    queueMockResponse('also-bad');
+    queueMockResponse('good');
+    const result = await promptUntilValid('Enter value', (v) => v === 'good', 'Try again.');
+    expect(result).toBe('good');
+  });
+
+  it('prints the error message once per invalid attempt', async () => {
+    queueMockResponse('bad');
+    queueMockResponse('also-bad');
+    queueMockResponse('good');
+    await promptUntilValid('Enter value', (v) => v === 'good', 'Try again.');
+    const printCalls = getMockUiCalls().filter(
+      (c) => c.method === 'print' && c.args[0] === 'Try again.',
+    );
+    expect(printCalls).toHaveLength(2);
+  });
+
+  it('returns null when the prompt is cancelled', async () => {
+    queueMockResponse(null);
+    const result = await promptUntilValid('Enter value', () => true, 'Try again.');
+    expect(result).toBeNull();
+  });
+
+  it('returns null immediately on cancellation without printing the error message', async () => {
+    queueMockResponse(null);
+    await promptUntilValid('Enter value', () => false, 'Try again.');
+    const printCalls = getMockUiCalls().filter(
+      (c) => c.method === 'print' && c.args[0] === 'Try again.',
+    );
+    expect(printCalls).toHaveLength(0);
   });
 });
 

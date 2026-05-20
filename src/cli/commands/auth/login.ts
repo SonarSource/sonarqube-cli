@@ -23,20 +23,28 @@ import {
   generateTokenViaBrowser,
 } from '../../../cli/commands/_common/token';
 import { cloudRegionFromUrl, isSonarQubeCloud } from '../../../lib/auth-resolver';
-import { SONARCLOUD_URL } from '../../../lib/config-constants';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../../../lib/config-constants';
 import { deleteStaleTokens, getToken as getKeystoreToken, saveToken } from '../../../lib/keychain';
 import { discoverOrganization, discoverServer } from '../../../lib/project-workspace';
 import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { addOrUpdateConnection, getActiveConnection } from '../../../lib/state-manager';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { discreetSuccess, print, selectPrompt, success, textPrompt } from '../../../ui';
+import {
+  discreetSuccess,
+  print,
+  promptUntilValid,
+  selectPrompt,
+  success,
+  textPrompt,
+} from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error';
 
 /**
  * Login command - authenticate and save token with organization
  */
 export async function authLogin(options: AuthLoginOptions): Promise<void> {
-  const server = await validateLoginOptions(options);
+  validateLoginOptions(options);
+  const server = await resolveServer(options);
 
   const isCloud = isSonarQubeCloud(server);
   const isNonInteractive = !!options.withToken;
@@ -240,11 +248,65 @@ async function validateOrSelectOrganization(
   return await getUserSelectedOrganization(client, isNonInteractive);
 }
 
-async function validateLoginOptions(options: {
-  server?: string;
-  org?: string;
-  withToken?: string;
-}) {
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function selectServerFromPrompt(): Promise<string> {
+  const serverType = await selectPrompt('Where would you like to connect?', [
+    { value: 'cloud', label: 'SonarQube Cloud' },
+    { value: 'server', label: 'SonarQube Server (self-hosted)' },
+  ]);
+
+  if (serverType === null) {
+    throw new CommandFailedError('Server selection cancelled');
+  }
+
+  if (serverType === 'cloud') {
+    const region = await selectPrompt('Which SonarQube Cloud region?', [
+      { value: SONARCLOUD_URL, label: 'EU (sonarcloud.io)' },
+      { value: SONARCLOUD_US_URL, label: 'US (sonarqube.us)' },
+    ]);
+    if (region === null) {
+      throw new CommandFailedError('Server selection cancelled');
+    }
+    return region;
+  }
+
+  const url = await promptUntilValid(
+    'Enter server URL',
+    (v) => !!v.trim() && isValidUrl(v.trim()),
+    'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
+  );
+  if (url === null) {
+    throw new CommandFailedError('Server selection cancelled');
+  }
+  return url.trim();
+}
+
+async function resolveServer(options: AuthLoginOptions): Promise<string> {
+  if (options.server) {
+    return options.server;
+  }
+  const configServer = await discoverServer();
+  if (configServer) {
+    return configServer;
+  }
+  if (options.withToken) {
+    throw new InvalidOptionError(
+      '--server is required when --with-token is provided and no server is configured.',
+      'Use --server <url> to specify the server.',
+    );
+  }
+  return selectServerFromPrompt();
+}
+
+function validateLoginOptions(options: AuthLoginOptions): void {
   if (options.org !== undefined && !options.org.trim()) {
     throw new InvalidOptionError('--org value cannot be empty.', 'Use --org <organization-key>.');
   }
@@ -263,23 +325,12 @@ async function validateLoginOptions(options: {
     );
   }
 
-  let server = options.server;
-  if (!server) {
-    const configServer = await discoverServer();
-    server = configServer || SONARCLOUD_URL;
+  if (options.server !== undefined && !isValidUrl(options.server)) {
+    throw new InvalidOptionError(
+      `Invalid server URL: '${options.server}'.`,
+      'Provide a valid URL (for example https://sonarcloud.io).',
+    );
   }
-
-  if (options.server !== undefined) {
-    try {
-      new URL(server);
-    } catch {
-      throw new InvalidOptionError(
-        `Invalid server URL: '${server}'.`,
-        'Provide a valid URL (for example https://sonarcloud.io).',
-      );
-    }
-  }
-  return server;
 }
 
 export interface AuthLoginOptions {

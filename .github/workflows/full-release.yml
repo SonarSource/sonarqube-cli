@@ -128,7 +128,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JIRA_USER: ${{ fromJSON(steps.secrets.outputs.vault).JIRA_USER }}
           JIRA_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).JIRA_TOKEN }}
-        run: bun build-scripts/generate-release-notes.ts --out release-notes.md
+        run: bun .github/scripts/generate-release-notes.ts --out release-notes.md
 
       - name: Update GitHub release body
         if: steps.generate.outcome == 'success'
