@@ -25,3 +25,4 @@ jobs:
       publishToBinaries: true
       slackChannel: C02E6L5C01H # squad-devex-private
       skipJavascriptReleasabilityChecks: true
+      createDraftRelease: false
