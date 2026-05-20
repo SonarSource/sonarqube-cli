@@ -39,10 +39,15 @@ import type { ChangeSetResult } from './sqaa-changeset';
 import { resolveChangeSet } from './sqaa-changeset';
 import {
   applyExitCode,
+  buildJsonReport,
   EXIT_CODE_ISSUES_FOUND,
+  makeReport,
   printFileDetails,
   printJsonReport,
   printSummary,
+  singleFileFailureReport,
+  singleFileSuccessReport,
+  type SqaaJsonReport,
 } from './sqaa-display';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
@@ -126,29 +131,9 @@ async function runSqaaAnalysis(
   const fileContent = readSqaaFileContent(file);
 
   if (format === 'json') {
-    const filePath = toRelativePosixPath(file);
-    try {
-      const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch);
-      const report = {
-        files: [{ path: filePath, issues: response.issues, errors: response.errors }],
-        ignored: [],
-        failures: [],
-        skipped: [],
-        summary: { totalIssues: response.issues.length, totalFailures: 0, totalSkipped: 0 },
-      };
-      print(JSON.stringify(report, null, 2));
-      if (response.issues.length > 0) process.exitCode = EXIT_CODE_ISSUES_FOUND;
-    } catch (err) {
-      const report = {
-        files: [],
-        ignored: [],
-        failures: [{ path: filePath, message: (err as Error).message }],
-        skipped: [],
-        summary: { totalIssues: 0, totalFailures: 1, totalSkipped: 0 },
-      };
-      print(JSON.stringify(report, null, 2));
-      process.exitCode = 1;
-    }
+    const report = await fetchSingleFileReport(cloudAuth, projectKey, file, fileContent, branch);
+    print(JSON.stringify(report, null, 2));
+    applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
     return;
   }
 
@@ -203,4 +188,82 @@ async function runSqaaAnalysisOnFiles(
   progress.finish(tally.allResults.length);
   printFileDetails(tally.allResults);
   printSummary(tally.totalIssues, tally.totalErrors, tally.totalFailures);
+}
+
+async function fetchSingleFileReport(
+  cloudAuth: CloudAuth,
+  projectKey: string,
+  file: string,
+  fileContent: string,
+  branch?: string,
+): Promise<SqaaJsonReport> {
+  const filePath = toRelativePosixPath(file);
+  try {
+    const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch);
+    return singleFileSuccessReport(filePath, response.issues, response.errors);
+  } catch (err) {
+    return singleFileFailureReport(filePath, (err as Error).message);
+  }
+}
+
+/**
+ * Run SQAA and return the JSON report without printing it.
+ * Returns null when SQAA is not available (non-Cloud connection or no project configured).
+ * Used by `analyzeAll` to build a combined JSON report.
+ */
+export async function buildSqaaJsonReport(
+  options: AnalyzeSqaaOptions,
+  auth: ResolvedAuth,
+  command?: Command,
+): Promise<SqaaJsonReport | null> {
+  const { file, staged, base, branch, project, force } = options;
+
+  if (file !== undefined) {
+    const resolved = await resolveCloudAuthAndProject(auth, project, command);
+    if (!resolved) return null;
+
+    const { cloudAuth, projectKey } = resolved;
+    const fileContent = readSqaaFileContent(file);
+    return fetchSingleFileReport(cloudAuth, projectKey, file, fileContent, branch);
+  }
+
+  // Change-set mode
+  const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
+  if (changeSet.files.length === 0) {
+    return makeReport(
+      [],
+      [],
+      changeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
+    );
+  }
+
+  const resolved = await resolveCloudAuthAndProject(auth, project, command, changeSet.repoRoot);
+  if (!resolved) return null;
+
+  // JSON mode is consumed by scripts/CI: never block on an interactive prompt
+  if (
+    !force &&
+    options.format !== 'json' &&
+    changeSet.files.length > SQAA_LARGE_CHANGESET_THRESHOLD
+  ) {
+    const confirmed = await confirmLargeChangeset(changeSet.files.length);
+    if (!confirmed) return null;
+  }
+
+  const { files, ignored, repoRoot } = changeSet;
+  const { cloudAuth, projectKey } = resolved;
+  const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
+  const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
+  const ctx: RunContext = {
+    files,
+    allPaths,
+    cloudAuth,
+    projectKey,
+    branch,
+    progress: silentProgress,
+    pathBase: repoRoot,
+  };
+
+  const tally = await runAnalyses(ctx);
+  return buildJsonReport(tally, ignored, allPaths, repoRoot);
 }
