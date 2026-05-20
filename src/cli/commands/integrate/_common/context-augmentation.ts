@@ -39,7 +39,7 @@ import {
 } from '../../../../ui';
 import { installContextAugmentationBinary } from '../../_common/install/context-augmentation';
 
-export type ContextAugmentationAgent = 'claude-code' | 'copilot';
+export type ContextAugmentationAgent = 'claude-code' | 'copilot' | 'codex';
 
 export interface SetupContextAugmentationParams {
   auth: ResolvedAuth;
@@ -54,6 +54,7 @@ export interface SetupContextAugmentationParams {
 const STATE_AGENT_ID: Record<ContextAugmentationAgent, string> = {
   'claude-code': 'claude-code',
   copilot: 'copilot-cli',
+  codex: 'codex',
 };
 
 const CAG_AGENT_BY_STATE_AGENT_ID: Record<string, ContextAugmentationAgent> = Object.fromEntries(
@@ -66,6 +67,7 @@ const CAG_AGENT_BY_STATE_AGENT_ID: Record<string, ContextAugmentationAgent> = Ob
 const AGENT_DISPLAY_NAME: Record<ContextAugmentationAgent, string> = {
   'claude-code': 'Claude Code',
   copilot: 'Copilot',
+  codex: 'Codex',
 };
 
 export function resolveContextAugmentationAgent(

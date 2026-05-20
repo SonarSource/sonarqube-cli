@@ -19,7 +19,7 @@
  */
 
 // Integration tests for the Context Augmentation step inside `sonar integrate
-// claude` and `sonar integrate copilot`.
+// claude`, `sonar integrate copilot`, and `sonar integrate codex`.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -515,6 +515,174 @@ describe('integrate copilot — Context Augmentation', () => {
   );
 });
 
+describe('integrate codex — Context Augmentation', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'invokes CAG with codex agent identifier',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate codex', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const skill = findInvocation(readInvocations(harness), 'skill');
+      expect(skill.argv).toEqual([
+        'skill',
+        '--install',
+        'codex',
+        '--invocation-prefix',
+        'sonar context',
+      ]);
+      expect(skill.env.SONAR_TOKEN).toBe(TOKEN);
+      expect(result.stdout).toContain('✓  Context skill configured for Codex');
+
+      const state = loadState(harness);
+      const skillExt = state.agentExtensions.find(
+        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
+      );
+      expect(skillExt).toBeDefined();
+      expect(skillExt?.agentId).toBe('codex');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips CAG entirely when --skip-context is passed',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate codex --skip-context', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      const state = loadState(harness);
+      expect(
+        state.agentExtensions.find(
+          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
+        ),
+      ).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips CAG with a warning when the org does not have it enabled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY, { enabled: false })
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate codex', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      expect(result.stderr).toContain('not enabled for your organization');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips CAG with a warning on SonarQube Cloud when no project key is configured',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      // No sonar-project.properties — projectKey is undefined.
+
+      const result = await harness.run('integrate codex', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      expect(result.stderr).toContain('a project key and organization are required');
+    },
+    { timeout: 30000 },
+  );
+});
+
 describe('integrate <agent> --global — Context Augmentation', () => {
   let harness: TestHarness;
 
@@ -530,6 +698,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
   it.each([
     ['claude', 'integrate claude -g --non-interactive'],
     ['copilot', 'integrate copilot -g'],
+    ['codex', 'integrate codex -g'],
   ])(
     'skips CAG entirely on "integrate %s --global"',
     async (_agent, command) => {

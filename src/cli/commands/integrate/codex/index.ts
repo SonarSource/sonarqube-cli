@@ -27,6 +27,7 @@ import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, print, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
+import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -87,6 +88,16 @@ export async function integrateCodex(
     scope: installScope,
     attrs: buildAttrs({ includeSecretsSection: true, projectKey: sqaaProjectKey }),
   });
+
+  if (!options.skipContext) {
+    await setupContextAugmentation({
+      auth,
+      agent: 'codex',
+      projectRoot: project.rootDir,
+      projectKey,
+      isGlobal,
+    });
+  }
 
   if (isGlobal) {
     success('Codex integration successfully configured globally');
