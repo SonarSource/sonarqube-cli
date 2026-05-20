@@ -134,14 +134,13 @@ function pluralize(count: number, singular: string): string {
   return `${singular}${count === 1 ? '' : 's'}`;
 }
 
-const RESOLVED_STATUSES = new Set(['SAFE', 'FIXED', 'ACCEPT']);
-
 export function countUnresolvedIssues(vm: DependencyRisksViewModel): number {
+  const isUnresolved = buildRiskFilter('open');
   let count = 0;
   for (const pkg of vm.packages) {
     for (const group of pkg.groups) {
       for (const risk of group.risks) {
-        if (!RESOLVED_STATUSES.has(risk.status)) count += 1;
+        if (isUnresolved(risk)) count += 1;
       }
     }
   }
