@@ -23,17 +23,23 @@ import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { version as CURRENT_VERSION } from '../../../../../package.json';
+import * as cagInstall from '../../../../../src/cli/commands/_common/install/context-augmentation';
 import * as secretsInstall from '../../../../../src/cli/commands/_common/install/secrets';
+import * as contextAugmentation from '../../../../../src/cli/commands/integrate/_common/context-augmentation';
 import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../../src/lib/install-types';
 import * as migration from '../../../../../src/lib/migration';
 import {
   migrateClaudeCodeHooks,
   runPostUpdateActions,
+  updateContextAugmentationIfNeeded,
   updateSecretsBinaryIfNeeded,
 } from '../../../../../src/lib/post-update';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository';
-import type { CliState, HookExtension } from '../../../../../src/lib/state';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../src/lib/signatures';
+import type { CliState, HookExtension, SkillExtension } from '../../../../../src/lib/state';
 import { getDefaultState } from '../../../../../src/lib/state';
+import * as stateManager from '../../../../../src/lib/state-manager';
 import * as versionLib from '../../../../../src/lib/version';
 
 const FAKE_HOME = '/fake/home';
@@ -61,6 +67,27 @@ function makeExtension(projectRoot: string, global: boolean): HookExtension {
     global,
     updatedByCliVersion: '1.0.0',
     updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function makeContextSkill(
+  projectRoot: string,
+  agentId = 'claude-code',
+  version = '0.0.0-old',
+): SkillExtension {
+  return {
+    id: `skill-${agentId}-${projectRoot}`,
+    agentId,
+    kind: 'skill',
+    name: CONTEXT_AUGMENTATION_BINARY_NAME,
+    projectRoot,
+    global: false,
+    projectKey: 'project-key',
+    orgKey: 'org-key',
+    serverUrl: 'https://sonarcloud.io',
+    updatedByCliVersion: '1.0.0',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    version,
   };
 }
 
@@ -131,17 +158,19 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // loadState is called 4 times:
+    // loadState is called 5 times:
     //   1. version check in runPostUpdateActions
     //   2. inside migrateClaudeCodeHooks
     //   3. inside updateSecretsBinaryIfNeeded
-    //   4. the reload after runActions (the fix being tested)
+    //   4. inside updateContextAugmentationIfNeeded
+    //   5. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: version check
       .mockReturnValueOnce(makeState()) // call 2: migrateClaudeCodeHooks
       .mockReturnValueOnce(makeState()) // call 3: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 4: reload
+      .mockReturnValueOnce(makeState()) // call 4: updateContextAugmentationIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 5: reload
 
     await runPostUpdateActions();
 
@@ -452,5 +481,182 @@ describe('updateSecretsBinaryIfNeeded', () => {
     installSecretsBinarySpy.mockRejectedValue(new Error('download failed'));
 
     expect(updateSecretsBinaryIfNeeded()).rejects.toThrow('download failed');
+  });
+});
+
+function makeStateWithContextAugmentation(): CliState {
+  const state = makeState();
+  state.tools = {
+    installed: [
+      {
+        name: CONTEXT_AUGMENTATION_BINARY_NAME,
+        version: '0.0.0.1',
+        path: '/fake/bin/sonar-context-augmentation-0.0.0.1-linux-x86-64',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        installedByCliVersion: '1.0.0',
+      },
+    ],
+  };
+  return state;
+}
+
+describe('updateContextAugmentationIfNeeded', () => {
+  let existsSyncSpy: Mock<typeof fs.existsSync>;
+  let statSyncSpy: Mock<typeof fs.statSync>;
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let installContextAugmentationBinarySpy: Mock<typeof cagInstall.installContextAugmentationBinary>;
+  let installContextAugmentationSkillSpy: Mock<
+    typeof contextAugmentation.installContextAugmentationSkill
+  >;
+  let recordSkillExtensionInStateSpy: Mock<typeof stateManager.recordSkillExtensionInState>;
+
+  beforeEach(() => {
+    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
+    statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({
+      isDirectory: () => true,
+    } as fs.Stats);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
+    installContextAugmentationBinarySpy = spyOn(
+      cagInstall,
+      'installContextAugmentationBinary',
+    ).mockResolvedValue('/fake/bin/sonar-context-augmentation');
+    installContextAugmentationSkillSpy = spyOn(
+      contextAugmentation,
+      'installContextAugmentationSkill',
+    ).mockResolvedValue(true);
+    recordSkillExtensionInStateSpy = spyOn(
+      stateManager,
+      'recordSkillExtensionInState',
+    ).mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    existsSyncSpy.mockRestore();
+    statSyncSpy.mockRestore();
+    loadStateSpy.mockRestore();
+    installContextAugmentationBinarySpy.mockRestore();
+    installContextAugmentationSkillSpy.mockRestore();
+    recordSkillExtensionInStateSpy.mockRestore();
+  });
+
+  it('does nothing when no previous CAG install or skill is recorded', async () => {
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationBinarySpy).not.toHaveBeenCalled();
+    expect(installContextAugmentationSkillSpy).not.toHaveBeenCalled();
+  });
+
+  it('downloads CAG when a previous binary installation is recorded', async () => {
+    loadStateSpy.mockReturnValue(makeStateWithContextAugmentation());
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationBinarySpy).toHaveBeenCalledTimes(1);
+    expect(installContextAugmentationSkillSpy).not.toHaveBeenCalled();
+  });
+
+  it('downloads CAG and refreshes all registered project skills', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [
+      makeContextSkill('/proj/alpha', 'claude-code'),
+      makeContextSkill('/proj/beta', 'copilot-cli'),
+    ];
+    loadStateSpy.mockReturnValue(state);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationBinarySpy).toHaveBeenCalledTimes(1);
+    expect(installContextAugmentationSkillSpy).toHaveBeenNthCalledWith(1, {
+      binaryPath: '/fake/bin/sonar-context-augmentation',
+      agent: 'claude-code',
+      projectRoot: '/proj/alpha',
+      reportFailure: false,
+    });
+    expect(installContextAugmentationSkillSpy).toHaveBeenNthCalledWith(2, {
+      binaryPath: '/fake/bin/sonar-context-augmentation',
+      agent: 'copilot',
+      projectRoot: '/proj/beta',
+      reportFailure: false,
+    });
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'claude-code',
+        projectRoot: '/proj/alpha',
+        updatedByCliVersion: CURRENT_VERSION,
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+      }),
+    );
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'copilot-cli',
+        projectRoot: '/proj/beta',
+        updatedByCliVersion: CURRENT_VERSION,
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+      }),
+    );
+  });
+
+  it('skips deleted project roots and unsupported agent ids', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [
+      makeContextSkill('/proj/missing', 'claude-code'),
+      makeContextSkill('/proj/unknown', 'unknown-agent'),
+    ];
+    loadStateSpy.mockReturnValue(state);
+    existsSyncSpy.mockImplementation((path) => path !== '/proj/missing');
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationSkillSpy).not.toHaveBeenCalled();
+    expect(recordSkillExtensionInStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('continues refreshing remaining skills when one skill install fails', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [
+      makeContextSkill('/proj/alpha', 'claude-code'),
+      makeContextSkill('/proj/beta', 'copilot-cli'),
+    ];
+    loadStateSpy.mockReturnValue(state);
+    installContextAugmentationSkillSpy.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledTimes(1);
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'copilot-cli',
+        projectRoot: '/proj/beta',
+      }),
+    );
+  });
+
+  it('continues refreshing remaining skills when one skill install throws', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [
+      makeContextSkill('/proj/alpha', 'claude-code'),
+      makeContextSkill('/proj/beta', 'copilot-cli'),
+    ];
+    loadStateSpy.mockReturnValue(state);
+    installContextAugmentationSkillSpy
+      .mockRejectedValueOnce(new Error('spawn failed'))
+      .mockResolvedValueOnce(true);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledTimes(1);
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'copilot-cli',
+        projectRoot: '/proj/beta',
+      }),
+    );
+  });
+
+  it('propagates errors from the CAG binary update to the caller', () => {
+    loadStateSpy.mockReturnValue(makeStateWithContextAugmentation());
+    installContextAugmentationBinarySpy.mockRejectedValue(new Error('download failed'));
+
+    expect(updateContextAugmentationIfNeeded()).rejects.toThrow('download failed');
   });
 });

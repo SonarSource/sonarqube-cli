@@ -56,10 +56,23 @@ const STATE_AGENT_ID: Record<ContextAugmentationAgent, string> = {
   copilot: 'copilot-cli',
 };
 
+const CAG_AGENT_BY_STATE_AGENT_ID: Record<string, ContextAugmentationAgent> = Object.fromEntries(
+  Object.entries(STATE_AGENT_ID).map(([agent, stateAgentId]) => [
+    stateAgentId,
+    agent as ContextAugmentationAgent,
+  ]),
+);
+
 const AGENT_DISPLAY_NAME: Record<ContextAugmentationAgent, string> = {
   'claude-code': 'Claude Code',
   copilot: 'Copilot',
 };
+
+export function resolveContextAugmentationAgent(
+  agentId: string,
+): ContextAugmentationAgent | undefined {
+  return CAG_AGENT_BY_STATE_AGENT_ID[agentId];
+}
 
 export async function setupContextAugmentation(p: SetupContextAugmentationParams): Promise<void> {
   blank();
@@ -135,7 +148,7 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
   const skillOk = await runCagStep(
     `Context skill configured for ${AGENT_DISPLAY_NAME[p.agent]}`,
     binaryPath,
-    ['skill', '--install', p.agent, '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
+    buildSkillInstallArgs(p.agent),
     p,
   );
   if (!skillOk) {
@@ -164,10 +177,47 @@ interface CagSubprocessResult {
   stderr: string;
 }
 
+interface CagSubprocessOptions {
+  projectRoot: string;
+  token?: string;
+}
+
+export interface InstallContextAugmentationSkillParams {
+  binaryPath: string;
+  agent: ContextAugmentationAgent;
+  projectRoot: string;
+  token?: string;
+  reportFailure?: boolean;
+}
+
 class CagStepFailedError extends Error {
   constructor(readonly result: CagSubprocessResult) {
     super('sonar-context-augmentation step failed');
   }
+}
+
+export async function installContextAugmentationSkill({
+  binaryPath,
+  agent,
+  projectRoot,
+  token,
+  reportFailure = true,
+}: InstallContextAugmentationSkillParams): Promise<boolean> {
+  const result = await runCagSubprocess(binaryPath, buildSkillInstallArgs(agent), {
+    projectRoot,
+    token,
+  });
+  if (!result.ok) {
+    if (reportFailure) {
+      reportCagFailure(result);
+    }
+    return false;
+  }
+  return true;
+}
+
+function buildSkillInstallArgs(agent: ContextAugmentationAgent): string[] {
+  return ['skill', '--install', agent, '--invocation-prefix', SONAR_CONTEXT_INVOCATION];
 }
 
 async function runCagStep(
@@ -179,7 +229,10 @@ async function runCagStep(
   if (process.stdout.isTTY) {
     try {
       await withSpinner(successMessage, async () => {
-        const result = await runCagSubprocess(binaryPath, args, p);
+        const result = await runCagSubprocess(binaryPath, args, {
+          projectRoot: p.projectRoot,
+          token: p.auth.token,
+        });
         if (!result.ok) {
           throw new CagStepFailedError(result);
         }
@@ -194,7 +247,10 @@ async function runCagStep(
     }
   }
 
-  const result = await runCagSubprocess(binaryPath, args, p);
+  const result = await runCagSubprocess(binaryPath, args, {
+    projectRoot: p.projectRoot,
+    token: p.auth.token,
+  });
   if (!result.ok) {
     reportCagFailure(result);
     return false;
@@ -206,15 +262,18 @@ async function runCagStep(
 async function runCagSubprocess(
   binaryPath: string,
   args: string[],
-  p: SetupContextAugmentationParams,
+  options: CagSubprocessOptions,
 ): Promise<CagSubprocessResult> {
   return new Promise<CagSubprocessResult>((resolve) => {
     let child;
     try {
       child = spawn(binaryPath, args, {
-        cwd: p.projectRoot,
+        cwd: options.projectRoot,
         stdio: ['inherit', 'pipe', 'pipe'],
-        env: { ...process.env, SONAR_TOKEN: p.auth.token },
+        env: {
+          ...process.env,
+          ...(options.token ? { SONAR_TOKEN: options.token } : {}),
+        },
       });
     } catch (err) {
       // Some platforms (notably Windows when the binary is not a valid PE)
