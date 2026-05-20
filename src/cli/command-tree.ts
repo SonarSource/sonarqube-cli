@@ -54,11 +54,13 @@ import {
 } from './commands/hook/agent-post-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
+import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateClaude } from './commands/integrate/claude';
+import { integrateCodex } from './commands/integrate/codex';
 import { integrateCopilot } from './commands/integrate/copilot';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
 import {
@@ -213,6 +215,19 @@ COMMAND_TREE.command('context')
   .anonymousAction((action: string | undefined, args: string[]) =>
     runContextPassthrough(action, args),
   );
+
+integrateCommand
+  .command('codex')
+  .description(
+    'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
+  )
+  .option(
+    '-g, --global',
+    'Install hook and config globally to ~/.codex instead of project directory',
+  )
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .addHelpText('after', projectKeyExtraHelp)
+  .authenticatedAction((_auth, options: IntegrateAgentOptions) => integrateCodex(options));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');
@@ -401,6 +416,11 @@ hookCommand
   .command('claude-prompt-submit')
   .description('UserPromptSubmit handler: scan prompts for secrets before sending')
   .anonymousAction(() => agentPromptSubmit());
+
+hookCommand
+  .command('codex-prompt-submit')
+  .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
+  .anonymousAction(() => codexPromptSubmit());
 
 hookCommand
   .command('claude-post-tool-use')
