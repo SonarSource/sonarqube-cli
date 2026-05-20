@@ -22,7 +22,7 @@
  * UX Report — curated CLI scenarios for UX documentation.
  *
  * Each uxDescribe() block is a report section; each uxIt() is a scenario.
- * After all tests complete, outputs are written to docs/cli-output-report.md.
+ * After all tests complete, outputs are written to ux-report/cli-output-report.md.
  *
  * Run:
  *   bun run pretest:integration                          # build binary + resources (once)
@@ -41,7 +41,7 @@ import { TestHarness } from '../../tests/integration/harness';
 import type { CliResult } from '../../tests/integration/harness/types.ts';
 import { commitFile, initGitRepo } from '../../tests/integration/specs/hook/git-test-helpers.ts';
 
-const OUTPUT_PATH = join(import.meta.dir, '../../docs/cli-output-report.md');
+const OUTPUT_PATH = join(import.meta.dir, '../../ux-report/cli-output-report.md');
 const DEFAULT_TIMEOUT = 30000;
 
 const TOKEN = 'test-token-12345';

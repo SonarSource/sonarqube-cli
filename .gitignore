@@ -1,5 +1,5 @@
 node_modules/
-docs/cli-output-report.md
+/ux-report/
 dist/
 *.log
 .DS_Store

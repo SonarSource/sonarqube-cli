@@ -1,12 +1,12 @@
 Generate a UX output report for the SonarQube CLI.
 
-This command produces `docs/cli-output-report.md` — a human-readable document showing the actual terminal output for every meaningful CLI scenario, organized by section. No credentials, no running servers, no setup required beyond having the project checked out.
+This command produces `ux-report/cli-output-report.md` — a human-readable document showing the actual terminal output for every meaningful CLI scenario, organized by section. No credentials, no running servers, no setup required beyond having the project checked out.
 
 ---
 
 ## Before you start
 
-This command takes 1–3 minutes depending on whether the CLI binary needs to be compiled. It is completely self-contained: it spins up fake servers internally and cleans them up afterwards. It is safe to run at any time and does not modify any source files (only `docs/cli-output-report.md` and potentially `build-scripts/ux-report/generate-ux-report.ts` if new scenarios are discovered).
+This command takes 1–3 minutes depending on whether the CLI binary needs to be compiled. It is completely self-contained: it spins up fake servers internally and cleans them up afterwards. It is safe to run at any time and does not modify any source files (only `ux-report/cli-output-report.md` and potentially `build-scripts/ux-report/generate-ux-report.ts` if new scenarios are discovered).
 
 ---
 
@@ -102,7 +102,7 @@ Run:
 bun test ./build-scripts/ux-report/generate-ux-report.ts
 ```
 
-This runs all scenarios in `build-scripts/ux-report/generate-ux-report.ts` (takes 20–60 seconds) and writes `docs/cli-output-report.md`.
+This runs all scenarios in `build-scripts/ux-report/generate-ux-report.ts` (takes 20–60 seconds) and writes `ux-report/cli-output-report.md`.
 
 **If this step fails:**
 - If individual test cases fail, the report is still written with the scenarios that succeeded. Check whether the failure is in a newly added scenario (fix it and rerun) or a pre-existing one (note it to the user and continue)
@@ -110,15 +110,15 @@ This runs all scenarios in `build-scripts/ux-report/generate-ux-report.ts` (take
 
 ### Step 6 — Report to the user
 
-Read the first 10 lines of the generated `docs/cli-output-report.md` to extract the scenario count (the line `> **Total runs captured:** N`).
+Read the first 10 lines of the generated `ux-report/cli-output-report.md` to extract the scenario count (the line `> **Total runs captured:** N`).
 
 Tell the user in plain language:
 - How many scenarios are in the report
 - How many new ones were added in this run (0 if none)
-- Where the file is: `docs/cli-output-report.md` relative to the project root
+- Where the file is: `ux-report/cli-output-report.md` relative to the project root
 - How to view it: open it in VS Code (renders markdown inline), any browser with a markdown extension, or any markdown viewer
 
 Example summary:
 > Done! The report has **102 scenarios** across 14 sections (3 newly added).
-> File: `docs/cli-output-report.md`
+> File: `ux-report/cli-output-report.md`
 > Open it in VS Code or any markdown viewer to share it with your team.
