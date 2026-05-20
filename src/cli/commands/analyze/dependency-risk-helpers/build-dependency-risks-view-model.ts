@@ -166,7 +166,11 @@ function buildGroups(release: AnalyzeProjectRelease, filter: RiskPredicate): Ris
 }
 
 function sortBySeverity(issues: AnalyzeProjectIssue[]): AnalyzeProjectIssue[] {
-  return [...issues].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+  return [...issues].sort((a, b) => compareSeverity(a.severity, b.severity));
+}
+
+function compareSeverity(a: Severity, b: Severity): number {
+  return severityRank(a) - severityRank(b);
 }
 
 function groupIssuesByType(
@@ -298,21 +302,38 @@ function buildSummaryVM(packages: PackageVM[], packagesScanned: number): Summary
 }
 
 function countsByTypeAndSeverity(packages: PackageVM[]): Map<ScaIssueType, Map<Severity, number>> {
-  const severities = Object.keys(SEVERITY_RANK) as Severity[];
-  const byType = new Map<ScaIssueType, Map<Severity, number>>(
-    ISSUE_TYPES.map((type) => [type, new Map(severities.map((sev) => [sev, 0]))]),
-  );
+  const byType = new Map<ScaIssueType, Map<Severity, number>>();
   for (const pkg of packages) {
     for (const group of pkg.groups) {
-      const row = byType.get(group.type);
-      if (row === undefined) continue;
-      for (const risk of group.risks) {
-        if (!(risk.severity in SEVERITY_RANK)) continue;
-        row.set(risk.severity, row.get(risk.severity)! + 1);
-      }
+      addRiskCounts(getOrCreateRow(byType, group.type), group.risks);
     }
   }
+  for (const row of byType.values()) sortBySeverityInPlace(row);
   return byType;
+}
+
+function getOrCreateRow(
+  byType: Map<ScaIssueType, Map<Severity, number>>,
+  type: ScaIssueType,
+): Map<Severity, number> {
+  let row = byType.get(type);
+  if (row === undefined) {
+    row = new Map<Severity, number>();
+    byType.set(type, row);
+  }
+  return row;
+}
+
+function addRiskCounts(row: Map<Severity, number>, risks: RiskVM[]): void {
+  for (const risk of risks) {
+    row.set(risk.severity, (row.get(risk.severity) ?? 0) + 1);
+  }
+}
+
+function sortBySeverityInPlace(row: Map<Severity, number>): void {
+  const sorted = [...row.entries()].sort(([a], [b]) => compareSeverity(a, b));
+  row.clear();
+  for (const [sev, count] of sorted) row.set(sev, count);
 }
 
 function effectiveStatus(
