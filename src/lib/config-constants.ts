@@ -144,3 +144,28 @@ export const SENTRY_FLUSH_TIMEOUT_MS = 500;
 
 export const AUTH_PORT_START = 64120;
 export const AUTH_PORT_COUNT = 11;
+
+// ---------------------------------------------------------------------------
+// Test / integration overrides
+// ---------------------------------------------------------------------------
+
+/** Env var to shorten SQAA 503 retry backoff (ms). Used by the integration harness only. */
+export const ENV_SQAA_RETRY_BASE_DELAY_MS = 'SONARQUBE_CLI_SQAA_RETRY_BASE_DELAY_MS';
+
+const DEFAULT_SQAA_RETRY_503_BASE_DELAY_MS = 2000;
+
+/**
+ * Base delay for SQAA 503 retry backoff. Attempt N waits base * 2^(N-1) (2s, 4s, 8s by default).
+ * Override via {@link ENV_SQAA_RETRY_BASE_DELAY_MS} in integration tests.
+ */
+export function getSqaaRetry503BaseDelayMs(): number {
+  const raw = process.env[ENV_SQAA_RETRY_BASE_DELAY_MS];
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_SQAA_RETRY_503_BASE_DELAY_MS;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_SQAA_RETRY_503_BASE_DELAY_MS;
+  }
+  return parsed;
+}

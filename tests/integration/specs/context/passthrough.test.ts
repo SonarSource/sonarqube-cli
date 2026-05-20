@@ -21,9 +21,12 @@
 // Integration tests for `sonar context <action>` — the passthrough wrapper to
 // the locally-installed sonar-context-augmentation binary.
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+
+// CAG stub spawn + temp-dir teardown on Windows can exceed Bun's default hook timeout.
+setDefaultTimeout(30_000);
 
 interface CagInvocation {
   argv: string[];

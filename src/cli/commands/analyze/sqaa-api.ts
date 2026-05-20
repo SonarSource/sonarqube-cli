@@ -22,6 +22,7 @@
 
 import { readFileSync } from 'node:fs';
 
+import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../../lib/fs-utils';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
@@ -33,9 +34,6 @@ import { displaySqaaResults } from './sqaa-display';
 
 /** Maximum number of retries on 503 responses. */
 export const MAX_503_RETRIES = 3;
-
-/** Base delay for 503 retry backoff in milliseconds. Attempt N waits BASE * 2^(N-1): 2s, 4s, 8s. */
-export const RETRY_503_BASE_DELAY_MS = 2000;
 
 /** Interval for the live countdown tick in milliseconds. */
 const COUNTDOWN_TICK_MS = 1000;
@@ -142,7 +140,7 @@ export async function waitBeforeRetry(
   attempt: number,
   onRetry?: (attempt: number) => Promise<void>,
 ): Promise<void> {
-  const delayMs = RETRY_503_BASE_DELAY_MS * 2 ** (attempt - 1);
+  const delayMs = getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1);
   if (onRetry) {
     await onRetry(attempt);
   } else {

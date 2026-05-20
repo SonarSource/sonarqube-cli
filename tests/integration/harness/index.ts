@@ -25,6 +25,7 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '../../../src/lib/config-constants.js';
 import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
@@ -216,6 +217,7 @@ export class TestHarness {
       ...fakeSonarcloudApiEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
+      [ENV_SQAA_RETRY_BASE_DELAY_MS]: '0',
       ...options?.extraEnv,
       ...buildHomeEnv(this.userHome.path),
     };
@@ -236,8 +238,8 @@ export class TestHarness {
     await rm(this.tempDir.path, {
       recursive: true,
       force: true,
-      maxRetries: 5,
-      retryDelay: 100,
+      maxRetries: IS_WINDOWS ? 15 : 5,
+      retryDelay: IS_WINDOWS ? 200 : 100,
     }).catch(() => {
       /* best-effort: temp dirs are cleaned up by the OS */
     });

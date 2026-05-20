@@ -20,9 +20,15 @@
 
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 
-import { APP_NAME, LOG_DIR, LOG_FILE } from '../../../src/lib/config-constants';
+import {
+  APP_NAME,
+  ENV_SQAA_RETRY_BASE_DELAY_MS,
+  getSqaaRetry503BaseDelayMs,
+  LOG_DIR,
+  LOG_FILE,
+} from '../../../src/lib/config-constants';
 
 describe('config-constants', () => {
   it('LOG_FILE should be inside LOG_DIR', () => {
@@ -31,5 +37,32 @@ describe('config-constants', () => {
 
   it('LOG_FILE should have the correct filename', () => {
     expect(LOG_FILE).toBe(join(LOG_DIR, `${APP_NAME}.log`));
+  });
+
+  describe('getSqaaRetry503BaseDelayMs', () => {
+    const previous = process.env[ENV_SQAA_RETRY_BASE_DELAY_MS];
+
+    afterEach(() => {
+      if (previous === undefined) {
+        delete process.env[ENV_SQAA_RETRY_BASE_DELAY_MS];
+      } else {
+        process.env[ENV_SQAA_RETRY_BASE_DELAY_MS] = previous;
+      }
+    });
+
+    it('defaults to 2000ms when unset', () => {
+      delete process.env[ENV_SQAA_RETRY_BASE_DELAY_MS];
+      expect(getSqaaRetry503BaseDelayMs()).toBe(2000);
+    });
+
+    it('uses the env override when valid', () => {
+      process.env[ENV_SQAA_RETRY_BASE_DELAY_MS] = '0';
+      expect(getSqaaRetry503BaseDelayMs()).toBe(0);
+    });
+
+    it('falls back to 2000ms for invalid values', () => {
+      process.env[ENV_SQAA_RETRY_BASE_DELAY_MS] = 'not-a-number';
+      expect(getSqaaRetry503BaseDelayMs()).toBe(2000);
+    });
   });
 });

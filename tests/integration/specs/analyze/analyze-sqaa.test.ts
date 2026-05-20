@@ -979,7 +979,7 @@ describe('analyze agentic — API error codes', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(4);
     },
-    { timeout: 30000 },
+    { timeout: 15000 },
   );
 
   it(
@@ -1012,7 +1012,7 @@ describe('analyze agentic — API error codes', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(8);
     },
-    { timeout: 60000 },
+    { timeout: 15000 },
   );
 
   it(
