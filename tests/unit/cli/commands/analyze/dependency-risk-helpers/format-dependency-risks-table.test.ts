@@ -387,21 +387,6 @@ describe('formatDependencyRisksTable', () => {
     expect(out).toContain('Review the license usage');
   });
 
-  it('uppercases lowercase severities at render time', () => {
-    const out = getFormattedTableWithReleases(
-      [
-        makeRelease({
-          issues: [makeVulnIssue({ severity: 'high', vulnerabilityId: 'CVE-LOWER' })],
-        }),
-      ],
-      1,
-      [],
-    );
-    const row = getLineWithText(out, 'CVE-LOWER');
-    expect(row).toContain('HIGH');
-    expect(row).not.toContain('high');
-  });
-
   it('defaults missing status to OPEN at render time', () => {
     const out = getFormattedTableWithReleases(
       [makeRelease({ issues: [makeVulnIssue({ status: null })] })],

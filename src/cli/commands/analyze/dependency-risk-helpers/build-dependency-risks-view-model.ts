@@ -31,9 +31,6 @@ import {
   type PackageVM,
   type RiskGroupVM,
   type RiskVM,
-  type SeverityCountVM,
-  type SummaryRowVM,
-  type SummarySeverity,
   type SummaryVM,
   type VulnerabilityGroupVM,
   type VulnerabilityRiskVM,
@@ -44,14 +41,14 @@ import type {
   AnalyzeProjectRelease,
   AnalyzeProjectResponse,
   ScaIssueType,
+  Severity,
   VersionOption,
   VersionOptionDescriptionCode,
 } from './sca-scanner.ts';
 
 const ISSUE_TYPES: ScaIssueType[] = ['MALWARE', 'PROHIBITED_LICENSE', 'VULNERABILITY'];
-const SUMMARY_SEVERITIES: SummarySeverity[] = ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 
-const SEVERITY_RANK: Record<string, number> = {
+const SEVERITY_RANK: Record<Severity, number> = {
   BLOCKER: 0,
   HIGH: 1,
   MEDIUM: 2,
@@ -225,7 +222,7 @@ function buildMalwareRisk(
   issue: AnalyzeProjectIssue,
 ): MalwareRiskVM {
   return {
-    severity: issue.severity.toUpperCase(),
+    severity: issue.severity,
     status: effectiveStatus(release, issue),
   };
 }
@@ -235,7 +232,7 @@ function buildLicenseRisk(
   issue: AnalyzeProjectIssue,
 ): LicenseRiskVM {
   return {
-    severity: issue.severity.toUpperCase(),
+    severity: issue.severity,
     status: effectiveStatus(release, issue),
     spdxLicenseId: issue.spdxLicenseId,
     releaseLicenseExpression: release.licenseExpression,
@@ -247,7 +244,7 @@ function buildVulnerabilityRisk(
   issue: AnalyzeProjectIssue,
 ): VulnerabilityRiskVM {
   return {
-    severity: issue.severity.toUpperCase(),
+    severity: issue.severity,
     status: effectiveStatus(release, issue),
     cvssScore: issue.cvssScore,
     vulnerabilityId: issue.vulnerabilityId ?? '',
@@ -293,45 +290,29 @@ function buildErrorVM(error: { code: string; path: string | null; message: strin
 }
 
 function buildSummaryVM(packages: PackageVM[], packagesScanned: number): SummaryVM {
-  const counts = summaryCountsByTypeAndSeverity(packages);
   return {
     packagesScanned,
     totalRisks: packages.reduce((n, p) => n + p.riskCount, 0),
-    rows: ISSUE_TYPES.map((type) => buildSummaryRow(type, counts.get(type))),
+    byType: countsByTypeAndSeverity(packages),
   };
 }
 
-function buildSummaryRow(
-  type: ScaIssueType,
-  countsByType: Map<SummarySeverity, number> | undefined,
-): SummaryRowVM {
-  const counts: SeverityCountVM[] = SUMMARY_SEVERITIES.map((severity) => ({
-    severity,
-    count: countsByType?.get(severity) ?? 0,
-  }));
-  return { type, counts };
-}
-
-function summaryCountsByTypeAndSeverity(
-  packages: PackageVM[],
-): Map<ScaIssueType, Map<SummarySeverity, number>> {
-  const validSeverities = new Set<string>(SUMMARY_SEVERITIES);
-  const out = new Map<ScaIssueType, Map<SummarySeverity, number>>();
+function countsByTypeAndSeverity(packages: PackageVM[]): Map<ScaIssueType, Map<Severity, number>> {
+  const severities = Object.keys(SEVERITY_RANK) as Severity[];
+  const byType = new Map<ScaIssueType, Map<Severity, number>>(
+    ISSUE_TYPES.map((type) => [type, new Map(severities.map((sev) => [sev, 0]))]),
+  );
   for (const pkg of packages) {
     for (const group of pkg.groups) {
-      let row = out.get(group.type);
-      if (!row) {
-        row = new Map();
-        out.set(group.type, row);
-      }
+      const row = byType.get(group.type);
+      if (row === undefined) continue;
       for (const risk of group.risks) {
-        if (!validSeverities.has(risk.severity)) continue;
-        const sev = risk.severity as SummarySeverity;
-        row.set(sev, (row.get(sev) ?? 0) + 1);
+        if (!(risk.severity in SEVERITY_RANK)) continue;
+        row.set(risk.severity, row.get(risk.severity)! + 1);
       }
     }
   }
-  return out;
+  return byType;
 }
 
 function effectiveStatus(
@@ -342,8 +323,7 @@ function effectiveStatus(
   return (issue.status ?? fallback).toUpperCase();
 }
 
-function severityRank(severity: string | undefined): number {
-  return severity
-    ? (SEVERITY_RANK[severity.toUpperCase()] ?? Number.MAX_SAFE_INTEGER)
-    : Number.MAX_SAFE_INTEGER;
+function severityRank(severity: Severity): number {
+  const ranks: Partial<Record<Severity, number>> = SEVERITY_RANK;
+  return ranks[severity] ?? Number.MAX_SAFE_INTEGER;
 }
