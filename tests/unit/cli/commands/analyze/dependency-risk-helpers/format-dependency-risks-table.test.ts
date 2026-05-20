@@ -496,7 +496,7 @@ describe('formatDependencyRisksTable', () => {
     expect(header).toContain('(1 risk)');
   });
 
-  it('renders "→ no known fix" when a VULNERABILITY has no versionOptions', () => {
+  it('renders "→ no fix available" when a VULNERABILITY has no versionOptions', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -507,10 +507,10 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const row = getLineWithText(out, 'CVE-NO-FIX');
-    expect(row).toContain('→ no known fix');
+    expect(row).toContain('→ no fix available');
   });
 
-  it('renders "→ no known fix" when versionOptions is an empty array', () => {
+  it('renders "→ no fix available" when versionOptions is an empty array', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -521,10 +521,10 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const row = getLineWithText(out, 'CVE-EMPTY');
-    expect(row).toContain('→ no known fix');
+    expect(row).toContain('→ no fix available');
   });
 
-  it('renders "→ no known fix" when every version option has fixLevel NONE', () => {
+  it('renders "→ no fix available" when every version option has fixLevel NONE', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -555,8 +555,9 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const row = getLineWithText(out, 'CVE-ONLY-NONE');
-    expect(row).toContain('→ no known fix');
+    expect(row).toContain('→ no fix available');
     expect(out).not.toContain('use recommended version');
+    expect(out).toContain('No recommended version without known vulnerabilities');
   });
 
   it('orders upgrade options by descriptionCode priority and filters out VERSION_IN_USE and UNKNOWN', () => {
@@ -1023,7 +1024,7 @@ describe('formatDependencyRisksTable', () => {
     expect(fixLine.match(/2\.0\.0/g)).toHaveLength(1);
   });
 
-  it('omits the Fix line when no vulnerability offers any COMPLETE fix', () => {
+  it('renders "No recommended version" when no vulnerability offers any COMPLETE fix', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -1054,6 +1055,7 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     expect(out).not.toContain('Recommended versions without known vulnerabilities:');
+    expect(out).toContain('No recommended version without known vulnerabilities');
   });
 
   it('computes the Fix line from vulnerabilities only, ignoring malware and license issues in the same release', () => {
@@ -1136,7 +1138,7 @@ describe('formatDependencyRisksTable', () => {
     expect(row).toContain('→ 1.0.1 (fixes 1/2)');
   });
 
-  it('renders "→ use recommended version" when a vulnerability has only a complete-fix option', () => {
+  it('renders no inline tail when a vulnerability has only a complete-fix option (Case A: recommended version exists)', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -1160,11 +1162,13 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const row = getLineWithText(out, 'CVE-COMPLETE-ONLY');
-    expect(row).toContain('→ use recommended version');
+    expect(row).not.toContain('→');
     expect(row).not.toContain('fixes');
+    expect(row).not.toContain('use recommended version');
+    expect(out).toContain('Recommended versions without known vulnerabilities:');
   });
 
-  it('appends "or use recommended version" when a vulnerability has both a partial and a complete fix', () => {
+  it('renders only the partial-fix tail (no "or use recommended version" suffix) when a vulnerability has both a partial and a complete fix', () => {
     const out = getFormattedTableWithReleases(
       [
         makeRelease({
@@ -1196,7 +1200,8 @@ describe('formatDependencyRisksTable', () => {
       [],
     );
     const row = getLineWithText(out, 'CVE-PARTIAL-AND-COMPLETE');
-    expect(row).toContain('→ 1.0.1 (fixes 1/2) or use recommended version');
+    expect(row).toContain('→ 1.0.1 (fixes 1/2)');
+    expect(row).not.toContain('or use recommended version');
   });
 
   it('picks the highest-priority partial-fix option for the inline tail', () => {
