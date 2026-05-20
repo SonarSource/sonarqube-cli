@@ -30,6 +30,7 @@ import { CLI_COMMAND } from '../../../../../../src/lib/config-constants';
 import {
   getMcpConfigFilePath,
   getMcpContainerCommand,
+  MCP_DEFAULT_TOOLSETS,
   writeMcpServerEntry,
 } from '../../../../../../src/lib/mcp/mcp-helper';
 import { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
@@ -77,9 +78,15 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_TOKEN',
         '-e',
         'SONARQUBE_URL',
+        '-e',
+        'SONARQUBE_TOOLSETS',
         'mcp/sonarqube',
       ],
-      env: { SONARQUBE_TOKEN: 'squ_test', SONARQUBE_URL: 'https://sonarqube.example.com' },
+      env: {
+        SONARQUBE_TOKEN: 'squ_test',
+        SONARQUBE_URL: 'https://sonarqube.example.com',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
+      },
     });
   });
 
@@ -97,9 +104,15 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_TOKEN',
         '-e',
         'SONARQUBE_URL',
+        '-e',
+        'SONARQUBE_TOOLSETS',
         'mcp/sonarqube',
       ],
-      env: { SONARQUBE_TOKEN: 'squ_test', SONARQUBE_URL: 'https://sonarqube.example.com' },
+      env: {
+        SONARQUBE_TOKEN: 'squ_test',
+        SONARQUBE_URL: 'https://sonarqube.example.com',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
+      },
     });
   });
 
@@ -120,12 +133,15 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_URL',
         '-e',
         'SONARQUBE_ORG',
+        '-e',
+        'SONARQUBE_TOOLSETS',
         'mcp/sonarqube',
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
         SONARQUBE_URL: 'https://sonarcloud.io',
         SONARQUBE_ORG: 'my-org',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
       },
     });
   });
@@ -147,12 +163,15 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_URL',
         '-e',
         'SONARQUBE_ORG',
+        '-e',
+        'SONARQUBE_TOOLSETS',
         'mcp/sonarqube',
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
         SONARQUBE_URL: 'https://sonarqube.us',
         SONARQUBE_ORG: 'my-org',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
       },
     });
   });
@@ -187,9 +206,15 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_URL',
         '-v',
         '/fake/project:/app/mcp-workspace:ro',
+        '-e',
+        'SONARQUBE_TOOLSETS',
         'mcp/sonarqube',
       ],
-      env: { SONARQUBE_TOKEN: 'squ_test', SONARQUBE_URL: 'https://sonarqube.example.com' },
+      env: {
+        SONARQUBE_TOKEN: 'squ_test',
+        SONARQUBE_URL: 'https://sonarqube.example.com',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
+      },
     });
   });
 
@@ -212,9 +237,15 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_URL',
         '-v',
         '/fake/project:/app/mcp-workspace:ro',
+        '-e',
+        'SONARQUBE_TOOLSETS',
         'mcp/sonarqube',
       ],
-      env: { SONARQUBE_TOKEN: 'squ_test', SONARQUBE_URL: 'https://sonarqube.example.com' },
+      env: {
+        SONARQUBE_TOKEN: 'squ_test',
+        SONARQUBE_URL: 'https://sonarqube.example.com',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
+      },
     });
   });
 
@@ -240,12 +271,15 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_PROJECT_KEY',
         '-v',
         '/fake/project:/app/mcp-workspace:ro',
+        '-e',
+        'SONARQUBE_TOOLSETS',
         'mcp/sonarqube',
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
         SONARQUBE_URL: 'https://sonarqube.example.com',
         SONARQUBE_PROJECT_KEY: 'my-project',
+        SONARQUBE_TOOLSETS: MCP_DEFAULT_TOOLSETS,
       },
     });
   });

@@ -78,6 +78,11 @@ export function getMcpConfig(
   return { command: cliPath, args };
 }
 
+// All MCP toolsets supported by the server, excluding 'cag' which is available directly via the CLI.
+// Passed explicitly to avoid relying on MCP-side defaults.
+export const MCP_DEFAULT_TOOLSETS =
+  'analysis,issues,projects,quality-gates,rules,duplications,measures,security-hotspots,dependency-risks,coverage';
+
 export function getMcpContainerCommand(
   auth: ResolvedAuth,
   runtime: ContainerRuntime,
@@ -124,10 +129,9 @@ export function getMcpContainerCommand(
     env.SONARQUBE_READ_ONLY = 'true';
   }
 
-  if (options.toolsets) {
-    args.push('-e', 'SONARQUBE_TOOLSETS');
-    env.SONARQUBE_TOOLSETS = options.toolsets;
-  }
+  const toolsets = options.toolsets ?? MCP_DEFAULT_TOOLSETS;
+  args.push('-e', 'SONARQUBE_TOOLSETS');
+  env.SONARQUBE_TOOLSETS = toolsets;
 
   args.push('mcp/sonarqube');
 

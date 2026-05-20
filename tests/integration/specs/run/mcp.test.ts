@@ -209,6 +209,46 @@ describe('run mcp', () => {
   );
 
   it(
+    'uses default toolsets (excluding cag) when --toolsets is not set',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      const result = await harness.run('run mcp', {
+        extraEnv: {
+          PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}`,
+        },
+        cwd: harness.userHome.path,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('-e SONARQUBE_TOOLSETS');
+      expect(result.stdout).toContain('ENV_TOOLSETS=analysis,issues,projects');
+      expect(result.stdout).not.toContain('cag');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'passes cag through when explicitly included in --toolsets',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      const result = await harness.run('run mcp --toolsets cag,issues', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('-e SONARQUBE_TOOLSETS');
+      expect(result.stdout).toContain('ENV_TOOLSETS=cag,issues');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'propagates non-zero container exit code to CLI exit code',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
