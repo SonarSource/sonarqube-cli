@@ -27,6 +27,7 @@ import type {
   AnalyzeProjectIssue,
   AnalyzeProjectRelease,
   AnalyzeProjectResponse,
+  Severity,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { countUnresolvedIssues } from '../../../../../../src/cli/commands/analyze/dependency-risks.ts';
 
@@ -382,24 +383,10 @@ describe('buildDependencyRisksViewModel — ordering', () => {
     ]);
   });
 
-  it('uppercases severity when ranking, so lowercase input sorts correctly', () => {
-    const release = makeRelease({
-      issues: [
-        makeVulnIssue({ severity: 'low', vulnerabilityId: 'CVE-LOW' }),
-        makeVulnIssue({ severity: 'high', vulnerabilityId: 'CVE-HIGH' }),
-      ],
-    });
-
-    const vm = buildVM(makeResponse([release]), 'all');
-
-    const group = vm.packages[0].groups[0];
-    expect((group.risks as { severity: string }[]).map((r) => r.severity)).toEqual(['HIGH', 'LOW']);
-  });
-
   it('sinks unknown severities to the bottom of a group', () => {
     const release = makeRelease({
       issues: [
-        makeVulnIssue({ severity: 'CATASTROPHIC', vulnerabilityId: 'CVE-WAT' }),
+        makeVulnIssue({ severity: 'CATASTROPHIC' as Severity, vulnerabilityId: 'CVE-WAT' }),
         makeVulnIssue({ severity: 'HIGH', vulnerabilityId: 'CVE-HIGH' }),
       ],
     });

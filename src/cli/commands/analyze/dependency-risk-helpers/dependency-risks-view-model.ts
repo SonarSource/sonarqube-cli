@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ScaIssueType, VersionOptionDescriptionCode } from './sca-scanner.ts';
+import type { ScaIssueType, Severity, VersionOptionDescriptionCode } from './sca-scanner.ts';
 
 export type DependencyRisksStatusFilter = 'all' | 'open' | 'new';
 
@@ -43,10 +43,6 @@ export class PackageIdentity {
   compareTo(other: PackageIdentity): number {
     return this.purl.localeCompare(other.purl);
   }
-
-  toJSON(): string {
-    return this.purl;
-  }
 }
 
 export interface PackageVM {
@@ -59,7 +55,7 @@ export interface PackageVM {
 }
 
 export interface RiskVM {
-  severity: string;
+  severity: Severity;
   status: string;
 }
 
@@ -109,17 +105,5 @@ export interface ErrorVM {
 export interface SummaryVM {
   packagesScanned: number;
   totalRisks: number;
-  rows: SummaryRowVM[];
-}
-
-export interface SummaryRowVM {
-  type: ScaIssueType;
-  counts: SeverityCountVM[];
-}
-
-export type SummarySeverity = 'BLOCKER' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
-
-export interface SeverityCountVM {
-  severity: SummarySeverity;
-  count: number;
+  byType: Map<ScaIssueType, Map<Severity, number>>;
 }

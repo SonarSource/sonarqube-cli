@@ -74,10 +74,11 @@ export interface AnalyzeProjectRelease {
 
 export type ScaIssueType = 'VULNERABILITY' | 'PROHIBITED_LICENSE' | 'MALWARE';
 export type SoftwareQuality = 'MAINTAINABILITY' | 'RELIABILITY' | 'SECURITY';
+export type Severity = 'BLOCKER' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
 
 export interface AnalyzeProjectIssue {
   key: string | null;
-  severity: string;
+  severity: Severity;
   showIncreasedSeverityWarning: boolean | null;
   type: ScaIssueType;
   quality: SoftwareQuality;

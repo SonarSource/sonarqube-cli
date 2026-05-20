@@ -28,7 +28,6 @@ import type {
   PackageVM,
   RiskGroupVM,
   RiskVM,
-  SummaryRowVM,
   SummaryVM,
   VulnerabilityGroupVM,
 } from '../dependency-risks-view-model.ts';
@@ -119,8 +118,8 @@ function appendErrors(lines: string[], errors: ErrorVM[]): void {
 
 function appendSummaryBlock(lines: string[], summary: SummaryVM): void {
   lines.push('', summaryHeader(summary));
-  for (const row of summary.rows) {
-    lines.push(summaryLineForType(row));
+  for (const [type, counts] of summary.byType) {
+    lines.push(summaryLineForType(type, counts));
   }
 }
 
@@ -128,9 +127,9 @@ function summaryHeader(summary: SummaryVM): string {
   return `Summary: ${summary.packagesScanned} dependencies checked, ${summary.totalRisks} risks found`;
 }
 
-function summaryLineForType(row: SummaryRowVM): string {
-  const cells = row.counts.map(({ severity, count }) => summarySeverityCell(severity, count));
-  return `  ${row.type.padEnd(TYPE_LABEL_WIDTH)}  ${cells.join('    ')}`;
+function summaryLineForType(type: string, counts: Map<string, number>): string {
+  const cells = [...counts].map(([severity, count]) => summarySeverityCell(severity, count));
+  return `  ${type.padEnd(TYPE_LABEL_WIDTH)}  ${cells.join('    ')}`;
 }
 
 function summarySeverityCell(label: string, count: number): string {
