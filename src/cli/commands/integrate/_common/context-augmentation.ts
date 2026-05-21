@@ -142,18 +142,11 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     `sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
     binaryPath,
     [
+      'tool',
       'init',
-      '--url',
-      p.auth.serverUrl,
-      '--org',
-      p.auth.orgKey,
-      '--project-key',
-      p.projectKey,
       // We install the skill ourselves below with --invocation-prefix overridden,
       // so suppress init's default skill install (CAG-374).
       '--skip-skill-install',
-      // We've already resolved URL/org/project-key here — skip CAG's own probing.
-      '--no-detect',
     ],
     p,
     initEnv,
@@ -239,8 +232,8 @@ export async function installContextAugmentationSkill({
 
 function buildSkillInstallArgs(agent: ContextAugmentationAgent, scaEnabled: boolean): string[] {
   return [
-    'skill',
-    '--install',
+    'tool',
+    'install-skill',
     agent,
     '--invocation-prefix',
     SONAR_CONTEXT_INVOCATION,
