@@ -19,7 +19,12 @@
  */
 
 import type { AnalyzeProjectIssue, AnalyzeProjectRelease } from '../../sca-scanner.ts';
-import type { LicenseRiskVM, MalwareRiskVM, VulnerabilityRiskVM } from '../risk.ts';
+import type {
+  EffectiveStatus,
+  LicenseRiskVM,
+  MalwareRiskVM,
+  VulnerabilityRiskVM,
+} from '../risk.ts';
 import { selectIssuePartialFixes } from './fix-version-selector.ts';
 
 export function buildMalwareRisk(
@@ -60,7 +65,7 @@ export function buildVulnerabilityRisk(
 function effectiveStatus(
   release: Pick<AnalyzeProjectRelease, 'newlyIntroduced'>,
   issue: Pick<AnalyzeProjectIssue, 'status'>,
-): string {
-  const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
+): EffectiveStatus {
+  const fallback: EffectiveStatus = release.newlyIntroduced ? 'NEW' : 'OPEN';
   return issue.status ?? fallback;
 }

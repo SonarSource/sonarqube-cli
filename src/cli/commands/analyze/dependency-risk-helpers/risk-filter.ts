@@ -20,12 +20,13 @@
 
 import type {
   DependencyRisksStatusFilter,
+  EffectiveStatus,
   RiskVM,
 } from './view-model/dependency-risks-view-model.ts';
 
 export type RiskPredicate = (risk: RiskVM) => boolean;
 
-const RESOLVED_STATUSES = new Set(['SAFE', 'FIXED', 'ACCEPT']);
+const RESOLVED_STATUSES = new Set<EffectiveStatus>(['SAFE', 'FIXED', 'ACCEPT']);
 
 export function buildRiskFilter(statusFilter: DependencyRisksStatusFilter): RiskPredicate {
   switch (statusFilter) {

@@ -27,6 +27,7 @@ export type { FixVersionVM } from './fix-version.ts';
 export { PackageIdentity, type PackageVM } from './package.ts';
 export type { RecommendationAction, RecommendationVM } from './recommendation.ts';
 export type {
+  EffectiveStatus,
   LicenseGroupVM,
   LicenseRiskVM,
   MalwareGroupVM,

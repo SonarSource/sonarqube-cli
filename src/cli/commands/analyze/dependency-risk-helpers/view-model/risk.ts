@@ -18,13 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ScaIssueType, Severity } from '../sca-scanner.ts';
+import type { ScaIssueType, ScaStatus, Severity } from '../sca-scanner.ts';
 import type { FixVersionVM } from './fix-version.ts';
 import type { RecommendationVM } from './recommendation.ts';
 
+export type EffectiveStatus = ScaStatus | 'NEW';
+
 export interface RiskVM {
   severity: Severity;
-  status: string;
+  status: EffectiveStatus;
 }
 
 export interface RiskGroupVM<T extends RiskVM> {

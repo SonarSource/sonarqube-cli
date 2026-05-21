@@ -75,6 +75,7 @@ export interface AnalyzeProjectRelease {
 export type ScaIssueType = 'VULNERABILITY' | 'PROHIBITED_LICENSE' | 'MALWARE';
 export type SoftwareQuality = 'MAINTAINABILITY' | 'RELIABILITY' | 'SECURITY';
 export type Severity = 'BLOCKER' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+export type ScaStatus = 'OPEN' | 'CONFIRM' | 'SAFE' | 'FIXED' | 'ACCEPT';
 
 export interface AnalyzeProjectIssue {
   key: string | null;
@@ -82,7 +83,7 @@ export interface AnalyzeProjectIssue {
   showIncreasedSeverityWarning: boolean | null;
   type: ScaIssueType;
   quality: SoftwareQuality;
-  status: string | null;
+  status: ScaStatus | null;
   vulnerabilityId: string | null;
   cweIds: string[] | null;
   cvssScore: string | null;
