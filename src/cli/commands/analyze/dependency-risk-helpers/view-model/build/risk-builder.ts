@@ -62,5 +62,5 @@ function effectiveStatus(
   issue: Pick<AnalyzeProjectIssue, 'status'>,
 ): string {
   const fallback = release.newlyIntroduced ? 'NEW' : 'OPEN';
-  return (issue.status ?? fallback).toUpperCase();
+  return issue.status ?? fallback;
 }
