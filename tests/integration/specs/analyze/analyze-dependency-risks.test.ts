@@ -175,9 +175,21 @@ describe('analyze dependency-risks', () => {
     );
   });
 
-  it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
+  it('exits with code 1 on a SonarQube Server (on-premise) connection', async () => {
     const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Dependency risk analysis is not yet supported on SonarQube Server — coming soon.',
+    );
+  });
+
+  it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
+    const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks --project demo');
 

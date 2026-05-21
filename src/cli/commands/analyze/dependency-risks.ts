@@ -60,6 +60,12 @@ export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
+  if (auth.connectionType !== 'cloud') {
+    throw new CommandFailedError(
+      'Dependency risk analysis is not yet supported on SonarQube Server — coming soon.',
+    );
+  }
+
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
   if (!enabled) {
