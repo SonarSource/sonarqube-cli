@@ -20,6 +20,7 @@
 
 import type { ScaIssueType, Severity } from '../sca-scanner.ts';
 import type { FixVersionVM } from './fix-version.ts';
+import type { RecommendationVM } from './recommendation.ts';
 
 export interface RiskVM {
   severity: Severity;
@@ -29,6 +30,7 @@ export interface RiskVM {
 export interface RiskGroupVM<T extends RiskVM> {
   type: ScaIssueType;
   risks: T[];
+  recommendation: RecommendationVM;
 }
 
 export type MalwareRiskVM = RiskVM;
@@ -54,5 +56,4 @@ export interface LicenseGroupVM extends RiskGroupVM<LicenseRiskVM> {
 
 export interface VulnerabilityGroupVM extends RiskGroupVM<VulnerabilityRiskVM> {
   type: 'VULNERABILITY';
-  packageFixes: FixVersionVM[];
 }

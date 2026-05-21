@@ -18,29 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ErrorVM } from './error.ts';
-import type { PackageVM } from './package.ts';
-import type { SummaryVM } from './summary.ts';
+import type { FixVersionVM } from './fix-version.ts';
 
-export type { ErrorVM } from './error.ts';
-export type { FixVersionVM } from './fix-version.ts';
-export { PackageIdentity, type PackageVM } from './package.ts';
-export type { RecommendationAction, RecommendationVM } from './recommendation.ts';
-export type {
-  LicenseGroupVM,
-  LicenseRiskVM,
-  MalwareGroupVM,
-  MalwareRiskVM,
-  RiskGroupVM,
-  RiskVM,
-  VulnerabilityGroupVM,
-  VulnerabilityRiskVM,
-} from './risk.ts';
-export type { DependencyRisksStatusFilter } from './status-filter.ts';
-export type { SummaryVM } from './summary.ts';
+export type RecommendationAction =
+  | 'REMOVE_PACKAGE'
+  | 'REVIEW_LICENSE'
+  | 'UPGRADE_PACKAGE'
+  | 'NO_FIX_AVAILABLE';
 
-export interface DependencyRisksViewModel {
-  packages: PackageVM[];
-  errors: ErrorVM[];
-  summary: SummaryVM;
+export interface RecommendationVM {
+  action: RecommendationAction;
+  fixVersions: FixVersionVM[];
 }

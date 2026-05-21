@@ -18,29 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ErrorVM } from './error.ts';
-import type { PackageVM } from './package.ts';
-import type { SummaryVM } from './summary.ts';
+import type { FixVersionVM } from '../fix-version.ts';
+import type { RecommendationVM } from '../recommendation.ts';
 
-export type { ErrorVM } from './error.ts';
-export type { FixVersionVM } from './fix-version.ts';
-export { PackageIdentity, type PackageVM } from './package.ts';
-export type { RecommendationAction, RecommendationVM } from './recommendation.ts';
-export type {
-  LicenseGroupVM,
-  LicenseRiskVM,
-  MalwareGroupVM,
-  MalwareRiskVM,
-  RiskGroupVM,
-  RiskVM,
-  VulnerabilityGroupVM,
-  VulnerabilityRiskVM,
-} from './risk.ts';
-export type { DependencyRisksStatusFilter } from './status-filter.ts';
-export type { SummaryVM } from './summary.ts';
+export function buildMalwareRecommendation(): RecommendationVM {
+  return { action: 'REMOVE_PACKAGE', fixVersions: [] };
+}
 
-export interface DependencyRisksViewModel {
-  packages: PackageVM[];
-  errors: ErrorVM[];
-  summary: SummaryVM;
+export function buildLicenseRecommendation(): RecommendationVM {
+  return { action: 'REVIEW_LICENSE', fixVersions: [] };
+}
+
+export function buildVulnerabilityRecommendation(fixVersions: FixVersionVM[]): RecommendationVM {
+  return fixVersions.length > 0
+    ? { action: 'UPGRADE_PACKAGE', fixVersions }
+    : { action: 'NO_FIX_AVAILABLE', fixVersions: [] };
 }

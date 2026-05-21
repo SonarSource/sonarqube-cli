@@ -126,21 +126,44 @@ describe('buildGroups — severity ordering within a group', () => {
   });
 });
 
-describe('buildGroups — VULNERABILITY group carries packageFixes', () => {
-  it('only the VULNERABILITY group has packageFixes; MALWARE and LICENSE do not', () => {
+describe('buildGroups — recommendation', () => {
+  it('attaches REMOVE_PACKAGE to MALWARE groups', () => {
+    const release = mockScaRelease({ issues: [mockMalwareRisk()] });
+    const groups = buildGroups(release, ALLOW_ALL);
+    expect(groups[0].recommendation).toEqual({ action: 'REMOVE_PACKAGE', fixVersions: [] });
+  });
+
+  it('attaches REVIEW_LICENSE to PROHIBITED_LICENSE groups', () => {
+    const release = mockScaRelease({ issues: [mockLicenseRisk()] });
+    const groups = buildGroups(release, ALLOW_ALL);
+    expect(groups[0].recommendation).toEqual({ action: 'REVIEW_LICENSE', fixVersions: [] });
+  });
+
+  it('attaches UPGRADE_PACKAGE with fixVersions when COMPLETE fixes exist', () => {
     const release = mockScaRelease({
-      issues: [mockMalwareRisk(), mockLicenseRisk(), mockVulnerabilityRisk()],
+      issues: [
+        mockVulnerabilityRisk({
+          versionOptions: [
+            {
+              version: '2.0.0',
+              vulnerabilityIds: [],
+              prerelease: false,
+              fixLevel: 'COMPLETE',
+              descriptionCode: 'LATEST_STABLE',
+            },
+          ],
+        }),
+      ],
     });
 
     const groups = buildGroups(release, ALLOW_ALL);
+    const vulnGroup = groups.find((g) => g.type === 'VULNERABILITY') as VulnerabilityGroupVM;
 
-    const byType = Object.fromEntries(groups.map((g) => [g.type, g]));
-    expect('packageFixes' in byType.MALWARE).toBe(false);
-    expect('packageFixes' in byType.PROHIBITED_LICENSE).toBe(false);
-    expect('packageFixes' in byType.VULNERABILITY).toBe(true);
+    expect(vulnGroup.recommendation.action).toBe('UPGRADE_PACKAGE');
+    expect(vulnGroup.recommendation.fixVersions.map((f) => f.version)).toEqual(['2.0.0']);
   });
 
-  it('populates packageFixes from the union of COMPLETE fix versions across the release vulnerabilities', () => {
+  it('populates UPGRADE_PACKAGE fixVersions from the union of COMPLETE fixes across vulnerabilities', () => {
     const release = mockScaRelease({
       issues: [
         mockVulnerabilityRisk({
@@ -171,21 +194,18 @@ describe('buildGroups — VULNERABILITY group carries packageFixes', () => {
     });
 
     const groups = buildGroups(release, ALLOW_ALL);
-
     const vulnGroup = groups.find((g) => g.type === 'VULNERABILITY') as VulnerabilityGroupVM;
-    const versions = vulnGroup.packageFixes.map((f) => f.version);
+
+    const versions = vulnGroup.recommendation.fixVersions.map((f) => f.version);
     expect(versions).toContain('2.0.0');
     expect(versions).toContain('1.5.0');
   });
 
-  it('packageFixes is empty when no vulnerability offers a COMPLETE fix', () => {
-    const release = mockScaRelease({
-      issues: [mockVulnerabilityRisk({ versionOptions: null })],
-    });
-
+  it('attaches NO_FIX_AVAILABLE when the vulnerability group has no COMPLETE fixes', () => {
+    const release = mockScaRelease({ issues: [mockVulnerabilityRisk({ versionOptions: null })] });
     const groups = buildGroups(release, ALLOW_ALL);
-
     const vulnGroup = groups.find((g) => g.type === 'VULNERABILITY') as VulnerabilityGroupVM;
-    expect(vulnGroup.packageFixes).toEqual([]);
+
+    expect(vulnGroup.recommendation).toEqual({ action: 'NO_FIX_AVAILABLE', fixVersions: [] });
   });
 });

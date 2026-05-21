@@ -124,4 +124,79 @@ describe('formatDependencyRisksJson', () => {
     expect(parsed.packages[0].groups).toHaveLength(1);
     expect(parsed.packages[0].groups[0]).toMatchObject({ type: 'VULNERABILITY' });
   });
+
+  it('emits a recommendation object under each risk group', () => {
+    const filtered = makeResponse({
+      releases: [
+        makeRelease({
+          packageName: 'mal',
+          issues: [
+            {
+              key: 'm1',
+              severity: 'BLOCKER',
+              showIncreasedSeverityWarning: null,
+              type: 'MALWARE',
+              quality: 'SECURITY',
+              status: 'OPEN',
+              vulnerabilityId: null,
+              cweIds: null,
+              cvssScore: null,
+              spdxLicenseId: null,
+              versionOptions: null,
+            },
+            {
+              key: 'l1',
+              severity: 'HIGH',
+              showIncreasedSeverityWarning: null,
+              type: 'PROHIBITED_LICENSE',
+              quality: 'MAINTAINABILITY',
+              status: 'OPEN',
+              vulnerabilityId: null,
+              cweIds: null,
+              cvssScore: null,
+              spdxLicenseId: 'GPL-3.0',
+              versionOptions: null,
+            },
+            {
+              key: 'v1',
+              severity: 'HIGH',
+              showIncreasedSeverityWarning: null,
+              type: 'VULNERABILITY',
+              quality: 'SECURITY',
+              status: 'OPEN',
+              vulnerabilityId: 'CVE-1',
+              cweIds: null,
+              cvssScore: '7.5',
+              spdxLicenseId: null,
+              versionOptions: [
+                {
+                  version: '2.0.0',
+                  vulnerabilityIds: [],
+                  prerelease: false,
+                  fixLevel: 'COMPLETE',
+                  descriptionCode: 'LATEST_STABLE',
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    const parsed = JSON.parse(render('demo', filtered)) as {
+      packages: {
+        groups: { type: string; recommendation: { action: string; fixVersions: unknown[] } }[];
+      }[];
+    };
+
+    const byType = Object.fromEntries(
+      parsed.packages[0].groups.map((g) => [g.type, g.recommendation]),
+    );
+    expect(byType.MALWARE).toEqual({ action: 'REMOVE_PACKAGE', fixVersions: [] });
+    expect(byType.PROHIBITED_LICENSE).toEqual({ action: 'REVIEW_LICENSE', fixVersions: [] });
+    expect(byType.VULNERABILITY.action).toBe('UPGRADE_PACKAGE');
+    expect(byType.VULNERABILITY.fixVersions).toEqual([
+      { version: '2.0.0', descriptionCode: 'LATEST_STABLE', vulnerabilityIds: [] },
+    ]);
+  });
 });
