@@ -630,3 +630,57 @@ describe('summary block', () => {
     expect(/LOW ✗\s+3/.test(vulnRow)).toBe(true);
   });
 });
+
+describe('recommendations summary block', () => {
+  it('lists each package once with its risk count and per-type recommendations', () => {
+    const out = render(
+      [
+        mockScaRelease({
+          packageName: 'mal',
+          version: '1.0.0',
+          issues: [mockMalwareRisk()],
+        }),
+        mockScaRelease({
+          packageName: 'lic',
+          version: '1.0.0',
+          issues: [mockLicenseRisk()],
+        }),
+      ],
+      2,
+    );
+    const tail = out.slice(out.indexOf('Recommendations:'));
+    expect(tail).toContain('Recommendations:');
+    expect(tail).toContain('lic@1.0.0 (1 risk)');
+    expect(tail).toContain('mal@1.0.0 (1 risk)');
+    expect(tail).toContain('Remove this package and notify your information security team');
+    expect(tail).toContain('Review the license usage');
+  });
+
+  it('pluralizes "risks" correctly and lists multiple recommendations under one package', () => {
+    const out = render(
+      [
+        mockScaRelease({
+          packageName: 'mixed',
+          version: '1.0.0',
+          issues: [mockMalwareRisk(), mockLicenseRisk(), mockVulnerabilityRisk()],
+        }),
+      ],
+      1,
+    );
+    const tail = out.slice(out.indexOf('Recommendations:'));
+    expect(tail).toContain('mixed@1.0.0 (3 risks)');
+    expect(tail).toContain('Remove this package and notify your information security team');
+    expect(tail).toContain('Review the license usage');
+    expect(tail).toContain('No recommended version without known vulnerabilities');
+  });
+
+  it('is omitted when no packages survived', () => {
+    const out = render([], 0);
+    expect(out).not.toContain('Recommendations:');
+  });
+
+  it('places the Recommendations block after the Summary counts', () => {
+    const out = render([mockScaRelease({ issues: [mockVulnerabilityRisk()] })], 1);
+    expect(out.indexOf('Recommendations:')).toBeGreaterThan(out.indexOf('Summary:'));
+  });
+});

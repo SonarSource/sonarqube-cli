@@ -139,4 +139,41 @@ describe('buildSummaryVM', () => {
       }
     }
   });
+
+  it('packages is empty when no packages survived', () => {
+    expect(buildSummaryVM([], 5).packages).toEqual([]);
+  });
+});
+
+describe('buildSummaryVM — per-package recommendations', () => {
+  it('emits one entry per package with its riskCount and a recommendation keyed by group type', () => {
+    const release = mockScaRelease({
+      packageName: 'mixed',
+      issues: [mockMalwareRisk(), mockLicenseRisk(), mockVulnerabilityRisk()],
+    });
+    const identityByPurl = buildPackageIdentityMap([release]);
+    const pkg = buildPackageVM(release, ALLOW_ALL, identityByPurl)!;
+
+    const summary = buildSummaryVM([pkg], 1);
+
+    expect(summary.packages).toHaveLength(1);
+    expect(summary.packages[0].package).toBe(pkg.package);
+    expect(summary.packages[0].riskCount).toBe(pkg.riskCount);
+    const recs = summary.packages[0].recommendations;
+    expect(recs.get('MALWARE')?.action).toBe('REMOVE_PACKAGE');
+    expect(recs.get('PROHIBITED_LICENSE')?.action).toBe('REVIEW_LICENSE');
+    expect(recs.get('VULNERABILITY')?.action).toBe('NO_FIX_AVAILABLE');
+  });
+
+  it('reflects multiple packages, preserving order from the input', () => {
+    const packages = buildPackage(
+      [{ severity: 'HIGH', vulnerabilityId: 'CVE-A' }],
+      [{ severity: 'LOW', vulnerabilityId: 'CVE-B' }],
+    );
+
+    const summary = buildSummaryVM(packages, packages.length);
+
+    expect(summary.packages.map((p) => p.package.name)).toEqual(['pkg0', 'pkg1']);
+    expect(summary.packages.every((p) => p.recommendations.size === 1)).toBe(true);
+  });
 });

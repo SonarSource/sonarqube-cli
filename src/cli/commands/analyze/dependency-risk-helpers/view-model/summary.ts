@@ -19,9 +19,18 @@
  */
 
 import type { ScaIssueType, Severity } from '../sca-scanner.ts';
+import type { PackageIdentity } from './package.ts';
+import type { RecommendationVM } from './recommendation.ts';
 
 export interface SummaryVM {
   packagesScanned: number;
   totalRisks: number;
   byType: Map<ScaIssueType, Map<Severity, number>>;
+  packages: PackageSummaryVM[];
+}
+
+export interface PackageSummaryVM {
+  package: PackageIdentity;
+  riskCount: number;
+  recommendations: Map<ScaIssueType, RecommendationVM>;
 }
