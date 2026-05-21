@@ -18,22 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { join } from 'node:path';
-
-import {
-  createAgentHookEntry,
-  resolveAgentHookScriptPath,
-  upsertAgentHooks,
-} from '../_common/hooks';
-import {
-  type IntegrationContext,
-  type IntegrationDeclaration,
-  jsonPatch,
-  SonarSourceBinary,
-  sonarSourceBinary,
-  supportedIntegrations,
-  wholeFile,
-} from '../_common/registry';
+import { createSonarSecretsBinaryFeature } from '../_common/features/sonar-secrets-binary-feature';
+import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
+import { type IntegrationDeclaration, supportedIntegrations } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
 
@@ -52,53 +39,32 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   id: CODEX_INTEGRATION_ID,
   displayName: 'Codex',
   features: [
-    {
-      id: 'sonar-secrets-binary',
-      displayName: 'sonar-secrets binary',
-      when: ({ options }) => options.installBinary === true,
-      resources: [
-        sonarSourceBinary({
-          id: 'sonar-secrets',
-          displayName: 'sonar-secrets binary',
-          binary: SonarSourceBinary.SonarSecrets,
-        }),
-      ],
-    },
-    {
-      id: 'sonar-secrets-hooks',
-      displayName: 'secrets hooks',
-      when: ({ options }) => options.installSecretsHooks === true,
-      resources: [
-        wholeFile({
+    createSonarSecretsBinaryFeature(),
+    createSonarSecretsHooksFeature({
+      agentDisplayName: 'Codex',
+      configDir: CODEX_CONFIG_DIR,
+      hooksConfigFileName: HOOKS_FILE,
+      hooksPatchId: 'codex-hooks-secrets-hook',
+      scripts: [
+        {
           id: 'prompt-secrets-script',
           displayName: 'Codex UserPromptSubmit hook script',
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, PROMPT_SCRIPT_REL),
+          scriptPath: PROMPT_SCRIPT_REL,
           content: {
             unix: getSecretPromptTemplateUnix(),
             windows: getSecretPromptTemplateWindows(),
           },
-          executable: true,
-        }),
-        jsonPatch({
-          id: 'codex-hooks-secrets-hook',
-          displayName: 'Codex hooks configuration',
-          targetPath: resolveCodexHooksFilePath,
-          defaultValue: { hooks: {} },
-          patch: (document, context) =>
-            upsertAgentHooks(document, [
-              createAgentHookEntry(
-                context,
-                CODEX_CONFIG_DIR,
-                'UserPromptSubmit',
-                '*',
-                'sonar-secrets',
-                PROMPT_SCRIPT_REL,
-              ),
-            ]),
-        }),
+        },
       ],
-    },
+      hookEntries: [
+        {
+          eventType: 'UserPromptSubmit',
+          matcher: '*',
+          marker: 'sonar-secrets',
+          scriptPath: PROMPT_SCRIPT_REL,
+        },
+      ],
+    }),
   ],
 };
 
@@ -111,8 +77,4 @@ export function registerCodexIntegration(): void {
 
   supportedIntegrations.register(codexIntegration);
   codexIntegrationRegistered = true;
-}
-
-function resolveCodexHooksFilePath(context: IntegrationContext): string {
-  return join(context.targetRoot, CODEX_CONFIG_DIR, HOOKS_FILE);
 }

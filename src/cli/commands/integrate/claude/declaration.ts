@@ -22,6 +22,8 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { createSonarSecretsBinaryFeature } from '../_common/features/sonar-secrets-binary-feature';
+import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
   resolveAgentHookScriptPath,
@@ -31,8 +33,6 @@ import {
   type IntegrationContext,
   type IntegrationDeclaration,
   jsonPatch,
-  SonarSourceBinary,
-  sonarSourceBinary,
   supportedIntegrations,
   wholeFile,
 } from '../_common/registry';
@@ -48,6 +48,8 @@ import {
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
+const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
+const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
@@ -63,80 +65,47 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: 'Claude Code',
   features: [
-    {
-      id: 'sonar-secrets-binary',
-      displayName: 'sonar-secrets binary',
-      when: ({ options }) => options.installBinary === true,
-      resources: [
-        sonarSourceBinary({
-          id: 'sonar-secrets',
-          displayName: 'sonar-secrets binary',
-          binary: SonarSourceBinary.SonarSecrets,
-        }),
-      ],
-    },
-    {
-      id: 'sonar-secrets-hooks',
-      displayName: 'secrets hooks',
-      when: ({ options }) => options.installSecretsHooks === true,
-      resources: [
-        wholeFile({
+    createSonarSecretsBinaryFeature(),
+    createSonarSecretsHooksFeature({
+      agentDisplayName: 'Claude',
+      configDir: CLAUDE_CONFIG_DIR,
+      hooksConfigFileName: SETTINGS_FILE,
+      hooksPatchId: 'claude-settings-secrets-hooks',
+      scripts: [
+        {
           id: 'pretool-secrets-script',
           displayName: 'Claude PreToolUse hook script',
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(
-              context,
-              CLAUDE_CONFIG_DIR,
-              'sonar-secrets/build-scripts/pretool-secrets',
-            ),
+          scriptPath: PRETOOL_SCRIPT_REL,
           content: {
             unix: getSecretPreToolTemplateUnix(),
             windows: getSecretPreToolTemplateWindows(),
           },
-          executable: true,
-        }),
-        wholeFile({
+        },
+        {
           id: 'prompt-secrets-script',
           displayName: 'Claude UserPromptSubmit hook script',
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(
-              context,
-              CLAUDE_CONFIG_DIR,
-              'sonar-secrets/build-scripts/prompt-secrets',
-            ),
+          scriptPath: PROMPT_SCRIPT_REL,
           content: {
             unix: getSecretPromptTemplateUnix(),
             windows: getSecretPromptTemplateWindows(),
           },
-          executable: true,
-        }),
-        jsonPatch({
-          id: 'claude-settings-secrets-hooks',
-          displayName: 'Claude hooks configuration',
-          targetPath: resolveClaudeSettingsPath,
-          defaultValue: { hooks: {} },
-          patch: (document, context) =>
-            upsertAgentHooks(document, [
-              createAgentHookEntry(
-                context,
-                CLAUDE_CONFIG_DIR,
-                'PreToolUse',
-                'Read',
-                'sonar-secrets',
-                'sonar-secrets/build-scripts/pretool-secrets',
-              ),
-              createAgentHookEntry(
-                context,
-                CLAUDE_CONFIG_DIR,
-                'UserPromptSubmit',
-                '*',
-                'sonar-secrets',
-                'sonar-secrets/build-scripts/prompt-secrets',
-              ),
-            ]),
-        }),
+        },
       ],
-    },
+      hookEntries: [
+        {
+          eventType: 'PreToolUse',
+          matcher: 'Read',
+          marker: 'sonar-secrets',
+          scriptPath: PRETOOL_SCRIPT_REL,
+        },
+        {
+          eventType: 'UserPromptSubmit',
+          matcher: '*',
+          marker: 'sonar-secrets',
+          scriptPath: PROMPT_SCRIPT_REL,
+        },
+      ],
+    }),
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
