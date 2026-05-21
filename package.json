@@ -52,7 +52,7 @@
       ]
     },
     "sca-scanner-cli": {
-      "version": "2025.6.0.14622",
+      "version": "2025.6.0.14965",
       "binaryPath": "CommercialDistribution/sca-scanner-cli",
       "platforms": [
         {
