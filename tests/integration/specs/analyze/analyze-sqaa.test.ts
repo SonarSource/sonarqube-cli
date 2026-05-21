@@ -57,7 +57,7 @@ describe('analyze (no subcommand)', () => {
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
       expect(output).toContain('❌ Not authenticated.');
-      expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
+      expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
     },
     { timeout: 15000 },
   );
