@@ -29,7 +29,7 @@ import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
+import { resolveSqaaEntitlement, warnSqaaSkippedOnGlobal } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CODEX_INTEGRATION_ID } from './declaration';
 
@@ -97,11 +97,7 @@ export async function integrateCodex(
 
   if (isGlobal) {
     success('Codex integration successfully configured globally');
-    if (sqaaEligible) {
-      warn(
-        'SonarQube Agentic Analysis is project-scoped and is not enabled by this global install. Run `sonar integrate codex --project <key>` from a project directory to enable it for that project.',
-      );
-    }
+    warnSqaaSkippedOnGlobal('codex', isGlobal, sqaaEligible);
   } else {
     success('Codex integration successfully configured at the project level');
   }

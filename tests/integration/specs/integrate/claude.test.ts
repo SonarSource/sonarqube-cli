@@ -718,8 +718,11 @@ describe('integrate claude — SQAA entitlement guard', () => {
   );
 
   it(
-    'sonar-sqaa agentExtension is always project-level even when -g flag is used',
+    'on global install, does not install SQAA but warns to run per-project when the org is entitled',
     async () => {
+      // SQAA is project-scoped: a global install must not install the hook,
+      // record SQAA state, or write any project-level SQAA artifact, even when
+      // a project key is supplied. The user is steered to re-run per-project.
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
@@ -743,12 +746,10 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(result.exitCode).toBe(0);
 
       const state = harness.stateJsonFile.asJson();
-      const sqaaExt = (state.agentExtensions as Array<{ name: string; global: boolean }>).find(
+      const sqaaExt = (state.agentExtensions as Array<{ name: string }>).find(
         (e) => e.name === 'sonar-sqaa',
       );
-
-      expect(sqaaExt).toBeDefined();
-      expect(sqaaExt?.global).toBe(false);
+      expect(sqaaExt).toBeUndefined();
 
       const claudeIntegration = state.integrations.installed.find(
         (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
@@ -756,16 +757,12 @@ describe('integrate claude — SQAA entitlement guard', () => {
       const sqaaFeature = claudeIntegration?.features.find(
         (feature: { featureId: string }) => feature.featureId === 'sonar-sqaa-hook',
       );
+      expect(sqaaFeature).toBeUndefined();
 
-      expect(sqaaFeature).toBeDefined();
-      expect(sqaaFeature).toMatchObject({
-        scope: 'project',
-        attrs: {
-          orgKey: 'my-org',
-          projectKey: 'my-project',
-          serverUrl,
-        },
-      });
+      // The user gets a hint pointing them at the per-project command.
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain('SonarQube Agentic Analysis');
+      expect(output).toContain('sonar integrate claude --project');
     },
     { timeout: 30000 },
   );

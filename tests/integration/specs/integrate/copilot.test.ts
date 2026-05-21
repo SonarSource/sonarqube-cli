@@ -738,10 +738,10 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'writes the SQAA section to the project file under -g when org is entitled and a project key is discoverable from sonar-project.properties',
+      'on global install, does not write SQAA project-side but warns to run per-project when the org is entitled',
       async () => {
-        // `--global` and `--project` are mutually exclusive on the CLI, so the
-        // project key must be discovered from disk in the global flow.
+        // SQAA is project-scoped: a global install must not touch the project
+        // directory at all, even when a project key is discoverable.
         const { extraEnv } = await setupCloudWithEntitlement();
         harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
@@ -754,24 +754,17 @@ describe('integrate copilot', () => {
         expect(globalBody).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(globalBody).not.toContain('# SonarQube Agentic Analysis');
 
-        // Project file holds SQAA, NOT prompt-secrets.
-        const projectBody = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(projectBody).toContain('# SonarQube Agentic Analysis protocol');
-        expect(projectBody).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
-        expect(projectBody).not.toContain('# SonarQube secrets scanning for prompts protocol');
+        // Project file is NOT written — global installs stay out of the repo.
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
 
         // Declarative state: prompt-secrets is global, SQAA is project-scoped.
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
-        expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
 
-        // Outcome shows both labeled lines pointing to their respective files.
-        const homePathNorm = normalizePath(harness.userHome.path);
-        expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
-        ).toContain(`${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`);
-        expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (SonarQube Agentic Analysis):')),
-        ).toContain('.github/instructions/sonarqube.instructions.md');
+        // The user gets a hint pointing them at the per-project command.
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).toContain('SonarQube Agentic Analysis');
+        expect(output).toContain('sonar integrate copilot --project');
       },
       { timeout: 30000 },
     );

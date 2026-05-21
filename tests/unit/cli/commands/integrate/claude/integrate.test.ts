@@ -373,12 +373,14 @@ describe('integrateCommand', () => {
 
     await integrateClaude({ global: true }, CLOUD_AUTH);
 
+    // SQAA is project-scoped and must not be installed during a global install,
+    // even when the org is entitled — that's surfaced via a warning instead.
     assertMigrationHookInstallationAndStateUpdateRan(
       'a-project',
       '/project/root',
       homedir(),
       true,
-      true,
+      false,
     );
   });
 

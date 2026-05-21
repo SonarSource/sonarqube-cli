@@ -28,7 +28,7 @@ import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
+import { resolveSqaaEntitlement, warnSqaaSkippedOnGlobal } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import {
@@ -61,8 +61,10 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     );
   }
 
-  const entitled = await resolveSqaaEntitlement(auth.serverUrl, auth.token, auth.orgKey);
-  const sqaaProjectKey = entitled && projectKey ? projectKey : undefined;
+  const sqaaEntitled = await resolveSqaaEntitlement(auth.serverUrl, auth.token, auth.orgKey);
+  // SQAA is project-scoped; never install it during a global install. We still
+  // surface the entitlement check so we can hint the user to re-run per-project.
+  const installSqaa = !isGlobal && sqaaEntitled && projectKey !== undefined;
 
   const targetRoot = isGlobal ? homedir() : project.rootDir;
   const scope: IntegrationScope = isGlobal ? 'global' : 'project';
@@ -77,7 +79,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     projectRoot: project.rootDir,
     installHook,
     installInstructions: true,
-    installSqaaInstructions: sqaaProjectKey !== undefined,
     installMcp: true,
   };
 
@@ -86,7 +87,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     options: integrationOptions,
     targetRoot,
     scope,
-    attrs: buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
+    attrs: buildIntegrationAttrs(projectKey, installSqaa),
   });
 
   if (!options.skipContext) {
@@ -102,48 +103,38 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   reportInstallationOutcome({
     isGlobal,
     hookPath: existingGlobalHookPath ?? expectedHookPath(targetRoot, scope),
-    promptInstructionsPath: expectedPromptInstructionsPath(targetRoot, scope),
-    sqaaInstructionsPath:
-      sqaaProjectKey === undefined ? undefined : expectedSqaaInstructionsPath(project.rootDir),
+    instructionsPath: expectedInstructionsPath(targetRoot, scope),
+    sqaaInstalled: installSqaa,
   });
+  warnSqaaSkippedOnGlobal('copilot', isGlobal, sqaaEntitled);
 }
 
 interface InstallationOutcome {
   isGlobal: boolean;
   hookPath: string;
-  promptInstructionsPath: string;
-  sqaaInstructionsPath?: string;
+  instructionsPath: string;
+  sqaaInstalled: boolean;
 }
 
-function reportInstallationOutcome({
-  isGlobal,
-  hookPath,
-  promptInstructionsPath,
-  sqaaInstructionsPath,
-}: InstallationOutcome): void {
-  const scope = isGlobal
+function reportInstallationOutcome(outcome: InstallationOutcome): void {
+  const scope = outcome.isGlobal
     ? 'Copilot integration successfully configured globally'
     : 'Copilot integration successfully configured at the project level';
-  const instructionsLines = formatInstructionsLines(promptInstructionsPath, sqaaInstructionsPath);
-  const hookLine = `Hook: ${hookPath}`;
+  const instructionsLines = formatInstructionsLines(outcome);
+  const hookLine = `Hook: ${outcome.hookPath}`;
   success([scope, hookLine, ...instructionsLines].join('\n'));
 }
 
-function formatInstructionsLines(
-  promptInstructionsPath: string,
-  sqaaInstructionsPath?: string,
-): string[] {
-  if (sqaaInstructionsPath && sqaaInstructionsPath === promptInstructionsPath) {
+function formatInstructionsLines({
+  instructionsPath,
+  sqaaInstalled,
+}: InstallationOutcome): string[] {
+  if (sqaaInstalled) {
     return [
-      `Instructions (secrets scanning for prompts, SonarQube Agentic Analysis): ${promptInstructionsPath}`,
+      `Instructions (secrets scanning for prompts, SonarQube Agentic Analysis): ${instructionsPath}`,
     ];
   }
-
-  const lines = [`Instructions (secrets scanning for prompts): ${promptInstructionsPath}`];
-  if (sqaaInstructionsPath) {
-    lines.push(`Instructions (SonarQube Agentic Analysis): ${sqaaInstructionsPath}`);
-  }
-  return lines;
+  return [`Instructions (secrets scanning for prompts): ${instructionsPath}`];
 }
 
 function expectedHookPath(targetRoot: string, scope: IntegrationScope): string {
@@ -152,10 +143,10 @@ function expectedHookPath(targetRoot: string, scope: IntegrationScope): string {
     : join(targetRoot, PROJECT_HOOKS_REL_DIR, SCRIPT_REL_DIR, hookScriptName());
 }
 
-function expectedPromptInstructionsPath(targetRoot: string, scope: IntegrationScope): string {
+function expectedInstructionsPath(targetRoot: string, scope: IntegrationScope): string {
   return scope === 'global'
     ? join(targetRoot, '.copilot', 'instructions', INSTRUCTIONS_FILENAME)
-    : expectedSqaaInstructionsPath(targetRoot);
+    : join(targetRoot, PROJECT_INSTRUCTIONS_REL_DIR, INSTRUCTIONS_FILENAME);
 }
 
 function buildIntegrationAttrs(
@@ -166,8 +157,4 @@ function buildIntegrationAttrs(
     projectKey: projectKey ?? null,
     sqaaEnabled,
   };
-}
-
-function expectedSqaaInstructionsPath(projectRoot: string): string {
-  return join(projectRoot, PROJECT_INSTRUCTIONS_REL_DIR, INSTRUCTIONS_FILENAME);
 }

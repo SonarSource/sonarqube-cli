@@ -35,7 +35,7 @@ import { blank, info, intro, note, outro, success, text, warn } from '../../../.
 import { CommandFailedError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
+import { resolveSqaaEntitlement, warnSqaaSkippedOnGlobal } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CLAUDE_INTEGRATION_ID } from './declaration';
 import { runHealthChecks } from './health';
@@ -77,41 +77,19 @@ export async function integrateClaude(
   const hooksRoot = isGlobal || skipSecretsHooks ? homedir() : project.rootDir;
   const globalDir = isGlobal ? homedir() : undefined;
 
-  let token = config.token;
-
   blank();
   text('Phase 2/3: Health Check & Repair');
   blank();
 
-  const healthResult = await runHealthChecks(
-    config.serverURL,
-    token,
-    config.projectKey,
-    hooksRoot,
-    config.organization,
-  );
+  const token = await runHealthCheckAndRepair(config, hooksRoot, options);
 
-  if (healthResult.errors.length === 0) {
-    success('All checks passed! Configuration is healthy.');
-  } else {
-    warn(`Found ${healthResult.errors.length} issue(s):`);
-    for (const msg of healthResult.errors) {
-      text(`  - ${msg}`);
-    }
+  const sqaaEntitled = await resolveSqaaEntitlement(config.serverURL, token, config.organization);
+  // SQAA is project-scoped; never install it (hooks, state, or migrations)
+  // during a global install. We still surface the entitlement check so we can
+  // hint the user to re-run per-project.
+  const installSqaa = !isGlobal && sqaaEntitled;
 
-    const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
-
-    if (!isNonInteractive && !healthResult.tokenValid) {
-      blank();
-      text('Running token repair...');
-
-      token = await repairToken(config.serverURL, config.organization);
-    }
-  }
-
-  const sqaaEnabled = await resolveSqaaEntitlement(config.serverURL, token, config.organization);
-
-  await runMigrations(project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
+  await runMigrations(project.rootDir, globalDir, installSqaa, config.projectKey, {
     skipSecretsHooks,
   });
 
@@ -124,7 +102,7 @@ export async function integrateClaude(
       ...options,
       projectRoot: project.rootDir,
       installSecretsHooks: !skipSecretsHooks,
-      installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
+      installSqaaHook: installSqaa && config.projectKey !== undefined,
       installMcp: true,
     },
     targetRoot: installRoot,
@@ -132,10 +110,10 @@ export async function integrateClaude(
     attrs: featureAttrs,
   });
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
-  await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled, {
+  await updateStateAfterConfiguration(config, project.rootDir, isGlobal, installSqaa, {
     skipSecretsHooks,
   });
-  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
+  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath, sqaaEntitled);
 
   if (!options.skipContext) {
     await setupContextAugmentation({
@@ -225,14 +203,54 @@ function validateConfiguration(
 }
 
 /**
+ * Run health checks and, if interactively recoverable, repair the token.
+ * Returns the (possibly refreshed) token to use for the rest of the install.
+ */
+async function runHealthCheckAndRepair(
+  config: ConfigurationData,
+  hooksRoot: string,
+  options: IntegrateAgentOptions,
+): Promise<string> {
+  const healthResult = await runHealthChecks(
+    config.serverURL,
+    config.token,
+    config.projectKey,
+    hooksRoot,
+    config.organization,
+  );
+
+  if (healthResult.errors.length === 0) {
+    success('All checks passed! Configuration is healthy.');
+    return config.token;
+  }
+
+  warn(`Found ${healthResult.errors.length} issue(s):`);
+  for (const msg of healthResult.errors) {
+    text(`  - ${msg}`);
+  }
+
+  const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
+  if (isNonInteractive || healthResult.tokenValid) {
+    return config.token;
+  }
+
+  blank();
+  text('Running token repair...');
+  return repairToken(config.serverURL, config.organization);
+}
+
+/**
  * Print the scope-aware outcome after hook installation completes.
  * When project-level setup was skipped because a global hook already owns the
  * sonar-secrets scope, surface the existing hook path so the user knows where
  * the active secrets scanning hook lives.
+ * When the install is global and the org is SQAA-entitled, hint the user to
+ * re-run per-project so the project-scoped SQAA hook gets installed.
  */
 function reportHookInstallationOutcome(
   isGlobal: boolean,
   existingGlobalHookPath: string | undefined,
+  sqaaEntitled: boolean,
 ): void {
   if (existingGlobalHookPath) {
     success(
@@ -242,6 +260,7 @@ function reportHookInstallationOutcome(
   }
   if (isGlobal) {
     success('Claude Code integration successfully configured globally');
+    warnSqaaSkippedOnGlobal('claude', isGlobal, sqaaEntitled);
   } else {
     success('Claude Code integration successfully configured at the project level');
   }

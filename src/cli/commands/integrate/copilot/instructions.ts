@@ -72,10 +72,6 @@ export function buildInstructionsBody(projectKey?: string): string {
   return `${sections.join('\n\n').trimEnd()}\n`;
 }
 
-export function buildSqaaInstructionsBody(projectKey: string): string {
-  return `${buildSqaaSection(projectKey).trimEnd()}\n`;
-}
-
 export function warnIfProjectInstructionsShadowGlobal(): void {
   const filePath = join(GLOBAL_INSTRUCTIONS_DIR, INSTRUCTIONS_FILENAME);
   if (!existsSync(filePath)) {

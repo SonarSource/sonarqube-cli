@@ -40,7 +40,6 @@ import {
 } from './hooks';
 import {
   buildInstructionsBody,
-  buildSqaaInstructionsBody,
   INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_REL_DIR,
 } from './instructions';
@@ -51,7 +50,6 @@ export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   installHook?: boolean;
   installInstructions?: boolean;
-  installSqaaInstructions?: boolean;
   installMcp?: boolean;
 }
 
@@ -97,22 +95,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
             context.scope === 'project' && getBooleanAttr(context, 'sqaaEnabled')
               ? buildInstructionsBody(getRequiredStringAttr(context, 'projectKey'))
               : buildInstructionsBody(),
-        }),
-      ],
-    },
-    {
-      id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
-      when: ({ options, scope }) => scope === 'global' && options.installSqaaInstructions === true,
-      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-      scope: 'project',
-      resources: [
-        wholeFile({
-          id: 'sqaa-instructions-file',
-          displayName: 'Copilot SQAA instructions',
-          targetPath: resolveInstructionsPath,
-          content: (context) =>
-            buildSqaaInstructionsBody(getRequiredStringAttr(context, 'projectKey')),
         }),
       ],
     },

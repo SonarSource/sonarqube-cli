@@ -43,3 +43,27 @@ export async function resolveSqaaEntitlement(
     return false;
   }
 }
+
+/**
+ * Emit the standard "SQAA is project-scoped" warning when an entitled org runs
+ * an integration globally. SQAA hooks and instructions are only installed by
+ * per-project integrate runs, so global users need to be steered to re-run.
+ *
+ * No-op unless both `isGlobal` and `sqaaEntitled` are true — keeps call sites
+ * free of nested conditionals.
+ *
+ * `agentCommand` is the subcommand name (e.g. `claude`, `codex`, `copilot`)
+ * that gets baked into the suggested `sonar integrate <agent> --project <key>`.
+ */
+export function warnSqaaSkippedOnGlobal(
+  agentCommand: string,
+  isGlobal: boolean,
+  sqaaEntitled: boolean,
+): void {
+  if (!isGlobal || !sqaaEntitled) {
+    return;
+  }
+  warn(
+    `SonarQube Agentic Analysis is project-scoped and is not enabled by this global install. Run \`sonar integrate ${agentCommand} --project <key>\` from a project directory to enable it for that project.`,
+  );
+}
