@@ -176,4 +176,50 @@ describe('buildSummaryVM — per-package recommendations', () => {
     expect(summary.packages.map((p) => p.package.name)).toEqual(['pkg0', 'pkg1']);
     expect(summary.packages.every((p) => p.recommendations.size === 1)).toBe(true);
   });
+
+  it('highestSeverity is the worst severity across all risks in the package', () => {
+    const release = mockScaRelease({
+      issues: [
+        mockVulnerabilityRisk({ severity: 'LOW', vulnerabilityId: 'CVE-1' }),
+        mockLicenseRisk({ severity: 'HIGH' }),
+        mockVulnerabilityRisk({ severity: 'MEDIUM', vulnerabilityId: 'CVE-2' }),
+      ],
+    });
+    const identityByPurl = buildPackageIdentityMap([release]);
+    const pkg = buildPackageVM(release, ALLOW_ALL, identityByPurl)!;
+
+    const summary = buildSummaryVM([pkg], 1);
+
+    expect(summary.packages[0].highestSeverity).toBe('HIGH');
+  });
+
+  it('highestSeverity prefers BLOCKER over HIGH', () => {
+    const release = mockScaRelease({
+      issues: [
+        mockVulnerabilityRisk({ severity: 'HIGH', vulnerabilityId: 'CVE-1' }),
+        mockMalwareRisk({ severity: 'BLOCKER' }),
+      ],
+    });
+    const identityByPurl = buildPackageIdentityMap([release]);
+    const pkg = buildPackageVM(release, ALLOW_ALL, identityByPurl)!;
+
+    const summary = buildSummaryVM([pkg], 1);
+
+    expect(summary.packages[0].highestSeverity).toBe('BLOCKER');
+  });
+
+  it('highestSeverity is computed per package independently', () => {
+    const packages = buildPackage(
+      [{ severity: 'INFO', vulnerabilityId: 'CVE-A' }],
+      [
+        { severity: 'LOW', vulnerabilityId: 'CVE-B1' },
+        { severity: 'BLOCKER', vulnerabilityId: 'CVE-B2' },
+      ],
+    );
+
+    const summary = buildSummaryVM(packages, packages.length);
+
+    expect(summary.packages[0].highestSeverity).toBe('INFO');
+    expect(summary.packages[1].highestSeverity).toBe('BLOCKER');
+  });
 });

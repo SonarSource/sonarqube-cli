@@ -131,7 +131,9 @@ function appendRecommendationsSummary(lines: string[], packages: PackageSummaryV
   if (packages.length === 0) return;
   lines.push('', 'Recommendations:');
   for (const pkg of packages) {
-    lines.push(`  ${pkg.package.label()} (${pkg.riskCount} risk${pkg.riskCount === 1 ? '' : 's'})`);
+    lines.push(
+      `  ${pkg.package.label()} (${pkg.riskCount} risk${pkg.riskCount === 1 ? '' : 's'}, highest severity ${pkg.highestSeverity})`,
+    );
     for (const rec of pkg.recommendations.values()) {
       lines.push(`    ${formatRecommendationLine(rec)}`);
     }

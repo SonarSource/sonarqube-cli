@@ -650,8 +650,8 @@ describe('recommendations summary block', () => {
     );
     const tail = out.slice(out.indexOf('Recommendations:'));
     expect(tail).toContain('Recommendations:');
-    expect(tail).toContain('lic@1.0.0 (1 risk)');
-    expect(tail).toContain('mal@1.0.0 (1 risk)');
+    expect(tail).toContain('lic@1.0.0 (1 risk, highest severity HIGH)');
+    expect(tail).toContain('mal@1.0.0 (1 risk, highest severity BLOCKER)');
     expect(tail).toContain('Remove this package and notify your information security team');
     expect(tail).toContain('Review the license usage');
   });
@@ -668,7 +668,7 @@ describe('recommendations summary block', () => {
       1,
     );
     const tail = out.slice(out.indexOf('Recommendations:'));
-    expect(tail).toContain('mixed@1.0.0 (3 risks)');
+    expect(tail).toContain('mixed@1.0.0 (3 risks, highest severity BLOCKER)');
     expect(tail).toContain('Remove this package and notify your information security team');
     expect(tail).toContain('Review the license usage');
     expect(tail).toContain('No recommended version without known vulnerabilities');
