@@ -74,6 +74,7 @@ function makeContextSkill(
   projectRoot: string,
   agentId = 'claude-code',
   version = '0.0.0-old',
+  scaEnabled?: boolean,
 ): SkillExtension {
   return {
     id: `skill-${agentId}-${projectRoot}`,
@@ -88,6 +89,7 @@ function makeContextSkill(
     updatedByCliVersion: '1.0.0',
     updatedAt: '2026-01-01T00:00:00.000Z',
     version,
+    scaEnabled,
   };
 }
 
@@ -567,12 +569,14 @@ describe('updateContextAugmentationIfNeeded', () => {
       binaryPath: '/fake/bin/sonar-context-augmentation',
       agent: 'claude-code',
       projectRoot: '/proj/alpha',
+      scaEnabled: false,
       reportFailure: false,
     });
     expect(installContextAugmentationSkillSpy).toHaveBeenNthCalledWith(2, {
       binaryPath: '/fake/bin/sonar-context-augmentation',
       agent: 'copilot',
       projectRoot: '/proj/beta',
+      scaEnabled: false,
       reportFailure: false,
     });
     expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
@@ -581,6 +585,7 @@ describe('updateContextAugmentationIfNeeded', () => {
         projectRoot: '/proj/alpha',
         updatedByCliVersion: CURRENT_VERSION,
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        scaEnabled: false,
       }),
     );
     expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
@@ -589,7 +594,27 @@ describe('updateContextAugmentationIfNeeded', () => {
         projectRoot: '/proj/beta',
         updatedByCliVersion: CURRENT_VERSION,
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        scaEnabled: false,
       }),
+    );
+  });
+
+  it('threads recorded scaEnabled true through to install and persists it', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [makeContextSkill('/proj/alpha', 'claude-code', '0.0.0-old', true)];
+    loadStateSpy.mockReturnValue(state);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationSkillSpy).toHaveBeenCalledWith({
+      binaryPath: '/fake/bin/sonar-context-augmentation',
+      agent: 'claude-code',
+      projectRoot: '/proj/alpha',
+      scaEnabled: true,
+      reportFailure: false,
+    });
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ projectRoot: '/proj/alpha', scaEnabled: true }),
     );
   });
 
@@ -623,6 +648,7 @@ describe('updateContextAugmentationIfNeeded', () => {
       binaryPath: '/fake/bin/sonar-context-augmentation',
       agent: 'copilot',
       projectRoot: '/proj/beta',
+      scaEnabled: false,
       reportFailure: false,
     });
     expect(recordSkillExtensionInStateSpy).toHaveBeenCalledTimes(1);
@@ -666,6 +692,7 @@ describe('updateContextAugmentationIfNeeded', () => {
       binaryPath: '/fake/bin/sonar-context-augmentation',
       agent: 'claude-code',
       projectRoot: '/proj|alpha',
+      scaEnabled: false,
       reportFailure: false,
     });
   });

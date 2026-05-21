@@ -216,6 +216,7 @@ async function tryRefreshContextAugmentationSkill(
       binaryPath,
       agent,
       projectRoot: skill.projectRoot,
+      scaEnabled: skill.scaEnabled ?? false,
       reportFailure: false,
     });
     if (!refreshed) {
@@ -243,6 +244,7 @@ function recordRefreshedContextAugmentationSkill(skill: SkillExtension): void {
     updatedByCliVersion: CURRENT_VERSION,
     name: CONTEXT_AUGMENTATION_BINARY_NAME,
     version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+    scaEnabled: skill.scaEnabled ?? false,
   });
 }
 

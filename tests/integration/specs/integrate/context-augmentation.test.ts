@@ -108,6 +108,7 @@ describe('integrate claude — Context Augmentation', () => {
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
         .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(true)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -155,6 +156,7 @@ describe('integrate claude — Context Augmentation', () => {
         'claude-code',
         '--invocation-prefix',
         'sonar context',
+        '--sca-enabled=true',
       ]);
       expectInheritedContextEnv(skill);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
@@ -170,6 +172,49 @@ describe('integrate claude — Context Augmentation', () => {
       );
       expect(skillExt).toBeDefined();
       expect(skillExt?.agentId).toBe('claude-code');
+      expect(skillExt?.kind === 'skill' && skillExt.scaEnabled).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'passes --sca-enabled=false and warns when SCA enablement check fails',
+    async () => {
+      // No .withScaEnabled() call → fake server returns 404 for the SCA endpoint.
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const skill = findInvocation(readInvocations(harness), 'skill');
+      expect(skill.argv).toContain('--sca-enabled=false');
+      expect(result.stderr).toContain('Could not verify SCA availability');
+      const state = loadState(harness);
+      const skillExt = state.agentExtensions.find(
+        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
+      );
+      expect(skillExt?.kind === 'skill' && skillExt.scaEnabled).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -501,6 +546,7 @@ describe('integrate copilot — Context Augmentation', () => {
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
         .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(false)
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -543,6 +589,7 @@ describe('integrate copilot — Context Augmentation', () => {
         'copilot',
         '--invocation-prefix',
         'sonar context',
+        '--sca-enabled=false',
       ]);
       expectNoContextEnv(skill);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
@@ -555,6 +602,7 @@ describe('integrate copilot — Context Augmentation', () => {
       );
       expect(skillExt).toBeDefined();
       expect(skillExt?.agentId).toBe('copilot-cli');
+      expect(skillExt?.kind === 'skill' && skillExt.scaEnabled).toBe(false);
     },
     { timeout: 30000 },
   );

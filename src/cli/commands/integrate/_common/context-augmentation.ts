@@ -115,6 +115,14 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     return;
   }
 
+  const scaStatus = await client.getScaEnablement(p.auth.connectionType, p.auth.orgKey);
+  if (scaStatus === 'check_failed') {
+    warn(
+      'Could not verify SCA availability on the connected server. Proceeding with --sca-enabled=false.',
+    );
+  }
+  const scaEnabled = scaStatus === 'enabled';
+
   let binaryPath: string;
   try {
     binaryPath = await installContextAugmentationBinary();
@@ -161,7 +169,7 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
   const skillOk = await runCagStep(
     `Context skill configured for ${AGENT_DISPLAY_NAME[p.agent]}`,
     binaryPath,
-    buildSkillInstallArgs(p.agent),
+    buildSkillInstallArgs(p.agent, scaEnabled),
     p,
   );
   if (!skillOk) {
@@ -179,6 +187,7 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     updatedByCliVersion: VERSION,
     name: 'sonar-context-augmentation',
     version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+    scaEnabled,
   });
   success('SonarQube Context Augmentation configured');
 }
@@ -199,6 +208,7 @@ export interface InstallContextAugmentationSkillParams {
   binaryPath: string;
   agent: ContextAugmentationAgent;
   projectRoot: string;
+  scaEnabled: boolean;
   reportFailure?: boolean;
 }
 
@@ -212,9 +222,10 @@ export async function installContextAugmentationSkill({
   binaryPath,
   agent,
   projectRoot,
+  scaEnabled,
   reportFailure = true,
 }: InstallContextAugmentationSkillParams): Promise<boolean> {
-  const result = await runCagSubprocess(binaryPath, buildSkillInstallArgs(agent), {
+  const result = await runCagSubprocess(binaryPath, buildSkillInstallArgs(agent, scaEnabled), {
     projectRoot,
   });
   if (!result.ok) {
@@ -226,8 +237,15 @@ export async function installContextAugmentationSkill({
   return true;
 }
 
-function buildSkillInstallArgs(agent: ContextAugmentationAgent): string[] {
-  return ['skill', '--install', agent, '--invocation-prefix', SONAR_CONTEXT_INVOCATION];
+function buildSkillInstallArgs(agent: ContextAugmentationAgent, scaEnabled: boolean): string[] {
+  return [
+    'skill',
+    '--install',
+    agent,
+    '--invocation-prefix',
+    SONAR_CONTEXT_INVOCATION,
+    `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
+  ];
 }
 
 async function runCagStep(

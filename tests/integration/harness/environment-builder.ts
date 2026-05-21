@@ -67,6 +67,7 @@ interface ContextAugmentationSkillConfig {
   projectKey: string;
   orgKey?: string;
   serverUrl?: string;
+  scaEnabled?: boolean;
 }
 
 export class EnvironmentBuilder {
@@ -243,8 +244,15 @@ export class EnvironmentBuilder {
     projectKey: string,
     orgKey?: string,
     serverUrl?: string,
+    scaEnabled = false,
   ): this {
-    this.contextAugmentationSkills.push({ projectRoot, projectKey, orgKey, serverUrl });
+    this.contextAugmentationSkills.push({
+      projectRoot,
+      projectKey,
+      orgKey,
+      serverUrl,
+      scaEnabled,
+    });
     return this;
   }
 
@@ -347,6 +355,7 @@ export class EnvironmentBuilder {
         kind: 'skill',
         name: CONTEXT_AUGMENTATION_BINARY_NAME,
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        scaEnabled: skill.scaEnabled ?? false,
       });
     }
 
