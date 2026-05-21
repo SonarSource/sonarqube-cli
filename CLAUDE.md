@@ -65,7 +65,7 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 ## State and auth
 
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.
-- Declarative integration installs are tracked as integration entries in the top-level `integrations.installed` state registry, with installed feature targets nested under each integration. This is the generic state surface for Git, Claude, Copilot, and future integrations; legacy `agents` and `agentExtensions` remain for compatibility.
+- Declarative integration installs are tracked as integration entries in the top-level `integrations.installed` state registry, with installed feature targets nested under each integration. This is the generic state surface for Git, Claude, Codex, Copilot, and future integrations; legacy `agents` and `agentExtensions` remain for compatibility.
 - Tokens are stored in the system keychain via `src/lib/keychain.ts` — never store tokens in plain files.
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.
 - Caller-agent hints (Cursor, Claude Code, or Copilot CLI) from the environment: `src/lib/agent-detector.ts` (`detectCallerAgent`, etc.).

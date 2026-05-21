@@ -18,32 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export interface IntegrateAgentOptions {
-  project?: string;
-  nonInteractive?: boolean;
-  global?: boolean;
-  /** Skip the sonar-context-augmentation install/init/skill step. */
-  skipContext?: boolean;
-}
+// UserPromptSubmit callback handler for Codex.
+//
+// Codex's UserPromptSubmit stdin payload exposes the user prompt at the same
+// top-level `prompt` field as Claude, and Codex accepts the same
+// `{ decision: "block", reason: "..." }` block-output shape. The agnostic
+// `agentPromptSubmit` handler therefore works as-is. This file exists to give
+// Codex a named entry point that can diverge later if the wire format ever
+// changes.
 
-export interface HookCommand {
-  type: 'command';
-  command: string;
-  timeout: number;
-}
+import { agentPromptSubmit } from './agent-prompt-submit';
 
-export interface HookConfig {
-  matcher: string;
-  hooks: HookCommand[];
-}
-
-export interface HooksDocument {
-  hooks?: Record<string, HookConfig[] | undefined>;
-  [key: string]: unknown;
-}
-
-export interface ManagedHookEntry {
-  eventType: string;
-  marker: string;
-  hookConfig: HookConfig;
+export function codexPromptSubmit(): Promise<void> {
+  return agentPromptSubmit();
 }

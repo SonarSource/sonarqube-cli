@@ -18,32 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export interface IntegrateAgentOptions {
-  project?: string;
-  nonInteractive?: boolean;
-  global?: boolean;
-  /** Skip the sonar-context-augmentation install/init/skill step. */
-  skipContext?: boolean;
+// Hook script templates for Codex integration.
+
+import { unixTemplate, windowsTemplate } from '../_common/hooks';
+
+export function getSecretPromptTemplateUnix(): string {
+  return unixTemplate('sonar hook codex-prompt-submit');
 }
 
-export interface HookCommand {
-  type: 'command';
-  command: string;
-  timeout: number;
-}
-
-export interface HookConfig {
-  matcher: string;
-  hooks: HookCommand[];
-}
-
-export interface HooksDocument {
-  hooks?: Record<string, HookConfig[] | undefined>;
-  [key: string]: unknown;
-}
-
-export interface ManagedHookEntry {
-  eventType: string;
-  marker: string;
-  hookConfig: HookConfig;
+export function getSecretPromptTemplateWindows(): string {
+  return windowsTemplate('sonar hook codex-prompt-submit');
 }

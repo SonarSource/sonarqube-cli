@@ -23,6 +23,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   detectCallerAgent,
   isClaudeCodeAgentEnv,
+  isCodexAgentEnv,
   isCopilotCliAgentEnv,
   isCursorAgentEnv,
 } from '../../../src/lib/agent-detector.js';
@@ -124,6 +125,34 @@ describe('agent-detector', () => {
     });
   });
 
+  describe('isCodexAgentEnv', () => {
+    it('is true when CODEX_CI is set, regardless of value', () => {
+      expect(isCodexAgentEnv(env({ CODEX_CI: '1' }))).toBe(true);
+      expect(isCodexAgentEnv(env({ CODEX_CI: '0' }))).toBe(true);
+      expect(isCodexAgentEnv(env({ CODEX_CI: '' }))).toBe(true);
+    });
+
+    it('is true when CODEX_SANDBOX_NETWORK_DISABLED is set, regardless of value', () => {
+      expect(isCodexAgentEnv(env({ CODEX_SANDBOX_NETWORK_DISABLED: '1' }))).toBe(true);
+      expect(isCodexAgentEnv(env({ CODEX_SANDBOX_NETWORK_DISABLED: '0' }))).toBe(true);
+    });
+
+    it('is true when CODEX_THREAD_ID is set, regardless of value', () => {
+      expect(isCodexAgentEnv(env({ CODEX_THREAD_ID: 'abc' }))).toBe(true);
+      expect(isCodexAgentEnv(env({ CODEX_THREAD_ID: '' }))).toBe(true);
+    });
+
+    it('is false when no codex vars are present', () => {
+      expect(isCodexAgentEnv(env({}))).toBe(false);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('CODEX_THREAD_ID', 'abc', () => {
+        expect(isCodexAgentEnv()).toBe(true);
+      });
+    });
+  });
+
   describe('detectCallerAgent', () => {
     it('returns null when no markers', () => {
       expect(detectCallerAgent(env({}))).toBeNull();
@@ -146,6 +175,19 @@ describe('agent-detector', () => {
           }),
         ),
       ).toBe('copilot');
+    });
+
+    it('prefers codex over all other agents when markers from multiple families are set', () => {
+      expect(
+        detectCallerAgent(
+          env({
+            CODEX_THREAD_ID: 'abc',
+            COPILOT_CLI: '1',
+            CLAUDECODE: '1',
+            CURSOR_TRACE_ID: 't',
+          }),
+        ),
+      ).toBe('codex');
     });
   });
 });

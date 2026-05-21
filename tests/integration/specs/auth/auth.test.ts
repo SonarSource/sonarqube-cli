@@ -996,7 +996,7 @@ describe('auth status', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('No saved connection');
       expect(result.stderr).toContain('Authentication check failed.');
-      expect(result.stderr).toContain("💡 Run 'sonar auth login' to authenticate.");
+      expect(result.stderr).toContain("  → Run 'sonar auth login' to authenticate.");
     },
     { timeout: 15000 },
   );
@@ -1013,7 +1013,7 @@ describe('auth status', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('Token missing');
       expect(result.stderr).toContain('Authentication check failed.');
-      expect(result.stderr).toContain("💡 Run 'sonar auth login' to restore the token.");
+      expect(result.stderr).toContain("  → Run 'sonar auth login' to restore the token.");
     },
     { timeout: 15000 },
   );
@@ -1108,7 +1108,7 @@ describe('auth status', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('Token invalid');
       expect(result.stderr).toContain('Authentication check failed.');
-      expect(result.stderr).toContain("💡 Run 'sonar auth login' to reauthenticate.");
+      expect(result.stderr).toContain("  → Run 'sonar auth login' to reauthenticate.");
     },
     { timeout: 15000 },
   );
@@ -1128,7 +1128,7 @@ describe('auth status', () => {
       expect(result.stdout).toContain('Cannot reach server');
       expect(result.stderr).toContain('Connection check failed.');
       expect(result.stderr).toContain(
-        '💡 Check the server URL and network connectivity, then retry.',
+        '  → Check the server URL and network connectivity, then retry.',
       );
     },
     { timeout: 15000 },

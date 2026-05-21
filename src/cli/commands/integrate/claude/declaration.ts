@@ -22,12 +22,17 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { createSonarSecretsBinaryFeature } from '../_common/features/sonar-secrets-binary-feature';
+import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
+import {
+  createAgentHookEntry,
+  resolveAgentHookScriptPath,
+  upsertAgentHooks,
+} from '../_common/hooks';
 import {
   type IntegrationContext,
   type IntegrationDeclaration,
   jsonPatch,
-  SonarSourceBinary,
-  sonarSourceBinary,
   supportedIntegrations,
   wholeFile,
 } from '../_common/registry';
@@ -42,9 +47,9 @@ import {
 } from './hook-templates';
 
 const CLAUDE_CONFIG_DIR = '.claude';
-const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
-const HOOK_TIMEOUT_SEC = 60;
+const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
+const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
@@ -56,96 +61,51 @@ export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   installMcp?: boolean;
 }
 
-interface HookCommand {
-  type: 'command';
-  command: string;
-  timeout: number;
-}
-
-interface HookConfig {
-  matcher: string;
-  hooks: HookCommand[];
-}
-
-interface AgentSettings {
-  hooks?: Record<string, HookConfig[] | undefined>;
-  [key: string]: unknown;
-}
-
-interface ManagedClaudeHookEntry {
-  eventType: string;
-  marker: string;
-  hookConfig: HookConfig;
-}
-
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
   id: CLAUDE_INTEGRATION_ID,
   displayName: 'Claude Code',
   features: [
-    {
-      id: 'sonar-secrets-binary',
-      displayName: 'sonar-secrets binary',
-      when: ({ options }) => options.installBinary === true,
-      resources: [
-        sonarSourceBinary({
-          id: 'sonar-secrets',
-          displayName: 'sonar-secrets binary',
-          binary: SonarSourceBinary.SonarSecrets,
-        }),
-      ],
-    },
-    {
-      id: 'sonar-secrets-hooks',
-      displayName: 'secrets hooks',
-      when: ({ options }) => options.installSecretsHooks === true,
-      resources: [
-        wholeFile({
+    createSonarSecretsBinaryFeature(),
+    createSonarSecretsHooksFeature({
+      agentDisplayName: 'Claude',
+      configDir: CLAUDE_CONFIG_DIR,
+      hooksConfigFileName: SETTINGS_FILE,
+      hooksPatchId: 'claude-settings-secrets-hooks',
+      scripts: [
+        {
           id: 'pretool-secrets-script',
           displayName: 'Claude PreToolUse hook script',
-          targetPath: (context) =>
-            resolveClaudeHookScriptPath(context, 'sonar-secrets/build-scripts/pretool-secrets'),
+          scriptPath: PRETOOL_SCRIPT_REL,
           content: {
             unix: getSecretPreToolTemplateUnix(),
             windows: getSecretPreToolTemplateWindows(),
           },
-          executable: true,
-        }),
-        wholeFile({
+        },
+        {
           id: 'prompt-secrets-script',
           displayName: 'Claude UserPromptSubmit hook script',
-          targetPath: (context) =>
-            resolveClaudeHookScriptPath(context, 'sonar-secrets/build-scripts/prompt-secrets'),
+          scriptPath: PROMPT_SCRIPT_REL,
           content: {
             unix: getSecretPromptTemplateUnix(),
             windows: getSecretPromptTemplateWindows(),
           },
-          executable: true,
-        }),
-        jsonPatch({
-          id: 'claude-settings-secrets-hooks',
-          displayName: 'Claude hooks configuration',
-          targetPath: resolveClaudeSettingsPath,
-          defaultValue: { hooks: {} },
-          patch: (document, context) =>
-            upsertClaudeHooks(document, [
-              createClaudeHookEntry(
-                context,
-                'PreToolUse',
-                'Read',
-                'sonar-secrets',
-                'sonar-secrets/build-scripts/pretool-secrets',
-              ),
-              createClaudeHookEntry(
-                context,
-                'UserPromptSubmit',
-                '*',
-                'sonar-secrets',
-                'sonar-secrets/build-scripts/prompt-secrets',
-              ),
-            ]),
-        }),
+        },
       ],
-    },
+      hookEntries: [
+        {
+          eventType: 'PreToolUse',
+          matcher: 'Read',
+          marker: 'sonar-secrets',
+          scriptPath: PRETOOL_SCRIPT_REL,
+        },
+        {
+          eventType: 'UserPromptSubmit',
+          matcher: '*',
+          marker: 'sonar-secrets',
+          scriptPath: PROMPT_SCRIPT_REL,
+        },
+      ],
+    }),
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
@@ -157,7 +117,11 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'posttool-sqaa-script',
           displayName: 'Claude PostToolUse hook script',
           targetPath: (context) =>
-            resolveClaudeHookScriptPath(context, 'sonar-sqaa/build-scripts/posttool-sqaa'),
+            resolveAgentHookScriptPath(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'sonar-sqaa/build-scripts/posttool-sqaa',
+            ),
           content: (context) => {
             const projectKey = getRequiredStringAttr(context, 'projectKey');
             return process.platform === 'win32'
@@ -172,9 +136,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           targetPath: resolveClaudeSettingsPath,
           defaultValue: { hooks: {} },
           patch: (document, context) =>
-            upsertClaudeHooks(document, [
-              createClaudeHookEntry(
+            upsertAgentHooks(document, [
+              createAgentHookEntry(
                 context,
+                CLAUDE_CONFIG_DIR,
                 'PostToolUse',
                 'Edit|Write',
                 'sonar-sqaa',
@@ -213,82 +178,12 @@ export function registerClaudeIntegration(): void {
   claudeIntegrationRegistered = true;
 }
 
-function resolveClaudeHookScriptPath(context: IntegrationContext, scriptPath: string): string {
-  const extension = process.platform === 'win32' ? '.ps1' : '.sh';
-  return join(context.targetRoot, CLAUDE_CONFIG_DIR, HOOKS_DIR, `${scriptPath}${extension}`);
-}
-
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);
 }
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {
   return getMcpConfigFilePath('claude', context.scope === 'global', context.targetRoot);
-}
-
-function createClaudeHookEntry(
-  context: IntegrationContext,
-  eventType: string,
-  matcher: string,
-  marker: string,
-  scriptPath: string,
-): ManagedClaudeHookEntry {
-  return {
-    eventType,
-    marker,
-    hookConfig: {
-      matcher,
-      hooks: [
-        {
-          type: 'command',
-          command: resolveClaudeHookCommand(context, scriptPath),
-          timeout: HOOK_TIMEOUT_SEC,
-        },
-      ],
-    },
-  };
-}
-
-function resolveClaudeHookCommand(context: IntegrationContext, scriptPath: string): string {
-  const extension = process.platform === 'win32' ? '.ps1' : '.sh';
-  const relativePath = join(CLAUDE_CONFIG_DIR, HOOKS_DIR, `${scriptPath}${extension}`);
-  const commandPath =
-    context.scope === 'global' ? join(context.targetRoot, relativePath) : relativePath;
-
-  return process.platform === 'win32'
-    ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
-    : commandPath;
-}
-
-function upsertClaudeHooks(document: unknown, entries: ManagedClaudeHookEntry[]): AgentSettings {
-  const settings = toAgentSettings(document);
-  settings.hooks ??= {};
-
-  for (const entry of entries) {
-    const existingEntries = settings.hooks[entry.eventType] ?? [];
-    settings.hooks[entry.eventType] = [
-      ...existingEntries.filter((hook) => !ownsClaudeHookEntry(hook, entry.marker)),
-      entry.hookConfig,
-    ];
-  }
-
-  return settings;
-}
-
-function ownsClaudeHookEntry(entry: HookConfig, marker: string): boolean {
-  return entry.hooks.some((hook) => hook.command.includes(marker));
-}
-
-function toAgentSettings(document: unknown): AgentSettings {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return { hooks: {} };
-  }
-
-  const settings = document as AgentSettings;
-  return {
-    ...settings,
-    hooks: settings.hooks ? { ...settings.hooks } : {},
-  };
 }
 
 function upsertClaudeMcpServer(document: unknown, serverConfig: object): Record<string, unknown> {

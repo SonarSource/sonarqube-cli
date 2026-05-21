@@ -42,12 +42,42 @@ export interface SqaaJsonReport {
   summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
 }
 
-export function printJsonReport(
+export function makeReport(
+  files: SqaaJsonReport['files'],
+  failures: SqaaJsonReport['failures'],
+  ignored: SqaaJsonReport['ignored'] = [],
+): SqaaJsonReport {
+  return {
+    files,
+    ignored,
+    failures,
+    skipped: [],
+    summary: {
+      totalIssues: files.reduce((n, f) => n + f.issues.length, 0),
+      totalFailures: failures.length,
+      totalSkipped: 0,
+    },
+  };
+}
+
+export function singleFileSuccessReport(
+  filePath: string,
+  issues: SqaaIssue[],
+  errors?: Array<{ code: string; message: string }> | null,
+): SqaaJsonReport {
+  return makeReport([{ path: filePath, issues, errors }], []);
+}
+
+export function singleFileFailureReport(filePath: string, message: string): SqaaJsonReport {
+  return makeReport([], [{ path: filePath, message }]);
+}
+
+export function buildJsonReport(
   tally: RunTally,
   ignored: IgnoredFile[],
   allPaths: string[],
   pathBase?: string,
-): void {
+): SqaaJsonReport {
   const files = tally.allResults
     .filter((r): r is FileSuccess => !('failure' in r))
     .map((r) => ({ path: r.filePath, issues: r.issues, errors: r.errors }));
@@ -59,7 +89,7 @@ export function printJsonReport(
   const processedPaths = new Set<string>(tally.allResults.map((r) => r.filePath));
   const skipped = allPaths.filter((p) => !processedPaths.has(p));
 
-  const report: SqaaJsonReport = {
+  return {
     files,
     ignored: ignored.map((f) => ({
       path: toRelativePosixPath(f.path, pathBase),
@@ -73,8 +103,15 @@ export function printJsonReport(
       totalSkipped: skipped.length,
     },
   };
+}
 
-  print(JSON.stringify(report, null, 2));
+export function printJsonReport(
+  tally: RunTally,
+  ignored: IgnoredFile[],
+  allPaths: string[],
+  pathBase?: string,
+): void {
+  print(JSON.stringify(buildJsonReport(tally, ignored, allPaths, pathBase), null, 2));
 }
 
 export function applyExitCode(totalIssues: number, totalFailures: number): void {

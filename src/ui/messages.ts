@@ -24,6 +24,27 @@ import { cyan, green, isTTY, red, yellow } from './colors.js';
 import { isMockActive, recordCall } from './mock.js';
 import type { ColorFn } from './types.js';
 
+let _formattedOutputMode = false;
+const _collectedMessages: string[] = [];
+
+/**
+ * Enable/disable formatted output mode (e.g. JSON output).
+ * When active, stdout messages are collected into a buffer instead of printed.
+ * Disabling clears the buffer.
+ * stderr output (warn, error) is never affected.
+ */
+export function setFormattedOutputMode(active: boolean): void {
+  _formattedOutputMode = active;
+  if (!active) {
+    _collectedMessages.length = 0;
+  }
+}
+
+/** Returns messages collected since the last setFormattedOutputMode(true) call. */
+export function getMessagesForFormattedOutput(): string[] {
+  return [..._collectedMessages];
+}
+
 function write(stream: NodeJS.WriteStream, line: string): void {
   stream.write(line + '\n');
 }
@@ -31,6 +52,10 @@ function write(stream: NodeJS.WriteStream, line: string): void {
 export function info(message: string): void {
   if (isMockActive()) {
     recordCall('info', message);
+    return;
+  }
+  if (_formattedOutputMode) {
+    _collectedMessages.push(`  ℹ  ${message}`);
     return;
   }
   write(process.stdout, `  ${cyan('ℹ')}  ${message}`);
@@ -41,12 +66,20 @@ export function success(message: string): void {
     recordCall('success', message);
     return;
   }
+  if (_formattedOutputMode) {
+    _collectedMessages.push(`✅ ${message}`);
+    return;
+  }
   write(process.stdout, `✅ ${green(message)}`);
 }
 
 export function discreetSuccess(message: string): void {
   if (isMockActive()) {
     recordCall('discreetSuccess', message);
+    return;
+  }
+  if (_formattedOutputMode) {
+    _collectedMessages.push(`  ✓  ${message}`);
     return;
   }
   write(process.stdout, `  ${green('✓')}  ${message}`);
@@ -74,6 +107,10 @@ export function text(message: string, color?: ColorFn): void {
     recordCall('text', message);
     return;
   }
+  if (_formattedOutputMode) {
+    _collectedMessages.push(message);
+    return;
+  }
   const formatted = color ? color(message) : message;
   write(process.stdout, formatted);
 }
@@ -93,5 +130,6 @@ export function blank(): void {
     recordCall('blank');
     return;
   }
+  if (_formattedOutputMode) return;
   if (isTTY) process.stdout.write('\n');
 }

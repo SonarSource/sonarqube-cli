@@ -18,32 +18,25 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export interface IntegrateAgentOptions {
-  project?: string;
-  nonInteractive?: boolean;
-  global?: boolean;
-  /** Skip the sonar-context-augmentation install/init/skill step. */
-  skipContext?: boolean;
+import { type FeatureDeclaration, SonarSourceBinary, sonarSourceBinary } from '../registry';
+
+export interface SonarSecretsBinaryFeatureOptions {
+  installBinary?: boolean;
 }
 
-export interface HookCommand {
-  type: 'command';
-  command: string;
-  timeout: number;
-}
-
-export interface HookConfig {
-  matcher: string;
-  hooks: HookCommand[];
-}
-
-export interface HooksDocument {
-  hooks?: Record<string, HookConfig[] | undefined>;
-  [key: string]: unknown;
-}
-
-export interface ManagedHookEntry {
-  eventType: string;
-  marker: string;
-  hookConfig: HookConfig;
+export function createSonarSecretsBinaryFeature<
+  TOptions extends SonarSecretsBinaryFeatureOptions,
+>(): FeatureDeclaration<TOptions> {
+  return {
+    id: 'sonar-secrets-binary',
+    displayName: 'sonar-secrets binary',
+    when: ({ options }) => options.installBinary === true,
+    resources: [
+      sonarSourceBinary({
+        id: 'sonar-secrets',
+        displayName: 'sonar-secrets binary',
+        binary: SonarSourceBinary.SonarSecrets,
+      }),
+    ],
+  };
 }

@@ -120,7 +120,7 @@ describe('SonarCommand', () => {
       });
 
       const hintCall = getMockUiCalls().find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe("💡 Run 'sonar auth login' to reauthenticate.");
+      expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to reauthenticate.");
     });
   });
 
@@ -221,7 +221,7 @@ describe('SonarCommand', () => {
       const errCall = getMockUiCalls().find((c) => c.method === 'error');
       expect(errCall?.args[0]).toContain('Not authenticated');
       const hintCall = getMockUiCalls().find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe("💡 Run 'sonar auth login' to authenticate.");
+      expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to authenticate.");
     });
 
     it('catches handler errors and sets process.exitCode', async () => {

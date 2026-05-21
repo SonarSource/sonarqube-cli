@@ -27,6 +27,9 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { IntegrationContext } from './registry';
+import type { HookConfig, HooksDocument, ManagedHookEntry } from './types';
+
 export const SONAR_SECRETS_MARKER = 'sonar-secrets';
 
 export const UNIX_SONAR_COMMAND_GUARD = `if ! command -v sonar &> /dev/null; then
@@ -80,4 +83,108 @@ export async function readOrInitJson<T>(path: string, defaultValue: T): Promise<
   } catch {
     return defaultValue;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shared declarative-registry helpers
+//
+// The Claude and Codex integrations both store their hooks in a JSON document
+// shaped like `{ hooks: { <eventType>: HookConfig[] } }` (Claude uses
+// `.claude/settings.json`, Codex uses `.codex/hooks.json`). The helpers below
+// drive the resource declarations in their `declaration.ts` files; only the
+// per-agent config directory differs.
+// ---------------------------------------------------------------------------
+
+export const HOOK_TIMEOUT_SEC = 60;
+export const HOOKS_DIR = 'hooks';
+
+/** Absolute path to the platform-specific hook script under `<targetRoot>/<configDir>/hooks/`. */
+export function resolveAgentHookScriptPath(
+  context: IntegrationContext,
+  configDir: string,
+  scriptPath: string,
+): string {
+  const extension = process.platform === 'win32' ? '.ps1' : '.sh';
+  return join(context.targetRoot, configDir, HOOKS_DIR, `${scriptPath}${extension}`);
+}
+
+/**
+ * Hook `command` string: `powershell -NoProfile -File <path>` on Windows, raw
+ * path on Unix. Absolute path for global scope, relative path (portable when
+ * the project is moved) for project scope.
+ */
+export function resolveAgentHookCommand(
+  context: IntegrationContext,
+  configDir: string,
+  scriptPath: string,
+): string {
+  const extension = process.platform === 'win32' ? '.ps1' : '.sh';
+  const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${extension}`);
+  const commandPath =
+    context.scope === 'global' ? join(context.targetRoot, relativePath) : relativePath;
+
+  return process.platform === 'win32'
+    ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
+    : commandPath;
+}
+
+export function createAgentHookEntry(
+  context: IntegrationContext,
+  configDir: string,
+  eventType: string,
+  matcher: string,
+  marker: string,
+  scriptPath: string,
+  timeoutSec: number = HOOK_TIMEOUT_SEC,
+): ManagedHookEntry {
+  return {
+    eventType,
+    marker,
+    hookConfig: {
+      matcher,
+      hooks: [
+        {
+          type: 'command',
+          command: resolveAgentHookCommand(context, configDir, scriptPath),
+          timeout: timeoutSec,
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Idempotent upsert: for each managed entry, drop any existing entries owned
+ * by its marker (any hook whose command contains the marker) and append the
+ * desired entry. Returns a new document; does not mutate the input.
+ */
+export function upsertAgentHooks(document: unknown, entries: ManagedHookEntry[]): HooksDocument {
+  const settings = toHooksDocument(document);
+  settings.hooks ??= {};
+
+  for (const entry of entries) {
+    const existingEntries = settings.hooks[entry.eventType] ?? [];
+    settings.hooks[entry.eventType] = [
+      ...existingEntries.filter((hook) => !ownsHookEntry(hook, entry.marker)),
+      entry.hookConfig,
+    ];
+  }
+
+  return settings;
+}
+
+function ownsHookEntry(entry: HookConfig, marker: string): boolean {
+  return entry.hooks.some((hook) => hook.command.includes(marker));
+}
+
+function toHooksDocument(document: unknown): HooksDocument {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) {
+    return { hooks: {} };
+  }
+
+  const settings = document as HooksDocument;
+  return {
+    ...settings,
+    hooks: settings.hooks ? { ...settings.hooks } : {},
+  };
 }
