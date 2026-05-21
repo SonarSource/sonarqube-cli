@@ -62,6 +62,13 @@ interface SqaaExtensionConfig {
   serverUrl?: string;
 }
 
+interface ContextAugmentationSkillConfig {
+  projectRoot: string;
+  projectKey: string;
+  orgKey?: string;
+  serverUrl?: string;
+}
+
 export class EnvironmentBuilder {
   private activeConnectionUrl?: string;
   private activeConnectionType: 'cloud' | 'on-premise' = 'on-premise';
@@ -78,6 +85,7 @@ export class EnvironmentBuilder {
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
+  private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
 
   withActiveConnection(
     url: string,
@@ -225,6 +233,21 @@ export class EnvironmentBuilder {
     return this;
   }
 
+  /**
+   * Registers a sonar-context-augmentation skill extension for a project.
+   * This mirrors the state written by `sonar integrate claude|copilot` after
+   * CAG setup succeeds.
+   */
+  withContextAugmentationSkill(
+    projectRoot: string,
+    projectKey: string,
+    orgKey?: string,
+    serverUrl?: string,
+  ): this {
+    this.contextAugmentationSkills.push({ projectRoot, projectKey, orgKey, serverUrl });
+    return this;
+  }
+
   build(): CliState {
     const state = getDefaultState('integration-test');
 
@@ -301,6 +324,29 @@ export class EnvironmentBuilder {
         kind: 'hook',
         name: 'sonar-sqaa',
         hookType: 'PostToolUse',
+      });
+    }
+
+    for (const skill of this.contextAugmentationSkills) {
+      let resolvedRoot: string;
+      try {
+        resolvedRoot = realpathSync(skill.projectRoot);
+      } catch {
+        resolvedRoot = skill.projectRoot;
+      }
+      state.agentExtensions.push({
+        id: randomUUID(),
+        agentId: 'claude-code',
+        projectRoot: resolvedRoot,
+        global: false,
+        projectKey: skill.projectKey,
+        orgKey: skill.orgKey ?? this.activeConnectionOrgKey,
+        serverUrl: skill.serverUrl ?? this.activeConnectionUrl,
+        updatedByCliVersion: 'integration-test',
+        updatedAt: new Date().toISOString(),
+        kind: 'skill',
+        name: CONTEXT_AUGMENTATION_BINARY_NAME,
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
       });
     }
 

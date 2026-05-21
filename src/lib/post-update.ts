@@ -70,7 +70,8 @@ export async function runPostUpdateActions(): Promise<void> {
   try {
     await runActions(previousVersion, CURRENT_VERSION);
     // Reload state to pick up changes made by subroutines (migrateClaudeCodeHooks,
-    // updateSecretsBinaryIfNeeded) that load and save their own state copies.
+    // updateSecretsBinaryIfNeeded, updateContextAugmentationIfNeeded) that load
+    // and save their own state copies.
     const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
     cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
@@ -93,7 +94,7 @@ async function runActions(_previousVersion: string, _currentVersion: string): Pr
 export async function updateSecretsBinaryIfNeeded(): Promise<void> {
   const state = loadState();
 
-  if (!hasPreviousInstallation(state)) {
+  if (!hasPreviousSecretsInstallation(state)) {
     logger.debug('sonar-secrets not installed — skipping binary update');
     return;
   }
@@ -101,7 +102,7 @@ export async function updateSecretsBinaryIfNeeded(): Promise<void> {
   await installSecretsBinary();
 }
 
-function hasPreviousInstallation(state: CliState): boolean {
+function hasPreviousSecretsInstallation(state: CliState): boolean {
   return hasBinaryInState(state, SECRETS_BINARY_NAME);
 }
 
@@ -149,7 +150,7 @@ async function refreshContextAugmentationSkills(
 function uniqueContextAugmentationSkills(skills: SkillExtension[]): SkillExtension[] {
   const seen = new Set<string>();
   return skills.filter((skill) => {
-    const key = `${skill.agentId}|${skill.projectRoot}`;
+    const key = JSON.stringify([skill.agentId, skill.projectRoot]);
     if (seen.has(key)) {
       return false;
     }
@@ -162,6 +163,13 @@ async function refreshContextAugmentationSkill(
   binaryPath: string,
   skill: SkillExtension,
 ): Promise<void> {
+  if (skill.version === SONAR_CONTEXT_AUGMENTATION_VERSION) {
+    logger.debug(
+      `Context Augmentation skill already at ${SONAR_CONTEXT_AUGMENTATION_VERSION}: ${skill.projectRoot}`,
+    );
+    return;
+  }
+
   const agent = getRefreshableContextAugmentationAgent(skill);
   if (!agent) {
     return;
@@ -251,7 +259,7 @@ function getContextAugmentationSkills(state: CliState): SkillExtension[] {
 
 function isExistingDirectory(path: string): boolean {
   try {
-    return fs.existsSync(path) && fs.statSync(path).isDirectory();
+    return fs.statSync(path).isDirectory();
   } catch {
     return false;
   }

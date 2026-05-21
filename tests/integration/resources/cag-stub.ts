@@ -42,9 +42,15 @@ if (args[0] === '--version') {
 
 const sentinel = process.env.CAG_STUB_SENTINEL;
 if (sentinel) {
+  const contextEnv: Record<string, string> = {};
+  copyEnvValue(contextEnv, 'SONAR_CONTEXT_ORGANIZATION');
+  copyEnvValue(contextEnv, 'SONAR_CONTEXT_PROJECT');
+  copyEnvValue(contextEnv, 'SONAR_CONTEXT_TOKEN');
+  copyEnvValue(contextEnv, 'SONAR_CONTEXT_URL');
+
   const entry = JSON.stringify({
     argv: args,
-    env: { SONAR_TOKEN: process.env.SONAR_TOKEN ?? '' },
+    env: contextEnv,
   });
   appendFileSync(sentinel, entry + '\n');
 }
@@ -62,3 +68,10 @@ if (args[0] === 'skill') {
   process.exit(Number.parseInt(process.env.CAG_STUB_SKILL_EXIT ?? '0', RADIX));
 }
 process.exit(0);
+
+function copyEnvValue(target: Record<string, string>, key: string): void {
+  const value = process.env[key];
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}

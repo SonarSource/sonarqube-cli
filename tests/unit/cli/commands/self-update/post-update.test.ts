@@ -501,7 +501,6 @@ function makeStateWithContextAugmentation(): CliState {
 }
 
 describe('updateContextAugmentationIfNeeded', () => {
-  let existsSyncSpy: Mock<typeof fs.existsSync>;
   let statSyncSpy: Mock<typeof fs.statSync>;
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
   let installContextAugmentationBinarySpy: Mock<typeof cagInstall.installContextAugmentationBinary>;
@@ -511,7 +510,6 @@ describe('updateContextAugmentationIfNeeded', () => {
   let recordSkillExtensionInStateSpy: Mock<typeof stateManager.recordSkillExtensionInState>;
 
   beforeEach(() => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
@@ -531,7 +529,6 @@ describe('updateContextAugmentationIfNeeded', () => {
   });
 
   afterEach(() => {
-    existsSyncSpy.mockRestore();
     statSyncSpy.mockRestore();
     loadStateSpy.mockRestore();
     installContextAugmentationBinarySpy.mockRestore();
@@ -596,6 +593,44 @@ describe('updateContextAugmentationIfNeeded', () => {
     );
   });
 
+  it('skips skill refresh when the recorded version already matches the current CAG version', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [
+      makeContextSkill('/proj/alpha', 'claude-code', SONAR_CONTEXT_AUGMENTATION_VERSION),
+      makeContextSkill('/proj/beta', 'copilot-cli', SONAR_CONTEXT_AUGMENTATION_VERSION),
+    ];
+    loadStateSpy.mockReturnValue(state);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationBinarySpy).toHaveBeenCalledTimes(1);
+    expect(installContextAugmentationSkillSpy).not.toHaveBeenCalled();
+    expect(recordSkillExtensionInStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('refreshes only the skills whose recorded version differs from the current CAG version', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [
+      makeContextSkill('/proj/alpha', 'claude-code', SONAR_CONTEXT_AUGMENTATION_VERSION),
+      makeContextSkill('/proj/beta', 'copilot-cli', '0.0.0-old'),
+    ];
+    loadStateSpy.mockReturnValue(state);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationSkillSpy).toHaveBeenCalledTimes(1);
+    expect(installContextAugmentationSkillSpy).toHaveBeenCalledWith({
+      binaryPath: '/fake/bin/sonar-context-augmentation',
+      agent: 'copilot',
+      projectRoot: '/proj/beta',
+      reportFailure: false,
+    });
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledTimes(1);
+    expect(recordSkillExtensionInStateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ projectRoot: '/proj/beta' }),
+    );
+  });
+
   it('skips deleted project roots and unsupported agent ids', async () => {
     const state = makeStateWithContextAugmentation();
     state.agentExtensions = [
@@ -603,12 +638,36 @@ describe('updateContextAugmentationIfNeeded', () => {
       makeContextSkill('/proj/unknown', 'unknown-agent'),
     ];
     loadStateSpy.mockReturnValue(state);
-    existsSyncSpy.mockImplementation((path) => path !== '/proj/missing');
+    statSyncSpy.mockImplementation(((path: fs.PathLike) => {
+      if (path === '/proj/missing') {
+        throw new Error('ENOENT');
+      }
+      return { isDirectory: () => true } as fs.Stats;
+    }) as typeof fs.statSync);
 
     await updateContextAugmentationIfNeeded();
 
     expect(installContextAugmentationSkillSpy).not.toHaveBeenCalled();
     expect(recordSkillExtensionInStateSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not deduplicate distinct CAG skills that collide under delimiter-joined keys', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [
+      makeContextSkill('alpha', 'claude-code|/proj'),
+      makeContextSkill('/proj|alpha', 'claude-code'),
+    ];
+    loadStateSpy.mockReturnValue(state);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(installContextAugmentationSkillSpy).toHaveBeenCalledTimes(1);
+    expect(installContextAugmentationSkillSpy).toHaveBeenCalledWith({
+      binaryPath: '/fake/bin/sonar-context-augmentation',
+      agent: 'claude-code',
+      projectRoot: '/proj|alpha',
+      reportFailure: false,
+    });
   });
 
   it('continues refreshing remaining skills when one skill install fails', async () => {

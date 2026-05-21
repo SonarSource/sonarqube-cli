@@ -31,7 +31,12 @@ import { TestHarness } from '../../harness';
 
 interface CagInvocation {
   argv: string[];
-  env: { SONAR_TOKEN?: string };
+  env: {
+    SONAR_CONTEXT_ORGANIZATION?: string;
+    SONAR_CONTEXT_PROJECT?: string;
+    SONAR_CONTEXT_TOKEN?: string;
+    SONAR_CONTEXT_URL?: string;
+  };
 }
 
 function readInvocations(harness: TestHarness): CagInvocation[] {
@@ -56,6 +61,27 @@ function findInvocation(invocations: CagInvocation[], subcommand: string): CagIn
 
 function loadState(harness: TestHarness): CliState {
   return harness.stateJsonFile.asJson() as CliState;
+}
+
+function expectContextEnv(invocation: CagInvocation, serverUrl: string): void {
+  expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe(TOKEN);
+  expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
+  expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
+  expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+}
+
+function expectInheritedContextEnv(invocation: CagInvocation): void {
+  expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('caller-token');
+  expect(invocation.env.SONAR_CONTEXT_URL).toBe('https://caller.example');
+  expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe('caller-org');
+  expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('caller-project');
+}
+
+function expectNoContextEnv(invocation: CagInvocation): void {
+  expect(invocation.env.SONAR_CONTEXT_TOKEN).toBeUndefined();
+  expect(invocation.env.SONAR_CONTEXT_URL).toBeUndefined();
+  expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBeUndefined();
+  expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
 }
 
 const PROJECT_KEY = 'my-project';
@@ -99,6 +125,10 @@ describe('integrate claude — Context Augmentation', () => {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          SONAR_CONTEXT_ORGANIZATION: 'caller-org',
+          SONAR_CONTEXT_PROJECT: 'caller-project',
+          SONAR_CONTEXT_TOKEN: 'caller-token',
+          SONAR_CONTEXT_URL: 'https://caller.example',
         },
       });
 
@@ -118,7 +148,7 @@ describe('integrate claude — Context Augmentation', () => {
         '--skip-skill-install',
         '--no-detect',
       ]);
-      expect(init.env.SONAR_TOKEN).toBe(TOKEN);
+      expectContextEnv(init, serverUrl);
       expect(skill.argv).toEqual([
         'skill',
         '--install',
@@ -126,7 +156,7 @@ describe('integrate claude — Context Augmentation', () => {
         '--invocation-prefix',
         'sonar context',
       ]);
-      expect(skill.env.SONAR_TOKEN).toBe(TOKEN);
+      expectInheritedContextEnv(skill);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
       expect(result.stdout).toContain(
         `✓  sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
@@ -492,7 +522,21 @@ describe('integrate copilot — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const skill = findInvocation(readInvocations(harness), 'skill');
+      const invocations = readInvocations(harness);
+      const init = findInvocation(invocations, 'init');
+      const skill = findInvocation(invocations, 'skill');
+      expect(init.argv).toEqual([
+        'init',
+        '--url',
+        serverUrl,
+        '--org',
+        ORG_KEY,
+        '--project-key',
+        PROJECT_KEY,
+        '--skip-skill-install',
+        '--no-detect',
+      ]);
+      expectContextEnv(init, serverUrl);
       expect(skill.argv).toEqual([
         'skill',
         '--install',
@@ -500,6 +544,7 @@ describe('integrate copilot — Context Augmentation', () => {
         '--invocation-prefix',
         'sonar context',
       ]);
+      expectNoContextEnv(skill);
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
       expect(result.stdout).toContain('✓  Context skill configured for Copilot');
 
