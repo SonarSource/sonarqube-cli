@@ -199,4 +199,46 @@ describe('formatDependencyRisksJson', () => {
       { version: '2.0.0', descriptionCode: 'LATEST_STABLE', vulnerabilityIds: [] },
     ]);
   });
+
+  it('emits a summary.packages array with per-package recommendations and risk count', () => {
+    const filtered = makeResponse({
+      releases: [
+        makeRelease({
+          packageName: 'mal',
+          issues: [
+            {
+              key: 'm1',
+              severity: 'BLOCKER',
+              showIncreasedSeverityWarning: null,
+              type: 'MALWARE',
+              quality: 'SECURITY',
+              status: 'OPEN',
+              vulnerabilityId: null,
+              cweIds: null,
+              cvssScore: null,
+              spdxLicenseId: null,
+              versionOptions: null,
+            },
+          ],
+        }),
+      ],
+    });
+
+    const parsed = JSON.parse(render('demo', filtered)) as {
+      summary: {
+        packages: {
+          package: string;
+          riskCount: number;
+          recommendations: Record<string, { action: string; fixVersions: unknown[] }>;
+        }[];
+      };
+    };
+
+    expect(parsed.summary.packages).toHaveLength(1);
+    expect(parsed.summary.packages[0].package).toBe('pkg:npm/mal@1.0.0');
+    expect(parsed.summary.packages[0].riskCount).toBe(1);
+    expect(parsed.summary.packages[0].recommendations).toEqual({
+      MALWARE: { action: 'REMOVE_PACKAGE', fixVersions: [] },
+    });
+  });
 });

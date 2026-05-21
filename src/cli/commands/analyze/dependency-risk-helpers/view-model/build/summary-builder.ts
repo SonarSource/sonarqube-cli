@@ -21,7 +21,7 @@
 import type { ScaIssueType, Severity } from '../../sca-scanner.ts';
 import type { PackageVM } from '../package.ts';
 import type { RiskVM } from '../risk.ts';
-import type { SummaryVM } from '../summary.ts';
+import type { PackageSummaryVM, SummaryVM } from '../summary.ts';
 import { ISSUE_TYPES } from './issue-types.ts';
 import { SEVERITIES } from './severity.ts';
 
@@ -30,6 +30,15 @@ export function buildSummaryVM(packages: PackageVM[], packagesScanned: number): 
     packagesScanned,
     totalRisks: packages.reduce((n, p) => n + p.riskCount, 0),
     byType: countsByTypeAndSeverity(packages),
+    packages: packages.map(toPackageSummary),
+  };
+}
+
+function toPackageSummary(pkg: PackageVM): PackageSummaryVM {
+  return {
+    package: pkg.package,
+    riskCount: pkg.riskCount,
+    recommendations: new Map(pkg.groups.map((g) => [g.type, g.recommendation])),
   };
 }
 

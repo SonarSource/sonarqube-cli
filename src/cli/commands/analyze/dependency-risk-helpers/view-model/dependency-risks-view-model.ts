@@ -37,7 +37,7 @@ export type {
   VulnerabilityRiskVM,
 } from './risk.ts';
 export type { DependencyRisksStatusFilter } from './status-filter.ts';
-export type { SummaryVM } from './summary.ts';
+export type { PackageSummaryVM, SummaryVM } from './summary.ts';
 
 export interface DependencyRisksViewModel {
   packages: PackageVM[];

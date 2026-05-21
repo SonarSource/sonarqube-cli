@@ -25,6 +25,7 @@ import type {
   LicenseGroupVM,
   MalwareGroupVM,
   PackageIdentity,
+  PackageSummaryVM,
   PackageVM,
   RiskGroupVM,
   RiskVM,
@@ -33,6 +34,7 @@ import type {
 } from '../view-model/dependency-risks-view-model.ts';
 import { appendLicenseGroup } from './format-table-license-group.ts';
 import { appendMalwareGroup } from './format-table-malware-group.ts';
+import { formatRecommendationLine } from './format-table-recommendation.ts';
 import { appendVulnerabilityGroup } from './format-table-vulnerability-group.ts';
 
 const MAX_LINE_WIDTH = 80;
@@ -121,6 +123,18 @@ function appendSummaryBlock(lines: string[], summary: SummaryVM): void {
   lines.push('', summaryHeader(summary));
   for (const [type, counts] of summary.byType) {
     lines.push(summaryLineForType(type, counts));
+  }
+  appendRecommendationsSummary(lines, summary.packages);
+}
+
+function appendRecommendationsSummary(lines: string[], packages: PackageSummaryVM[]): void {
+  if (packages.length === 0) return;
+  lines.push('', 'Recommendations:');
+  for (const pkg of packages) {
+    lines.push(`  ${pkg.package.label()} (${pkg.riskCount} risk${pkg.riskCount === 1 ? '' : 's'})`);
+    for (const rec of pkg.recommendations.values()) {
+      lines.push(`    ${formatRecommendationLine(rec)}`);
+    }
   }
 }
 
