@@ -39,8 +39,8 @@ import { appendVulnerabilityGroup } from './format-table-vulnerability-group.ts'
 
 const MAX_LINE_WIDTH = 80;
 const MAX_CHAINS_DISPLAYED = 3;
-const CHAIN_LINE_INDENT = '  ';
-const CHAIN_CONTINUATION_INDENT = `${CHAIN_LINE_INDENT}    `;
+export const LINE_INDENT = '  ';
+const CHAIN_CONTINUATION_INDENT = `${LINE_INDENT}    `;
 
 const TYPE_LABEL_WIDTH = 'PROHIBITED_LICENSE'.length;
 const SEVERITY_COUNT_WIDTH = 3;
@@ -168,17 +168,17 @@ function transitiveChainLines(chains: PackageIdentity[][]): string[] {
   }
   const remaining = chains.length - displayed.length;
   if (remaining > 0) {
-    lines.push(`${CHAIN_LINE_INDENT}and via ${remaining} others`);
+    lines.push(`${LINE_INDENT}and via ${remaining} others`);
   }
   return lines;
 }
 
 function wrapChain(labels: string[], maxWidth: number): string[] {
   if (labels.length === 0) {
-    return [`${CHAIN_LINE_INDENT}via `];
+    return [`${LINE_INDENT}via `];
   }
   const lines: string[] = [];
-  let current = `${CHAIN_LINE_INDENT}via ${labels[0]}`;
+  let current = `${LINE_INDENT}via ${labels[0]}`;
   for (let i = 1; i < labels.length; i++) {
     const candidate = `${current} → ${labels[i]}`;
     if (candidate.length <= maxWidth) {
