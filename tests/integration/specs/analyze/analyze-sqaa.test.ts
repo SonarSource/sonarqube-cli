@@ -92,7 +92,7 @@ describe('analyze agentic', () => {
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
       expect(output).toContain('❌ Not authenticated.');
-      expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
+      expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
     },
     { timeout: 15000 },
   );
@@ -188,7 +188,9 @@ describe('analyze agentic', () => {
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
       expect(output).toContain('Failed to read file');
-      expect(output).toContain("💡 Check that 'src' exists and is readable as a file, then retry.");
+      expect(output).toContain(
+        "  → Check that 'src' exists and is readable as a file, then retry.",
+      );
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
