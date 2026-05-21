@@ -138,7 +138,7 @@
 <hr class="section-divider">
 
 <!-- ─── Quick Start ───────────────────────────────────────────── -->
-<section class="section" id="quickstart">
+<section class="section" id="quickstart" style="max-width:1060px">
   <h2 class="section-title">Quick Start</h2>
   <p class="section-sub">What do you want to do?</p>
 
@@ -155,6 +155,22 @@
       <button class="jtbd-pill" onclick="showJtbd('install')">Update the CLI</button>
     </div>
     <div class="jtbd-recipe" id="jtbd-recipe"></div>
+  </div>
+</section>
+
+<!-- ─── Signup CTA ───────────────────────────────────────────── -->
+<section class="cta-section">
+  <div class="cta-card">
+    <h2 class="cta-title">Safe, reliable, and auditable<br>agentic development</h2>
+    <div class="cta-rating">
+      <img class="cta-g2-logo" src="https://assets-eu-01.kc-usercontent.com:443/ef593040-b591-0198-9506-ed88b30bc023/691ee030-708a-483b-aa90-34612b8aadb8/G2-Icon.svg" alt="G2" width="24" height="24">
+      <span class="cta-stars">★★★★<span class="cta-star-dim">★</span></span>
+      <span class="cta-rating-text">4.6 / 5</span>
+    </div>
+    <div class="cta-actions">
+      <a href="https://www.sonarsource.com/get-started/cloud/" class="btn btn-primary" target="_blank" rel="noopener">Get started</a>
+      <a href="https://www.sonarsource.com/plans-and-pricing/contact-sales/" class="btn btn-outline" target="_blank" rel="noopener">Contact sales</a>
+    </div>
   </div>
 </section>
 
@@ -527,8 +543,19 @@
   function buildStepsHtml(steps) {
     return '<div class="steps">' + steps.map((s, i) => {
       const arrow = i < steps.length - 1 ? '<div class="steps-arrow">→</div>' : '';
-      return `<div class="step"><div class="step-num">${i + 1}</div><h3>${s.title}</h3><code>${s.cmd}</code><p>${s.desc}</p></div>${arrow}`;
+      return `<div class="step"><div class="step-num">${i + 1}</div><h3>${s.title}</h3><div class="step-code-wrap"><code>${s.cmd}</code><button class="step-copy-btn" onclick="copyStepCmd(this, '${s.cmd.replace(/'/g, "\\'")}')" title="Copy">Copy</button></div><p>${s.desc}</p></div>${arrow}`;
     }).join('') + '</div>';
+  }
+
+  function copyStepCmd(btn, cmd) {
+    const done = () => { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(cmd).then(done);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = cmd; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); done();
+    }
   }
 
   let activeJtbd = null;
