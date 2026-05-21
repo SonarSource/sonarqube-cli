@@ -19,12 +19,15 @@
  */
 
 import type { LicenseGroupVM, LicenseRiskVM } from '../view-model/dependency-risks-view-model.ts';
+import { LINE_INDENT } from './format-dependency-risks-table.ts';
 import { formatRecommendationLine } from './format-table-recommendation.ts';
 import { genericRiskInfo } from './format-table-risk-generic.ts';
 
 export function appendLicenseGroup(lines: string[], group: LicenseGroupVM): void {
-  for (const risk of group.risks) lines.push(genericRiskInfo(risk, licenseCell(risk)));
-  lines.push(formatRecommendationLine(group.recommendation));
+  for (const risk of group.risks) {
+    lines.push(`${LINE_INDENT}${genericRiskInfo(risk, licenseCell(risk))}`);
+  }
+  lines.push(`${LINE_INDENT}${formatRecommendationLine(group.recommendation)}`);
 }
 
 function licenseCell(risk: LicenseRiskVM): string {
