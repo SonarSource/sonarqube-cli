@@ -55,7 +55,7 @@ function makeResponse(overrides: Partial<AnalyzeProjectResponse> = {}): AnalyzeP
 function render(project: string, response: AnalyzeProjectResponse): string {
   return formatDependencyRisksJson(
     project,
-    buildDependencyRisksViewModel(response, buildRiskFilter('all')),
+    buildDependencyRisksViewModel(response, buildRiskFilter('including-safe')),
   );
 }
 

@@ -170,7 +170,9 @@ describe('analyze dependency-risks', () => {
     );
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain('Allowed choices are all, open, new');
+    expect(result.stdout + result.stderr).toContain(
+      'Allowed choices are including-safe, all, open, new',
+    );
   });
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {

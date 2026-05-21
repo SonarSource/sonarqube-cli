@@ -39,14 +39,12 @@ import {
 import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table/format-dependency-risks-table.ts';
 import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
-import type {
-  DependencyRisksStatusFilter,
-  DependencyRisksViewModel,
-} from './dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
+import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
+import type { DependencyRisksStatusFilter } from './dependency-risk-helpers/view-model/status-filter.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
 
-export const VALID_STATUS_FILTERS: readonly DependencyRisksStatusFilter[] = ['all', 'open', 'new'];
+export { DEPENDENCY_RISKS_STATUS_FILTERS as VALID_STATUS_FILTERS } from './dependency-risk-helpers/view-model/status-filter.ts';
 
 const EXIT_CODE_OK = 0;
 const EXIT_CODE_ERRORS_ONLY = 1;
