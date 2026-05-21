@@ -18,4 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type DependencyRisksStatusFilter = 'all' | 'open' | 'new';
+export const DEPENDENCY_RISKS_STATUS_FILTERS = ['including-safe', 'all', 'open', 'new'] as const;
+
+export type DependencyRisksStatusFilter = (typeof DEPENDENCY_RISKS_STATUS_FILTERS)[number];

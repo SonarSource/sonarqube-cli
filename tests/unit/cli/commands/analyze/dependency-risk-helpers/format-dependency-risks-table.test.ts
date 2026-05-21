@@ -40,7 +40,7 @@ function renderTable(response: {
   errors: AnalysisErrorResource[];
 }): string {
   return formatDependencyRisksTable(
-    buildDependencyRisksViewModel(response, buildRiskFilter('all')),
+    buildDependencyRisksViewModel(response, buildRiskFilter('including-safe')),
   );
 }
 

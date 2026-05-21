@@ -29,8 +29,10 @@ const RESOLVED_STATUSES = new Set(['SAFE', 'FIXED', 'ACCEPT']);
 
 export function buildRiskFilter(statusFilter: DependencyRisksStatusFilter): RiskPredicate {
   switch (statusFilter) {
-    case 'all':
+    case 'including-safe':
       return () => true;
+    case 'all':
+      return (risk) => risk.status !== 'SAFE';
     case 'open':
       return (risk) => !RESOLVED_STATUSES.has(risk.status);
     case 'new':
