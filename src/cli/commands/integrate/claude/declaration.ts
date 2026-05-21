@@ -23,6 +23,11 @@ import { join } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import {
+  createAgentHookEntry,
+  resolveAgentHookScriptPath,
+  upsertAgentHooks,
+} from '../_common/hooks';
+import {
   type IntegrationContext,
   type IntegrationDeclaration,
   jsonPatch,
@@ -42,9 +47,7 @@ import {
 } from './hook-templates';
 
 const CLAUDE_CONFIG_DIR = '.claude';
-const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
-const HOOK_TIMEOUT_SEC = 60;
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
@@ -54,28 +57,6 @@ export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   installSecretsHooks?: boolean;
   installSqaaHook?: boolean;
   installMcp?: boolean;
-}
-
-interface HookCommand {
-  type: 'command';
-  command: string;
-  timeout: number;
-}
-
-interface HookConfig {
-  matcher: string;
-  hooks: HookCommand[];
-}
-
-interface AgentSettings {
-  hooks?: Record<string, HookConfig[] | undefined>;
-  [key: string]: unknown;
-}
-
-interface ManagedClaudeHookEntry {
-  eventType: string;
-  marker: string;
-  hookConfig: HookConfig;
 }
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
@@ -103,7 +84,11 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'pretool-secrets-script',
           displayName: 'Claude PreToolUse hook script',
           targetPath: (context) =>
-            resolveClaudeHookScriptPath(context, 'sonar-secrets/build-scripts/pretool-secrets'),
+            resolveAgentHookScriptPath(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'sonar-secrets/build-scripts/pretool-secrets',
+            ),
           content: {
             unix: getSecretPreToolTemplateUnix(),
             windows: getSecretPreToolTemplateWindows(),
@@ -114,7 +99,11 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'prompt-secrets-script',
           displayName: 'Claude UserPromptSubmit hook script',
           targetPath: (context) =>
-            resolveClaudeHookScriptPath(context, 'sonar-secrets/build-scripts/prompt-secrets'),
+            resolveAgentHookScriptPath(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'sonar-secrets/build-scripts/prompt-secrets',
+            ),
           content: {
             unix: getSecretPromptTemplateUnix(),
             windows: getSecretPromptTemplateWindows(),
@@ -127,16 +116,18 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           targetPath: resolveClaudeSettingsPath,
           defaultValue: { hooks: {} },
           patch: (document, context) =>
-            upsertClaudeHooks(document, [
-              createClaudeHookEntry(
+            upsertAgentHooks(document, [
+              createAgentHookEntry(
                 context,
+                CLAUDE_CONFIG_DIR,
                 'PreToolUse',
                 'Read',
                 'sonar-secrets',
                 'sonar-secrets/build-scripts/pretool-secrets',
               ),
-              createClaudeHookEntry(
+              createAgentHookEntry(
                 context,
+                CLAUDE_CONFIG_DIR,
                 'UserPromptSubmit',
                 '*',
                 'sonar-secrets',
@@ -157,7 +148,11 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           id: 'posttool-sqaa-script',
           displayName: 'Claude PostToolUse hook script',
           targetPath: (context) =>
-            resolveClaudeHookScriptPath(context, 'sonar-sqaa/build-scripts/posttool-sqaa'),
+            resolveAgentHookScriptPath(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'sonar-sqaa/build-scripts/posttool-sqaa',
+            ),
           content: (context) => {
             const projectKey = getRequiredStringAttr(context, 'projectKey');
             return process.platform === 'win32'
@@ -172,9 +167,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           targetPath: resolveClaudeSettingsPath,
           defaultValue: { hooks: {} },
           patch: (document, context) =>
-            upsertClaudeHooks(document, [
-              createClaudeHookEntry(
+            upsertAgentHooks(document, [
+              createAgentHookEntry(
                 context,
+                CLAUDE_CONFIG_DIR,
                 'PostToolUse',
                 'Edit|Write',
                 'sonar-sqaa',
@@ -213,82 +209,12 @@ export function registerClaudeIntegration(): void {
   claudeIntegrationRegistered = true;
 }
 
-function resolveClaudeHookScriptPath(context: IntegrationContext, scriptPath: string): string {
-  const extension = process.platform === 'win32' ? '.ps1' : '.sh';
-  return join(context.targetRoot, CLAUDE_CONFIG_DIR, HOOKS_DIR, `${scriptPath}${extension}`);
-}
-
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);
 }
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {
   return getMcpConfigFilePath('claude', context.scope === 'global', context.targetRoot);
-}
-
-function createClaudeHookEntry(
-  context: IntegrationContext,
-  eventType: string,
-  matcher: string,
-  marker: string,
-  scriptPath: string,
-): ManagedClaudeHookEntry {
-  return {
-    eventType,
-    marker,
-    hookConfig: {
-      matcher,
-      hooks: [
-        {
-          type: 'command',
-          command: resolveClaudeHookCommand(context, scriptPath),
-          timeout: HOOK_TIMEOUT_SEC,
-        },
-      ],
-    },
-  };
-}
-
-function resolveClaudeHookCommand(context: IntegrationContext, scriptPath: string): string {
-  const extension = process.platform === 'win32' ? '.ps1' : '.sh';
-  const relativePath = join(CLAUDE_CONFIG_DIR, HOOKS_DIR, `${scriptPath}${extension}`);
-  const commandPath =
-    context.scope === 'global' ? join(context.targetRoot, relativePath) : relativePath;
-
-  return process.platform === 'win32'
-    ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
-    : commandPath;
-}
-
-function upsertClaudeHooks(document: unknown, entries: ManagedClaudeHookEntry[]): AgentSettings {
-  const settings = toAgentSettings(document);
-  settings.hooks ??= {};
-
-  for (const entry of entries) {
-    const existingEntries = settings.hooks[entry.eventType] ?? [];
-    settings.hooks[entry.eventType] = [
-      ...existingEntries.filter((hook) => !ownsClaudeHookEntry(hook, entry.marker)),
-      entry.hookConfig,
-    ];
-  }
-
-  return settings;
-}
-
-function ownsClaudeHookEntry(entry: HookConfig, marker: string): boolean {
-  return entry.hooks.some((hook) => hook.command.includes(marker));
-}
-
-function toAgentSettings(document: unknown): AgentSettings {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return { hooks: {} };
-  }
-
-  const settings = document as AgentSettings;
-  return {
-    ...settings,
-    hooks: settings.hooks ? { ...settings.hooks } : {},
-  };
 }
 
 function upsertClaudeMcpServer(document: unknown, serverConfig: object): Record<string, unknown> {

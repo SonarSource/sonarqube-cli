@@ -106,6 +106,38 @@ describe('integrate codex', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'preserves pre-existing non-Sonar entries in hooks.json across re-install',
+      async () => {
+        harness.cwd.writeFile(
+          '.codex/hooks.json',
+          JSON.stringify({
+            hooks: {
+              UserPromptSubmit: [
+                {
+                  matcher: '*',
+                  hooks: [
+                    { type: 'command', command: '.codex/hooks/other-tool/run.sh', timeout: 30 },
+                  ],
+                },
+              ],
+            },
+          }),
+        );
+
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const commands = hooks.hooks?.UserPromptSubmit?.flatMap(
+          (entry) => entry.hooks?.map((hook) => hook.command) ?? [],
+        );
+        expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
+        expect(commands?.some((command) => command?.includes('sonar-secrets'))).toBe(true);
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe('global install (-g)', () => {
