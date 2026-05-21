@@ -578,6 +578,17 @@
     }
   }
 
+  function copyStepCmd(btn, cmd) {
+    const done = () => { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(cmd).then(done);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = cmd; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); done();
+    }
+  }
+
   let activeJtbd = null;
 
   function showJtbd(key) {
