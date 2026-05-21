@@ -31,11 +31,11 @@ import {
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
+import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CLAUDE_INTEGRATION_ID, registerClaudeIntegration } from './declaration';
 import { runHealthChecks } from './health';
@@ -251,19 +251,6 @@ function reportHookInstallationOutcome(
   } else {
     success('Claude Code integration successfully configured at the project level');
   }
-}
-
-/**
- * Check if the organization has SQAA entitlement.
- * Returns false for on-premise, missing org, or failed API call.
- */
-async function resolveSqaaEntitlement(
-  serverURL: string,
-  token: string,
-  organization: string | undefined,
-): Promise<boolean> {
-  const client = new SonarQubeClient(serverURL, token);
-  return client.hasSqaaEntitlement(organization);
 }
 
 /**

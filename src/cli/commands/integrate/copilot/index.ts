@@ -19,10 +19,10 @@
  */
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
-import { SonarQubeClient } from '../../../../sonarqube/client';
 import { intro, print, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
+import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { installHooks } from './hooks';
 import type { InstructionsInstallResult } from './instructions';
@@ -56,7 +56,8 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     );
   }
 
-  const sqaaProjectKey = await resolveSqaaProjectKey(auth, projectKey);
+  const entitled = await resolveSqaaEntitlement(auth.serverUrl, auth.token, auth.orgKey);
+  const sqaaProjectKey = entitled && projectKey ? projectKey : undefined;
 
   // ============
   // Installation
@@ -86,38 +87,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   }
 
   reportInstallationOutcome(isGlobal, hookPath, instructions);
-}
-
-/**
- * Resolve the project key to bake into the SQAA section of the instructions
- * file, or `undefined` when the SQAA section must not be installed.
- *
- * SQAA is project-scoped (the section carries a baked-in --project key) but is
- * written to the project file regardless of --global, so global installs can
- * still get SQAA when a project key is known.
- *
- * Returns the project key only when *all* are true:
- *   1. project key resolvable (from --project flag or sonar-project.properties)
- *   2. cloud + org auth with SQAA entitlement enabled
- */
-async function resolveSqaaProjectKey(
-  auth: ResolvedAuth,
-  projectKey: string | undefined,
-): Promise<string | undefined> {
-  if (!projectKey) {
-    return undefined;
-  }
-  try {
-    const client = new SonarQubeClient(auth.serverUrl, auth.token);
-    const entitled = await client.hasSqaaEntitlement(auth.orgKey);
-    return entitled ? projectKey : undefined;
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    warn(
-      `Could not determine SonarQube Agentic Analysis entitlement — skipping instructions setup: ${detail}`,
-    );
-    return undefined;
-  }
 }
 
 function reportInstallationOutcome(

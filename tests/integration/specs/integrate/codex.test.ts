@@ -187,9 +187,11 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+
+        expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
+        expect(body).toContain('<!-- sonar:end:codex-secrets-on-read -->');
         expect(body).toContain(SECRETS_HEADING);
         expect(body).toContain('sonar analyze secrets');
-        expect(body).not.toContain(SQAA_HEADING);
       },
       { timeout: 30000 },
     );
@@ -216,7 +218,11 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
+        expect(body).toContain('<!-- sonar:end:codex-secrets-on-read -->');
         expect(body).toContain(SECRETS_HEADING);
+        expect(body).toContain('<!-- sonar:begin:sqaa-protocol -->');
+        expect(body).toContain('<!-- sonar:end:sqaa-protocol -->');
         expect(body).toContain(SQAA_HEADING);
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
       },

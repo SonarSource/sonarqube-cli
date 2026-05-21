@@ -25,10 +25,10 @@ import { homedir } from 'node:os';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { SonarQubeClient } from '../../../../sonarqube/client';
 import { intro, print, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { installIntegration } from '../_common/registry';
+import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CODEX_INTEGRATION_ID, registerCodexIntegration } from './declaration';
 
@@ -98,19 +98,6 @@ export async function integrateCodex(
   } else {
     success('Codex integration successfully configured at the project level');
   }
-}
-
-/**
- * Check if the organization has SQAA entitlement.
- * Returns false for on-premise, missing org, or failed API call.
- */
-async function resolveSqaaEntitlement(
-  serverURL: string,
-  token: string,
-  organization: string | undefined,
-): Promise<boolean> {
-  const client = new SonarQubeClient(serverURL, token);
-  return client.hasSqaaEntitlement(organization);
 }
 
 function buildAttrs(args: {
