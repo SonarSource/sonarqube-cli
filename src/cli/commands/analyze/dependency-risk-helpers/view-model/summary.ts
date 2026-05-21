@@ -32,5 +32,6 @@ export interface SummaryVM {
 export interface PackageSummaryVM {
   package: PackageIdentity;
   riskCount: number;
+  highestSeverity: Severity;
   recommendations: Map<ScaIssueType, RecommendationVM>;
 }

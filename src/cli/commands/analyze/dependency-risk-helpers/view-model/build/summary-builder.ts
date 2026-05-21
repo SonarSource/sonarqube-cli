@@ -23,7 +23,7 @@ import type { PackageVM } from '../package.ts';
 import type { RiskVM } from '../risk.ts';
 import type { PackageSummaryVM, SummaryVM } from '../summary.ts';
 import { ISSUE_TYPES } from './issue-types.ts';
-import { SEVERITIES } from './severity.ts';
+import { compareSeverity, SEVERITIES } from './severity.ts';
 
 export function buildSummaryVM(packages: PackageVM[], packagesScanned: number): SummaryVM {
   return {
@@ -38,8 +38,24 @@ function toPackageSummary(pkg: PackageVM): PackageSummaryVM {
   return {
     package: pkg.package,
     riskCount: pkg.riskCount,
+    highestSeverity: highestSeverityOf(pkg),
     recommendations: new Map(pkg.groups.map((g) => [g.type, g.recommendation])),
   };
+}
+
+function highestSeverityOf(pkg: PackageVM): Severity {
+  let highest: Severity | undefined;
+  for (const group of pkg.groups) {
+    for (const risk of group.risks) {
+      if (highest === undefined || compareSeverity(risk.severity, highest) < 0) {
+        highest = risk.severity;
+      }
+    }
+  }
+  if (highest === undefined) {
+    throw new Error(`Package ${pkg.package.label()} has no risks`);
+  }
+  return highest;
 }
 
 function countsByTypeAndSeverity(packages: PackageVM[]): Map<ScaIssueType, Map<Severity, number>> {
