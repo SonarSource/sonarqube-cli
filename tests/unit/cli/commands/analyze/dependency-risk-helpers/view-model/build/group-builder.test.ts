@@ -78,10 +78,11 @@ describe('buildGroups — filtering', () => {
 
   it('keeps the group when at least one risk survives the filter', () => {
     const release = mockScaRelease({
+      newlyIntroduced: true,
       issues: [
         mockVulnerabilityRisk({ vulnerabilityId: 'CVE-A', status: 'OPEN' }),
         mockVulnerabilityRisk({ vulnerabilityId: 'CVE-B', status: 'OPEN' }),
-        mockVulnerabilityRisk({ vulnerabilityId: 'CVE-C', status: 'NEW' }),
+        mockVulnerabilityRisk({ vulnerabilityId: 'CVE-C', status: null }),
       ],
     });
 

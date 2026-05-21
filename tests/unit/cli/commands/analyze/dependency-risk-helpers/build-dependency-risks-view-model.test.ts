@@ -108,14 +108,19 @@ describe('countUnresolvedIssues', () => {
     const vm = buildVM(
       mockScaResponse([
         mockScaRelease({
+          packageName: 'existing',
           issues: [
-            mockVulnerabilityRisk({ status: 'OPEN' }),
-            mockVulnerabilityRisk({ status: 'NEW' }),
-            mockVulnerabilityRisk({ status: 'SAFE' }),
-            mockVulnerabilityRisk({ status: 'FIXED' }),
-            mockVulnerabilityRisk({ status: 'ACCEPT' }),
-            mockVulnerabilityRisk({ status: 'CONFIRM' }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-OPEN', status: 'OPEN' }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-SAFE', status: 'SAFE' }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-FIXED', status: 'FIXED' }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-ACCEPT', status: 'ACCEPT' }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-CONFIRM', status: 'CONFIRM' }),
           ],
+        }),
+        mockScaRelease({
+          packageName: 'fresh',
+          newlyIntroduced: true,
+          issues: [mockVulnerabilityRisk({ vulnerabilityId: 'CVE-NEW', status: null })],
         }),
       ]),
       'including-safe',
@@ -128,11 +133,18 @@ describe('countUnresolvedIssues', () => {
     const vm = buildVM(
       mockScaResponse([
         mockScaRelease({
+          packageName: 'existing',
           issues: [
-            mockVulnerabilityRisk({ status: 'NEW' }),
-            mockVulnerabilityRisk({ status: 'NEW' }),
-            mockVulnerabilityRisk({ status: 'OPEN' }),
-            mockVulnerabilityRisk({ status: 'SAFE' }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-OPEN', status: 'OPEN' }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-SAFE', status: 'SAFE' }),
+          ],
+        }),
+        mockScaRelease({
+          packageName: 'fresh',
+          newlyIntroduced: true,
+          issues: [
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-NEW-1', status: null }),
+            mockVulnerabilityRisk({ vulnerabilityId: 'CVE-NEW-2', status: null }),
           ],
         }),
       ]),

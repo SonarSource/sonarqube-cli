@@ -21,13 +21,23 @@
 import { describe, expect, it } from 'bun:test';
 
 import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
-import type { RiskVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
+import type {
+  EffectiveStatus,
+  RiskVM,
+} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
 
-function risk(status: string): RiskVM {
+function risk(status: EffectiveStatus): RiskVM {
   return { severity: 'HIGH', status };
 }
 
-const ALL_STATUSES = ['OPEN', 'NEW', 'CONFIRM', 'SAFE', 'FIXED', 'ACCEPT'] as const;
+const ALL_STATUSES: readonly EffectiveStatus[] = [
+  'OPEN',
+  'NEW',
+  'CONFIRM',
+  'SAFE',
+  'FIXED',
+  'ACCEPT',
+];
 
 function keep(filter: ReturnType<typeof buildRiskFilter>): string[] {
   return ALL_STATUSES.filter((s) => filter(risk(s)));
