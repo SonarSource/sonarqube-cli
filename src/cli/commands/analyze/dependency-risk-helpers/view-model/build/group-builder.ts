@@ -33,6 +33,11 @@ import type {
 } from '../risk.ts';
 import { selectPackageCompleteFixes } from './fix-version-selector.ts';
 import { ISSUE_TYPES } from './issue-types.ts';
+import {
+  buildLicenseRecommendation,
+  buildMalwareRecommendation,
+  buildVulnerabilityRecommendation,
+} from './recommendation-builder.ts';
 import { buildLicenseRisk, buildMalwareRisk, buildVulnerabilityRisk } from './risk-builder.ts';
 import { sortBySeverity } from './severity.ts';
 
@@ -72,24 +77,27 @@ function buildGroup(
         issues.map((i) => buildMalwareRisk(release, i)),
         filter,
       );
-      return risks.length === 0 ? null : { type, risks };
+      if (risks.length === 0) return null;
+      return { type, risks, recommendation: buildMalwareRecommendation() };
     }
     case 'PROHIBITED_LICENSE': {
       const risks = filterRisks(
         issues.map((i) => buildLicenseRisk(release, i)),
         filter,
       );
-      return risks.length === 0 ? null : { type, risks };
+      if (risks.length === 0) return null;
+      return { type, risks, recommendation: buildLicenseRecommendation() };
     }
     case 'VULNERABILITY': {
       const survivors = issues
         .map((issue) => ({ issue, risk: buildVulnerabilityRisk(release, issue) }))
         .filter(({ risk }) => filter(risk));
       if (survivors.length === 0) return null;
+      const fixVersions = selectPackageCompleteFixes(survivors.map(({ issue }) => issue));
       return {
         type,
         risks: survivors.map(({ risk }) => risk),
-        packageFixes: selectPackageCompleteFixes(survivors.map(({ issue }) => issue)),
+        recommendation: buildVulnerabilityRecommendation(fixVersions),
       };
     }
   }
