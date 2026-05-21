@@ -18,14 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { createSonarSecretsBinaryFeature } from '../_common/features/sonar-secrets-binary-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
-import { type IntegrationDeclaration, supportedIntegrations } from '../_common/registry';
+import {
+  type IntegrationContext,
+  type IntegrationDeclaration,
+  supportedIntegrations,
+  wholeFile,
+} from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
+import { buildAgentsMdContent } from './instructions-templates';
 
 const CODEX_CONFIG_DIR = '.codex';
 const HOOKS_FILE = 'hooks.json';
+const AGENTS_MD_FILE = 'AGENTS.md';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
 export const CODEX_INTEGRATION_ID = 'codex';
@@ -33,6 +42,10 @@ export const CODEX_INTEGRATION_ID = 'codex';
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   installBinary?: boolean;
   installSecretsHooks?: boolean;
+  /** Render the pre-tool secrets-on-read section into `.codex/AGENTS.md`. */
+  installSecretsInstructions?: boolean;
+  /** Render the post-tool SQAA section into `.codex/AGENTS.md`. */
+  installSqaaInstructions?: boolean;
 }
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
@@ -65,6 +78,28 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         },
       ],
     }),
+    {
+      id: 'agents-md-instructions',
+      displayName: 'Codex AGENTS.md instructions',
+      // Fires whenever at least one section is enabled. Each section's
+      // inclusion is then decided from attrs by the content function, so the
+      // two flags act as independent toggles even though both sections share
+      // a single file.
+      when: ({ options }) =>
+        options.installSecretsInstructions === true || options.installSqaaInstructions === true,
+      resources: [
+        wholeFile({
+          id: 'codex-agents-md',
+          displayName: 'Codex AGENTS.md',
+          targetPath: resolveCodexAgentsMdPath,
+          content: (context) =>
+            buildAgentsMdContent({
+              includeSecrets: getOptionalBoolAttr(context, 'includeSecretsSection'),
+              projectKey: getOptionalStringAttr(context, 'projectKey'),
+            }),
+        }),
+      ],
+    },
   ],
 };
 
@@ -77,4 +112,17 @@ export function registerCodexIntegration(): void {
 
   supportedIntegrations.register(codexIntegration);
   codexIntegrationRegistered = true;
+}
+
+function resolveCodexAgentsMdPath(context: IntegrationContext): string {
+  return join(context.targetRoot, CODEX_CONFIG_DIR, AGENTS_MD_FILE);
+}
+
+function getOptionalStringAttr(context: IntegrationContext, key: string): string | undefined {
+  const value = context.attrs?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getOptionalBoolAttr(context: IntegrationContext, key: string): boolean {
+  return context.attrs?.[key] === true;
 }

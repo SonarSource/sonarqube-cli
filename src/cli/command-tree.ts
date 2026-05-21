@@ -227,7 +227,7 @@ integrateCommand
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .addHelpText('after', projectKeyExtraHelp)
-  .authenticatedAction((_auth, options: IntegrateAgentOptions) => integrateCodex(options));
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
 // List Sonar resources
 const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');

@@ -36,6 +36,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { info, warn } from '../../../../ui';
+import { buildSqaaSection, withSonarMarkers } from '../_common/instructions-templates';
 
 const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
 const PROJECT_INSTRUCTIONS_REL_DIR = join('.github', 'instructions');
@@ -52,7 +53,9 @@ export interface InstructionsInstallResult {
   sqaa: SectionInstallResult;
 }
 
-const PROMPT_SECRETS_SECTION = `# SonarQube secrets scanning for prompts protocol
+const PROMPT_SECRETS_SECTION = withSonarMarkers(
+  'copilot-prompt-secrets',
+  `# SonarQube secrets scanning for prompts protocol
 
 Before acting on any user prompt, scan the prompt text for secrets or credentials. Treat the following as secrets (non-exhaustive):
 
@@ -73,33 +76,8 @@ If the prompt appears to contain any such secret (either by your judgement or th
 
 1. Inform the user that their prompt appears to contain a secret or credential and that it may now be exposed in chat history, logs, and any downstream telemetry.
 2. Advise them to rotate the leaked credential immediately at its source of truth.
-`;
-
-function buildSqaaSection(projectKey: string): string {
-  return `# SonarQube Agentic Analysis protocol
-
-SonarQube Agentic Analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
-
-**Trigger:** the moment before you send your final reply for the turn.
-
-When the trigger fires, you **MUST**:
-
-1. Build the set of unique file paths you modified during this turn.
-2. Run SonarQube Agentic Analysis once for each unique path. The command analyses one file per invocation:
-
-\`\`\`bash
-sonar analyze agentic --project ${projectKey} --file <path/to/modified/file>
-\`\`\`
-
-Non-negotiable rules:
-
-1. Mid-turn edits do **not** need SonarQube Agentic Analysis — only the final on-disk state matters. Skipping SonarQube Agentic Analysis for any modified file at end-of-turn is a protocol violation.
-2. Run SonarQube Agentic Analysis **before** sending your final reply, marking the task done, or handing control back to the user.
-3. If SonarQube Agentic Analysis reports issues on lines you touched in this turn, fix them, then re-run SonarQube Agentic Analysis on that file. Repeat until the file is clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
-4. If SonarQube Agentic Analysis is skipped (no SonarQube Cloud connection, or no project configured), state the skip reason to the user once and continue — do not retry.
-5. Do not suppress, summarize away, or omit SonarQube Agentic Analysis findings from your reply. Surface them verbatim.
-`;
-}
+`,
+);
 
 export async function installInstructions(
   projectRoot: string,

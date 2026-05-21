@@ -31,6 +31,9 @@ import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../.
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
+const AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
+const SECRETS_HEADING = '# SonarQube secrets scanning for files protocol';
+const SQAA_HEADING = '# SonarQube Agentic Analysis protocol';
 
 interface CodexHooksFile {
   hooks?: {
@@ -171,5 +174,104 @@ describe('integrate codex', () => {
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('mutually exclusive');
     });
+  });
+
+  describe('AGENTS.md instructions', () => {
+    const TEST_ORG = 'my-org';
+    const TEST_PROJECT = 'my-project';
+
+    it(
+      'writes the secrets-on-read section to <repo>/.codex/AGENTS.md at project scope (no SQAA without entitlement)',
+      async () => {
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        expect(body).toContain(SECRETS_HEADING);
+        expect(body).toContain('sonar analyze secrets');
+        expect(body).not.toContain(SQAA_HEADING);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'appends the SQAA section with the project key baked in when the org is entitled',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        const result = await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        expect(body).toContain(SECRETS_HEADING);
+        expect(body).toContain(SQAA_HEADING);
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes ~/.codex/AGENTS.md (and nothing project-side) at global scope without SQAA entitlement, and does NOT warn about SQAA',
+      async () => {
+        const result = await harness.run('integrate codex -g');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...AGENTS_MD_DIRS)).toBe(false);
+        const body = harness.userHome.file(...AGENTS_MD_DIRS).asText();
+        expect(body).toContain(SECRETS_HEADING);
+        expect(body).not.toContain(SQAA_HEADING);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).not.toContain('sonar integrate codex --project');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'on global install, does not write SQAA project-side but warns to run per-project when the org is entitled',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+
+        const result = await harness.run('integrate codex -g', {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...AGENTS_MD_DIRS)).toBe(false);
+
+        const globalBody = harness.userHome.file(...AGENTS_MD_DIRS).asText();
+        expect(globalBody).toContain(SECRETS_HEADING);
+        expect(globalBody).not.toContain(SQAA_HEADING);
+
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).toContain('SonarQube Agentic Analysis');
+        expect(output).toContain('sonar integrate codex --project');
+      },
+      { timeout: 30000 },
+    );
   });
 });
