@@ -144,29 +144,17 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     [
       'tool',
       'integrate',
-      // We install the skill ourselves below with --invocation-prefix overridden,
-      // so suppress init's default skill install (CAG-374).
-      '--skip-skill-install',
+      '--agent',
+      p.agent,
+      '--invocation-prefix',
+      SONAR_CONTEXT_INVOCATION,
+      `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
     ],
     p,
     initEnv,
   );
   if (!initOk) {
     warn('Context Augmentation init failed (see output above). Skipping skill installation.');
-    return;
-  }
-
-  // skill --install renders the skill template into the agent config directory; it does not
-  // call the server, so it does not need the SONAR_CONTEXT_* env. Post-update reuses the same
-  // path (see installContextAugmentationSkill) without auth, so keep this consistent.
-  const skillOk = await runCagStep(
-    `Context skill configured for ${AGENT_DISPLAY_NAME[p.agent]}`,
-    binaryPath,
-    buildSkillInstallArgs(p.agent, scaEnabled),
-    p,
-  );
-  if (!skillOk) {
-    warn('Context Augmentation skill install failed (see output above).');
     return;
   }
 
