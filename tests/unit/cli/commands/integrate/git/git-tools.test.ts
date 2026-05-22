@@ -29,18 +29,18 @@ import {
 } from '../../../../../../src/cli/commands/integrate/git/tools';
 
 describe('registerGitIntegrations', () => {
-  it('rejects duplicate git integration registration', () => {
+  it('is idempotent when git integrations are already registered', () => {
     const registry = new IntegrationRegistry();
-
-    registerGitIntegrations(registry);
-
-    expect(registry.list().map((integration) => integration.id)).toEqual([
+    const expectedIntegrationIds = [
       NATIVE_GIT_INTEGRATION_ID,
       HUSKY_INTEGRATION_ID,
       PRE_COMMIT_INTEGRATION_ID,
-    ]);
-    expect(() => registerGitIntegrations(registry)).toThrow(
-      'Integration declaration already registered: native-git',
-    );
+    ];
+
+    registerGitIntegrations(registry);
+
+    expect(registry.list().map((integration) => integration.id)).toEqual(expectedIntegrationIds);
+    expect(() => registerGitIntegrations(registry)).not.toThrow();
+    expect(registry.list().map((integration) => integration.id)).toEqual(expectedIntegrationIds);
   });
 });

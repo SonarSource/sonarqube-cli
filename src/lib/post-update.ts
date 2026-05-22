@@ -31,7 +31,18 @@ import {
   resolveContextAugmentationAgent,
   stopAllContextAugmentationTools,
 } from '../cli/commands/integrate/_common/context-augmentation';
+import {
+  integrationInstaller,
+  type IntegrationRegistry,
+  supportedIntegrations,
+} from '../cli/commands/integrate/_common/registry';
+import {
+  CLAUDE_INTEGRATION_ID,
+  registerClaudeIntegration,
+} from '../cli/commands/integrate/claude/declaration';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
+import { registerCodexIntegration } from '../cli/commands/integrate/codex/declaration';
+import { registerGitIntegrations } from '../cli/commands/integrate/git/tools';
 import { CONTEXT_AUGMENTATION_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
 import {
@@ -83,9 +94,82 @@ export async function runPostUpdateActions(): Promise<void> {
 }
 
 async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
+  await migrateDeclarativeIntegrations();
   await migrateClaudeCodeHooks();
   await updateSecretsBinaryIfNeeded();
   await updateContextAugmentationIfNeeded();
+}
+
+export async function migrateDeclarativeIntegrations(
+  registry: IntegrationRegistry = supportedIntegrations,
+): Promise<void> {
+  ensureBuiltInIntegrationsRegistered(registry);
+
+  const state = loadState();
+  let stateChanged = false;
+
+  for (const integration of registry.list()) {
+    const installedIntegration = integrationInstaller.findInstalledIntegration(state, integration);
+    if (!installedIntegration) {
+      continue;
+    }
+
+    const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
+    const knownFeatures = installedIntegration.features.filter((feature) =>
+      featuresById.has(feature.featureId),
+    );
+
+    if (knownFeatures.length !== installedIntegration.features.length) {
+      installedIntegration.features = knownFeatures;
+      stateChanged = true;
+    }
+
+    for (const installedFeature of knownFeatures) {
+      const feature = featuresById.get(installedFeature.featureId);
+      if (!feature) {
+        continue;
+      }
+
+      try {
+        const featureContext = {
+          targetRoot: installedFeature.targetRoot,
+          scope: installedFeature.scope,
+          attrs: installedFeature.attrs,
+        };
+        const applied = await integrationInstaller.applyFeature(
+          { state, ...featureContext },
+          installedFeature,
+          feature,
+        );
+        integrationInstaller.recordInstalledFeature(
+          state,
+          featureContext,
+          integration,
+          feature,
+          applied,
+        );
+        stateChanged = true;
+      } catch (err) {
+        logger.debug(
+          `Declarative migration failed for ${integration.id}.${installedFeature.featureId}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
+  if (stateChanged) {
+    saveState(state);
+  }
+}
+
+function ensureBuiltInIntegrationsRegistered(registry: IntegrationRegistry): void {
+  if (registry !== supportedIntegrations) {
+    return;
+  }
+
+  registerClaudeIntegration();
+  registerCodexIntegration();
+  registerGitIntegrations();
 }
 
 /**
@@ -306,6 +390,11 @@ function isExistingDirectory(path: string): boolean {
 export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir): Promise<void> {
   const state = loadState();
 
+  if (hasInstalledDeclarativeIntegration(state, CLAUDE_INTEGRATION_ID)) {
+    logger.debug('Declarative Claude integration detected — skipping legacy hook migration');
+    return;
+  }
+
   type Location = { projectRoot: string; globalDir: string | undefined };
   const locations: Location[] = [];
 
@@ -343,4 +432,8 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
       );
     }
   }
+}
+
+function hasInstalledDeclarativeIntegration(state: CliState, integrationId: string): boolean {
+  return state.integrations.installed.some((entry) => entry.integrationId === integrationId);
 }

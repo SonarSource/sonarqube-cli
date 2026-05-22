@@ -27,6 +27,9 @@ const GIT_INTEGRATIONS = [nativeGitIntegration, huskyIntegration, preCommitInteg
 
 export function registerGitIntegrations(registry = supportedIntegrations): void {
   for (const integration of GIT_INTEGRATIONS) {
+    if (registry.get(integration.id)) {
+      continue;
+    }
     registry.register(integration);
   }
 }
