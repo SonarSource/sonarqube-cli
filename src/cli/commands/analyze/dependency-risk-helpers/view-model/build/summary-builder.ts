@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { RiskFilterDescription } from '../../risk-filter.ts';
 import type { ScaIssueType, Severity } from '../../sca-scanner.ts';
 import type { PackageVM } from '../package.ts';
 import type { RiskVM } from '../risk.ts';
@@ -25,12 +26,17 @@ import type { PackageSummaryVM, SummaryVM } from '../summary.ts';
 import { ISSUE_TYPES } from './issue-types.ts';
 import { compareSeverity, SEVERITIES } from './severity.ts';
 
-export function buildSummaryVM(packages: PackageVM[], packagesScanned: number): SummaryVM {
+export function buildSummaryVM(
+  packages: PackageVM[],
+  packagesScanned: number,
+  filter: RiskFilterDescription,
+): SummaryVM {
   return {
     packagesScanned,
     totalRisks: packages.reduce((n, p) => n + p.riskCount, 0),
     byType: countsByTypeAndSeverity(packages),
     packages: packages.map(toPackageSummary),
+    filter,
   };
 }
 

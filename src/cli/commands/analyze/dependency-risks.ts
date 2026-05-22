@@ -26,7 +26,7 @@ import { CLI_DIR } from '../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { error, print, warn } from '../../../ui';
-import { CommandFailedError } from '../_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
@@ -40,11 +40,8 @@ import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table/format-dependency-risks-table.ts';
 import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
-import type { DependencyRisksStatusFilter } from './dependency-risk-helpers/view-model/status-filter.ts';
 
 export const VALID_FORMATS = ['json', 'table'];
-
-export { DEPENDENCY_RISKS_STATUS_FILTERS as VALID_STATUS_FILTERS } from './dependency-risk-helpers/view-model/status-filter.ts';
 
 const EXIT_CODE_OK = 0;
 const EXIT_CODE_ERRORS_ONLY = 1;
@@ -53,13 +50,18 @@ const EXIT_CODE_UNRESOLVED_RISKS = 51;
 export interface AnalyzeDependencyRisksOptions {
   project: string;
   format: string;
-  statusFilter: DependencyRisksStatusFilter;
+  statuses: string;
 }
 
 export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
+  const filter = buildRiskFilter(options.statuses);
+  if (!filter) {
+    throw new InvalidOptionError(`Invalid --statuses value: '${options.statuses}'`);
+  }
+
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
   if (!enabled) {
@@ -97,7 +99,7 @@ export async function analyzeDependencyRisks(
     new DefaultScaScannerSpawner(),
   ).run(invocation);
 
-  const viewModel = buildDependencyRisksViewModel(result, buildRiskFilter(options.statusFilter));
+  const viewModel = buildDependencyRisksViewModel(result, filter);
   if (options.format === 'json') {
     print(formatDependencyRisksJson(options.project, viewModel));
   } else {
@@ -133,7 +135,7 @@ function pluralize(count: number, singular: string): string {
 }
 
 export function countUnresolvedIssues(vm: DependencyRisksViewModel): number {
-  const isUnresolved = buildRiskFilter('open');
+  const isUnresolved = buildRiskFilter('active')!.predicate;
   let count = 0;
   for (const pkg of vm.packages) {
     for (const group of pkg.groups) {

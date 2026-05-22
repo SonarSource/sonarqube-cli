@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { RiskPredicate } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
+import type { RiskFilterPredicate } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type { Severity } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { buildGroups } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/group-builder.ts';
 import type {
@@ -35,7 +35,7 @@ import {
   mockVulnerabilityRisk,
 } from './_helpers.ts';
 
-const ALLOW_ALL: RiskPredicate = () => true;
+const ALLOW_ALL: RiskFilterPredicate = () => true;
 
 describe('buildGroups — type ordering', () => {
   it('returns groups in MALWARE → PROHIBITED_LICENSE → VULNERABILITY order regardless of source order', () => {

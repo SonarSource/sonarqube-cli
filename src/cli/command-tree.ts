@@ -34,7 +34,6 @@ import {
   analyzeDependencyRisks,
   type AnalyzeDependencyRisksOptions,
   VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
-  VALID_STATUS_FILTERS as DEPENDENCY_RISKS_STATUS_FILTERS,
 } from './commands/analyze/dependency-risks';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/secrets';
 import {
@@ -332,11 +331,17 @@ const dependencyRisksFormatOption = new Option('--format <format>', 'Output form
   .default('table');
 
 const dependencyRisksStatusFilterOption = new Option(
-  '--status-filter <statusFilter>',
-  'Dependency risk status filter',
-)
-  .choices(DEPENDENCY_RISKS_STATUS_FILTERS)
-  .default('open');
+  '--statuses <statuses>',
+  'Filter issues by status\n' +
+    '\n' +
+    '  Presets:   active | to_fix | all\n' +
+    '  Raw:       new | open | confirm | accept | safe | fixed\n' +
+    '\n' +
+    'Examples:\n' +
+    '    --statuses active\n' +
+    '    --statuses new,confirm\n' +
+    '    --statuses active,safe',
+).default('active');
 
 analyze
   .command('dependency-risks')

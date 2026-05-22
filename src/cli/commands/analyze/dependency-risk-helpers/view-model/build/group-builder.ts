@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { RiskPredicate } from '../../risk-filter.ts';
+import type { RiskFilterPredicate } from '../../risk-filter.ts';
 import type {
   AnalyzeProjectIssue,
   AnalyzeProjectRelease,
@@ -43,7 +43,7 @@ import { sortBySeverity } from './severity.ts';
 
 export function buildGroups(
   release: AnalyzeProjectRelease,
-  filter: RiskPredicate,
+  filter: RiskFilterPredicate,
 ): RiskGroupVM<RiskVM>[] {
   const byType = groupIssuesByType(release.issues);
   const groups: RiskGroupVM<RiskVM>[] = [];
@@ -69,7 +69,7 @@ function buildGroup(
   type: ScaIssueType,
   release: AnalyzeProjectRelease,
   issues: AnalyzeProjectIssue[],
-  filter: RiskPredicate,
+  filter: RiskFilterPredicate,
 ): MalwareGroupVM | LicenseGroupVM | VulnerabilityGroupVM | null {
   switch (type) {
     case 'MALWARE': {
@@ -115,6 +115,6 @@ function buildGroup(
   }
 }
 
-function filterRisks<T extends RiskVM>(risks: T[], filter: RiskPredicate): T[] {
+function filterRisks<T extends RiskVM>(risks: T[], filter: RiskFilterPredicate): T[] {
   return risks.filter(filter);
 }

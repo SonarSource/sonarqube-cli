@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { RiskFilterDescription } from '../risk-filter.ts';
 import type { ScaIssueType, Severity } from '../sca-scanner.ts';
 import type { PackageIdentity } from './package.ts';
 import type { RecommendationVM } from './recommendation.ts';
@@ -27,6 +28,7 @@ export interface SummaryVM {
   totalRisks: number;
   byType: Map<ScaIssueType, Map<Severity, number>>;
   packages: PackageSummaryVM[];
+  filter: RiskFilterDescription;
 }
 
 export interface PackageSummaryVM {

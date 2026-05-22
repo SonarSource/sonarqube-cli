@@ -162,17 +162,13 @@ describe('analyze dependency-risks', () => {
     { timeout: 30000 },
   );
 
-  it('rejects an unknown --status-filter value with commander usage error', async () => {
+  it('rejects an unknown --statuses value', async () => {
     harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run(
-      'analyze dependency-risks --project demo --status-filter bogus',
-    );
+    const result = await harness.run('analyze dependency-risks --project demo --statuses bogus');
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain(
-      'Allowed choices are including-safe, all, open, new',
-    );
+    expect(result.stdout + result.stderr).toContain("Invalid --statuses value: 'bogus'");
   });
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {

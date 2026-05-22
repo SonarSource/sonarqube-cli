@@ -20,7 +20,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
+import {
+  buildRiskFilter,
+  type RiskFilterPredicate,
+} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type {
   EffectiveStatus,
   RiskVM,
@@ -39,13 +42,17 @@ const ALL_STATUSES: readonly EffectiveStatus[] = [
   'ACCEPT',
 ];
 
-function keep(filter: ReturnType<typeof buildRiskFilter>): string[] {
-  return ALL_STATUSES.filter((s) => filter(risk(s)));
+function keep(predicate: RiskFilterPredicate): string[] {
+  return ALL_STATUSES.filter((s) => predicate(risk(s)));
 }
 
-describe('buildRiskFilter', () => {
-  it("'including-safe' keeps every risk regardless of status", () => {
-    expect(keep(buildRiskFilter('including-safe'))).toEqual([
+function predicateFor(input: string): RiskFilterPredicate {
+  return buildRiskFilter(input)!.predicate;
+}
+
+describe('buildRiskFilter — predicate', () => {
+  it("'all' preset keeps every status", () => {
+    expect(keep(predicateFor('all'))).toEqual([
       'OPEN',
       'NEW',
       'CONFIRM',
@@ -55,15 +62,51 @@ describe('buildRiskFilter', () => {
     ]);
   });
 
-  it("'all' keeps every status except SAFE", () => {
-    expect(keep(buildRiskFilter('all'))).toEqual(['OPEN', 'NEW', 'CONFIRM', 'FIXED', 'ACCEPT']);
+  it("'to_fix,fixed' keeps every status except SAFE", () => {
+    expect(keep(predicateFor('to_fix,fixed'))).toEqual([
+      'OPEN',
+      'NEW',
+      'CONFIRM',
+      'FIXED',
+      'ACCEPT',
+    ]);
   });
 
-  it("'open' drops the resolved statuses (SAFE, FIXED, ACCEPT)", () => {
-    expect(keep(buildRiskFilter('open'))).toEqual(['OPEN', 'NEW', 'CONFIRM']);
+  it("'active' preset keeps new, open, confirmed (drops SAFE, FIXED, ACCEPT)", () => {
+    expect(keep(predicateFor('active'))).toEqual(['OPEN', 'NEW', 'CONFIRM']);
   });
 
-  it("'new' keeps only NEW", () => {
-    expect(keep(buildRiskFilter('new'))).toEqual(['NEW']);
+  it("'new' individual status keeps only NEW", () => {
+    expect(keep(predicateFor('new'))).toEqual(['NEW']);
+  });
+});
+
+describe('buildRiskFilter — vm', () => {
+  it("'active' expands to NEW, OPEN, CONFIRM in canonical order", () => {
+    expect(buildRiskFilter('active')?.description.effectiveStatuses).toEqual([
+      'NEW',
+      'OPEN',
+      'CONFIRM',
+    ]);
+  });
+
+  it('raw input keeps the listed statuses, deduplicated and in canonical order', () => {
+    expect(buildRiskFilter('confirm,new')?.description.effectiveStatuses).toEqual([
+      'NEW',
+      'CONFIRM',
+    ]);
+  });
+
+  it('preset + raw merges and deduplicates (active,safe)', () => {
+    expect(buildRiskFilter('active,safe')?.description.effectiveStatuses).toEqual([
+      'NEW',
+      'OPEN',
+      'CONFIRM',
+      'SAFE',
+    ]);
+  });
+
+  it('returns null for an unknown token', () => {
+    expect(buildRiskFilter('bogus')).toBeNull();
   });
 });

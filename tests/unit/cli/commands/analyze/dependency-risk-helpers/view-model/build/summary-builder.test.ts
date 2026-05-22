@@ -20,6 +20,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import {
+  buildRiskFilter,
+  type RiskFilterDescription,
+} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type {
   ScaIssueType,
   Severity,
@@ -36,6 +40,8 @@ import {
   mockScaRelease,
   mockVulnerabilityRisk,
 } from './_helpers.ts';
+
+const DEFAULT_FILTER: RiskFilterDescription = buildRiskFilter('all')!.description;
 
 const ALLOW_ALL = () => true;
 
@@ -62,7 +68,7 @@ describe('buildSummaryVM', () => {
   it('packagesScanned reflects the count passed in, independent of surviving packages', () => {
     const packages = buildPackage([{ severity: 'HIGH' }]);
 
-    const summary = buildSummaryVM(packages, 42);
+    const summary = buildSummaryVM(packages, 42, DEFAULT_FILTER);
 
     expect(summary.packagesScanned).toBe(42);
   });
@@ -73,13 +79,13 @@ describe('buildSummaryVM', () => {
       [{ severity: 'BLOCKER' }],
     );
 
-    const summary = buildSummaryVM(packages, packages.length);
+    const summary = buildSummaryVM(packages, packages.length, DEFAULT_FILTER);
 
     expect(summary.totalRisks).toBe(3);
   });
 
   it('byType seeds every (type, severity) cell with 0', () => {
-    const summary = buildSummaryVM([], 0);
+    const summary = buildSummaryVM([], 0, DEFAULT_FILTER);
 
     const types: ScaIssueType[] = ['MALWARE', 'PROHIBITED_LICENSE', 'VULNERABILITY'];
     const severities: Severity[] = ['BLOCKER', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
@@ -105,7 +111,7 @@ describe('buildSummaryVM', () => {
     const identityByPurl = buildPackageIdentityMap([release]);
     const pkg = buildPackageVM(release, ALLOW_ALL, identityByPurl)!;
 
-    const summary = buildSummaryVM([pkg], 1);
+    const summary = buildSummaryVM([pkg], 1, DEFAULT_FILTER);
 
     expect(summary.byType.get('VULNERABILITY')!.get('BLOCKER')).toBe(2);
     expect(summary.byType.get('VULNERABILITY')!.get('HIGH')).toBe(1);
@@ -123,13 +129,13 @@ describe('buildSummaryVM', () => {
       [{ severity: 'LOW', vulnerabilityId: 'CVE-B1' }],
     );
 
-    const summary = buildSummaryVM(packages, packages.length);
+    const summary = buildSummaryVM(packages, packages.length, DEFAULT_FILTER);
 
     expect(summary.byType.get('VULNERABILITY')!.get('LOW')).toBe(3);
   });
 
   it('produces an all-zero byType when there are no packages', () => {
-    const summary = buildSummaryVM([], 5);
+    const summary = buildSummaryVM([], 5, DEFAULT_FILTER);
 
     expect(summary.totalRisks).toBe(0);
     expect(summary.packagesScanned).toBe(5);
@@ -141,7 +147,7 @@ describe('buildSummaryVM', () => {
   });
 
   it('packages is empty when no packages survived', () => {
-    expect(buildSummaryVM([], 5).packages).toEqual([]);
+    expect(buildSummaryVM([], 5, DEFAULT_FILTER).packages).toEqual([]);
   });
 });
 
@@ -154,7 +160,7 @@ describe('buildSummaryVM — per-package recommendations', () => {
     const identityByPurl = buildPackageIdentityMap([release]);
     const pkg = buildPackageVM(release, ALLOW_ALL, identityByPurl)!;
 
-    const summary = buildSummaryVM([pkg], 1);
+    const summary = buildSummaryVM([pkg], 1, DEFAULT_FILTER);
 
     expect(summary.packages).toHaveLength(1);
     expect(summary.packages[0].package).toBe(pkg.package);
@@ -171,7 +177,7 @@ describe('buildSummaryVM — per-package recommendations', () => {
       [{ severity: 'LOW', vulnerabilityId: 'CVE-B' }],
     );
 
-    const summary = buildSummaryVM(packages, packages.length);
+    const summary = buildSummaryVM(packages, packages.length, DEFAULT_FILTER);
 
     expect(summary.packages.map((p) => p.package.name)).toEqual(['pkg0', 'pkg1']);
     expect(summary.packages.every((p) => p.recommendations.size === 1)).toBe(true);
@@ -188,7 +194,7 @@ describe('buildSummaryVM — per-package recommendations', () => {
     const identityByPurl = buildPackageIdentityMap([release]);
     const pkg = buildPackageVM(release, ALLOW_ALL, identityByPurl)!;
 
-    const summary = buildSummaryVM([pkg], 1);
+    const summary = buildSummaryVM([pkg], 1, DEFAULT_FILTER);
 
     expect(summary.packages[0].highestSeverity).toBe('HIGH');
   });
@@ -203,7 +209,7 @@ describe('buildSummaryVM — per-package recommendations', () => {
     const identityByPurl = buildPackageIdentityMap([release]);
     const pkg = buildPackageVM(release, ALLOW_ALL, identityByPurl)!;
 
-    const summary = buildSummaryVM([pkg], 1);
+    const summary = buildSummaryVM([pkg], 1, DEFAULT_FILTER);
 
     expect(summary.packages[0].highestSeverity).toBe('BLOCKER');
   });
@@ -217,7 +223,7 @@ describe('buildSummaryVM — per-package recommendations', () => {
       ],
     );
 
-    const summary = buildSummaryVM(packages, packages.length);
+    const summary = buildSummaryVM(packages, packages.length, DEFAULT_FILTER);
 
     expect(summary.packages[0].highestSeverity).toBe('INFO');
     expect(summary.packages[1].highestSeverity).toBe('BLOCKER');

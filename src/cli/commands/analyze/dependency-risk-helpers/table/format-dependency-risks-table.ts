@@ -19,6 +19,7 @@
  */
 
 import { dim, green, red, STATUS_ICONS } from '../../../../../ui/colors.js';
+import type { RiskFilterDescription } from '../risk-filter.ts';
 import type {
   DependencyRisksViewModel,
   ErrorVM,
@@ -120,7 +121,7 @@ function appendErrors(lines: string[], errors: ErrorVM[]): void {
 }
 
 function appendSummaryBlock(lines: string[], summary: SummaryVM): void {
-  lines.push('', summaryHeader(summary));
+  lines.push('', summaryHeader(summary), filteringByLine(summary.filter));
   for (const [type, counts] of summary.byType) {
     lines.push(summaryLineForType(type, counts));
   }
@@ -142,6 +143,20 @@ function appendRecommendationsSummary(lines: string[], packages: PackageSummaryV
 
 function summaryHeader(summary: SummaryVM): string {
   return `Summary: ${summary.packagesScanned} dependencies checked, ${summary.totalRisks} risks found`;
+}
+
+function filteringByLine(filter: RiskFilterDescription): string {
+  const kept = formatStatuses(filter.effectiveStatuses);
+  if (filter.discardedStatuses.length === 0) {
+    return `Filtering by: ${kept}`;
+  }
+  const discarded = formatStatuses(filter.discardedStatuses);
+  const discardedText = dim(`(discarded: ${discarded})`);
+  return `Filtering by: ${kept} ${discardedText}`;
+}
+
+function formatStatuses(statuses: readonly string[]): string {
+  return statuses.map((s) => s.toLowerCase()).join(', ');
 }
 
 function summaryLineForType(type: string, counts: Map<string, number>): string {

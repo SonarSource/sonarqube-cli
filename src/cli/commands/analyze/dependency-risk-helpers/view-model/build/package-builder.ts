@@ -19,7 +19,7 @@
  */
 
 import logger from '../../../../../../lib/logger.ts';
-import type { RiskPredicate } from '../../risk-filter.ts';
+import type { RiskFilterPredicate } from '../../risk-filter.ts';
 import type { AnalyzeProjectRelease } from '../../sca-scanner.ts';
 import { PackageIdentity, type PackageVM } from '../package.ts';
 import { buildGroups } from './group-builder.ts';
@@ -44,7 +44,7 @@ export function buildPackageIdentityMap(
 
 export function buildPackageVM(
   release: AnalyzeProjectRelease,
-  filter: RiskPredicate,
+  filter: RiskFilterPredicate,
   identityByPurl: Map<string, PackageIdentity>,
 ): PackageVM | null {
   const groups = buildGroups(release, filter);

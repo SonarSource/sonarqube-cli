@@ -23,7 +23,6 @@ import { describe, expect, it } from 'bun:test';
 import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type { AnalyzeProjectResponse } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
-import type { DependencyRisksStatusFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/status-filter.ts';
 import { countUnresolvedIssues } from '../../../../../../src/cli/commands/analyze/dependency-risks.ts';
 import {
   mockScaRelease,
@@ -31,8 +30,8 @@ import {
   mockVulnerabilityRisk,
 } from './view-model/build/_helpers.ts';
 
-function buildVM(response: AnalyzeProjectResponse, filter: DependencyRisksStatusFilter) {
-  return buildDependencyRisksViewModel(response, buildRiskFilter(filter));
+function buildVM(response: AnalyzeProjectResponse, statuses: string) {
+  return buildDependencyRisksViewModel(response, buildRiskFilter(statuses)!);
 }
 
 describe('buildDependencyRisksViewModel — orchestration', () => {
@@ -48,7 +47,7 @@ describe('buildDependencyRisksViewModel — orchestration', () => {
       { errors: [{ id: 'e1', code: 'UNKNOWN', path: null, message: 'oops' }] },
     );
 
-    const vm = buildVM(response, 'including-safe');
+    const vm = buildVM(response, 'all');
 
     expect(vm.packages.map((p) => p.package.name)).toEqual(['a']);
     expect(vm.errors).toEqual([{ code: 'UNKNOWN', path: null, message: 'oops' }]);
@@ -63,7 +62,7 @@ describe('buildDependencyRisksViewModel — orchestration', () => {
       mockScaRelease({ packageName: 'mid', version: '0.0.1', issues: [mockVulnerabilityRisk()] }),
     ]);
 
-    const vm = buildVM(response, 'including-safe');
+    const vm = buildVM(response, 'all');
 
     expect(vm.packages.map((p) => `${p.package.name}@${p.package.version}`)).toEqual([
       'alpha@2.0.0',
@@ -79,7 +78,7 @@ describe('buildDependencyRisksViewModel — orchestration', () => {
       mockScaRelease({ packageName: 'c', issues: [] }),
     ]);
 
-    const vm = buildVM(response, 'open');
+    const vm = buildVM(response, 'active');
 
     expect(vm.packages.map((p) => p.package.name)).toEqual(['b']);
     expect(vm.summary.packagesScanned).toBe(3);
@@ -96,7 +95,7 @@ describe('buildDependencyRisksViewModel — orchestration', () => {
     const issuesBefore = release.issues.length;
     const releasesBefore = response.releases.length;
 
-    buildVM(response, 'open');
+    buildVM(response, 'active');
 
     expect(release.issues.length).toBe(issuesBefore);
     expect(response.releases.length).toBe(releasesBefore);
@@ -123,7 +122,7 @@ describe('countUnresolvedIssues', () => {
           issues: [mockVulnerabilityRisk({ vulnerabilityId: 'CVE-NEW', status: null })],
         }),
       ]),
-      'including-safe',
+      'all',
     );
 
     expect(countUnresolvedIssues(vm)).toBe(3);

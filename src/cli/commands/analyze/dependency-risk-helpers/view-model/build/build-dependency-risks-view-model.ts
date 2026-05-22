@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { RiskPredicate } from '../../risk-filter.ts';
+import type { RiskFilter } from '../../risk-filter.ts';
 import type { AnalyzeProjectResponse } from '../../sca-scanner.ts';
 import type { DependencyRisksViewModel } from '../dependency-risks-view-model.ts';
 import type { PackageVM } from '../package.ts';
@@ -28,18 +28,18 @@ import { buildSummaryVM } from './summary-builder.ts';
 
 export function buildDependencyRisksViewModel(
   response: AnalyzeProjectResponse,
-  filter: RiskPredicate,
+  filter: RiskFilter,
 ): DependencyRisksViewModel {
   const identityByPurl = buildPackageIdentityMap(response.releases);
   const packages: PackageVM[] = [];
   for (const release of response.releases) {
-    const pkg = buildPackageVM(release, filter, identityByPurl);
+    const pkg = buildPackageVM(release, filter.predicate, identityByPurl);
     if (pkg !== null) packages.push(pkg);
   }
   packages.sort((a, b) => a.package.compareTo(b.package));
   return {
     packages,
     errors: response.errors.map(buildErrorVM),
-    summary: buildSummaryVM(packages, response.releases.length),
+    summary: buildSummaryVM(packages, response.releases.length, filter.description),
   };
 }

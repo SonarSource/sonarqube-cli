@@ -18,6 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import {
+  buildRiskFilter,
+  type RiskFilterDescription,
+} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import { buildSummaryVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/summary-builder.ts';
 import type { DependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
 import type { ErrorVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/error.ts';
@@ -136,6 +140,10 @@ export function mockPackageVM(overrides: Partial<PackageVM> = {}): PackageVM {
   };
 }
 
+export function mockFilter(): RiskFilterDescription {
+  return buildRiskFilter('all')!.description;
+}
+
 export function mockDependencyRisksViewModel(
   overrides: Partial<DependencyRisksViewModel> & { packagesScanned?: number } = {},
 ): DependencyRisksViewModel {
@@ -145,6 +153,6 @@ export function mockDependencyRisksViewModel(
   return {
     packages,
     errors,
-    summary: overrides.summary ?? buildSummaryVM(packages, packagesScanned),
+    summary: overrides.summary ?? buildSummaryVM(packages, packagesScanned, mockFilter()),
   };
 }

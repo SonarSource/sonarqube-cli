@@ -93,6 +93,14 @@ describe('formatDependencyRisksTable — general smoke', () => {
     expect(out).toContain('0 dependencies checked');
     expect(out).toContain('0 risks found');
   });
+
+  it('shows the resolved filter inside the summary block', () => {
+    const out = formatDependencyRisksTable(
+      mockDependencyRisksViewModel({ packages: [], packagesScanned: 0 }),
+    );
+    expect(out).toContain('Filtering by: new, open, confirm, accept, safe, fixed');
+    expect(out.indexOf('Summary:')).toBeLessThan(out.indexOf('Filtering by:'));
+  });
 });
 
 describe('package header', () => {
