@@ -21,63 +21,42 @@
 import { describe, expect, it } from 'bun:test';
 
 import { formatDependencyRisksJson } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/format-dependency-risks-json.ts';
-import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
-import type {
-  AnalyzeProjectRelease,
-  AnalyzeProjectResponse,
-} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
-
-function makeRelease(overrides: Partial<AnalyzeProjectRelease> = {}): AnalyzeProjectRelease {
-  const packageName = overrides.packageName ?? 'foo';
-  const version = overrides.version ?? '1.0.0';
-  return {
-    key: `release-${packageName}`,
-    packageUrl: `pkg:npm/${packageName}@${version}`,
-    packageManager: 'npm',
-    packageName,
-    version,
-    licenseExpression: null,
-    known: true,
-    knownPackage: true,
-    newlyIntroduced: false,
-    issues: [],
-    dependencyFilePaths: ['package-lock.json'],
-    dependencyChains: [[`pkg:npm/${packageName}@${version}`]],
-    ...overrides,
-  };
-}
-
-function makeResponse(overrides: Partial<AnalyzeProjectResponse> = {}): AnalyzeProjectResponse {
-  return { releases: [], parsedFiles: [], errors: [], ...overrides };
-}
-
-function render(project: string, response: AnalyzeProjectResponse): string {
-  return formatDependencyRisksJson(
-    project,
-    buildDependencyRisksViewModel(response, buildRiskFilter('including-safe')),
-  );
-}
+import { PackageIdentity } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/package.ts';
+import {
+  mockDependencyRisksViewModel,
+  mockLicenseGroupVM,
+  mockLicenseRiskVM,
+  mockMalwareGroupVM,
+  mockPackageVM,
+  mockVulnerabilityGroupVM,
+  mockVulnerabilityRiskVM,
+  pkgId,
+} from './_helpers.ts';
 
 describe('formatDependencyRisksJson', () => {
   it('emits the project key and the ViewModel fields as pretty-printed JSON', () => {
-    const filtered = makeResponse({
-      releases: [makeRelease({ packageName: 'lodash' })],
-      errors: [{ id: 'e1', code: 'UNKNOWN', path: null, message: 'err' }],
-    });
-
-    const out = render('demo-project', filtered);
+    const out = formatDependencyRisksJson(
+      'demo-project',
+      mockDependencyRisksViewModel({
+        packages: [],
+        packagesScanned: 1,
+        errors: [{ code: 'UNKNOWN', path: null, message: 'err' }],
+      }),
+    );
     const parsed = JSON.parse(out) as Record<string, unknown>;
 
     expect(parsed.project).toBe('demo-project');
-    expect(parsed.packages).toEqual([]); // lodash has no issues → no package entry
+    expect(parsed.packages).toEqual([]);
     expect(parsed.errors).toEqual([{ code: 'UNKNOWN', path: null, message: 'err' }]);
     expect(parsed.summary).toMatchObject({ packagesScanned: 1, totalRisks: 0 });
     expect(out).toContain('\n  "project": "demo-project"');
   });
 
   it('serializes an empty response as an empty payload with the project key', () => {
-    const out = render('demo', makeResponse());
+    const out = formatDependencyRisksJson(
+      'demo',
+      mockDependencyRisksViewModel({ packages: [], packagesScanned: 0 }),
+    );
     const parsed = JSON.parse(out) as Record<string, unknown>;
 
     expect(parsed.project).toBe('demo');
@@ -87,30 +66,19 @@ describe('formatDependencyRisksJson', () => {
   });
 
   it('serializes a release with issues into a package entry with risk groups', () => {
-    const filtered = makeResponse({
-      releases: [
-        makeRelease({
-          packageName: 'lodash',
-          issues: [
-            {
-              key: 'i1',
-              severity: 'HIGH',
-              showIncreasedSeverityWarning: null,
-              type: 'VULNERABILITY',
-              quality: 'SECURITY',
-              status: 'OPEN',
-              vulnerabilityId: 'CVE-1',
-              cweIds: null,
-              cvssScore: '7.5',
-              spdxLicenseId: null,
-              versionOptions: null,
-            },
-          ],
+    const lodash = pkgId('pkg:npm/lodash@1.0.0');
+    const pkg = mockPackageVM({
+      package: lodash,
+      chains: [[lodash]],
+      groups: [
+        mockVulnerabilityGroupVM({
+          selectedRisks: [mockVulnerabilityRiskVM({ vulnerabilityId: 'CVE-1', cvssScore: '7.5' })],
         }),
       ],
     });
-
-    const parsed = JSON.parse(render('demo', filtered)) as {
+    const parsed = JSON.parse(
+      formatDependencyRisksJson('demo', mockDependencyRisksViewModel({ packages: [pkg] })),
+    ) as {
       packages: {
         package: string;
         chains: string[][];
@@ -126,64 +94,25 @@ describe('formatDependencyRisksJson', () => {
   });
 
   it('emits a recommendation object under each risk group', () => {
-    const filtered = makeResponse({
-      releases: [
-        makeRelease({
-          packageName: 'mal',
-          issues: [
-            {
-              key: 'm1',
-              severity: 'BLOCKER',
-              showIncreasedSeverityWarning: null,
-              type: 'MALWARE',
-              quality: 'SECURITY',
-              status: 'OPEN',
-              vulnerabilityId: null,
-              cweIds: null,
-              cvssScore: null,
-              spdxLicenseId: null,
-              versionOptions: null,
-            },
-            {
-              key: 'l1',
-              severity: 'HIGH',
-              showIncreasedSeverityWarning: null,
-              type: 'PROHIBITED_LICENSE',
-              quality: 'MAINTAINABILITY',
-              status: 'OPEN',
-              vulnerabilityId: null,
-              cweIds: null,
-              cvssScore: null,
-              spdxLicenseId: 'GPL-3.0',
-              versionOptions: null,
-            },
-            {
-              key: 'v1',
-              severity: 'HIGH',
-              showIncreasedSeverityWarning: null,
-              type: 'VULNERABILITY',
-              quality: 'SECURITY',
-              status: 'OPEN',
-              vulnerabilityId: 'CVE-1',
-              cweIds: null,
-              cvssScore: '7.5',
-              spdxLicenseId: null,
-              versionOptions: [
-                {
-                  version: '2.0.0',
-                  vulnerabilityIds: [],
-                  prerelease: false,
-                  fixLevel: 'COMPLETE',
-                  descriptionCode: 'LATEST_STABLE',
-                },
-              ],
-            },
-          ],
+    const pkg = mockPackageVM({
+      package: new PackageIdentity('pkg:npm/mal@1.0.0', 'mal', '1.0.0', 'npm'),
+      groups: [
+        mockMalwareGroupVM(),
+        mockLicenseGroupVM({ selectedRisks: [mockLicenseRiskVM({ spdxLicenseId: 'GPL-3.0' })] }),
+        mockVulnerabilityGroupVM({
+          selectedRisks: [mockVulnerabilityRiskVM({ vulnerabilityId: 'CVE-1', cvssScore: '7.5' })],
+          recommendation: {
+            action: 'UPGRADE_PACKAGE',
+            fixVersions: [
+              { version: '2.0.0', descriptionCode: 'LATEST_STABLE', vulnerabilityIds: [] },
+            ],
+          },
         }),
       ],
     });
-
-    const parsed = JSON.parse(render('demo', filtered)) as {
+    const parsed = JSON.parse(
+      formatDependencyRisksJson('demo', mockDependencyRisksViewModel({ packages: [pkg] })),
+    ) as {
       packages: {
         groups: { type: string; recommendation: { action: string; fixVersions: unknown[] } }[];
       }[];
@@ -201,30 +130,13 @@ describe('formatDependencyRisksJson', () => {
   });
 
   it('emits a summary.packages array with per-package recommendations and risk count', () => {
-    const filtered = makeResponse({
-      releases: [
-        makeRelease({
-          packageName: 'mal',
-          issues: [
-            {
-              key: 'm1',
-              severity: 'BLOCKER',
-              showIncreasedSeverityWarning: null,
-              type: 'MALWARE',
-              quality: 'SECURITY',
-              status: 'OPEN',
-              vulnerabilityId: null,
-              cweIds: null,
-              cvssScore: null,
-              spdxLicenseId: null,
-              versionOptions: null,
-            },
-          ],
-        }),
-      ],
+    const pkg = mockPackageVM({
+      package: new PackageIdentity('pkg:npm/mal@1.0.0', 'mal', '1.0.0', 'npm'),
+      groups: [mockMalwareGroupVM()],
     });
-
-    const parsed = JSON.parse(render('demo', filtered)) as {
+    const parsed = JSON.parse(
+      formatDependencyRisksJson('demo', mockDependencyRisksViewModel({ packages: [pkg] })),
+    ) as {
       summary: {
         packages: {
           package: string;
