@@ -66,7 +66,7 @@ describe('buildGroups — type ordering', () => {
 });
 
 describe('buildGroups — filtering', () => {
-  it('omits a group when the filter eliminates all of its risks', () => {
+  it('omits a group when the filter eliminates all of its selectedRisks', () => {
     const release = mockScaRelease({
       issues: [mockMalwareRisk(), mockVulnerabilityRisk()],
     });
@@ -89,12 +89,12 @@ describe('buildGroups — filtering', () => {
     const groups = buildGroups(release, (risk: RiskVM) => risk.status === 'NEW');
 
     expect(groups).toHaveLength(1);
-    expect(groups[0].risks).toHaveLength(1);
+    expect(groups[0].selectedRisks).toHaveLength(1);
   });
 });
 
 describe('buildGroups — severity ordering within a group', () => {
-  it('sorts risks by severity (BLOCKER → INFO)', () => {
+  it('sorts selectedRisks by severity (BLOCKER → INFO)', () => {
     const release = mockScaRelease({
       issues: [
         mockVulnerabilityRisk({ severity: 'LOW', vulnerabilityId: 'CVE-LOW' }),
@@ -108,7 +108,7 @@ describe('buildGroups — severity ordering within a group', () => {
 
     const groups = buildGroups(release, ALLOW_ALL);
 
-    const severities = groups[0].risks.map((r) => r.severity);
+    const severities = groups[0].selectedRisks.map((r) => r.severity);
     expect(severities).toEqual(['BLOCKER', 'HIGH', 'MEDIUM', 'MEDIUM', 'LOW', 'INFO']);
   });
 
@@ -122,8 +122,42 @@ describe('buildGroups — severity ordering within a group', () => {
 
     const groups = buildGroups(release, ALLOW_ALL);
 
-    const ids = (groups[0].risks as VulnerabilityRiskVM[]).map((r) => r.vulnerabilityId);
+    const ids = (groups[0].selectedRisks as VulnerabilityRiskVM[]).map((r) => r.vulnerabilityId);
     expect(ids).toEqual(['CVE-HIGH', 'CVE-WAT']);
+  });
+});
+
+describe('buildGroups — totalKnownRisksCount', () => {
+  it('equals the number of issues in the group regardless of how many pass the filter', () => {
+    const release = mockScaRelease({
+      issues: [
+        mockVulnerabilityRisk({ vulnerabilityId: 'CVE-A', status: 'OPEN' }),
+        mockVulnerabilityRisk({ vulnerabilityId: 'CVE-B', status: 'SAFE' }),
+        mockVulnerabilityRisk({ vulnerabilityId: 'CVE-C', status: 'SAFE' }),
+      ],
+    });
+
+    const groups = buildGroups(release, (risk: RiskVM) => risk.status === 'OPEN');
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].selectedRisks).toHaveLength(1);
+    expect(groups[0].totalKnownRisksCount).toBe(3);
+  });
+
+  it('equals selectedRisks.length when no issues are filtered out', () => {
+    const release = mockScaRelease({
+      issues: [
+        mockMalwareRisk(),
+        mockVulnerabilityRisk({ vulnerabilityId: 'CVE-A' }),
+        mockVulnerabilityRisk({ vulnerabilityId: 'CVE-B' }),
+      ],
+    });
+
+    const groups = buildGroups(release, ALLOW_ALL);
+
+    for (const group of groups) {
+      expect(group.totalKnownRisksCount).toBe(group.selectedRisks.length);
+    }
   });
 });
 

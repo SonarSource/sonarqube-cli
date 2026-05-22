@@ -49,7 +49,7 @@ export function buildPackageVM(
 ): PackageVM | null {
   const groups = buildGroups(release, filter);
   if (groups.length === 0) return null;
-  const riskCount = groups.reduce((n, g) => n + g.risks.length, 0);
+  const riskCount = groups.reduce((n, g) => n + g.selectedRisks.length, 0);
   return {
     package: identityByPurl.get(release.packageUrl)!,
     newlyIntroduced: release.newlyIntroduced,

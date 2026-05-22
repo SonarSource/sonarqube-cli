@@ -31,8 +31,9 @@ export interface RiskVM {
 
 export interface RiskGroupVM<T extends RiskVM> {
   type: ScaIssueType;
-  risks: T[];
+  selectedRisks: T[];
   recommendation: RecommendationVM;
+  totalKnownRisksCount: number;
 }
 
 export type MalwareRiskVM = RiskVM;

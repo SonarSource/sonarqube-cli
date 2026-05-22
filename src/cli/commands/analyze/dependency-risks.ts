@@ -137,7 +137,7 @@ export function countUnresolvedIssues(vm: DependencyRisksViewModel): number {
   let count = 0;
   for (const pkg of vm.packages) {
     for (const group of pkg.groups) {
-      for (const risk of group.risks) {
+      for (const risk of group.selectedRisks) {
         if (isUnresolved(risk)) count += 1;
       }
     }

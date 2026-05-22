@@ -24,7 +24,7 @@ import { formatRecommendationLine } from './format-table-recommendation.ts';
 import { genericRiskInfo } from './format-table-risk-generic.ts';
 
 export function appendLicenseGroup(lines: string[], group: LicenseGroupVM): void {
-  for (const risk of group.risks) {
+  for (const risk of group.selectedRisks) {
     lines.push(`${LINE_INDENT}${genericRiskInfo(risk, licenseCell(risk))}`);
   }
   lines.push(`${LINE_INDENT}${formatRecommendationLine(group.recommendation)}`);

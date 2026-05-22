@@ -519,6 +519,45 @@ describe('inline partial-fix tail on vulnerability rows', () => {
     ]);
     expect(lineWith(out, 'CVE-NO-FIX')).toContain('→ no fix available');
   });
+
+  it('uses total (unfiltered) vulnerability count for the fixes fraction when some CVEs are hidden by the status filter', () => {
+    // CVE-OPEN is visible; CVE-SAFE is hidden by the default 'open' filter.
+    // The partial upgrade to 1.0.1 fixes CVE-OPEN but leaves CVE-SAFE → fixes 1 of 2 total.
+    const releases = [
+      mockScaRelease({
+        issues: [
+          mockVulnerabilityRisk({
+            key: 'issue-open',
+            vulnerabilityId: 'CVE-OPEN',
+            status: 'OPEN',
+            versionOptions: [
+              {
+                version: '1.0.1',
+                vulnerabilityIds: ['CVE-SAFE'],
+                prerelease: false,
+                fixLevel: 'PARTIAL',
+                descriptionCode: 'NEAREST_PARTIAL',
+              },
+            ],
+          }),
+          mockVulnerabilityRisk({
+            key: 'issue-safe',
+            vulnerabilityId: 'CVE-SAFE',
+            status: 'SAFE',
+            versionOptions: null,
+          }),
+        ],
+      }),
+    ];
+    const withTargets = withChainTargetReleases(releases);
+    const out = formatDependencyRisksTable(
+      buildDependencyRisksViewModel(
+        { releases: withTargets, parsedFiles: [], errors: [] },
+        buildRiskFilter('open'),
+      ),
+    );
+    expect(lineWith(out, 'CVE-OPEN')).toContain('→ 1.0.1 (fixes 1/2)');
+  });
 });
 
 describe('errors section', () => {

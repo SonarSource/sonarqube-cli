@@ -73,31 +73,42 @@ function buildGroup(
 ): MalwareGroupVM | LicenseGroupVM | VulnerabilityGroupVM | null {
   switch (type) {
     case 'MALWARE': {
-      const risks = filterRisks(
+      const selectedRisks = filterRisks(
         issues.map((i) => buildMalwareRisk(release, i)),
         filter,
       );
-      if (risks.length === 0) return null;
-      return { type, risks, recommendation: buildMalwareRecommendation() };
+      if (selectedRisks.length === 0) return null;
+      return {
+        type,
+        selectedRisks: selectedRisks,
+        recommendation: buildMalwareRecommendation(),
+        totalKnownRisksCount: issues.length,
+      };
     }
     case 'PROHIBITED_LICENSE': {
-      const risks = filterRisks(
+      const selectedRisks = filterRisks(
         issues.map((i) => buildLicenseRisk(release, i)),
         filter,
       );
-      if (risks.length === 0) return null;
-      return { type, risks, recommendation: buildLicenseRecommendation() };
-    }
-    case 'VULNERABILITY': {
-      const survivors = issues
-        .map((issue) => ({ issue, risk: buildVulnerabilityRisk(release, issue) }))
-        .filter(({ risk }) => filter(risk));
-      if (survivors.length === 0) return null;
-      const fixVersions = selectPackageCompleteFixes(survivors.map(({ issue }) => issue));
+      if (selectedRisks.length === 0) return null;
       return {
         type,
-        risks: survivors.map(({ risk }) => risk),
+        selectedRisks: selectedRisks,
+        recommendation: buildLicenseRecommendation(),
+        totalKnownRisksCount: issues.length,
+      };
+    }
+    case 'VULNERABILITY': {
+      const selectedRisks = issues
+        .map((issue) => ({ issue, risk: buildVulnerabilityRisk(release, issue) }))
+        .filter(({ risk }) => filter(risk));
+      if (selectedRisks.length === 0) return null;
+      const fixVersions = selectPackageCompleteFixes(selectedRisks.map(({ issue }) => issue));
+      return {
+        type,
+        selectedRisks: selectedRisks.map(({ risk }) => risk),
         recommendation: buildVulnerabilityRecommendation(fixVersions),
+        totalKnownRisksCount: issues.length,
       };
     }
   }

@@ -18,10 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `analyze dependency-risks`: pre-flight gates
+// Integration tests for `analyze dependency-selectedRisks`: pre-flight gates
 // (authentication, SCA availability, project existence) plus the happy path,
 // which currently runs against the no-op scanner runner and emits an empty
-// list of dependency risks. Once the real scanner is wired, the happy-path
+// list of dependency selectedRisks. Once the real scanner is wired, the happy-path
 // assertions will be expanded.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -34,7 +34,7 @@ const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
 const SCA_SCANNER_FAILURE_PREFIX = 'Dependency risk analysis error: sca-scanner exited with code';
 
-describe('analyze dependency-risks', () => {
+describe('analyze dependency-selectedRisks', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -46,7 +46,7 @@ describe('analyze dependency-risks', () => {
   });
 
   it('exits with code 1 when not authenticated', async () => {
-    const result = await harness.run('analyze dependency-risks --project demo');
+    const result = await harness.run('analyze dependency-selectedRisks --project demo');
 
     expect(result.exitCode).toBe(1);
     const output = result.stdout + result.stderr;
@@ -62,7 +62,7 @@ describe('analyze dependency-risks', () => {
       .start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
+    const result = await harness.run('analyze dependency-selectedRisks --project demo');
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('Project demo not found');
@@ -77,7 +77,7 @@ describe('analyze dependency-risks', () => {
       .start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
+    const result = await harness.run('analyze dependency-selectedRisks --project demo');
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
@@ -101,9 +101,12 @@ describe('analyze dependency-risks', () => {
     harness.state().withScaScannerBinaryInstalled();
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo --format json', {
-      timeoutMs: 30_000,
-    });
+    const result = await harness.run(
+      'analyze dependency-selectedRisks --project demo --format json',
+      {
+        timeoutMs: 30_000,
+      },
+    );
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(SCA_SCANNER_FAILURE_PREFIX);
@@ -122,7 +125,9 @@ describe('analyze dependency-risks', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run('analyze dependency-risks --project demo --format json');
+      const result = await harness.run(
+        'analyze dependency-selectedRisks --project demo --format json',
+      );
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(SCA_SCANNER_FAILURE_PREFIX);
@@ -152,7 +157,9 @@ describe('analyze dependency-risks', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run('analyze dependency-risks --project demo --format json');
+      const result = await harness.run(
+        'analyze dependency-selectedRisks --project demo --format json',
+      );
 
       expect(result.exitCode).not.toBe(0);
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
@@ -166,7 +173,7 @@ describe('analyze dependency-risks', () => {
     harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run(
-      'analyze dependency-risks --project demo --status-filter bogus',
+      'analyze dependency-selectedRisks --project demo --status-filter bogus',
     );
 
     expect(result.exitCode).not.toBe(0);
@@ -179,7 +186,7 @@ describe('analyze dependency-risks', () => {
     const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
+    const result = await harness.run('analyze dependency-selectedRisks --project demo');
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(

@@ -79,7 +79,7 @@ describe('buildPackageVM', () => {
     expect(buildPackageVM(release, ALLOW_ALL, identityByPurl)).toBeNull();
   });
 
-  it('sets riskCount to the sum of risks across surviving groups', () => {
+  it('sets riskCount to the sum of selectedRisks across surviving groups', () => {
     const release = mockScaRelease({
       issues: [
         mockVulnerabilityRisk({ vulnerabilityId: 'CVE-1' }),

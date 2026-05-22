@@ -46,7 +46,7 @@ function toPackageSummary(pkg: PackageVM): PackageSummaryVM {
 function highestSeverityOf(pkg: PackageVM): Severity {
   let highest: Severity | undefined;
   for (const group of pkg.groups) {
-    for (const risk of group.risks) {
+    for (const risk of group.selectedRisks) {
       if (highest === undefined || compareSeverity(risk.severity, highest) < 0) {
         highest = risk.severity;
       }
@@ -64,7 +64,7 @@ function countsByTypeAndSeverity(packages: PackageVM[]): Map<ScaIssueType, Map<S
   );
   for (const pkg of packages) {
     for (const group of pkg.groups) {
-      addRiskCounts(byType.get(group.type)!, group.risks);
+      addRiskCounts(byType.get(group.type)!, group.selectedRisks);
     }
   }
   return byType;
