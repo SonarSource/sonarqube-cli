@@ -143,7 +143,7 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     binaryPath,
     [
       'tool',
-      'init',
+      'integrate',
       // We install the skill ourselves below with --invocation-prefix overridden,
       // so suppress init's default skill install (CAG-374).
       '--skip-skill-install',
