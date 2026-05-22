@@ -50,7 +50,7 @@ export function buildGroups(
   for (const type of ISSUE_TYPES) {
     const typed = byType.get(type) ?? [];
     if (typed.length === 0) continue;
-    const group = buildGroup(type, release, sortBySeverity(typed), filter);
+    const group = buildGroup(type, release, typed, filter);
     if (group !== null) groups.push(group);
   }
   return groups;
@@ -80,7 +80,7 @@ function buildGroup(
       if (selectedRisks.length === 0) return null;
       return {
         type,
-        selectedRisks: selectedRisks,
+        selectedRisks: sortBySeverity(selectedRisks),
         recommendation: buildMalwareRecommendation(),
         totalKnownRisksCount: issues.length,
       };
@@ -93,20 +93,21 @@ function buildGroup(
       if (selectedRisks.length === 0) return null;
       return {
         type,
-        selectedRisks: selectedRisks,
+        selectedRisks: sortBySeverity(selectedRisks),
         recommendation: buildLicenseRecommendation(),
         totalKnownRisksCount: issues.length,
       };
     }
     case 'VULNERABILITY': {
-      const selectedRisks = issues
-        .map((issue) => ({ issue, risk: buildVulnerabilityRisk(release, issue) }))
-        .filter(({ risk }) => filter(risk));
+      const fixVersions = selectPackageCompleteFixes(issues);
+      const selectedRisks = filterRisks(
+        issues.map((issue) => buildVulnerabilityRisk(release, issue)),
+        filter,
+      );
       if (selectedRisks.length === 0) return null;
-      const fixVersions = selectPackageCompleteFixes(selectedRisks.map(({ issue }) => issue));
       return {
         type,
-        selectedRisks: selectedRisks.map(({ risk }) => risk),
+        selectedRisks: sortBySeverity(selectedRisks),
         recommendation: buildVulnerabilityRecommendation(fixVersions),
         totalKnownRisksCount: issues.length,
       };

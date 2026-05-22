@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { AnalyzeProjectIssue, Severity } from '../../sca-scanner.ts';
+import type { Severity } from '../../sca-scanner.ts';
+import { type RiskVM } from '../risk.ts';
 
 const SEVERITY_RANK: Record<Severity, number> = {
   BLOCKER: 0,
@@ -39,6 +40,6 @@ export function compareSeverity(a: Severity, b: Severity): number {
   return severityRank(a) - severityRank(b);
 }
 
-export function sortBySeverity(issues: AnalyzeProjectIssue[]): AnalyzeProjectIssue[] {
-  return [...issues].sort((a, b) => compareSeverity(a.severity, b.severity));
+export function sortBySeverity<T extends RiskVM>(items: T[]): T[] {
+  return [...items].sort((a, b) => compareSeverity(a.severity, b.severity));
 }
