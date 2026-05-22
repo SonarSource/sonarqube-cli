@@ -33,7 +33,7 @@
  * run `cag init` and does not need auth.
  */
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
@@ -56,6 +56,7 @@ const STALE_CLI_VERSION = '0.0.1';
 const STALE_SKILL_VERSION = '0.0.0';
 const SEEDED_PROJECT_KEY = 'offline-test-project';
 const SEEDED_ORG_KEY = 'offline-test-org';
+const SKILL_RELATIVE_PATH = join('.claude', 'skills', CONTEXT_AUGMENTATION_BINARY_NAME, 'SKILL.md');
 
 describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', () => {
   let harness: TestHarness;
@@ -117,6 +118,66 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     const result = await harness.run('context --help', { timeoutMs: HELP_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout.length + result.stderr.length).toBeGreaterThan(0);
+  });
+
+  it('writes the agent SKILL.md to the project root', () => {
+    const skillPath = join(harness.cwd.path, SKILL_RELATIVE_PATH);
+    expect(existsSync(skillPath)).toBe(true);
+    const content = readFileSync(skillPath, 'utf-8');
+    expect(content.length).toBeGreaterThan(0);
+    expect(content).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
+  });
+
+  describe('a second self-update (rewound state) reinstalls the skill', () => {
+    let refreshResult: { exitCode: number; stdout: string; stderr: string };
+    let skillPath: string;
+    let preMutationContent: string;
+
+    beforeAll(async () => {
+      skillPath = join(harness.cwd.path, SKILL_RELATIVE_PATH);
+      preMutationContent = readFileSync(skillPath, 'utf-8');
+
+      // Simulate a fresh CLI upgrade landing on the same machine: rewind the
+      // persisted CLI version (forces runPostUpdateActions to fire again) and
+      // the recorded CAG skill version (forces refreshContextAugmentationSkill
+      // to actually run `tool install-skill` instead of the early-return
+      // shortcut when versions already match).
+      const state = harness.stateJsonFile.asJson() as CliState;
+      state.config.cliVersion = STALE_CLI_VERSION;
+      const recordedSkill = findRecordedCagSkill(state);
+      if (!recordedSkill) {
+        throw new Error('Expected a recorded CAG skill from the initial post-update');
+      }
+      recordedSkill.version = STALE_SKILL_VERSION;
+      writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
+
+      // Delete the rendered skill so the rerun has to write it again — proves
+      // the refresh actually invoked the binary's `tool install-skill` rather
+      // than only bumping state.
+      rmSync(skillPath);
+
+      refreshResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
+    });
+
+    it('the simulated self-update exits successfully', () => {
+      expect(refreshResult.exitCode, refreshResult.stderr).toBe(0);
+    });
+
+    it('recreates the SKILL.md that was deleted before the rerun', () => {
+      expect(existsSync(skillPath)).toBe(true);
+      const restored = readFileSync(skillPath, 'utf-8');
+      expect(restored).toEqual(preMutationContent);
+    });
+
+    it('re-bumps state.config.cliVersion past the rewound stale value', () => {
+      const state = harness.stateJsonFile.asJson() as CliState;
+      expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
+    });
+
+    it('re-refreshes the recorded skill version to the pinned CAG version', () => {
+      const state = harness.stateJsonFile.asJson() as CliState;
+      expect(findRecordedCagSkill(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    });
   });
 });
 
