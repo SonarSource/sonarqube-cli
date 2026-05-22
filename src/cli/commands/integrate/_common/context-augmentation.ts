@@ -66,11 +66,6 @@ const CAG_AGENT_BY_STATE_AGENT_ID: Record<string, ContextAugmentationAgent> = Ob
   ]),
 );
 
-const AGENT_DISPLAY_NAME: Record<ContextAugmentationAgent, string> = {
-  'claude-code': 'Claude Code',
-  copilot: 'Copilot',
-};
-
 export function resolveContextAugmentationAgent(
   agentId: string,
 ): ContextAugmentationAgent | undefined {
