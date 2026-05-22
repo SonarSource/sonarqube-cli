@@ -31,8 +31,8 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
+import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import {
   type BinarySpec,
   buildLocalBinaryName,
