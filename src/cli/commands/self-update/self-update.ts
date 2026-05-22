@@ -25,6 +25,7 @@ import { join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
+import { isWindows } from '../../../lib/platform-detector';
 import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
 import { blank, info, success, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
@@ -60,8 +61,7 @@ export interface UpdateCheckResult {
  * Throws on network failure or when the version cannot be extracted from the script.
  */
 export async function checkForUpdate(): Promise<UpdateCheckResult> {
-  const isWindows = process.platform === 'win32';
-  const scriptName = isWindows ? 'install.ps1' : 'install.sh';
+  const scriptName = isWindows() ? 'install.ps1' : 'install.sh';
   const scriptUrl = `${UPDATE_SCRIPT_BASE_URL}/${scriptName}`;
 
   const response = await fetch(scriptUrl);
@@ -136,7 +136,7 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
 
   const tempPath = join(tmpdir(), scriptName);
 
-  if (process.platform === 'win32') {
+  if (isWindows()) {
     // On Windows the running binary is file-locked, so the parent must exit immediately
     // so that the script can overwrite the executable. Otherwise, the update will fail and
     // has to be manually retried by the user.
@@ -151,6 +151,7 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
+    text('Check the new terminal window to confirm the update completed.');
   } else {
     // On Unix the binary is not locked, so run the script synchronously and
     // stream its output directly to the terminal.
@@ -165,5 +166,6 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
         },
       );
     }
+    success(`Updated to v${latestVersion}`);
   }
 }
