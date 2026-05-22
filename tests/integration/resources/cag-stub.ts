@@ -25,8 +25,11 @@
 //
 // Parameterized by env vars set per-test via the harness:
 //   CAG_STUB_SENTINEL     — path to append one JSON line per non-version call
-//   CAG_STUB_INIT_EXIT    — exit code returned for `init` subcommand (default 0)
-//   CAG_STUB_SKILL_EXIT   — exit code returned for `skill` subcommand (default 0)
+//   CAG_STUB_INIT_EXIT    — exit code returned for `tool …` subcommands (default 0).
+//                           Name kept for backwards compatibility with harness builder
+//                           callers; covers the modern `tool integrate` flow and the
+//                           legacy `init` subcommand alike.
+//   CAG_STUB_SKILL_EXIT   — exit code returned for the legacy `skill` subcommand (default 0)
 //   CAG_STUB_STDOUT_LINE  — a line emitted to stdout on every non-version call
 //   CAG_STUB_STDERR_LINE  — a line emitted to stderr on every non-version call
 
@@ -61,7 +64,7 @@ if (stdoutLine) process.stdout.write(stdoutLine + '\n');
 if (stderrLine) process.stderr.write(stderrLine + '\n');
 
 const RADIX = 10;
-if (args[0] === 'init') {
+if (args[0] === 'tool' || args[0] === 'init') {
   process.exit(Number.parseInt(process.env.CAG_STUB_INIT_EXIT ?? '0', RADIX));
 }
 if (args[0] === 'skill') {
