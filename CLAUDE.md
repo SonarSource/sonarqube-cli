@@ -85,7 +85,7 @@ Follow the structure of existing tests for the command or feature area you are w
 
 - Unit tests: `tests/unit/` — use `src/ui/mock.ts` for UI layer, `tests/unit/keychain/keychain-test-handle.ts` for keychain.
 - Integration tests: `tests/integration/specs/<command>/` — run the compiled binary against fake servers. Use `TestHarness` from `tests/integration/harness/`.
-- E2E tests: `tests/e2e/` — real external dependencies that cannot be faked: OS keychain, install scripts with real network, real SonarQube server calls, and integration with external tools. Those tests are black-box tests and exercise the product from the outside.
+- E2E tests: `tests/e2e/` — real external dependencies that cannot be faked: OS keychain, install scripts with real network, real SonarQube server calls, and integration with external tools. Those tests are black-box tests and exercise the product from the outside. `tests/e2e/context/cag-offline.test.ts` is the offline real-binary suite for `sonar-context-augmentation`: it seeds a stale-version skill in `state.json`, lets `runPostUpdateActions()` re-download CAG from `binaries.sonarsource.com`, and asserts on the on-disk binary, the refreshed skill version in state, and `sonar context --help` forwarding. No SonarQube/Cloud access required — only the binaries CDN.
 
 Before writing a test, find an existing spec for the same command area and follow its structure.
 
