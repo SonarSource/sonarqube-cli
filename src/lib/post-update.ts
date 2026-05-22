@@ -126,9 +126,27 @@ export async function updateContextAugmentationIfNeeded(): Promise<void> {
     return;
   }
 
+  await stopExistingContextAugmentationTools(state);
+
   const binaryPath = await installContextAugmentationBinary();
-  await stopAllContextAugmentationTools(binaryPath);
   await refreshContextAugmentationSkills(binaryPath, skills);
+}
+
+function findInstalledToolPath(state: CliState, toolName: string): string | undefined {
+  return state.tools?.installed.find((t) => t.name === toolName)?.path;
+}
+
+async function stopExistingContextAugmentationTools(state: CliState): Promise<void> {
+  const existingPath = findInstalledToolPath(state, CONTEXT_AUGMENTATION_BINARY_NAME);
+  if (!existingPath) {
+    logger.debug('No previously-installed sonar-context-augmentation — skipping stop');
+    return;
+  }
+  if (!fs.existsSync(existingPath)) {
+    logger.debug(`sonar-context-augmentation binary missing at ${existingPath} — skipping stop`);
+    return;
+  }
+  await stopAllContextAugmentationTools(existingPath);
 }
 
 function shouldUpdateContextAugmentation(state: CliState, skills: SkillExtension[]): boolean {

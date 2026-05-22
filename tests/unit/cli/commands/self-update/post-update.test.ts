@@ -502,8 +502,11 @@ function makeStateWithContextAugmentation(): CliState {
   return state;
 }
 
+const OLD_CAG_BINARY_PATH = '/fake/bin/sonar-context-augmentation-0.0.0.1-linux-x86-64';
+
 describe('updateContextAugmentationIfNeeded', () => {
   let statSyncSpy: Mock<typeof fs.statSync>;
+  let existsSyncSpy: Mock<typeof fs.existsSync>;
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
   let installContextAugmentationBinarySpy: Mock<typeof cagInstall.installContextAugmentationBinary>;
   let installContextAugmentationSkillSpy: Mock<
@@ -518,6 +521,7 @@ describe('updateContextAugmentationIfNeeded', () => {
     statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
+    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
     installContextAugmentationBinarySpy = spyOn(
       cagInstall,
@@ -539,6 +543,7 @@ describe('updateContextAugmentationIfNeeded', () => {
 
   afterEach(() => {
     statSyncSpy.mockRestore();
+    existsSyncSpy.mockRestore();
     loadStateSpy.mockRestore();
     installContextAugmentationBinarySpy.mockRestore();
     installContextAugmentationSkillSpy.mockRestore();
@@ -554,19 +559,19 @@ describe('updateContextAugmentationIfNeeded', () => {
     expect(stopAllContextAugmentationToolsSpy).not.toHaveBeenCalled();
   });
 
-  it('stops running CAG tools after binary install and before refreshing skills', async () => {
+  it('stops running CAG tools using the old binary before installing the new one', async () => {
     const state = makeStateWithContextAugmentation();
     state.agentExtensions = [makeContextSkill('/proj/alpha', 'claude-code')];
     loadStateSpy.mockReturnValue(state);
 
     const calls: string[] = [];
-    installContextAugmentationBinarySpy.mockImplementation(() => {
-      calls.push('install-binary');
-      return Promise.resolve('/fake/bin/sonar-context-augmentation');
-    });
     stopAllContextAugmentationToolsSpy.mockImplementation(() => {
       calls.push('stop-all');
       return Promise.resolve(true);
+    });
+    installContextAugmentationBinarySpy.mockImplementation(() => {
+      calls.push('install-binary');
+      return Promise.resolve('/fake/bin/sonar-context-augmentation');
     });
     installContextAugmentationSkillSpy.mockImplementation(() => {
       calls.push('install-skill');
@@ -575,10 +580,34 @@ describe('updateContextAugmentationIfNeeded', () => {
 
     await updateContextAugmentationIfNeeded();
 
-    expect(calls).toEqual(['install-binary', 'stop-all', 'install-skill']);
-    expect(stopAllContextAugmentationToolsSpy).toHaveBeenCalledWith(
-      '/fake/bin/sonar-context-augmentation',
-    );
+    expect(calls).toEqual(['stop-all', 'install-binary', 'install-skill']);
+    expect(stopAllContextAugmentationToolsSpy).toHaveBeenCalledWith(OLD_CAG_BINARY_PATH);
+  });
+
+  it('skips stop when no previous CAG binary is recorded in state', async () => {
+    // Legacy state: skill exists but tools.installed has no CAG entry.
+    const state = makeState();
+    state.agentExtensions = [makeContextSkill('/proj/alpha', 'claude-code')];
+    loadStateSpy.mockReturnValue(state);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(stopAllContextAugmentationToolsSpy).not.toHaveBeenCalled();
+    expect(installContextAugmentationBinarySpy).toHaveBeenCalledTimes(1);
+    expect(installContextAugmentationSkillSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips stop when the recorded CAG binary no longer exists on disk', async () => {
+    const state = makeStateWithContextAugmentation();
+    state.agentExtensions = [makeContextSkill('/proj/alpha', 'claude-code')];
+    loadStateSpy.mockReturnValue(state);
+    existsSyncSpy.mockImplementation((path) => path !== OLD_CAG_BINARY_PATH);
+
+    await updateContextAugmentationIfNeeded();
+
+    expect(stopAllContextAugmentationToolsSpy).not.toHaveBeenCalled();
+    expect(installContextAugmentationBinarySpy).toHaveBeenCalledTimes(1);
+    expect(installContextAugmentationSkillSpy).toHaveBeenCalledTimes(1);
   });
 
   it('still refreshes skills when stop --all fails', async () => {
