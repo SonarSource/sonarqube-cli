@@ -29,6 +29,7 @@ import {
   type ContextAugmentationAgent,
   installContextAugmentationSkill,
   resolveContextAugmentationAgent,
+  stopAllContextAugmentationTools,
 } from '../cli/commands/integrate/_common/context-augmentation';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
 import { CONTEXT_AUGMENTATION_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
@@ -70,7 +71,8 @@ export async function runPostUpdateActions(): Promise<void> {
   try {
     await runActions(previousVersion, CURRENT_VERSION);
     // Reload state to pick up changes made by subroutines (migrateClaudeCodeHooks,
-    // updateSecretsBinaryIfNeeded) that load and save their own state copies.
+    // updateSecretsBinaryIfNeeded, updateContextAugmentationIfNeeded) that load
+    // and save their own state copies.
     const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
     cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
@@ -93,7 +95,7 @@ async function runActions(_previousVersion: string, _currentVersion: string): Pr
 export async function updateSecretsBinaryIfNeeded(): Promise<void> {
   const state = loadState();
 
-  if (!hasPreviousInstallation(state)) {
+  if (!hasPreviousSecretsInstallation(state)) {
     logger.debug('sonar-secrets not installed — skipping binary update');
     return;
   }
@@ -101,7 +103,7 @@ export async function updateSecretsBinaryIfNeeded(): Promise<void> {
   await installSecretsBinary();
 }
 
-function hasPreviousInstallation(state: CliState): boolean {
+function hasPreviousSecretsInstallation(state: CliState): boolean {
   return hasBinaryInState(state, SECRETS_BINARY_NAME);
 }
 
@@ -124,8 +126,27 @@ export async function updateContextAugmentationIfNeeded(): Promise<void> {
     return;
   }
 
+  await stopExistingContextAugmentationTools(state);
+
   const binaryPath = await installContextAugmentationBinary();
   await refreshContextAugmentationSkills(binaryPath, skills);
+}
+
+function findInstalledToolPath(state: CliState, toolName: string): string | undefined {
+  return state.tools?.installed.find((t) => t.name === toolName)?.path;
+}
+
+async function stopExistingContextAugmentationTools(state: CliState): Promise<void> {
+  const existingPath = findInstalledToolPath(state, CONTEXT_AUGMENTATION_BINARY_NAME);
+  if (!existingPath) {
+    logger.debug('No previously-installed sonar-context-augmentation — skipping stop');
+    return;
+  }
+  if (!fs.existsSync(existingPath)) {
+    logger.debug(`sonar-context-augmentation binary missing at ${existingPath} — skipping stop`);
+    return;
+  }
+  await stopAllContextAugmentationTools(existingPath);
 }
 
 function shouldUpdateContextAugmentation(state: CliState, skills: SkillExtension[]): boolean {
@@ -149,7 +170,7 @@ async function refreshContextAugmentationSkills(
 function uniqueContextAugmentationSkills(skills: SkillExtension[]): SkillExtension[] {
   const seen = new Set<string>();
   return skills.filter((skill) => {
-    const key = `${skill.agentId}|${skill.projectRoot}`;
+    const key = JSON.stringify([skill.agentId, skill.projectRoot]);
     if (seen.has(key)) {
       return false;
     }
@@ -162,6 +183,13 @@ async function refreshContextAugmentationSkill(
   binaryPath: string,
   skill: SkillExtension,
 ): Promise<void> {
+  if (skill.version === SONAR_CONTEXT_AUGMENTATION_VERSION) {
+    logger.debug(
+      `Context Augmentation skill already at ${SONAR_CONTEXT_AUGMENTATION_VERSION}: ${skill.projectRoot}`,
+    );
+    return;
+  }
+
   const agent = getRefreshableContextAugmentationAgent(skill);
   if (!agent) {
     return;
@@ -208,6 +236,7 @@ async function tryRefreshContextAugmentationSkill(
       binaryPath,
       agent,
       projectRoot: skill.projectRoot,
+      scaEnabled: skill.scaEnabled ?? false,
       reportFailure: false,
     });
     if (!refreshed) {
@@ -235,6 +264,7 @@ function recordRefreshedContextAugmentationSkill(skill: SkillExtension): void {
     updatedByCliVersion: CURRENT_VERSION,
     name: CONTEXT_AUGMENTATION_BINARY_NAME,
     version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+    scaEnabled: skill.scaEnabled ?? false,
   });
 }
 
@@ -251,7 +281,7 @@ function getContextAugmentationSkills(state: CliState): SkillExtension[] {
 
 function isExistingDirectory(path: string): boolean {
   try {
-    return fs.existsSync(path) && fs.statSync(path).isDirectory();
+    return fs.statSync(path).isDirectory();
   } catch {
     return false;
   }

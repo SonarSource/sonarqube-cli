@@ -25,7 +25,12 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
+import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../src/lib/install-types';
+import { detectPlatform } from '../../../../src/lib/platform-detector';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures';
 import { TestHarness } from '../../harness';
+import { readCagInvocations } from '../../harness/cag-invocations';
 
 describe('post-update migration', () => {
   let harness: TestHarness;
@@ -109,5 +114,83 @@ describe('post-update migration', () => {
       expect((state.config as { cliVersion: string }).cliVersion).toBe(CURRENT_VERSION);
     },
     { timeout: 15000 },
+  );
+
+  it(
+    'stops running CAG tools and refreshes registered skills after a CLI upgrade',
+    async () => {
+      // Skill recorded with an older CAG version — triggers post-update refresh.
+      const staleSkillVersion = '0.0.0.1';
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: new Date().toISOString(),
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {
+            'claude-code': {
+              configured: true,
+              configuredByCliVersion: '0.5.0',
+              hooks: { installed: [] },
+              skills: { installed: [] },
+            },
+          },
+          config: { cliVersion: '0.5.0' },
+          telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
+          tools: {
+            installed: [
+              {
+                name: CONTEXT_AUGMENTATION_BINARY_NAME,
+                version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+                // Absolute path the harness writes the CAG stub to.
+                path: harness.cliHome.file('bin', buildLocalCagBinaryName(detectPlatform())).path,
+                installedAt: new Date().toISOString(),
+                installedByCliVersion: '0.5.0',
+              },
+            ],
+          },
+          agentExtensions: [
+            {
+              id: randomUUID(),
+              agentId: 'claude-code',
+              projectRoot: harness.cwd.path,
+              global: false,
+              kind: 'skill',
+              name: CONTEXT_AUGMENTATION_BINARY_NAME,
+              version: staleSkillVersion,
+              scaEnabled: false,
+              projectKey: 'p',
+              orgKey: 'o',
+              serverUrl: 'https://sonarcloud.io',
+              updatedByCliVersion: '0.5.0',
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        }),
+      );
+      // Copies the CAG stub into <cliHome>/bin so the stop step can spawn it.
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      await harness.run('--version');
+
+      const invocations = readCagInvocations(harness);
+      const stopIndex = invocations.findIndex(
+        (i) => i.argv[0] === 'tool' && i.argv[1] === 'stop' && i.argv[2] === '--all',
+      );
+      const skillIndex = invocations.findIndex(
+        (i) => i.argv[0] === 'tool' && i.argv[1] === 'install-skill',
+      );
+      expect(stopIndex).toBeGreaterThanOrEqual(0);
+      expect(invocations[skillIndex]?.argv).toEqual([
+        'tool',
+        'install-skill',
+        'claude-code',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=false',
+      ]);
+      // Stop must precede the skill refresh.
+      expect(stopIndex).toBeLessThan(skillIndex);
+    },
+    { timeout: 30000 },
   );
 });

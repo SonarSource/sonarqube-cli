@@ -35,9 +35,9 @@ describe('install-types', () => {
 
   describe('buildCagPlatformSuffix (sonar-context-augmentation convention)', () => {
     it.each([
-      ['linux', 'x86-64', '', 'alpine-x64'],
+      ['linux', 'x86-64', '', 'linux-x64'],
       ['windows', 'x86-64', '.exe', 'windows-x64'],
-      ['linux', 'arm64', '', 'alpine-arm64'],
+      ['linux', 'arm64', '', 'linux-arm64'],
       ['macos', 'arm64', '', 'macos-arm64'],
     ] as const)('%s/%s%s → %s', (os, arch, extension, expected) => {
       expect(buildCagPlatformSuffix({ os, arch, extension })).toBe(expected);

@@ -33,6 +33,14 @@ void mock.module('node:child_process', () => ({
   spawnSync: spawnSyncMock as unknown as typeof childProcess.spawnSync,
 }));
 
+// Mock platform-detector so both Unix and Windows branches are reachable on any OS.
+const platformDetector = await import('../../../../../src/lib/platform-detector.js');
+const isWindowsMock = mock(() => false);
+void mock.module('../../../../../src/lib/platform-detector.js', () => ({
+  ...platformDetector,
+  isWindows: isWindowsMock,
+}));
+
 // Mock the version module — isNewerVersion and stripBuildNumber are tested in version.test.ts.
 const { isNewerVersion: realIsNewerVersion, stripBuildNumber: realStripBuildNumber } =
   await import('../../../../../src/lib/version');
@@ -176,6 +184,7 @@ describe('selfUpdate --force', () => {
     clearMockUiCalls();
     spawnMock.mockClear();
     spawnSyncMock.mockClear();
+    isWindowsMock.mockImplementation(() => false);
     fetchSpy = spyOn(globalThis, 'fetch');
   });
 
@@ -205,5 +214,26 @@ describe('selfUpdate --force', () => {
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /updating/i.test(m))).toBe(true);
+  });
+
+  it('emits a success message after a successful Unix update', async () => {
+    await runForce('version="2.0.0"\necho hi');
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(messages.some((m) => m.includes('Updated to v2.0.0'))).toBe(true);
+  });
+
+  it('confirms update launched in new terminal on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    await runForce('version="2.0.0"\necho hi');
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(
+      messages.some((m) =>
+        m.includes('Check the new terminal window to confirm the update completed.'),
+      ),
+    ).toBe(true);
+    expect(spawnMock).toHaveBeenCalled();
+    expect(spawnSyncMock).not.toHaveBeenCalled();
   });
 });

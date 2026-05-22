@@ -24,6 +24,7 @@ import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
+import logger from '../../../../lib/logger';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import { recordSkillExtensionInState } from '../../../../lib/state-manager';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -37,6 +38,7 @@ import {
   warn,
   withSpinner,
 } from '../../../../ui';
+import { buildContextAugmentationEnv } from '../../_common/context-augmentation-env';
 import { installContextAugmentationBinary } from '../../_common/install/context-augmentation';
 
 export type ContextAugmentationAgent = 'claude-code' | 'copilot' | 'codex';
@@ -57,18 +59,13 @@ const STATE_AGENT_ID: Record<ContextAugmentationAgent, string> = {
   codex: 'codex',
 };
 
+// Inverse lookup for state entries, which store agent ids rather than CAG subcommand arguments.
 const CAG_AGENT_BY_STATE_AGENT_ID: Record<string, ContextAugmentationAgent> = Object.fromEntries(
   Object.entries(STATE_AGENT_ID).map(([agent, stateAgentId]) => [
     stateAgentId,
     agent as ContextAugmentationAgent,
   ]),
 );
-
-const AGENT_DISPLAY_NAME: Record<ContextAugmentationAgent, string> = {
-  'claude-code': 'Claude Code',
-  copilot: 'Copilot',
-  codex: 'Codex',
-};
 
 export function resolveContextAugmentationAgent(
   agentId: string,
@@ -115,6 +112,14 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     return;
   }
 
+  const scaStatus = await client.getScaEnablement(p.auth.connectionType, p.auth.orgKey);
+  if (scaStatus === 'check_failed') {
+    warn(
+      'Could not verify SCA availability on the connected server. Proceeding with --sca-enabled=false.',
+    );
+  }
+  const scaEnabled = scaStatus === 'enabled';
+
   let binaryPath: string;
   try {
     binaryPath = await installContextAugmentationBinary();
@@ -123,38 +128,30 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     return;
   }
 
+  const initEnv = buildContextAugmentationEnv({
+    organization: p.auth.orgKey,
+    projectKey: p.projectKey,
+    serverUrl: p.auth.serverUrl,
+    token: p.auth.token,
+  });
+
   const initOk = await runCagStep(
     `sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
     binaryPath,
     [
-      'init',
-      '--url',
-      p.auth.serverUrl,
-      '--org',
-      p.auth.orgKey,
-      '--project-key',
-      p.projectKey,
-      // We install the skill ourselves below with --invocation-prefix overridden,
-      // so suppress init's default skill install (CAG-374).
-      '--skip-skill-install',
-      // We've already resolved URL/org/project-key here — skip CAG's own probing.
-      '--no-detect',
+      'tool',
+      'integrate',
+      '--agent',
+      p.agent,
+      '--invocation-prefix',
+      SONAR_CONTEXT_INVOCATION,
+      `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
     ],
     p,
+    initEnv,
   );
   if (!initOk) {
     warn('Context Augmentation init failed (see output above). Skipping skill installation.');
-    return;
-  }
-
-  const skillOk = await runCagStep(
-    `Context skill configured for ${AGENT_DISPLAY_NAME[p.agent]}`,
-    binaryPath,
-    buildSkillInstallArgs(p.agent),
-    p,
-  );
-  if (!skillOk) {
-    warn('Context Augmentation skill install failed (see output above).');
     return;
   }
 
@@ -168,6 +165,7 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
     updatedByCliVersion: VERSION,
     name: 'sonar-context-augmentation',
     version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+    scaEnabled,
   });
   success('SonarQube Context Augmentation configured');
 }
@@ -181,14 +179,14 @@ interface CagSubprocessResult {
 
 interface CagSubprocessOptions {
   projectRoot: string;
-  token?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface InstallContextAugmentationSkillParams {
   binaryPath: string;
   agent: ContextAugmentationAgent;
   projectRoot: string;
-  token?: string;
+  scaEnabled: boolean;
   reportFailure?: boolean;
 }
 
@@ -202,12 +200,11 @@ export async function installContextAugmentationSkill({
   binaryPath,
   agent,
   projectRoot,
-  token,
+  scaEnabled,
   reportFailure = true,
 }: InstallContextAugmentationSkillParams): Promise<boolean> {
-  const result = await runCagSubprocess(binaryPath, buildSkillInstallArgs(agent), {
+  const result = await runCagSubprocess(binaryPath, buildSkillInstallArgs(agent, scaEnabled), {
     projectRoot,
-    token,
   });
   if (!result.ok) {
     if (reportFailure) {
@@ -218,8 +215,34 @@ export async function installContextAugmentationSkill({
   return true;
 }
 
-function buildSkillInstallArgs(agent: ContextAugmentationAgent): string[] {
-  return ['skill', '--install', agent, '--invocation-prefix', SONAR_CONTEXT_INVOCATION];
+/**
+ * Best-effort `sonar-context-augmentation tool stop --all` invocation.
+ * Used during post-update to stop running CAG tools before refreshing skills
+ * so the refreshed skill templates take effect on next start. Failures are
+ * logged at debug level and never surfaced to the user.
+ */
+export async function stopAllContextAugmentationTools(binaryPath: string): Promise<boolean> {
+  const result = await runCagSubprocess(binaryPath, ['tool', 'stop', '--all'], {
+    projectRoot: process.cwd(),
+  });
+  if (!result.ok) {
+    logger.debug(
+      `sonar-context-augmentation tool stop --all failed: ${result.failureMessage ?? 'unknown error'}`,
+    );
+    return false;
+  }
+  return true;
+}
+
+function buildSkillInstallArgs(agent: ContextAugmentationAgent, scaEnabled: boolean): string[] {
+  return [
+    'tool',
+    'install-skill',
+    agent,
+    '--invocation-prefix',
+    SONAR_CONTEXT_INVOCATION,
+    `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
+  ];
 }
 
 async function runCagStep(
@@ -227,13 +250,14 @@ async function runCagStep(
   binaryPath: string,
   args: string[],
   p: SetupContextAugmentationParams,
+  env: NodeJS.ProcessEnv = buildContextAugmentationEnv(),
 ): Promise<boolean> {
   if (process.stdout.isTTY) {
     try {
       await withSpinner(successMessage, async () => {
         const result = await runCagSubprocess(binaryPath, args, {
           projectRoot: p.projectRoot,
-          token: p.auth.token,
+          env,
         });
         if (!result.ok) {
           throw new CagStepFailedError(result);
@@ -251,7 +275,7 @@ async function runCagStep(
 
   const result = await runCagSubprocess(binaryPath, args, {
     projectRoot: p.projectRoot,
-    token: p.auth.token,
+    env,
   });
   if (!result.ok) {
     reportCagFailure(result);
@@ -272,10 +296,7 @@ async function runCagSubprocess(
       child = spawn(binaryPath, args, {
         cwd: options.projectRoot,
         stdio: ['inherit', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          ...(options.token ? { SONAR_TOKEN: options.token } : {}),
-        },
+        env: options.env ?? buildContextAugmentationEnv(),
       });
     } catch (err) {
       // Some platforms (notably Windows when the binary is not a valid PE)

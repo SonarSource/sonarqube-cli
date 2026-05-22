@@ -60,8 +60,8 @@ export interface ContextAugmentationInstallResult {
 
 /**
  * Build the local cached binary filename, e.g.
- *   sonar-context-augmentation-0.9.0.355-macos-arm64
- *   sonar-context-augmentation-0.9.0.355-windows-x64.exe
+ *   sonar-context-augmentation-0.10.0.1024-macos-arm64
+ *   sonar-context-augmentation-0.10.0.1024-windows-x64.exe
  */
 export function buildLocalCagBinaryName(platform: PlatformInfo): string {
   const platSuffix = buildCagPlatformSuffix(platform);

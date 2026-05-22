@@ -25,7 +25,7 @@ import { homedir } from 'node:os';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { intro, print, success, warn } from '../../../../ui';
+import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
@@ -48,10 +48,6 @@ export async function integrateCodex(
   intro('SonarQube integration for Codex');
 
   const project = await discoverProject(process.cwd());
-  for (const configSource of project.configSources) {
-    print(`Found ${configSource}`);
-  }
-
   const isGlobal = options.global ?? false;
   const projectKey = options.project || project.projectKey;
   if (!isGlobal && !projectKey) {

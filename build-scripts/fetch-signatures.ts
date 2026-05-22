@@ -138,7 +138,7 @@ function buildAscUrl(platform: Platform, binary: ExternalBinary): string {
   const platKey = urlPlatformKey(platform, binary);
   const binaryName = binary.binaryPath.split('/').at(-1);
   if (binary.archive === 'tar.gz') {
-    // e.g. Distribution/sonar-context-augmentation-macos-arm64/sonar-context-augmentation-macos-arm64-0.9.0.355.tar.gz.asc
+    // e.g. Distribution/sonar-context-augmentation-linux-x64/sonar-context-augmentation-linux-x64-0.10.0.1024.tar.gz.asc
     return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}-${platKey}/${binaryName}-${platKey}-${binary.version}.tar.gz.asc`;
   }
   // e.g. CommercialDistribution/sonar-secrets/sonar-secrets-2.41.0.10709-macos-arm64.exe.asc

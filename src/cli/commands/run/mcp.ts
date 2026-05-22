@@ -54,7 +54,7 @@ export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): P
 
   const cwd = process.cwd();
   const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
-  const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd);
+  const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd, true);
   const projectKey = options.project || discovered?.projectKey;
   if (!projectKey) {
     warn(

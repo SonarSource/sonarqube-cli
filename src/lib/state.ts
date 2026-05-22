@@ -151,6 +151,8 @@ export interface SkillExtension extends BaseAgentExtension {
   name: string;
   /** Skill version, if versioned */
   version?: string;
+  /** Whether SCA was enabled on the connection when the skill was installed. */
+  scaEnabled?: boolean;
 }
 
 /**

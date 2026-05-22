@@ -74,17 +74,17 @@
       ]
     },
     "sonar-context-augmentation": {
-      "version": "0.9.0.631",
+      "version": "0.10.0.1024",
       "binaryPath": "Distribution/sonar-context-augmentation",
       "archive": "tar.gz",
       "platformNaming": "x64",
       "platforms": [
         {
-          "os": "alpine",
+          "os": "linux",
           "arch": "x86-64"
         },
         {
-          "os": "alpine",
+          "os": "linux",
           "arch": "arm64"
         },
         {
@@ -108,7 +108,7 @@
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "@sentry/cli": "3.4.0",
+    "@sentry/cli": "3.4.2",
     "@sonar/scan": "^4.3.5",
     "@types/bun": "^1.3.9",
     "@types/istanbul-lib-coverage": "2.0.6",

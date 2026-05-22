@@ -31,7 +31,7 @@ import {
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
+import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
@@ -66,9 +66,6 @@ export async function integrateClaude(
   blank();
 
   const project = await discoverProject(process.cwd());
-  for (const configSource of project.configSources) {
-    print(`Found ${configSource}`);
-  }
   const config = loadConfiguration(project, options, auth);
   validateConfiguration(project, config, options.global ?? false);
 

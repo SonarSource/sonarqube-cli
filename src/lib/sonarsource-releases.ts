@@ -66,7 +66,7 @@ export function buildDownloadUrl(
  * (instead of `<name>-<ver>-<plat>`).
  *
  * Example:
- *   https://binaries.sonarsource.com/Distribution/sonar-context-augmentation-macos-arm64/sonar-context-augmentation-macos-arm64-0.9.0.355.tar.gz
+ *   https://binaries.sonarsource.com/Distribution/sonar-context-augmentation-linux-x64/sonar-context-augmentation-linux-x64-0.10.0.1024.tar.gz
  */
 export function buildCagDownloadUrl(version: string, platform: PlatformInfo): string {
   const platSuffix = buildCagPlatformSuffix(platform);

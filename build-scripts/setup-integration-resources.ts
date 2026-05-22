@@ -30,7 +30,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -135,7 +135,9 @@ if (!existsSync(cagArchivePath) || !existsSync(cagAscPath)) {
 // and the sentinel path are passed via env vars (see tests/integration/resources/cag-stub.ts).
 const cagStubSource = join(RESOURCES_DIR, 'cag-stub.ts');
 const cagStubOutfile = join(RESOURCES_DIR, platform.os === 'windows' ? 'cag-stub.exe' : 'cag-stub');
-if (!existsSync(cagStubOutfile)) {
+const shouldCompileCagStub =
+  !existsSync(cagStubOutfile) || statSync(cagStubSource).mtimeMs > statSync(cagStubOutfile).mtimeMs;
+if (shouldCompileCagStub) {
   console.log(`Compiling CAG stub fixture for ${platform.os}-${platform.arch}`);
   // Use process.execPath so we invoke the same bun runtime that's running this
   // script, rather than resolving `bun` through PATH (also satisfies S4036).
