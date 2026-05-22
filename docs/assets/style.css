@@ -635,6 +635,14 @@ pre code {
   display: none;
 }
 .jtbd-recipe.visible { display: block; }
+.jtbd-docs-link {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-muted, #888);
+  text-decoration: none;
+}
+.jtbd-docs-link:hover { color: var(--accent); text-decoration: underline; }
 
 /* ─── Feature cards ─────────────────────────────────────────── */
 .features-grid {
