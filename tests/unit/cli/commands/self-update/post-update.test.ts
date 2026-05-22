@@ -19,6 +19,8 @@
  */
 
 import * as fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
@@ -26,11 +28,16 @@ import { version as CURRENT_VERSION } from '../../../../../package.json';
 import * as cagInstall from '../../../../../src/cli/commands/_common/install/context-augmentation';
 import * as secretsInstall from '../../../../../src/cli/commands/_common/install/secrets';
 import * as contextAugmentation from '../../../../../src/cli/commands/integrate/_common/context-augmentation';
+import {
+  IntegrationRegistry,
+  wholeFile,
+} from '../../../../../src/cli/commands/integrate/_common/registry';
 import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../../src/lib/install-types';
 import * as migration from '../../../../../src/lib/migration';
 import {
   migrateClaudeCodeHooks,
+  migrateDeclarativeIntegrations,
   runPostUpdateActions,
   updateContextAugmentationIfNeeded,
   updateSecretsBinaryIfNeeded,
@@ -160,19 +167,21 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // loadState is called 5 times:
+    // loadState is called 6 times:
     //   1. version check in runPostUpdateActions
-    //   2. inside migrateClaudeCodeHooks
-    //   3. inside updateSecretsBinaryIfNeeded
-    //   4. inside updateContextAugmentationIfNeeded
-    //   5. the reload after runActions (the fix being tested)
+    //   2. inside migrateDeclarativeIntegrations
+    //   3. inside migrateClaudeCodeHooks
+    //   4. inside updateSecretsBinaryIfNeeded
+    //   5. inside updateContextAugmentationIfNeeded
+    //   6. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: version check
-      .mockReturnValueOnce(makeState()) // call 2: migrateClaudeCodeHooks
-      .mockReturnValueOnce(makeState()) // call 3: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 4: updateContextAugmentationIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 5: reload
+      .mockReturnValueOnce(makeState()) // call 2: migrateDeclarativeIntegrations
+      .mockReturnValueOnce(makeState()) // call 3: migrateClaudeCodeHooks
+      .mockReturnValueOnce(makeState()) // call 4: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 5: updateContextAugmentationIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 6: reload
 
     await runPostUpdateActions();
 
@@ -224,6 +233,130 @@ describe('runPostUpdateActions', () => {
     expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
       false,
     );
+  });
+});
+
+describe('migrateDeclarativeIntegrations', () => {
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(join(tmpdir(), 'sonar-cli-post-update-'));
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('reapplies installed declarative features and prunes unknown feature state', async () => {
+    const operationCalls: string[] = [];
+    const resourcePath = join(tempDir, 'managed.txt');
+    const now = '2026-01-01T00:00:00.000Z';
+    fs.writeFileSync(resourcePath, 'legacy content', 'utf-8');
+
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      features: [
+        {
+          featureId: 'managed-feature',
+          scope: 'project',
+          targetRoot: tempDir,
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [
+            {
+              id: 'managed-file',
+              resourceType: 'whole-file',
+              version: '1',
+              path: resourcePath,
+              updatedByCliVersion: '0.9.0',
+              updatedAt: now,
+            },
+          ],
+          operations: [],
+          attrs: { projectKey: 'project-key' },
+        },
+        {
+          featureId: 'removed-feature',
+          scope: 'project',
+          targetRoot: tempDir,
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+        },
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [
+        {
+          id: 'managed-feature',
+          displayName: 'Managed feature',
+          resources: [
+            wholeFile({
+              id: 'managed-file',
+              version: '2',
+              targetPath: resourcePath,
+              content: 'fresh content',
+            }),
+          ],
+          operations: [
+            {
+              id: 'refresh-operation',
+              version: '1',
+              apply: () => {
+                operationCalls.push('refresh-operation');
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(fs.readFileSync(resourcePath, 'utf-8')).toBe('fresh content');
+    expect(operationCalls).toEqual(['refresh-operation']);
+    expect(saveStateSpy).toHaveBeenCalledTimes(1);
+
+    const savedState = saveStateSpy.mock.calls[0][0];
+    expect(savedState.integrations.installed).toHaveLength(1);
+    expect(savedState.integrations.installed[0].features).toHaveLength(1);
+    const savedFeature = savedState.integrations.installed[0].features[0];
+    expect(savedFeature.featureId).toBe('managed-feature');
+    expect(savedFeature.resources).toHaveLength(1);
+    expect(savedFeature.resources[0]).toMatchObject({
+      id: 'managed-file',
+      version: '2',
+      path: resourcePath,
+    });
+    expect(savedFeature.operations).toHaveLength(1);
+    expect(savedFeature.operations[0]).toMatchObject({
+      id: 'refresh-operation',
+      version: '1',
+    });
   });
 });
 
@@ -292,6 +425,57 @@ describe('migrateClaudeCodeHooks', () => {
 
     expect(installHooksSpy).not.toHaveBeenCalled();
     expect(migrateHookScriptsSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips legacy migration when Claude is already tracked declaratively', async () => {
+    const state = makeStateWithExtensions([makeExtension('/proj/root', false)]);
+    state.integrations.installed.push({
+      id: 'claude-integration-id',
+      integrationId: 'claude-code',
+      installedByCliVersion: '1.0.0',
+      installedAt: '2026-01-01T00:00:00.000Z',
+      updatedByCliVersion: '1.0.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      features: [
+        {
+          featureId: 'mcp-server',
+          scope: 'project',
+          targetRoot: '/proj/root',
+          installedByCliVersion: '1.0.0',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedByCliVersion: '1.0.0',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          dependencies: [],
+          resources: [],
+          operations: [],
+        },
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await migrateClaudeCodeHooks(homedirFn);
+
+    expect(installHooksSpy).not.toHaveBeenCalled();
+    expect(migrateHookScriptsSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not skip legacy migration for an empty declarative Claude container', async () => {
+    const state = makeStateWithExtensions([makeExtension('/proj/root', false)]);
+    state.integrations.installed.push({
+      id: 'claude-integration-id',
+      integrationId: 'claude-code',
+      installedByCliVersion: '1.0.0',
+      installedAt: '2026-01-01T00:00:00.000Z',
+      updatedByCliVersion: '1.0.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      features: [],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    await migrateClaudeCodeHooks(homedirFn);
+
+    expect(installHooksSpy).toHaveBeenCalledTimes(1);
+    expect(migrateHookScriptsSpy).toHaveBeenCalledTimes(1);
   });
 
   it('installs hooks for each extension in the registry', async () => {

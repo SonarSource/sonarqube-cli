@@ -30,11 +30,7 @@ import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import {
-  COPILOT_INTEGRATION_ID,
-  type CopilotIntegrationOptions,
-  registerCopilotIntegration,
-} from './declaration';
+import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import {
   detectGlobalSecretsHook,
   hookScriptName,
@@ -46,8 +42,6 @@ import {
   PROJECT_INSTRUCTIONS_REL_DIR,
   warnIfProjectInstructionsShadowGlobal,
 } from './instructions';
-
-registerCopilotIntegration();
 
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {

@@ -38,6 +38,7 @@ void mock.module('../../../../../../src/cli/commands/_common/install/binary', ()
 }));
 
 const {
+  createIntegrationRegistry,
   IntegrationInstaller,
   IntegrationRegistry,
   jsonPatch,
@@ -77,6 +78,12 @@ describe('declarative integration framework', () => {
     registry.register(declaration);
 
     expect(() => registry.register(declaration)).toThrow(
+      'Integration declaration already registered: test-integration',
+    );
+  });
+
+  it('rejects duplicate integration ids when seeding a registry from static data', () => {
+    expect(() => createIntegrationRegistry([makeIntegration(), makeIntegration()])).toThrow(
       'Integration declaration already registered: test-integration',
     );
   });

@@ -31,9 +31,7 @@ import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { CODEX_INTEGRATION_ID, registerCodexIntegration } from './declaration';
-
-registerCodexIntegration();
+import { CODEX_INTEGRATION_ID } from './declaration';
 
 export async function integrateCodex(
   options: IntegrateAgentOptions,

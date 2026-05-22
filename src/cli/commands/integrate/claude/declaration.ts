@@ -22,19 +22,19 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '../../../../lib/migration';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import {
-  type IntegrationContext,
-  type IntegrationDeclaration,
-  jsonPatch,
-  supportedIntegrations,
-  wholeFile,
-} from '../_common/registry';
+import { jsonPatch, wholeFile } from '../_common/registry/resources';
+import type {
+  FeatureOperation,
+  IntegrationContext,
+  IntegrationDeclaration,
+} from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -63,46 +63,49 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: 'Claude Code',
   features: [
-    createSonarSecretsHooksFeature({
-      agentDisplayName: 'Claude',
-      configDir: CLAUDE_CONFIG_DIR,
-      hooksConfigFileName: SETTINGS_FILE,
-      hooksPatchId: 'claude-settings-secrets-hooks',
-      scripts: [
-        {
-          id: 'pretool-secrets-script',
-          displayName: 'Claude PreToolUse hook script',
-          scriptPath: PRETOOL_SCRIPT_REL,
-          content: {
-            unix: getSecretPreToolTemplateUnix(),
-            windows: getSecretPreToolTemplateWindows(),
+    {
+      ...createSonarSecretsHooksFeature({
+        agentDisplayName: 'Claude',
+        configDir: CLAUDE_CONFIG_DIR,
+        hooksConfigFileName: SETTINGS_FILE,
+        hooksPatchId: 'claude-settings-secrets-hooks',
+        scripts: [
+          {
+            id: 'pretool-secrets-script',
+            displayName: 'Claude PreToolUse hook script',
+            scriptPath: PRETOOL_SCRIPT_REL,
+            content: {
+              unix: getSecretPreToolTemplateUnix(),
+              windows: getSecretPreToolTemplateWindows(),
+            },
           },
-        },
-        {
-          id: 'prompt-secrets-script',
-          displayName: 'Claude UserPromptSubmit hook script',
-          scriptPath: PROMPT_SCRIPT_REL,
-          content: {
-            unix: getSecretPromptTemplateUnix(),
-            windows: getSecretPromptTemplateWindows(),
+          {
+            id: 'prompt-secrets-script',
+            displayName: 'Claude UserPromptSubmit hook script',
+            scriptPath: PROMPT_SCRIPT_REL,
+            content: {
+              unix: getSecretPromptTemplateUnix(),
+              windows: getSecretPromptTemplateWindows(),
+            },
           },
-        },
-      ],
-      hookEntries: [
-        {
-          eventType: 'PreToolUse',
-          matcher: 'Read',
-          marker: 'sonar-secrets',
-          scriptPath: PRETOOL_SCRIPT_REL,
-        },
-        {
-          eventType: 'UserPromptSubmit',
-          matcher: '*',
-          marker: 'sonar-secrets',
-          scriptPath: PROMPT_SCRIPT_REL,
-        },
-      ],
-    }),
+        ],
+        hookEntries: [
+          {
+            eventType: 'PreToolUse',
+            matcher: 'Read',
+            marker: 'sonar-secrets',
+            scriptPath: PRETOOL_SCRIPT_REL,
+          },
+          {
+            eventType: 'UserPromptSubmit',
+            matcher: '*',
+            marker: 'sonar-secrets',
+            scriptPath: PROMPT_SCRIPT_REL,
+          },
+        ],
+      }),
+      operations: [createRemoveObsoleteA3sArtifactsOperation()],
+    },
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
@@ -145,6 +148,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
             ]),
         }),
       ],
+      operations: [createRemoveObsoleteA3sArtifactsOperation()],
     },
     {
       id: 'mcp-server',
@@ -163,17 +167,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     },
   ],
 };
-
-let claudeIntegrationRegistered = false;
-
-export function registerClaudeIntegration(): void {
-  if (claudeIntegrationRegistered) {
-    return;
-  }
-
-  supportedIntegrations.register(claudeIntegration);
-  claudeIntegrationRegistered = true;
-}
 
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);
@@ -238,4 +231,12 @@ function getRequiredStringAttr(context: IntegrationContext, key: string): string
     throw new Error(`Missing integration attribute: ${key}`);
   }
   return value;
+}
+
+function createRemoveObsoleteA3sArtifactsOperation(): FeatureOperation {
+  return {
+    id: 'remove-obsolete-a3s-artifacts',
+    displayName: 'Remove obsolete SQAA hook artifacts',
+    apply: ({ targetRoot }) => removeObsoleteHookArtifacts(targetRoot, OBSOLETE_A3S_MARKER),
+  };
 }

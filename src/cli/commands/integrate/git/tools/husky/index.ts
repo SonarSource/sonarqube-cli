@@ -20,12 +20,9 @@
 
 import { join } from 'node:path';
 
-import {
-  type FeatureDeclaration,
-  type IntegrationDeclaration,
-  sonarSecretsBinaryDependency,
-  textSnippet,
-} from '../../../_common/registry';
+import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
+import { textSnippet } from '../../../_common/registry/resources';
+import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { HOOK_MARKER } from '../shared';
 import { getHuskySnippetContent } from './shell-fragments';
