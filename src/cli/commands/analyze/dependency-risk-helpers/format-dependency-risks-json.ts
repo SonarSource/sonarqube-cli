@@ -18,10 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  type DependencyRisksViewModel,
-  PackageIdentity,
-} from './view-model/dependency-risks-view-model.ts';
+import { type DependencyRisksViewModel, PackageIdentity } from './view-model';
 
 export function formatDependencyRisksJson(project: string, vm: DependencyRisksViewModel): string {
   return JSON.stringify({ project, ...vm }, jsonReplacer, 2);

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { RiskVM } from '../view-model/dependency-risks-view-model.ts';
+import type { RiskVM } from '../view-model';
 
 const SEVERITY_WIDTH = 9;
 const STATUS_WIDTH = 8;

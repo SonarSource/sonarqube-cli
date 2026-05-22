@@ -32,7 +32,7 @@ import type {
   RiskVM,
   SummaryVM,
   VulnerabilityGroupVM,
-} from '../view-model/dependency-risks-view-model.ts';
+} from '../view-model';
 import { appendLicenseGroup } from './format-table-license-group.ts';
 import { appendMalwareGroup } from './format-table-malware-group.ts';
 import { formatRecommendationLine } from './format-table-recommendation.ts';

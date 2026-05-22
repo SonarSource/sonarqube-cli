@@ -22,12 +22,12 @@ import { describe, expect, it } from 'bun:test';
 
 import type { RiskFilterPredicate } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type { Severity } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import { buildGroups } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/group-builder.ts';
 import type {
   RiskVM,
   VulnerabilityGroupVM,
   VulnerabilityRiskVM,
-} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/risk.ts';
+} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
+import { buildGroups } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import {
   mockLicenseRisk,
   mockMalwareRisk,

@@ -22,23 +22,21 @@ import {
   buildRiskFilter,
   type RiskFilterDescription,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
-import { buildSummaryVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/summary-builder.ts';
-import type { DependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
-import type { ErrorVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/error.ts';
-import type { FixVersionVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/fix-version.ts';
 import {
+  type DependencyRisksViewModel,
+  type ErrorVM,
+  type FixVersionVM,
+  type LicenseGroupVM,
+  type LicenseRiskVM,
+  type MalwareGroupVM,
+  type MalwareRiskVM,
   PackageIdentity,
   type PackageVM,
-} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/package.ts';
-import type { RecommendationVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/recommendation.ts';
-import type {
-  LicenseGroupVM,
-  LicenseRiskVM,
-  MalwareGroupVM,
-  MalwareRiskVM,
-  VulnerabilityGroupVM,
-  VulnerabilityRiskVM,
-} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/risk.ts';
+  type RecommendationVM,
+  type VulnerabilityGroupVM,
+  type VulnerabilityRiskVM,
+} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
+import { buildSummaryVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 
 export function pkgId(purl: string): PackageIdentity {
   const atIdx = purl.lastIndexOf('@');

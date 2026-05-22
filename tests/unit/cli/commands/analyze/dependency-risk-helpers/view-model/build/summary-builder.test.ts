@@ -28,12 +28,12 @@ import type {
   ScaIssueType,
   Severity,
 } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import type { PackageVM } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 import {
   buildPackageIdentityMap,
   buildPackageVM,
-} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/package-builder.ts';
-import { buildSummaryVM } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/summary-builder.ts';
-import type { PackageVM } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/package.ts';
+  buildSummaryVM,
+} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import {
   mockLicenseRisk,
   mockMalwareRisk,

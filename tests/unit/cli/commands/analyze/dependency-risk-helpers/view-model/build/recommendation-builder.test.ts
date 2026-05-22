@@ -20,12 +20,12 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import type { FixVersionVM } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 import {
   buildLicenseRecommendation,
   buildMalwareRecommendation,
   buildVulnerabilityRecommendation,
-} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/recommendation-builder.ts';
-import type { FixVersionVM } from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/fix-version.ts';
+} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 
 describe('recommendation-builder', () => {
   it('malware → REMOVE_PACKAGE with empty fixVersions', () => {

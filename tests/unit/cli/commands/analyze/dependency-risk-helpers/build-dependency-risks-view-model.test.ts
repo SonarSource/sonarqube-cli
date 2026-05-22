@@ -22,7 +22,7 @@ import { describe, expect, it } from 'bun:test';
 
 import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import type { AnalyzeProjectResponse } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
+import { buildDependencyRisksViewModel } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import { countUnresolvedIssues } from '../../../../../../src/cli/commands/analyze/dependency-risks.ts';
 import {
   mockScaRelease,

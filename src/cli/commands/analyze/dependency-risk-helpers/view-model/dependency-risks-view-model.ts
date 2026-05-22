@@ -22,23 +22,6 @@ import type { ErrorVM } from './error.ts';
 import type { PackageVM } from './package.ts';
 import type { SummaryVM } from './summary.ts';
 
-export type { ErrorVM } from './error.ts';
-export type { FixVersionVM } from './fix-version.ts';
-export { PackageIdentity, type PackageVM } from './package.ts';
-export type { RecommendationAction, RecommendationVM } from './recommendation.ts';
-export type {
-  EffectiveStatus,
-  LicenseGroupVM,
-  LicenseRiskVM,
-  MalwareGroupVM,
-  MalwareRiskVM,
-  RiskGroupVM,
-  RiskVM,
-  VulnerabilityGroupVM,
-  VulnerabilityRiskVM,
-} from './risk.ts';
-export type { PackageSummaryVM, SummaryVM } from './summary.ts';
-
 export interface DependencyRisksViewModel {
   packages: PackageVM[];
   errors: ErrorVM[];

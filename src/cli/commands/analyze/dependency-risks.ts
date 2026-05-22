@@ -37,9 +37,9 @@ import {
   ScaScannerRunner,
 } from './dependency-risk-helpers/sca-scanner.ts';
 import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
-import { formatDependencyRisksTable } from './dependency-risk-helpers/table/format-dependency-risks-table.ts';
-import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build/build-dependency-risks-view-model.ts';
-import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
+import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
+import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
+import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build';
 
 export const VALID_FORMATS = ['json', 'table'];
 

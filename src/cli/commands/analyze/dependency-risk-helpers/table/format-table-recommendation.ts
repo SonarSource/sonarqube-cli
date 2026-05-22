@@ -20,7 +20,7 @@
 
 import { bold, red } from '../../../../../ui/colors.js';
 import type { VersionOptionDescriptionCode } from '../sca-scanner.ts';
-import type { FixVersionVM, RecommendationVM } from '../view-model/dependency-risks-view-model.ts';
+import type { FixVersionVM, RecommendationVM } from '../view-model';
 
 const MAX_PACKAGE_FIXES = 2;
 

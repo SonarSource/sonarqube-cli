@@ -20,8 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { formatDependencyRisksTable } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/table/format-dependency-risks-table.ts';
-import { PackageIdentity } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/package.ts';
+import { formatDependencyRisksTable } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/table';
+import { PackageIdentity } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 import {
   mockDependencyRisksViewModel,
   mockLicenseGroupVM,

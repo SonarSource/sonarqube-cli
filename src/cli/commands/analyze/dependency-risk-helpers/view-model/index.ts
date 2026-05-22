@@ -18,14 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { MalwareGroupVM } from '../view-model';
-import { LINE_INDENT } from './format-dependency-risks-table.ts';
-import { formatRecommendationLine } from './format-table-recommendation.ts';
-import { genericRiskInfo } from './format-table-risk-generic.ts';
-
-export function appendMalwareGroup(lines: string[], group: MalwareGroupVM): void {
-  for (const risk of group.selectedRisks) {
-    lines.push(`${LINE_INDENT}${genericRiskInfo(risk, 'Malicious package')}`);
-  }
-  lines.push(`${LINE_INDENT}${formatRecommendationLine(group.recommendation)}`);
-}
+export type { DependencyRisksViewModel } from './dependency-risks-view-model.ts';
+export type { ErrorVM } from './error.ts';
+export type { FixVersionVM } from './fix-version.ts';
+export { PackageIdentity, type PackageVM } from './package.ts';
+export type { RecommendationAction, RecommendationVM } from './recommendation.ts';
+export type {
+  EffectiveStatus,
+  LicenseGroupVM,
+  LicenseRiskVM,
+  MalwareGroupVM,
+  MalwareRiskVM,
+  RiskGroupVM,
+  RiskVM,
+  VulnerabilityGroupVM,
+  VulnerabilityRiskVM,
+} from './risk.ts';
+export type { PackageSummaryVM, SummaryVM } from './summary.ts';

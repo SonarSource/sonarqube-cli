@@ -27,7 +27,7 @@ import {
 import type {
   EffectiveStatus,
   RiskVM,
-} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/dependency-risks-view-model.ts';
+} from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 
 function risk(status: EffectiveStatus): RiskVM {
   return { severity: 'HIGH', status };

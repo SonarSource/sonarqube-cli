@@ -24,7 +24,7 @@ import {
   buildLicenseRisk,
   buildMalwareRisk,
   buildVulnerabilityRisk,
-} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/risk-builder.ts';
+} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import {
   mockLicenseRisk,
   mockMalwareRisk,

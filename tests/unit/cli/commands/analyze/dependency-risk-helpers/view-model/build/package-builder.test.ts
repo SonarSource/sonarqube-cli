@@ -23,7 +23,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   buildPackageIdentityMap,
   buildPackageVM,
-} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/package-builder.ts';
+} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import { mockScaRelease, mockVulnerabilityRisk } from './_helpers.ts';
 
 const ALLOW_ALL = () => true;

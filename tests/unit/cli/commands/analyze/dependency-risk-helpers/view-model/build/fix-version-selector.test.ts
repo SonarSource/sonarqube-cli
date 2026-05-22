@@ -24,7 +24,7 @@ import type { VersionOption } from '../../../../../../../../src/cli/commands/ana
 import {
   selectIssuePartialFixes,
   selectPackageCompleteFixes,
-} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/fix-version-selector.ts';
+} from '../../../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import { mockVersionOption, mockVulnerabilityRisk } from './_helpers.ts';
 
 describe('selectIssuePartialFixes', () => {

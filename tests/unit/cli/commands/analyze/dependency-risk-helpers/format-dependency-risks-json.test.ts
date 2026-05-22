@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { formatDependencyRisksJson } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/format-dependency-risks-json.ts';
-import { PackageIdentity } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/package.ts';
+import { PackageIdentity } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 import {
   mockDependencyRisksViewModel,
   mockLicenseGroupVM,
