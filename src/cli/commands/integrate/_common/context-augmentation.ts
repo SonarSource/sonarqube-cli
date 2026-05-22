@@ -24,6 +24,7 @@ import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
+import logger from '../../../../lib/logger';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import { recordSkillExtensionInState } from '../../../../lib/state-manager';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -213,6 +214,25 @@ export async function installContextAugmentationSkill({
     if (reportFailure) {
       reportCagFailure(result);
     }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Best-effort `sonar-context-augmentation tool stop --all` invocation.
+ * Used during post-update to stop running CAG tools before refreshing skills
+ * so the refreshed skill templates take effect on next start. Failures are
+ * logged at debug level and never surfaced to the user.
+ */
+export async function stopAllContextAugmentationTools(binaryPath: string): Promise<boolean> {
+  const result = await runCagSubprocess(binaryPath, ['tool', 'stop', '--all'], {
+    projectRoot: process.cwd(),
+  });
+  if (!result.ok) {
+    logger.debug(
+      `sonar-context-augmentation tool stop --all failed: ${result.failureMessage ?? 'unknown error'}`,
+    );
     return false;
   }
   return true;

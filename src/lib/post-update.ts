@@ -29,6 +29,7 @@ import {
   type ContextAugmentationAgent,
   installContextAugmentationSkill,
   resolveContextAugmentationAgent,
+  stopAllContextAugmentationTools,
 } from '../cli/commands/integrate/_common/context-augmentation';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
 import { CONTEXT_AUGMENTATION_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
@@ -126,6 +127,7 @@ export async function updateContextAugmentationIfNeeded(): Promise<void> {
   }
 
   const binaryPath = await installContextAugmentationBinary();
+  await stopAllContextAugmentationTools(binaryPath);
   await refreshContextAugmentationSkills(binaryPath, skills);
 }
 
