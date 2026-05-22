@@ -30,20 +30,7 @@ import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../src/lib/install-ty
 import { detectPlatform } from '../../../../src/lib/platform-detector';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures';
 import { TestHarness } from '../../harness';
-
-interface CagInvocation {
-  argv: string[];
-}
-
-function readCagInvocations(harness: TestHarness): CagInvocation[] {
-  const file = harness.cliHome.file('cag-invocations.jsonl');
-  if (!file.exists()) return [];
-  return file
-    .asText()
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as CagInvocation);
-}
+import { readCagInvocations } from '../../harness/cag-invocations';
 
 describe('post-update migration', () => {
   let harness: TestHarness;

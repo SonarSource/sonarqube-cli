@@ -28,26 +28,10 @@ import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
 import type { CliState } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
-
-interface CagInvocation {
-  argv: string[];
-  env: {
-    SONAR_CONTEXT_ORGANIZATION?: string;
-    SONAR_CONTEXT_PROJECT?: string;
-    SONAR_CONTEXT_TOKEN?: string;
-    SONAR_CONTEXT_URL?: string;
-  };
-}
-
-function readInvocations(harness: TestHarness): CagInvocation[] {
-  const file = harness.cliHome.file('cag-invocations.jsonl');
-  if (!file.exists()) return [];
-  return file
-    .asText()
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as CagInvocation);
-}
+import {
+  type CagInvocation,
+  readCagInvocations as readInvocations,
+} from '../../harness/cag-invocations';
 
 function findInvocation(invocations: CagInvocation[], subcommand: string): CagInvocation {
   const match = invocations.find((i) => i.argv[0] === subcommand);

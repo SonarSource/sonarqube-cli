@@ -26,29 +26,13 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from '
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../src/lib/install-types.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
 import { TestHarness } from '../../harness';
+import {
+  type CagInvocation,
+  readCagInvocations as readInvocations,
+} from '../../harness/cag-invocations';
 
 // CAG stub spawn + temp-dir teardown on Windows can exceed Bun's default hook timeout.
 setDefaultTimeout(30_000);
-
-interface CagInvocation {
-  argv: string[];
-  env: {
-    SONAR_CONTEXT_ORGANIZATION?: string;
-    SONAR_CONTEXT_PROJECT?: string;
-    SONAR_CONTEXT_TOKEN?: string;
-    SONAR_CONTEXT_URL?: string;
-  };
-}
-
-function readInvocations(harness: TestHarness): CagInvocation[] {
-  const file = harness.cliHome.file('cag-invocations.jsonl');
-  if (!file.exists()) return [];
-  return file
-    .asText()
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as CagInvocation);
-}
 
 function findInvocation(invocations: CagInvocation[], argv: string[]): CagInvocation {
   const matches = invocations.filter((i) => JSON.stringify(i.argv) === JSON.stringify(argv));
