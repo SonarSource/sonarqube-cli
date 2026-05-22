@@ -20,8 +20,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { buildRiskFilter } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
 import { formatDependencyRisksTable } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/table';
 import { PackageIdentity } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
+import { buildSummaryVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import {
   mockDependencyRisksViewModel,
   mockLicenseGroupVM,
@@ -100,6 +102,21 @@ describe('formatDependencyRisksTable — general smoke', () => {
     );
     expect(out).toContain('Filtering by: new, open, confirm, accept, safe, fixed');
     expect(out.indexOf('Summary:')).toBeLessThan(out.indexOf('Filtering by:'));
+  });
+
+  it('renders the discarded statuses alongside the kept ones when the filter excludes some', () => {
+    const filter = buildRiskFilter('active')!.description;
+    const out = formatDependencyRisksTable(
+      mockDependencyRisksViewModel({
+        packages: [],
+        packagesScanned: 0,
+        summary: buildSummaryVM([], 0, filter),
+      }),
+    );
+    const filterLine = lineWith(out, 'Filtering by:');
+    expect(filterLine).toContain('new, open, confirm');
+    expect(filterLine).toContain('discarded: accept, safe, fixed');
+    expect(filterLine.indexOf('new, open, confirm')).toBeLessThan(filterLine.indexOf('discarded:'));
   });
 });
 

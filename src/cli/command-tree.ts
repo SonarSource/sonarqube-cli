@@ -340,7 +340,7 @@ const dependencyRisksStatusFilterOption = new Option(
     'Examples:\n' +
     '    --statuses active\n' +
     '    --statuses new,confirm\n' +
-    '    --statuses active,safe',
+    '    --statuses active,safe\n',
 ).default('active');
 
 analyze
