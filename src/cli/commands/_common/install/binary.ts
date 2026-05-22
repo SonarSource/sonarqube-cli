@@ -95,12 +95,10 @@ async function downloadAndInstall(
   const binaryPath = join(resolvedBinDir, binaryName);
 
   if (!options.force && existsSync(binaryPath)) {
-    text(`  ${spec.name} ${spec.version} is already installed (latest)`);
     return { skipped: true, binaryPath };
   }
 
   text(`Installing ${spec.name} ${spec.version}`);
-  text(`  Platform: ${platform.os}-${platform.arch}`);
 
   const downloadUrl = buildDownloadUrl(spec.name, spec.version, spec.distPrefix, platform);
   await withSpinner(`Downloading ${spec.name} ${spec.version}`, () =>
