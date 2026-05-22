@@ -37,24 +37,24 @@ describe('sonarsource-releases', () => {
   });
 
   describe('buildCagDownloadUrl (sonar-context-augmentation convention)', () => {
-    it('routes linux to the alpine artifact and maps x86-64 -> x64', () => {
-      const url = buildCagDownloadUrl('0.9.0.355', {
+    it('maps linux x86-64 -> linux-x64', () => {
+      const url = buildCagDownloadUrl('0.10.0.1024', {
         os: 'linux',
         arch: 'x86-64',
         extension: '',
       });
-      expect(url).toContain('Distribution/sonar-context-augmentation-alpine-x64/');
-      expect(url.endsWith('sonar-context-augmentation-alpine-x64-0.9.0.355.tar.gz')).toBe(true);
+      expect(url).toContain('Distribution/sonar-context-augmentation-linux-x64/');
+      expect(url.endsWith('sonar-context-augmentation-linux-x64-0.10.0.1024.tar.gz')).toBe(true);
     });
 
     it('keeps arm64 unchanged for macOS', () => {
-      const url = buildCagDownloadUrl('0.9.0.355', {
+      const url = buildCagDownloadUrl('0.10.0.1024', {
         os: 'macos',
         arch: 'arm64',
         extension: '',
       });
       expect(url).toContain('Distribution/sonar-context-augmentation-macos-arm64/');
-      expect(url.endsWith('sonar-context-augmentation-macos-arm64-0.9.0.355.tar.gz')).toBe(true);
+      expect(url.endsWith('sonar-context-augmentation-macos-arm64-0.10.0.1024.tar.gz')).toBe(true);
     });
   });
 });

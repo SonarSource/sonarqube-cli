@@ -74,17 +74,17 @@
       ]
     },
     "sonar-context-augmentation": {
-      "version": "0.9.0.631",
+      "version": "0.10.0.1024",
       "binaryPath": "Distribution/sonar-context-augmentation",
       "archive": "tar.gz",
       "platformNaming": "x64",
       "platforms": [
         {
-          "os": "alpine",
+          "os": "linux",
           "arch": "x86-64"
         },
         {
-          "os": "alpine",
+          "os": "linux",
           "arch": "arm64"
         },
         {

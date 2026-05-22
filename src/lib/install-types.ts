@@ -36,16 +36,11 @@ export function buildPlatformSuffix(p: PlatformInfo): string {
 
 /**
  * Platform suffix used by sonar-context-augmentation distribution archives.
- * CAG publishes platforms as `alpine-x64` / `windows-x64` (not `linux-x86-64`),
+ * CAG publishes platforms as `linux-x64` / `windows-x64` (not `linux-x86-64`),
  * so we map `x86-64` -> `x64` here. Only used for CAG download paths and the
  * matching local cached filename — `buildPlatformSuffix` is unchanged.
- *
- * TEMPORARY: linux is routed to the statically-linked alpine artifact until
- * upstream CAG ships a unified static linux build under linux-x64/linux-arm64.
- * Once that lands, drop the linux→alpine mapping and refresh signatures.
  */
 export function buildCagPlatformSuffix(p: PlatformInfo): string {
   const arch = p.arch === 'x86-64' ? 'x64' : p.arch;
-  const os = p.os === 'linux' ? 'alpine' : p.os;
-  return `${os}-${arch}`;
+  return `${p.os}-${arch}`;
 }
