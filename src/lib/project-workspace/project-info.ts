@@ -137,7 +137,10 @@ export async function discoverProjectInfo(startDir: string): Promise<ProjectInfo
   };
 }
 
-export async function discoverProject(startDir: string): Promise<DiscoveredProject> {
+export async function discoverProject(
+  startDir: string,
+  silent = false,
+): Promise<DiscoveredProject> {
   const projectInfo = await discoverProjectInfo(startDir);
   const config: DiscoveredProject = {
     rootDir: projectInfo.root,
@@ -150,6 +153,12 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
     config.serverUrl = projectInfo.sonarPropsData.hostURL;
     config.projectKey = projectInfo.sonarPropsData.projectKey;
     config.organization = projectInfo.sonarPropsData.organization;
+    if (!silent) {
+      const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+      if (fields) {
+        print(`Found sonar-project.properties: ${fields}`);
+      }
+    }
   }
 
   if (
@@ -161,9 +170,30 @@ export async function discoverProject(startDir: string): Promise<DiscoveredProje
     config.serverUrl = config.serverUrl || projectInfo.sonarLintData.serverURL;
     config.projectKey = config.projectKey || projectInfo.sonarLintData.projectKey;
     config.organization = config.organization || projectInfo.sonarLintData.organization;
+    if (!silent) {
+      const fields = formatConfigFields(
+        projectInfo.sonarLintData.serverURL,
+        projectInfo.sonarLintData.projectKey,
+        projectInfo.sonarLintData.organization,
+      );
+      if (fields) {
+        print(`Found ${projectInfo.sonarLintConfigPath}: ${fields}`);
+      }
+    }
   }
 
   return config;
+}
+
+function formatConfigFields(
+  serverUrl?: string,
+  projectKey?: string,
+  organization?: string,
+): string {
+  return Object.entries({ project: projectKey, server: serverUrl, org: organization })
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ');
 }
 
 export function findGitRoot(startDir: string): { gitRoot: string; isGit: boolean } {
