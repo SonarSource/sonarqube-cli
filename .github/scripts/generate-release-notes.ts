@@ -67,7 +67,7 @@ const COMMIT_NOISE_PATTERNS: RegExp[] = [
 ];
 
 // JIRA enrichment. Issue keys look like `CLI-123`, `CODEFIX-456`, etc.
-const JIRA_KEY_REGEX = /\b[A-Z][A-Z0-9_]+-\d+\b/g;
+const JIRA_KEY_REGEX = /\b[A-Z][A-Z0-9]+-\d+\b/g;
 const JIRA_DEFAULT_BASE_URL = 'https://sonarsource.atlassian.net';
 const JIRA_MAX_TICKETS = 40;
 const JIRA_DESCRIPTION_MAX_CHARS = 800;
@@ -104,6 +104,7 @@ interface JiraTicket {
 interface AnthropicMessagesResponse {
   content?: { type: string; text?: string }[];
   error?: { type?: string; message?: string };
+  stop_reason?: string;
 }
 
 function printUsageAndExit(code: number): never {
@@ -479,6 +480,13 @@ async function callAnthropic(apiKey: string, model: string, prompt: string): Pro
   if (parsed.error) {
     throw new Error(
       `Anthropic API error: ${parsed.error.type ?? 'unknown'}: ${parsed.error.message ?? text}`,
+    );
+  }
+
+  if (parsed.stop_reason === 'max_tokens') {
+    throw new Error(
+      `Anthropic response was truncated (stop_reason=max_tokens, MAX_TOKENS=${MAX_TOKENS}). ` +
+        'Increase MAX_TOKENS or reduce JIRA_DESCRIPTION_MAX_CHARS.',
     );
   }
 

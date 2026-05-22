@@ -17,8 +17,11 @@ jobs:
   check-draft-exists:
     name: Check draft release exists
     runs-on: github-ubuntu-latest-s
+    # contents: write is required — draft releases are only visible to tokens with write access.
     permissions:
-      contents: read
+      contents: write
+    outputs:
+      release-version: ${{ steps.version.outputs.release-version }}
     steps:
       - name: Get release version
         id: version
@@ -118,3 +121,25 @@ jobs:
           draft: true # so that we don't actually need to re-open the PR and just make it ready for review
           reviewers: ${{ github.actor }}
           body: Bump the version for the new iteration. Created by release automation.
+
+  publish-release-notes:
+    name: Copy reviewed notes to published release
+    runs-on: github-ubuntu-latest-s
+    needs: [check-draft-exists, release]
+    permissions:
+      contents: write
+    steps:
+      - name: Copy draft body to published release and delete draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRAFT_VERSION: ${{ needs.check-draft-exists.outputs.release-version }}
+          RELEASED_VERSION: ${{ needs.release.outputs.released-version }}
+        run: |
+          echo "Copying notes from draft '$DRAFT_VERSION' to published release '$RELEASED_VERSION'..."
+          gh release view "$DRAFT_VERSION" --json body --jq '.body' > release-notes.md
+          gh release edit "$RELEASED_VERSION" --notes-file release-notes.md
+          # Draft releases do not create a git tag (see https://github.com/orgs/community/discussions/24690),
+          # so --cleanup-tag is intentionally omitted.
+          echo "Deleting draft '$DRAFT_VERSION'..."
+          gh release delete "$DRAFT_VERSION" --yes
+          echo "Done."
