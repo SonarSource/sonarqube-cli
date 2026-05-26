@@ -306,13 +306,17 @@ export class SonarQubeClient {
   }
 
   /**
-   * Check whether Sonar Advanced Security (SCA) is enabled on the connected
-   * server. SonarCloud exposes this at `/sca/feature-enabled?organization=<key>`
-   * (api.sonarcloud.io); SonarQube Server at `/api/v2/sca/feature-enabled`. Any
-   * failure (404, network, unauthorized) is treated as "not available" so
-   * callers can gate analysis with a friendly error.
+   * Query Sonar Advanced Security (SCA) enablement on the connected server.
+   * SonarCloud exposes this at `/sca/feature-enabled?organization=<key>`
+   * (api.sonarcloud.io); SonarQube Server at `/api/v2/sca/feature-enabled`.
+   *
+   * Returns a 3-state value so callers can distinguish "not enabled" (a definitive
+   * answer from the server) from "check_failed" (network error, unreachable, etc.).
    */
-  async checkScaEnabled(connectionType: 'cloud' | 'on-premise', orgKey?: string): Promise<boolean> {
+  async getScaEnablement(
+    connectionType: 'cloud' | 'on-premise',
+    orgKey?: string,
+  ): Promise<'enabled' | 'not_enabled' | 'check_failed'> {
     try {
       const isCloud = connectionType === 'cloud';
       const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
@@ -322,10 +326,18 @@ export class SonarQubeClient {
         params,
         resolveFromEndpoint(this.serverURL, endpoint),
       );
-      return result.enabled;
+      return result.enabled ? 'enabled' : 'not_enabled';
     } catch {
-      return false;
+      return 'check_failed';
     }
+  }
+
+  /**
+   * Boolean wrapper over getScaEnablement for callers that gate on "enabled" only.
+   * Any failure (404, network, unauthorized, not enabled) is treated as "not available".
+   */
+  async checkScaEnabled(connectionType: 'cloud' | 'on-premise', orgKey?: string): Promise<boolean> {
+    return (await this.getScaEnablement(connectionType, orgKey)) === 'enabled';
   }
 
   /**

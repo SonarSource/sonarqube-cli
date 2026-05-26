@@ -21,7 +21,7 @@
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN, resolveFromEnv } from '../../../lib/auth-resolver';
 import { getToken as getKeystoreToken } from '../../../lib/keychain';
 import { loadState } from '../../../lib/repository/state-repository';
-import { note, print, withSpinner } from '../../../ui';
+import { blank, note, print, withSpinner } from '../../../ui';
 import { NOTE_STYLES } from '../../../ui/colors';
 import { CommandFailedError } from '../_common/error';
 import type { TokenStatus } from '../_common/token';
@@ -100,6 +100,7 @@ export async function authStatus(): Promise<void> {
   const status = await withSpinner('Verifying token...', () =>
     checkTokenStatus(conn.serverUrl, token),
   );
+  blank();
 
   if (status === 'valid') {
     printConnected(conn.serverUrl, 'OS Keychain', conn.orgKey);

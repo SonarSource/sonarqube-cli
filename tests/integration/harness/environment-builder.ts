@@ -32,6 +32,7 @@ import {
 import { join } from 'node:path';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
+import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import {
   type BinarySpec,
   buildLocalBinaryName,
@@ -62,6 +63,14 @@ interface SqaaExtensionConfig {
   serverUrl?: string;
 }
 
+interface ContextAugmentationSkillConfig {
+  projectRoot: string;
+  projectKey: string;
+  orgKey?: string;
+  serverUrl?: string;
+  scaEnabled?: boolean;
+}
+
 export class EnvironmentBuilder {
   private activeConnectionUrl?: string;
   private activeConnectionType: 'cloud' | 'on-premise' = 'on-premise';
@@ -78,6 +87,7 @@ export class EnvironmentBuilder {
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
+  private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
 
   withActiveConnection(
     url: string,
@@ -225,8 +235,33 @@ export class EnvironmentBuilder {
     return this;
   }
 
-  build(): CliState {
-    const state = getDefaultState('integration-test');
+  /**
+   * Registers a sonar-context-augmentation skill extension for a project.
+   * This mirrors the state written by `sonar integrate claude|copilot` after
+   * CAG setup succeeds.
+   */
+  withContextAugmentationSkill(
+    projectRoot: string,
+    projectKey: string,
+    orgKey?: string,
+    serverUrl?: string,
+    scaEnabled = false,
+  ): this {
+    this.contextAugmentationSkills.push({
+      projectRoot,
+      projectKey,
+      orgKey,
+      serverUrl,
+      scaEnabled,
+    });
+    return this;
+  }
+
+  build(binDir?: string): CliState {
+    // Default to the current CLI version so post-update is a no-op. Tests that
+    // need to exercise the upgrade migration inject a stale version via
+    // withRawState().
+    const state = getDefaultState(CURRENT_CLI_VERSION);
 
     // disable telemetry for integration tests
     state.telemetry.enabled = false;
@@ -247,12 +282,17 @@ export class EnvironmentBuilder {
       state.auth.activeConnectionId = connectionId;
     }
 
+    // Match production: recordInstallationInState stores the absolute installed
+    // path. binDir is omitted only by the no-arg build() callers that do not
+    // care about path resolution.
+    const resolvePath = (name: string): string => (binDir ? join(binDir, name) : name);
+
     const installed: InstalledTool[] = [];
     if (this._installSecretsBinary) {
       installed.push({
         name: SECRETS_SPEC.name,
         version: SECRETS_SPEC.version,
-        path: buildLocalBinaryName(SECRETS_SPEC, detectPlatform()),
+        path: resolvePath(buildLocalBinaryName(SECRETS_SPEC, detectPlatform())),
         installedAt: new Date().toISOString(),
         installedByCliVersion: 'integration-test',
       });
@@ -261,7 +301,7 @@ export class EnvironmentBuilder {
       installed.push({
         name: CONTEXT_AUGMENTATION_BINARY_NAME,
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-        path: buildLocalCagBinaryName(detectPlatform()),
+        path: resolvePath(buildLocalCagBinaryName(detectPlatform())),
         installedAt: new Date().toISOString(),
         installedByCliVersion: 'integration-test',
       });
@@ -270,7 +310,7 @@ export class EnvironmentBuilder {
       installed.push({
         name: SCA_SCANNER_SPEC.name,
         version: SCA_SCANNER_SPEC.version,
-        path: buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform()),
+        path: resolvePath(buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform())),
         installedAt: new Date().toISOString(),
         installedByCliVersion: 'integration-test',
       });
@@ -304,6 +344,30 @@ export class EnvironmentBuilder {
       });
     }
 
+    for (const skill of this.contextAugmentationSkills) {
+      let resolvedRoot: string;
+      try {
+        resolvedRoot = realpathSync(skill.projectRoot);
+      } catch {
+        resolvedRoot = skill.projectRoot;
+      }
+      state.agentExtensions.push({
+        id: randomUUID(),
+        agentId: 'claude-code',
+        projectRoot: resolvedRoot,
+        global: false,
+        projectKey: skill.projectKey,
+        orgKey: skill.orgKey ?? this.activeConnectionOrgKey,
+        serverUrl: skill.serverUrl ?? this.activeConnectionUrl,
+        updatedByCliVersion: 'integration-test',
+        updatedAt: new Date().toISOString(),
+        kind: 'skill',
+        name: CONTEXT_AUGMENTATION_BINARY_NAME,
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        scaEnabled: skill.scaEnabled ?? false,
+      });
+    }
+
     return state;
   }
 
@@ -312,7 +376,8 @@ export class EnvironmentBuilder {
    */
   writeTo(cliHome: string, keychainFile: string): void {
     mkdirSync(cliHome, { recursive: true });
-    const stateJson = this._rawStateJson ?? JSON.stringify(this.build(), null, 2);
+    const stateJson =
+      this._rawStateJson ?? JSON.stringify(this.build(join(cliHome, 'bin')), null, 2);
     writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
 
     if (this.keychainTokens.length > 0) {

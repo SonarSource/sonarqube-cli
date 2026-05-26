@@ -25,28 +25,43 @@ import { type ResolvedAuth } from '../../../lib/auth-resolver';
 import { CLI_DIR } from '../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { print } from '../../../ui';
-import { CommandFailedError } from '../_common/error.js';
+import { error, print, warn } from '../../../ui';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
+import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
+import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
 import {
   type ScaScannerInvocation,
   ScaScannerRunner,
 } from './dependency-risk-helpers/sca-scanner.ts';
 import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
+import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
+import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
+import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build';
 
 export const VALID_FORMATS = ['json', 'table'];
+
+const EXIT_CODE_OK = 0;
+const EXIT_CODE_ERRORS_ONLY = 1;
+const EXIT_CODE_UNRESOLVED_RISKS = 51;
 
 export interface AnalyzeDependencyRisksOptions {
   project: string;
   format: string;
+  statuses: string;
 }
 
 export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
+  const filter = buildRiskFilter(options.statuses);
+  if (!filter) {
+    throw new InvalidOptionError(`Invalid --statuses value: '${options.statuses}'`);
+  }
+
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
   if (!enabled) {
@@ -84,5 +99,50 @@ export async function analyzeDependencyRisks(
     new DefaultScaScannerSpawner(),
   ).run(invocation);
 
-  print(JSON.stringify({ project: options.project, ...result }, null, 2));
+  const viewModel = buildDependencyRisksViewModel(result, filter);
+  if (options.format === 'json') {
+    print(formatDependencyRisksJson(options.project, viewModel));
+  } else {
+    print(formatDependencyRisksTable(viewModel));
+  }
+
+  handleResult(countUnresolvedIssues(viewModel), result.errors.length);
+}
+
+function handleResult(unresolvedRisksCount: number, errorCount: number) {
+  function warnErrorsDuringAnalysis() {
+    if (errorCount > 0) {
+      warn(`Found ${errorCount} ${pluralize(errorCount, 'analysis error')}.`);
+    }
+  }
+
+  if (unresolvedRisksCount > 0) {
+    warnErrorsDuringAnalysis();
+    error(
+      `Found ${unresolvedRisksCount} ${pluralize(unresolvedRisksCount, 'unresolved dependency risk')}.`,
+    );
+    process.exitCode = EXIT_CODE_UNRESOLVED_RISKS;
+  } else if (errorCount > 0) {
+    warnErrorsDuringAnalysis();
+    process.exitCode = EXIT_CODE_ERRORS_ONLY;
+  } else {
+    process.exitCode = EXIT_CODE_OK;
+  }
+}
+
+function pluralize(count: number, singular: string): string {
+  return `${singular}${count === 1 ? '' : 's'}`;
+}
+
+export function countUnresolvedIssues(vm: DependencyRisksViewModel): number {
+  const isUnresolved = buildRiskFilter('active')!.predicate;
+  let count = 0;
+  for (const pkg of vm.packages) {
+    for (const group of pkg.groups) {
+      for (const risk of group.selectedRisks) {
+        if (isUnresolved(risk)) count += 1;
+      }
+    }
+  }
+  return count;
 }

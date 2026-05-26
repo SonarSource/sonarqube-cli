@@ -21,7 +21,7 @@
 // Integration tests for `analyze dependency-risks`: pre-flight gates
 // (authentication, SCA availability, project existence) plus the happy path,
 // which currently runs against the no-op scanner runner and emits an empty
-// `AnalyzeProjectResponse`. Once the real scanner is wired, the happy-path
+// list of dependency risks. Once the real scanner is wired, the happy-path
 // assertions will be expanded.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -51,7 +51,7 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(1);
     const output = result.stdout + result.stderr;
     expect(output).toContain('❌ Not authenticated.');
-    expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
+    expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
   });
 
   it('exits with code 1 when project does not exist (settings 404)', async () => {
@@ -161,6 +161,15 @@ describe('analyze dependency-risks', () => {
     },
     { timeout: 30000 },
   );
+
+  it('rejects an unknown --statuses value', async () => {
+    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo --statuses bogus');
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("Invalid --statuses value: 'bogus'");
+  });
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
     const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();

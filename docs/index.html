@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-56DR48M');</script>
+  <!-- End Google Tag Manager -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SonarQube CLI — cli.sonarqube.com</title>
@@ -38,6 +45,13 @@
 </head>
 <body>
 
+<!-- Google Tag Manager (noscript) -->
+<noscript>
+  <iframe title="Tag Manager" src="https://www.googletagmanager.com/ns.html?id=GTM-56DR48M" height="0" width="0" style="display:none;visibility:hidden">
+  </iframe>
+</noscript>
+<!-- End Google Tag Manager (noscript) -->
+
 <!-- ─── Nav ──────────────────────────────────────────────────── -->
 <nav class="nav">
   <a href="index.html" class="logo">
@@ -48,6 +62,7 @@
   <div class="nav-links">
     <a href="index.html" class="nav-link active">Home</a>
     <a href="commands.html" class="nav-link">Commands</a>
+    <a href="https://docs.sonarsource.com/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">Docs</a>
     <a href="https://github.com/SonarSource/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
     <a href="llms.txt" class="nav-link">llms.txt</a>
     <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="nav-link" target="_blank" rel="noopener">Feedback</a>
@@ -106,6 +121,7 @@
 
   <div class="hero-ctas">
     <a href="commands.html" class="btn btn-primary">Browse Commands</a>
+    <a href="https://docs.sonarsource.com/sonarqube-cli" class="btn" target="_blank" rel="noopener">Read the Docs ↗</a>
   </div>
 </section>
 
@@ -541,10 +557,12 @@
   };
 
   function buildStepsHtml(steps) {
-    return '<div class="steps">' + steps.map((s, i) => {
+    const stepsHtml = '<div class="steps">' + steps.map((s, i) => {
       const arrow = i < steps.length - 1 ? '<div class="steps-arrow">→</div>' : '';
       return `<div class="step"><div class="step-num">${i + 1}</div><h3>${s.title}</h3><div class="step-code-wrap"><code>${s.cmd}</code><button class="step-copy-btn" onclick="copyStepCmd(this, '${s.cmd.replace(/'/g, "\\'")}')" title="Copy">Copy</button></div><p>${s.desc}</p></div>${arrow}`;
     }).join('') + '</div>';
+    const docsLink = '<a href="https://docs.sonarsource.com/sonarqube-cli" class="jtbd-docs-link" target="_blank" rel="noopener">Full reference on docs.sonarsource.com ↗</a>';
+    return stepsHtml + docsLink;
   }
 
   function copyStepCmd(btn, cmd) {

@@ -150,9 +150,8 @@ export function writeExistingGlobalInstructions(harness: TestHarness): void {
 }
 
 /**
- * Force the project-level hook write to fail by pre-creating `hooks.json` as a
- * directory. The integration's `readOrInitJson` then fails with `EISDIR`,
- * exercising the try/catch fallback in `installHooks`.
+ * Force the project-level hook configuration update to fail by pre-creating
+ * `hooks.json` as a directory.
  */
 export function obstructHooksJson(harness: TestHarness): void {
   mkdirSync(harness.cwd.file('.github', 'hooks').path, { recursive: true });
@@ -161,8 +160,7 @@ export function obstructHooksJson(harness: TestHarness): void {
 
 /**
  * Force the project-level instructions write to fail by pre-creating the
- * target file path as a directory. The integration's `writeFile` then fails
- * with `EISDIR`, exercising the try/catch fallback in `installInstructions`.
+ * target file path as a directory.
  */
 export function obstructInstructionsFile(harness: TestHarness): void {
   mkdirSync(harness.cwd.file('.github', 'instructions').path, { recursive: true });

@@ -21,7 +21,7 @@
 /**
  * Build-time script: generate GitHub release notes via the Anthropic API.
  *
- * Driven by the `generate-release-notes` job in .github/workflows/full-release.yml.
+ * Driven by the `prepare-release-notes` job in .github/workflows/prepare-release-notes.yml.
  * Can also be run locally for preview:
  *
  *   bun .github/scripts/generate-release-notes.ts --tag 0.12.0.1512 --dry-run
@@ -46,7 +46,7 @@ import { writeFileSync } from 'node:fs';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_API_VERSION = '2023-06-01';
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 2048;
 const ERROR_BODY_PREVIEW_CHARS = 500;
 const JIRA_ERROR_BODY_PREVIEW_CHARS = 200;
@@ -67,7 +67,7 @@ const COMMIT_NOISE_PATTERNS: RegExp[] = [
 ];
 
 // JIRA enrichment. Issue keys look like `CLI-123`, `CODEFIX-456`, etc.
-const JIRA_KEY_REGEX = /\b[A-Z][A-Z0-9_]+-\d+\b/g;
+const JIRA_KEY_REGEX = /\b[A-Z][A-Z0-9]+-\d+\b/g;
 const JIRA_DEFAULT_BASE_URL = 'https://sonarsource.atlassian.net';
 const JIRA_MAX_TICKETS = 40;
 const JIRA_DESCRIPTION_MAX_CHARS = 800;
@@ -83,16 +83,28 @@ interface CommitEntry {
   subject: string;
 }
 
+interface JiraParent {
+  key: string;
+  summary: string;
+  issueType: string;
+  status: string;
+  // Jira's coarse status grouping: 'new' | 'indeterminate' | 'done' | 'undefined'.
+  // More reliable across configurations than the human-readable status name.
+  statusCategory: string;
+}
+
 interface JiraTicket {
   key: string;
   summary: string;
   description: string;
   issueType: string;
+  parent?: JiraParent;
 }
 
 interface AnthropicMessagesResponse {
   content?: { type: string; text?: string }[];
   error?: { type?: string; message?: string };
+  stop_reason?: string;
 }
 
 function printUsageAndExit(code: number): never {
@@ -216,10 +228,10 @@ and fixes some bugs.
 
 ## Features
 
-* Secrets pre-commit and pre-push hooks — automatically scans staged files for secrets before each commit or push
-* Secrets binary auto-install — sonar integrate claude now installs the secrets scanner if not already present
-* MCP Server configuration — sonar integrate claude configures the SonarQube MCP Server automatically
-* Auth enforcement — feature commands now require active authentication
+* **Secrets pre-commit and pre-push hooks**: automatically scans staged files for secrets before each commit or push
+* **Secrets binary auto-install**: sonar integrate claude now installs the secrets scanner if not already present
+* **MCP Server configuration**: sonar integrate claude configures the SonarQube MCP Server automatically
+* **Auth enforcement**: feature commands now require active authentication
 
 ## Bug Fixes
 
@@ -251,7 +263,12 @@ This release introduces several improvements and fixes some bugs.
 
 ## Performance & Installation
 
-* **Windows Installation:** Sped up \`install.ps1\` by silencing the progress bar.`;
+* **Windows Installation:** Sped up \`install.ps1\` by silencing the progress bar.
+
+## Miscellaneous
+
+* Continued foundational work on the upcoming SCA dependency analysis command (not yet user-facing).
+* Internal refactors and dependency bumps.`;
 
 function extractJiraKeys(commits: CommitEntry[]): string[] {
   const set = new Set<string>();
@@ -269,7 +286,9 @@ async function fetchJiraTicket(
 ): Promise<JiraTicket | null> {
   // Atlassian REST API v2 returns description as plain text (wiki markup),
   // which is much easier to feed into a prompt than the v3 ADF JSON.
-  const url = `${baseUrl}/rest/api/2/issue/${encodeURIComponent(key)}?fields=summary,description,issuetype`;
+  // `parent` lets us pick up the epic context so the prompt can decide
+  // whether a ticket belongs in user-facing sections or in Miscellaneous.
+  const url = `${baseUrl}/rest/api/2/issue/${encodeURIComponent(key)}?fields=summary,description,issuetype,parent`;
   const response = await fetch(url, {
     headers: {
       authorization: authHeader,
@@ -292,6 +311,17 @@ async function fetchJiraTicket(
       summary?: string;
       description?: string | null;
       issuetype?: { name?: string };
+      parent?: {
+        key?: string;
+        fields?: {
+          summary?: string;
+          issuetype?: { name?: string };
+          status?: {
+            name?: string;
+            statusCategory?: { key?: string };
+          };
+        };
+      };
     };
   };
   const summary = data.fields?.summary?.trim() ?? '';
@@ -300,11 +330,22 @@ async function fetchJiraTicket(
   if (description.length > JIRA_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, JIRA_DESCRIPTION_MAX_CHARS).trimEnd() + '…';
   }
+  const parentRaw = data.fields?.parent;
+  const parent: JiraParent | undefined = parentRaw?.key
+    ? {
+        key: parentRaw.key,
+        summary: parentRaw.fields?.summary?.trim() ?? '',
+        issueType: parentRaw.fields?.issuetype?.name?.trim() ?? '',
+        status: parentRaw.fields?.status?.name?.trim() ?? '',
+        statusCategory: parentRaw.fields?.status?.statusCategory?.key?.trim() ?? '',
+      }
+    : undefined;
   return {
     key,
     summary,
     description,
     issueType: data.fields?.issuetype?.name?.trim() ?? '',
+    parent,
   };
 }
 
@@ -335,6 +376,17 @@ async function fetchJiraTickets(commits: CommitEntry[]): Promise<JiraTicket[]> {
   return results.filter((t): t is JiraTicket => t !== null);
 }
 
+function renderParentLine(parent: JiraParent | undefined): string {
+  if (!parent) {
+    return '';
+  }
+  const typePart = parent.issueType ? ` (${parent.issueType})` : '';
+  const summary = parent.summary || '(no summary)';
+  const status = parent.status || 'unknown';
+  const categoryPart = parent.statusCategory ? ` [${parent.statusCategory}]` : '';
+  return `\n_Parent epic ${parent.key}${typePart}: ${summary} — status: ${status}${categoryPart}_`;
+}
+
 function buildPrompt(
   releasedVersion: string,
   commits: CommitEntry[],
@@ -352,7 +404,9 @@ function buildPrompt(
           .map((t) => {
             const issueTypePart = t.issueType ? ` (${t.issueType})` : '';
             const header = `### ${t.key}${issueTypePart}: ${t.summary}`;
-            return t.description ? `${header}\n\n${t.description}` : header;
+            const parentLine = renderParentLine(t.parent);
+            const body = t.description ? `\n\n${t.description}` : '';
+            return `${header}${parentLine}${body}`;
           })
           .join('\n\n');
 
@@ -366,7 +420,7 @@ function buildPrompt(
     '',
     'Below is the list of commits included in this release (subject and short SHA).',
     'PR numbers like `(#123)` already inside subjects must be preserved verbatim.',
-    'Ignore release bookkeeping commits ("Prepare next development iteration", version bumps, etc.).',
+    'Ignore release bookkeeping commits and pure-CI changes (e.g., "Prepare next development iteration", project version bumps, GitHub Actions version/SHA bumps in `.github/workflows/`, internal CI tooling updates) — these MUST NOT appear anywhere in the release notes, not even in `## Miscellaneous`.',
     '',
     commitsText,
     '',
@@ -379,9 +433,13 @@ function buildPrompt(
     'Now produce the release notes as Markdown, following these rules:',
     `- Start with a single H1 heading: \`# SonarQube CLI v${short}\`.`,
     '- Optionally include a one-paragraph summary right after the heading when there is a clear theme.',
-    '- Use `## Features` for new functionality / enhancements (omit the section if empty).',
-    '- Use `## Bug Fixes` for fixes (omit the section if empty).',
-    '- Add other `## ...` sections (e.g. "Security", "Performance") only if they materially apply.',
+    '- **User-facing-only sections**: `## Features`, `## Bug Fixes`, `## Security`, `## Performance`, and any other themed `## ...` section MUST contain only items that an end user can observe, use, or benefit from immediately upon installing this release. A hidden command, work-in-progress functionality behind an internal flag, a refactor, a dependency bump, a CI/tooling change, or any foundational scaffolding MUST NOT appear in these sections.',
+    '- **Litmus test for "user-facing"**: before placing an item in any non-Miscellaneous section, answer: "If a user runs the same `sonar` commands they ran on the previous release, will they notice anything different — different output, a new flag/command/option available, a previously-failing flow that now succeeds, a noticeably faster operation, a different installed file/path, or any other directly observable change?" If the honest answer is no, the item is internal and MUST go in `## Miscellaneous` (or be omitted). Restructuring code without changing externally observable behavior — even if it "enables future work", "harmonizes" an area, or "makes things easier to add/maintain" — is not user-facing.',
+    '- **Anti-patterns (these belong in `## Miscellaneous`, not Features)**: any item whose value statement is one of "introduce/refactor X framework", "declarative framework for X", "use X framework for Y", "harmonize/consolidate/unify X", "make X easier to add/maintain/extend", "foundation/groundwork/scaffolding for X", "abstraction/interface/architecture for X", "internal restructuring of X". These describe DEVELOPER ergonomics, not USER value. Treat them as Miscellaneous even when the commit message or ticket summary sounds polished. Pay extra attention to integration/integrate, scanner, hook, and registry refactors — those often masquerade as features.',
+    '- **Epic-status hint**: when a ticket lists a parent epic whose status category is not `done`, treat the ticket as foundational/in-progress and place it in `## Miscellaneous` (or omit it). Only items belonging to a `done` epic — or items with no parent epic that are clearly user-facing on their own — qualify for the user-facing sections.',
+    '- **Hidden commands rule**: if a commit/ticket adds or modifies a CLI command that is not yet exposed to users (e.g., marked hidden, behind a flag, or otherwise opt-in only), summarize it under `## Miscellaneous` as foundational work rather than listing it as a feature.',
+    '- **Suggested section names** (these are recommendations, not a fixed list — feel free to add, rename, or split sections when it improves readability): `## Features` for new user-facing functionality and enhancements, `## Bug Fixes` for user-facing fixes, `## Security`, `## Performance`, `## Installation`, `## Documentation`, etc. when they materially apply. Omit any section that would be empty.',
+    '- **`## Miscellaneous`** is the catch-all for foundational work, internal improvements, dependency bumps, refactors, or items whose user impact is not visible in this release. Summarize at the level of themes (e.g., "Continued foundational work on SCA dependency analysis") rather than listing each commit/ticket. Omit the section if there is nothing meaningful to mention.',
     '- Keep entries short and user-facing. Group related commits / tickets when reasonable.',
     '- Do not include internal ticket prefixes (e.g. `CLI-123`), implementation details, or commit SHAs in the output.',
     '- Output Markdown only — no preamble, no closing remarks, no code fences around the document.',
@@ -422,6 +480,13 @@ async function callAnthropic(apiKey: string, model: string, prompt: string): Pro
   if (parsed.error) {
     throw new Error(
       `Anthropic API error: ${parsed.error.type ?? 'unknown'}: ${parsed.error.message ?? text}`,
+    );
+  }
+
+  if (parsed.stop_reason === 'max_tokens') {
+    throw new Error(
+      `Anthropic response was truncated (stop_reason=max_tokens, MAX_TOKENS=${MAX_TOKENS}). ` +
+        'Increase MAX_TOKENS or reduce JIRA_DESCRIPTION_MAX_CHARS.',
     );
   }
 

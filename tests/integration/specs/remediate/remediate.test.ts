@@ -73,7 +73,7 @@ describe('sonar remediate', () => {
       const output = result.stdout + result.stderr;
       expect(output).toContain('requires a SonarQube Cloud connection');
       expect(output).toContain(
-        "💡 Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+        "  → Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
       );
     },
     { timeout: 15000 },
@@ -793,7 +793,7 @@ describe('sonar remediate', () => {
         const output = result.stdout + result.stderr;
         expect(output).toContain('requires a SonarQube Cloud connection');
         expect(output).toContain(
-          "💡 Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+          "  → Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
         );
       },
       { timeout: 15000 },
