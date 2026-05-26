@@ -42,21 +42,21 @@ import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/insta
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { detectPlatform } from '../../../src/lib/platform-detector';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
-import type { CliState, SkillExtension } from '../../../src/lib/state';
-import { getDefaultState } from '../../../src/lib/state';
+import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
+import {
+  CLAUDE_SKILL_RELATIVE_PATH,
+  findRecordedCagSkill,
+  seedState,
+  STALE_CLI_VERSION,
+  STALE_SKILL_VERSION,
+} from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const POST_UPDATE_TIMEOUT_MS = 150_000;
 const HELP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
-
-const STALE_CLI_VERSION = '0.0.1';
-const STALE_SKILL_VERSION = '0.0.0';
-const SEEDED_PROJECT_KEY = 'offline-test-project';
-const SEEDED_ORG_KEY = 'offline-test-org';
-const SKILL_RELATIVE_PATH = join('.claude', 'skills', CONTEXT_AUGMENTATION_BINARY_NAME, 'SKILL.md');
 
 describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', () => {
   let harness: TestHarness;
@@ -70,7 +70,9 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
 
     cagBinaryPath = join(harness.cliHome.path, 'bin', buildLocalCagBinaryName(detectPlatform()));
 
-    seedStaleState(harness);
+    seedState(harness, {
+      skills: [{ agentId: 'claude-code', projectRoot: harness.cwd.path }],
+    });
 
     postUpdateResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
   });
@@ -121,7 +123,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
   });
 
   it('writes the agent SKILL.md to the project root', () => {
-    const skillPath = join(harness.cwd.path, SKILL_RELATIVE_PATH);
+    const skillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
     expect(existsSync(skillPath)).toBe(true);
     const content = readFileSync(skillPath, 'utf-8');
     expect(content.length).toBeGreaterThan(0);
@@ -134,7 +136,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     let preMutationContent: string;
 
     beforeAll(async () => {
-      skillPath = join(harness.cwd.path, SKILL_RELATIVE_PATH);
+      skillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
       preMutationContent = readFileSync(skillPath, 'utf-8');
 
       // Simulate a fresh CLI upgrade landing on the same machine: rewind the
@@ -180,34 +182,3 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     });
   });
 });
-
-function seedStaleState(harness: TestHarness): void {
-  const state = getDefaultState(STALE_CLI_VERSION);
-  state.telemetry.enabled = false;
-
-  const skill: SkillExtension = {
-    id: 'offline-e2e-skill',
-    kind: 'skill',
-    agentId: 'claude-code',
-    projectRoot: harness.cwd.path,
-    global: false,
-    projectKey: SEEDED_PROJECT_KEY,
-    orgKey: SEEDED_ORG_KEY,
-    serverUrl: 'https://sonarcloud.io',
-    updatedByCliVersion: STALE_CLI_VERSION,
-    updatedAt: new Date(0).toISOString(),
-    name: CONTEXT_AUGMENTATION_BINARY_NAME,
-    version: STALE_SKILL_VERSION,
-    scaEnabled: false,
-  };
-  state.agentExtensions.push(skill);
-
-  writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
-}
-
-function findRecordedCagSkill(state: CliState): SkillExtension | undefined {
-  return state.agentExtensions.find(
-    (extension): extension is SkillExtension =>
-      extension.kind === 'skill' && extension.name === CONTEXT_AUGMENTATION_BINARY_NAME,
-  );
-}
