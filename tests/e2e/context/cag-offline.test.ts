@@ -34,7 +34,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -58,6 +58,8 @@ const HELP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
+const STALE_SKILL_SENTINEL = '<<stale-claude-skill-placeholder-cag-offline-e2e>>';
+
 describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', () => {
   let harness: TestHarness;
   let cagBinaryPath: string;
@@ -73,6 +75,13 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     seedState(harness, {
       skills: [{ agentId: 'claude-code', projectRoot: harness.cwd.path }],
     });
+
+    // Pre-write a sentinel into the skill file so the refresh has to overwrite
+    // it — proves the post-update path actually invoked `tool install-skill`
+    // rather than the file existing as a side effect of something else.
+    const seededSkillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
+    mkdirSync(dirname(seededSkillPath), { recursive: true });
+    writeFileSync(seededSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
 
     postUpdateResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
   });
@@ -122,11 +131,11 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     expect(result.stdout.length + result.stderr.length).toBeGreaterThan(0);
   });
 
-  it('writes the agent SKILL.md to the project root', () => {
+  it('overwrites the stale agent SKILL.md with refreshed content', () => {
     const skillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
     expect(existsSync(skillPath)).toBe(true);
     const content = readFileSync(skillPath, 'utf-8');
-    expect(content.length).toBeGreaterThan(0);
+    expect(content).not.toContain(STALE_SKILL_SENTINEL);
     expect(content).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
   });
 

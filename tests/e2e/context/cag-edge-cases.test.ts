@@ -24,8 +24,8 @@
  * the CLI version is already current, and stale-binary cleanup.
  */
 
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -108,11 +108,26 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
       ],
     });
 
+    const skillPathA = join(projectA, CLAUDE_SKILL_RELATIVE_PATH);
+    const skillPathB = join(projectB, CLAUDE_SKILL_RELATIVE_PATH);
+    const sentinelA = '<<stale-skill-A-multi-refresh-e2e>>';
+    const sentinelB = '<<stale-skill-B-multi-refresh-e2e>>';
+    mkdirSync(dirname(skillPathA), { recursive: true });
+    mkdirSync(dirname(skillPathB), { recursive: true });
+    writeFileSync(skillPathA, sentinelA, 'utf-8');
+    writeFileSync(skillPathB, sentinelB, 'utf-8');
+
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
 
-    expect(existsSync(join(projectA, CLAUDE_SKILL_RELATIVE_PATH))).toBe(true);
-    expect(existsSync(join(projectB, CLAUDE_SKILL_RELATIVE_PATH))).toBe(true);
+    expect(existsSync(skillPathA)).toBe(true);
+    expect(existsSync(skillPathB)).toBe(true);
+    const contentA = readFileSync(skillPathA, 'utf-8');
+    const contentB = readFileSync(skillPathB, 'utf-8');
+    expect(contentA).not.toContain(sentinelA);
+    expect(contentB).not.toContain(sentinelB);
+    expect(contentA).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
+    expect(contentB).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
 
     const state = harness.stateJsonFile.asJson() as CliState;
     const skillA = findRecordedCagSkill(state, (s) => s.projectRoot === projectA);
