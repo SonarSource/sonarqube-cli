@@ -334,8 +334,13 @@ const dependencyRisksStatusFilterOption = new Option(
   '--statuses <statuses>',
   'Filter issues by status\n' +
     '\n' +
-    '  Presets:   active | to_fix | all\n' +
     '  Raw:       new | open | confirm | accept | safe | fixed\n' +
+    '  Presets:   active | to_fix | all\n' +
+    '    active:  new, open, confirm\n' +
+    '    to_fix:  new, open, confirm, accept\n' +
+    '    all:     new, open, confirm, accept, safe, fixed\n' +
+    '\n' +
+    'Presets and raw statuses can be combined; the resulting set is the union.\n' +
     '\n' +
     'Examples:\n' +
     '    --statuses active\n' +
