@@ -46,9 +46,15 @@ export const COPILOT_SKILL_RELATIVE_PATH = join(
   CONTEXT_AUGMENTATION_BINARY_NAME,
   'SKILL.md',
 );
+export const CODEX_SKILL_RELATIVE_PATH = join(
+  '.agents',
+  'skills',
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  'SKILL.md',
+);
 
 export interface SeedSkillOptions {
-  agentId: 'claude-code' | 'copilot-cli';
+  agentId: 'claude-code' | 'copilot-cli' | 'codex';
   projectRoot: string;
   global?: boolean;
   version?: string;
