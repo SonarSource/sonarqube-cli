@@ -23,8 +23,8 @@
  * skill (writes `.github/skills/...` rather than `.claude/skills/...`).
  */
 
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -44,6 +44,8 @@ const POST_UPDATE_TIMEOUT_MS = 150_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
+const STALE_SKILL_SENTINEL = '<<stale-copilot-skill-placeholder-cag-copilot-e2e>>';
+
 describe('sonar-context-augmentation copilot skill refresh (offline, real binary)', () => {
   let harness: TestHarness;
   let copilotSkillPath: string;
@@ -56,6 +58,12 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     });
     copilotSkillPath = join(harness.cwd.path, COPILOT_SKILL_RELATIVE_PATH);
 
+    // Pre-write a sentinel into the skill file so the refresh has to overwrite
+    // it — proves the post-update path actually invoked `tool install-skill`
+    // rather than the file existing as a side effect of something else.
+    mkdirSync(dirname(copilotSkillPath), { recursive: true });
+    writeFileSync(copilotSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
+
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
   });
@@ -64,10 +72,10 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     await harness.dispose();
   });
 
-  it('renders the copilot SKILL.md under .github/skills/...', () => {
+  it('overwrites the stale copilot SKILL.md with refreshed content under .github/skills/...', () => {
     expect(existsSync(copilotSkillPath)).toBe(true);
     const content = readFileSync(copilotSkillPath, 'utf-8');
-    expect(content.length).toBeGreaterThan(0);
+    expect(content).not.toContain(STALE_SKILL_SENTINEL);
     expect(content).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
   });
 
