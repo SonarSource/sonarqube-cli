@@ -22,7 +22,6 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { warn } from '../../../../ui';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   type IntegrationContext,
@@ -97,6 +96,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           content: (context) =>
             buildAgentsMdContent({
               includeSecrets: getOptionalBoolAttr(context, 'includeSecretsSection'),
+              includeSqaa: getOptionalBoolAttr(context, 'includeSqaa'),
               projectKey: getOptionalStringAttr(context, 'projectKey'),
             }),
         }),
@@ -142,20 +142,10 @@ function upsertCodexMcpServer(
   document: Record<string, unknown>,
   context: IntegrationContext,
 ): Record<string, unknown> {
-  const existingServers = toRecord(document.mcp_servers);
-  if (existingServers.sonarqube !== undefined) {
-    // Preserve any user-customized [mcp_servers.sonarqube] table.
-    const path = resolveCodexMcpConfigPath(context);
-    warn(
-      `[mcp_servers.sonarqube] already exists in ${path}; leaving the existing entry untouched.`,
-    );
-    return document;
-  }
-
   return {
     ...document,
     mcp_servers: {
-      ...existingServers,
+      ...toRecord(document.mcp_servers),
       sonarqube: getDesiredCodexMcpConfig(context),
     },
   };
