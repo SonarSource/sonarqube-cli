@@ -342,10 +342,11 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'overwrites pre-existing global instructions (CLI-owned file)',
+      'preserves pre-existing global instructions and appends the managed prompt-secrets section',
       async () => {
-        // sonarqube.instructions.md is CLI-owned, so any pre-existing content
-        // is replaced with the freshly rendered prompt-secrets section.
+        // sonarqube.instructions.md is patched in-place: any pre-existing
+        // content outside our managed markers is preserved, and our section
+        // is appended (or replaced in-place on re-runs).
         harness.userHome.writeFile(
           '.copilot/instructions/sonarqube.instructions.md',
           '# pre-existing\n',
@@ -355,7 +356,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).not.toContain('# pre-existing');
+        expect(body).toContain('# pre-existing');
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
       },
       { timeout: 30000 },
@@ -725,14 +726,28 @@ describe('integrate copilot', () => {
         // Project key is baked into the example command.
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
 
-        // Project-scope installs keep SQAA in the prompt instructions feature.
+        // Both sections recorded in state with the SQAA entry carrying the cloud attrs.
         const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-instructions');
         expect(promptSecrets?.scope).toBe('project');
-        expect(promptSecrets?.attrs).toMatchObject({
-          projectKey: TEST_PROJECT,
-          sqaaEnabled: true,
-        });
-        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        const sqaa = findCopilotFeature(harness, 'sqaa-instructions');
+        expect(sqaa?.scope).toBe('project');
+
+        // Both instruction features are recorded as installed.
+        const state = harness.stateJsonFile.asJson();
+        const copilotIntegration = state.integrations.installed.find(
+          (integration: { integrationId: string }) => integration.integrationId === 'copilot-cli',
+        );
+        expect(
+          copilotIntegration.features
+            .map((feature: { featureId: string }) => feature.featureId)
+            .sort(),
+        ).toEqual([
+          'mcp-server',
+          'pre-tool-use-hook',
+          'prompt-secrets-instructions',
+          'sonar-secrets-binary',
+          'sqaa-instructions',
+        ]);
       },
       { timeout: 30000 },
     );

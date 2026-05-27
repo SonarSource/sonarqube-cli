@@ -391,8 +391,8 @@ describe('integrate codex', () => {
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:end:codex-secrets-on-read -->');
         expect(body).toContain(SECRETS_HEADING);
-        expect(body).toContain('<!-- sonar:begin:sqaa-protocol -->');
-        expect(body).toContain('<!-- sonar:end:sqaa-protocol -->');
+        expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis -->');
+        expect(body).toContain('<!-- sonar:end:sonarqube-agentic-analysis -->');
         expect(body).toContain(SQAA_HEADING);
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
       },

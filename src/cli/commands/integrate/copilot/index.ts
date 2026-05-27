@@ -78,7 +78,8 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     ...options,
     projectRoot: project.rootDir,
     installHook,
-    installInstructions: true,
+    installPromptSecretsInstructions: true,
+    installSqaaInstructions: installSqaa,
     installMcp: true,
   };
 
@@ -151,10 +152,10 @@ function expectedInstructionsPath(targetRoot: string, scope: IntegrationScope): 
 
 function buildIntegrationAttrs(
   projectKey: string | undefined,
-  sqaaEnabled: boolean,
+  sqaaEntitled: boolean,
 ): Record<string, IntegrationStateAttribute> {
   return {
     projectKey: projectKey ?? null,
-    sqaaEnabled,
+    sqaaEntitled,
   };
 }

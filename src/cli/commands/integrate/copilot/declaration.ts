@@ -23,8 +23,14 @@ import { join, relative } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { CommandFailedError } from '../../_common/error';
+import {
+  buildSqaaSectionBody,
+  sonarBeginMarker,
+  sonarEndMarker,
+  SQAA_SECTION_ID,
+} from '../_common/instructions-templates';
 import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
-import { jsonPatch, wholeFile } from '../_common/registry/resources';
+import { jsonPatch, textSnippet, wholeFile } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
@@ -39,9 +45,10 @@ import {
   SCRIPT_REL_DIR,
 } from './hooks';
 import {
-  buildInstructionsBody,
   INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_REL_DIR,
+  PROMPT_SECRETS_SECTION_BODY,
+  PROMPT_SECRETS_SECTION_ID,
 } from './instructions';
 
 export const COPILOT_INTEGRATION_ID = 'copilot-cli';
@@ -49,7 +56,8 @@ export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   installHook?: boolean;
-  installInstructions?: boolean;
+  installPromptSecretsInstructions?: boolean;
+  installSqaaInstructions?: boolean;
   installMcp?: boolean;
 }
 
@@ -85,16 +93,30 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'prompt-secrets-instructions',
       displayName: 'prompt-secrets instructions',
-      when: ({ options }) => options.installInstructions === true,
+      when: ({ options }) => options.installPromptSecretsInstructions === true,
       resources: [
-        wholeFile({
-          id: 'prompt-secrets-instructions-file',
-          displayName: 'Copilot prompt-secrets instructions',
+        textSnippet({
+          id: 'prompt-secrets-instructions-section',
+          displayName: 'Copilot prompt-secrets instructions section',
           targetPath: resolveInstructionsPath,
-          content: (context) =>
-            context.scope === 'project' && getBooleanAttr(context, 'sqaaEnabled')
-              ? buildInstructionsBody(getRequiredStringAttr(context, 'projectKey'))
-              : buildInstructionsBody(),
+          content: PROMPT_SECRETS_SECTION_BODY,
+          startMarker: sonarBeginMarker(PROMPT_SECRETS_SECTION_ID),
+          endMarker: sonarEndMarker(PROMPT_SECRETS_SECTION_ID),
+        }),
+      ],
+    },
+    {
+      id: 'sqaa-instructions',
+      displayName: 'SonarQube Agentic Analysis instructions',
+      when: ({ options }) => options.installSqaaInstructions === true,
+      resources: [
+        textSnippet({
+          id: 'sqaa-instructions-section',
+          displayName: 'Copilot SQAA instructions section',
+          targetPath: resolveInstructionsPath,
+          content: (context) => buildSqaaSectionBody(getRequiredStringAttr(context, 'projectKey')),
+          startMarker: sonarBeginMarker(SQAA_SECTION_ID),
+          endMarker: sonarEndMarker(SQAA_SECTION_ID),
         }),
       ],
     },
@@ -219,10 +241,6 @@ function getRequiredStringAttr(context: IntegrationContext, key: string): string
     throw new CommandFailedError(`Missing required integration attribute: ${key}`);
   }
   return value;
-}
-
-function getBooleanAttr(context: IntegrationContext, key: string): boolean {
-  return context.attrs?.[key] === true;
 }
 
 function toJsonObject(document: unknown): Record<string, unknown> {

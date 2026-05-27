@@ -32,15 +32,14 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { warn } from '../../../../ui';
-import { buildSqaaSection, withSonarMarkers } from '../_common/instructions-templates';
 
 export const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
 export const PROJECT_INSTRUCTIONS_REL_DIR = join('.github', 'instructions');
 export const GLOBAL_INSTRUCTIONS_DIR = join(homedir(), '.copilot', 'instructions');
 
-const PROMPT_SECRETS_SECTION = withSonarMarkers(
-  'copilot-prompt-secrets',
-  `# SonarQube secrets scanning for prompts protocol
+export const PROMPT_SECRETS_SECTION_ID = 'copilot-prompt-secrets';
+
+export const PROMPT_SECRETS_SECTION_BODY = `# SonarQube secrets scanning for prompts protocol
 
 Before acting on any user prompt, scan the prompt text for secrets or credentials. Treat the following as secrets (non-exhaustive):
 
@@ -61,16 +60,7 @@ If the prompt appears to contain any such secret (either by your judgement or th
 
 1. Inform the user that their prompt appears to contain a secret or credential and that it may now be exposed in chat history, logs, and any downstream telemetry.
 2. Advise them to rotate the leaked credential immediately at its source of truth.
-`,
-);
-
-export function buildInstructionsBody(projectKey?: string): string {
-  const sections = [PROMPT_SECRETS_SECTION];
-  if (projectKey) {
-    sections.push(buildSqaaSection(projectKey));
-  }
-  return `${sections.join('\n\n').trimEnd()}\n`;
-}
+`;
 
 export function warnIfProjectInstructionsShadowGlobal(): void {
   const filePath = join(GLOBAL_INSTRUCTIONS_DIR, INSTRUCTIONS_FILENAME);

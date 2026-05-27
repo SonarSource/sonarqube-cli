@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { AppliedResource, IntegrationContext } from '../types';
+import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
   type PathResolver,
@@ -28,9 +28,11 @@ import {
   writeFileIfChanged,
 } from './common';
 
+export type TextSnippetContent = string | ((context: IntegrationContext) => MaybePromise<string>);
+
 export interface TextSnippetResourceOptions extends BaseResourceOptions {
   targetPath: PathResolver;
-  content: string;
+  content: TextSnippetContent;
   executable?: boolean;
   startMarker: string;
   endMarker?: string;
@@ -54,7 +56,8 @@ export class TextSnippet implements ResourceDeclaration {
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
     const path = await resolvePath(context, this.options.targetPath);
-    await writeFileIfChanged(path, await this.renderContent(path), this.options.executable);
+    const body = await this.resolveBody(context);
+    await writeFileIfChanged(path, await this.renderFile(path, body), this.options.executable);
     return { id: this.id, resourceType: this.resourceType, version: this.version, path };
   }
 
@@ -64,12 +67,17 @@ export class TextSnippet implements ResourceDeclaration {
     if (existing === undefined) {
       return false;
     }
-    return existing.includes(this.renderManagedBlock());
+    return existing.includes(this.renderManagedBlock(await this.resolveBody(context)));
   }
 
-  private async renderContent(path: string): Promise<string> {
+  private async resolveBody(context: IntegrationContext): Promise<string> {
+    const { content } = this.options;
+    return typeof content === 'function' ? content(context) : content;
+  }
+
+  private async renderFile(path: string, body: string): Promise<string> {
     const existing = (await readTextFile(path)) ?? '';
-    const managedBlock = this.renderManagedBlock();
+    const managedBlock = this.renderManagedBlock(body);
     const pattern = new RegExp(
       String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
     );
@@ -85,8 +93,8 @@ export class TextSnippet implements ResourceDeclaration {
     return appendBlock(existing, managedBlock);
   }
 
-  private renderManagedBlock(): string {
-    return `${this.startMarker}\n${this.options.content.trimEnd()}\n${this.endMarker}`;
+  private renderManagedBlock(body: string): string {
+    return `${this.startMarker}\n${body.trimEnd()}\n${this.endMarker}`;
   }
 
   private get startMarker(): string {
@@ -106,5 +114,5 @@ function appendBlock(existing: string, block: string): string {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
