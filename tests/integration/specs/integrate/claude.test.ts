@@ -131,7 +131,7 @@ describe('integrate claude', () => {
           {
             id: 'claude-mcp-config',
             resourceType: 'json-patch',
-            path: harness.cwd.file('.mcp.json').path,
+            path: realpathSync(harness.cwd.file('.mcp.json').path),
           },
         ],
         operations: [],
@@ -762,7 +762,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       // The user gets a hint pointing them at the per-project command.
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('SonarQube Agentic Analysis');
-      expect(output).toContain('sonar integrate claude --project');
+      expect(output).toContain('Re-run without --global from a project directory');
     },
     { timeout: 30000 },
   );

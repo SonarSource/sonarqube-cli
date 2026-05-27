@@ -52,18 +52,12 @@ export async function resolveSqaaEntitlement(
  * No-op unless both `isGlobal` and `sqaaEntitled` are true — keeps call sites
  * free of nested conditionals.
  *
- * `agentCommand` is the subcommand name (e.g. `claude`, `codex`, `copilot`)
- * that gets baked into the suggested `sonar integrate <agent> --project <key>`.
  */
-export function warnSqaaSkippedOnGlobal(
-  agentCommand: string,
-  isGlobal: boolean,
-  sqaaEntitled: boolean,
-): void {
+export function warnSqaaSkippedOnGlobal(isGlobal: boolean, sqaaEntitled: boolean): void {
   if (!isGlobal || !sqaaEntitled) {
     return;
   }
   warn(
-    `SonarQube Agentic Analysis is project-scoped and is not enabled by this global install. Run \`sonar integrate ${agentCommand} --project <key>\` from a project directory to enable it for that project.`,
+    `Skipping SonarQube Agentic Analysis: not supported with --global. Re-run without --global from a project directory to install it there.`,
   );
 }

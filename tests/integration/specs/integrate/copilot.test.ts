@@ -745,7 +745,6 @@ describe('integrate copilot', () => {
           'mcp-server',
           'pre-tool-use-hook',
           'prompt-secrets-instructions',
-          'sonar-secrets-binary',
           'sqaa-instructions',
         ]);
       },
@@ -776,10 +775,10 @@ describe('integrate copilot', () => {
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
         expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
 
-        // The user gets a hint pointing them at the per-project command.
+        // The user gets a hint pointing them at the per-project re-run.
         const output = `${result.stdout}\n${result.stderr}`;
         expect(output).toContain('SonarQube Agentic Analysis');
-        expect(output).toContain('sonar integrate copilot --project');
+        expect(output).toContain('Re-run without --global from a project directory');
       },
       { timeout: 30000 },
     );

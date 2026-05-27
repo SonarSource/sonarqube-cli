@@ -23,6 +23,7 @@
 // hook-agent-prompt-submit.test.ts; this spec only exercises the integrate
 // command — script + hooks.json layout, scope semantics, and idempotency.
 
+import { realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -199,7 +200,7 @@ describe('integrate codex', () => {
             {
               id: 'codex-mcp-config',
               resourceType: 'toml-patch',
-              path: harness.cwd.file(...CONFIG_TOML_DIRS).path,
+              path: realpathSync(harness.cwd.file(...CONFIG_TOML_DIRS).path),
             },
           ],
         });
@@ -410,7 +411,7 @@ describe('integrate codex', () => {
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).not.toContain('sonar integrate codex --project');
+        expect(output).not.toContain('Skipping SonarQube Agentic Analysis');
       },
       { timeout: 30000 },
     );
@@ -445,7 +446,7 @@ describe('integrate codex', () => {
 
         const output = `${result.stdout}\n${result.stderr}`;
         expect(output).toContain('SonarQube Agentic Analysis');
-        expect(output).toContain('sonar integrate codex --project');
+        expect(output).toContain('Re-run without --global from a project directory');
       },
       { timeout: 30000 },
     );

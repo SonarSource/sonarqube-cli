@@ -97,7 +97,7 @@ export async function integrateCodex(
 
   if (isGlobal) {
     success('Codex integration successfully configured globally');
-    warnSqaaSkippedOnGlobal('codex', isGlobal, sqaaEligible);
+    warnSqaaSkippedOnGlobal(isGlobal, sqaaEligible);
   } else {
     success('Codex integration successfully configured at the project level');
   }

@@ -23,7 +23,7 @@ import { join } from 'node:path';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
-import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
+import type { IntegrationScope } from '../../../../lib/state';
 import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import { setupContextAugmentation } from '../_common/context-augmentation';
@@ -88,7 +88,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     options: integrationOptions,
     targetRoot,
     scope,
-    attrs: buildIntegrationAttrs(projectKey, installSqaa),
+    attrs: { projectKey: projectKey ?? null },
   });
 
   if (!options.skipContext) {
@@ -107,7 +107,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     instructionsPath: expectedInstructionsPath(targetRoot, scope),
     sqaaInstalled: installSqaa,
   });
-  warnSqaaSkippedOnGlobal('copilot', isGlobal, sqaaEntitled);
+  warnSqaaSkippedOnGlobal(isGlobal, sqaaEntitled);
 }
 
 interface InstallationOutcome {
@@ -148,14 +148,4 @@ function expectedInstructionsPath(targetRoot: string, scope: IntegrationScope): 
   return scope === 'global'
     ? join(targetRoot, '.copilot', 'instructions', INSTRUCTIONS_FILENAME)
     : join(targetRoot, PROJECT_INSTRUCTIONS_REL_DIR, INSTRUCTIONS_FILENAME);
-}
-
-function buildIntegrationAttrs(
-  projectKey: string | undefined,
-  sqaaEntitled: boolean,
-): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: projectKey ?? null,
-    sqaaEntitled,
-  };
 }

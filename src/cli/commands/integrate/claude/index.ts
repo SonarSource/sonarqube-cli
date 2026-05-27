@@ -260,7 +260,7 @@ function reportHookInstallationOutcome(
   }
   if (isGlobal) {
     success('Claude Code integration successfully configured globally');
-    warnSqaaSkippedOnGlobal('claude', isGlobal, sqaaEntitled);
+    warnSqaaSkippedOnGlobal(isGlobal, sqaaEntitled);
   } else {
     success('Claude Code integration successfully configured at the project level');
   }
