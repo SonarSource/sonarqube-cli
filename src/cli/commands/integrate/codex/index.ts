@@ -78,6 +78,7 @@ export async function integrateCodex(
       installSecretsHooks: true,
       installSecretsInstructions: true,
       installSqaaInstructions: includeSqaaSection,
+      installMcp: true,
     },
     targetRoot: installRoot,
     scope: installScope,
