@@ -45,7 +45,11 @@ import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
-import type { CliState, InstalledTool } from '../../../src/lib/state.js';
+import type {
+  CliState,
+  InstalledIntegrationDependency,
+  InstalledTool,
+} from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import { IS_WINDOWS } from './platform';
 
@@ -288,13 +292,23 @@ export class EnvironmentBuilder {
     const resolvePath = (name: string): string => (binDir ? join(binDir, name) : name);
 
     const installed: InstalledTool[] = [];
+    const installedDependencies: InstalledIntegrationDependency[] = [];
     if (this._installSecretsBinary) {
+      const binaryPath = resolvePath(buildLocalBinaryName(SECRETS_SPEC, detectPlatform()));
       installed.push({
         name: SECRETS_SPEC.name,
         version: SECRETS_SPEC.version,
-        path: resolvePath(buildLocalBinaryName(SECRETS_SPEC, detectPlatform())),
+        path: binaryPath,
         installedAt: new Date().toISOString(),
         installedByCliVersion: 'integration-test',
+      });
+      installedDependencies.push({
+        id: SECRETS_SPEC.name,
+        dependencyType: 'sonarsource-binary',
+        version: SECRETS_SPEC.version,
+        path: binaryPath,
+        updatedAt: new Date().toISOString(),
+        updatedByCliVersion: 'integration-test',
       });
     }
     if (this._installCagBinary) {
@@ -317,6 +331,9 @@ export class EnvironmentBuilder {
     }
     if (installed.length > 0) {
       state.tools = { installed };
+    }
+    if (installedDependencies.length > 0) {
+      state.dependencies = { installed: installedDependencies };
     }
 
     for (const ext of this.sqaaExtensions) {

@@ -20,7 +20,6 @@
 
 import { join } from 'node:path';
 
-import { createSonarSecretsBinaryFeature } from '../_common/features/sonar-secrets-binary-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   type IntegrationContext,
@@ -40,7 +39,6 @@ const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 export const CODEX_INTEGRATION_ID = 'codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
-  installBinary?: boolean;
   installSecretsHooks?: boolean;
   /** Render the pre-tool secrets-on-read section into `.codex/AGENTS.md`. */
   installSecretsInstructions?: boolean;
@@ -52,7 +50,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   id: CODEX_INTEGRATION_ID,
   displayName: 'Codex',
   features: [
-    createSonarSecretsBinaryFeature(),
     createSonarSecretsHooksFeature({
       agentDisplayName: 'Codex',
       configDir: CODEX_CONFIG_DIR,

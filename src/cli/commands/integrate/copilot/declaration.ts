@@ -27,8 +27,7 @@ import {
   type IntegrationContext,
   type IntegrationDeclaration,
   jsonPatch,
-  SonarSourceBinary,
-  sonarSourceBinary,
+  sonarSecretsBinaryDependency,
   supportedIntegrations,
   wholeFile,
 } from '../_common/registry';
@@ -55,7 +54,6 @@ export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
-  installBinary?: boolean;
   installHook?: boolean;
   installInstructions?: boolean;
   installSqaaInstructions?: boolean;
@@ -67,21 +65,10 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
   displayName: 'Copilot',
   features: [
     {
-      id: 'sonar-secrets-binary',
-      displayName: 'sonar-secrets binary',
-      when: ({ options }) => options.installBinary === true,
-      resources: [
-        sonarSourceBinary({
-          id: 'sonar-secrets',
-          displayName: 'sonar-secrets binary',
-          binary: SonarSourceBinary.SonarSecrets,
-        }),
-      ],
-    },
-    {
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
       when: ({ options }) => options.installHook === true,
+      dependencies: [sonarSecretsBinaryDependency],
       resources: [
         wholeFile({
           id: 'pretool-secrets-script',

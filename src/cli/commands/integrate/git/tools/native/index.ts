@@ -24,8 +24,7 @@ import { CommandFailedError } from '../../../../_common/error';
 import {
   type FeatureDeclaration,
   type IntegrationDeclaration,
-  SonarSourceBinary,
-  sonarSourceBinary,
+  sonarSecretsBinaryDependency,
 } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { nativeGitHookResource } from './resource';
@@ -45,12 +44,8 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     when: ({ options }) => options.hook === hook,
+    dependencies: [sonarSecretsBinaryDependency],
     resources: [
-      sonarSourceBinary({
-        id: 'sonar-secrets',
-        displayName: 'sonar-secrets binary',
-        binary: SonarSourceBinary.SonarSecrets,
-      }),
       nativeGitHookResource({
         id: 'hook-file',
         displayName: `${hook} hook`,

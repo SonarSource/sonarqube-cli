@@ -18,25 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type FeatureDeclaration, SonarSourceBinary, sonarSourceBinary } from '../registry';
-
-export interface SonarSecretsBinaryFeatureOptions {
-  installBinary?: boolean;
-}
-
-export function createSonarSecretsBinaryFeature<
-  TOptions extends SonarSecretsBinaryFeatureOptions,
->(): FeatureDeclaration<TOptions> {
-  return {
-    id: 'sonar-secrets-binary',
-    displayName: 'sonar-secrets binary',
-    when: ({ options }) => options.installBinary === true,
-    resources: [
-      sonarSourceBinary({
-        id: 'sonar-secrets',
-        displayName: 'sonar-secrets binary',
-        binary: SonarSourceBinary.SonarSecrets,
-      }),
-    ],
-  };
-}
+export type { BaseDependencyOptions, DependencyDeclaration } from './common';
+export {
+  sonarSecretsBinaryDependency,
+  SonarSourceBinary,
+  sonarSourceBinary,
+  SonarSourceBinaryDependency,
+  type SonarSourceBinaryDependencyOptions,
+  type SonarSourceBinaryDescriptor,
+} from './sonarsource-binary';

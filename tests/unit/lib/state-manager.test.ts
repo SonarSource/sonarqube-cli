@@ -334,6 +334,17 @@ describe('loadState: migration', () => {
     expect(state.integrations).toEqual({ installed: [] });
   });
 
+  it('initialises dependencies to empty installed list when absent in state file', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    delete raw['dependencies'];
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.dependencies).toEqual({ installed: [] });
+  });
+
   it('initialises telemetry when absent in state file', () => {
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     delete raw['telemetry'];

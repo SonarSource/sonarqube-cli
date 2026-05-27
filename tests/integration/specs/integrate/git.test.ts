@@ -112,6 +112,12 @@ const INTEGRATION_TEST_TOKEN = 'test-token';
 const LEGACY_PRE_COMMIT_REPO = 'https://github.com/SonarSource/sonar-secrets-pre-commit';
 
 type InstalledStateJson = {
+  dependencies: {
+    installed: Array<{
+      id: string;
+      dependencyType: string;
+    }>;
+  };
   integrations: {
     installed: Array<{
       integrationId: string;
@@ -120,6 +126,7 @@ type InstalledStateJson = {
         scope: string;
         targetRoot: string;
         attrs?: Record<string, unknown>;
+        dependencies: Array<{ id: string }>;
         resources: Array<{ id: string; resourceType: string }>;
         operations: Array<{ id: string }>;
       }>;
@@ -143,6 +150,22 @@ function getInstalledIntegration(state: InstalledStateJson, integrationId: strin
   );
   expect(integration).toBeDefined();
   return integration as InstalledIntegrationJson;
+}
+
+function expectInstalledDependency(
+  state: InstalledStateJson,
+  id: string,
+  dependencyType: string,
+): void {
+  const dependency = state.dependencies.installed.find((entry) => entry.id === id);
+  expect(dependency).toBeDefined();
+  expect(dependency?.dependencyType).toBe(dependencyType);
+}
+
+function expectFeatureDependency(feature: InstalledFeatureJson, id: string): void {
+  const dependency = feature.dependencies.find((entry) => entry.id === id);
+  expect(dependency).toBeDefined();
+  expect(dependency?.id).toBe(id);
 }
 
 function expectInstalledResource(
@@ -381,9 +404,10 @@ describe('integrate git (native hooks)', () => {
           hook: 'pre-commit',
         },
       });
-      expectInstalledResource(feature, 'sonar-secrets', 'sonarsource-binary');
+      expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'git-hook-file');
       expect(feature.operations).toEqual([]);
+      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
     },
     { timeout: 15000 },
   );
@@ -507,9 +531,10 @@ describe('integrate git (husky)', () => {
           hook: 'pre-commit',
         },
       });
-      expectInstalledResource(feature, 'sonar-secrets', 'sonarsource-binary');
+      expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
       expect(feature.operations).toEqual([]);
+      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
     },
     { timeout: 15000 },
   );
@@ -574,9 +599,10 @@ describe('integrate git (husky)', () => {
           hook: 'pre-push',
         },
       });
-      expectInstalledResource(feature, 'sonar-secrets', 'sonarsource-binary');
+      expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
       expect(feature.operations).toEqual([]);
+      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
     },
     { timeout: 15000 },
   );
@@ -671,9 +697,10 @@ describe('integrate git (pre-commit framework)', () => {
           hook: 'pre-commit',
         },
       });
-      expectInstalledResource(feature, 'sonar-secrets', 'sonarsource-binary');
+      expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
       expectInstalledOperation(feature, 'activate-hook');
+      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
     },
     { timeout: 15000 },
   );
@@ -720,9 +747,10 @@ describe('integrate git (pre-commit framework)', () => {
           hook: 'pre-push',
         },
       });
-      expectInstalledResource(feature, 'sonar-secrets', 'sonarsource-binary');
+      expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
       expectInstalledOperation(feature, 'activate-hook');
+      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
     },
     { timeout: 15000 },
   );

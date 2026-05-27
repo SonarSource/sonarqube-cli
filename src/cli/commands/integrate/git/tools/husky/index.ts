@@ -23,8 +23,7 @@ import { join } from 'node:path';
 import {
   type FeatureDeclaration,
   type IntegrationDeclaration,
-  SonarSourceBinary,
-  sonarSourceBinary,
+  sonarSecretsBinaryDependency,
   textSnippet,
 } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
@@ -44,12 +43,8 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     when: ({ options }) => options.hook === hook,
+    dependencies: [sonarSecretsBinaryDependency],
     resources: [
-      sonarSourceBinary({
-        id: 'sonar-secrets',
-        displayName: 'sonar-secrets binary',
-        binary: SonarSourceBinary.SonarSecrets,
-      }),
       textSnippet({
         id: 'hook-file',
         displayName: `${hook} hook`,

@@ -617,12 +617,19 @@ describe('integrateGit', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: TEMP_DIR,
+        dependencies: [{ id: 'sonar-secrets' }],
       });
       expect(
         feature?.resources.some(
           (resource) => resource.id === 'hook-file' && resource.resourceType === 'text-snippet',
         ),
       ).toBe(true);
+      expect(state.dependencies.installed).toMatchObject([
+        {
+          id: 'sonar-secrets',
+          dependencyType: 'sonarsource-binary',
+        },
+      ]);
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -653,6 +660,7 @@ describe('integrateGit', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: TEMP_DIR,
+        dependencies: [{ id: 'sonar-secrets' }],
       });
       expect(
         feature?.resources.some(
@@ -660,6 +668,12 @@ describe('integrateGit', () => {
         ),
       ).toBe(true);
       expect(feature?.operations.some((operation) => operation.id === 'activate-hook')).toBe(true);
+      expect(state.dependencies.installed).toMatchObject([
+        {
+          id: 'sonar-secrets',
+          dependencyType: 'sonarsource-binary',
+        },
+      ]);
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -679,6 +693,7 @@ describe('integrateGit', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: TEMP_DIR,
+        dependencies: [{ id: 'sonar-secrets' }],
       });
       expect(
         feature?.resources.some(
@@ -686,6 +701,12 @@ describe('integrateGit', () => {
         ),
       ).toBe(true);
       expect(feature?.operations).toEqual([]);
+      expect(state.dependencies.installed).toMatchObject([
+        {
+          id: 'sonar-secrets',
+          dependencyType: 'sonarsource-binary',
+        },
+      ]);
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });

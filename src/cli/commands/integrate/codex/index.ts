@@ -75,7 +75,6 @@ export async function integrateCodex(
     integrationId: CODEX_INTEGRATION_ID,
     options: {
       ...options,
-      installBinary: true,
       installSecretsHooks: true,
       installSecretsInstructions: true,
       installSqaaInstructions: includeSqaaSection,
