@@ -32,6 +32,7 @@ import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../.
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
 const AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
+const CONFIG_TOML_DIRS = ['.codex', 'config.toml'];
 const SECRETS_HEADING = '# SonarQube secrets scanning for files protocol';
 const SQAA_HEADING = '# SonarQube Agentic Analysis protocol';
 
@@ -162,6 +163,175 @@ describe('integrate codex', () => {
         );
         expect(isAbsolute(command)).toBe(true);
         expect(command.startsWith(normalizePath(harness.userHome.path))).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+  });
+
+  describe('MCP server config', () => {
+    it(
+      'writes [mcp_servers.sonarqube] to .codex/config.toml at project scope',
+      async () => {
+        harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
+
+        const result = await harness.run('integrate codex');
+
+        // Assert on the result and the file contents
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
+        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('[mcp_servers.sonarqube]');
+        expect(tomlBody).toContain('run');
+        expect(tomlBody).toContain('mcp');
+        expect(tomlBody).toContain('--project');
+        expect(tomlBody).toContain('my-project');
+
+        // Assert on the state
+        const state = harness.stateJsonFile.asJson();
+        const codex = state.integrations.installed.find(
+          (entry: { integrationId: string }) => entry.integrationId === 'codex',
+        );
+        const mcpFeature = codex?.features?.find(
+          (feature: { featureId: string }) => feature.featureId === 'mcp-server',
+        );
+        expect(mcpFeature).toMatchObject({
+          resources: [
+            {
+              id: 'codex-mcp-config',
+              resourceType: 'toml-patch',
+              path: harness.cwd.file(...CONFIG_TOML_DIRS).path,
+            },
+          ],
+        });
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes the MCP config to $HOME/.codex/config.toml for global installs',
+      async () => {
+        const result = await harness.run('integrate codex -g');
+
+        // Assert on the result and the file contents
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(false);
+        expect(harness.userHome.exists(...CONFIG_TOML_DIRS)).toBe(true);
+        const tomlBody = harness.userHome.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('[mcp_servers.sonarqube]');
+        expect(tomlBody).toContain('run');
+        expect(tomlBody).toContain('mcp');
+
+        // Assert on the state
+        const state = harness.stateJsonFile.asJson();
+        const codex = state.integrations.installed.find(
+          (entry: { integrationId: string }) => entry.integrationId === 'codex',
+        );
+        const mcpFeature = codex?.features?.find(
+          (feature: { featureId: string }) => feature.featureId === 'mcp-server',
+        );
+        expect(mcpFeature).toMatchObject({
+          resources: [
+            {
+              id: 'codex-mcp-config',
+              resourceType: 'toml-patch',
+              path: harness.userHome.file(...CONFIG_TOML_DIRS).path,
+            },
+          ],
+        });
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      're-running does not change the config.toml or duplicate [mcp_servers.sonarqube]',
+      async () => {
+        await harness.run('integrate codex');
+        const firstBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file(...CONFIG_TOML_DIRS).asText()).toBe(firstBody);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'overwrites an existing [mcp_servers.sonarqube] entry with the canonical config',
+      async () => {
+        harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
+        harness.cwd.writeFile(
+          '.codex/config.toml',
+          '[mcp_servers.sonarqube]\ncommand = "custom-sonar"\nargs = ["custom", "args"]\n',
+        );
+
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        expect(body).not.toContain('custom-sonar');
+        expect(body).toContain('[mcp_servers.sonarqube]');
+        expect(body).toContain('my-project');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'fails when the existing config.toml contains invalid TOML',
+      async () => {
+        harness.cwd.writeFile('.codex/config.toml', '= not valid toml =');
+
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(1);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).toContain('config.toml contains invalid TOML');
+        expect(output).toContain('Please fix or delete it and re-run.');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits --project from the args array when no project key is known',
+      async () => {
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(0);
+        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('[mcp_servers.sonarqube]');
+        expect(tomlBody).not.toContain('--project');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'merges the sonarqube entry alongside pre-existing Codex config without touching unrelated tables',
+      async () => {
+        harness.cwd.writeFile(
+          '.codex/config.toml',
+          [
+            'model = "gpt-5.3-codex"',
+            'model_reasoning_effort = "medium"',
+            '',
+            '[plugins."browser-use@openai-bundled"]',
+            'enabled = true',
+            '',
+            '[mcp_servers.other]',
+            'command = "other"',
+            'args = ["go"]',
+            '',
+          ].join('\n'),
+        );
+
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(0);
+        const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
+        expect(tomlBody).toContain('model = "gpt-5.3-codex"');
+        expect(tomlBody).toContain('model_reasoning_effort = "medium"');
+        expect(tomlBody).toContain('[plugins."browser-use@openai-bundled"]');
+        expect(tomlBody).toContain('[mcp_servers.other]');
+        expect(tomlBody).toContain('[mcp_servers.sonarqube]');
       },
       { timeout: 30000 },
     );
