@@ -193,7 +193,7 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   blank();
 
   if (!options.nonInteractive) {
-    const confirmed = await confirmPrompt('Proceed with global installation?');
+    const confirmed = await confirmPrompt('Proceed with global installation?', true);
     if (confirmed === false || confirmed === null) {
       throw new CommandFailedError('Installation cancelled');
     }
@@ -231,7 +231,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   blank();
 
   if (!options.nonInteractive) {
-    const confirmed = await confirmPrompt('Install here?');
+    const confirmed = await confirmPrompt('Install here?', true);
     if (confirmed === false || confirmed === null) {
       throw new CommandFailedError('Installation cancelled');
     }

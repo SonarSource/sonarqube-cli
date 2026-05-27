@@ -170,7 +170,7 @@ export async function confirmLargeChangeset(fileCount: number): Promise<boolean>
   }
 
   blank();
-  const confirmed = await confirmPrompt('Do you wish to proceed?');
+  const confirmed = await confirmPrompt('Do you wish to proceed?', true);
   if (!confirmed) {
     blank();
     text('Analysis cancelled. Use --force to bypass the file count check.');
