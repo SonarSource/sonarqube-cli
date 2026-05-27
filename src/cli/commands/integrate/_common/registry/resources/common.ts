@@ -76,28 +76,32 @@ export async function readTextFile(path: string): Promise<string | undefined> {
   return readFile(path, 'utf-8');
 }
 
-export interface PatchBase {
-  id: string;
+export interface PatchResourceOptions extends BaseResourceOptions {
   targetPath: PathResolver;
 }
 
-export async function applyPatch(
-  options: PatchBase,
-  resourceType: string,
-  version: string | undefined,
-  context: IntegrationContext,
-  render: (path: string) => Promise<string>,
-): Promise<AppliedResource> {
-  const path = await resolvePath(context, options.targetPath);
-  await writeFileIfChanged(path, await render(path));
-  return { id: options.id, resourceType, version, path };
-}
+export abstract class PatchResource<O extends PatchResourceOptions> implements ResourceDeclaration {
+  readonly id: string;
+  readonly displayName?: string;
+  readonly version?: string;
+  abstract readonly resourceType: string;
 
-export async function isPatchApplied(
-  options: PatchBase,
-  context: IntegrationContext,
-  render: (path: string) => Promise<string>,
-): Promise<boolean> {
-  const path = await resolvePath(context, options.targetPath);
-  return (await readTextFile(path)) === (await render(path));
+  constructor(protected readonly options: O) {
+    this.id = options.id;
+    this.displayName = options.displayName;
+    this.version = options.version;
+  }
+
+  async apply(context: IntegrationContext): Promise<AppliedResource> {
+    const path = await resolvePath(context, this.options.targetPath);
+    await writeFileIfChanged(path, await this.renderContent(path, context));
+    return { id: this.id, resourceType: this.resourceType, version: this.version, path };
+  }
+
+  async isApplied(context: IntegrationContext): Promise<boolean> {
+    const path = await resolvePath(context, this.options.targetPath);
+    return (await readTextFile(path)) === (await this.renderContent(path, context));
+  }
+
+  protected abstract renderContent(path: string, context: IntegrationContext): Promise<string>;
 }

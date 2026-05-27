@@ -22,17 +22,10 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import { CommandFailedError } from '../../../../_common/error';
-import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
-import {
-  applyPatch,
-  type BaseResourceOptions,
-  isPatchApplied,
-  type PathResolver,
-  type ResourceDeclaration,
-} from './common';
+import type { IntegrationContext, MaybePromise } from '../types';
+import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
 
-export interface JsonPatchOptions extends BaseResourceOptions {
-  targetPath: PathResolver;
+export interface JsonPatchOptions extends PatchResourceOptions {
   defaultValue?: unknown;
   patch: (document: unknown, context: IntegrationContext) => MaybePromise<unknown>;
 }
@@ -41,29 +34,10 @@ export function jsonPatch(options: JsonPatchOptions): ResourceDeclaration {
   return new JsonPatch(options);
 }
 
-export class JsonPatch implements ResourceDeclaration {
-  readonly id: string;
-  readonly displayName?: string;
+export class JsonPatch extends PatchResource<JsonPatchOptions> {
   readonly resourceType = 'json-patch';
-  readonly version?: string;
 
-  constructor(private readonly options: JsonPatchOptions) {
-    this.id = options.id;
-    this.displayName = options.displayName;
-    this.version = options.version;
-  }
-
-  apply(context: IntegrationContext): Promise<AppliedResource> {
-    return applyPatch(this.options, this.resourceType, this.version, context, (path) =>
-      this.renderContent(path, context),
-    );
-  }
-
-  isApplied(context: IntegrationContext): Promise<boolean> {
-    return isPatchApplied(this.options, context, (path) => this.renderContent(path, context));
-  }
-
-  private async renderContent(path: string, context: IntegrationContext): Promise<string> {
+  protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
     const document = await readJson(path, this.options.defaultValue ?? {});
     const updated = await this.options.patch(document, context);
     return `${JSON.stringify(updated ?? document, null, 2)}\n`;

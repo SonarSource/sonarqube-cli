@@ -24,17 +24,10 @@ import { readFile } from 'node:fs/promises';
 import { parse, stringify } from 'smol-toml';
 
 import { CommandFailedError } from '../../../../_common/error';
-import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
-import {
-  applyPatch,
-  type BaseResourceOptions,
-  isPatchApplied,
-  type PathResolver,
-  type ResourceDeclaration,
-} from './common';
+import type { IntegrationContext, MaybePromise } from '../types';
+import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
 
-export interface TomlPatchOptions extends BaseResourceOptions {
-  targetPath: PathResolver;
+export interface TomlPatchOptions extends PatchResourceOptions {
   defaultValue?: Record<string, unknown>;
   patch: (
     document: Record<string, unknown>,
@@ -46,29 +39,10 @@ export function tomlPatch(options: TomlPatchOptions): ResourceDeclaration {
   return new TomlPatch(options);
 }
 
-export class TomlPatch implements ResourceDeclaration {
-  readonly id: string;
-  readonly displayName?: string;
+export class TomlPatch extends PatchResource<TomlPatchOptions> {
   readonly resourceType = 'toml-patch';
-  readonly version?: string;
 
-  constructor(private readonly options: TomlPatchOptions) {
-    this.id = options.id;
-    this.displayName = options.displayName;
-    this.version = options.version;
-  }
-
-  apply(context: IntegrationContext): Promise<AppliedResource> {
-    return applyPatch(this.options, this.resourceType, this.version, context, (path) =>
-      this.renderContent(path, context),
-    );
-  }
-
-  isApplied(context: IntegrationContext): Promise<boolean> {
-    return isPatchApplied(this.options, context, (path) => this.renderContent(path, context));
-  }
-
-  private async renderContent(path: string, context: IntegrationContext): Promise<string> {
+  protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
     const document = await readToml(path, this.options.defaultValue ?? {});
     const updated = await this.options.patch(document, context);
     return stringify(updated);
