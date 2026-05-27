@@ -75,3 +75,29 @@ export async function readTextFile(path: string): Promise<string | undefined> {
   }
   return readFile(path, 'utf-8');
 }
+
+export interface PatchBase {
+  id: string;
+  targetPath: PathResolver;
+}
+
+export async function applyPatch(
+  options: PatchBase,
+  resourceType: string,
+  version: string | undefined,
+  context: IntegrationContext,
+  render: (path: string) => Promise<string>,
+): Promise<AppliedResource> {
+  const path = await resolvePath(context, options.targetPath);
+  await writeFileIfChanged(path, await render(path));
+  return { id: options.id, resourceType, version, path };
+}
+
+export async function isPatchApplied(
+  options: PatchBase,
+  context: IntegrationContext,
+  render: (path: string) => Promise<string>,
+): Promise<boolean> {
+  const path = await resolvePath(context, options.targetPath);
+  return (await readTextFile(path)) === (await render(path));
+}

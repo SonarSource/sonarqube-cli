@@ -26,12 +26,11 @@ import { parse, stringify } from 'smol-toml';
 import { CommandFailedError } from '../../../../_common/error';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
+  applyPatch,
   type BaseResourceOptions,
+  isPatchApplied,
   type PathResolver,
-  readTextFile,
-  resolvePath,
   type ResourceDeclaration,
-  writeFileIfChanged,
 } from './common';
 
 export interface TomlPatchOptions extends BaseResourceOptions {
@@ -59,15 +58,14 @@ export class TomlPatch implements ResourceDeclaration {
     this.version = options.version;
   }
 
-  async apply(context: IntegrationContext): Promise<AppliedResource> {
-    const path = await resolvePath(context, this.options.targetPath);
-    await writeFileIfChanged(path, await this.renderContent(path, context));
-    return { id: this.id, resourceType: this.resourceType, version: this.version, path };
+  apply(context: IntegrationContext): Promise<AppliedResource> {
+    return applyPatch(this.options, this.resourceType, this.version, context, (path) =>
+      this.renderContent(path, context),
+    );
   }
 
-  async isApplied(context: IntegrationContext): Promise<boolean> {
-    const path = await resolvePath(context, this.options.targetPath);
-    return (await readTextFile(path)) === (await this.renderContent(path, context));
+  isApplied(context: IntegrationContext): Promise<boolean> {
+    return isPatchApplied(this.options, context, (path) => this.renderContent(path, context));
   }
 
   private async renderContent(path: string, context: IntegrationContext): Promise<string> {
