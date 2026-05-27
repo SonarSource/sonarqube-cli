@@ -59,8 +59,8 @@ export interface AuthConnection {
   /**
    * Server-generated token name, present only for connections created through
    * the browser-based OAuth flow. Used during logout to revoke the token on
-   * the server side via `/api/user_tokens/revoke`. Absent when the user
-   * authenticated with a manually-provided token (`--with-token`).
+   * the server side via `/api/user_tokens/revoke`. Absent for connections
+   * created with older CLI versions that did not capture the token name.
    */
   tokenName?: string;
   /** Timestamp when authenticated */

@@ -54,7 +54,7 @@ describe('auth login', () => {
   it(
     'exits with code 2 when --server is not a valid URL',
     async () => {
-      const result = await harness.run('auth login --server not-a-url --with-token mytoken');
+      const result = await harness.run('auth login --server not-a-url');
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('Invalid server URL');
@@ -63,13 +63,13 @@ describe('auth login', () => {
   );
 
   it(
-    'saves token to keychain and state after --with-token and --server',
+    'saves token to keychain and state after browser login',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-login-token').start();
 
-      const result = await harness.run(
-        `auth login --with-token my-login-token --server ${server.baseUrl()}`,
-      );
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-login-token',
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
@@ -106,34 +106,6 @@ describe('auth login', () => {
   );
 
   it(
-    'does not inherit a stale tokenName when re-authenticating with --with-token',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken('manual-token').start();
-
-      // Pre-existing state: a prior browser-OAuth login left a tokenName behind.
-      // The keychain token has since been replaced by a manually-supplied one.
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withTokenName('cli-browser-token-from-prior-session');
-
-      const result = await harness.run(
-        `auth login --server ${server.baseUrl()} --with-token manual-token`,
-      );
-
-      expect(result.exitCode).toBe(0);
-      const state = harness.stateJsonFile.asJson() as {
-        auth: { connections: Array<{ tokenName?: string; serverUrl: string }> };
-      };
-      // The manually-supplied token has no server-side name we can know about,
-      // so the connection must NOT carry the stale browser-issued tokenName forward.
-      expect(state.auth.connections[0].serverUrl).toBe(server.baseUrl());
-      expect(state.auth.connections[0].tokenName).toBeUndefined();
-    },
-    { timeout: 15000 },
-  );
-
-  it(
     'preserves tokenName when re-authenticating with the existing keychain token',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('browser-login-token').start();
@@ -162,12 +134,13 @@ describe('auth login', () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
       const result = await harness.run(
-        `auth login --with-token my-token --org nonexistent-org --server ${server.baseUrl()}`,
+        `auth login --org nonexistent-org --server ${server.baseUrl()}`,
         {
           extraEnv: {
             SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
             SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
           },
+          browserToken: 'my-token',
         },
       );
 
@@ -186,15 +159,13 @@ describe('auth login', () => {
         .withOrganizations([{ key: 'us-org', name: 'US Org' }])
         .start();
 
-      const result = await harness.run(
-        `auth login --with-token my-token --server ${server.baseUrl()}`,
-        {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl(),
-            SONARQUBE_CLI_SONARCLOUD_US_API_URL: server.baseUrl(),
-          },
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_US_API_URL: server.baseUrl(),
         },
-      );
+        browserToken: 'my-token',
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
@@ -215,12 +186,12 @@ describe('auth login', () => {
       const server1 = await harness.newFakeServer().withAuthToken('tok-1').start();
       const server2 = await harness.newFakeServer().withAuthToken('tok-2').start();
 
-      await harness.run(`auth login --with-token tok-1 --server ${server1.baseUrl()}`);
+      await harness.run(`auth login --server ${server1.baseUrl()}`, { browserToken: 'tok-1' });
       const { installationId } = (
         harness.stateJsonFile.asJson() as { telemetry: { installationId: string } }
       ).telemetry;
 
-      await harness.run(`auth login --with-token tok-2 --server ${server2.baseUrl()}`);
+      await harness.run(`auth login --server ${server2.baseUrl()}`, { browserToken: 'tok-2' });
       const stateAfter = harness.stateJsonFile.asJson() as {
         telemetry: { installationId: string };
         auth: { connections: Array<{ serverUrl: string }> };
@@ -255,15 +226,13 @@ describe('auth login — organization selection', () => {
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
         .start();
 
-      const result = await harness.run(
-        `auth login --with-token my-token --server ${server.baseUrl()}`,
-        {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-            SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
-          },
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
-      );
+        browserToken: 'my-token',
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Authentication successful');
@@ -631,17 +600,6 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain('Server selection cancelled');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 2 when --with-token is provided but --server is not',
-    async () => {
-      const result = await harness.run('auth login --with-token my-token');
-
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('--server is required when --with-token is provided');
     },
     { timeout: 15000 },
   );
