@@ -287,9 +287,6 @@ uxDescribe('Option Validation Errors', () => {
   uxIt('config telemetry: --enabled and --disabled conflict', () =>
     harness.run('config telemetry --enabled --disabled'),
   );
-  uxIt('auth login: --with-token without --server', () =>
-    harness.run('auth login --with-token tok'),
-  );
   uxIt('auth login: invalid server URL', () => harness.run('auth login --server not-a-url'));
 });
 
@@ -333,8 +330,10 @@ uxDescribe('SonarQube Server (On-Premise) — Happy Path', () => {
     await harness.dispose();
   });
 
-  uxIt('auth login --with-token', () =>
-    harness.run(`auth login --with-token ${TOKEN} --server ${serverUrl}`),
+  uxIt('auth status: env var authentication (SQS)', () =>
+    harness.run('auth status', {
+      extraEnv: { SONARQUBE_CLI_TOKEN: TOKEN, SONARQUBE_CLI_SERVER: serverUrl },
+    }),
   );
   uxIt('auth status (connected)', () => harness.run('auth status'));
   uxIt('api GET /api/authentication/validate', () =>
@@ -451,9 +450,9 @@ uxDescribe('SonarQube Cloud — Happy Path', () => {
     await harness.dispose();
   });
 
-  uxIt('auth login (Cloud, with org)', () =>
-    harness.run(`auth login --with-token ${TOKEN} --server ${cloudUrl} --org ${ORG}`, {
-      extraEnv: cloudEnvFor(cloudUrl),
+  uxIt('auth status: env var authentication (Cloud)', () =>
+    harness.run('auth status', {
+      extraEnv: { ...cloudEnvFor(cloudUrl), SONARQUBE_CLI_TOKEN: TOKEN, SONARQUBE_CLI_ORG: ORG },
     }),
   );
   uxIt('auth status (Cloud, connected)', () => harness.run('auth status'));

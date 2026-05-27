@@ -40,7 +40,8 @@ export async function repairToken(serverURL: string, organization?: string): Pro
   const valid = await validateToken(serverURL, newToken);
   if (!valid) {
     throw new CommandFailedError('Generated token is invalid.', {
-      remediationHint: "Rerun the browser login flow or authenticate again with '--with-token'.",
+      remediationHint:
+        'Rerun the browser login flow, or set SONARQUBE_CLI_TOKEN (+ SONARQUBE_CLI_SERVER or SONARQUBE_CLI_ORG) for scripted environments.',
     });
   }
 
