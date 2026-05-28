@@ -574,12 +574,6 @@
       fallback();
     }
   }
-    } else {
-      const ta = document.createElement('textarea');
-      ta.value = cmd; document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); document.body.removeChild(ta); done();
-    }
-  }
 
   let activeJtbd = null;
 
