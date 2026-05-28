@@ -68,6 +68,46 @@ download_with_auth() {
   fi
 }
 
+# Try .bin first (current Unix pre-releases), then .exe (legacy artifacts).
+# Remove fallback once .bin is released
+download_cli_prerelease_artifact() {
+  local version="$1"
+  local platform="$2"
+  local dest="$3"
+  local token="$4"
+  local base="sonarqube-cli-${version}-${platform}"
+  local url_bin="$BASE_URL/$version/${base}.bin"
+  local url_exe="$BASE_URL/$version/${base}.exe"
+
+  if command -v curl &>/dev/null; then
+    if curl -fsSL -H "Authorization: Bearer $token" "$url_bin" -o "$dest" 2>/dev/null; then
+      echo "  $url_bin"
+      return 0
+    fi
+    if curl -fsSL -H "Authorization: Bearer $token" "$url_exe" -o "$dest" 2>/dev/null; then
+      echo "  $url_exe"
+      return 0
+    fi
+  elif command -v wget &>/dev/null; then
+    if wget -qO "$dest" --header="Authorization: Bearer $token" "$url_bin" 2>/dev/null; then
+      echo "  $url_bin"
+      return 0
+    fi
+    if wget -qO "$dest" --header="Authorization: Bearer $token" "$url_exe" 2>/dev/null; then
+      echo "  $url_exe"
+      return 0
+    fi
+  else
+    echo "Error: neither curl nor wget is available. Please install one and retry." >&2
+    exit 1
+  fi
+
+  echo "Error: could not download sonarqube-cli pre-release (tried .bin and .exe):" >&2
+  echo "  $url_bin" >&2
+  echo "  $url_exe" >&2
+  exit 1
+}
+
 resolve_latest_version() {
   local token="$1"
   local api_url="https://repox.jfrog.io/artifactory/api/search/latestVersion?g=org.sonarsource.cli&a=sonarqube-cli&repos=sonarsource-public-builds"
@@ -184,21 +224,19 @@ main() {
   local platform
   platform="$(detect_platform)"
 
-  local filename="sonarqube-cli-${version}-${platform}.exe"
-  local url="$BASE_URL/$version/$filename"
+  local artifact_basename="sonarqube-cli-${version}-${platform}"
   local dest="$INSTALL_DIR/$BINARY_NAME"
   TMP_DIR="$(mktemp -d -t 'sonarqube-cli-install.XXXXXX')"
 
   echo "Installing pre-release sonarqube-cli $version"
   echo "Detected platform: $platform"
   echo "Downloading from:"
-  echo "  $url"
 
   mkdir -p "$INSTALL_DIR"
 
-  local tmp_bin="$TMP_DIR/$filename"
+  local tmp_bin="$TMP_DIR/$artifact_basename"
 
-  download_with_auth "$url" "$tmp_bin" "$token"
+  download_cli_prerelease_artifact "$version" "$platform" "$tmp_bin" "$token"
 
   mv "$tmp_bin" "$dest"
   chmod +x "$dest"

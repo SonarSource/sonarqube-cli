@@ -74,6 +74,46 @@ download() {
   fi
 }
 
+# Download the CLI from binaries.sonarsource.com (not bundled in the sonar binary).
+# Remove fallback once .bin is released
+download_cli_artifact() {
+  local version="$1"
+  local platform="$2"
+  local os="$3"
+  local dest="$4"
+  local base="sonarqube-cli-${version}-${platform}"
+  local url_bin="$BASE_URL/$version/$os/${base}.bin"
+  local url_exe="$BASE_URL/$version/$os/${base}.exe"
+
+  if command -v curl &>/dev/null; then
+    if curl -fsSL "$url_bin" -o "$dest" 2>/dev/null; then
+      echo "  $url_bin"
+      return 0
+    fi
+    if curl -fsSL "$url_exe" -o "$dest" 2>/dev/null; then
+      echo "  $url_exe"
+      return 0
+    fi
+  elif command -v wget &>/dev/null; then
+    if wget -qO "$dest" "$url_bin" 2>/dev/null; then
+      echo "  $url_bin"
+      return 0
+    fi
+    if wget -qO "$dest" "$url_exe" 2>/dev/null; then
+      echo "  $url_exe"
+      return 0
+    fi
+  else
+    echo "Error: neither curl nor wget is available. Please install one and retry." >&2
+    exit 1
+  fi
+
+  echo "Error: could not download sonarqube-cli (tried .bin and .exe):" >&2
+  echo "  $url_bin" >&2
+  echo "  $url_exe" >&2
+  exit 1
+}
+
 # Detect the best shell profile file to update (inspired by nvm_detect_profile).
 # Honors $PROFILE override, detects shell from $SHELL, respects $ZDOTDIR for zsh.
 # Outputs exactly one file path, or nothing if no profile is found.
@@ -148,20 +188,18 @@ main() {
   local os
   os="$(detect_os)"
 
-  local filename="sonarqube-cli-${version}-${platform}.exe"
-  local url="$BASE_URL/$version/$os/$filename"
+  local artifact_basename="sonarqube-cli-${version}-${platform}"
   local dest="$INSTALL_DIR/$BINARY_NAME"
   TMP_DIR="$(mktemp -d -t 'sonarqube-cli-install.XXXXXX')"
 
   echo "Detected platform: $platform"
   echo "Downloading sonarqube-cli from:"
-  echo "  $url"
 
   mkdir -p "$INSTALL_DIR"
 
-  local tmp_bin="$TMP_DIR/$filename"
+  local tmp_bin="$TMP_DIR/$artifact_basename"
 
-  download "$url" "$tmp_bin"
+  download_cli_artifact "$version" "$platform" "$os" "$tmp_bin"
 
   mv "$tmp_bin" "$dest"
   chmod +x "$dest"
