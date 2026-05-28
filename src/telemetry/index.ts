@@ -63,7 +63,12 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
   const topCommand = commandNames[0];
   const commandPathTail = commandNames.slice(1);
   const fallbackSubcommand = commandPathTail.length > 0 ? commandPathTail.join(' ') : null;
-  const subcommand = passthroughSubcommands.get(command) ?? fallbackSubcommand;
+  let subcommand: string | null;
+  if (passthroughSubcommands.has(command)) {
+    subcommand = passthroughSubcommands.get(command) ?? null;
+  } else {
+    subcommand = fallbackSubcommand;
+  }
 
   const conn = getActiveConnection(state);
   const connectionType: 'sqc' | 'sqs' | null =

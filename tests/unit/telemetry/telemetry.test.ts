@@ -197,7 +197,7 @@ describe('storeEvent', () => {
     });
 
     it('honors a stashed null subcommand even when the command chain has children', async () => {
-      const command = makeCommand('context');
+      const command = makeCommand('context child');
       setPassthroughSubcommand(command, null);
 
       await storeEvent(command, true);
