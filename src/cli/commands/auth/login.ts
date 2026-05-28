@@ -30,12 +30,14 @@ import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { addOrUpdateConnection, getActiveConnection } from '../../../lib/state-manager';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import {
+  confirmPrompt,
   discreetSuccess,
   print,
   promptUntilValid,
   selectPrompt,
   success,
   textPrompt,
+  warn,
 } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error';
 
@@ -45,6 +47,7 @@ import { CommandFailedError, InvalidOptionError } from '../_common/error';
 export async function authLogin(options: AuthLoginOptions): Promise<void> {
   validateLoginOptions(options);
   const server = await resolveServer(options);
+  await confirmServerTrust(server);
 
   const isCloud = isSonarQubeCloud(server);
 
@@ -223,6 +226,17 @@ async function validateOrSelectOrganization(
   }
 
   return await getUserSelectedOrganization(client);
+}
+
+export async function confirmServerTrust(server: string): Promise<void> {
+  if (isSonarQubeCloud(server)) {
+    return;
+  }
+  warn('Only connect to servers you trust.');
+  const confirmed = await confirmPrompt('Connect anyway?', true);
+  if (!confirmed) {
+    throw new CommandFailedError('Login cancelled');
+  }
 }
 
 function isValidUrl(url: string): boolean {
