@@ -124,6 +124,13 @@ export const AGENT_ACTIVITY_PATH = '/project/agent_activity';
 export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 
 // ---------------------------------------------------------------------------
+// Telemetry
+// ---------------------------------------------------------------------------
+
+/** Env var that disables telemetry when set to 1. */
+export const ENV_DO_NOT_TRACK = 'DO_NOT_TRACK';
+
+// ---------------------------------------------------------------------------
 // Sentry
 // ---------------------------------------------------------------------------
 

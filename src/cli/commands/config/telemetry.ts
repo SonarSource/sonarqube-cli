@@ -20,6 +20,7 @@
 // Configure CLI settings
 
 import { loadState, saveState } from '../../../lib/repository/state-repository';
+import { describeTelemetryStatus } from '../../../telemetry/enabled.js';
 import { info, success } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 
@@ -34,7 +35,7 @@ export function configureTelemetry(options: ConfigureTelemetryOptions): Promise<
   }
   if (!options.enabled && !options.disabled) {
     const state = loadState();
-    info(`Telemetry is currently ${state.telemetry.enabled ? 'enabled' : 'disabled'}.`);
+    info(describeTelemetryStatus(state));
     return Promise.resolve();
   }
   const state = loadState();

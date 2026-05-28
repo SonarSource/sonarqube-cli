@@ -26,6 +26,7 @@ import { version as VERSION } from '../../package.json';
 import { detectCallerAgent } from '../lib/agent-detector.js';
 import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
 import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
+import { isTelemetryEnabled } from './enabled.js';
 import { getOrCreateUserId } from './user.js';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
@@ -51,7 +52,7 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
 
   const state = loadState();
 
-  if (!state.telemetry.enabled) {
+  if (!isTelemetryEnabled(state)) {
     return Promise.resolve();
   }
   const commandNames: string[] = [];
@@ -137,7 +138,7 @@ const FLUSH_TIMEOUT_MS = 60_000;
  */
 export async function flushTelemetry(): Promise<void> {
   const state = loadState();
-  if (!state.telemetry.enabled) {
+  if (!isTelemetryEnabled(state)) {
     return;
   }
   const telemetry = state.telemetry;

@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
 import * as agentDetector from '../../../src/lib/agent-detector.js';
+import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
 import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
@@ -118,6 +119,7 @@ afterEach(() => {
   getUserIdSpy.mockRestore();
   spawnSpy.mockRestore();
   delete process.env[TELEMETRY_FLUSH_MODE_ENV];
+  delete process.env[ENV_DO_NOT_TRACK];
   delete process.env.CLAUDECODE;
   delete process.env.CLAUDE_CODE_ENTRYPOINT;
   delete process.env.CLAUDE_PROJECT_DIR;
@@ -141,6 +143,14 @@ describe('storeEvent', () => {
       const state = getDefaultState('1.0.0');
       state.telemetry.enabled = false;
       loadStateSpy.mockReturnValue(state);
+
+      await storeEvent(makeCommand('auth login'), true);
+
+      expect(saveStateSpy).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when DO_NOT_TRACK is set', async () => {
+      process.env[ENV_DO_NOT_TRACK] = '1';
 
       await storeEvent(makeCommand('auth login'), true);
 
@@ -371,6 +381,19 @@ describe('flushTelemetry', () => {
       state.telemetry.enabled = false;
       state.telemetry.events = [makeStoredEvent()];
       loadStateSpy.mockReturnValue(state);
+
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetry();
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('does nothing when DO_NOT_TRACK is set', async () => {
+      process.env[ENV_DO_NOT_TRACK] = '1';
+      loadStateSpy.mockReturnValue(makeStateWithEvents([makeStoredEvent()]));
 
       const fetchSpy = mockFetch();
       try {
