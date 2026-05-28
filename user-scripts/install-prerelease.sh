@@ -54,22 +54,36 @@ fetch_with_auth() {
   fi
 }
 
+# Optional fourth argument "quiet": return 1 on failure instead of exiting (stderr suppressed).
 download_with_auth() {
   local url="$1"
   local dest="$2"
   local token="$3"
+  local quiet="${4:-}"
   if command -v curl &>/dev/null; then
-    curl -fsSL -H "Authorization: Bearer $token" "$url" -o "$dest"
-  elif command -v wget &>/dev/null; then
-    wget -qO "$dest" --header="Authorization: Bearer $token" "$url"
-  else
-    echo "Error: neither curl nor wget is available. Please install one and retry." >&2
-    exit 1
+    if [[ -n "$quiet" ]]; then
+      curl -fsSL -H "Authorization: Bearer $token" "$url" -o "$dest" 2>/dev/null
+    else
+      curl -fsSL -H "Authorization: Bearer $token" "$url" -o "$dest"
+    fi
+    return
   fi
+  if command -v wget &>/dev/null; then
+    if [[ -n "$quiet" ]]; then
+      wget -qO "$dest" --header="Authorization: Bearer $token" "$url" 2>/dev/null
+    else
+      wget -qO "$dest" --header="Authorization: Bearer $token" "$url"
+    fi
+    return
+  fi
+  if [[ -n "$quiet" ]]; then
+    return 1
+  fi
+  echo "Error: neither curl nor wget is available. Please install one and retry." >&2
+  exit 1
 }
 
-# Try .bin first (current Unix pre-releases), then .exe (legacy artifacts).
-# Remove fallback once .bin is released
+# Tries .bin first, then .exe for legacy Artifactory artifacts. Remove .exe fallback once .bin is released.
 download_cli_prerelease_artifact() {
   local version="$1"
   local platform="$2"
@@ -79,27 +93,13 @@ download_cli_prerelease_artifact() {
   local url_bin="$BASE_URL/$version/${base}.bin"
   local url_exe="$BASE_URL/$version/${base}.exe"
 
-  if command -v curl &>/dev/null; then
-    if curl -fsSL -H "Authorization: Bearer $token" "$url_bin" -o "$dest" 2>/dev/null; then
-      echo "  $url_bin"
-      return 0
-    fi
-    if curl -fsSL -H "Authorization: Bearer $token" "$url_exe" -o "$dest" 2>/dev/null; then
-      echo "  $url_exe"
-      return 0
-    fi
-  elif command -v wget &>/dev/null; then
-    if wget -qO "$dest" --header="Authorization: Bearer $token" "$url_bin" 2>/dev/null; then
-      echo "  $url_bin"
-      return 0
-    fi
-    if wget -qO "$dest" --header="Authorization: Bearer $token" "$url_exe" 2>/dev/null; then
-      echo "  $url_exe"
-      return 0
-    fi
-  else
-    echo "Error: neither curl nor wget is available. Please install one and retry." >&2
-    exit 1
+  if download_with_auth "$url_bin" "$dest" "$token" quiet; then
+    echo "  $url_bin"
+    return 0
+  fi
+  if download_with_auth "$url_exe" "$dest" "$token" quiet; then
+    echo "  $url_exe"
+    return 0
   fi
 
   echo "Error: could not download sonarqube-cli pre-release (tried .bin and .exe):" >&2

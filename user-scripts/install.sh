@@ -61,21 +61,36 @@ resolve_latest_version() {
   echo "$version"
 }
 
+# Optional third argument "quiet": return 1 on failure instead of exiting (stderr suppressed).
 download() {
   local url="$1"
   local dest="$2"
+  local quiet="${3:-}"
   if command -v curl &>/dev/null; then
-    curl -fsSL "$url" -o "$dest"
-  elif command -v wget &>/dev/null; then
-    wget -qO "$dest" "$url"
-  else
-    echo "Error: neither curl nor wget is available. Please install one and retry." >&2
-    exit 1
+    if [[ -n "$quiet" ]]; then
+      curl -fsSL "$url" -o "$dest" 2>/dev/null
+    else
+      curl -fsSL "$url" -o "$dest"
+    fi
+    return
   fi
+  if command -v wget &>/dev/null; then
+    if [[ -n "$quiet" ]]; then
+      wget -qO "$dest" "$url" 2>/dev/null
+    else
+      wget -qO "$dest" "$url"
+    fi
+    return
+  fi
+  if [[ -n "$quiet" ]]; then
+    return 1
+  fi
+  echo "Error: neither curl nor wget is available. Please install one and retry." >&2
+  exit 1
 }
 
-# Download the CLI from binaries.sonarsource.com (not bundled in the sonar binary).
-# Remove fallback once .bin is released
+# Fetches the CLI from binaries.sonarsource.com (sonar self-update runs this script from GitHub).
+# Tries .bin first, then .exe for legacy CDN builds. Remove .exe fallback once .bin is released.
 download_cli_artifact() {
   local version="$1"
   local platform="$2"
@@ -85,27 +100,13 @@ download_cli_artifact() {
   local url_bin="$BASE_URL/$version/$os/${base}.bin"
   local url_exe="$BASE_URL/$version/$os/${base}.exe"
 
-  if command -v curl &>/dev/null; then
-    if curl -fsSL "$url_bin" -o "$dest" 2>/dev/null; then
-      echo "  $url_bin"
-      return 0
-    fi
-    if curl -fsSL "$url_exe" -o "$dest" 2>/dev/null; then
-      echo "  $url_exe"
-      return 0
-    fi
-  elif command -v wget &>/dev/null; then
-    if wget -qO "$dest" "$url_bin" 2>/dev/null; then
-      echo "  $url_bin"
-      return 0
-    fi
-    if wget -qO "$dest" "$url_exe" 2>/dev/null; then
-      echo "  $url_exe"
-      return 0
-    fi
-  else
-    echo "Error: neither curl nor wget is available. Please install one and retry." >&2
-    exit 1
+  if download "$url_bin" "$dest" quiet; then
+    echo "  $url_bin"
+    return 0
+  fi
+  if download "$url_exe" "$dest" quiet; then
+    echo "  $url_exe"
+    return 0
   fi
 
   echo "Error: could not download sonarqube-cli (tried .bin and .exe):" >&2
