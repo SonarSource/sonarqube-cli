@@ -1,11 +1,7 @@
 ---
 name: Update release channel
 
-# Manual ops: re-point a release channel pointer (stable/beta/rc) at a given version.
-# The automated `latest` promotion happens as a follow-up job in the release workflow.
-#
-# Requires a GitHub Environment named `release-channel-admin` configured with required reviewers.
-# Without that gate, anyone with write access to the repo could re-point a production channel.
+# Manual ops: re-point the dogfood release channel pointer at a given version.
 
 on:
   workflow_dispatch:
