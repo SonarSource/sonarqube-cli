@@ -26,6 +26,7 @@ import {
   type IntegrationContext,
   jsonPatch,
   type PlatformSpecificContent,
+  sonarSecretsBinaryDependency,
   wholeFile,
 } from '../registry';
 
@@ -75,6 +76,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
     id: 'sonar-secrets-hooks',
     displayName: 'secrets hooks',
     when: ({ options }) => options.installSecretsHooks === true,
+    dependencies: [sonarSecretsBinaryDependency],
     resources: [
       ...config.scripts.map((script) =>
         wholeFile({

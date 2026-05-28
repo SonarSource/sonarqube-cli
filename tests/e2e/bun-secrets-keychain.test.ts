@@ -34,6 +34,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from '
 
 import { generateKeychainAccount } from '../../src/lib/keychain';
 import { getDefaultState } from '../../src/lib/state';
+import { addOrUpdateConnection } from '../../src/lib/state-manager';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../integration/harness';
 import { getCliBinaryPath, runCli } from '../integration/harness/cli-runner';
 import { buildHomeEnv } from '../integration/harness/platform';
@@ -85,6 +86,22 @@ function writeState(cliHome: string): void {
   writeFileSync(join(cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
 }
 
+async function setupAuth(ctx: E2eContext): Promise<string> {
+  const token = 'e2e-token';
+  const serverUrl = ctx.server.baseUrl();
+  const account = generateKeychainAccount(serverUrl);
+  ctx.trackedAccounts.add(account);
+
+  await Bun.secrets.set({ service: ctx.serviceName, name: account, value: token });
+
+  const state = getDefaultState('e2e-test');
+  state.telemetry.enabled = false;
+  addOrUpdateConnection(state, serverUrl, 'on-premise');
+  writeFileSync(join(ctx.cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
+
+  return account;
+}
+
 describe('Bun.secrets keychain via CLI', () => {
   let ctx: E2eContext;
 
@@ -120,43 +137,13 @@ describe('Bun.secrets keychain via CLI', () => {
     rmSync(ctx.tempDir, { recursive: true, force: true });
   });
 
-  it('auth login --with-token stores a token in the OS keychain', async () => {
-    const env = buildEnv(ctx);
-    const result = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Authentication successful');
-
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    const stored = await Bun.secrets.get({ service: ctx.serviceName, name: account });
-    expect(stored).toBe('e2e-token');
-  });
-
   it('auth logout removes the token from the OS keychain', async () => {
     const env = buildEnv(ctx);
+    const account = await setupAuth(ctx);
 
-    // Login first
-    const loginResult = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-    expect(loginResult.exitCode).toBe(0);
-
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    // Verify the token was stored
     const stored = await Bun.secrets.get({ service: ctx.serviceName, name: account });
     expect(stored).toBe('e2e-token');
 
-    // Logout
     const logoutResult = await runCli('auth logout', env, { cwd: ctx.cwd });
     expect(logoutResult.exitCode).toBe(0);
     expect(logoutResult.stdout).toContain('Logged out');
@@ -167,19 +154,8 @@ describe('Bun.secrets keychain via CLI', () => {
 
   it('auth purge removes all tokens from the OS keychain', async () => {
     const env = buildEnv(ctx);
+    const account = await setupAuth(ctx);
 
-    // Login to a server
-    const loginResult = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-    expect(loginResult.exitCode).toBe(0);
-
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    // Purge with confirmation
     const purgeResult = await runCli('auth purge', env, { cwd: ctx.cwd, stdin: 'y\n' });
     expect(purgeResult.exitCode).toBe(0);
 
@@ -189,19 +165,10 @@ describe('Bun.secrets keychain via CLI', () => {
 
   it('auth status reports connected when token exists in OS keychain', async () => {
     const env = buildEnv(ctx);
+    const account = await setupAuth(ctx);
 
-    // Login first
-    const loginResult = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-    expect(loginResult.exitCode).toBe(0);
+    expect(await Bun.secrets.get({ service: ctx.serviceName, name: account })).toBe('e2e-token');
 
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    // Check status
     const statusResult = await runCli('auth status', env, { cwd: ctx.cwd });
     expect(statusResult.exitCode).toBe(0);
     expect(statusResult.stdout).toContain('Connected');

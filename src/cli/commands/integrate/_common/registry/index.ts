@@ -21,6 +21,14 @@
 import type { IntegrationDeclaration } from './types';
 
 export {
+  type DependencyDeclaration,
+  sonarSecretsBinaryDependency,
+  SonarSourceBinary,
+  sonarSourceBinary,
+  type SonarSourceBinaryDependencyOptions,
+  type SonarSourceBinaryDescriptor,
+} from './dependencies';
+export {
   installIntegration,
   type InstallIntegrationOptions,
   IntegrationInstaller,
@@ -31,10 +39,6 @@ export {
   type JsonPatchOptions,
   type PlatformSpecificContent,
   type ResourceDeclaration,
-  SonarSourceBinary,
-  sonarSourceBinary,
-  type SonarSourceBinaryDescriptor,
-  type SonarSourceBinaryResourceOptions,
   textSnippet,
   type TextSnippetResourceOptions,
   wholeFile,
@@ -49,6 +53,7 @@ export type {
   AppliedResource,
   FeatureDeclaration,
   FeatureOperation,
+  InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationInvocation,
@@ -84,6 +89,10 @@ export class IntegrationRegistry {
     for (const feature of declaration.features) {
       this.ensureNonEmptyId(feature.id, 'Feature');
       this.ensureUnique(
+        (feature.dependencies ?? []).map((dependency) => dependency.id),
+        `Duplicate dependency id in feature ${declaration.id}.${feature.id}`,
+      );
+      this.ensureUnique(
         (feature.resources ?? []).map((resource) => resource.id),
         `Duplicate resource id in feature ${declaration.id}.${feature.id}`,
       );
@@ -91,6 +100,9 @@ export class IntegrationRegistry {
         (feature.operations ?? []).map((operation) => operation.id),
         `Duplicate operation id in feature ${declaration.id}.${feature.id}`,
       );
+      for (const dependency of feature.dependencies ?? []) {
+        this.ensureNonEmptyId(dependency.id, 'Dependency');
+      }
       for (const resource of feature.resources ?? []) {
         this.ensureNonEmptyId(resource.id, 'Resource');
       }

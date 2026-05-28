@@ -38,7 +38,7 @@ To add a new command: add it to `src/cli/command-tree.ts` and implement the logi
 Please declare commands using the type defined in `src/cli/commands/_common/sonar-command.ts`.
 By default, new commands should register a `authenticatedAction()`, only technical commands will use `anonymousAction()`.
 
-Declarative integration registry helpers live in `src/cli/commands/integrate/_common/registry/index.ts`. New integration descriptors should use that public entrypoint for resource factories, operations, and registry validation. Command handlers should keep command-specific validation, prompts, and target resolution thin, then delegate feature selection, generic install messages, resource/operation application, and state recording to `src/cli/commands/integrate/_common/installer.ts`.
+Declarative integration registry helpers live in `src/cli/commands/integrate/_common/registry/index.ts`. New integration descriptors should use that public entrypoint for dependency/resource factories, operations, and registry validation. Command handlers should keep command-specific validation, prompts, and target resolution thin, then delegate feature selection, generic install messages, dependency/resource application, and state recording to `src/cli/commands/integrate/_common/installer.ts`.
 
 ### Context Augmentation
 
@@ -67,13 +67,13 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 ## State and auth
 
 - Persistent state (server URL, org, project) is managed via `src/lib/state-manager.ts`.
-- Declarative integration installs are tracked as integration entries in the top-level `integrations.installed` state registry, with installed feature targets nested under each integration. This is the generic state surface for Git, Claude, Codex, Copilot, and future integrations; legacy `agents` and `agentExtensions` remain for compatibility.
+- Declarative integration installs are tracked as integration entries in the top-level `integrations.installed` state registry, with installed feature targets nested under each integration. Shared declarative dependencies (for example SonarSource binaries required by multiple features) are recorded separately in `dependencies.installed` and referenced from features by id. This is the generic state surface for Git, Claude, Codex, Copilot, and future integrations; legacy `agents` and `agentExtensions` remain for compatibility.
 - Tokens are stored in the system keychain via `src/lib/keychain.ts` — never store tokens in plain files.
 - All path and URL constants live in `src/lib/config-constants.ts` — import from there instead of hardcoding.
 - Caller-agent hints (Cursor, Claude Code, or Copilot CLI) from the environment: `src/lib/agent-detector.ts` (`detectCallerAgent`, etc.).
 - `sonar auth logout` relies on state: if there is no active connection or `isAuthenticated` is false, it only reports that you are already logged out (no keychain changes).
-- When `sonar auth login` runs the browser-based OAuth flow, the server-generated token name returned in the callback POST body is captured and persisted on the connection as `tokenName` (see `AuthConnection` in `src/lib/state.ts`). The wire field is `name` (matching `/api/user_tokens/revoke?name=`); we keep it as `tokenName` in-memory to disambiguate from other "name" fields. Tokens supplied via `--with-token` are not assigned a `tokenName`.
-- On `sonar auth logout`, the CLI best-effort revokes the server-side token via `SonarQubeClient.revokeUserToken(...)` (a one-line wrapper over the generic `postForm(endpoint, params)` helper) before clearing the keychain entry. Failures (network error, non-2xx response) are reported via a warning on stderr; local cleanup still proceeds. When the connection has no `tokenName` (e.g. authenticated with `--with-token`, or upgraded from an older CLI), the CLI emits a manual-revocation hint on stderr instead.
+- When `sonar auth login` runs the browser-based OAuth flow, the server-generated token name returned in the callback POST body is captured and persisted on the connection as `tokenName` (see `AuthConnection` in `src/lib/state.ts`). The wire field is `name` (matching `/api/user_tokens/revoke?name=`); we keep it as `tokenName` in-memory to disambiguate from other "name" fields.
+- On `sonar auth logout`, the CLI best-effort revokes the server-side token via `SonarQubeClient.revokeUserToken(...)` (a one-line wrapper over the generic `postForm(endpoint, params)` helper) before clearing the keychain entry. Failures (network error, non-2xx response) are reported via a warning on stderr; local cleanup still proceeds. When the connection has no `tokenName` (e.g. upgraded from an older CLI version), the CLI emits a manual-revocation hint on stderr instead.
 
 ## Tests
 

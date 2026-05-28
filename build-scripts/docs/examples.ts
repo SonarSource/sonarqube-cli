@@ -61,12 +61,8 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Interactive login for SonarQube Cloud with browser',
     },
     {
-      command: 'sonar auth login -o my-org -t squ_abc123',
-      description: 'Non-interactive login with direct token',
-    },
-    {
-      command: 'sonar auth login -s https://my-sonarqube.io --with-token squ_def456',
-      description: 'Non-interactive login for SonarQube Server with token',
+      command: 'sonar auth login -s https://sonarqube.my.com/sonarqube',
+      description: 'Interactive login for SonarQube Server with browser with a server specified',
     },
   ],
   'sonar auth logout': [

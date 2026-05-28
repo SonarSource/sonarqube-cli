@@ -110,7 +110,7 @@ describe('integrate claude', () => {
         claudeIntegration.features
           .map((feature: { featureId: string }) => feature.featureId)
           .sort(),
-      ).toEqual(['mcp-server', 'sonar-secrets-binary', 'sonar-secrets-hooks']);
+      ).toEqual(['mcp-server', 'sonar-secrets-hooks']);
 
       const secretsHooksFeature = claudeIntegration.features.find(
         (feature: { featureId: string }) => feature.featureId === 'sonar-secrets-hooks',
@@ -120,6 +120,7 @@ describe('integrate claude', () => {
       );
       expect(secretsHooksFeature).toMatchObject({
         scope: 'project',
+        dependencies: [{ id: 'sonar-secrets' }],
         attrs: {
           projectKey: 'my-project',
           serverUrl: server.baseUrl(),
@@ -135,6 +136,12 @@ describe('integrate claude', () => {
         ],
         operations: [],
       });
+      expect(state.dependencies.installed).toMatchObject([
+        {
+          id: 'sonar-secrets',
+          dependencyType: 'sonarsource-binary',
+        },
+      ]);
     },
     { timeout: 30000 },
   );

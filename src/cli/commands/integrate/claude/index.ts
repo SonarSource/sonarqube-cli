@@ -125,7 +125,6 @@ export async function integrateClaude(
     options: {
       ...options,
       projectRoot: project.rootDir,
-      installBinary: true,
       installSecretsHooks: !skipSecretsHooks,
       installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
       installMcp: true,

@@ -26,6 +26,8 @@ import { loadState, saveState } from '../../../../../lib/repository/state-reposi
 import type {
   CliState,
   InstalledIntegration,
+  InstalledIntegrationDependency,
+  InstalledIntegrationDependencyReference,
   InstalledIntegrationFeature,
   InstalledIntegrationOperation,
   InstalledIntegrationResource,
@@ -35,6 +37,7 @@ import type {
 import { getDefaultState } from '../../../../../lib/state';
 import { info, success, text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
+import type { DependencyDeclaration } from './dependencies';
 import type { IntegrationRegistry } from './index';
 import { supportedIntegrations } from './index';
 import type { ResourceDeclaration } from './resources';
@@ -44,12 +47,15 @@ import type {
   AppliedResource,
   FeatureDeclaration,
   FeatureOperation,
+  InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationInvocation,
 } from './types';
 
 interface ApplyFeatureCallbacks {
+  onDependencyInstalled?: (dependency: DependencyDeclaration) => void;
+  onDependencySkipped?: (dependency: DependencyDeclaration) => void;
   onResourceInstalled?: (resource: ResourceDeclaration) => void;
   onResourceSkipped?: (resource: ResourceDeclaration) => void;
   onOperationApplied?: (operation: FeatureOperation) => void;
@@ -105,6 +111,27 @@ export class IntegrationInstaller {
     return state.integrations.installed.find((entry) => entry.integrationId === integration.id);
   }
 
+  findInstalledDependency(
+    state: CliState,
+    dependency: DependencyDeclaration,
+  ): InstalledIntegrationDependency | undefined {
+    return state.dependencies.installed.find((entry) => entry.id === dependency.id);
+  }
+
+  async dependencyNeedsInstall(
+    context: IntegrationContext,
+    dependency: DependencyDeclaration,
+  ): Promise<boolean> {
+    const installedDependency = this.findInstalledDependency(context.state, dependency);
+    if (!installedDependency) {
+      return true;
+    }
+    if (installedDependency.version !== dependency.version) {
+      return true;
+    }
+    return !(await dependency.isInstalled(context));
+  }
+
   async resourceNeedsApply(
     context: IntegrationContext,
     installedFeature: InstalledIntegrationFeature | undefined,
@@ -136,8 +163,18 @@ export class IntegrationInstaller {
     feature: FeatureDeclaration<TOptions>,
     callbacks: ApplyFeatureCallbacks = {},
   ): Promise<AppliedFeature> {
+    const dependencies: InstalledDependency[] = [];
     const resources: AppliedResource[] = [];
     const operations: AppliedOperation[] = [];
+
+    for (const dependency of feature.dependencies ?? []) {
+      if (!(await this.dependencyNeedsInstall(context, dependency))) {
+        callbacks.onDependencySkipped?.(dependency);
+        continue;
+      }
+      dependencies.push(await dependency.install(context));
+      callbacks.onDependencyInstalled?.(dependency);
+    }
 
     for (const resource of feature.resources ?? []) {
       if (!(await this.resourceNeedsApply(context, installedFeature, resource))) {
@@ -157,7 +194,7 @@ export class IntegrationInstaller {
       callbacks.onOperationApplied?.(operation);
     }
 
-    return { resources, operations };
+    return { dependencies, resources, operations };
   }
 
   async applyAndRecordFeature<TOptions>(
@@ -199,6 +236,10 @@ export class IntegrationInstaller {
       installedAt: existing?.installedAt ?? now,
       updatedByCliVersion: VERSION,
       updatedAt: now,
+      dependencies: this.upsertDependencyReferences(
+        existing?.dependencies ?? [],
+        new Set((feature.dependencies ?? []).map((dependency) => dependency.id)),
+      ),
       resources: this.upsertResources(
         existing?.resources ?? [],
         applied.resources,
@@ -216,11 +257,18 @@ export class IntegrationInstaller {
 
     if (existing) {
       Object.assign(existing, next);
-      return existing;
+    } else {
+      installedIntegration.features.push(next);
     }
 
-    installedIntegration.features.push(next);
-    return next;
+    state.dependencies.installed = this.upsertDependencies(
+      state.dependencies.installed,
+      applied.dependencies,
+      now,
+      this.collectReferencedDependencyIds(state),
+    );
+
+    return existing ?? next;
   }
 
   private upsertInstalledIntegration<TOptions>(
@@ -246,6 +294,42 @@ export class IntegrationInstaller {
     };
     state.integrations.installed.push(next);
     return next;
+  }
+
+  private upsertDependencyReferences(
+    existing: InstalledIntegrationDependencyReference[],
+    declaredIds: Set<string>,
+  ): InstalledIntegrationDependencyReference[] {
+    return existing
+      .filter((dependency) => declaredIds.has(dependency.id))
+      .concat(
+        [...declaredIds]
+          .filter((id) => !existing.some((dependency) => dependency.id === id))
+          .map((id) => ({ id })),
+      );
+  }
+
+  private upsertDependencies(
+    existing: InstalledIntegrationDependency[],
+    applied: InstalledDependency[],
+    now: string,
+    referencedIds: Set<string>,
+  ): InstalledIntegrationDependency[] {
+    const dependencies = existing.filter((dependency) => referencedIds.has(dependency.id));
+    for (const dependency of applied) {
+      const next: InstalledIntegrationDependency = {
+        ...dependency,
+        updatedByCliVersion: VERSION,
+        updatedAt: now,
+      };
+      const index = dependencies.findIndex((entry) => entry.id === dependency.id);
+      if (index >= 0) {
+        dependencies[index] = next;
+      } else {
+        dependencies.push(next);
+      }
+    }
+    return dependencies;
   }
 
   private upsertResources(
@@ -293,6 +377,16 @@ export class IntegrationInstaller {
     }
     return operations;
   }
+
+  private collectReferencedDependencyIds(state: CliState): Set<string> {
+    return new Set(
+      state.integrations.installed.flatMap((integration) =>
+        integration.features.flatMap((feature) =>
+          feature.dependencies.map((dependency) => dependency.id),
+        ),
+      ),
+    );
+  }
 }
 
 export const integrationInstaller = new IntegrationInstaller();
@@ -324,6 +418,12 @@ export async function installIntegration<TOptions>({
     );
     text(`Installing ${integration.displayName}: ${feature.displayName}`);
     const applied = await integrationInstaller.applyFeature(context, installedFeature, feature, {
+      onDependencyInstalled: (dependency) => {
+        success(`Installed ${dependency.displayName ?? dependency.id}`);
+      },
+      onDependencySkipped: (dependency) => {
+        info(`${dependency.displayName ?? dependency.id} already installed`);
+      },
       onResourceInstalled: (resource) => {
         success(`Installed ${resource.displayName ?? resource.id}`);
       },

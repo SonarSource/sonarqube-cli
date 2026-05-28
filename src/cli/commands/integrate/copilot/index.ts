@@ -82,7 +82,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   const integrationOptions: CopilotIntegrationOptions = {
     ...options,
     projectRoot: project.rootDir,
-    installBinary: true,
     installHook,
     installInstructions: true,
     installSqaaInstructions: sqaaProjectKey !== undefined,
