@@ -19,9 +19,7 @@ on:
         required: true
         type: choice
         options:
-          - stable
-          - beta
-          - rc
+          - dogfood
 
 jobs:
   update-channel:
