@@ -21,6 +21,7 @@
 export { createIntegrationRegistry, IntegrationRegistry, registerIntegrations } from './core';
 export {
   type DependencyDeclaration,
+  sonarScaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
   SonarSourceBinary,
   sonarSourceBinary,

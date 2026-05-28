@@ -24,17 +24,31 @@ import { existsSync, readFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { join } from 'node:path';
 
+import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
+import { isValidProjectKey, PROJECT_KEY_VALIDATION_ERROR } from '../../../../lib/project-key.ts';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, info, intro, note, selectPrompt, text, warn } from '../../../../ui';
+import { SonarQubeClient } from '../../../../sonarqube/client';
+import {
+  blank,
+  confirmPrompt,
+  info,
+  intro,
+  note,
+  promptUntilValid,
+  selectPrompt,
+  text,
+  warn,
+} from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
+import { assertScaAvailable } from '../../_common/sca-availability';
 import { installIntegration } from '../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from './options';
 import {
   hasSonarHookInPreCommitConfig,
-  HOOK_MARKER,
+  hasSonarHookMarker,
   HUSKY_INTEGRATION_ID,
   NATIVE_GIT_INTEGRATION_ID,
   PRE_COMMIT_CONFIG_FILE,
@@ -55,7 +69,7 @@ export function isGitHookType(s: string): s is GitHookType {
 // ---------------------------------------------------------------------------
 
 export function hasMarker(filePath: string): boolean {
-  return existsSync(filePath) && readFileSync(filePath, 'utf-8').includes(HOOK_MARKER);
+  return existsSync(filePath) && hasSonarHookMarker(readFileSync(filePath, 'utf-8'));
 }
 
 interface HookInstallation {
@@ -98,10 +112,77 @@ export function validateHookOption(hook: string | undefined): void {
   }
 }
 
+/** Rejects an invalid project key for the given option name */
+export function validateProjectKeyOption(optionName: string, key: string | undefined): void {
+  if (key === undefined) return;
+  if (!isValidProjectKey(key.trim())) {
+    throw new InvalidOptionError(`${optionName}: ${PROJECT_KEY_VALIDATION_ERROR}`);
+  }
+}
+
+/** `--with-dependency-risks` requires `--project` in non-interactive mode and is only meaningful for the pre-push hook. */
+export function validateDependencyRisksOption(options: IntegrateGitOptions): void {
+  if (!options.withDependencyRisks) return;
+  if (options.nonInteractive && !options.project) {
+    throw new InvalidOptionError('--with-dependency-risks requires -p <project>');
+  }
+  if (options.hook !== undefined && options.hook !== 'pre-push') {
+    throw new InvalidOptionError(
+      '--with-dependency-risks can only be combined with --hook pre-push',
+    );
+  }
+}
+
+export interface OptionalFeatures {
+  dependencyRisks: boolean;
+}
+
+/**
+ * Resolves which optional pre-push features to install. Uses the `--with-dependency-risks` flag
+ * when set; otherwise confirms with the user in interactive mode.
+ */
+export async function resolveOptionalFeatures(
+  options: IntegrateGitOptions,
+  hook: GitHookType,
+): Promise<OptionalFeatures> {
+  if (hook !== 'pre-push') return { dependencyRisks: false };
+  if (options.withDependencyRisks) return { dependencyRisks: true };
+  if (options.nonInteractive) return { dependencyRisks: false };
+
+  const enable = await confirmPrompt(
+    'Also install pre-push dependency-risks scanning? (Requires SCA-enabled SonarQube project)',
+    false,
+  );
+  return { dependencyRisks: enable === true };
+}
+
+/**
+ * Resolves the project key needed by analysis features. Uses `--project` if provided and valid;
+ * otherwise prompts once with a generic message.
+ */
+export async function resolveProjectKey(options: IntegrateGitOptions): Promise<string | null> {
+  if (options.project !== undefined && isValidProjectKey(options.project.trim())) {
+    return options.project.trim();
+  }
+  if (options.project !== undefined) {
+    warn(`Invalid project key '${options.project}': ${PROJECT_KEY_VALIDATION_ERROR}`);
+  }
+  text('A project key is required to run analysis.');
+  const value = await promptUntilValid(
+    'Project key:',
+    (v) => isValidProjectKey(v.trim()),
+    PROJECT_KEY_VALIDATION_ERROR,
+  );
+  return value?.trim() ?? null;
+}
+
 /**
  * Validates and returns explicit `--hook`, or `pre-commit` when non-interactive with no hook, or prompts to select.
  */
-export async function resolveHookType(options: IntegrateGitOptions): Promise<GitHookType> {
+export async function resolveHookType(
+  options: IntegrateGitOptions,
+  prePushLabel = 'pre-push (scan files in unpushed commits)',
+): Promise<GitHookType> {
   if (options.hook !== undefined) {
     return options.hook;
   }
@@ -117,7 +198,7 @@ export async function resolveHookType(options: IntegrateGitOptions): Promise<Git
       },
       {
         value: 'pre-push' as const,
-        label: 'pre-push (scan files in unpushed commits)',
+        label: prePushLabel,
       },
     ],
   );
@@ -176,6 +257,12 @@ export async function showInstallationStatus(root: string): Promise<void> {
 
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   validateHookOption(options.hook);
+  if (options.nonInteractive) validateProjectKeyOption('--project', options.project);
+  if (options.withDependencyRisks) {
+    throw new InvalidOptionError(
+      '--with-dependency-risks is not supported with --global; install per project instead',
+    );
+  }
 
   warn('Global hook installation');
   text('  Git prioritizes local repository settings over global ones.');
@@ -197,6 +284,10 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   }
   blank();
 
+  warn('Dependency risks analysis is not available with the global hook.');
+  text('  To run dependency risks analysis, install a repository-based pre-push hook instead.');
+  blank();
+
   const hook = await resolveHookType(options);
   text(`Hook: ${hook}`);
   blank();
@@ -206,8 +297,13 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   showVerificationGuide(hook);
 }
 
-export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
+export async function integrateGit(
+  auth: ResolvedAuth,
+  options: IntegrateGitOptions,
+): Promise<void> {
   validateHookOption(options.hook);
+  if (options.nonInteractive) validateProjectKeyOption('--project', options.project);
+  validateDependencyRisksOption(options);
 
   intro('SonarQube Git integration (secrets scanning)');
   blank();
@@ -235,11 +331,43 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   }
   blank();
 
-  const hook = await resolveHookType(options);
+  const hook = await resolveHookType(
+    options,
+    'pre-push (scan files in unpushed commits, supports analysis of dependency risks)',
+  );
   text(`Hook: ${hook}`);
   blank();
 
-  await installGitFeatures({ ...options, hook }, gitRoot, 'project');
+  const features = await resolveOptionalFeatures(options, hook);
+
+  const depRisksEnabled = features.dependencyRisks;
+  const projectKey = depRisksEnabled ? await resolveProjectKey(options) : undefined;
+
+  const installDepRisks = depRisksEnabled && projectKey != null;
+
+  if (installDepRisks) {
+    const client = new SonarQubeClient(auth.serverUrl, auth.token);
+    if (!(await client.checkComponent(projectKey))) {
+      throw new CommandFailedError(`Project '${projectKey}' not found on the connected server.`);
+    }
+    await assertScaAvailable(client, auth);
+  }
+
+  if (installDepRisks) {
+    text(`Dependency-risks scanning: enabled for project '${projectKey}'`);
+    blank();
+  }
+
+  await installGitFeatures(
+    {
+      ...options,
+      hook,
+      withDependencyRisks: installDepRisks,
+      project: projectKey ?? undefined,
+    },
+    gitRoot,
+    'project',
+  );
 
   showPostInstallInfo(hook);
   await showInstallationStatus(gitRoot);
@@ -252,15 +380,17 @@ async function installGitFeatures(
   scope: 'project' | 'global',
 ): Promise<void> {
   const integrationId = await resolveGitIntegrationId(targetRoot, scope);
+  const attrs: Record<string, string> = { hook: options.hook };
+  if (options.withDependencyRisks && options.project && options.hook === 'pre-push') {
+    attrs.dependencyRisksProject = options.project;
+  }
   await installIntegration({
     integrationId,
     options,
     targetRoot,
     scope,
     force: options.force,
-    attrs: {
-      hook: options.hook,
-    },
+    attrs,
   });
 }
 

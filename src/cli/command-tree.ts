@@ -61,7 +61,7 @@ import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
-import { gitPrePush } from './commands/hook/git-pre-push';
+import { gitPrePush, type GitPrePushOptions } from './commands/hook/git-pre-push';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateClaude } from './commands/integrate/claude';
 import { integrateCodex } from './commands/integrate/codex';
@@ -160,23 +160,6 @@ const integrateCommand = COMMAND_TREE.command('integrate').description(
   'Setup SonarQube integration for AI coding agents, git and others.',
 );
 
-integrateCommand
-  .command('git')
-  .description(
-    'Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
-  )
-  .option(
-    '--hook <type>',
-    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)',
-  )
-  .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
-  .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option(
-    '--global',
-    'Install hook globally for all repositories (sets git config --global core.hooksPath)',
-  )
-  .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
-
 const projectKeyExtraHelp = `
 Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
 Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for example .sonarlint/connectedMode.json) that includes projectKey.
@@ -195,6 +178,28 @@ integrateCommand
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
+
+integrateCommand
+  .command('git')
+  .description(
+    'Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).',
+  )
+  .option(
+    '--hook <type>',
+    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)',
+  )
+  .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '--global',
+    'Install hook globally for all repositories (sets git config --global core.hooksPath)',
+  )
+  .option('-p, --project <project>', 'Project key for dependency-risks scanning')
+  .option(
+    '--with-dependency-risks',
+    'Also install a pre-push dependency-risks scan (requires --hook pre-push and -p <project>)',
+  )
+  .authenticatedAction((auth, options: IntegrateGitOptions) => integrateGit(auth, options));
 
 integrateCommand
   .command('copilot')
@@ -471,8 +476,15 @@ hookCommand
 
 hookCommand
   .command('git-pre-push')
-  .description('git pre-push handler: scan files in new commits for secrets')
-  .anonymousAction(() => gitPrePush());
+  .description(
+    'git pre-push handler: scan files in new commits for secrets, optionally scan dependency manifests for risks',
+  )
+  .option('-p, --project <project>', 'Project key (required when --dependency-risks is set)')
+  .option(
+    '--dependency-risks',
+    'Also run a dependency-risks scan after the secrets scan (requires -p)',
+  )
+  .anonymousAction((options: GitPrePushOptions) => gitPrePush(options));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {

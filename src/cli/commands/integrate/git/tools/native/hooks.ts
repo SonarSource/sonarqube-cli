@@ -25,8 +25,8 @@ import { dirname, join } from 'node:path';
 import { success, text, warn } from '../../../../../../ui';
 import { CommandFailedError } from '../../../../_common/error';
 import type { GitHookType } from '../../options';
-import { HOOK_MARKER } from '../shared';
-import { getHookScript } from './shell-fragments';
+import { hasSonarHookMarker } from '../shared';
+import { getHookScript, type HookScriptOptions } from './shell-fragments';
 
 const OVERWRITE_HOOK_REMEDIATION_HINT = 'Use --force to replace the existing hook.';
 
@@ -34,11 +34,12 @@ export async function writeManagedGitHook(
   hookPath: string,
   hook: GitHookType,
   force?: boolean,
+  scriptOptions: HookScriptOptions = {},
 ): Promise<void> {
   mkdirSync(dirname(hookPath), { recursive: true });
   if (existsSync(hookPath)) {
     const existing = await fs.readFile(hookPath, 'utf-8');
-    if (!existing.includes(HOOK_MARKER) && !force) {
+    if (!hasSonarHookMarker(existing) && !force) {
       warn(`A different ${hook} hook already exists at ${hookPath}.`);
       text('  Use --force to replace it.');
       throw new CommandFailedError(`Refusing to overwrite existing ${hook} hook at ${hookPath}.`, {
@@ -46,15 +47,16 @@ export async function writeManagedGitHook(
       });
     }
   }
-  await fs.writeFile(hookPath, getHookScript(hook), { mode: 0o755 });
+  await fs.writeFile(hookPath, getHookScript(hook, scriptOptions), { mode: 0o755 });
 }
 
 export async function installViaGitHooks(
   hooksDir: string,
   hook: GitHookType,
   force?: boolean,
+  scriptOptions: HookScriptOptions = {},
 ): Promise<void> {
   const hookPath = join(hooksDir, hook);
-  await writeManagedGitHook(hookPath, hook, force);
+  await writeManagedGitHook(hookPath, hook, force, scriptOptions);
   success(`${hook} hook installed at ${hookPath}`);
 }

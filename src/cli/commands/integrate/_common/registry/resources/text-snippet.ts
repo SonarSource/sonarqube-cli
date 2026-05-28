@@ -30,10 +30,11 @@ import {
 
 export interface TextSnippetResourceOptions extends BaseResourceOptions {
   targetPath: PathResolver;
-  content: string;
+  content: string | ((context: IntegrationContext) => string);
   executable?: boolean;
   startMarker: string;
   endMarker?: string;
+  legacyStartMarkers?: string[];
 }
 
 export function textSnippet(options: TextSnippetResourceOptions): ResourceDeclaration {
@@ -54,7 +55,11 @@ export class TextSnippet implements ResourceDeclaration {
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
     const path = await resolvePath(context, this.options.targetPath);
-    await writeFileIfChanged(path, await this.renderContent(path), this.options.executable);
+    await writeFileIfChanged(
+      path,
+      await this.renderContent(path, context),
+      this.options.executable,
+    );
     return { id: this.id, resourceType: this.resourceType, version: this.version, path };
   }
 
@@ -64,12 +69,12 @@ export class TextSnippet implements ResourceDeclaration {
     if (existing === undefined) {
       return false;
     }
-    return existing.includes(this.renderManagedBlock());
+    return existing.includes(this.renderManagedBlock(context));
   }
 
-  private async renderContent(path: string): Promise<string> {
+  private async renderContent(path: string, context: IntegrationContext): Promise<string> {
     const existing = (await readTextFile(path)) ?? '';
-    const managedBlock = this.renderManagedBlock();
+    const managedBlock = this.renderManagedBlock(context);
     const pattern = new RegExp(
       String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
     );
@@ -82,11 +87,22 @@ export class TextSnippet implements ResourceDeclaration {
       return `${existing.slice(0, startMarkerIndex)}${managedBlock}\n`;
     }
 
+    for (const legacyMarker of this.options.legacyStartMarkers ?? []) {
+      const legacyIndex = existing.indexOf(legacyMarker);
+      if (legacyIndex >= 0) {
+        return `${existing.slice(0, legacyIndex)}${managedBlock}\n`;
+      }
+    }
+
     return appendBlock(existing, managedBlock);
   }
 
-  private renderManagedBlock(): string {
-    return `${this.startMarker}\n${this.options.content.trimEnd()}\n${this.endMarker}`;
+  private renderManagedBlock(context: IntegrationContext): string {
+    const content =
+      typeof this.options.content === 'function'
+        ? this.options.content(context)
+        : this.options.content;
+    return `${this.startMarker}\n${content.trimEnd()}\n${this.endMarker}`;
   }
 
   private get startMarker(): string {

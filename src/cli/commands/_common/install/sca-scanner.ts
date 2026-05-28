@@ -28,7 +28,12 @@ import {
   SONARSOURCE_PUBLIC_KEY,
 } from '../../../../lib/signatures';
 import { success } from '../../../../ui';
-import { type BinarySpec, buildLocalBinaryName as buildBinaryName, installBinary } from './binary';
+import {
+  type BinarySpec,
+  buildLocalBinaryName as buildBinaryName,
+  installBinary,
+  resolveBinaryPath,
+} from './binary';
 
 export const SCA_SCANNER_SPEC: BinarySpec = {
   name: SCA_SCANNER_BINARY_NAME,
@@ -50,6 +55,14 @@ export function buildLocalBinaryName(platformInfo: PlatformInfo): string {
   return buildBinaryName(SCA_SCANNER_SPEC, platformInfo);
 }
 
+/**
+ * Returns the path to the installed sca-scanner binary, or null if not present.
+ * Never downloads — use this where silent operation is required (e.g. hook handlers).
+ */
+export function resolveScaScannerBinaryPath(): string | null {
+  return resolveBinaryPath(SCA_SCANNER_SPEC);
+}
+
 export interface ScaScannerInstaller {
   install(): Promise<string>;
 }
@@ -57,5 +70,12 @@ export interface ScaScannerInstaller {
 export class DefaultScaScannerInstaller implements ScaScannerInstaller {
   install(): Promise<string> {
     return installScaScannerBinary();
+  }
+}
+
+export class ScaScannerNoopInstaller implements ScaScannerInstaller {
+  constructor(private readonly binaryPath: string) {}
+  install(): Promise<string> {
+    return Promise.resolve(this.binaryPath);
   }
 }

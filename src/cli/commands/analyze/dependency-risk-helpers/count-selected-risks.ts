@@ -18,13 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type { BaseDependencyOptions, DependencyDeclaration } from './common';
-export {
-  sonarScaScannerBinaryDependency,
-  sonarSecretsBinaryDependency,
-  SonarSourceBinary,
-  sonarSourceBinary,
-  SonarSourceBinaryDependency,
-  type SonarSourceBinaryDependencyOptions,
-  type SonarSourceBinaryDescriptor,
-} from './sonarsource-binary';
+import type { DependencyRisksViewModel } from './view-model';
+import type { RiskVM } from './view-model/risk';
+
+export function countSelectedRisks(
+  vm: DependencyRisksViewModel,
+  predicate: (risk: RiskVM) => boolean = () => true,
+): number {
+  let count = 0;
+  for (const pkg of vm.packages) {
+    for (const group of pkg.groups) {
+      count += group.selectedRisks.filter(predicate).length;
+    }
+  }
+  return count;
+}

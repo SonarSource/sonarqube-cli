@@ -106,7 +106,8 @@
     "js-yaml": "^4.1.1",
     "openpgp": "^6.0.0",
     "picocolors": "^1.1.1",
-    "smol-toml": "^1.6.1"
+    "smol-toml": "^1.6.1",
+    "picomatch": "^4.0.3"
   },
   "devDependencies": {
     "@sentry/cli": "3.4.2",
@@ -117,6 +118,7 @@
     "@types/istanbul-lib-report": "3.0.3",
     "@types/istanbul-reports": "3.0.4",
     "@types/js-yaml": "^4.0.9",
+    "@types/picomatch": "^4.0.2",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
     "ajv": "^8.18.0",

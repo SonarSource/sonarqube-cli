@@ -18,13 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type { BaseDependencyOptions, DependencyDeclaration } from './common';
-export {
-  sonarScaScannerBinaryDependency,
-  sonarSecretsBinaryDependency,
-  SonarSourceBinary,
-  sonarSourceBinary,
-  SonarSourceBinaryDependency,
-  type SonarSourceBinaryDependencyOptions,
-  type SonarSourceBinaryDescriptor,
-} from './sonarsource-binary';
+import { red } from '../ui/colors.ts';
+
+const PROJECT_KEY_REGEX = /^[a-zA-Z0-9\-_.:]{1,400}$/;
+
+export const PROJECT_KEY_VALIDATION_ERROR = red(
+  'Project key may only contain letters, digits, dash, underscore, period, or colon, and must be at most 400 characters.',
+);
+
+export function isValidProjectKey(key: string): boolean {
+  return PROJECT_KEY_REGEX.test(key);
+}
