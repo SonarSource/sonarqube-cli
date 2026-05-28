@@ -56,4 +56,16 @@ describe('derivePassthroughSubcommand', () => {
   it('returns null when only option flags are passed without any positional', () => {
     expect(derivePassthroughSubcommand(undefined, ['--debug'])).toBeNull();
   });
+
+  it('collapses internal whitespace inside a quoted token', () => {
+    expect(derivePassthroughSubcommand('tool  stop', [])).toBe('tool stop');
+  });
+
+  it('drops empty-string tokens instead of producing double spaces', () => {
+    expect(derivePassthroughSubcommand('tool', ['', 'stop'])).toBe('tool stop');
+  });
+
+  it('returns null when all positional tokens are empty / whitespace', () => {
+    expect(derivePassthroughSubcommand('', ['   '])).toBeNull();
+  });
 });
