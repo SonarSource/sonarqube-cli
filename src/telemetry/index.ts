@@ -30,6 +30,15 @@ import { getOrCreateUserId } from './user.js';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
 
+// Passthrough commands (e.g. `sonar context`) own a single Command node, so the
+// usual parent-chain walk cannot recover the forwarded subcommand. The handler
+// publishes the resolved subcommand here and storeEvent reads it back.
+const passthroughSubcommands = new WeakMap<Command, string | null>();
+
+export function setPassthroughSubcommand(command: Command, subcommand: string | null): void {
+  passthroughSubcommands.set(command, subcommand);
+}
+
 const TELEMETRY_ENDPOINT = 'https://events.sonardata.io/cli';
 const TELEMETRY_API_KEY = 'hJPRohLsOsasZeOhSCSNDiL4h2yR96S5fOWJqRch';
 
@@ -52,7 +61,14 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
     current = current.parent;
   }
   const topCommand = commandNames[0];
-  const subcommand = commandNames.length > 1 ? commandNames.slice(1).join(' ') : null;
+  const commandPathTail = commandNames.slice(1);
+  const fallbackSubcommand = commandPathTail.length > 0 ? commandPathTail.join(' ') : null;
+  let subcommand: string | null;
+  if (passthroughSubcommands.has(command)) {
+    subcommand = passthroughSubcommands.get(command) ?? null;
+  } else {
+    subcommand = fallbackSubcommand;
+  }
 
   const conn = getActiveConnection(state);
   const connectionType: 'sqc' | 'sqs' | null =

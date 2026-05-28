@@ -25,7 +25,12 @@ import { loadState } from '../lib/repository/state-repository';
 import { initSentry } from '../lib/sentry';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
-import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
+import {
+  flushTelemetry,
+  setPassthroughSubcommand,
+  storeEvent,
+  TELEMETRY_FLUSH_MODE_ENV,
+} from '../telemetry';
 import { warn } from '../ui';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
@@ -47,7 +52,7 @@ import { authLogout } from './commands/auth/logout';
 import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
-import { runContextPassthrough } from './commands/context';
+import { derivePassthroughSubcommand, runContextPassthrough } from './commands/context';
 import {
   agentPostToolUse,
   type AgentPostToolUseOptions,
@@ -211,9 +216,10 @@ COMMAND_TREE.command('context')
   .helpOption(false)
   .passThroughOptions()
   .allowUnknownOption()
-  .anonymousAction((action: string | undefined, args: string[]) =>
-    runContextPassthrough(action, args),
-  );
+  .anonymousAction(function (this: SonarCommand, action: string | undefined, args: string[]) {
+    setPassthroughSubcommand(this, derivePassthroughSubcommand(action, args));
+    return runContextPassthrough(action, args);
+  });
 
 integrateCommand
   .command('codex')

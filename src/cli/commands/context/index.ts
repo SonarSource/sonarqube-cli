@@ -51,6 +51,31 @@ function buildForwardedArgs(
   return { forwarded, isHelp };
 }
 
+/**
+ * Derive the telemetry subcommand for a `sonar context` passthrough invocation.
+ * Records `help` for --help/-h, leading positional tokens up to the first flag
+ * for normal actions (e.g. `tool stop` for `tool stop --all`), and null for bare
+ * `sonar context`. Whitespace inside or between tokens is collapsed to a single
+ * space so quoting quirks don't create separate telemetry buckets. Option values
+ * are intentionally never captured.
+ */
+export function derivePassthroughSubcommand(
+  action: string | undefined,
+  args: string[],
+): string | null {
+  const all = action ? [action, ...args] : args;
+  if (all.length === 0) return null;
+  if (all[0] === '--help' || all[0] === '-h') return 'help';
+  const positionals: string[] = [];
+  for (const token of all) {
+    if (token.startsWith('-')) break;
+    for (const word of token.split(/\s+/)) {
+      if (word.length > 0) positionals.push(word);
+    }
+  }
+  return positionals.length > 0 ? positionals.join(' ') : null;
+}
+
 interface RecordedContextAugmentationConfig {
   organization?: string;
   projectKey?: string;
