@@ -1,8 +1,6 @@
 ---
 name: Update release channel
 
-# Manual ops: re-point the dogfood release channel pointer at a given version.
-
 on:
   workflow_dispatch:
     inputs:
