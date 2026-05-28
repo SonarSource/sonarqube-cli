@@ -1,0 +1,37 @@
+---
+name: Update release channel
+
+# Manual ops: re-point a release channel pointer (stable/beta/rc) at a given version.
+# The automated `latest` promotion happens as a follow-up job in the release workflow.
+#
+# Requires a GitHub Environment named `release-channel-admin` configured with required reviewers.
+# Without that gate, anyone with write access to the repo could re-point a production channel.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version the channel should point at (e.g. 0.9.0.977).
+        required: true
+        type: string
+      channel:
+        description: Release channel to update.
+        required: true
+        type: choice
+        options:
+          - stable
+          - beta
+          - rc
+
+jobs:
+  update-channel:
+    runs-on: sonar-xs
+    environment: release-channel-admin
+    permissions:
+      id-token: write   # OIDC → Vault
+      contents: read
+    steps:
+      - uses: SonarSource/ci-github-actions/update-release-channel@0b6af4d68192fa1c371e9327b5f0513949b39119 # v1
+        with:
+          version: ${{ inputs.version }}
+          channel: ${{ inputs.channel }}
