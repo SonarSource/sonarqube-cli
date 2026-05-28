@@ -22,7 +22,6 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { createSonarSecretsBinaryFeature } from '../_common/features/sonar-secrets-binary-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
@@ -55,7 +54,6 @@ export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
-  installBinary?: boolean;
   installSecretsHooks?: boolean;
   installSqaaHook?: boolean;
   installMcp?: boolean;
@@ -65,7 +63,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: 'Claude Code',
   features: [
-    createSonarSecretsBinaryFeature(),
     createSonarSecretsHooksFeature({
       agentDisplayName: 'Claude',
       configDir: CLAUDE_CONFIG_DIR,

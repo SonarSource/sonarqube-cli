@@ -80,7 +80,7 @@ describe('declarative integration framework', () => {
     );
   });
 
-  it('rejects duplicate feature, resource, and operation ids', () => {
+  it('rejects duplicate feature, dependency, resource, and operation ids', () => {
     const registry = new IntegrationRegistry();
 
     expect(() =>
@@ -93,6 +93,23 @@ describe('declarative integration framework', () => {
         }),
       ),
     ).toThrow('Duplicate feature id in integration test-integration');
+
+    expect(() =>
+      registry.register(
+        makeIntegration({
+          features: [
+            {
+              id: 'feature',
+              displayName: 'Feature',
+              dependencies: [
+                sonarSourceBinary({ id: 'same', binary: SonarSourceBinary.SonarSecrets }),
+                sonarSourceBinary({ id: 'same', binary: SonarSourceBinary.SonarSecrets }),
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toThrow('Duplicate dependency id in feature test-integration.feature');
 
     expect(() =>
       registry.register(
@@ -153,6 +170,21 @@ describe('declarative integration framework', () => {
         }),
       ),
     ).toThrow('Feature id must not be empty');
+    expect(() =>
+      registry.register(
+        makeIntegration({
+          features: [
+            {
+              id: 'feature',
+              displayName: 'Feature',
+              dependencies: [
+                sonarSourceBinary({ id: ' ', binary: SonarSourceBinary.SonarSecrets }),
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toThrow('Dependency id must not be empty');
     expect(() =>
       registry.register(
         makeIntegration({
@@ -266,6 +298,12 @@ describe('declarative integration framework', () => {
     const feature: FeatureDeclaration = {
       id: 'feature',
       displayName: 'Feature',
+      dependencies: [
+        sonarSourceBinary({
+          id: 'binary',
+          binary: SonarSourceBinary.SonarSecrets,
+        }),
+      ],
       resources: [
         wholeFile({
           id: 'whole',
@@ -291,10 +329,6 @@ describe('declarative integration framework', () => {
           executable: true,
           startMarker: '# sonar:begin text',
         }),
-        sonarSourceBinary({
-          id: 'binary',
-          binary: SonarSourceBinary.SonarSecrets,
-        }),
       ],
       operations: [
         {
@@ -317,14 +351,22 @@ describe('declarative integration framework', () => {
     expect(state.integrations.installed[0].features).toHaveLength(1);
     expect(state.integrations.installed[0].features[0].attrs?.projectKey).toBe('project');
     expect(state.integrations.installed[0].features[0].targetRoot).toBe(tempDir);
+    expect(second.dependencies).toEqual([{ id: 'binary' }]);
     expect(second.resources.map((resource) => resource.id).sort()).toEqual([
-      'binary',
       'json',
       'text',
       'whole',
       'yaml',
     ]);
     expect(second.operations.map((operation) => operation.id)).toEqual(['operation']);
+    expect(state.dependencies.installed).toMatchObject([
+      {
+        id: 'binary',
+        dependencyType: 'sonarsource-binary',
+        version: SonarSourceBinary.SonarSecrets.spec.version,
+        path: join(tempDir, 'bin', 'sonar-secrets'),
+      },
+    ]);
     expect(operationCalls).toEqual(['operation', 'operation']);
     expect(await readFile(join(tempDir, 'script.sh'), 'utf-8')).toBe('#!/bin/sh\necho sonar\n');
     expect(JSON.parse(await readFile(join(tempDir, 'settings.json'), 'utf-8'))).toEqual({
@@ -614,37 +656,84 @@ describe('declarative integration framework', () => {
     ]);
   });
 
-  it('checks SonarSource binary resources by their descriptor', async () => {
+  it('prunes stale shared dependency state when no installed feature references it', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const legacyFeature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      dependencies: [
+        sonarSourceBinary({
+          id: 'binary',
+          binary: SonarSourceBinary.SonarSecrets,
+        }),
+      ],
+    };
+    const currentFeature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      resources: [
+        wholeFile({
+          id: 'current',
+          targetPath: join(tempDir, 'current.txt'),
+          content: 'current',
+        }),
+      ],
+    };
+
+    await installer.applyAndRecordFeature(
+      context,
+      makeIntegration({ features: [legacyFeature] }),
+      legacyFeature,
+    );
+    const installed = await installer.applyAndRecordFeature(
+      context,
+      makeIntegration({ features: [currentFeature] }),
+      currentFeature,
+    );
+
+    expect(installed.dependencies).toEqual([]);
+    expect(state.dependencies.installed).toEqual([]);
+  });
+
+  it('checks SonarSource binary dependencies by their descriptor', async () => {
     const state = getDefaultState('test');
     const binaryPath = join(tempDir, 'bin', 'sonar-secrets');
-    const resource = sonarSourceBinary({
+    const dependency = sonarSourceBinary({
       id: 'binary',
       binary: SonarSourceBinary.SonarSecrets,
     });
     const context = makeContext(state, tempDir);
 
-    expect(await resource.isApplied(context)).toBe(false);
+    expect(await dependency.isInstalled(context)).toBe(false);
 
     resolveBinaryPathSpy.mockReturnValue(binaryPath);
 
-    expect(await resource.isApplied(context)).toBe(true);
+    expect(await dependency.isInstalled(context)).toBe(true);
 
-    const applied = await resource.apply(context);
+    const applied = await dependency.install(context);
 
     expect(installBinarySpy).toHaveBeenCalledWith(SonarSourceBinary.SonarSecrets.spec);
     expect(applied).toEqual({
       id: 'binary',
-      resourceType: 'sonarsource-binary',
+      dependencyType: 'sonarsource-binary',
       version: SonarSourceBinary.SonarSecrets.spec.version,
       path: binaryPath,
     });
   });
 
-  it('reports whether resources and operations need to be applied', async () => {
+  it('reports whether dependencies, resources, and operations need to be applied', async () => {
     const state = getDefaultState('test');
     const feature: FeatureDeclaration = {
       id: 'feature',
       displayName: 'Feature',
+      dependencies: [
+        sonarSourceBinary({
+          id: 'dependency',
+          version: '1',
+          binary: SonarSourceBinary.SonarSecrets,
+        }),
+      ],
       resources: [
         wholeFile({
           id: 'resource',
@@ -658,6 +747,7 @@ describe('declarative integration framework', () => {
     const integration = makeIntegration({ features: [feature] });
     const context = makeContext(state, tempDir);
 
+    expect(await installer.dependencyNeedsInstall(context, feature.dependencies![0])).toBe(true);
     expect(await installer.resourceNeedsApply(context, undefined, feature.resources![0])).toBe(
       true,
     );
@@ -668,12 +758,24 @@ describe('declarative integration framework', () => {
 
     const installed = await installer.applyAndRecordFeature(context, integration, feature);
     const found = installer.findInstalledFeature(state, context, integration, feature);
+    resolveBinaryPathSpy.mockReturnValue(join(tempDir, 'bin', 'sonar-secrets'));
 
     expect(found?.featureId).toBe(installed.featureId);
+    expect(await installer.dependencyNeedsInstall(context, feature.dependencies![0])).toBe(false);
     expect(await installer.resourceNeedsApply(context, installed, feature.resources![0])).toBe(
       false,
     );
     expect(installer.operationNeedsApply(installed, feature.operations![0])).toBe(false);
+    expect(
+      await installer.dependencyNeedsInstall(
+        context,
+        sonarSourceBinary({
+          id: 'dependency',
+          version: '2',
+          binary: SonarSourceBinary.SonarSecrets,
+        }),
+      ),
+    ).toBe(true);
     expect(
       await installer.resourceNeedsApply(
         context,

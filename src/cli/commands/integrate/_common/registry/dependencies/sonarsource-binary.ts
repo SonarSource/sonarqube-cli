@@ -30,8 +30,8 @@ import {
   installBinary,
   resolveBinaryPath,
 } from '../../../../_common/install/binary';
-import type { AppliedResource, IntegrationContext } from '../types';
-import { type BaseResourceOptions, type ResourceDeclaration } from './common';
+import type { InstalledDependency, IntegrationContext } from '../types';
+import { type BaseDependencyOptions, type DependencyDeclaration } from './common';
 
 export interface SonarSourceBinaryDescriptor {
   id: string;
@@ -51,37 +51,45 @@ export const SonarSourceBinary = {
   },
 } as const satisfies Record<string, SonarSourceBinaryDescriptor>;
 
-export interface SonarSourceBinaryResourceOptions extends BaseResourceOptions {
+export interface SonarSourceBinaryDependencyOptions extends BaseDependencyOptions {
   binary: SonarSourceBinaryDescriptor;
 }
 
-export function sonarSourceBinary(options: SonarSourceBinaryResourceOptions): ResourceDeclaration {
-  return new SonarSourceBinaryResource(options);
+export function sonarSourceBinary(
+  options: SonarSourceBinaryDependencyOptions,
+): DependencyDeclaration {
+  return new SonarSourceBinaryDependency(options);
 }
 
-export class SonarSourceBinaryResource implements ResourceDeclaration {
+export class SonarSourceBinaryDependency implements DependencyDeclaration {
   readonly id: string;
   readonly displayName?: string;
-  readonly resourceType = 'sonarsource-binary';
+  readonly dependencyType = 'sonarsource-binary';
   readonly version: string;
 
-  constructor(private readonly options: SonarSourceBinaryResourceOptions) {
+  constructor(private readonly options: SonarSourceBinaryDependencyOptions) {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version ?? options.binary.spec.version;
   }
 
-  async apply(_context: IntegrationContext): Promise<AppliedResource> {
+  async install(_context: IntegrationContext): Promise<InstalledDependency> {
     const result = await installBinary(this.options.binary.spec);
     return {
       id: this.id,
-      resourceType: this.resourceType,
+      dependencyType: this.dependencyType,
       version: this.version,
       path: result.binaryPath,
     };
   }
 
-  isApplied(_context: IntegrationContext): boolean {
+  isInstalled(_context: IntegrationContext): boolean {
     return resolveBinaryPath(this.options.binary.spec) !== null;
   }
 }
+
+export const sonarSecretsBinaryDependency = sonarSourceBinary({
+  id: 'sonar-secrets',
+  displayName: 'sonar-secrets binary',
+  binary: SonarSourceBinary.SonarSecrets,
+});

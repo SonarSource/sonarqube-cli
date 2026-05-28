@@ -158,22 +158,24 @@ describe('integrate copilot', () => {
           copilotIntegration.features
             .map((feature: { featureId: string }) => feature.featureId)
             .sort(),
-        ).toEqual([
-          'mcp-server',
-          'pre-tool-use-hook',
-          'prompt-secrets-instructions',
-          'sonar-secrets-binary',
-        ]);
+        ).toEqual(['mcp-server', 'pre-tool-use-hook', 'prompt-secrets-instructions']);
 
         const hookFeature = copilotIntegration.features.find(
           (feature: { featureId: string }) => feature.featureId === 'pre-tool-use-hook',
         );
         expect(hookFeature).toMatchObject({
           scope: 'project',
+          dependencies: [{ id: 'sonar-secrets' }],
           attrs: {
             projectKey: 'my-project',
           },
         });
+        expect(state.dependencies.installed).toMatchObject([
+          {
+            id: 'sonar-secrets',
+            dependencyType: 'sonarsource-binary',
+          },
+        ]);
       },
       { timeout: 30000 },
     );
@@ -581,7 +583,8 @@ describe('integrate copilot', () => {
           copilotIntegration.features
             .map((feature: { featureId: string }) => feature.featureId)
             .sort(),
-        ).toEqual(['mcp-server', 'prompt-secrets-instructions', 'sonar-secrets-binary']);
+        ).toEqual(['mcp-server', 'prompt-secrets-instructions']);
+        expect(state.dependencies.installed).toEqual([]);
       },
       { timeout: 30000 },
     );
