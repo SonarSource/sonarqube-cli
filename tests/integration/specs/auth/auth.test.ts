@@ -69,6 +69,7 @@ describe('auth login', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-login-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -93,6 +94,7 @@ describe('auth login', () => {
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'browser-login-token',
         browserTokenName: 'cli-browser-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -116,7 +118,9 @@ describe('auth login', () => {
         .withTokenName('cli-browser-token')
         .withKeychainToken(server.baseUrl(), 'browser-login-token');
 
-      const result = await harness.run(`auth login --server ${server.baseUrl()}`);
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as {
@@ -181,17 +185,46 @@ describe('auth login', () => {
   );
 
   it(
+    'does not show trust warning when --server is SonarCloud US',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'us-org', name: 'US Org' }])
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_US_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('Only connect to servers you trust');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'preserves telemetry.installationId when logging in to a second server',
     async () => {
       const server1 = await harness.newFakeServer().withAuthToken('tok-1').start();
       const server2 = await harness.newFakeServer().withAuthToken('tok-2').start();
 
-      await harness.run(`auth login --server ${server1.baseUrl()}`, { browserToken: 'tok-1' });
+      await harness.run(`auth login --server ${server1.baseUrl()}`, {
+        browserToken: 'tok-1',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
       const { installationId } = (
         harness.stateJsonFile.asJson() as { telemetry: { installationId: string } }
       ).telemetry;
 
-      await harness.run(`auth login --server ${server2.baseUrl()}`, { browserToken: 'tok-2' });
+      await harness.run(`auth login --server ${server2.baseUrl()}`, {
+        browserToken: 'tok-2',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
       const stateAfter = harness.stateJsonFile.asJson() as {
         telemetry: { installationId: string };
         auth: { connections: Array<{ serverUrl: string }> };
@@ -199,6 +232,38 @@ describe('auth login', () => {
 
       expect(stateAfter.telemetry.installationId).toBe(installationId);
       expect(stateAfter.auth.connections[0].serverUrl).toBe(server2.baseUrl());
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows trust warning when --server is a self-hosted SonarQube Server',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with error when user declines trust for --server',
+    async () => {
+      const server = await harness.newFakeServer().start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        stdin: 'n\n', // n (decline trust)
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
   );
@@ -513,7 +578,7 @@ describe('auth login — server selection', () => {
 
       const result = await harness.run('auth login', {
         browserToken: 'my-token',
-        stdinChunks: ['\x1b[B\r', `${server.baseUrl()}\r`], // down+Enter (Server), URL+Enter
+        stdinChunks: ['\x1b[B\r', `${server.baseUrl()}\r`, '\r'], // down+Enter (Server), URL+Enter, Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -534,7 +599,7 @@ describe('auth login — server selection', () => {
 
       const result = await harness.run('auth login', {
         browserToken: 'my-token',
-        stdinChunks: ['\x1b[B\r', '\r', `${server.baseUrl()}\r`], // Server, blank, valid URL
+        stdinChunks: ['\x1b[B\r', '\r', `${server.baseUrl()}\r`, '\r'], // Server, blank, valid URL, Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -553,7 +618,7 @@ describe('auth login — server selection', () => {
 
       const result = await harness.run('auth login', {
         browserToken: 'my-token',
-        stdinChunks: ['\x1b[B\r', 'not-a-url\r', `${server.baseUrl()}\r`], // Server, invalid, valid URL
+        stdinChunks: ['\x1b[B\r', 'not-a-url\r', `${server.baseUrl()}\r`, '\r'], // Server, invalid, valid URL, Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -578,6 +643,7 @@ describe('auth login — server selection', () => {
           'bad-url-2\r', // invalid attempt 2
           'bad-url-3\r', // invalid attempt 3
           `${server.baseUrl()}\r`, // valid URL
+          '\r', // Enter (confirm trust, Yes is default)
         ],
       });
 
@@ -600,6 +666,92 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain('Server selection cancelled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows trust warning for interactive SonarQube Server path',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+      const result = await harness.run('auth login', {
+        browserToken: 'my-token',
+        stdinChunks: ['\x1b[B\r', `${server.baseUrl()}\r`, '\r'], // Server, URL, Enter (confirm trust, Yes is default)
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with error when user declines trust for interactive SonarQube Server path',
+    async () => {
+      const server = await harness.newFakeServer().start();
+
+      const result = await harness.run('auth login', {
+        stdinChunks: ['\x1b[B\r', `${server.baseUrl()}\r`, 'n\r'], // Server, URL, n (decline trust)
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stderr).toContain('Login cancelled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows trust warning when server is discovered from sonar-project.properties',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}\n`);
+
+      const result = await harness.run('auth login', {
+        browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with error when user declines trust for server discovered from sonar-project.properties',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}\n`);
+
+      const result = await harness.run('auth login', {
+        stdin: 'n\n', // n (decline trust)
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stderr).toContain('Login cancelled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows trust warning when server is discovered from .sonarlint/connectedMode.json',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      harness.cwd.writeFile(
+        '.sonarlint/connectedMode.json',
+        JSON.stringify({ sonarQubeUri: server.baseUrl(), projectKey: 'my-project' }),
+      );
+
+      const result = await harness.run('auth login', {
+        browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
     },
     { timeout: 15000 },
   );
@@ -791,6 +943,7 @@ describe('auth login — auth URL', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -811,6 +964,7 @@ describe('auth login — auth URL', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -831,6 +985,7 @@ describe('auth login — auth URL', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -850,6 +1005,7 @@ describe('auth login — auth URL', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
@@ -869,6 +1025,7 @@ describe('auth login — auth URL', () => {
 
       const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'my-token',
+        stdin: '\r', // Enter (confirm trust, Yes is default)
       });
 
       expect(result.exitCode).toBe(0);
