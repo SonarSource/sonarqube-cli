@@ -12,12 +12,14 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 
 **Use it standalone or integrate with:** Git hooks, Claude Code, GitHub Copilot, CI/CD pipelines, custom automation
 
-> **🤖 For AI Agents:** If you are an AI agent reading this, navigate to [docs/llms.txt](https://github.com/SonarSource/sonarqube-cli/blob/master/docs/llms.txt) for machine-readable command documentation optimized for LLM consumption.
+> **🤖 For AI Agents:** If you are an AI agent reading this, navigate to [docs/llms.txt](https://github.com/SonarSource/sonarqube-cli/blob/master/docs/llms.txt) for machine-readable
+> command documentation optimized for LLM consumption.
 
 [![Build](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=SonarSource_sonarqube-cli&metric=alert_status&token=4ad890bd54c6c3feb5d5251004fa3e5b1f665dea)](https://sonarcloud.io/summary/new_code?id=SonarSource_sonarqube-cli)
 
-> **Beta Notice:** This product is currently in Beta, and we are actively collecting feedback on it. Please share your thoughts via [this form](https://forms.gle/xE61HS2E5NzxFCSR9)!
+> **Beta Notice:** This product is currently in Beta, and we are actively collecting feedback on it. Please share your thoughts
+> via [this form](https://forms.gle/xE61HS2E5NzxFCSR9)!
 
 ## Documentation
 
@@ -83,6 +85,7 @@ Before installing, you need:
 - **Operating System**: Linux (x86-64, ARM64), macOS (ARM64), or Windows (x86-64)
 
 **Optional:**
+
 - Git 2.x+ for git hook integrations
 - Claude Code or GitHub Copilot CLI for AI assistant integrations
 
@@ -93,16 +96,19 @@ Before installing, you need:
 ### Step 1: Install
 
 **Linux/macOS:**
+
 ```bash
 curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 ```
 
 **Windows (from PowerShell):**
+
 ```powershell
 irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 ```
 
 **Verify installation:**
+
 ```bash
 sonar --version
 # Example output: 1.0.0
@@ -113,6 +119,7 @@ sonar --version
 ### Step 2: Authenticate
 
 Connect to SonarQube Cloud EU (default):
+
 ```bash
 sonar auth login
 # Opens your browser to sign in to SonarQube and generates a user token
@@ -120,16 +127,19 @@ sonar auth login
 ```
 
 For SonarQube Cloud US:
+
 ```bash
 sonar auth login --server https://sonarqube.us
 ```
 
 For self-hosted SonarQube Server:
+
 ```bash
 sonar auth login --server https://sonarqube.mycompany.com
 ```
 
 **Verify authentication:**
+
 ```bash
 sonar auth status
 # Verifying token......
@@ -139,11 +149,12 @@ sonar auth status
 # Source  OS Keychain
 ```
 
-**For automation, CI/CD, and AI agents**, pass the token via environment variables. The CLI reads them at command time, so nothing is written to disk or the OS keychain, and the token does not appear in process listings (where `--with-token` would expose it via `ps aux`).
+**For automation, CI/CD, and AI agents**, pass the token via environment variables. The CLI reads them at command time, so nothing is written to disk or the OS keychain.
 
 Generate a token first: SonarQube → My Account → Security → Generate Token.
 
-Then define the following environment variables before invoking `sonar` (use your runner's secret store in CI, or your preferred local mechanism — direnv, an untracked `.env` file, a password manager CLI, etc.):
+Then define the following environment variables before invoking `sonar` (use your runner's secret store in CI, or your preferred local mechanism — direnv, an untracked `.env` file,
+a password manager CLI, etc.):
 
 - SonarQube Cloud: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`
 - Self-hosted SonarQube Server: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_SERVER`
@@ -154,11 +165,13 @@ With those exported, any command works without further configuration:
 sonar list projects
 ```
 
-Set both variables — if only `SONARQUBE_CLI_TOKEN` is present, the CLI prints a warning on stderr and falls back to keychain credentials, which is rarely what automation wants. Never commit the token or pass it as a CLI argument.
+Set both variables — if only `SONARQUBE_CLI_TOKEN` is present, the CLI prints a warning on stderr and falls back to keychain credentials, which is rarely what automation wants.
+Never commit the token or pass it as a CLI argument.
 
 ### Step 3: Try Basic Commands
 
 **List your projects:**
+
 ```bash
 sonar list projects
 # {"projects":[{"key":"my-org_my-app","name":"my-app"},
@@ -169,6 +182,7 @@ sonar list projects
 Output is JSON by default. Pipe through `jq` for ad-hoc filtering, e.g. `sonar list projects | jq -r '.projects[].key'`.
 
 **Scan a file for secrets:**
+
 ```bash
 cat > test.js <<'EOF'
 const STRIPE_KEY = "sk_live_<PASTE_A_REAL_STRIPE_KEY_HERE>";
@@ -190,6 +204,7 @@ sonar analyze secrets test.js
 When a secret is found, the command exits with code `51`.
 
 **Check issues in a project:**
+
 ```bash
 sonar list issues --project my-org_my-app --format table --page-size 3
 # SEVERITY | RULE             | MESSAGE                                                 | FILE
@@ -201,7 +216,8 @@ sonar list issues --project my-org_my-app --format table --page-size 3
 
 Supported formats: `json` (default), `table`, `toon`, `csv`.
 
-> **💡 Tip:** The `--project` flag is often optional—if your working directory contains a `sonar-project.properties` file or a SonarLint connected-mode binding under `.sonarlint/`, the CLI picks the project key up from there.
+> **💡 Tip:** The `--project` flag is often optional—if your working directory contains a `sonar-project.properties` file or a SonarLint connected-mode binding under `.sonarlint/`,
+> the CLI picks the project key up from there.
 
 ### Step 4: Analyze Local Changes (SonarQube Cloud only)
 
@@ -213,6 +229,7 @@ sonar verify --staged
 ```
 
 **Common options:**
+
 ```bash
 sonar verify --file src/myfile.ts          # Analyze a specific file
 sonar verify --base main                   # Analyze changes vs main branch
@@ -226,12 +243,14 @@ sonar verify --branch feature-xyz          # Set branch context
 ### Claude Code Integration
 
 **Global setup** (hooks apply to all Claude Code sessions):
+
 ```bash
 sonar auth login
 sonar integrate claude -g
 ```
 
 **Project-specific setup** (hooks apply only to this project):
+
 ```bash
 cd your-project
 sonar auth login
@@ -239,6 +258,7 @@ sonar integrate claude --project my-org_my-project
 ```
 
 This installs:
+
 - **Pre-tool-use hook for secrets scanning** — Prevents hardcoded credentials from being sent to LLM providers
 - **SonarQube Agentic Analysis integration** — Server-side code quality analysis in your workflow
 - **Model Context Protocol (MCP) server** — Access SonarQube data directly from Claude Code
@@ -246,21 +266,25 @@ This installs:
 ### Git Hooks
 
 **Pre-commit hook** (scan staged files before each commit):
+
 ```bash
 sonar integrate git --hook pre-commit
 ```
 
 **Pre-push hook** (scan committed files before each push):
+
 ```bash
 sonar integrate git --hook pre-push
 ```
 
 **Global git hooks** (apply to all repositories):
+
 ```bash
 sonar integrate git --hook pre-commit --global
 ```
 
 **For CI/CD or automation** (non-interactive mode):
+
 ```bash
 sonar integrate git --hook pre-commit --non-interactive
 # Skips all prompts, fails fast on errors
@@ -269,12 +293,14 @@ sonar integrate git --hook pre-commit --non-interactive
 ### GitHub Copilot Integration
 
 **Global setup:**
+
 ```bash
 sonar auth login
 sonar integrate copilot -g
 ```
 
 **Project-specific setup:**
+
 ```bash
 cd your-project
 sonar auth login
@@ -282,6 +308,7 @@ sonar integrate copilot --project my-org_my-project
 ```
 
 This installs:
+
 - **Pre-tool-use hook for secrets scanning** — Prevents hardcoded credentials from being sent to LLM providers
 - **SonarQube Agentic Analysis integration** — Server-side code quality analysis in your workflow
 - **Model Context Protocol (MCP) server** — Access SonarQube data directly from Copilot
@@ -328,7 +355,8 @@ $ sonar verify --staged
 SonarQube Agentic Analysis: no files in the change set to analyze.
 ```
 
-When there are staged changes against a project configured for SonarQube Cloud Agentic Analysis, the analyzer reports new issues introduced by the change set in the same `text`/`json` format selectable via `--format`.
+When there are staged changes against a project configured for SonarQube Cloud Agentic Analysis, the analyzer reports new issues introduced by the change set in the same `text`/
+`json` format selectable via `--format`.
 
 ### LLM-Optimized Output Format
 
@@ -365,6 +393,7 @@ This format is designed for parsing by LLMs and can be used with Claude Code, Gi
 **Cause:** Using the project display name instead of the project key.
 
 **Solution:** Use the exact project key from the JSON output of `sonar list projects`:
+
 ```bash
 # Find the correct key:
 sonar list projects -q my-project
@@ -385,6 +414,7 @@ sonar list issues --project my-org_my-project
 **Cause:** Project hasn't been scanned yet, or you're checking the wrong branch.
 
 **Solution:**
+
 1. Verify your project has at least one completed scan in SonarQube
 2. Check you're authenticated to the right organization:
    ```bash
@@ -401,18 +431,21 @@ sonar list issues --project my-org_my-project
 
 **Symptom:** `Error: Invalid token` or browser authentication fails
 
-**Solution:** Use token-based authentication instead:
+**Solution:** Use token-based authentication:
 
 1. Go to SonarQube → My Account → Security → Generate Token
 2. Copy the generated token
-3. Run:
-   ```bash
-   sonar auth login --with-token YOUR_TOKEN
+3. Use following environment variables (set them globally before running commands from a new terminal):
+   ```
+   SONARQUBE_CLI_TOKEN=YOUR_TOKEN
+   SONARQUBE_CLI_SERVER=https://sonarcloud.io  # or your SonarQube Server URL
+   SONARQUBE_CLI_ORG=your-org-key              # SonarQube Cloud only
    ```
 
 For SonarQube Cloud, ensure you're using the correct region:
-- EU (default): `--server https://sonarcloud.io`
-- US: `--server https://sonarqube.us`
+
+- EU: `https://sonarcloud.io`
+- US: `https://sonarqube.us`
 
 ---
 
@@ -421,6 +454,7 @@ For SonarQube Cloud, ensure you're using the correct region:
 **Cause:** `sonar verify` requires git to detect changes.
 
 **Solution:**
+
 - Run from inside a git repository:
   ```bash
   cd your-project
@@ -475,8 +509,9 @@ For SonarQube Cloud, ensure you're using the correct region:
    Then reload: `source ~/.bashrc` (or `~/.zshrc`)
 
    **Windows** — The installer should have updated PATH automatically. Try:
-   - Opening a new PowerShell window
-   - Restarting your computer if the issue persists
+
+- Opening a new PowerShell window
+- Restarting your computer if the issue persists
 
 3. Verify the binary exists:
    ```bash
@@ -508,8 +543,9 @@ Secrets scanning is intentionally sensitive to avoid missing real credentials. F
    ```
 
 2. **Store test secrets in ignored files:**
-   - `.env.test` files are often excluded by default
-   - Keep real-looking test data in fixture files outside `src/`
+
+- `.env.test` files are often excluded by default
+- Keep real-looking test data in fixture files outside `src/`
 
 3. **For legitimate exceptions:** Consider adding comments explaining why the value is safe, or use environment variables even in tests.
 
@@ -521,6 +557,7 @@ Secrets scanning is intentionally sensitive to avoid missing real credentials. F
 - **Open a new issue:** [New Issue](https://github.com/SonarSource/sonarqube-cli/issues/new)
 
 Include in your report:
+
 - Output of `sonar --version`
 - Full error message (with sensitive info redacted)
 - Command you ran

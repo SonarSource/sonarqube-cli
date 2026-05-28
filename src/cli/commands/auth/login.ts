@@ -47,20 +47,14 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const server = await resolveServer(options);
 
   const isCloud = isSonarQubeCloud(server);
-  const isNonInteractive = !!options.withToken;
 
-  const { token, tokenName, reusedExistingToken } = await getOrGenerateToken(
-    server,
-    options.org,
-    isNonInteractive,
-    options.withToken,
-  );
+  const { token, tokenName, reusedExistingToken } = await getOrGenerateToken(server, options.org);
 
   let org = options.org;
 
   if (isCloud) {
     const client = new SonarQubeClient(server, token);
-    org = await validateOrSelectOrganization(client, org, isNonInteractive);
+    org = await validateOrSelectOrganization(client, org);
   } else {
     org = await setupOnPremiseOrganization(org);
   }
@@ -78,9 +72,8 @@ export async function authLogin(options: AuthLoginOptions): Promise<void> {
   const connection = addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
     orgKey: org,
     region: cloudRegionFromUrl(server),
-    // `--with-token` logins have no server-side name; only browser-OAuth logins
-    // carry a tokenName (always provided by the callback for new tokens).
-    tokenName: isNonInteractive ? undefined : reusedExistingToken ? existingTokenName : tokenName,
+    // Only browser-OAuth logins carry a tokenName (always provided by the callback for new tokens).
+    tokenName: reusedExistingToken ? existingTokenName : tokenName,
   });
 
   // Fetch server-side IDs for telemetry enrichment (best effort, non-blocking on error).
@@ -132,13 +125,7 @@ async function setupOnPremiseOrganization(org: string | undefined): Promise<stri
 async function getOrGenerateToken(
   server: string,
   org: string | undefined,
-  isNonInteractive: boolean,
-  withToken: string | undefined,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
-  if (isNonInteractive) {
-    return { token: withToken || '', reusedExistingToken: false };
-  }
-
   const existingToken = await getKeystoreToken(server, org);
   if (existingToken) {
     const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
@@ -153,22 +140,13 @@ async function getOrGenerateToken(
   return { ...authResult, reusedExistingToken: false };
 }
 
-async function getUserSelectedOrganization(
-  client: SonarQubeClient,
-  isNonInteractive: boolean,
-): Promise<string> {
+async function getUserSelectedOrganization(client: SonarQubeClient): Promise<string> {
   // Deduce organization from API: if user is member of exactly one org, use it
   const { organizations: memberOrgs, total: orgTotal } = await client.listUserOrganizations();
   if (memberOrgs.length === 1 && orgTotal === 1) {
     const singleOrg = memberOrgs[0].key;
     print(`Using organization (only member): ${singleOrg}`);
     return singleOrg;
-  }
-
-  if (isNonInteractive) {
-    throw new CommandFailedError('Organization must be specified in non-interactive mode.', {
-      remediationHint: 'Use -o/--org <key> or rerun interactively to choose an organization.',
-    });
   }
 
   // No org memberships — prompt for manual entry
@@ -224,7 +202,6 @@ async function getUserSelectedOrganization(
 async function validateOrSelectOrganization(
   client: SonarQubeClient,
   org: string | undefined,
-  isNonInteractive: boolean,
 ): Promise<string> {
   if (org) {
     const orgExists = await client.checkOrganization(org);
@@ -245,7 +222,7 @@ async function validateOrSelectOrganization(
     return configOrg;
   }
 
-  return await getUserSelectedOrganization(client, isNonInteractive);
+  return await getUserSelectedOrganization(client);
 }
 
 function isValidUrl(url: string): boolean {
@@ -297,25 +274,12 @@ async function resolveServer(options: AuthLoginOptions): Promise<string> {
   if (configServer) {
     return configServer;
   }
-  if (options.withToken) {
-    throw new InvalidOptionError(
-      '--server is required when --with-token is provided and no server is configured.',
-      'Use --server <url> to specify the server.',
-    );
-  }
   return selectServerFromPrompt();
 }
 
 function validateLoginOptions(options: AuthLoginOptions): void {
   if (options.org !== undefined && !options.org.trim()) {
     throw new InvalidOptionError('--org value cannot be empty.', 'Use --org <organization-key>.');
-  }
-
-  if (options.withToken !== undefined && !options.withToken.trim()) {
-    throw new InvalidOptionError(
-      '--with-token value cannot be empty.',
-      'Provide a token with --with-token or omit the flag to use browser authentication.',
-    );
   }
 
   if (options.server !== undefined && !options.server.trim()) {
@@ -336,5 +300,4 @@ function validateLoginOptions(options: AuthLoginOptions): void {
 export interface AuthLoginOptions {
   server?: string;
   org?: string;
-  withToken?: string;
 }

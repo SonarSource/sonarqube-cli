@@ -109,7 +109,6 @@ auth
     'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
   )
   .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-  .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
   .anonymousAction((options: AuthLoginOptions) => authLogin(options));
 
 auth
