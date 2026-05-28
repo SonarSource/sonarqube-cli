@@ -18,14 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type { BaseResourceOptions, PathResolver, ResourceDeclaration } from './common';
-export { jsonPatch, type JsonPatchOptions } from './json-patch';
-export { TextSnippet, textSnippet, type TextSnippetResourceOptions } from './text-snippet';
-export {
-  type PlatformSpecificContent,
-  wholeFile,
-  type WholeFileContent,
-  WholeFileResource,
-  type WholeFileResourceOptions,
-} from './whole-file';
-export { YamlPatch, yamlPatch, type YamlPatchOptions } from './yaml-patch';
+import type { InstalledDependency, IntegrationContext, MaybePromise } from '../types';
+
+export interface BaseDependencyOptions {
+  id: string;
+  displayName?: string;
+  version?: string;
+}
+
+export interface DependencyDeclaration {
+  id: string;
+  displayName?: string;
+  dependencyType: string;
+  version?: string;
+  install: (context: IntegrationContext) => MaybePromise<InstalledDependency>;
+  isInstalled: (context: IntegrationContext) => MaybePromise<boolean>;
+}

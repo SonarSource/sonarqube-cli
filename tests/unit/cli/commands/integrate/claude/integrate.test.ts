@@ -768,7 +768,6 @@ describe('integrateCommand', () => {
         integrationId: 'claude-code',
         options: expect.objectContaining({
           projectRoot,
-          installBinary: true,
           installSecretsHooks,
           installSqaaHook,
           installMcp: true,
