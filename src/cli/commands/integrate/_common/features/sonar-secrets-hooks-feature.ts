@@ -22,12 +22,13 @@ import { join } from 'node:path';
 
 import { createAgentHookEntry, resolveAgentHookScriptPath, upsertAgentHooks } from '../hooks';
 import { sonarSecretsBinaryDependency } from '../registry/dependencies';
+import { isFeatureInstalled } from '../registry/installer';
 import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
 import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
 
-export interface SonarSecretsHooksFeatureOptions {
-  installSecretsHooks?: boolean;
-}
+const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
+const SONAR_SECRETS_HOOKS_HINT =
+  'scans prompts and file reads for secrets before they reach the agent';
 
 export interface SonarSecretsHookScriptSpec {
   id: string;
@@ -44,6 +45,7 @@ export interface SonarSecretsHookEntrySpec {
 }
 
 export interface SonarSecretsHooksFeatureConfig {
+  integrationId: string;
   agentDisplayName: string;
   configDir: string;
   hooksConfigFileName: string;
@@ -61,16 +63,22 @@ export function resolveAgentHooksConfigPath(
   return join(context.targetRoot, configDir, fileName);
 }
 
-export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHooksFeatureOptions>(
+export function createSonarSecretsHooksFeature<TOptions>(
   config: SonarSecretsHooksFeatureConfig,
 ): FeatureDeclaration<TOptions> {
   const resolveHooksConfigPath = (context: IntegrationContext) =>
     resolveAgentHooksConfigPath(context, config.configDir, config.hooksConfigFileName);
 
   return {
-    id: 'sonar-secrets-hooks',
+    id: SONAR_SECRETS_HOOKS_FEATURE_ID,
     displayName: 'secrets hooks',
-    when: ({ options }) => options.installSecretsHooks === true,
+    hint: SONAR_SECRETS_HOOKS_HINT,
+    // Skip project-level install when a global secrets hook already covers it; otherwise ask.
+    when: ({ scope, state }) =>
+      scope === 'project' &&
+      isFeatureInstalled(state, config.integrationId, SONAR_SECRETS_HOOKS_FEATURE_ID, 'global')
+        ? { kind: 'skip', reason: 'global hook already covers this' }
+        : { kind: 'ask' },
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       ...config.scripts.map((script) =>

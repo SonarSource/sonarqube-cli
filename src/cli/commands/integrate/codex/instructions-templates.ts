@@ -18,16 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Markdown sections rendered into `.codex/AGENTS.md`. The file is CLI-owned;
-// each run overwrites the whole document with the composition of the
-// applicable sections. The SQAA section is shared with the Copilot
-// integration so the wording stays consistent across agents.
+// Markdown sections rendered into `.codex/AGENTS.md`. Each section is wrapped
+// by its own sonar:begin/end markers so the secrets and SQAA features can be
+// installed independently and coexist in the same file. The SQAA section is
+// shared with the Copilot integration so the wording stays consistent across
+// agents.
 
-import { buildSqaaSection, withSonarMarkers } from '../_common/instructions-templates';
+export const CODEX_SECRETS_MARKER_ID = 'codex-secrets-on-read';
+export const CODEX_SECRETS_START_MARKER = `<!-- sonar:begin:${CODEX_SECRETS_MARKER_ID} -->`;
+export const CODEX_SECRETS_END_MARKER = `<!-- sonar:end:${CODEX_SECRETS_MARKER_ID} -->`;
 
-const SECRETS_ON_READ_SECTION = withSonarMarkers(
-  'codex-secrets-on-read',
-  `# SonarQube secrets scanning for files protocol
+export const CODEX_SECRETS_BODY = `# SonarQube secrets scanning for files protocol
 
 Before reading any file in this workspace, scan it for secrets with the deterministic scanner:
 
@@ -40,22 +41,4 @@ If the command reports that the file contains a secret, **do not read the file**
 1. Inform the user that the file appears to contain a secret or credential and that reading it would expose the value in chat history, logs, and any downstream telemetry.
 2. Advise them to rotate the leaked credential at its source of truth and remove it from the file.
 3. Do not proceed with the original request until the secret has been removed.
-`,
-);
-
-export interface AgentsMdSections {
-  includeSecrets: boolean;
-  includeSqaa: boolean;
-  projectKey?: string;
-}
-
-export function buildAgentsMdContent(sections: AgentsMdSections): string {
-  const parts: string[] = [];
-  if (sections.includeSecrets) {
-    parts.push(SECRETS_ON_READ_SECTION);
-  }
-  if (sections.includeSqaa && sections.projectKey) {
-    parts.push(buildSqaaSection(sections.projectKey));
-  }
-  return `${parts.join('\n').trimEnd()}\n`;
-}
+`;

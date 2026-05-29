@@ -207,6 +207,7 @@ integrateCommand
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(auth, options));
 
@@ -236,6 +237,7 @@ integrateCommand
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 

@@ -22,12 +22,24 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { CommandFailedError } from '../../_common/error';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
-import { tomlPatch, wholeFile } from '../_common/registry/resources';
+import {
+  buildSqaaBody,
+  SQAA_END_MARKER,
+  SQAA_START_MARKER,
+} from '../_common/instructions-templates';
+import { isFeatureInstalled } from '../_common/registry/installer';
+import { textSnippet, tomlPatch } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
+import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
-import { buildAgentsMdContent } from './instructions-templates';
+import {
+  CODEX_SECRETS_BODY,
+  CODEX_SECRETS_END_MARKER,
+  CODEX_SECRETS_START_MARKER,
+} from './instructions-templates';
 
 const CODEX_CONFIG_DIR = '.codex';
 const HOOKS_FILE = 'hooks.json';
@@ -37,12 +49,10 @@ const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 export const CODEX_INTEGRATION_ID = 'codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
-  installSecretsHooks?: boolean;
-  /** Render the pre-tool secrets-on-read section into `.codex/AGENTS.md`. */
-  installSecretsInstructions?: boolean;
-  /** Render the post-tool SQAA section into `.codex/AGENTS.md`. */
-  installSqaaInstructions?: boolean;
-  installMcp?: boolean;
+  projectRoot?: string;
+  serverURL?: string;
+  token?: string;
+  organization?: string;
 }
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
@@ -50,6 +60,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   displayName: 'Codex',
   features: [
     createSonarSecretsHooksFeature({
+      integrationId: CODEX_INTEGRATION_ID,
       agentDisplayName: 'Codex',
       configDir: CODEX_CONFIG_DIR,
       hooksConfigFileName: HOOKS_FILE,
@@ -75,32 +86,70 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       ],
     }),
     {
-      id: 'agents-md-instructions',
-      displayName: 'Codex AGENTS.md instructions',
-      // Fires whenever at least one section is enabled. Each section's
-      // inclusion is then decided from attrs by the content function, so the
-      // two flags act as independent toggles even though both sections share
-      // a single file.
-      when: ({ options }) =>
-        options.installSecretsInstructions === true || options.installSqaaInstructions === true,
+      id: 'secrets-instructions',
+      displayName: 'Codex secrets-on-read instructions',
+      hint: 'tells Codex to scan files for secrets before reading',
+      when: ({ scope, state }) => {
+        if (scope === 'global') return { kind: 'ask' };
+        const globalExists = isFeatureInstalled(
+          state,
+          CODEX_INTEGRATION_ID,
+          'secrets-instructions',
+          'global',
+        );
+        return globalExists
+          ? {
+              kind: 'ask',
+              question:
+                'Global Codex instructions already exist. Also create a project-local copy?',
+            }
+          : { kind: 'ask' };
+      },
       resources: [
-        wholeFile({
-          id: 'codex-agents-md',
-          displayName: 'Codex AGENTS.md',
+        textSnippet({
+          id: 'codex-secrets-instructions-file',
+          displayName: 'Codex secrets-on-read instructions',
           targetPath: resolveCodexAgentsMdPath,
-          content: (context) =>
-            buildAgentsMdContent({
-              includeSecrets: getOptionalBoolAttr(context, 'includeSecretsSection'),
-              includeSqaa: getOptionalBoolAttr(context, 'includeSqaa'),
-              projectKey: getOptionalStringAttr(context, 'projectKey'),
-            }),
+          content: CODEX_SECRETS_BODY,
+          startMarker: CODEX_SECRETS_START_MARKER,
+          endMarker: CODEX_SECRETS_END_MARKER,
+        }),
+      ],
+    },
+    {
+      id: 'sqaa-instructions',
+      displayName: 'SonarQube Agentic Analysis instructions',
+      hint: 'guides Codex to fix issues found by SonarQube Agentic Analysis',
+      when: async ({ options }) => {
+        if (!options.serverURL || !options.token) {
+          return { kind: 'skip' };
+        }
+        const entitled = await resolveSqaaEntitlement(
+          options.serverURL,
+          options.token,
+          options.organization,
+        );
+        return entitled
+          ? { kind: 'ask' }
+          : { kind: 'skip', reason: 'Agentic Analysis available on SonarQube Cloud' };
+      },
+      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
+      scope: 'project',
+      resources: [
+        textSnippet({
+          id: 'codex-sqaa-instructions-file',
+          displayName: 'Codex SQAA instructions',
+          targetPath: resolveCodexAgentsMdPath,
+          content: (context) => buildSqaaBody(getRequiredStringAttr(context, 'projectKey')),
+          startMarker: SQAA_START_MARKER,
+          endMarker: SQAA_END_MARKER,
         }),
       ],
     },
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      when: ({ options }) => options.installMcp === true,
+      hint: 'gives Codex access to SonarQube data',
       resources: [
         tomlPatch({
           id: 'codex-mcp-config',
@@ -160,6 +209,10 @@ function getOptionalStringAttr(context: IntegrationContext, key: string): string
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function getOptionalBoolAttr(context: IntegrationContext, key: string): boolean {
-  return context.attrs?.[key] === true;
+function getRequiredStringAttr(context: IntegrationContext, key: string): string {
+  const value = getOptionalStringAttr(context, key);
+  if (!value) {
+    throw new CommandFailedError(`Missing required integration attribute: ${key}`);
+  }
+  return value;
 }
