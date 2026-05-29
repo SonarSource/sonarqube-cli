@@ -31,7 +31,7 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '../telemetry';
-import { warn } from '../ui';
+import { blank, error, warn } from '../ui';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
 import { analyzeAll, type AnalyzeAllOptions } from './commands/analyze/analyze-all';
@@ -88,6 +88,12 @@ COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
   .version(VERSION, '-v, --version', 'display version for command')
   .enablePositionalOptions()
+  .configureOutput({
+    outputError: (str) => {
+      blank();
+      error(str.trim());
+    },
+  })
   .configureHelp({
     formatHelp: (cmd, helper) => {
       if (!cmd.parent) {
