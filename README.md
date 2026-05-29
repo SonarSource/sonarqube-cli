@@ -554,7 +554,7 @@ Secrets scanning is intentionally sensitive to avoid missing real credentials. F
 ### Still having issues?
 
 - **Search existing issues:** [GitHub Issues](https://github.com/SonarSource/sonarqube-cli/issues)
-- **Open a new issue:** [New Issue](https://github.com/SonarSource/sonarqube-cli/issues/new)
+- **Open a new issue:** [New Issue](https://github.com/SonarSource/sonarqube-cli/issues/new/choose)
 
 Include in your report:
 
@@ -598,10 +598,11 @@ No personally identifiable information is transmitted.
 
 ## Contributing
 
-Please be aware that we are not actively looking for feature contributions. The truth is that it's extremely difficult for someone outside
-SonarSource to comply with our roadmap and expectations. Therefore, we typically only accept minor cosmetic changes and typo fixes.
+We don't accept external pull requests on this project. This isn't about the quality of your change — keeping all changes in one place lets us properly track, plan, prioritize, and test everything that goes into the CLI.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, coding guidelines, and how to run tests.
+That doesn't mean we don't want to hear from you — we do. If you've hit a bug or have an idea, please [open a GitHub Issue](https://github.com/SonarSource/sonarqube-cli/issues/new/choose) and we'll take it from there.
+
+The source is public, so you're welcome to fork it, read it, and experiment. See [CONTRIBUTING.md](./CONTRIBUTING.md) if you'd like to build the CLI from source.
 
 ## License
 
