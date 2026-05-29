@@ -45,7 +45,7 @@ If the command reports that the file contains a secret, **do not read the file**
 
 export interface AgentsMdSections {
   includeSecrets: boolean;
-  /** Project key to bake into the SQAA section. Section is omitted when undefined. */
+  includeSqaa: boolean;
   projectKey?: string;
 }
 
@@ -54,7 +54,7 @@ export function buildAgentsMdContent(sections: AgentsMdSections): string {
   if (sections.includeSecrets) {
     parts.push(SECRETS_ON_READ_SECTION);
   }
-  if (sections.projectKey) {
+  if (sections.includeSqaa && sections.projectKey) {
     parts.push(buildSqaaSection(sections.projectKey));
   }
   return `${parts.join('\n').trimEnd()}\n`;

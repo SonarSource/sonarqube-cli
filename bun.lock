@@ -12,6 +12,7 @@
         "js-yaml": "^4.1.1",
         "openpgp": "^6.0.0",
         "picocolors": "^1.1.1",
+        "smol-toml": "^1.6.1",
       },
       "devDependencies": {
         "@sentry/cli": "3.4.2",
@@ -560,6 +561,8 @@
     "slice-ansi": ["slice-ansi@7.1.2", "https://repox.jfrog.io/artifactory/api/npm/npm/slice-ansi/-/slice-ansi-7.1.2.tgz", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-iOBWFgUX7caIZiuutICxVgX1SdxwAVFFKwt1EvMYYec/NWO5meOJ6K5uQxhrYBdQJne4KxiqZc+KptFOWFSI9w=="],
 
     "slugify": ["slugify@1.6.9", "https://repox.jfrog.io/artifactory/api/npm/npm/slugify/-/slugify-1.6.9.tgz", {}, "sha512-vZ7rfeehZui7wQs438JXBckYLkIIdfHOXsaVEUMyS5fHo1483l1bMdo0EDSWYclY0yZKFOipDy4KHuKs6ssvdg=="],
+
+    "smol-toml": ["smol-toml@1.6.1", "https://repox.jfrog.io/artifactory/api/npm/npm/smol-toml/-/smol-toml-1.6.1.tgz", {}, "sha512-dWUG8F5sIIARXih1DTaQAX4SsiTXhInKf1buxdY9DIg4ZYPZK5nGM1VRIYmEbDbsHt7USo99xSLFu5Q1IqTmsg=="],
 
     "source-map": ["source-map@0.6.1", "https://repox.jfrog.io/artifactory/api/npm/npm/source-map/-/source-map-0.6.1.tgz", {}, "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g=="],
 

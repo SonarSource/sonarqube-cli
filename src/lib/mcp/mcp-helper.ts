@@ -166,6 +166,10 @@ export function getMcpConfigFilePath(
     return isGlobal
       ? join(homedir(), '.copilot', 'mcp-config.json')
       : join(projectRoot, '.mcp.json');
+  } else if (agent === 'codex') {
+    return isGlobal
+      ? join(homedir(), '.codex', 'config.toml')
+      : join(projectRoot, '.codex', 'config.toml');
   }
   throw new Error(`Unsupported agent: ${agent}`);
 }

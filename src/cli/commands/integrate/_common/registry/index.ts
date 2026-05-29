@@ -41,6 +41,8 @@ export {
   type ResourceDeclaration,
   textSnippet,
   type TextSnippetResourceOptions,
+  tomlPatch,
+  type TomlPatchOptions,
   wholeFile,
   type WholeFileContent,
   type WholeFileResourceOptions,
