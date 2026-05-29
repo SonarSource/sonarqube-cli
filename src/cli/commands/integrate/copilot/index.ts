@@ -46,7 +46,6 @@ import {
   PROJECT_INSTRUCTIONS_REL_DIR,
   warnIfProjectInstructionsShadowGlobal,
 } from './instructions';
-import { updateCopilotState } from './state';
 
 registerCopilotIntegration();
 
@@ -94,15 +93,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     targetRoot,
     scope,
     attrs: buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
-  });
-
-  await updateCopilotState(project.rootDir, isGlobal, {
-    hookInstalled: installHook,
-    promptSecretsInstructionsInstalled: true,
-    sqaaInstructionsInstalled: sqaaProjectKey !== undefined,
-    projectKey: sqaaProjectKey,
-    orgKey: sqaaProjectKey ? auth.orgKey : undefined,
-    serverUrl: sqaaProjectKey ? auth.serverUrl : undefined,
   });
 
   if (!options.skipContext) {
