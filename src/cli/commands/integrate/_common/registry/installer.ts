@@ -35,7 +35,7 @@ import type {
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
 import { getDefaultState } from '../../../../../lib/state';
-import { info, success, text, warn } from '../../../../../ui';
+import { confirmPrompt, info, success, text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import { supportedIntegrations } from '../../index';
 import type { IntegrationRegistry } from './core';
@@ -47,10 +47,12 @@ import type {
   AppliedResource,
   FeatureDeclaration,
   FeatureOperation,
+  FeatureWhenContext,
   InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationInvocation,
+  WhenResult,
 } from './types';
 
 interface ApplyFeatureCallbacks {
@@ -69,6 +71,7 @@ export interface InstallIntegrationOptions<TOptions> {
   scope: IntegrationScope;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  nonInteractive?: boolean;
 }
 
 export class IntegrationInstaller {
@@ -83,11 +86,45 @@ export class IntegrationInstaller {
     });
   }
 
-  selectFeaturesForInvocation<TOptions>(
+  async selectFeaturesForInvocation<TOptions>(
     integration: IntegrationDeclaration<TOptions>,
     invocation: IntegrationInvocation<TOptions>,
-  ): FeatureDeclaration<TOptions>[] {
-    return integration.features.filter((feature) => !feature.when || feature.when(invocation));
+  ): Promise<FeatureDeclaration<TOptions>[]> {
+    const state = loadStateForInstallation();
+    const whenCtx: FeatureWhenContext<TOptions> = {
+      options: invocation.options,
+      scope: invocation.scope,
+      state,
+    };
+    const selected: FeatureDeclaration<TOptions>[] = [];
+    for (const feature of integration.features) {
+      const result: WhenResult = feature.when ? await feature.when(whenCtx) : { kind: 'ask' };
+
+      if (result.kind === 'skip') {
+        if (result.reason) {
+          info(`${feature.displayName}: ${result.reason}`);
+        }
+        continue;
+      }
+
+      const question = this.buildPromptQuestion(feature, result);
+      const answer = invocation.nonInteractive ? true : await confirmPrompt(question);
+      if (answer) {
+        selected.push(feature);
+      }
+    }
+    return selected;
+  }
+
+  private buildPromptQuestion<TOptions>(
+    feature: FeatureDeclaration<TOptions>,
+    result: WhenResult,
+  ): string {
+    if (result.kind === 'ask' && result.question) {
+      return result.question;
+    }
+    const base = `Set up ${feature.displayName}?`;
+    return feature.hint ? `${base} (${feature.hint})` : base;
   }
 
   findInstalledFeature<TOptions>(
@@ -391,6 +428,17 @@ export class IntegrationInstaller {
 
 export const integrationInstaller = new IntegrationInstaller();
 
+export function isFeatureInstalled(
+  state: CliState,
+  integrationId: string,
+  featureId: string,
+  scope: IntegrationScope,
+): boolean {
+  return !!state.integrations.installed
+    .find((integration) => integration.integrationId === integrationId)
+    ?.features.some((feature) => feature.featureId === featureId && feature.scope === scope);
+}
+
 export async function installIntegration<TOptions>({
   registry = supportedIntegrations,
   integrationId,
@@ -399,12 +447,14 @@ export async function installIntegration<TOptions>({
   scope,
   force,
   attrs,
+  nonInteractive,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
-  const invocation = makeInvocation(options, targetRoot, scope, force, attrs);
-  const features = integrationInstaller.selectFeaturesForInvocation(integration, invocation);
+  const invocation = makeInvocation(options, targetRoot, scope, force, attrs, nonInteractive);
+  const features = await integrationInstaller.selectFeaturesForInvocation(integration, invocation);
   if (features.length === 0) {
-    throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
+    info(`Nothing to install for ${integration.displayName}`);
+    return [];
   }
 
   const installedFeatures: InstalledIntegrationFeature[] = [];
@@ -503,6 +553,7 @@ function makeInvocation<TOptions>(
   scope: IntegrationScope,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
+  nonInteractive: boolean | undefined,
 ): IntegrationInvocation<TOptions> {
   return {
     options,
@@ -510,6 +561,7 @@ function makeInvocation<TOptions>(
     scope,
     force,
     attrs,
+    nonInteractive,
   };
 }
 

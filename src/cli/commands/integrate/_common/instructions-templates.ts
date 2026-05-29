@@ -37,10 +37,16 @@ export function withSonarMarkers(id: string, body: string): string {
   return `<!-- sonar:begin:${id} -->\n${body.trimEnd()}\n<!-- sonar:end:${id} -->\n`;
 }
 
+export const SQAA_MARKER_ID = 'sqaa-protocol';
+export const SQAA_START_MARKER = `<!-- sonar:begin:${SQAA_MARKER_ID} -->`;
+export const SQAA_END_MARKER = `<!-- sonar:end:${SQAA_MARKER_ID} -->`;
+
 export function buildSqaaSection(projectKey: string): string {
-  return withSonarMarkers(
-    'sqaa-protocol',
-    `# SonarQube Agentic Analysis protocol
+  return withSonarMarkers(SQAA_MARKER_ID, buildSqaaBody(projectKey));
+}
+
+export function buildSqaaBody(projectKey: string): string {
+  return `# SonarQube Agentic Analysis protocol
 
 SonarQube Agentic Analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
 
@@ -62,6 +68,5 @@ Non-negotiable rules:
 3. If SonarQube Agentic Analysis reports issues on lines you touched in this turn, fix them, then re-run SonarQube Agentic Analysis on that file. Repeat until the file is clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
 4. If SonarQube Agentic Analysis is skipped (no SonarQube Cloud connection, or no project configured), state the skip reason to the user once and continue — do not retry.
 5. Do not suppress, summarize away, or omit SonarQube Agentic Analysis findings from your reply. Surface them verbatim.
-`,
-  );
+`;
 }

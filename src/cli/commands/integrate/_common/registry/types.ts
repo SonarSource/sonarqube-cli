@@ -42,6 +42,15 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   scope: IntegrationScope;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  nonInteractive?: boolean;
+}
+
+export type WhenResult = { kind: 'ask'; question?: string } | { kind: 'skip'; reason?: string };
+
+export interface FeatureWhenContext<TOptions = Record<string, unknown>> {
+  options: TOptions;
+  scope: IntegrationScope;
+  state: CliState;
 }
 
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =
@@ -62,7 +71,10 @@ export interface IntegrationDeclaration<TOptions = Record<string, unknown>> {
 export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
-  when?: (invocation: IntegrationInvocation<TOptions>) => boolean;
+  /** Appended in parens to the default prompt. Ignored if `when` returns a custom question. */
+  hint?: string;
+  /** Skip the feature with a reason or ask to install it. Defaults to ask. */
+  when?: (ctx: FeatureWhenContext<TOptions>) => MaybePromise<WhenResult>;
   targetRoot?: FeatureTargetRoot<TOptions>;
   scope?: FeatureScope<TOptions>;
   dependencies?: DependencyDeclaration[];

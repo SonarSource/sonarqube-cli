@@ -32,6 +32,7 @@ export {
   type InstallIntegrationOptions,
   IntegrationInstaller,
   integrationInstaller,
+  isFeatureInstalled,
 } from './installer';
 export {
   jsonPatch,

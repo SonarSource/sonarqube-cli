@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { AppliedResource, IntegrationContext } from '../types';
+import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
   type PathResolver,
@@ -28,9 +28,11 @@ import {
   writeFileIfChanged,
 } from './common';
 
+export type TextSnippetContent = string | ((context: IntegrationContext) => MaybePromise<string>);
+
 export interface TextSnippetResourceOptions extends BaseResourceOptions {
   targetPath: PathResolver;
-  content: string;
+  content: TextSnippetContent;
   executable?: boolean;
   startMarker: string;
   endMarker?: string;
@@ -54,7 +56,12 @@ export class TextSnippet implements ResourceDeclaration {
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
     const path = await resolvePath(context, this.options.targetPath);
-    await writeFileIfChanged(path, await this.renderContent(path), this.options.executable);
+    const managedBlock = await this.renderManagedBlock(context);
+    await writeFileIfChanged(
+      path,
+      await this.renderContent(path, managedBlock),
+      this.options.executable,
+    );
     return { id: this.id, resourceType: this.resourceType, version: this.version, path };
   }
 
@@ -64,12 +71,11 @@ export class TextSnippet implements ResourceDeclaration {
     if (existing === undefined) {
       return false;
     }
-    return existing.includes(this.renderManagedBlock());
+    return existing.includes(await this.renderManagedBlock(context));
   }
 
-  private async renderContent(path: string): Promise<string> {
+  private async renderContent(path: string, managedBlock: string): Promise<string> {
     const existing = (await readTextFile(path)) ?? '';
-    const managedBlock = this.renderManagedBlock();
     const pattern = new RegExp(
       String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
     );
@@ -85,8 +91,12 @@ export class TextSnippet implements ResourceDeclaration {
     return appendBlock(existing, managedBlock);
   }
 
-  private renderManagedBlock(): string {
-    return `${this.startMarker}\n${this.options.content.trimEnd()}\n${this.endMarker}`;
+  private async renderManagedBlock(context: IntegrationContext): Promise<string> {
+    const content =
+      typeof this.options.content === 'function'
+        ? await this.options.content(context)
+        : this.options.content;
+    return `${this.startMarker}\n${content.trimEnd()}\n${this.endMarker}`;
   }
 
   private get startMarker(): string {
