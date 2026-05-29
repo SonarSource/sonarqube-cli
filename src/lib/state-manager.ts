@@ -146,15 +146,6 @@ export function removeConnection(state: CliState, connectionId: string): void {
 }
 
 /**
- * Remove all connections from state (used by purge).
- */
-export function clearAllConnections(state: CliState): void {
-  state.auth.connections = [];
-  state.auth.activeConnectionId = undefined;
-  state.auth.isAuthenticated = false;
-}
-
-/**
  * Mark agent as configured
  */
 export function markAgentConfigured(state: CliState, agentName: string, cliVersion: string): void {

@@ -24,7 +24,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import { CommandFailedError } from '../cli/commands/_common/error.js';
 import { APP_NAME } from './config-constants.js';
-import { loadState } from './repository/state-repository.js';
 
 function getServiceName(): string {
   return process.env.SONARQUBE_CLI_KEYCHAIN_SERVICE || APP_NAME;
@@ -130,14 +129,6 @@ function getBackend(): KeychainBackend {
 }
 
 /**
- * Derive account names from the connections stored in state.json.
- */
-function deriveAccountsFromConnections(): string[] {
-  const state = loadState();
-  return state.auth.connections.map((c) => generateKeychainAccount(c.serverUrl, c.orgKey));
-}
-
-/**
  * Generate keychain account key
  * SonarQube Cloud: "sonarcloud.io:org-key"
  * SonarQube Server: "hostname"
@@ -226,37 +217,4 @@ export async function deleteToken(serverURL: string, org?: string): Promise<void
   const backend = getBackend();
   await backend.deletePassword(getServiceName(), account);
   tokenCache.delete(account);
-}
-
-export async function getAllCredentials(): Promise<Array<{ account: string; password: string }>> {
-  const filePath = getKeychainFilePath();
-  if (filePath) {
-    const store = readFileStore(filePath);
-    return Object.entries(store.tokens).map(([account, password]) => ({ account, password }));
-  }
-
-  const accounts = deriveAccountsFromConnections();
-  const backend = getBackend();
-  const service = getServiceName();
-  const results: Array<{ account: string; password: string }> = [];
-  for (const account of accounts) {
-    const password = await backend.getPassword(service, account);
-    if (password != null) {
-      results.push({ account, password });
-    }
-  }
-  return results;
-}
-
-/**
- * Clear all tokens for this service and cache
- */
-export async function purgeAllTokens(): Promise<void> {
-  const credentials = await getAllCredentials();
-  const backend = getBackend();
-  const service = getServiceName();
-  for (const cred of credentials) {
-    await backend.deletePassword(service, cred.account);
-  }
-  tokenCache.clear();
 }

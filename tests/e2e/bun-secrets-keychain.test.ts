@@ -22,7 +22,7 @@
  * E2e tests that exercise the real Bun.secrets OS credential store via the CLI binary.
  *
  * Each test starts a FakeSonarQubeServer, runs actual CLI commands (auth login,
- * logout, purge), and verifies tokens are stored/removed from the real OS keychain.
+ * logout, status), and verifies tokens are stored/removed from the real OS keychain.
  * SONARQUBE_CLI_KEYCHAIN_SERVICE isolates tokens per test run.
  */
 
@@ -150,17 +150,6 @@ describe('Bun.secrets keychain via CLI', () => {
 
     const afterLogout = await Bun.secrets.get({ service: ctx.serviceName, name: account });
     expect(afterLogout).toBeNull();
-  });
-
-  it('auth purge removes all tokens from the OS keychain', async () => {
-    const env = buildEnv(ctx);
-    const account = await setupAuth(ctx);
-
-    const purgeResult = await runCli('auth purge', env, { cwd: ctx.cwd, stdin: 'y\n' });
-    expect(purgeResult.exitCode).toBe(0);
-
-    const afterPurge = await Bun.secrets.get({ service: ctx.serviceName, name: account });
-    expect(afterPurge).toBeNull();
   });
 
   it('auth status reports connected when token exists in OS keychain', async () => {
