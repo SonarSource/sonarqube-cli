@@ -32,11 +32,7 @@ function connectionLines(serverUrl: string, orgKey: string | undefined): string[
 }
 
 function displayTokenMissing(serverUrl: string, orgKey: string | undefined): void {
-  note(
-    [...connectionLines(serverUrl, orgKey), '', 'Run "sonar auth login" to restore the token'],
-    '✗ Token missing',
-    NOTE_STYLES.error,
-  );
+  note(connectionLines(serverUrl, orgKey), '✗ Token missing', NOTE_STYLES.error);
 }
 
 function displayTokenStatus(
@@ -47,13 +43,9 @@ function displayTokenStatus(
   const lines = connectionLines(serverUrl, orgKey);
 
   if (status === 'valid') {
-    note(lines, '✓ Connected', NOTE_STYLES.success);
+    printConnected(serverUrl, 'OS Keychain', orgKey);
   } else if (status === 'invalid') {
-    note(
-      [...lines, '', 'Run "sonar auth login" to reauthenticate'],
-      '✗ Token invalid',
-      NOTE_STYLES.error,
-    );
+    note(lines, '✗ Token invalid', NOTE_STYLES.error);
   } else {
     note(
       [...lines, '', 'Could not connect to the server to verify the token'],
@@ -102,11 +94,7 @@ export async function authStatus(): Promise<void> {
   );
   blank();
 
-  if (status === 'valid') {
-    printConnected(conn.serverUrl, 'OS Keychain', conn.orgKey);
-  } else {
-    displayTokenStatus(conn.serverUrl, conn.orgKey, status);
-  }
+  displayTokenStatus(conn.serverUrl, conn.orgKey, status);
 
   if (status === 'unreachable') {
     throw new CommandFailedError('Connection check failed.', {
@@ -121,11 +109,9 @@ export async function authStatus(): Promise<void> {
 }
 
 function printConnected(serverUrl: string, source: string, orgKey?: string): void {
-  const lines = [
-    `Server  ${serverUrl}`,
-    ...(orgKey ? [`Org     ${orgKey}`] : []),
-    '',
-    `Source  ${source}`,
-  ];
-  note(lines, '✓ Connected', NOTE_STYLES.success);
+  note(
+    [...connectionLines(serverUrl, orgKey), '', `Source  ${source}`],
+    '✓ Connected',
+    NOTE_STYLES.success,
+  );
 }

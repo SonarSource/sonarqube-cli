@@ -107,7 +107,11 @@ const auth = COMMAND_TREE.command('auth').description(
 
 auth
   .command('login')
-  .description('Save authentication token to keychain')
+  .description(
+    'Authenticate via browser and save credentials in the system keychain. ' +
+      'Must be run manually — agents cannot authenticate themselves. ' +
+      'For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables',
+  )
   .option(
     '-s, --server <server>',
     'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
@@ -150,6 +154,23 @@ const integrateCommand = COMMAND_TREE.command('integrate').description(
   'Setup SonarQube integration for AI coding agents, git and others.',
 );
 
+integrateCommand
+  .command('git')
+  .description(
+    'Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
+  )
+  .option(
+    '--hook <type>',
+    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)',
+  )
+  .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '--global',
+    'Install hook globally for all repositories (sets git config --global core.hooksPath)',
+  )
+  .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
+
 const projectKeyExtraHelp = `
 Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
 Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for example .sonarlint/connectedMode.json) that includes projectKey.
@@ -168,23 +189,6 @@ integrateCommand
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
-
-integrateCommand
-  .command('git')
-  .description(
-    'Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).',
-  )
-  .option(
-    '--hook <type>',
-    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)',
-  )
-  .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
-  .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option(
-    '--global',
-    'Install hook globally for all repositories (sets git config --global core.hooksPath)',
-  )
-  .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
 
 integrateCommand
   .command('copilot')
@@ -230,7 +234,9 @@ integrateCommand
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
 // List Sonar resources
-const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');
+const list = COMMAND_TREE.command('list').description(
+  'List issues and projects from SonarQube Cloud or Server',
+);
 
 const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
 const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
@@ -359,7 +365,12 @@ analyze
   );
 
 applySqaaOptions(
-  analyze.command('agentic').description('Run server-side Agentic Analysis (SonarQube Cloud only)'),
+  analyze
+    .command('agentic')
+    .description(
+      'Run server-side Agentic Analysis (SonarQube Cloud only). ' +
+        'Limitations apply, see https://www.sonarsource.com/products/sonarqube/agentic-analysis/',
+    ),
 );
 
 // `verify` is deprecated in favour of `sonar analyze`.
