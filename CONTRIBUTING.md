@@ -1,5 +1,14 @@
 # Contributing to sonarqube-cli
 
+> **We don't accept external pull requests on this project.** Keeping all changes in one
+> place lets us properly track, plan, prioritize, and test everything that goes into the
+> CLI. If you've found a bug or have an idea, please
+> [open a GitHub Issue](https://github.com/SonarSource/sonarqube-cli/issues/new/choose)
+> instead — we'd love to hear from you.
+>
+> The source is public, so you're welcome to fork it, read it, and experiment. The rest
+> of this guide explains how to build and run the CLI from source.
+
 ## Prerequisites
 
 - [Bun](https://bun.sh/) 1.3.9+ — required for running tests and building binaries
@@ -30,7 +39,7 @@ Produces `dist/sonarqube-cli` using Bun's single-file compiler. To use it locall
 
 ## Checks
 
-Run these before opening a pull request:
+Run these to validate your local build:
 
 ```bash
 # Lint (ESLint + TypeScript-aware rules)
@@ -98,7 +107,7 @@ After this, every build signs the binary automatically. On machines without the 
 
 ## Doc generation
 
-The README.md file is generated from the source code. When adding or modifying a command, please call:
+The docs site under `docs/` (`commands.json`, `llms.txt`, `sitemap.xml`) is generated from the source code. When adding or modifying a command, regenerate it with:
 
 ```bash
 bun run gen:docs
