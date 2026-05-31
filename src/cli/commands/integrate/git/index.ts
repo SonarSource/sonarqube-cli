@@ -27,8 +27,8 @@ import { join } from 'node:path';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, info, intro, note, selectPrompt, text, warn } from '../../../../ui';
-import { CommandFailedError, InvalidOptionError } from '../../_common/error';
+import { blank, confirmPrompt, info, intro, note, text, warn } from '../../../../ui';
+import { CommandFailedError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { installIntegration } from '../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from './options';
@@ -91,42 +91,6 @@ export async function detectSonarHookInstallation(root: string): Promise<HookIns
 // Shared interaction helpers
 // ---------------------------------------------------------------------------
 
-/** Rejects invalid `--hook` when it is set */
-export function validateHookOption(hook: string | undefined): void {
-  if (hook !== undefined && !isGitHookType(hook)) {
-    throw new InvalidOptionError('--hook must be pre-commit or pre-push');
-  }
-}
-
-/**
- * Validates and returns explicit `--hook`, or `pre-commit` when non-interactive with no hook, or prompts to select.
- */
-export async function resolveHookType(options: IntegrateGitOptions): Promise<GitHookType> {
-  if (options.hook !== undefined) {
-    return options.hook;
-  }
-  if (options.nonInteractive) {
-    return 'pre-commit';
-  }
-  const choice = await selectPrompt<GitHookType>(
-    'Would you like to install the pre-commit or pre-push hook?',
-    [
-      {
-        value: 'pre-commit' as const,
-        label: 'pre-commit (scan staged files)',
-      },
-      {
-        value: 'pre-push' as const,
-        label: 'pre-push (scan files in unpushed commits)',
-      },
-    ],
-  );
-  if (choice === null) {
-    throw new CommandFailedError('Installation cancelled');
-  }
-  return choice;
-}
-
 export function showPostInstallInfo(hook: GitHookType): void {
   blank();
   text(
@@ -175,8 +139,6 @@ export async function showInstallationStatus(root: string): Promise<void> {
 }
 
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
-  validateHookOption(options.hook);
-
   warn('Global hook installation');
   text('  Git prioritizes local repository settings over global ones.');
   text('  If a project has a local core.hooksPath set,');
@@ -197,18 +159,14 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   }
   blank();
 
-  const hook = await resolveHookType(options);
-  text(`Hook: ${hook}`);
-  blank();
-
-  await installGitFeatures({ ...options, hook }, GLOBAL_HOOKS_DIR, 'global');
-  showPostInstallInfo(hook);
-  showVerificationGuide(hook);
+  const hooks = await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global');
+  for (const hook of hooks) {
+    showPostInstallInfo(hook);
+    showVerificationGuide(hook);
+  }
 }
 
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
-  validateHookOption(options.hook);
-
   intro('SonarQube Git integration (secrets scanning)');
   blank();
 
@@ -235,33 +193,31 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   }
   blank();
 
-  const hook = await resolveHookType(options);
-  text(`Hook: ${hook}`);
-  blank();
-
-  await installGitFeatures({ ...options, hook }, gitRoot, 'project');
-
-  showPostInstallInfo(hook);
+  const hooks = await installGitFeatures(options, gitRoot, 'project');
+  for (const hook of hooks) {
+    showPostInstallInfo(hook);
+  }
   await showInstallationStatus(gitRoot);
-  showVerificationGuide(hook);
+  for (const hook of hooks) {
+    showVerificationGuide(hook);
+  }
 }
 
 async function installGitFeatures(
-  options: IntegrateGitOptions & { hook: GitHookType },
+  options: IntegrateGitOptions,
   targetRoot: string,
   scope: 'project' | 'global',
-): Promise<void> {
+): Promise<GitHookType[]> {
   const integrationId = await resolveGitIntegrationId(targetRoot, scope);
-  await installIntegration({
+  const installed = await installIntegration({
     integrationId,
     options,
     targetRoot,
     scope,
     force: options.force,
-    attrs: {
-      hook: options.hook,
-    },
+    nonInteractive: options.nonInteractive,
   });
+  return installed.map((f) => f.featureId.replace('-hook', '') as GitHookType);
 }
 
 async function resolveGitIntegrationId(

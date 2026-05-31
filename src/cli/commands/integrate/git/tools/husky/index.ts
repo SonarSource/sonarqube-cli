@@ -39,7 +39,9 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
   return {
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
-    when: ({ options }) => options.hook === hook,
+    hint: hook === 'pre-commit' ? 'scan staged files' : 'scan files in unpushed commits',
+    when: ({ options }) =>
+      options.nonInteractive === true && hook !== 'pre-commit' ? { kind: 'skip' } : { kind: 'ask' },
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       textSnippet({
