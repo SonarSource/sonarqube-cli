@@ -289,6 +289,9 @@ describe('integrate claude', () => {
 
       const result = await harness.run('integrate claude', {
         browserToken: 'browser-token',
+        // After the interactive browser repair, the installer asks per feature (secrets, mcp);
+        // 'y' to each. sqaa is auto-skipped (not a cloud connection).
+        stdinChunks: ['y', 'y'],
       });
 
       expect(result.exitCode).toBe(0);
@@ -314,6 +317,8 @@ describe('integrate claude', () => {
 
       const result = await harness.run('integrate claude', {
         browserToken: 'valid-browser-token',
+        // Answer the per-feature prompts (secrets, mcp) that follow the browser repair.
+        stdinChunks: ['y', 'y'],
       });
 
       expect(result.exitCode).toBe(0);
@@ -411,6 +416,9 @@ describe('integrate claude', () => {
             SONARQUBE_CLI_SERVER: server.baseUrl(),
             // no browserToken: if browser auth is triggered the test times out
           },
+          // Env-based auth skips browser repair but feature selection stays interactive;
+          // answer the per-feature prompts (secrets, mcp) so the run can complete.
+          stdinChunks: ['y', 'y'],
         },
       );
 
@@ -1037,6 +1045,9 @@ describe('integrate claude — file placement (local vs global)', () => {
   // ─── Global pre-exists, project install runs ────────────────────
 
   function writeExistingGlobalSecretsHook(): void {
+    // Record the global secrets-hooks install in state — this is the source of truth the
+    // declarative installer consults to skip the project-level secrets feature.
+    harness.state().withInstalledIntegrationFeature('claude-code', 'sonar-secrets-hooks', 'global');
     // Simulate the on-disk footprint of a previous `sonar integrate claude -g` run:
     // .claude/settings.json with a sonar-secrets PreToolUse entry plus the script file.
     const globalScriptRel =

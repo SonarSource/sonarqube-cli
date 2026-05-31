@@ -25,7 +25,6 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import {
   type FeatureDeclaration,
   installIntegration,
@@ -94,6 +93,7 @@ describe('generic integration installer', () => {
       targetRoot: tempDir,
       scope: 'project',
       attrs: { projectKey: 'project' },
+      nonInteractive: true,
     });
 
     expect(installed).toHaveLength(1);
@@ -115,51 +115,46 @@ describe('generic integration installer', () => {
     loadStateSpy.mockReturnValue(state);
     const mainRoot = join(tempDir, 'global');
     const projectRoot = join(tempDir, 'project');
-    const integration = registerIntegration<{
-      installMain?: boolean;
-      installProject?: boolean;
-      projectRoot?: string;
-    }>(registry, 'installer-feature-routing', [
-      {
-        id: 'main',
-        displayName: 'Main feature',
-        when: ({ options }) => options.installMain === true,
-        resources: [
-          wholeFile({
-            id: 'main-file',
-            displayName: 'Main file',
-            targetPath: (context) => join(context.targetRoot, 'main.txt'),
-            content: 'main\n',
-          }),
-        ],
-      },
-      {
-        id: 'project',
-        displayName: 'Project feature',
-        when: ({ options }) => options.installProject === true,
-        targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
-        scope: 'project',
-        resources: [
-          wholeFile({
-            id: 'project-file',
-            displayName: 'Project file',
-            targetPath: (context) => join(context.targetRoot, 'project.txt'),
-            content: 'project\n',
-          }),
-        ],
-      },
-    ]);
+    const integration = registerIntegration<{ projectRoot?: string }>(
+      registry,
+      'installer-feature-routing',
+      [
+        {
+          id: 'main',
+          displayName: 'Main feature',
+          resources: [
+            wholeFile({
+              id: 'main-file',
+              displayName: 'Main file',
+              targetPath: (context) => join(context.targetRoot, 'main.txt'),
+              content: 'main\n',
+            }),
+          ],
+        },
+        {
+          id: 'project',
+          displayName: 'Project feature',
+          targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
+          scope: 'project',
+          resources: [
+            wholeFile({
+              id: 'project-file',
+              displayName: 'Project file',
+              targetPath: (context) => join(context.targetRoot, 'project.txt'),
+              content: 'project\n',
+            }),
+          ],
+        },
+      ],
+    );
 
     const installed = await installIntegration({
       registry,
       integrationId: integration.id,
-      options: {
-        installMain: true,
-        installProject: true,
-        projectRoot,
-      },
+      options: { projectRoot },
       targetRoot: mainRoot,
       scope: 'global',
+      nonInteractive: true,
     });
 
     expect(installed).toMatchObject([
@@ -193,6 +188,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      nonInteractive: true,
     });
     clearMockUiCalls();
 
@@ -202,6 +198,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      nonInteractive: true,
     });
 
     expect(installed[0].resources.some((resource) => resource.id === 'file')).toBe(true);
@@ -233,6 +230,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      nonInteractive: true,
     });
 
     expect(called).toBe(false);
@@ -242,7 +240,7 @@ describe('generic integration installer', () => {
     );
   });
 
-  it('throws when the integration is unknown or no feature matches the invocation', async () => {
+  it('throws when the integration is unknown', async () => {
     const missingError = await catchError(() =>
       installIntegration({
         registry,
@@ -256,31 +254,28 @@ describe('generic integration installer', () => {
     expect(missingError?.message).toBe(
       'Integration declaration is not registered: missing-integration',
     );
+  });
 
-    const integration = registerIntegration<{ enabled?: boolean }>(
+  it('returns empty array and logs info when no feature matches the invocation', async () => {
+    const integration = registerIntegration(registry, 'installer-no-feature', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        when: () => ({ kind: 'skip' }),
+      },
+    ]);
+
+    const installed = await installIntegration({
       registry,
-      'installer-no-feature',
-      [
-        {
-          id: 'feature',
-          displayName: 'Feature',
-          when: ({ options }) => options.enabled === true,
-        },
-      ],
-    );
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      nonInteractive: true,
+    });
 
-    const noFeatureError = await catchError(() =>
-      installIntegration({
-        registry,
-        integrationId: integration.id,
-        options: {},
-        targetRoot: tempDir,
-        scope: 'project',
-      }),
-    );
-
-    expect(noFeatureError).toBeInstanceOf(CommandFailedError);
-    expect(noFeatureError?.message).toBe('No feature selected for Test Integration');
+    expect(installed).toEqual([]);
+    expect(hasUiCall('info', 'Nothing to install for Test Integration')).toBe(true);
   });
 
   it('passes force through the integration context for protected whole files', async () => {
@@ -311,6 +306,7 @@ describe('generic integration installer', () => {
         options: {},
         targetRoot: tempDir,
         scope: 'project',
+        nonInteractive: true,
       }),
     ).rejects.toThrow(
       `Refusing to overwrite existing pre-commit hook at ${targetPath}. Use --force to replace.`,
@@ -322,6 +318,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      nonInteractive: true,
       force: true,
     });
 
@@ -351,6 +348,7 @@ describe('generic integration installer', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      nonInteractive: true,
     });
 
     expect(installed).toEqual([]);

@@ -534,8 +534,6 @@ describe('integrateCommand', () => {
         auth: SERVER_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: false,
-        installSqaaHook: false,
       });
       expect(runMigrationsSpy).toHaveBeenCalledWith(
         '/project/root',
@@ -565,8 +563,6 @@ describe('integrateCommand', () => {
         auth: CLOUD_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: false,
-        installSqaaHook: true,
       });
     });
 
@@ -612,8 +608,6 @@ describe('integrateCommand', () => {
         auth: SERVER_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: true,
-        installSqaaHook: false,
       });
     });
 
@@ -705,7 +699,6 @@ describe('integrateCommand', () => {
     isGlobal: boolean,
     sqaaEnabled: boolean,
     auth: ResolvedAuth = CLOUD_AUTH,
-    skipSecretsHooks = false,
   ): void {
     const expectedOptions = { skipSecretsHooks: false };
     expect(runMigrationsSpy).toHaveBeenCalledTimes(1);
@@ -725,8 +718,6 @@ describe('integrateCommand', () => {
       auth,
       projectRoot: projectRootDir,
       projectKey,
-      installSecretsHooks: !skipSecretsHooks,
-      installSqaaHook: sqaaEnabled && projectKey !== undefined,
     });
 
     expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
@@ -745,16 +736,12 @@ describe('integrateCommand', () => {
     auth,
     projectRoot,
     projectKey,
-    installSecretsHooks,
-    installSqaaHook,
   }: {
     targetRoot: string;
     scope: 'global' | 'project';
     auth: ResolvedAuth;
     projectRoot: string;
     projectKey?: string;
-    installSecretsHooks: boolean;
-    installSqaaHook: boolean;
   }): void {
     const attrs = {
       orgKey: auth.orgKey ?? null,
@@ -768,9 +755,10 @@ describe('integrateCommand', () => {
         integrationId: 'claude-code',
         options: expect.objectContaining({
           projectRoot,
-          installSecretsHooks,
-          installSqaaHook,
-          installMcp: true,
+          serverURL: auth.serverUrl,
+          token: auth.token,
+          organization: auth.orgKey,
+          projectKey,
         }),
         scope,
         targetRoot,

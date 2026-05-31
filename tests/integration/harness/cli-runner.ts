@@ -94,12 +94,15 @@ export async function runCli(
     sink.end();
   }
 
+  // Pump stdin chunks concurrently (awaited after exit): with browserToken, stdout must stay
+  // drained and the loopback token deliverable while chunks feed the prompts that follow repair.
+  let stdinPump: Promise<void> | undefined;
   if (options.stdinChunks !== undefined && proc.stdin) {
     const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
     const encoder = new TextEncoder();
     // Write each chunk with a delay so readline in the CLI process finishes
     // handling one prompt before the next chunk arrives for the next prompt.
-    await (async () => {
+    stdinPump = (async () => {
       for (const chunk of options.stdinChunks ?? []) {
         await new Promise((r) => setTimeout(r, STDIN_CHUNK_DELAY_MS));
         sink.write(encoder.encode(chunk));
@@ -127,6 +130,7 @@ export async function runCli(
   }
 
   const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+  await stdinPump?.catch(() => {});
 
   clearTimeout(timer);
 

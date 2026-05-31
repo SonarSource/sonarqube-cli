@@ -31,6 +31,12 @@ import type {
   IntegrationDeclaration,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { getDefaultState } from '../../../../../../src/lib/state';
+import {
+  clearMockUiCalls,
+  getMockUiCalls,
+  queueMockResponse,
+  setMockUi,
+} from '../../../../../../src/ui';
 
 const binaryInstall = await import('../../../../../../src/cli/commands/_common/install/binary');
 void mock.module('../../../../../../src/cli/commands/_common/install/binary', () => ({
@@ -63,9 +69,12 @@ describe('declarative integration framework', () => {
       freshlyInstalled: true,
     });
     resolveBinaryPathSpy = spyOn(binaryInstall, 'resolveBinaryPath').mockReturnValue(null);
+    setMockUi(true);
+    clearMockUiCalls();
   });
 
   afterEach(() => {
+    setMockUi(false);
     installBinarySpy.mockRestore();
     resolveBinaryPathSpy.mockRestore();
     rmSync(tempDir, { recursive: true, force: true });
@@ -257,47 +266,202 @@ describe('declarative integration framework', () => {
     );
   });
 
-  it('selects features matching an invocation', () => {
+  it('selects features matching an invocation', async () => {
     interface GitOptions {
-      hook?: 'pre-commit' | 'pre-push';
+      nonInteractive?: boolean;
     }
     const integration: IntegrationDeclaration<GitOptions> = makeIntegration({
       features: [
         {
           id: 'pre-commit',
           displayName: 'Pre-commit',
-          when: ({ options }) => !options.hook || options.hook === 'pre-commit',
         },
         {
           id: 'pre-push',
           displayName: 'Pre-push',
-          when: ({ options }) => options.hook === 'pre-push',
-        },
-        {
-          id: 'always',
-          displayName: 'Always',
+          when: ({ options }) =>
+            options.nonInteractive === true ? { kind: 'skip' } : { kind: 'ask' },
         },
       ],
     });
 
     expect(
-      installer
-        .selectFeaturesForInvocation(integration, {
-          options: {},
+      (
+        await installer.selectFeaturesForInvocation(integration, {
+          options: { nonInteractive: true },
           targetRoot: tempDir,
           scope: 'project',
+          nonInteractive: true,
         })
-        .map((feature) => feature.id),
-    ).toEqual(['pre-commit', 'always']);
+      ).map((feature) => feature.id),
+    ).toEqual(['pre-commit']);
+
+    queueMockResponse(true);
+    queueMockResponse(true);
     expect(
-      installer
-        .selectFeaturesForInvocation(integration, {
-          options: { hook: 'pre-push' },
+      (
+        await installer.selectFeaturesForInvocation(integration, {
+          options: { nonInteractive: false },
           targetRoot: tempDir,
           scope: 'project',
+          nonInteractive: false,
         })
-        .map((feature) => feature.id),
-    ).toEqual(['pre-push', 'always']);
+      ).map((feature) => feature.id),
+    ).toEqual(['pre-commit', 'pre-push']);
+  });
+
+  it('skips feature and shows reason when when() returns skip with reason', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [
+        {
+          id: 'f',
+          displayName: 'My Feature',
+          when: () => ({ kind: 'skip', reason: 'already done' }),
+        },
+      ],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(
+      integration,
+      makeInvocation(tempDir),
+    );
+
+    expect(selected).toHaveLength(0);
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'info' && String(c.args[0]) === 'My Feature: already done',
+      ),
+    ).toBe(true);
+  });
+
+  it('skips feature silently when when() returns skip without reason', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [{ id: 'f', displayName: 'My Feature', when: () => ({ kind: 'skip' }) }],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(
+      integration,
+      makeInvocation(tempDir),
+    );
+
+    expect(selected).toHaveLength(0);
+    expect(getMockUiCalls().some((c) => c.method === 'info')).toBe(false);
+  });
+
+  it('prompts with default question including hint when when() returns ask', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [
+        { id: 'f', displayName: 'My Feature', hint: 'does X', when: () => ({ kind: 'ask' }) },
+      ],
+    });
+    queueMockResponse(true);
+
+    const selected = await installer.selectFeaturesForInvocation(
+      integration,
+      makeInvocation(tempDir),
+    );
+
+    expect(selected.map((f) => f.id)).toEqual(['f']);
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'confirmPrompt' && String(c.args[0]) === 'Set up My Feature? (does X)',
+      ),
+    ).toBe(true);
+  });
+
+  it('prompts with default question when no hint is set', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [{ id: 'f', displayName: 'My Feature', when: () => ({ kind: 'ask' }) }],
+    });
+    queueMockResponse(true);
+
+    await installer.selectFeaturesForInvocation(integration, makeInvocation(tempDir));
+
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'confirmPrompt' && String(c.args[0]) === 'Set up My Feature?',
+      ),
+    ).toBe(true);
+  });
+
+  it('uses custom question when when() returns ask with question', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [
+        {
+          id: 'f',
+          displayName: 'My Feature',
+          when: () => ({ kind: 'ask', question: 'Enable this?' }),
+        },
+      ],
+    });
+    queueMockResponse(true);
+
+    await installer.selectFeaturesForInvocation(integration, makeInvocation(tempDir));
+
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'confirmPrompt' && String(c.args[0]) === 'Enable this?',
+      ),
+    ).toBe(true);
+  });
+
+  it('excludes feature when user declines the prompt', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [{ id: 'f', displayName: 'My Feature', when: () => ({ kind: 'ask' }) }],
+    });
+    queueMockResponse(false);
+
+    const selected = await installer.selectFeaturesForInvocation(
+      integration,
+      makeInvocation(tempDir),
+    );
+
+    expect(selected).toHaveLength(0);
+  });
+
+  it('auto-accepts all ask features in nonInteractive mode without prompting', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [
+        { id: 'a', displayName: 'A', when: () => ({ kind: 'ask' }) },
+        { id: 'b', displayName: 'B' },
+      ],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(
+      integration,
+      makeInvocation(tempDir, { nonInteractive: true }),
+    );
+
+    expect(selected.map((f) => f.id)).toEqual(['a', 'b']);
+    expect(getMockUiCalls().some((c) => c.method === 'confirmPrompt')).toBe(false);
+  });
+
+  it('handles async when() callbacks', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [
+        { id: 'f', displayName: 'My Feature', when: () => Promise.resolve({ kind: 'ask' }) },
+      ],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(
+      integration,
+      makeInvocation(tempDir, { nonInteractive: true }),
+    );
+
+    expect(selected.map((f) => f.id)).toEqual(['f']);
+  });
+
+  it('includes feature when no when() is defined', async () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [{ id: 'f', displayName: 'My Feature' }],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(
+      integration,
+      makeInvocation(tempDir, { nonInteractive: true }),
+    );
+
+    expect(selected.map((f) => f.id)).toEqual(['f']);
   });
 
   it('applies declared resources and records the feature once', async () => {
@@ -900,5 +1064,14 @@ function makeContext(
     scope: 'project',
     force,
     attrs,
+  };
+}
+
+function makeInvocation(targetRoot: string, opts?: { nonInteractive?: boolean }) {
+  return {
+    options: {} as Record<string, unknown>,
+    targetRoot,
+    scope: 'project' as const,
+    ...opts,
   };
 }

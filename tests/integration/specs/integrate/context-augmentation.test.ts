@@ -650,7 +650,7 @@ describe('integrate copilot — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate copilot', {
+      const result = await harness.run('integrate copilot --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -719,7 +719,7 @@ describe('integrate codex — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate codex', {
+      const result = await harness.run('integrate codex --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -773,7 +773,7 @@ describe('integrate codex — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate codex --skip-context', {
+      const result = await harness.run('integrate codex --non-interactive --skip-context', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -814,7 +814,7 @@ describe('integrate codex — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate codex', {
+      const result = await harness.run('integrate codex --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -842,7 +842,7 @@ describe('integrate codex — Context Augmentation', () => {
       harness.state().withContextAugmentationBinaryInstalled();
       // No sonar-project.properties — projectKey is undefined.
 
-      const result = await harness.run('integrate codex', {
+      const result = await harness.run('integrate codex --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -872,8 +872,8 @@ describe('integrate <agent> --global — Context Augmentation', () => {
 
   it.each([
     ['claude', 'integrate claude -g --non-interactive'],
-    ['copilot', 'integrate copilot -g'],
-    ['codex', 'integrate codex -g'],
+    ['copilot', 'integrate copilot -g --non-interactive'],
+    ['codex', 'integrate codex -g --non-interactive'],
   ])(
     'skips CAG entirely on "integrate %s --global"',
     async (_agent, command) => {

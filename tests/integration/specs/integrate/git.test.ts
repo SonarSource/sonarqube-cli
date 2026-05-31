@@ -41,6 +41,13 @@ function pathWithoutNodeModules(envPath: string | undefined): string {
 // Intentional fixture for secret detection (split literal avoids hardcoded-secret rules)
 const GITHUB_TEST_TOKEN = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';
 
+// Interactive `confirmPrompt` answers, one keypress per prompt, in order:
+//   1. "Install here?" / "Proceed with global installation?"
+//   2. "Set up pre-commit hook?"
+//   3. "Set up pre-push hook?"
+const PRECOMMIT_ONLY_ANSWERS = ['y', 'y', 'n'];
+const PREPUSH_ONLY_ANSWERS = ['y', 'n', 'y'];
+
 /** Env for `git commit` / `git push` so the installed hook sees the same HOME + keychain as `harness.run()`. */
 function buildHookEnv(sonarBinDir: string, harness: TestHarness): Record<string, string> {
   const env: Record<string, string> = {
@@ -242,14 +249,14 @@ describe('integrate git (native hooks)', () => {
   });
 
   it(
-    'exits with error when user cancels the hook-type selection',
+    'exits with error when user cancels the install confirmation',
     async () => {
       await setupAuthenticated(harness);
 
       // Minimal git repo: findGitRoot() detects the .git directory
       harness.cwd.writeFile('.git/.keep', '');
 
-      // Ctrl+C sent to stdin cancels the interactive confirmPrompt
+      // Ctrl+C sent to stdin cancels the interactive 'Install here?' confirmPrompt
       const result = await harness.run('integrate git', { stdin: '\x03' });
 
       expect(result.exitCode).toBe(1);
@@ -293,7 +300,7 @@ describe('integrate git (native hooks)', () => {
       // to a non-existent gitdir so git rev-parse --git-path hooks fails.
       harness.cwd.writeFile('.git', 'gitdir: not-a-real-git-dir\n');
 
-      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+      const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
@@ -312,7 +319,7 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+      const result = await harness.run('integrate git --non-interactive');
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
 
@@ -335,7 +342,7 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      const result = await harness.run('integrate git --hook pre-push --non-interactive');
+      const result = await harness.run('integrate git', { stdinChunks: PREPUSH_ONLY_ANSWERS });
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
 
@@ -372,9 +379,9 @@ describe('integrate git (native hooks)', () => {
       // and resolveGitHooksDir() resolves to .git/hooks as expected
       initGitRepo(harness);
 
-      // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: '\r' confirms 'Install here?', then '\r' selects pre-commit
-      const result = await harness.run('integrate git', { stdinChunks: ['\r', '\r'] });
+      // One stdin chunk per prompt (delays prevent readline from buffering them together):
+      // 'y' confirms 'Install here?', 'y' sets up pre-commit, 'n' skips pre-push.
+      const result = await harness.run('integrate git', { stdinChunks: PRECOMMIT_ONLY_ANSWERS });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
@@ -389,7 +396,7 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+      const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as InstalledStateJson;
@@ -400,9 +407,6 @@ describe('integrate git (native hooks)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'git-hook-file');
@@ -418,9 +422,9 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // '\r' confirms 'Install here?'; '\x1b[B' moves the selection down to pre-push; '\r' submits
+      // 'y' confirms 'Install here?', 'n' skips pre-commit, 'y' sets up pre-push.
       const result = await harness.run('integrate git', {
-        stdinChunks: ['\r', '\x1b[B', '\r'],
+        stdinChunks: PREPUSH_ONLY_ANSWERS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -435,9 +439,11 @@ describe('integrate git (native hooks)', () => {
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
-      // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: '\r' confirms global hook warning, then '\r' selects pre-commit
-      const result = await harness.run('integrate git --global', { stdinChunks: ['\r', '\r'] });
+      // One stdin chunk per prompt: 'y' confirms global installation, 'y' sets up
+      // pre-commit, 'n' skips pre-push.
+      const result = await harness.run('integrate git --global', {
+        stdinChunks: PRECOMMIT_ONLY_ANSWERS,
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
@@ -452,7 +458,9 @@ describe('integrate git (native hooks)', () => {
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
-      const result = await harness.run('integrate git --global --hook pre-push --non-interactive');
+      const result = await harness.run('integrate git --global', {
+        stdinChunks: PREPUSH_ONLY_ANSWERS,
+      });
 
       expect(result.exitCode).toBe(0);
       const state = harness.stateJsonFile.asJson() as InstalledStateJson;
@@ -462,9 +470,6 @@ describe('integrate git (native hooks)', () => {
         featureId: 'pre-push-hook',
         scope: 'global',
         targetRoot: harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks').path,
-        attrs: {
-          hook: 'pre-push',
-        },
       });
       expectInstalledOperation(feature, 'configure-global-hooks-path');
     },
@@ -476,10 +481,9 @@ describe('integrate git (native hooks)', () => {
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
-      // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: '\r' confirms global hook warning, then '\r' selects pre-push
+      // 'y' confirms global installation, 'n' skips pre-commit, 'y' sets up pre-push.
       const result = await harness.run('integrate git --global', {
-        stdinChunks: ['\r', '\x1b[B', '\r'],
+        stdinChunks: PREPUSH_ONLY_ANSWERS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -508,7 +512,7 @@ describe('integrate git (husky)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepoWithHusky(harness);
 
-      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+      const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
@@ -527,9 +531,6 @@ describe('integrate git (husky)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
@@ -557,7 +558,7 @@ describe('integrate git (husky)', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+      const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(0);
       const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-commit'), 'utf-8');
@@ -576,7 +577,7 @@ describe('integrate git (husky)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepoWithHusky(harness);
 
-      const result = await harness.run('integrate git --hook pre-push --non-interactive');
+      const result = await harness.run('integrate git', { stdinChunks: PREPUSH_ONLY_ANSWERS });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
@@ -595,9 +596,6 @@ describe('integrate git (husky)', () => {
         featureId: 'pre-push-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-push',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
@@ -665,7 +663,7 @@ describe('integrate git (pre-commit framework)', () => {
         }),
       );
 
-      const result = await harness.run('integrate git --hook pre-commit --non-interactive', {
+      const result = await harness.run('integrate git --non-interactive', {
         extraEnv: setupFakePreCommit(preCommitLog),
       });
 
@@ -693,9 +691,6 @@ describe('integrate git (pre-commit framework)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
@@ -712,7 +707,8 @@ describe('integrate git (pre-commit framework)', () => {
       initGitRepoWithPreCommitConfig(harness);
       const preCommitLog = join(harness.cwd.path, 'pre-commit.log');
 
-      const result = await harness.run('integrate git --hook pre-push --non-interactive', {
+      const result = await harness.run('integrate git', {
+        stdinChunks: PREPUSH_ONLY_ANSWERS,
         extraEnv: setupFakePreCommit(preCommitLog),
       });
 
@@ -743,9 +739,6 @@ describe('integrate git (pre-commit framework)', () => {
         featureId: 'pre-push-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-push',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
@@ -774,10 +767,10 @@ describe('integrate git (pre-commit framework)', () => {
       );
 
       const extraEnv = setupFakePreCommit(preCommitLog);
-      const first = await harness.run('integrate git --hook pre-commit --non-interactive', {
+      const first = await harness.run('integrate git --non-interactive', {
         extraEnv,
       });
-      const second = await harness.run('integrate git --hook pre-commit --non-interactive', {
+      const second = await harness.run('integrate git --non-interactive', {
         extraEnv,
       });
 
@@ -811,9 +804,6 @@ describe('integrate git (pre-commit framework)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
     },
     { timeout: 15000 },

@@ -125,7 +125,7 @@ export function findCopilotFeature(
   );
 }
 
-/** Simulates a previous `sonar integrate copilot -g` run on disk. */
+/** Simulates a previous `sonar integrate copilot -g` run on disk and in state. */
 export function writeExistingGlobalHook(harness: TestHarness): void {
   const scriptRel = `.copilot/hooks/sonar-secrets/build-scripts/${PRETOOL_SECRETS_SCRIPT}`;
   harness.userHome.writeFile(scriptRel, '#!/bin/bash\nexit 0\n');
@@ -135,14 +135,18 @@ export function writeExistingGlobalHook(harness: TestHarness): void {
     hooks: { preToolUse: [makeHookEntry(normalizePath(absScriptPath))] },
   };
   harness.userHome.writeFile('.copilot/hooks/hooks.json', JSON.stringify(hooksJson));
+  harness.state().withInstalledIntegrationFeature('copilot-cli', 'pre-tool-use-hook', 'global');
 }
 
-/** Simulates a pre-existing global instructions file. */
+/** Simulates a pre-existing global instructions file and state entry. */
 export function writeExistingGlobalInstructions(harness: TestHarness): void {
   harness.userHome.writeFile(
     '.copilot/instructions/sonarqube.instructions.md',
     '# pre-existing global instructions\n',
   );
+  harness
+    .state()
+    .withInstalledIntegrationFeature('copilot-cli', 'prompt-secrets-instructions', 'global');
 }
 
 /**

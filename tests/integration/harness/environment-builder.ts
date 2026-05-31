@@ -49,6 +49,7 @@ import type {
   CliState,
   InstalledIntegrationDependency,
   InstalledTool,
+  IntegrationScope,
 } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import { IS_WINDOWS } from './platform';
@@ -94,6 +95,11 @@ export class EnvironmentBuilder {
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
   private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
+  private readonly installedIntegrationFeatures: Array<{
+    integrationId: string;
+    featureId: string;
+    scope: IntegrationScope;
+  }> = [];
 
   withActiveConnection(
     url: string,
@@ -271,6 +277,20 @@ export class EnvironmentBuilder {
     return this;
   }
 
+  /**
+   * Pre-seeds a declarative integration feature in state so that
+   * `isFeatureInstalled(state, integrationId, featureId, scope)` returns true
+   * before the CLI binary runs.
+   */
+  withInstalledIntegrationFeature(
+    integrationId: string,
+    featureId: string,
+    scope: IntegrationScope,
+  ): this {
+    this.installedIntegrationFeatures.push({ integrationId, featureId, scope });
+    return this;
+  }
+
   build(binDir?: string): CliState {
     // Default to the current CLI version so post-update is a no-op. Tests that
     // need to exercise the upgrade migration inject a stale version via
@@ -392,6 +412,42 @@ export class EnvironmentBuilder {
         name: CONTEXT_AUGMENTATION_BINARY_NAME,
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         scaEnabled: skill.scaEnabled ?? false,
+      });
+    }
+
+    const byIntegrationId = new Map<
+      string,
+      Array<{ featureId: string; scope: IntegrationScope }>
+    >();
+    for (const { integrationId, featureId, scope } of this.installedIntegrationFeatures) {
+      let features = byIntegrationId.get(integrationId);
+      if (!features) {
+        features = [];
+        byIntegrationId.set(integrationId, features);
+      }
+      features.push({ featureId, scope });
+    }
+    const now = new Date().toISOString();
+    for (const [integrationId, features] of byIntegrationId) {
+      state.integrations.installed.push({
+        id: randomUUID(),
+        integrationId,
+        installedByCliVersion: 'integration-test',
+        installedAt: now,
+        updatedByCliVersion: 'integration-test',
+        updatedAt: now,
+        features: features.map(({ featureId, scope }) => ({
+          featureId,
+          scope,
+          targetRoot: '',
+          installedByCliVersion: 'integration-test',
+          installedAt: now,
+          updatedByCliVersion: 'integration-test',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+        })),
       });
     }
 
