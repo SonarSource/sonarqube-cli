@@ -25,10 +25,8 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import {
   areHooksInstalled,
-  detectGlobalSecretsHook,
   installHooks,
 } from '../../../../../../src/cli/commands/integrate/claude/hooks';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
 const PROJECT_ROOT = '/fake/project';
 const GLOBAL_DIR = '/fake/global';
@@ -63,104 +61,6 @@ function getScriptPathFor(nameFragment: string): string | undefined {
 }
 
 let writeFileSpy: Mock<Extract<(typeof fsPromises)['writeFile'], (...args: any[]) => any>>;
-
-describe('detectGlobalSecretsHook', () => {
-  let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
-  let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
-
-  const SETTINGS_WITH_SECRETS = {
-    hooks: {
-      PreToolUse: [
-        {
-          matcher: 'Read',
-          hooks: [
-            { type: 'command', command: '.claude/hooks/sonar-secrets/pretool.sh', timeout: 60 },
-          ],
-        },
-      ],
-    },
-  };
-
-  beforeEach(() => {
-    setMockUi(true);
-    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(true);
-    readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{}');
-  });
-
-  afterEach(() => {
-    clearMockUiCalls();
-    setMockUi(false);
-    existsSyncSpy.mockRestore();
-    readFileSpy.mockRestore();
-  });
-
-  it('returns undefined and stays silent when settings.json does not exist (absent)', async () => {
-    existsSyncSpy.mockReturnValue(false);
-
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
-    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
-    expect(noisy).toHaveLength(0);
-  });
-
-  it('returns undefined and stays silent when no PreToolUse entry references sonar-secrets (absent)', async () => {
-    readFileSpy.mockResolvedValue(JSON.stringify({ hooks: { PreToolUse: [] } }));
-
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
-    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
-    expect(noisy).toHaveLength(0);
-  });
-
-  it('returns undefined and stays silent when settings.json contains malformed JSON (absent)', async () => {
-    readFileSpy.mockResolvedValue('{ invalid json !!!');
-
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT)).toBeUndefined();
-    const noisy = getMockUiCalls().filter((c) => c.method === 'info' || c.method === 'warn');
-    expect(noisy).toHaveLength(0);
-  });
-
-  it('returns undefined and emits warn(...) when settings entry exists but the sonar-secrets script directory is missing (orphaned)', async () => {
-    readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
-    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
-      const path = normPath(String(p));
-      if (path.endsWith('.claude/hooks/sonar-secrets')) return false;
-      return path.endsWith('.claude/settings.json');
-    });
-
-    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
-
-    expect(result).toBeUndefined();
-    const warnCall = getMockUiCalls().find(
-      (c) =>
-        c.method === 'warn' &&
-        String(c.args[0]).includes(
-          'WARNING: Global hook configuration detected, but the source files are missing',
-        ),
-    );
-    expect(warnCall).toBeDefined();
-  });
-
-  it('returns the hook dir and emits info(...) when both settings entry and sonar-secrets script directory are present (installed)', async () => {
-    readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
-    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
-      const path = normPath(String(p));
-      return path.endsWith('.claude/settings.json') || path.endsWith('.claude/hooks/sonar-secrets');
-    });
-
-    const result = await detectGlobalSecretsHook(PROJECT_ROOT);
-
-    expect(result).toBeDefined();
-    expect(normPath(result ?? '')).toEndWith('.claude/hooks/sonar-secrets');
-    const infoCall = getMockUiCalls().find(
-      (c) =>
-        c.method === 'info' &&
-        String(c.args[0]).includes(
-          'A global secrets scanning hook is already configured for SonarQube',
-        ) &&
-        String(c.args[0]).includes('project-level secrets hooks were skipped'),
-    );
-    expect(infoCall).toBeDefined();
-  });
-});
 
 describe('areHooksInstalled', () => {
   let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;

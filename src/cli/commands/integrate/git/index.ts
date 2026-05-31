@@ -46,10 +46,6 @@ export { installViaGitHooks } from './tools';
 
 type GitIntegrationId = 'native-git' | 'husky' | 'pre-commit';
 
-export function isGitHookType(s: string): s is GitHookType {
-  return s === 'pre-commit' || s === 'pre-push';
-}
-
 // ---------------------------------------------------------------------------
 // Hook detection
 // ---------------------------------------------------------------------------
