@@ -27,8 +27,7 @@ import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/
 import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
 
 const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
-const SONAR_SECRETS_HOOKS_HINT =
-  'scans prompts and file reads for secrets before they reach the agent';
+const SONAR_SECRETS_HOOKS_HINT = 'prevents leaked secrets in AI prompts';
 
 export interface SonarSecretsHookScriptSpec {
   id: string;
@@ -71,7 +70,7 @@ export function createSonarSecretsHooksFeature<TOptions>(
 
   return {
     id: SONAR_SECRETS_HOOKS_FEATURE_ID,
-    displayName: 'secrets hooks',
+    displayName: 'secret scanning hooks',
     hint: SONAR_SECRETS_HOOKS_HINT,
     // Skip project-level install when a global secrets hook already covers it; otherwise ask.
     when: ({ scope, state }) =>

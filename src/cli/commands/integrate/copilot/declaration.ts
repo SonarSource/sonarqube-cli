@@ -131,8 +131,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     },
     {
       id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
-      hint: 'guides Copilot to fix issues found by SonarQube Agentic Analysis',
+      displayName: 'agentic analysis',
+      hint: 'on-demand analysis',
       when: async ({ options }) => {
         if (!options.serverURL || !options.token || !options.projectKey) return { kind: 'skip' };
         const entitled = await resolveSqaaEntitlement(
@@ -159,7 +159,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     },
     {
       id: 'mcp-server',
-      displayName: 'MCP server',
+      displayName: 'MCP Server',
       hint: 'gives Copilot access to SonarQube data',
       resources: [
         jsonPatch({

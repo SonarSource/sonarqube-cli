@@ -119,8 +119,8 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     },
     {
       id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
-      hint: 'guides Codex to fix issues found by SonarQube Agentic Analysis',
+      displayName: 'agentic analysis',
+      hint: 'on-demand analysis',
       when: async ({ options }) => {
         if (!options.serverURL || !options.token || !options.projectKey) {
           return { kind: 'skip' };
@@ -149,7 +149,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     },
     {
       id: 'mcp-server',
-      displayName: 'MCP server',
+      displayName: 'MCP Server',
       hint: 'gives Codex access to SonarQube data',
       resources: [
         tomlPatch({

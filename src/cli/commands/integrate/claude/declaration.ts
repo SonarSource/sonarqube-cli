@@ -103,8 +103,8 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     }),
     {
       id: 'sonar-sqaa-hook',
-      displayName: 'SonarQube Agentic Analysis hook',
-      hint: 'guides Claude to fix issues found by SonarQube Agentic Analysis',
+      displayName: 'agentic analysis',
+      hint: 'on-demand analysis',
       when: async ({ options }) => {
         if (!options.serverURL || !options.token || !options.projectKey) {
           return { kind: 'skip' };
@@ -159,7 +159,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     },
     {
       id: 'mcp-server',
-      displayName: 'MCP server',
+      displayName: 'MCP Server',
       hint: 'gives Claude access to SonarQube data',
       resources: [
         jsonPatch({
