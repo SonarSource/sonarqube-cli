@@ -60,6 +60,7 @@ export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   serverURL?: string;
   token?: string;
   organization?: string;
+  projectKey?: string;
 }
 
 export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOptions> = {
@@ -133,7 +134,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       displayName: 'SonarQube Agentic Analysis instructions',
       hint: 'guides Copilot to fix issues found by SonarQube Agentic Analysis',
       when: async ({ options }) => {
-        if (!options.serverURL || !options.token) return { kind: 'skip' };
+        if (!options.serverURL || !options.token || !options.projectKey) return { kind: 'skip' };
         const entitled = await resolveSqaaEntitlement(
           options.serverURL,
           options.token,

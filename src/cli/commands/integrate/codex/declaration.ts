@@ -53,6 +53,7 @@ export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   serverURL?: string;
   token?: string;
   organization?: string;
+  projectKey?: string;
 }
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
@@ -121,7 +122,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       displayName: 'SonarQube Agentic Analysis instructions',
       hint: 'guides Codex to fix issues found by SonarQube Agentic Analysis',
       when: async ({ options }) => {
-        if (!options.serverURL || !options.token) {
+        if (!options.serverURL || !options.token || !options.projectKey) {
           return { kind: 'skip' };
         }
         const entitled = await resolveSqaaEntitlement(

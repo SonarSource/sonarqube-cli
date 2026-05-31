@@ -60,6 +60,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     serverURL: auth.serverUrl,
     token: auth.token,
     organization: auth.orgKey,
+    projectKey: projectKey ?? undefined,
   };
 
   const installed = await installIntegration({

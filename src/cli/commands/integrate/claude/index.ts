@@ -131,6 +131,7 @@ export async function integrateClaude(
     targetRoot: installRoot,
     scope: installScope,
     attrs: featureAttrs,
+    nonInteractive: options.nonInteractive,
   });
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
   await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled, {

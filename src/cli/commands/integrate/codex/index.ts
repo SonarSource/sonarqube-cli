@@ -62,6 +62,7 @@ export async function integrateCodex(
     serverURL: auth.serverUrl,
     token: auth.token,
     organization: auth.orgKey,
+    projectKey: projectKey ?? undefined,
   };
 
   await installIntegration({
