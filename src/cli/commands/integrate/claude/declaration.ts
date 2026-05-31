@@ -28,8 +28,9 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { jsonPatch, wholeFile } from '../_common/registry';
+import { jsonPatch, wholeFile } from '../_common/registry/resources';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
+import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -49,61 +50,74 @@ export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
-  installSecretsHooks?: boolean;
-  installSqaaHook?: boolean;
-  installMcp?: boolean;
+  serverURL?: string;
+  token?: string;
+  organization?: string;
+  projectKey?: string;
 }
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
   id: CLAUDE_INTEGRATION_ID,
   displayName: 'Claude Code',
   features: [
-    {
-      ...createSonarSecretsHooksFeature({
-        agentDisplayName: 'Claude',
-        configDir: CLAUDE_CONFIG_DIR,
-        hooksConfigFileName: SETTINGS_FILE,
-        hooksPatchId: 'claude-settings-secrets-hooks',
-        scripts: [
-          {
-            id: 'pretool-secrets-script',
-            displayName: 'Claude PreToolUse hook script',
-            scriptPath: PRETOOL_SCRIPT_REL,
-            content: {
-              unix: getSecretPreToolTemplateUnix(),
-              windows: getSecretPreToolTemplateWindows(),
-            },
+    createSonarSecretsHooksFeature({
+      integrationId: CLAUDE_INTEGRATION_ID,
+      agentDisplayName: 'Claude',
+      configDir: CLAUDE_CONFIG_DIR,
+      hooksConfigFileName: SETTINGS_FILE,
+      hooksPatchId: 'claude-settings-secrets-hooks',
+      scripts: [
+        {
+          id: 'pretool-secrets-script',
+          displayName: 'Claude PreToolUse hook script',
+          scriptPath: PRETOOL_SCRIPT_REL,
+          content: {
+            unix: getSecretPreToolTemplateUnix(),
+            windows: getSecretPreToolTemplateWindows(),
           },
-          {
-            id: 'prompt-secrets-script',
-            displayName: 'Claude UserPromptSubmit hook script',
-            scriptPath: PROMPT_SCRIPT_REL,
-            content: {
-              unix: getSecretPromptTemplateUnix(),
-              windows: getSecretPromptTemplateWindows(),
-            },
+        },
+        {
+          id: 'prompt-secrets-script',
+          displayName: 'Claude UserPromptSubmit hook script',
+          scriptPath: PROMPT_SCRIPT_REL,
+          content: {
+            unix: getSecretPromptTemplateUnix(),
+            windows: getSecretPromptTemplateWindows(),
           },
-        ],
-        hookEntries: [
-          {
-            eventType: 'PreToolUse',
-            matcher: 'Read',
-            marker: 'sonar-secrets',
-            scriptPath: PRETOOL_SCRIPT_REL,
-          },
-          {
-            eventType: 'UserPromptSubmit',
-            matcher: '*',
-            marker: 'sonar-secrets',
-            scriptPath: PROMPT_SCRIPT_REL,
-          },
-        ],
-      }),
-    },
+        },
+      ],
+      hookEntries: [
+        {
+          eventType: 'PreToolUse',
+          matcher: 'Read',
+          marker: 'sonar-secrets',
+          scriptPath: PRETOOL_SCRIPT_REL,
+        },
+        {
+          eventType: 'UserPromptSubmit',
+          matcher: '*',
+          marker: 'sonar-secrets',
+          scriptPath: PROMPT_SCRIPT_REL,
+        },
+      ],
+    }),
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
-      when: ({ options }) => options.installSqaaHook === true,
+      hint: 'guides Claude to fix issues found by SonarQube Agentic Analysis',
+      when: async ({ options }) => {
+        if (!options.serverURL || !options.token || !options.projectKey) {
+          return { kind: 'skip' };
+        }
+        const entitled = await resolveSqaaEntitlement(
+          options.serverURL,
+          options.token,
+          options.organization,
+        );
+        return entitled
+          ? { kind: 'ask' }
+          : { kind: 'skip', reason: 'Agentic Analysis available on SonarQube Cloud' };
+      },
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
@@ -146,7 +160,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      when: ({ options }) => options.installMcp === true,
+      hint: 'gives Claude access to SonarQube data',
       resources: [
         jsonPatch({
           id: 'claude-mcp-config',

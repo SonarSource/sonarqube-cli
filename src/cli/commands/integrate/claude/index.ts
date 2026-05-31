@@ -123,9 +123,10 @@ export async function integrateClaude(
     options: {
       ...options,
       projectRoot: project.rootDir,
-      installSecretsHooks: !skipSecretsHooks,
-      installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
-      installMcp: true,
+      serverURL: config.serverURL,
+      token,
+      organization: config.organization,
+      projectKey: config.projectKey,
     },
     targetRoot: installRoot,
     scope: installScope,
