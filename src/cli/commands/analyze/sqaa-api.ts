@@ -136,7 +136,7 @@ export async function fetchWithRetry(
     }
   }
   throw new CommandFailedError(
-    `Agentic Analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
+    `SonarQube Agentic Analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
     { cause: lastServiceError },
   );
 }

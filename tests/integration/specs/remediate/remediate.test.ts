@@ -107,8 +107,8 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('The Remediation Agent is not available for your organization');
-      expect(output).toContain(TEST_ORG);
+      expect(output).toContain('Remediation Agent unavailable.');
+      expect(output).toContain('check eligibility');
       expect(output).toContain('docs.sonarsource.com');
       expect(output).not.toContain('Which issues');
     },
@@ -132,8 +132,8 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('The Remediation Agent is not enabled for your organization');
-      expect(output).toContain(TEST_ORG);
+      expect(output).toContain('Remediation Agent unavailable.');
+      expect(output).toContain('enable the feature');
       expect(output).toContain('docs.sonarsource.com');
       expect(output).not.toContain('Which issues');
     },
@@ -157,8 +157,8 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('The Remediation Agent is not available for your organization');
-      expect(output).toContain(TEST_ORG);
+      expect(output).toContain('Remediation Agent unavailable.');
+      expect(output).toContain('check eligibility');
       expect(output).toContain('docs.sonarsource.com');
       expect(output).not.toContain('Which issues');
     },
@@ -766,9 +766,8 @@ describe('sonar remediate', () => {
         const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1`);
 
         expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain(
-          'The Remediation Agent is not enabled for your organization',
-        );
+        expect(result.stdout + result.stderr).toContain('Remediation Agent unavailable.');
+        expect(result.stdout + result.stderr).toContain('enable the feature');
 
         const agentJobCalls = server
           .getRecordedRequests()

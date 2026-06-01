@@ -622,6 +622,7 @@ describe('analyze agentic', () => {
       const output = result.stdout + result.stderr;
       expect(output).toContain('NOT_ENTITLED');
       expect(output).toContain('not entitled');
+      expect(output).not.toContain('no issues found');
     },
     { timeout: 15000 },
   );
@@ -1316,7 +1317,7 @@ describe('analyze agentic — API error codes', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('still unavailable');
       expect(result.stdout + result.stderr).toContain(
-        '  → Check your network connection and try again in a moment.',
+        '  → Check your network connection and try again later.',
       );
       // 4 total attempts: 1 initial + 3 retries
       const sqaaCalls = server
