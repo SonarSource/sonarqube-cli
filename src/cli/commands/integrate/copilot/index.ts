@@ -30,11 +30,7 @@ import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import {
-  COPILOT_INTEGRATION_ID,
-  type CopilotIntegrationOptions,
-  registerCopilotIntegration,
-} from './declaration';
+import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import {
   detectGlobalSecretsHook,
   hookScriptName,
@@ -46,9 +42,6 @@ import {
   PROJECT_INSTRUCTIONS_REL_DIR,
   warnIfProjectInstructionsShadowGlobal,
 } from './instructions';
-import { updateCopilotState } from './state';
-
-registerCopilotIntegration();
 
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {
@@ -94,15 +87,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     targetRoot,
     scope,
     attrs: buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
-  });
-
-  await updateCopilotState(project.rootDir, isGlobal, {
-    hookInstalled: installHook,
-    promptSecretsInstructionsInstalled: true,
-    sqaaInstructionsInstalled: sqaaProjectKey !== undefined,
-    projectKey: sqaaProjectKey,
-    orgKey: sqaaProjectKey ? auth.orgKey : undefined,
-    serverUrl: sqaaProjectKey ? auth.serverUrl : undefined,
   });
 
   if (!options.skipContext) {

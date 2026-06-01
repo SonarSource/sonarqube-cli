@@ -21,14 +21,9 @@
 import { join } from 'node:path';
 
 import { createAgentHookEntry, resolveAgentHookScriptPath, upsertAgentHooks } from '../hooks';
-import {
-  type FeatureDeclaration,
-  type IntegrationContext,
-  jsonPatch,
-  type PlatformSpecificContent,
-  sonarSecretsBinaryDependency,
-  wholeFile,
-} from '../registry';
+import { sonarSecretsBinaryDependency } from '../registry/dependencies';
+import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
+import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
 
 export interface SonarSecretsHooksFeatureOptions {
   installSecretsHooks?: boolean;

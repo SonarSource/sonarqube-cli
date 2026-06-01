@@ -21,36 +21,46 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
-import yaml from 'js-yaml';
+import { parse, stringify } from 'smol-toml';
 
+import { CommandFailedError } from '../../../../_common/error';
 import type { IntegrationContext, MaybePromise } from '../types';
 import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
 
-export interface YamlPatchOptions extends PatchResourceOptions {
-  patch: (document: unknown, context: IntegrationContext) => MaybePromise<unknown>;
+export interface TomlPatchOptions extends PatchResourceOptions {
+  defaultValue?: Record<string, unknown>;
+  patch: (
+    document: Record<string, unknown>,
+    context: IntegrationContext,
+  ) => MaybePromise<Record<string, unknown>>;
 }
 
-export function yamlPatch(options: YamlPatchOptions): ResourceDeclaration {
-  return new YamlPatch(options);
+export function tomlPatch(options: TomlPatchOptions): ResourceDeclaration {
+  return new TomlPatch(options);
 }
 
-export class YamlPatch extends PatchResource<YamlPatchOptions> {
-  readonly resourceType = 'yaml-patch';
+export class TomlPatch extends PatchResource<TomlPatchOptions> {
+  readonly resourceType = 'toml-patch';
 
   protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
-    const document = await readYaml(path);
+    const document = await readToml(path, this.options.defaultValue ?? {});
     const updated = await this.options.patch(document, context);
-    return yaml.dump(updated, { lineWidth: -1 });
+    return stringify(updated);
   }
 }
 
-async function readYaml(path: string): Promise<unknown> {
+async function readToml(
+  path: string,
+  defaultValue: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   if (!existsSync(path)) {
-    return {};
+    return defaultValue;
   }
   try {
-    return yaml.load(await readFile(path, 'utf-8')) ?? {};
+    return parse(await readFile(path, 'utf-8'));
   } catch {
-    return {};
+    throw new CommandFailedError(
+      `${path} contains invalid TOML. Please fix or delete it and re-run.`,
+    );
   }
 }

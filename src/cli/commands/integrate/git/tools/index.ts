@@ -18,18 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { supportedIntegrations } from '../../_common/registry';
 import { huskyIntegration } from './husky';
 import { nativeGitIntegration } from './native';
 import { preCommitIntegration } from './pre-commit';
 
-const GIT_INTEGRATIONS = [nativeGitIntegration, huskyIntegration, preCommitIntegration] as const;
-
-export function registerGitIntegrations(registry = supportedIntegrations): void {
-  for (const integration of GIT_INTEGRATIONS) {
-    registry.register(integration);
-  }
-}
+export const GIT_INTEGRATIONS = [
+  nativeGitIntegration,
+  huskyIntegration,
+  preCommitIntegration,
+] as const;
 
 export { HUSKY_INTEGRATION_ID } from './husky';
 export { installViaGitHooks, NATIVE_GIT_INTEGRATION_ID } from './native';

@@ -18,8 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { IntegrationDeclaration } from './types';
-
+export { createIntegrationRegistry, IntegrationRegistry, registerIntegrations } from './core';
 export {
   type DependencyDeclaration,
   sonarSecretsBinaryDependency,
@@ -41,6 +40,8 @@ export {
   type ResourceDeclaration,
   textSnippet,
   type TextSnippetResourceOptions,
+  tomlPatch,
+  type TomlPatchOptions,
   wholeFile,
   type WholeFileContent,
   type WholeFileResourceOptions,
@@ -60,76 +61,3 @@ export type {
   LegacyFeatureDeclaration,
   MaybePromise,
 } from './types';
-
-export class IntegrationRegistry {
-  private readonly declarations = new Map<string, IntegrationDeclaration>();
-
-  register(declaration: IntegrationDeclaration): void {
-    this.validateDeclaration(declaration);
-    if (this.declarations.has(declaration.id)) {
-      throw new Error(`Integration declaration already registered: ${declaration.id}`);
-    }
-    this.declarations.set(declaration.id, declaration);
-  }
-
-  get(id: string): IntegrationDeclaration | undefined {
-    return this.declarations.get(id);
-  }
-
-  list(): IntegrationDeclaration[] {
-    return [...this.declarations.values()];
-  }
-
-  private validateDeclaration(declaration: IntegrationDeclaration): void {
-    this.ensureNonEmptyId(declaration.id, 'Integration');
-    this.ensureUnique(
-      declaration.features.map((feature) => feature.id),
-      `Duplicate feature id in integration ${declaration.id}`,
-    );
-    for (const feature of declaration.features) {
-      this.ensureNonEmptyId(feature.id, 'Feature');
-      this.ensureUnique(
-        (feature.dependencies ?? []).map((dependency) => dependency.id),
-        `Duplicate dependency id in feature ${declaration.id}.${feature.id}`,
-      );
-      this.ensureUnique(
-        (feature.resources ?? []).map((resource) => resource.id),
-        `Duplicate resource id in feature ${declaration.id}.${feature.id}`,
-      );
-      this.ensureUnique(
-        (feature.operations ?? []).map((operation) => operation.id),
-        `Duplicate operation id in feature ${declaration.id}.${feature.id}`,
-      );
-      for (const dependency of feature.dependencies ?? []) {
-        this.ensureNonEmptyId(dependency.id, 'Dependency');
-      }
-      for (const resource of feature.resources ?? []) {
-        this.ensureNonEmptyId(resource.id, 'Resource');
-      }
-      for (const operation of feature.operations ?? []) {
-        this.ensureNonEmptyId(operation.id, 'Operation');
-      }
-    }
-    this.ensureUnique(
-      (declaration.legacyFeatures ?? []).map((feature) => feature.id),
-      `Duplicate legacy feature id in integration ${declaration.id}`,
-    );
-    for (const legacyFeature of declaration.legacyFeatures ?? []) {
-      this.ensureNonEmptyId(legacyFeature.id, 'Legacy feature');
-    }
-  }
-
-  private ensureUnique(values: string[], message: string): void {
-    if (new Set(values).size !== values.length) {
-      throw new Error(message);
-    }
-  }
-
-  private ensureNonEmptyId(id: string, entity: string): void {
-    if (id.trim().length === 0) {
-      throw new Error(`${entity} id must not be empty`);
-    }
-  }
-}
-
-export const supportedIntegrations = new IntegrationRegistry();

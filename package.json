@@ -74,7 +74,7 @@
       ]
     },
     "sonar-context-augmentation": {
-      "version": "0.10.0.1024",
+      "version": "0.11.0.1346",
       "binaryPath": "Distribution/sonar-context-augmentation",
       "archive": "tar.gz",
       "platformNaming": "x64",
@@ -105,7 +105,8 @@
     "commander": "^14.0.0",
     "js-yaml": "^4.1.1",
     "openpgp": "^6.0.0",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "smol-toml": "^1.6.1"
   },
   "devDependencies": {
     "@sentry/cli": "3.4.2",

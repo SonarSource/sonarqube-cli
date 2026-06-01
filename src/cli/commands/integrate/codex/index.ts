@@ -31,9 +31,7 @@ import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { CODEX_INTEGRATION_ID, registerCodexIntegration } from './declaration';
-
-registerCodexIntegration();
+import { CODEX_INTEGRATION_ID } from './declaration';
 
 export async function integrateCodex(
   options: IntegrateAgentOptions,
@@ -64,12 +62,10 @@ export async function integrateCodex(
   //    the warning for unentitled orgs to avoid noise about a feature they
   //    cannot use.
   const sqaaEligible = await resolveSqaaEntitlement(auth.serverUrl, auth.token, auth.orgKey);
-  const sqaaProjectKey = !isGlobal && sqaaEligible && projectKey ? projectKey : undefined;
+  const includeSqaa = !isGlobal && sqaaEligible && Boolean(projectKey);
 
   const installRoot = isGlobal ? homedir() : project.rootDir;
   const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
-
-  const includeSqaaSection = sqaaProjectKey !== undefined;
 
   await installIntegration({
     integrationId: CODEX_INTEGRATION_ID,
@@ -77,11 +73,16 @@ export async function integrateCodex(
       ...options,
       installSecretsHooks: true,
       installSecretsInstructions: true,
-      installSqaaInstructions: includeSqaaSection,
+      installSqaaInstructions: includeSqaa,
+      installMcp: true,
     },
     targetRoot: installRoot,
     scope: installScope,
-    attrs: buildAttrs({ includeSecretsSection: true, projectKey: sqaaProjectKey }),
+    attrs: buildAttrs({
+      includeSecretsSection: true,
+      projectKey,
+      includeSqaa,
+    }),
   });
 
   if (!options.skipContext) {
@@ -109,9 +110,11 @@ export async function integrateCodex(
 function buildAttrs(args: {
   includeSecretsSection: boolean;
   projectKey: string | undefined;
+  includeSqaa: boolean;
 }): Record<string, IntegrationStateAttribute> {
   return {
     includeSecretsSection: args.includeSecretsSection,
     projectKey: args.projectKey ?? null,
+    includeSqaa: args.includeSqaa,
   };
 }

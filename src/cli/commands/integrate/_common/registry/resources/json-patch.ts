@@ -22,18 +22,10 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import { CommandFailedError } from '../../../../_common/error';
-import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
-import {
-  type BaseResourceOptions,
-  type PathResolver,
-  readTextFile,
-  resolvePath,
-  type ResourceDeclaration,
-  writeFileIfChanged,
-} from './common';
+import type { IntegrationContext, MaybePromise } from '../types';
+import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
 
-export interface JsonPatchOptions extends BaseResourceOptions {
-  targetPath: PathResolver;
+export interface JsonPatchOptions extends PatchResourceOptions {
   defaultValue?: unknown;
   patch: (document: unknown, context: IntegrationContext) => MaybePromise<unknown>;
 }
@@ -42,30 +34,10 @@ export function jsonPatch(options: JsonPatchOptions): ResourceDeclaration {
   return new JsonPatch(options);
 }
 
-export class JsonPatch implements ResourceDeclaration {
-  readonly id: string;
-  readonly displayName?: string;
+export class JsonPatch extends PatchResource<JsonPatchOptions> {
   readonly resourceType = 'json-patch';
-  readonly version?: string;
 
-  constructor(private readonly options: JsonPatchOptions) {
-    this.id = options.id;
-    this.displayName = options.displayName;
-    this.version = options.version;
-  }
-
-  async apply(context: IntegrationContext): Promise<AppliedResource> {
-    const path = await resolvePath(context, this.options.targetPath);
-    await writeFileIfChanged(path, await this.renderContent(path, context));
-    return { id: this.id, resourceType: this.resourceType, version: this.version, path };
-  }
-
-  async isApplied(context: IntegrationContext): Promise<boolean> {
-    const path = await resolvePath(context, this.options.targetPath);
-    return (await readTextFile(path)) === (await this.renderContent(path, context));
-  }
-
-  private async renderContent(path: string, context: IntegrationContext): Promise<string> {
+  protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
     const document = await readJson(path, this.options.defaultValue ?? {});
     const updated = await this.options.patch(document, context);
     return `${JSON.stringify(updated ?? document, null, 2)}\n`;

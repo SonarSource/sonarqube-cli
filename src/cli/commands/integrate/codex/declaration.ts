@@ -20,13 +20,11 @@
 
 import { join } from 'node:path';
 
+import { CLI_COMMAND } from '../../../../lib/config-constants';
+import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
-import {
-  type IntegrationContext,
-  type IntegrationDeclaration,
-  supportedIntegrations,
-  wholeFile,
-} from '../_common/registry';
+import { tomlPatch, wholeFile } from '../_common/registry/resources';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
 import { buildAgentsMdContent } from './instructions-templates';
@@ -44,6 +42,7 @@ export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   installSecretsInstructions?: boolean;
   /** Render the post-tool SQAA section into `.codex/AGENTS.md`. */
   installSqaaInstructions?: boolean;
+  installMcp?: boolean;
 }
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
@@ -92,27 +91,68 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           content: (context) =>
             buildAgentsMdContent({
               includeSecrets: getOptionalBoolAttr(context, 'includeSecretsSection'),
+              includeSqaa: getOptionalBoolAttr(context, 'includeSqaa'),
               projectKey: getOptionalStringAttr(context, 'projectKey'),
             }),
+        }),
+      ],
+    },
+    {
+      id: 'mcp-server',
+      displayName: 'MCP server',
+      when: ({ options }) => options.installMcp === true,
+      resources: [
+        tomlPatch({
+          id: 'codex-mcp-config',
+          displayName: 'Codex MCP configuration',
+          targetPath: resolveCodexMcpConfigPath,
+          defaultValue: {},
+          patch: (document, context) => upsertCodexMcpServer(document, context),
         }),
       ],
     },
   ],
 };
 
-let codexIntegrationRegistered = false;
-
-export function registerCodexIntegration(): void {
-  if (codexIntegrationRegistered) {
-    return;
-  }
-
-  supportedIntegrations.register(codexIntegration);
-  codexIntegrationRegistered = true;
-}
-
 function resolveCodexAgentsMdPath(context: IntegrationContext): string {
   return join(context.targetRoot, CODEX_CONFIG_DIR, AGENTS_MD_FILE);
+}
+
+function resolveCodexMcpConfigPath(context: IntegrationContext): string {
+  return getMcpConfigFilePath('codex', context.scope === 'global', context.targetRoot);
+}
+
+function upsertCodexMcpServer(
+  document: Record<string, unknown>,
+  context: IntegrationContext,
+): Record<string, unknown> {
+  return {
+    ...document,
+    mcp_servers: {
+      ...toRecord(document.mcp_servers),
+      sonarqube: getDesiredCodexMcpConfig(context),
+    },
+  };
+}
+
+function getDesiredCodexMcpConfig(context: IntegrationContext) {
+  return getMcpConfig(
+    CLI_COMMAND,
+    context.scope === 'global'
+      ? { withFsMount: false }
+      : {
+          withFsMount: true,
+          projectRoot: context.targetRoot,
+          projectKey: getOptionalStringAttr(context, 'projectKey'),
+        },
+  );
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return { ...(value as Record<string, unknown>) };
 }
 
 function getOptionalStringAttr(context: IntegrationContext, key: string): string | undefined {

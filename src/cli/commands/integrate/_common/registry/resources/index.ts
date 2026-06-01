@@ -21,6 +21,7 @@
 export type { BaseResourceOptions, PathResolver, ResourceDeclaration } from './common';
 export { jsonPatch, type JsonPatchOptions } from './json-patch';
 export { TextSnippet, textSnippet, type TextSnippetResourceOptions } from './text-snippet';
+export { TomlPatch, tomlPatch, type TomlPatchOptions } from './toml-patch';
 export {
   type PlatformSpecificContent,
   wholeFile,

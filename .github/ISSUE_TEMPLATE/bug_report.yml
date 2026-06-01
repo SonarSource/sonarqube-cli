@@ -1,0 +1,51 @@
+name: Bug report
+description: Report something that isn't working as expected in the SonarQube CLI.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill in the fields below so we can reproduce and triage it quickly.
+  - type: input
+    id: version
+    attributes:
+      label: CLI version
+      description: Output of `sonar --version`.
+      placeholder: e.g. 1.4.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: e.g. macOS 15.4 (arm64), Ubuntu 24.04 (x86-64), Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact `sonar` command (redact tokens and other secrets).
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The full error message or output (with sensitive info redacted).
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected to happen
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help — for auth issues, note whether you target SonarQube Cloud or Server.
+    validations:
+      required: false

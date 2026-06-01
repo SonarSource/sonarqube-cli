@@ -28,13 +28,8 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import {
-  type IntegrationContext,
-  type IntegrationDeclaration,
-  jsonPatch,
-  supportedIntegrations,
-  wholeFile,
-} from '../_common/registry';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
+import { jsonPatch, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -63,46 +58,48 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: 'Claude Code',
   features: [
-    createSonarSecretsHooksFeature({
-      agentDisplayName: 'Claude',
-      configDir: CLAUDE_CONFIG_DIR,
-      hooksConfigFileName: SETTINGS_FILE,
-      hooksPatchId: 'claude-settings-secrets-hooks',
-      scripts: [
-        {
-          id: 'pretool-secrets-script',
-          displayName: 'Claude PreToolUse hook script',
-          scriptPath: PRETOOL_SCRIPT_REL,
-          content: {
-            unix: getSecretPreToolTemplateUnix(),
-            windows: getSecretPreToolTemplateWindows(),
+    {
+      ...createSonarSecretsHooksFeature({
+        agentDisplayName: 'Claude',
+        configDir: CLAUDE_CONFIG_DIR,
+        hooksConfigFileName: SETTINGS_FILE,
+        hooksPatchId: 'claude-settings-secrets-hooks',
+        scripts: [
+          {
+            id: 'pretool-secrets-script',
+            displayName: 'Claude PreToolUse hook script',
+            scriptPath: PRETOOL_SCRIPT_REL,
+            content: {
+              unix: getSecretPreToolTemplateUnix(),
+              windows: getSecretPreToolTemplateWindows(),
+            },
           },
-        },
-        {
-          id: 'prompt-secrets-script',
-          displayName: 'Claude UserPromptSubmit hook script',
-          scriptPath: PROMPT_SCRIPT_REL,
-          content: {
-            unix: getSecretPromptTemplateUnix(),
-            windows: getSecretPromptTemplateWindows(),
+          {
+            id: 'prompt-secrets-script',
+            displayName: 'Claude UserPromptSubmit hook script',
+            scriptPath: PROMPT_SCRIPT_REL,
+            content: {
+              unix: getSecretPromptTemplateUnix(),
+              windows: getSecretPromptTemplateWindows(),
+            },
           },
-        },
-      ],
-      hookEntries: [
-        {
-          eventType: 'PreToolUse',
-          matcher: 'Read',
-          marker: 'sonar-secrets',
-          scriptPath: PRETOOL_SCRIPT_REL,
-        },
-        {
-          eventType: 'UserPromptSubmit',
-          matcher: '*',
-          marker: 'sonar-secrets',
-          scriptPath: PROMPT_SCRIPT_REL,
-        },
-      ],
-    }),
+        ],
+        hookEntries: [
+          {
+            eventType: 'PreToolUse',
+            matcher: 'Read',
+            marker: 'sonar-secrets',
+            scriptPath: PRETOOL_SCRIPT_REL,
+          },
+          {
+            eventType: 'UserPromptSubmit',
+            matcher: '*',
+            marker: 'sonar-secrets',
+            scriptPath: PROMPT_SCRIPT_REL,
+          },
+        ],
+      }),
+    },
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
@@ -163,17 +160,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     },
   ],
 };
-
-let claudeIntegrationRegistered = false;
-
-export function registerClaudeIntegration(): void {
-  if (claudeIntegrationRegistered) {
-    return;
-  }
-
-  supportedIntegrations.register(claudeIntegration);
-  claudeIntegrationRegistered = true;
-}
 
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);

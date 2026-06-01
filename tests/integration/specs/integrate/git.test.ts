@@ -373,8 +373,8 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: 'y' confirms 'Install here?', then '\r' selects pre-commit
-      const result = await harness.run('integrate git', { stdinChunks: ['y', '\r'] });
+      // both at once: '\r' confirms 'Install here?', then '\r' selects pre-commit
+      const result = await harness.run('integrate git', { stdinChunks: ['\r', '\r'] });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
@@ -418,9 +418,9 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // 'y' confirms 'Install here?'; '\x1b[B' moves the selection down to pre-push; '\r' submits
+      // '\r' confirms 'Install here?'; '\x1b[B' moves the selection down to pre-push; '\r' submits
       const result = await harness.run('integrate git', {
-        stdinChunks: ['y', '\x1b[B', '\r'],
+        stdinChunks: ['\r', '\x1b[B', '\r'],
       });
 
       expect(result.exitCode).toBe(0);
@@ -436,8 +436,8 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: 'y' confirms global hook warning, then '\r' selects pre-commit
-      const result = await harness.run('integrate git --global', { stdinChunks: ['y', '\r'] });
+      // both at once: '\r' confirms global hook warning, then '\r' selects pre-commit
+      const result = await harness.run('integrate git --global', { stdinChunks: ['\r', '\r'] });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
@@ -477,9 +477,9 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: 'y' confirms global hook warning, then '\r' selects pre-push
+      // both at once: '\r' confirms global hook warning, then '\r' selects pre-push
       const result = await harness.run('integrate git --global', {
-        stdinChunks: ['y', '\x1b[B', '\r'],
+        stdinChunks: ['\r', '\x1b[B', '\r'],
       });
 
       expect(result.exitCode).toBe(0);

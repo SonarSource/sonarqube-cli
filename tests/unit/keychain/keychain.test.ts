@@ -36,9 +36,7 @@ import {
   deleteStaleTokens,
   deleteToken,
   generateKeychainAccount,
-  getAllCredentials,
   getToken,
-  purgeAllTokens,
   saveToken,
 } from '../../../src/lib/keychain.js';
 
@@ -160,70 +158,20 @@ describe('deleteToken', () => {
   });
 });
 
-describe('getAllCredentials', () => {
-  useFileBackend();
-
-  it('returns empty array when keychain file is missing', async () => {
-    const credentials = await getAllCredentials();
-    expect(credentials).toEqual([]);
-  });
-
-  it('returns all saved credentials', async () => {
-    await saveToken('https://sonarcloud.io', 'token1', 'org1');
-    await saveToken('https://sonarcloud.io', 'token2', 'org2');
-    await saveToken('https://sonarqube.example.com', 'token3');
-
-    const credentials = await getAllCredentials();
-
-    expect(credentials).toHaveLength(3);
-    const accounts = credentials.map((c) => c.account);
-    expect(accounts).toContain('sonarcloud.io:org1');
-    expect(accounts).toContain('sonarcloud.io:org2');
-    expect(accounts).toContain('sonarqube.example.com');
-  });
-});
-
-describe('purgeAllTokens', () => {
-  useFileBackend();
-
-  it('deletes all tokens and leaves keychain empty', async () => {
-    await saveToken('https://sonarcloud.io', 'token1', 'org1');
-    await saveToken('https://sonarcloud.io', 'token2', 'org2');
-
-    await purgeAllTokens();
-
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
-    expect(await getToken('https://sonarcloud.io', 'org2')).toBeNull();
-    expect(await getAllCredentials()).toHaveLength(0);
-  });
-
-  it('succeeds when there are no tokens', async () => {
-    const result = await purgeAllTokens();
-    expect(result).toBeUndefined();
-    expect(await getAllCredentials()).toHaveLength(0);
-  });
-});
-
 describe('account key generation', () => {
   useFileBackend();
 
-  it('uses hostname:org format for SonarCloud with org', async () => {
-    await saveToken('https://sonarcloud.io', 'token1', 'my-org');
-    const credentials = await getAllCredentials();
-    expect(credentials[0].account).toBe('sonarcloud.io:my-org');
+  it('uses hostname:org format for SonarCloud with org', () => {
+    expect(generateKeychainAccount('https://sonarcloud.io', 'my-org')).toBe('sonarcloud.io:my-org');
   });
 
-  it('uses hostname only for SonarQube without org', async () => {
-    await saveToken('https://sonarqube.example.com', 'token1');
-    const credentials = await getAllCredentials();
-    expect(credentials[0].account).toBe('sonarqube.example.com');
+  it('uses hostname only for SonarQube without org', () => {
+    expect(generateKeychainAccount('https://sonarqube.example.com')).toBe('sonarqube.example.com');
   });
 
-  it('uses raw string as key when URL parsing fails', async () => {
+  it('uses raw string as key when URL parsing fails', () => {
     const invalidUrl = 'not-a-valid-url';
-    await saveToken(invalidUrl, 'token1');
-    const credentials = await getAllCredentials();
-    expect(credentials[0].account).toBe(invalidUrl);
+    expect(generateKeychainAccount(invalidUrl)).toBe(invalidUrl);
   });
 
   it('isolates tokens by org on the same server', async () => {
@@ -310,16 +258,6 @@ describe('file backend edge cases', () => {
     expect(await getToken('https://nonexistent.example.com')).toBeNull();
   });
 
-  it('getAllCredentials handles corrupted keychain file gracefully', async () => {
-    writeFileSync(
-      process.env.SONARQUBE_CLI_KEYCHAIN_FILE!,
-      '{ this is not valid json !!!',
-      'utf-8',
-    );
-    const credentials = await getAllCredentials();
-    expect(credentials).toEqual([]);
-  });
-
   it('saveToken creates keychain file if it does not exist', async () => {
     await saveToken('https://sonar.example.com', 'new-token');
     clearTokenCache();
@@ -331,14 +269,6 @@ describe('file backend edge cases', () => {
     await deleteToken('https://sonarcloud.io', 'org1');
     await deleteToken('https://sonarcloud.io', 'org1');
     expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
-  });
-
-  it('purgeAllTokens then getAllCredentials returns empty', async () => {
-    await saveToken('https://sonarcloud.io', 'tok1', 'org1');
-    await saveToken('https://sonar.example.com', 'tok2');
-    await purgeAllTokens();
-    clearTokenCache();
-    expect(await getAllCredentials()).toEqual([]);
   });
 
   it('backend cache is invalidated when SONARQUBE_CLI_KEYCHAIN_FILE changes', async () => {

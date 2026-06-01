@@ -38,12 +38,14 @@ void mock.module('../../../../../../src/cli/commands/_common/install/binary', ()
 }));
 
 const {
+  createIntegrationRegistry,
   IntegrationInstaller,
   IntegrationRegistry,
   jsonPatch,
   SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
+  tomlPatch,
   wholeFile,
   yamlPatch,
 } = await import('../../../../../../src/cli/commands/integrate/_common/registry');
@@ -76,6 +78,12 @@ describe('declarative integration framework', () => {
     registry.register(declaration);
 
     expect(() => registry.register(declaration)).toThrow(
+      'Integration declaration already registered: test-integration',
+    );
+  });
+
+  it('rejects duplicate integration ids when seeding a registry from static data', () => {
+    expect(() => createIntegrationRegistry([makeIntegration(), makeIntegration()])).toThrow(
       'Integration declaration already registered: test-integration',
     );
   });
@@ -322,6 +330,11 @@ describe('declarative integration framework', () => {
           targetPath: join(tempDir, 'config.yml'),
           patch: () => ({ repos: [{ repo: 'local' }] }),
         }),
+        tomlPatch({
+          id: 'toml',
+          targetPath: join(tempDir, 'config.toml'),
+          patch: (document) => ({ ...document, enabled: true }),
+        }),
         textSnippet({
           id: 'text',
           targetPath: join(tempDir, 'pre-commit-config.yaml'),
@@ -355,6 +368,7 @@ describe('declarative integration framework', () => {
     expect(second.resources.map((resource) => resource.id).sort()).toEqual([
       'json',
       'text',
+      'toml',
       'whole',
       'yaml',
     ]);
@@ -822,6 +836,26 @@ describe('declarative integration framework', () => {
     );
     expect(jsonResource.isApplied(context)).rejects.toThrow(
       `${jsonPath} contains invalid JSON. Please fix or delete it and re-run.`,
+    );
+  });
+
+  it('fails when TOML files contain invalid content', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const tomlPath = join(tempDir, 'config.toml');
+    await writeFile(tomlPath, '= not valid toml =');
+    const tomlResource = tomlPatch({
+      id: 'toml-invalid',
+      targetPath: tomlPath,
+      defaultValue: {},
+      patch: (document) => document,
+    });
+
+    expect(tomlResource.apply(context)).rejects.toThrow(
+      `${tomlPath} contains invalid TOML. Please fix or delete it and re-run.`,
+    );
+    expect(tomlResource.isApplied(context)).rejects.toThrow(
+      `${tomlPath} contains invalid TOML. Please fix or delete it and re-run.`,
     );
   });
 
