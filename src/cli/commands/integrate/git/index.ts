@@ -21,13 +21,12 @@
 // Integrate command - install git hooks for secrets scanning
 
 import { existsSync, readFileSync } from 'node:fs';
-import { platform } from 'node:os';
 import { join } from 'node:path';
 
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, info, intro, note, selectPrompt, text, warn } from '../../../../ui';
+import { blank, confirmPrompt, intro, selectPrompt, text, warn } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { installIntegration } from '../_common/registry';
@@ -37,7 +36,6 @@ import {
   HOOK_MARKER,
   HUSKY_INTEGRATION_ID,
   NATIVE_GIT_INTEGRATION_ID,
-  PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_INTEGRATION_ID,
 } from './tools';
 
@@ -127,53 +125,6 @@ export async function resolveHookType(options: IntegrateGitOptions): Promise<Git
   return choice;
 }
 
-export function showPostInstallInfo(hook: GitHookType): void {
-  blank();
-  text(
-    hook === 'pre-commit'
-      ? 'The hook will scan staged files for secrets before each commit.'
-      : 'The hook will scan committed files for secrets before each push.',
-  );
-  text('Ensure "sonar" is on your PATH when you commit or push.');
-  blank();
-}
-
-const VERIFY_FILE_NAME = 'sonar-hook-verify.js';
-const VERIFY_SECRET_CONTENT = `const API_KEY = "sqp_b4556a16fa2d28519d2451a911d2e073024010bc";`;
-
-export function showVerificationGuide(hook: GitHookType): void {
-  blank();
-  note(
-    [
-      'To verify the hook works:',
-      `  1. Create a file named ${VERIFY_FILE_NAME} containing:`,
-      `       ${VERIFY_SECRET_CONTENT}`,
-      hook === 'pre-commit'
-        ? `  2. Stage it:      git add ${VERIFY_FILE_NAME}`
-        : `  2. Commit it:     git add ${VERIFY_FILE_NAME} && git commit -m "verify"`,
-      hook === 'pre-commit'
-        ? '  3. Try to commit: git commit -m "verify"'
-        : '  3. Try to push:   git push',
-      '  4. The hook should block the operation and report the secret.',
-      `  5. Delete the file: ${platform() === 'win32' ? 'del' : 'rm'} ${VERIFY_FILE_NAME}`,
-      `  To skip hooks when needed, run ${hook === 'pre-commit' ? 'git commit' : 'git push'} with the --no-verify flag.`,
-    ].join('\n'),
-    'Verify the hook works',
-  );
-}
-
-export async function showInstallationStatus(root: string): Promise<void> {
-  const installed = await detectSonarHookInstallation(root);
-  if (installed.preCommitConfig) {
-    info(`Status: hook active via pre-commit framework (${PRE_COMMIT_CONFIG_FILE})`);
-  } else if (installed.huskyPreCommit || installed.gitPreCommit) {
-    info(`Status: pre-commit hook active (${join(installed.hooksDir, 'pre-commit')})`);
-  } else if (installed.huskyPrePush || installed.gitPrePush) {
-    info(`Status: pre-push hook active (${join(installed.hooksDir, 'pre-push')})`);
-  }
-  blank();
-}
-
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   validateHookOption(options.hook);
 
@@ -202,8 +153,6 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   blank();
 
   await installGitFeatures({ ...options, hook }, GLOBAL_HOOKS_DIR, 'global');
-  showPostInstallInfo(hook);
-  showVerificationGuide(hook);
 }
 
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
@@ -240,10 +189,6 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   blank();
 
   await installGitFeatures({ ...options, hook }, gitRoot, 'project');
-
-  showPostInstallInfo(hook);
-  await showInstallationStatus(gitRoot);
-  showVerificationGuide(hook);
 }
 
 async function installGitFeatures(
