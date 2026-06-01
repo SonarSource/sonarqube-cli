@@ -149,9 +149,10 @@ async function assertServerSupportsLocalSca(
     let serverVersion: string;
     try {
       serverVersion = await fetchServerVersion(auth.serverUrl);
-    } catch {
+    } catch (err) {
       throw new CommandFailedError(
         `Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later.`,
+        { cause: err },
       );
     }
     if (!isAtLeast(serverVersion, MIN_SCA_SQS_VERSION)) {

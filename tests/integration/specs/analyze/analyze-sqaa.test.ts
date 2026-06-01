@@ -1320,6 +1320,7 @@ describe('analyze agentic — API error codes', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Rate limit reached');
+      expect(result.stdout + result.stderr).toContain('  → Wait a moment and try again.');
     },
     { timeout: 15000 },
   );
@@ -1343,7 +1344,10 @@ describe('analyze agentic — API error codes', () => {
       const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Server busy');
+      expect(result.stdout + result.stderr).toContain('still unavailable');
+      expect(result.stdout + result.stderr).toContain(
+        '  → Check your network connection and try again in a moment.',
+      );
       // 4 total attempts: 1 initial + 3 retries
       const sqaaCalls = server
         .getRecordedRequests()
