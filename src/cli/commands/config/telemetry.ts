@@ -20,7 +20,7 @@
 // Configure CLI settings
 
 import { loadState, saveState } from '../../../lib/repository/state-repository';
-import { describeTelemetryStatus } from '../../../telemetry/enabled.js';
+import { describeTelemetryStatus, isDoNotTrackRequested } from '../../../telemetry/enabled.js';
 import { info, success } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 
@@ -39,8 +39,14 @@ export function configureTelemetry(options: ConfigureTelemetryOptions): Promise<
     return Promise.resolve();
   }
   const state = loadState();
-  state.telemetry.enabled = options.enabled ?? false;
+  const persistedEnabled = options.enabled ?? false;
+  state.telemetry.enabled = persistedEnabled;
   saveState(state);
-  success(`Telemetry ${options.enabled ? 'enabled' : 'disabled'}.`);
+  if (persistedEnabled && isDoNotTrackRequested()) {
+    success('Telemetry preference saved as enabled.');
+    info('Telemetry is currently disabled (DO_NOT_TRACK is set).');
+  } else {
+    success(`Telemetry ${persistedEnabled ? 'enabled' : 'disabled'}.`);
+  }
   return Promise.resolve();
 }

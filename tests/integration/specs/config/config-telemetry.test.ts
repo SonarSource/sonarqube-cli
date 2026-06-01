@@ -96,4 +96,21 @@ describe('config telemetry', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'reports effective disabled state when --enabled is run with DO_NOT_TRACK set',
+    async () => {
+      const result = await harness.run('config telemetry --enabled', {
+        extraEnv: { DO_NOT_TRACK: '1' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('preference saved as enabled');
+      expect(output).toContain('DO_NOT_TRACK');
+      expect(output).toContain('disabled');
+      expect(output).not.toContain('Telemetry enabled.');
+    },
+    { timeout: 15000 },
+  );
 });
