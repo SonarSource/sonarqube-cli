@@ -20,7 +20,7 @@
 
 // TestHarness — main entry point for integration tests
 
-import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -71,8 +71,14 @@ export class TestHarness {
   }
 
   static create(): Promise<TestHarness> {
-    const tempDir = join(tmpdir(), `sonar-cli-harness-${Date.now()}-${crypto.randomUUID()}`);
-    mkdirSync(tempDir, { recursive: true });
+    const rawDir = join(tmpdir(), `sonar-cli-harness-${Date.now()}-${crypto.randomUUID()}`);
+    mkdirSync(rawDir, { recursive: true });
+    // Resolve symlinks (macOS exposes $TMPDIR as `/var/folders/...` which is a
+    // symlink to `/private/var/folders/...`). The CLI canonicalises project
+    // roots via project-workspace::canonicalizePath, so state recordings use
+    // the resolved path; matching that here keeps test assertions stable on
+    // macOS local runs.
+    const tempDir = realpathSync(rawDir);
     return Promise.resolve(new TestHarness(tempDir));
   }
 
