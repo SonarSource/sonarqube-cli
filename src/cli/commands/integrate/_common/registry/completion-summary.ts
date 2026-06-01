@@ -47,19 +47,19 @@ function renderInstalledList<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
 ): void {
+  const home = homedir();
   const items = installedFeatures.map((installed) => {
     const declaration = featureDeclaration(integration, installed.featureId);
     const paths = installed.resources
       .map((resource) => resource.path)
       .filter((path): path is string => Boolean(path))
-      .map(formatPath);
+      .map((p) => formatPath(p, home));
     return phaseItem(declaration.displayName, 'done', undefined, paths);
   });
   phase('Installed', items);
 }
 
-function formatPath(path: string): string {
-  const home = homedir();
+function formatPath(path: string, home: string): string {
   return path.startsWith(home) ? '~' + path.slice(home.length) : path;
 }
 
