@@ -144,6 +144,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   } catch (err) {
     logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
     throw new CommandFailedError('Remediation job submission failed.', {
+      cause: err,
       remediationHint: mapSubmissionFailureHint((err as Error).message, orgKey),
     });
   }
