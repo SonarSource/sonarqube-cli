@@ -163,13 +163,14 @@
 
   <div class="jtbd-layout">
     <div class="jtbd-pills" id="jtbd-pills">
-      <button class="jtbd-pill" onclick="showJtbd('status')">Check my authentication status</button>
-      <button class="jtbd-pill" onclick="showJtbd('list-projects')">List projects</button>
       <button class="jtbd-pill" onclick="showJtbd('issues')">List issues in my project</button>
       <button class="jtbd-pill" onclick="showJtbd('analyze')">Analyze a file for issues</button>
       <button class="jtbd-pill" onclick="showJtbd('secrets-scan')">Scan a file for secrets</button>
       <button class="jtbd-pill" onclick="showJtbd('hooks')">Block bad commits with git hooks</button>
-      <button class="jtbd-pill" onclick="showJtbd('claude')">Set up Claude Code integration</button>
+      <button class="jtbd-pill" onclick="showJtbd('ai-agent')">Integrate an AI Agent</button>
+      <button class="jtbd-pill" onclick="showJtbd('agentic')">Run Agentic Analysis</button>
+      <button class="jtbd-pill" onclick="showJtbd('remediate')">Remediate issues with AI</button>
+      <button class="jtbd-pill" onclick="showJtbd('dependency-risks')">Scan for dependency risks</button>
       <button class="jtbd-pill" onclick="showJtbd('pr-issues')" style="display:none">Review issues in a pull request</button>
       <button class="jtbd-pill" onclick="showJtbd('install')">Update the CLI</button>
     </div>
@@ -519,9 +520,10 @@
   }
 
   const JTBD_RECIPES = {
-    claude: [
-      { title: 'Authenticate',        cmd: 'sonar auth login',         desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
-      { title: 'Integrate Claude',    cmd: 'sonar integrate claude',   desc: 'Installs hooks and MCP server for your project.' },
+    'ai-agent': [
+      { title: 'Authenticate',          cmd: 'sonar auth login',           desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
+      { title: 'Integrate Claude Code', cmd: 'sonar integrate claude',     desc: 'Installs hooks and MCP server for Claude Code.' },
+      { title: 'Integrate Copilot',     cmd: 'sonar integrate copilot',    desc: 'Installs hooks and project instructions for GitHub Copilot.' },
     ],
     'secrets-scan': [
       { title: 'Authenticate',        cmd: 'sonar auth login',                               desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
@@ -530,7 +532,7 @@
     issues: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                        desc: 'Connect to SonarQube.' },
       { title: 'List issues',         cmd: 'sonar list issues --project &lt;key&gt;',                 desc: 'Returns issues in JSON by default.' },
-      { title: 'Filter &amp; format', cmd: 'sonar list issues --project &lt;key&gt; --severity CRITICAL --format table', desc: 'Narrow by severity and output as a table.' },
+      { title: 'Filter &amp; format', cmd: 'sonar list issues --project &lt;key&gt; --severities CRITICAL --format table', desc: 'Narrow by severity and output as a table.' },
     ],
     analyze: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                              desc: 'Connect to SonarQube.' },
@@ -545,17 +547,21 @@
       { title: 'List PR issues',      cmd: 'sonar list issues --project &lt;key&gt; --pull-request &lt;number&gt;',        desc: 'Shows only issues introduced in the pull request.' },
       { title: 'Format as table',     cmd: 'sonar list issues --project &lt;key&gt; --pull-request &lt;number&gt; --format table', desc: 'Human-readable table output.' },
     ],
-    'list-projects': [
-      { title: 'Authenticate',        cmd: 'sonar auth login',         desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
-      { title: 'List projects',       cmd: 'sonar list projects',      desc: 'Returns all projects you have access to.' },
+    agentic: [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                    desc: 'Connect to SonarQube Cloud (required for Agentic Analysis).' },
+      { title: 'Analyze',             cmd: 'sonar analyze agentic --staged',      desc: 'Runs server-side agentic analysis on your staged changes. Use <code>--file &lt;file&gt;</code> to target a single file, or <code>--base main</code> to diff against a branch.' },
+    ],
+    remediate: [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                    desc: 'Connect to SonarQube Cloud (required for AI remediation).' },
+      { title: 'Remediate',           cmd: 'sonar remediate',                     desc: 'Interactively select eligible issues to hand off to the AI remediation agent. Use <code>--issues &lt;keys&gt;</code> for non-interactive mode.' },
+    ],
+    'dependency-risks': [
+      { title: 'Authenticate',        cmd: 'sonar auth login',                                desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
+      { title: 'Scan',                cmd: 'sonar analyze dependency-risks -p &lt;key&gt;',  desc: 'Detects security and license risks in your project dependencies.' },
     ],
     install: [
       { title: 'Check for updates',   cmd: 'sonar self-update --status',      desc: 'Check if a newer version is available without installing.' },
       { title: 'Update',              cmd: 'sonar self-update',               desc: 'Install the latest version of the CLI.' },
-    ],
-    status: [
-      { title: 'Check status',        cmd: 'sonar auth status',   desc: 'Shows your current server and org connection.' },
-      { title: 'Re-authenticate',     cmd: 'sonar auth login',    desc: 'Refresh credentials if expired.' },
     ],
   };
 
@@ -612,7 +618,7 @@
     box.classList.add('visible');
   }
 
-  showJtbd('status');
+  showJtbd('issues');
 
   function copyInstall(btn) {
     const text = btn.closest('.code-block').querySelector('code').textContent;

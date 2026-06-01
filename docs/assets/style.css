@@ -650,7 +650,7 @@ pre code {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 16px 24px;
+  padding: 10px 20px;
   border-radius: 10px;
   border: 2px solid transparent;
   background: var(--surface2);
