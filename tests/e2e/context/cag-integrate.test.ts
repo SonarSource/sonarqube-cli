@@ -48,10 +48,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { detectPlatform } from '../../../src/lib/platform-detector';
-import type { CliState, SkillExtension } from '../../../src/lib/state';
+import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
+import { findRecordedCagSkill } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const INTEGRATE_TIMEOUT_MS = 30_000;
@@ -61,12 +61,6 @@ setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 const PROJECT_KEY = 'cag-e2e-project';
 const ORG_KEY = 'cag-e2e-org';
 const TOKEN = 'cag-e2e-token';
-
-function findRecordedCagSkill(state: CliState): SkillExtension | undefined {
-  return state.agentExtensions.find(
-    (e): e is SkillExtension => e.kind === 'skill' && e.name === CONTEXT_AUGMENTATION_BINARY_NAME,
-  );
-}
 
 describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake server)', () => {
   let harness: TestHarness;
