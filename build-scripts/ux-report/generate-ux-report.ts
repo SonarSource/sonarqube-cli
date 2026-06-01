@@ -37,8 +37,8 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, it } from 'bun:test';
 
+import type { CliResult } from '../../tests/integration/harness';
 import { TestHarness } from '../../tests/integration/harness';
-import type { CliResult } from '../../tests/integration/harness/types.ts';
 import { commitFile, initGitRepo } from '../../tests/integration/specs/hook/git-test-helpers.ts';
 
 const OUTPUT_PATH = join(import.meta.dir, '../../ux-report/cli-output-report.md');
@@ -62,7 +62,7 @@ interface CapturedRun {
 const captured: CapturedRun[] = [];
 let currentGroup = '';
 
-const ANSI_RE = /\x1B\[[0-9;?]*[A-Za-z]|\x1B\].*?\x07/g;
+const ANSI_RE = /\x1B\[[0-9;?]*[A-Za-z]|\x1B].*?\x07/g;
 
 function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, '');
@@ -231,7 +231,6 @@ uxDescribe('Unauthenticated State', () => {
 
   uxIt('auth status — no saved connection', () => harness.run('auth status'));
   uxIt('auth logout — not logged in', () => harness.run('auth logout'));
-  uxIt('auth purge — no keychain tokens', () => harness.run('auth purge'));
   uxIt('config telemetry --enabled', () => harness.run('config telemetry --enabled'));
   uxIt('config telemetry --disabled', () => harness.run('config telemetry --disabled'));
   uxIt('api GET — not authenticated', () => harness.run('api GET /api/system/status'));

@@ -49,7 +49,6 @@ import {
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
-import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
 import { derivePassthroughSubcommand, runContextPassthrough } from './commands/context';
@@ -120,11 +119,6 @@ auth
   .command('logout')
   .description('Remove active connection token from keychain')
   .anonymousAction(() => authLogout());
-
-auth
-  .command('purge')
-  .description('Remove all authentication tokens from keychain')
-  .anonymousAction(() => authPurge());
 
 auth
   .command('status')

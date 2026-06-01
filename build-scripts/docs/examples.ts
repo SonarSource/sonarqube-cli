@@ -71,9 +71,6 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Remove active connection token from keychain',
     },
   ],
-  'sonar auth purge': [
-    { command: 'sonar auth purge', description: 'Interactively remove all saved tokens' },
-  ],
   'sonar auth status': [
     {
       command: 'sonar auth status',

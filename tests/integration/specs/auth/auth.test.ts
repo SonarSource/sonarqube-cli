@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar auth login`, `auth logout`, `auth purge`, and `auth status`
+// Integration tests for `sonar auth login`, `auth logout`, and `auth status`
 
 import { readFileSync } from 'node:fs';
 
@@ -762,63 +762,6 @@ describe('auth logout', () => {
       const account2 = generateKeychainAccount(server.baseUrl(), 'org2');
       expect(readKeychainToken(harness.keychainJsonFile, account1)).toBeUndefined();
       expect(readKeychainToken(harness.keychainJsonFile, account2)).toBe('token-org2');
-    },
-    { timeout: 15000 },
-  );
-});
-
-describe('auth purge', () => {
-  let harness: TestHarness;
-
-  beforeEach(async () => {
-    harness = await TestHarness.create();
-  });
-
-  afterEach(async () => {
-    await harness.dispose();
-  });
-
-  it(
-    'exits with code 0 and reports no tokens when keychain is empty',
-    async () => {
-      const result = await harness.run('auth purge');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('No tokens found');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'removes all tokens after confirmation and clears auth state',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken('purge-token-1').start();
-
-      const server2 = await harness.newFakeServer().withAuthToken('purge-token-2').start();
-
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withKeychainToken(server.baseUrl(), 'purge-token-1')
-        .withKeychainToken(server2.baseUrl(), 'purge-token-2');
-
-      const result = await harness.run('auth purge', { stdin: 'y\n' });
-
-      expect(result.exitCode).toBe(0);
-
-      const account1 = generateKeychainAccount(server.baseUrl());
-      const account2 = generateKeychainAccount(server2.baseUrl());
-      expect(readKeychainToken(harness.keychainJsonFile, account1)).toBeUndefined();
-      expect(readKeychainToken(harness.keychainJsonFile, account2)).toBeUndefined();
-
-      const authState = harness.stateJsonFile.asJson().auth as {
-        connections: unknown[];
-        activeConnectionId: string | undefined;
-        isAuthenticated: boolean;
-      };
-      expect(authState.connections).toHaveLength(0);
-      expect(authState.activeConnectionId).toBeUndefined();
-      expect(authState.isAuthenticated).toBe(false);
     },
     { timeout: 15000 },
   );
