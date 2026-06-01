@@ -253,9 +253,10 @@ describe('migrateDeclarativeIntegrations', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('reapplies installed declarative features and prunes unknown feature state', async () => {
+  it('reapplies only installed declarative features and prunes unknown feature state', async () => {
     const operationCalls: string[] = [];
     const resourcePath = join(tempDir, 'managed.txt');
+    const newFeatureResourcePath = join(tempDir, 'new-feature.txt');
     const now = '2026-01-01T00:00:00.000Z';
     fs.writeFileSync(resourcePath, 'legacy content', 'utf-8');
 
@@ -332,6 +333,27 @@ describe('migrateDeclarativeIntegrations', () => {
             },
           ],
         },
+        {
+          id: 'new-feature',
+          displayName: 'New feature',
+          resources: [
+            wholeFile({
+              id: 'new-managed-file',
+              version: '1',
+              targetPath: newFeatureResourcePath,
+              content: 'should not be written automatically',
+            }),
+          ],
+          operations: [
+            {
+              id: 'new-feature-operation',
+              version: '1',
+              apply: () => {
+                operationCalls.push('new-feature-operation');
+              },
+            },
+          ],
+        },
       ],
     });
 
@@ -339,6 +361,7 @@ describe('migrateDeclarativeIntegrations', () => {
 
     expect(fs.readFileSync(resourcePath, 'utf-8')).toBe('fresh content');
     expect(operationCalls).toEqual(['refresh-operation']);
+    expect(fs.existsSync(newFeatureResourcePath)).toBe(false);
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
 
     const savedState = saveStateSpy.mock.calls[0][0];

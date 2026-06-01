@@ -22,19 +22,14 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { OBSOLETE_A3S_MARKER, removeObsoleteHookArtifacts } from '../../../../lib/migration';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import { jsonPatch, wholeFile } from '../_common/registry/resources';
-import type {
-  FeatureOperation,
-  IntegrationContext,
-  IntegrationDeclaration,
-} from '../_common/registry/types';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
+import { jsonPatch, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -104,7 +99,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           },
         ],
       }),
-      operations: [createRemoveObsoleteA3sArtifactsOperation()],
     },
     {
       id: 'sonar-sqaa-hook',
@@ -148,7 +142,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
             ]),
         }),
       ],
-      operations: [createRemoveObsoleteA3sArtifactsOperation()],
     },
     {
       id: 'mcp-server',
@@ -231,12 +224,4 @@ function getRequiredStringAttr(context: IntegrationContext, key: string): string
     throw new Error(`Missing integration attribute: ${key}`);
   }
   return value;
-}
-
-function createRemoveObsoleteA3sArtifactsOperation(): FeatureOperation {
-  return {
-    id: 'remove-obsolete-a3s-artifacts',
-    displayName: 'Remove obsolete SQAA hook artifacts',
-    apply: ({ targetRoot }) => removeObsoleteHookArtifacts(targetRoot, OBSOLETE_A3S_MARKER),
-  };
 }

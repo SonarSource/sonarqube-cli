@@ -371,7 +371,7 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
   const state = loadState();
 
   if (hasInstalledDeclarativeIntegration(state, CLAUDE_INTEGRATION_ID)) {
-    logger.debug('Declarative Claude integration detected — skipping legacy hook migration');
+    logger.debug('Declarative Claude Code integration detected — skipping legacy hook migration');
     return;
   }
 
