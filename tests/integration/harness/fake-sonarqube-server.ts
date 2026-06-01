@@ -120,8 +120,10 @@ export class FakeSonarQubeServerBuilder {
     string,
     { uuid: string; eligible: boolean; enabled: boolean }
   > = new Map();
-  private readonly cagEntitlementOrgs: Map<string, { eligible: boolean; enabled: boolean }> =
-    new Map();
+  private readonly cagEntitlementOrgs: Map<
+    string,
+    { uuid: string; eligible: boolean; enabled: boolean }
+  > = new Map();
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '9.9.0.00001';
@@ -237,9 +239,10 @@ export class FakeSonarQubeServerBuilder {
 
   withCagEntitlement(
     orgKey: string,
-    options: { eligible?: boolean; enabled?: boolean } = {},
+    options: { uuid?: string; eligible?: boolean; enabled?: boolean } = {},
   ): this {
     this.cagEntitlementOrgs.set(orgKey, {
+      uuid: options.uuid ?? `${orgKey}-uuid-v4`,
       eligible: options.eligible ?? true,
       enabled: options.enabled ?? true,
     });
@@ -560,7 +563,10 @@ export class FakeSonarQubeServerBuilder {
               JSON.stringify(
                 [...knownOrgs].map((key) => ({
                   id: `id-${key}`,
-                  uuidV4: sqaaEntitlementOrgs.get(key)?.uuid ?? `${key}-uuid-v4`,
+                  uuidV4:
+                    cagEntitlementOrgs.get(key)?.uuid ??
+                    sqaaEntitlementOrgs.get(key)?.uuid ??
+                    `${key}-uuid-v4`,
                   key,
                   name: key,
                 })),
@@ -622,10 +628,7 @@ export class FakeSonarQubeServerBuilder {
         const cagOrgConfigMatch = /^\/a3s-analysis\/cag-org-config\/(.+)$/.exec(path);
         if (cagOrgConfigMatch) {
           const uuid = cagOrgConfigMatch[1];
-          // UUID is derived from org key as `${orgKey}-uuid-v4` (matches the default
-          // org UUID fallback in /organizations/organizations).
-          const orgKey = [...cagEntitlementOrgs.keys()].find((k) => `${k}-uuid-v4` === uuid);
-          const entitlement = orgKey ? cagEntitlementOrgs.get(orgKey) : undefined;
+          const entitlement = [...cagEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
               status: 404,
