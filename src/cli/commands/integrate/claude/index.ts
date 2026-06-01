@@ -37,13 +37,11 @@ import { setupContextAugmentation } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { CLAUDE_INTEGRATION_ID, registerClaudeIntegration } from './declaration';
+import { CLAUDE_INTEGRATION_ID } from './declaration';
 import { runHealthChecks } from './health';
 import { detectGlobalSecretsHook } from './hooks';
 import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
-
-registerClaudeIntegration();
 
 export interface ConfigurationData {
   serverURL: string;

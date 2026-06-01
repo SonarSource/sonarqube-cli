@@ -21,11 +21,8 @@
 import { normalizePath } from '../../../../../../lib/fs-utils';
 import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
-import {
-  type FeatureDeclaration,
-  type IntegrationDeclaration,
-  sonarSecretsBinaryDependency,
-} from '../../../_common/registry';
+import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
+import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { nativeGitHookResource } from './resource';
 

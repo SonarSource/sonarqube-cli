@@ -20,24 +20,23 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { createIntegrationRegistry } from '../../../../../../src/cli/commands/integrate/_common/registry/core';
-import {
-  GIT_INTEGRATIONS,
-  HUSKY_INTEGRATION_ID,
-  NATIVE_GIT_INTEGRATION_ID,
-  PRE_COMMIT_INTEGRATION_ID,
-} from '../../../../../../src/cli/commands/integrate/git/tools';
+import { ALL_INTEGRATIONS, supportedIntegrations } from '../../../../../src/cli/commands/integrate';
+import { createIntegrationRegistry } from '../../../../../src/cli/commands/integrate/_common/registry/core';
 
-describe('GIT_INTEGRATIONS', () => {
-  it('can seed a registry from the static git integrations list', () => {
-    const expectedIntegrationIds = [
-      NATIVE_GIT_INTEGRATION_ID,
-      HUSKY_INTEGRATION_ID,
-      PRE_COMMIT_INTEGRATION_ID,
-    ];
+describe('ALL_INTEGRATIONS', () => {
+  it('seeds the global supportedIntegrations registry in order', () => {
+    const expectedIntegrationIds = ALL_INTEGRATIONS.map((integration) => integration.id);
 
-    const registry = createIntegrationRegistry(GIT_INTEGRATIONS);
+    expect(supportedIntegrations.list().map((integration) => integration.id)).toEqual(
+      expectedIntegrationIds,
+    );
+  });
 
-    expect(registry.list().map((integration) => integration.id)).toEqual(expectedIntegrationIds);
+  it('can seed a fresh registry from the static data', () => {
+    const registry = createIntegrationRegistry(ALL_INTEGRATIONS);
+
+    expect(registry.list().map((integration) => integration.id)).toEqual(
+      ALL_INTEGRATIONS.map((integration) => integration.id),
+    );
   });
 });

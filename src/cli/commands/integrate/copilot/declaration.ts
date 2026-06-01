@@ -23,14 +23,9 @@ import { join, relative } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { CommandFailedError } from '../../_common/error';
-import {
-  type IntegrationContext,
-  type IntegrationDeclaration,
-  jsonPatch,
-  sonarSecretsBinaryDependency,
-  supportedIntegrations,
-  wholeFile,
-} from '../_common/registry';
+import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
+import { jsonPatch, wholeFile } from '../_common/registry/resources';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
 import {
@@ -138,17 +133,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     },
   ],
 };
-
-let copilotIntegrationRegistered = false;
-
-export function registerCopilotIntegration(): void {
-  if (copilotIntegrationRegistered) {
-    return;
-  }
-
-  supportedIntegrations.register(copilotIntegration);
-  copilotIntegrationRegistered = true;
-}
 
 function resolveCopilotHookScriptPath(context: IntegrationContext): string {
   return join(resolveHooksDir(context), SCRIPT_REL_DIR, hookScriptName());

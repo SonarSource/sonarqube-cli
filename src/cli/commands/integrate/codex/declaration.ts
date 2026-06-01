@@ -23,13 +23,8 @@ import { join } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
-import {
-  type IntegrationContext,
-  type IntegrationDeclaration,
-  supportedIntegrations,
-  tomlPatch,
-  wholeFile,
-} from '../_common/registry';
+import { tomlPatch, wholeFile } from '../_common/registry/resources';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
 import { buildAgentsMdContent } from './instructions-templates';
@@ -118,17 +113,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     },
   ],
 };
-
-let codexIntegrationRegistered = false;
-
-export function registerCodexIntegration(): void {
-  if (codexIntegrationRegistered) {
-    return;
-  }
-
-  supportedIntegrations.register(codexIntegration);
-  codexIntegrationRegistered = true;
-}
 
 function resolveCodexAgentsMdPath(context: IntegrationContext): string {
   return join(context.targetRoot, CODEX_CONFIG_DIR, AGENTS_MD_FILE);

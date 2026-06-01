@@ -18,26 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { createIntegrationRegistry } from './_common/registry/core';
+import { claudeIntegration } from './claude/declaration';
+import { codexIntegration } from './codex/declaration';
+import { copilotIntegration } from './copilot/declaration';
+import { GIT_INTEGRATIONS } from './git/tools';
 
-import { createIntegrationRegistry } from '../../../../../../src/cli/commands/integrate/_common/registry/core';
-import {
-  GIT_INTEGRATIONS,
-  HUSKY_INTEGRATION_ID,
-  NATIVE_GIT_INTEGRATION_ID,
-  PRE_COMMIT_INTEGRATION_ID,
-} from '../../../../../../src/cli/commands/integrate/git/tools';
+export const ALL_INTEGRATIONS = [
+  claudeIntegration,
+  copilotIntegration,
+  codexIntegration,
+  ...GIT_INTEGRATIONS,
+] as const;
 
-describe('GIT_INTEGRATIONS', () => {
-  it('can seed a registry from the static git integrations list', () => {
-    const expectedIntegrationIds = [
-      NATIVE_GIT_INTEGRATION_ID,
-      HUSKY_INTEGRATION_ID,
-      PRE_COMMIT_INTEGRATION_ID,
-    ];
-
-    const registry = createIntegrationRegistry(GIT_INTEGRATIONS);
-
-    expect(registry.list().map((integration) => integration.id)).toEqual(expectedIntegrationIds);
-  });
-});
+export const supportedIntegrations = createIntegrationRegistry(ALL_INTEGRATIONS);

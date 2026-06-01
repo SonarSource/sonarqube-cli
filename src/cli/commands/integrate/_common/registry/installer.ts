@@ -37,9 +37,9 @@ import type {
 import { getDefaultState } from '../../../../../lib/state';
 import { info, success, text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
+import { supportedIntegrations } from '../../index';
+import type { IntegrationRegistry } from './core';
 import type { DependencyDeclaration } from './dependencies';
-import type { IntegrationRegistry } from './index';
-import { supportedIntegrations } from './index';
 import type { ResourceDeclaration } from './resources';
 import type {
   AppliedFeature,

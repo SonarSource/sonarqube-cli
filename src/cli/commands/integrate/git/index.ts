@@ -39,10 +39,7 @@ import {
   NATIVE_GIT_INTEGRATION_ID,
   PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_INTEGRATION_ID,
-  registerGitIntegrations,
 } from './tools';
-
-registerGitIntegrations();
 
 export type { GitHookType, IntegrateGitOptions } from './options';
 export { installViaGitHooks } from './tools';
