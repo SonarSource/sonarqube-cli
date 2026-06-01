@@ -104,7 +104,7 @@ describe('confirmPrompt: mock mode', () => {
 
   it('returns queued true response and records call', async () => {
     queueMockResponse(true);
-    const result = await confirmPrompt('Are you sure?');
+    const result = await confirmPrompt('Are you sure?', true);
     expect(result).toBe(true);
     const calls = getMockUiCalls();
     expect(calls.some((c) => c.method === 'confirmPrompt' && c.args[0] === 'Are you sure?')).toBe(
@@ -114,20 +114,25 @@ describe('confirmPrompt: mock mode', () => {
 
   it('returns queued false response', async () => {
     queueMockResponse(false);
-    const result = await confirmPrompt('Proceed?');
+    const result = await confirmPrompt('Proceed?', false);
     expect(result).toBe(false);
   });
 
-  it('returns false as fallback when queue is empty', async () => {
-    const result = await confirmPrompt('Delete everything?');
+  it('returns default when queue is empty', async () => {
+    const result = await confirmPrompt('Proceed?', true);
+    expect(result).toBe(true);
+  });
+
+  it('returns explicit default when queue is empty and default is false', async () => {
+    const result = await confirmPrompt('Delete everything?', false);
     expect(result).toBe(false);
   });
 
   it('dequeues boolean responses in FIFO order', async () => {
     queueMockResponse(true);
     queueMockResponse(false);
-    expect(await confirmPrompt('First?')).toBe(true);
-    expect(await confirmPrompt('Second?')).toBe(false);
+    expect(await confirmPrompt('First?', true)).toBe(true);
+    expect(await confirmPrompt('Second?', false)).toBe(false);
   });
 });
 
