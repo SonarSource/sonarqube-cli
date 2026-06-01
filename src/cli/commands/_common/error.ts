@@ -25,7 +25,7 @@ function hintFromCause(cause: unknown): string | undefined {
     return 'Wait a moment and try again.';
   }
   if (cause instanceof ServiceUnavailableError) {
-    return 'Check your network connection and try again in a moment.';
+    return 'Check your network connection and try again later.';
   }
   return undefined;
 }

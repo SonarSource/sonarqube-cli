@@ -187,7 +187,7 @@ export function displaySqaaResults(
   blank();
 
   if (issues.length === 0) {
-    if (!inChangeSetMode) {
+    if (!inChangeSetMode && !errors?.length) {
       success('SonarQube Agentic Analysis completed — no issues found.');
     }
   } else {

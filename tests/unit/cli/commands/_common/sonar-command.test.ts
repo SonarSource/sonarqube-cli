@@ -143,9 +143,7 @@ describe('SonarCommand', () => {
       });
 
       const hintCall = getMockUiCalls().find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe(
-        '  → Check your network connection and try again in a moment.',
-      );
+      expect(hintCall?.args[0]).toBe('  → Check your network connection and try again later.');
     });
 
     it('cause-derived hint takes precedence over generic remediationHint', async () => {
