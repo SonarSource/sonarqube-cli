@@ -419,6 +419,26 @@ describe('declarative integration framework', () => {
     expect(selected).toHaveLength(0);
   });
 
+  it('aborts the installation when the user cancels the prompt (Ctrl+C)', () => {
+    const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
+      features: [
+        { id: 'a', displayName: 'A', when: () => ({ kind: 'ask' }) },
+        { id: 'b', displayName: 'B', when: () => ({ kind: 'ask' }) },
+      ],
+    });
+    queueMockResponse(null);
+
+    expect(
+      installer.selectFeaturesForInvocation(integration, makeInvocation(tempDir)),
+    ).rejects.toThrow('Installation cancelled');
+
+    expect(
+      getMockUiCalls().filter(
+        (c) => c.method === 'confirmPrompt' && String(c.args[0]) === 'Set up B?',
+      ),
+    ).toHaveLength(0);
+  });
+
   it('auto-accepts all ask features in nonInteractive mode without prompting', async () => {
     const integration: IntegrationDeclaration = makeIntegration<Record<string, unknown>>({
       features: [

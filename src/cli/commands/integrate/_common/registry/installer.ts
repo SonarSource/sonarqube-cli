@@ -109,6 +109,9 @@ export class IntegrationInstaller {
 
       const question = this.buildPromptQuestion(feature, result);
       const answer = invocation.nonInteractive ? true : await confirmPrompt(question);
+      if (answer === null) {
+        throw new CommandFailedError('Installation cancelled');
+      }
       if (answer) {
         selected.push(feature);
       }
