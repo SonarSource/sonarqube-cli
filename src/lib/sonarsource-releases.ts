@@ -33,7 +33,9 @@ import logger from './logger.js';
 const DOWNLOAD_TIMEOUT_MS = 60000;
 
 /**
- * Build the download filename — Sonarsource always uses .exe regardless of platform.
+ * Build the CDN filename for dependency binaries installed via `buildDownloadUrl`
+ * (e.g. sonar-secrets, sca-scanner-cli). Unlike the sonarqube-cli release artifact,
+ * these always use a `.exe` suffix on binaries.sonarsource.com regardless of platform.
  */
 function buildDownloadFilename(
   binaryName: string,
