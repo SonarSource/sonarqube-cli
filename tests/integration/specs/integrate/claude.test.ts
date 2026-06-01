@@ -78,6 +78,12 @@ describe('integrate claude', () => {
           hookScriptName('pretool-secrets'),
         ),
       ).toBe(true);
+
+      // Completion summary
+      expect(result.stdout).toContain('Installed');
+      expect(result.stdout).toContain('Setup complete!');
+      expect(result.stdout).toContain('secret scanning hooks');
+      expect(result.stdout).toContain('paste this into Claude');
     },
     { timeout: 30000 },
   );

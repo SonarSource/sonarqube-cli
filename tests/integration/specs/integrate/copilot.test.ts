@@ -91,6 +91,11 @@ describe('integrate copilot', () => {
         const sonar = mcp.mcpServers?.sonarqube;
         expect(sonar?.command).toBe(CLI_COMMAND);
         expect(sonar?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
+
+        // Completion summary
+        expect(result.stdout).toContain('Installed');
+        expect(result.stdout).toContain('Setup complete!');
+        expect(result.stdout).toContain('paste this into Copilot');
       },
       { timeout: 30000 },
     );
