@@ -1,0 +1,99 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Framework-rendered completion summary shared by every `sonar integrate`
+// command: a borderless "Installed" list (each feature with the resource paths
+// it edited), a "Setup complete!" outro, and the per-feature "try it out"
+// examples. This keeps the wording and layout consistent across all
+// integrations.
+
+import { homedir } from 'node:os';
+
+import type { InstalledIntegrationFeature } from '../../../../../lib/state';
+import { info, note, outro, phase, phaseItem, text } from '../../../../../ui';
+import type { FeatureDeclaration, IntegrationDeclaration, VerificationExample } from './types';
+
+export function renderCompletionSummary<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  installedFeatures: InstalledIntegrationFeature[],
+): void {
+  if (installedFeatures.length === 0) {
+    return;
+  }
+
+  renderInstalledList(integration, installedFeatures);
+  outro('Setup complete!', 'success');
+  renderVerificationExamples(integration, installedFeatures);
+}
+
+function renderInstalledList<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  installedFeatures: InstalledIntegrationFeature[],
+): void {
+  const items = installedFeatures.map((installed) => {
+    const declaration = featureDeclaration(integration, installed.featureId);
+    const paths = installed.resources
+      .map((resource) => resource.path)
+      .filter((path): path is string => Boolean(path))
+      .map(formatPath);
+    return phaseItem(declaration.displayName, 'done', undefined, paths);
+  });
+  phase('Installed', items);
+}
+
+function formatPath(path: string): string {
+  const home = homedir();
+  return path.startsWith(home) ? '~' + path.slice(home.length) : path;
+}
+
+function renderVerificationExamples<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  installedFeatures: InstalledIntegrationFeature[],
+): void {
+  for (const installed of installedFeatures) {
+    const { verificationExample } = featureDeclaration(integration, installed.featureId);
+    if (verificationExample) {
+      renderVerificationExample(verificationExample);
+    }
+  }
+}
+
+function renderVerificationExample(example: VerificationExample): void {
+  if (example.intro) {
+    info(example.intro);
+  }
+  note(example.lines.join('\n'), example.title);
+  if (example.footer) {
+    text(example.footer);
+  }
+}
+
+function featureDeclaration<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  featureId: string,
+): FeatureDeclaration<TOptions> {
+  const declaration = integration.features.find((feature) => feature.id === featureId);
+  if (!declaration) {
+    // Installed features always derive from the integration declaration, so a
+    // missing match means the recorded state and the declaration are out of sync.
+    throw new Error(`No declaration found for installed feature ${integration.id}.${featureId}`);
+  }
+  return declaration;
+}
