@@ -25,7 +25,7 @@ import { homedir } from 'node:os';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { intro, success, warn } from '../../../../ui';
+import { intro, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import {
   buildContextAugmentationAttrs,
@@ -103,15 +103,10 @@ export async function integrateCodex(
     },
   });
 
-  if (isGlobal) {
-    success('Codex integration successfully configured globally');
-    if (sqaaEligible) {
-      warn(
-        'SonarQube Agentic Analysis is project-scoped and is not enabled by this global install. Run `sonar integrate codex --project <key>` from a project directory to enable it for that project.',
-      );
-    }
-  } else {
-    success('Codex integration successfully configured at the project level');
+  if (isGlobal && sqaaEligible) {
+    warn(
+      'SonarQube Agentic Analysis is project-scoped and is not enabled by this global install. Run `sonar integrate codex --project <key>` from a project directory to enable it for that project.',
+    );
   }
 }
 
