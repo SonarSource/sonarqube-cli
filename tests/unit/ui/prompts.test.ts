@@ -128,6 +128,11 @@ describe('confirmPrompt: mock mode', () => {
     expect(result).toBe(false);
   });
 
+  it('uses initialValue as fallback when queue is empty', async () => {
+    const result = await confirmPrompt('Set up feature?', true);
+    expect(result).toBe(true);
+  });
+
   it('dequeues boolean responses in FIFO order', async () => {
     queueMockResponse(true);
     queueMockResponse(false);

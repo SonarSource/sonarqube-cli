@@ -59,10 +59,10 @@ export async function textPrompt(message: string): Promise<string | null> {
  */
 export async function confirmPrompt(
   message: string,
-  defaultValue: boolean,
+  initialValue = false,
 ): Promise<boolean | null> {
   if (isMockActive()) {
-    const value = dequeueMockResponse<boolean>(defaultValue);
+    const value = dequeueMockResponse<boolean>(initialValue);
     recordCall('confirmPrompt', message, value);
     return value;
   }
@@ -70,7 +70,7 @@ export async function confirmPrompt(
   const prompt = new ConfirmPrompt({
     active: 'Yes',
     inactive: 'No',
-    initialValue: defaultValue,
+    initialValue,
     render() {
       if (this.state === 'submit')
         return `  ${green('✓')}  ${message} ${dim(this.value ? 'Yes' : 'No')}`;
