@@ -35,6 +35,8 @@ export interface PhaseItem {
   text: string;
   status: StepStatus;
   detail?: string;
+  /** Optional bullet sub-list rendered under the item (e.g. edited file paths). */
+  subItems?: string[];
 }
 
 export interface NoteOptions {

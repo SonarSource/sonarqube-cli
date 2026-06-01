@@ -82,6 +82,11 @@ describe('phaseItem', () => {
     expect(item.detail).toBe('file not found');
   });
 
+  it('creates item with sub-items when provided', () => {
+    const item = phaseItem('Feature', 'done', undefined, ['~/.config/a', '~/.config/b']);
+    expect(item.subItems).toEqual(['~/.config/a', '~/.config/b']);
+  });
+
   it('supports all status values', () => {
     expect(phaseItem('a', 'done').status).toBe('done');
     expect(phaseItem('b', 'failed').status).toBe('failed');
@@ -161,6 +166,22 @@ describe('phase: non-TTY output', () => {
     try {
       phase('Phase', [phaseItem('Config', 'warn', 'missing field')]);
       expect(output.join('')).toContain('missing field');
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('renders sub-items as a bullet list under the item', () => {
+    const output: string[] = [];
+    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      phase('Installed', [phaseItem('Feature', 'done', undefined, ['~/.config/a', '~/.config/b'])]);
+      const combined = output.join('');
+      expect(combined).toContain('* ~/.config/a');
+      expect(combined).toContain('* ~/.config/b');
     } finally {
       writeSpy.mockRestore();
     }

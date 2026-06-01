@@ -106,6 +106,20 @@ describe('phase: TTY rendering', () => {
     }
   });
 
+  it('renderItem: writes sub-items as a bullet list in TTY mode', () => {
+    const output: string[] = [];
+    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      phase('Installed', [phaseItem('Feature', 'done', undefined, ['~/.config/a'])]);
+      expect(output.join('')).toContain('* ~/.config/a');
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
   it('accepts custom titleColor and iconColors options', () => {
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
