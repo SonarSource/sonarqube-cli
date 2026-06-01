@@ -97,7 +97,11 @@ export class FakeSonarQubeServer {
   }
 
   baseUrl(): string {
-    return `http://127.0.0.1:${this.server.port}`;
+    // Use `localhost` (not `127.0.0.1`) so CAG's Cloud-API URL transformation
+    // (host → `api.<host>`) lands on `api.localhost`, which resolves to
+    // 127.0.0.1 per RFC 6761 and reaches the same server. `api.127.0.0.1`
+    // would not resolve, breaking any test that exercises Cloud-mode CAG.
+    return `http://localhost:${this.server.port}`;
   }
 
   getRecordedRequests(): RecordedRequest[] {
@@ -116,8 +120,10 @@ export class FakeSonarQubeServerBuilder {
     string,
     { uuid: string; eligible: boolean; enabled: boolean }
   > = new Map();
-  private readonly cagEntitlementOrgs: Map<string, { eligible: boolean; enabled: boolean }> =
-    new Map();
+  private readonly cagEntitlementOrgs: Map<
+    string,
+    { uuid: string; eligible: boolean; enabled: boolean }
+  > = new Map();
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '9.9.0.00001';
@@ -233,9 +239,10 @@ export class FakeSonarQubeServerBuilder {
 
   withCagEntitlement(
     orgKey: string,
-    options: { eligible?: boolean; enabled?: boolean } = {},
+    options: { uuid?: string; eligible?: boolean; enabled?: boolean } = {},
   ): this {
     this.cagEntitlementOrgs.set(orgKey, {
+      uuid: options.uuid ?? `${orgKey}-uuid-v4`,
       eligible: options.eligible ?? true,
       enabled: options.enabled ?? true,
     });
@@ -324,6 +331,17 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
+        // sonar-context-augmentation calls /api/server/version to detect
+        // SonarQube Cloud: major == 8, minor == 0, build != 29455 ⇒ Cloud
+        // (see sonar_api/urls.rs in the CAG repo). Only return a Cloud-shaped
+        // version when the test explicitly opts in by configuring CAG
+        // entitlement, so suites that exercise on-premise behaviour (e.g.
+        // sonar-secrets auth) keep seeing the standard `systemVersion`.
+        if (path === '/api/server/version') {
+          const version = cagEntitlementOrgs.size > 0 ? '8.0.0.12345' : systemVersion;
+          return new Response(version, { headers: { 'Content-Type': 'text/plain' } });
+        }
+
         const authHeader = req.headers.get('Authorization');
         const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
         const isAuthorized = !validToken || bearerToken === validToken;
@@ -400,6 +418,29 @@ export class FakeSonarQubeServerBuilder {
               ps: pageSize,
               paging: { pageIndex: page, pageSize, total: issues.length },
               issues: pagedIssues,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        // sonar-context-augmentation calls /api/project_branches/list to
+        // confirm the project exists in the org during daemon startup. Return
+        // a one-branch payload for registered projects; otherwise CAG aborts
+        // with "Project '<key>' not found in organization '<org>'".
+        if (path === '/api/project_branches/list') {
+          const projectKey = query.project;
+          const projectData = projectKey ? projects.get(projectKey) : undefined;
+          if (!projectData) {
+            return new Response(
+              JSON.stringify({ errors: [{ msg: `Project '${projectKey}' not found` }] }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              branches: [
+                { name: 'main', isMain: true, type: 'LONG', status: { qualityGateStatus: 'OK' } },
+              ],
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
@@ -508,6 +549,31 @@ export class FakeSonarQubeServerBuilder {
               { headers: { 'Content-Type': 'application/json' } },
             );
           }
+          // No organizationKey query param: sonar-context-augmentation calls
+          // /organizations/organizations with no params during open-beta
+          // entitlement resolution and expects a flat list of accessible orgs.
+          // Synthesize entries from the orgs that have CAG/SQAA entitlement
+          // registered so the daemon can find a matching org by key.
+          const knownOrgs = new Set<string>([
+            ...cagEntitlementOrgs.keys(),
+            ...sqaaEntitlementOrgs.keys(),
+          ]);
+          if (knownOrgs.size > 0) {
+            return new Response(
+              JSON.stringify(
+                [...knownOrgs].map((key) => ({
+                  id: `id-${key}`,
+                  uuidV4:
+                    cagEntitlementOrgs.get(key)?.uuid ??
+                    sqaaEntitlementOrgs.get(key)?.uuid ??
+                    `${key}-uuid-v4`,
+                  key,
+                  name: key,
+                })),
+              ),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
+          }
           return new Response(JSON.stringify([]), {
             headers: { 'Content-Type': 'application/json' },
           });
@@ -562,10 +628,7 @@ export class FakeSonarQubeServerBuilder {
         const cagOrgConfigMatch = /^\/a3s-analysis\/cag-org-config\/(.+)$/.exec(path);
         if (cagOrgConfigMatch) {
           const uuid = cagOrgConfigMatch[1];
-          // UUID is derived from org key as `${orgKey}-uuid-v4` (matches the default
-          // org UUID fallback in /organizations/organizations).
-          const orgKey = [...cagEntitlementOrgs.keys()].find((k) => `${k}-uuid-v4` === uuid);
-          const entitlement = orgKey ? cagEntitlementOrgs.get(orgKey) : undefined;
+          const entitlement = [...cagEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
               status: 404,

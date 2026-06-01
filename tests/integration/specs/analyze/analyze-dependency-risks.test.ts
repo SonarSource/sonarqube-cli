@@ -81,7 +81,7 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current server connection',
+      'Software Composition Analysis is not available for the current connection.',
     );
   });
 
@@ -183,7 +183,7 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current server connection',
+      'Software Composition Analysis is not available for the current connection.',
     );
   });
 
@@ -222,7 +222,7 @@ describe('analyze dependency-risks', () => {
     // Version check passes — failure now comes from the SCA availability check.
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current server connection',
+      'Software Composition Analysis is not available for the current connection.',
     );
   });
 
@@ -258,7 +258,7 @@ describe('analyze dependency-risks', () => {
     // and proceeds to the SCA availability probe.
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current server connection',
+      'Software Composition Analysis is not available for the current connection.',
     );
     expect(server.getRecordedRequests().some((r) => r.path === '/api/system/status')).toBe(false);
   });
