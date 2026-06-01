@@ -24,6 +24,7 @@ import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { CommandFailedError } from '../../_common/error';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
+import { secretsScanningVerificationExample } from '../_common/features/sonar-secrets-hooks-feature';
 import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
 import { jsonPatch, wholeFile } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
@@ -65,6 +66,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
       when: ({ options }) => options.installHook === true,
+      verificationExample: secretsScanningVerificationExample('Copilot'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
         wholeFile({
