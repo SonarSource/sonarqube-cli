@@ -20,6 +20,35 @@
 
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { warn } from '../../../../ui';
+import type { WhenResult } from './registry/types';
+
+export interface SqaaFeatureOptions {
+  serverURL?: string;
+  token?: string;
+  organization?: string;
+  projectKey?: string;
+}
+
+/**
+ * Shared `when` condition for the agentic analysis (SQAA) feature across agent
+ * integrations: skip when connection/project context is missing, then ask or
+ * skip based on the org's SQAA entitlement.
+ */
+export async function resolveSqaaFeatureCondition(
+  options: SqaaFeatureOptions,
+): Promise<WhenResult> {
+  if (!options.serverURL || !options.token || !options.projectKey) {
+    return { kind: 'skip' };
+  }
+  const entitled = await resolveSqaaEntitlement(
+    options.serverURL,
+    options.token,
+    options.organization,
+  );
+  return entitled
+    ? { kind: 'ask' }
+    : { kind: 'skip', reason: 'Agentic Analysis available on SonarQube Cloud' };
+}
 
 /**
  * Check if the organization has SonarQube Agentic Analysis (SQAA) entitlement.

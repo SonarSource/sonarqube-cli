@@ -32,7 +32,7 @@ import {
 import { isFeatureInstalled } from '../_common/registry/installer';
 import { textSnippet, tomlPatch } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
-import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
+import { resolveSqaaFeatureCondition } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
 import {
@@ -121,19 +121,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       id: 'sqaa-instructions',
       displayName: 'agentic analysis',
       hint: 'on-demand analysis',
-      when: async ({ options }) => {
-        if (!options.serverURL || !options.token || !options.projectKey) {
-          return { kind: 'skip' };
-        }
-        const entitled = await resolveSqaaEntitlement(
-          options.serverURL,
-          options.token,
-          options.organization,
-        );
-        return entitled
-          ? { kind: 'ask' }
-          : { kind: 'skip', reason: 'Agentic Analysis available on SonarQube Cloud' };
-      },
+      when: ({ options }) => resolveSqaaFeatureCondition(options),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
