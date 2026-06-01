@@ -108,6 +108,12 @@ Do **not** use `bun test --coverage` directly — Bun's native LCOV reporter emi
 
 When adding, removing, or changing commands, scripts, or project structure, update `CLAUDE.md`, and `AGENTS.md` to reflect the change before finishing.
 
+## GitHub Agentic Workflows
+
+- Agentic workflow source files live in `.github/workflows/*.md`. Generated `.lock.yml` files are compiler output; update them with `gh aw compile <workflow>` instead of editing them directly.
+- `ci-failure-triage-agent.md` watches failed workflow runs and can open draft remediation PRs.
+- `night-owl.md` runs nightly at `00:00 UTC`, uses GitHub MCP plus Atlassian MCP to select one `CLI` Jira ticket labeled `for-agent` in a to-do status, reads the ticket and parent context from Jira, opens draft PRs when the work is implementable, and posts Slack updates for starvation, blocked tickets, and draft PR creation.
+
 ## Docs site (`docs/`)
 
 The docs site is generated from the CLI source — do not edit `commands.json`, `llms.txt`, or `sitemap.xml` by hand. This is done by automation post-release.

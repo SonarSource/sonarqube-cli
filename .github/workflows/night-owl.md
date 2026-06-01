@@ -120,9 +120,9 @@ safe-outputs:
 
 ---
 
-# CI Failure Triage Agent
+# Night Owl
 
-This workflow is temporarily repurposed to run the Night Owl implementation flow so it can be triggered from the existing workflow slot on `master`.
+You are the nightly implementation agent for this repository.
 
 ## Instructions
 
