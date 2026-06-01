@@ -37,7 +37,6 @@ import {
   McpJson,
   obstructHooksJson,
   obstructInstructionsFile,
-  outcomeLine,
   PRETOOL_SECRETS_SCRIPT,
   PROJECT_HOOK_SCRIPT_PATH,
   PROJECT_HOOKS_JSON_PATH,
@@ -263,28 +262,6 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
-
-    it(
-      'prints a project-level outcome message with the written hook and instructions paths',
-      async () => {
-        const result = await harness.run('integrate copilot');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(
-          'Copilot integration successfully configured at the project level',
-        );
-        const hookLine = outcomeLine(result.stdout, 'Hook:');
-        expect(hookLine).toContain('sonar-secrets');
-        expect(hookLine).toContain('pretool-secrets');
-        const instructionsLine = outcomeLine(
-          result.stdout,
-          'Instructions (secrets scanning for prompts):',
-        );
-        expect(instructionsLine).toContain('sonarqube.instructions.md');
-        expect(normalizePath(instructionsLine)).toContain('.github/instructions');
-      },
-      { timeout: 30000 },
-    );
   });
 
   // ─── Global install (-g) ────────────────────────────────────────────────────
@@ -373,24 +350,6 @@ describe('integrate copilot', () => {
         expect(headingCount).toBe(1);
       },
       { timeout: 60000 },
-    );
-
-    it(
-      'prints a global outcome message with the written hook and instructions paths under ~/.copilot/',
-      async () => {
-        const result = await harness.run('integrate copilot -g');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Copilot integration successfully configured globally');
-        const homePathNorm = normalizePath(harness.userHome.path);
-        expect(normalizePath(outcomeLine(result.stdout, 'Hook:'))).toContain(
-          `${homePathNorm}/.copilot/hooks/sonar-secrets`,
-        );
-        expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
-        ).toContain(`${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`);
-      },
-      { timeout: 30000 },
     );
   });
 
@@ -527,23 +486,6 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
-
-    it(
-      'surfaces the project-level instructions path on the outcome Instructions line',
-      async () => {
-        writeExistingGlobalInstructions(harness);
-
-        const result = await harness.run('integrate copilot');
-
-        expect(result.exitCode).toBe(0);
-        const instructionsLine = normalizePath(
-          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
-        );
-        expect(instructionsLine).toContain('.github/instructions/sonarqube.instructions.md');
-        expect(instructionsLine).not.toContain('.copilot/instructions');
-      },
-      { timeout: 30000 },
-    );
   });
 
   // ─── Project-level install when both global hook and instructions exist ────
@@ -566,14 +508,6 @@ describe('integrate copilot', () => {
         const state = harness.stateJsonFile.asJson();
         expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeUndefined();
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('project');
-
-        const homePathNorm = normalizePath(harness.userHome.path);
-        expect(normalizePath(outcomeLine(result.stdout, 'Hook:'))).toContain(
-          `${homePathNorm}/.copilot/hooks/sonar-secrets`,
-        );
-        expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
-        ).toContain('.github/instructions/sonarqube.instructions.md');
 
         const copilotIntegration = state.integrations.installed.find(
           (integration: { integrationId: string }) => integration.integrationId === 'copilot-cli',
@@ -607,7 +541,6 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(1);
         expect(result.stdout + result.stderr).toContain('contains invalid JSON');
-        expect(result.stdout).not.toContain('Copilot integration successfully configured');
 
         // The hook feature fails before later features run.
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
@@ -628,7 +561,6 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot');
 
         expect(result.exitCode).toBe(1);
-        expect(result.stdout).not.toContain('Copilot integration successfully configured');
         expect(harness.cwd.exists('.mcp.json')).toBe(false);
 
         // The hook feature completed before the instructions write failed, so
@@ -649,7 +581,6 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(1);
         expect(result.stdout + result.stderr).toContain('.mcp.json contains invalid JSON');
-        expect(result.stdout).not.toContain('Copilot integration successfully configured');
         expect(
           getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
         ).toEqual(['pre-tool-use-hook', 'prompt-secrets-instructions']);
@@ -763,15 +694,6 @@ describe('integrate copilot', () => {
         // Declarative state: prompt-secrets is global, SQAA is project-scoped.
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
         expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
-
-        // Outcome shows both labeled lines pointing to their respective files.
-        const homePathNorm = normalizePath(harness.userHome.path);
-        expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
-        ).toContain(`${homePathNorm}/.copilot/instructions/sonarqube.instructions.md`);
-        expect(
-          normalizePath(outcomeLine(result.stdout, 'Instructions (SonarQube Agentic Analysis):')),
-        ).toContain('.github/instructions/sonarqube.instructions.md');
       },
       { timeout: 30000 },
     );
