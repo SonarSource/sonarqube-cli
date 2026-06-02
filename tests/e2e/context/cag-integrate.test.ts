@@ -38,7 +38,7 @@
  * prefix. A live-server e2e against real SQ Cloud would side-step the harness
  * entirely; until then, the integrate happy path remains covered by
  * `tests/integration/specs/integrate/context-augmentation.test.ts` (stub
- * binary) and the post-update install-skill path is covered by the rest of
+ * binary) and the post-update print-skill path is covered by the rest of
  * `tests/e2e/context/` (real binary, no daemon).
  */
 

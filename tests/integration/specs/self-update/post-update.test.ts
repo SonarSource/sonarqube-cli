@@ -177,13 +177,12 @@ describe('post-update migration', () => {
         (i) => i.argv[0] === 'tool' && i.argv[1] === 'stop' && i.argv[2] === '--all',
       );
       const skillIndex = invocations.findIndex(
-        (i) => i.argv[0] === 'tool' && i.argv[1] === 'install-skill',
+        (i) => i.argv[0] === 'tool' && i.argv[1] === 'print-skill',
       );
       expect(stopIndex).toBeGreaterThanOrEqual(0);
       expect(invocations[skillIndex]?.argv).toEqual([
         'tool',
-        'install-skill',
-        'claude-code',
+        'print-skill',
         '--invocation-prefix',
         'sonar context',
         '--sca-enabled=false',

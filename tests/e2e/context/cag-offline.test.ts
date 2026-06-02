@@ -22,7 +22,7 @@
  * Offline e2e for sonar-context-augmentation.
  *
  * Exercises the *real* CAG binary download, PGP signature verification,
- * tar extraction and `tool install-skill` rendering — without touching
+ * tar extraction and `tool print-skill` rendering — without touching
  * SonarQube/Cloud. Only network reach is `binaries.sonarsource.com` for
  * the archive and detached signature.
  *
@@ -77,7 +77,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     });
 
     // Pre-write a sentinel into the skill file so the refresh has to overwrite
-    // it — proves the post-update path actually invoked `tool install-skill`
+    // it — proves the post-update path actually invoked `tool print-skill`
     // rather than the file existing as a side effect of something else.
     const seededSkillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
     mkdirSync(dirname(seededSkillPath), { recursive: true });
@@ -151,7 +151,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       // Simulate a fresh CLI upgrade landing on the same machine: rewind the
       // persisted CLI version (forces runPostUpdateActions to fire again) and
       // the recorded CAG skill version (forces refreshContextAugmentationSkill
-      // to actually run `tool install-skill` instead of the early-return
+      // to actually run `tool print-skill` instead of the early-return
       // shortcut when versions already match).
       const state = harness.stateJsonFile.asJson() as CliState;
       state.config.cliVersion = STALE_CLI_VERSION;
@@ -163,7 +163,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
 
       // Delete the rendered skill so the rerun has to write it again — proves
-      // the refresh actually invoked the binary's `tool install-skill` rather
+      // the refresh actually invoked the binary's `tool print-skill` rather
       // than only bumping state.
       rmSync(skillPath);
 
