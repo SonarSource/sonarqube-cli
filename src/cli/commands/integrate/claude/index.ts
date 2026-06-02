@@ -31,7 +31,17 @@ import {
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
+import {
+  blank,
+  discreetSuccess,
+  info,
+  intro,
+  note,
+  outro,
+  success,
+  text,
+  warn,
+} from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import {
   buildContextAugmentationAttrs,
@@ -95,7 +105,7 @@ export async function integrateClaude(
   );
 
   if (healthResult.errors.length === 0) {
-    success('All checks passed! Configuration is healthy.');
+    discreetSuccess('All checks passed! Configuration is healthy.');
   } else {
     warn(`Found ${healthResult.errors.length} issue(s):`);
     for (const msg of healthResult.errors) {

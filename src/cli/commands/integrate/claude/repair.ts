@@ -23,12 +23,12 @@
 import { deleteToken, saveToken } from '../../../../lib/keychain';
 import logger from '../../../../lib/logger';
 import { getActiveConnection, loadState, saveState } from '../../../../lib/state-manager';
-import { success, text } from '../../../../ui';
+import { discreetSuccess, print } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { generateTokenViaBrowser, validateToken } from '../../_common/token';
 
 export async function repairToken(serverURL: string, organization?: string): Promise<string> {
-  text('Obtaining access token...');
+  print('🔑 Obtaining access token...');
 
   // Generate new token via the browser-OAuth flow. We also capture the
   // server-generated `tokenName` so that a later `sonar auth logout` can
@@ -58,7 +58,7 @@ export async function repairToken(serverURL: string, organization?: string): Pro
   // Keep state.tokenName in sync with the freshly-saved keychain token.
   persistTokenNameOnActiveConnection(serverURL, organization, authResult.tokenName);
 
-  success('Token saved to keychain');
+  discreetSuccess('Token saved to keychain');
   return newToken;
 }
 

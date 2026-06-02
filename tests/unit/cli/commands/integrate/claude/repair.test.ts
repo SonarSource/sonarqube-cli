@@ -85,20 +85,20 @@ describe('repairToken', () => {
     saveStateSpy.mockRestore();
   });
 
-  it('shows "Obtaining access token..." text message', async () => {
+  it('shows "🔑 Obtaining access token..." text message', async () => {
     await repairToken(SERVER_URL);
 
     const msg = getMockUiCalls().find(
-      (c) => c.method === 'text' && String(c.args[0]) === 'Obtaining access token...',
+      (c) => c.method === 'print' && String(c.args[0]) === '🔑 Obtaining access token...',
     );
     expect(msg).toBeDefined();
   });
 
-  it('shows "Token saved to keychain" success message', async () => {
+  it('shows "Token saved to keychain" discreet success message', async () => {
     await repairToken(SERVER_URL);
 
     const msg = getMockUiCalls().find(
-      (c) => c.method === 'success' && String(c.args[0]) === 'Token saved to keychain',
+      (c) => c.method === 'discreetSuccess' && String(c.args[0]) === 'Token saved to keychain',
     );
     expect(msg).toBeDefined();
   });

@@ -775,12 +775,16 @@ describe('integrateGitGlobal', () => {
       const calls = getMockUiCalls();
       expect(
         calls.some(
-          (c) => c.method === 'success' && String(c.args[0]).includes('Installed pre-commit hook'),
+          (c) =>
+            c.method === 'discreetSuccess' &&
+            String(c.args[0]).includes('Installed pre-commit hook'),
         ),
       ).toBe(true);
       expect(
         calls.some(
-          (c) => c.method === 'success' && String(c.args[0]).includes('Applied global hooks path'),
+          (c) =>
+            c.method === 'discreetSuccess' &&
+            String(c.args[0]).includes('Applied global hooks path'),
         ),
       ).toBe(true);
       expect(state.integrations.installed[0]?.integrationId).toBe('native-git');

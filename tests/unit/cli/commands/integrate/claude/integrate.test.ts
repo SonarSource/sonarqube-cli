@@ -254,12 +254,12 @@ describe('integrateCommand', () => {
     expect(phaseText).toBeDefined();
   });
 
-  it('shows success message on heath check success', async () => {
+  it('shows discreet success message on heath check success', async () => {
     await integrateClaude({}, SERVER_AUTH);
 
     const successText = getMockUiCalls().find(
       (c) =>
-        c.method === 'success' &&
+        c.method === 'discreetSuccess' &&
         String(c.args[0]).includes('All checks passed! Configuration is healthy.'),
     );
     expect(successText).toBeDefined();

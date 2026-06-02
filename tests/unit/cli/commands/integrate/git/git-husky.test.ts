@@ -97,7 +97,7 @@ describe('installViaHusky', () => {
     expect(content).toContain(getHuskyPreCommitSnippet());
     expect(
       getMockUiCalls().some(
-        (c) => c.method === 'success' && String(c.args[0]).includes('pre-commit'),
+        (c) => c.method === 'discreetSuccess' && String(c.args[0]).includes('pre-commit'),
       ),
     ).toBe(true);
   });
@@ -112,7 +112,7 @@ describe('installViaHusky', () => {
     expect(content).toContain(getHuskyPrePushSnippet());
     expect(
       getMockUiCalls().some(
-        (c) => c.method === 'success' && String(c.args[0]).includes('pre-push'),
+        (c) => c.method === 'discreetSuccess' && String(c.args[0]).includes('pre-push'),
       ),
     ).toBe(true);
   });
@@ -125,7 +125,7 @@ describe('installViaHusky', () => {
 
     expect(readFileSync(HOOK_PATH, 'utf-8')).toBe(before);
     expect(getMockUiCalls().some((c) => c.method === 'info')).toBe(true);
-    expect(getMockUiCalls().some((c) => c.method === 'success')).toBe(false);
+    expect(getMockUiCalls().some((c) => c.method === 'discreetSuccess')).toBe(false);
   });
 });
 
