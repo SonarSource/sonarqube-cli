@@ -22,6 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { version as CURRENT_CLI_VERSION } from '../../../../package.json';
+import { getDefaultState } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 
 describe('config telemetry', () => {
@@ -75,6 +77,39 @@ describe('config telemetry', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Telemetry disabled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports telemetry disabled when DO_NOT_TRACK is set',
+    async () => {
+      const state = getDefaultState(CURRENT_CLI_VERSION);
+      state.telemetry.enabled = true;
+      harness.state().withRawState(JSON.stringify(state));
+
+      const result = await harness.run('config telemetry', { extraEnv: { DO_NOT_TRACK: '1' } });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('DO_NOT_TRACK');
+      expect(result.stdout + result.stderr).toContain('disabled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports effective disabled state when --enabled is run with DO_NOT_TRACK set',
+    async () => {
+      const result = await harness.run('config telemetry --enabled', {
+        extraEnv: { DO_NOT_TRACK: '1' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('preference saved as enabled');
+      expect(output).toContain('DO_NOT_TRACK');
+      expect(output).toContain('disabled');
+      expect(output).not.toContain('Telemetry enabled.');
     },
     { timeout: 15000 },
   );

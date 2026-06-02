@@ -24,6 +24,7 @@ import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
 import { flushSentry, initSentry } from '../../../src/lib/sentry.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as userModule from '../../../src/telemetry/user.js';
@@ -71,6 +72,7 @@ beforeEach(() => {
   flushSpy = spyOn(Sentry, 'flush').mockResolvedValue(true);
   getClientSpy = spyOn(Sentry, 'getClient').mockReturnValue(undefined);
   delete process.env['SONARQUBE_CLI_DISABLE_SENTRY'];
+  delete process.env[ENV_DO_NOT_TRACK];
 });
 
 afterEach(() => {
@@ -81,6 +83,7 @@ afterEach(() => {
   getClientSpy.mockRestore();
   delete process.env['SONARSOURCE_DOGFOODING'];
   process.env['SONARQUBE_CLI_DISABLE_SENTRY'] = '1';
+  delete process.env[ENV_DO_NOT_TRACK];
 });
 
 describe('initSentry', () => {
@@ -101,6 +104,16 @@ describe('initSentry', () => {
       initSentry(state);
 
       expect(setUserSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not call Sentry.init when DO_NOT_TRACK is set', () => {
+      const state = getDefaultState('1.0.0');
+      state.telemetry.enabled = true;
+      process.env[ENV_DO_NOT_TRACK] = '1';
+
+      initSentry(state);
+
+      expect(initSpy).not.toHaveBeenCalled();
     });
   });
 

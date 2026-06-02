@@ -594,6 +594,8 @@ Both are enabled by default and share the same opt-out toggle. To disable all da
 sonar config telemetry --disabled
 ```
 
+You can also set the `DO_NOT_TRACK=1` environment variable to disable telemetry for a session without changing persisted configuration.
+
 No personally identifiable information is transmitted.
 
 ## Contributing

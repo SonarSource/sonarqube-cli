@@ -23,6 +23,7 @@ import { homedir } from 'node:os';
 import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 
+import { isTelemetryEnabled } from '../telemetry/enabled.js';
 import { getOrCreateUserId } from '../telemetry/user.js';
 import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from './config-constants.js';
 import type { CliState } from './state.js';
@@ -31,7 +32,7 @@ import type { CliState } from './state.js';
  * Initialize Sentry if telemetry is enabled.
  */
 export function initSentry(state: CliState): void {
-  if (!state.telemetry.enabled || process.env.SONARQUBE_CLI_DISABLE_SENTRY) return;
+  if (!isTelemetryEnabled(state) || process.env.SONARQUBE_CLI_DISABLE_SENTRY) return;
 
   const environment = process.env.SONARSOURCE_DOGFOODING === '1' ? 'dogfood' : 'production';
 
