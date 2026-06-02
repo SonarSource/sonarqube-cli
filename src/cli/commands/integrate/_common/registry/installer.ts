@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { version as VERSION } from '../../../../../../package.json';
+import type { ResolvedAuth } from '../../../../../lib/auth-resolver';
 import logger from '../../../../../lib/logger';
 import { loadState, saveState } from '../../../../../lib/repository/state-repository';
 import type {
@@ -50,6 +51,7 @@ import type {
   InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
+  IntegrationExecutionMode,
   IntegrationInvocation,
 } from './types';
 
@@ -65,6 +67,7 @@ interface FeatureApplication<TOptions = Record<string, unknown>> {
   feature: FeatureDeclaration<TOptions>;
   targetRoot: string;
   scope: IntegrationScope;
+  auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
 }
@@ -72,6 +75,7 @@ interface FeatureApplication<TOptions = Record<string, unknown>> {
 interface ApplyAndRecordFeaturesOptions<TOptions = Record<string, unknown>> {
   callbacks?: ApplyFeatureCallbacks;
   continueOnFeatureError?: boolean;
+  executionMode?: IntegrationExecutionMode;
   onFeatureError?: (application: FeatureApplication<TOptions>, error: Error) => void;
 }
 
@@ -98,6 +102,7 @@ export interface InstallIntegrationOptions<TOptions> {
   options: TOptions;
   targetRoot: string;
   scope: IntegrationScope;
+  auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   featureIds?: string[];
@@ -198,7 +203,12 @@ export class IntegrationInstaller {
     applications: FeatureApplication<TOptions>[],
     options: ApplyAndRecordFeaturesOptions<TOptions> = {},
   ): Promise<InstalledIntegrationFeature[]> {
-    const executions = this.prepareFeatureExecutions(state, integration, applications);
+    const executions = this.prepareFeatureExecutions(
+      state,
+      integration,
+      applications,
+      options.executionMode ?? 'install',
+    );
     if (executions.length === 0) {
       return [];
     }
@@ -251,6 +261,7 @@ export class IntegrationInstaller {
             feature,
             targetRoot: context.targetRoot,
             scope: context.scope,
+            auth: context.auth,
             force: context.force,
             attrs: context.attrs,
           },
@@ -551,12 +562,15 @@ export class IntegrationInstaller {
     state: CliState,
     integration: IntegrationDeclaration<TOptions>,
     applications: FeatureApplication<TOptions>[],
+    executionMode: IntegrationExecutionMode,
   ): PreparedFeatureExecution<TOptions>[] {
     return applications.map((application) => {
       const context = makeContext(
         state,
         application.targetRoot,
         application.scope,
+        executionMode,
+        application.auth,
         application.force,
         application.attrs,
       );
@@ -625,12 +639,13 @@ export async function installIntegration<TOptions>({
   options,
   targetRoot,
   scope,
+  auth,
   force,
   attrs,
   featureIds,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
-  const invocation = makeInvocation(options, targetRoot, scope, force, attrs);
+  const invocation = makeInvocation(options, targetRoot, scope, auth, force, attrs);
   const features =
     featureIds === undefined
       ? integrationInstaller.selectFeaturesForInvocation(integration, invocation)
@@ -642,47 +657,59 @@ export async function installIntegration<TOptions>({
   const state = loadStateForInstallation();
   const applications: FeatureApplication<TOptions>[] = [];
   for (const feature of features) {
-    const context = await resolveFeatureContext(state, invocation, feature);
+    const context = await resolveFeatureContext(state, invocation, feature, 'install');
     applications.push({
       feature,
       targetRoot: context.targetRoot,
       scope: context.scope,
+      auth: context.auth,
       force: context.force,
       attrs: context.attrs,
     });
     text(`Installing ${integration.displayName}: ${feature.displayName}`);
   }
 
-  const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
-    state,
-    integration,
-    applications,
-    {
-      callbacks: {
-        onDependencyInstalled: (dependency) => {
-          success(`Installed ${dependency.displayName ?? dependency.id}`);
+  try {
+    const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
+      state,
+      integration,
+      applications,
+      {
+        callbacks: {
+          onDependencyInstalled: (dependency) => {
+            success(`Installed ${dependency.displayName ?? dependency.id}`);
+          },
+          onDependencySkipped: (dependency) => {
+            info(`${dependency.displayName ?? dependency.id} already installed`);
+          },
+          onResourceInstalled: (resource) => {
+            success(`Installed ${resource.displayName ?? resource.id}`);
+          },
+          onResourceSkipped: (resource) => {
+            info(`${resource.displayName ?? resource.id} already installed`);
+          },
+          onOperationApplied: (operation) => {
+            success(`Applied ${operation.displayName ?? operation.id}`);
+          },
         },
-        onDependencySkipped: (dependency) => {
-          info(`${dependency.displayName ?? dependency.id} already installed`);
-        },
-        onResourceInstalled: (resource) => {
-          success(`Installed ${resource.displayName ?? resource.id}`);
-        },
-        onResourceSkipped: (resource) => {
-          info(`${resource.displayName ?? resource.id} already installed`);
-        },
-        onOperationApplied: (operation) => {
-          success(`Applied ${operation.displayName ?? operation.id}`);
-        },
+        executionMode: 'install',
       },
-    },
-  );
+    );
 
-  return saveInstalledFeatures(state) ? installedFeatures : [];
+    return saveInstalledFeatures(state) ? installedFeatures : [];
+  } catch (error) {
+    saveInstalledFeatures(state);
+    throw error;
+  }
 }
 
 function saveInstalledFeatures(state: CliState): boolean {
   try {
+    try {
+      state.tools = loadState().tools;
+    } catch (err) {
+      logger.debug(`Failed to merge latest tools state before save: ${(err as Error).message}`);
+    }
     saveState(state);
     return true;
   } catch (err) {
@@ -719,6 +746,7 @@ function makeInvocation<TOptions>(
   options: TOptions,
   targetRoot: string,
   scope: IntegrationScope,
+  auth: ResolvedAuth | undefined,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): IntegrationInvocation<TOptions> {
@@ -726,6 +754,7 @@ function makeInvocation<TOptions>(
     options,
     targetRoot,
     scope,
+    auth,
     force,
     attrs,
   };
@@ -735,11 +764,14 @@ async function resolveFeatureContext<TOptions>(
   state: CliState,
   invocation: IntegrationInvocation<TOptions>,
   feature: FeatureDeclaration<TOptions>,
+  executionMode: IntegrationExecutionMode,
 ): Promise<IntegrationContext> {
   return makeContext(
     state,
     await resolveFeatureTargetRoot(invocation, feature),
     await resolveFeatureScope(invocation, feature),
+    executionMode,
+    invocation.auth,
     invocation.force,
     invocation.attrs,
   );
@@ -771,6 +803,8 @@ function makeContext(
   state: CliState,
   targetRoot: string,
   scope: IntegrationScope,
+  executionMode: IntegrationExecutionMode,
+  auth: ResolvedAuth | undefined,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): IntegrationContext {
@@ -778,6 +812,8 @@ function makeContext(
     state,
     targetRoot,
     scope,
+    executionMode,
+    auth,
     force,
     attrs,
     resolvedDependencies: new Map(),

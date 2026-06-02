@@ -61,9 +61,8 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     copilotSkillPath = join(harness.cwd.path, COPILOT_SKILL_RELATIVE_PATH);
 
     // Pre-write a sentinel into the skill file so the refresh has to overwrite
-    // it — proves the post-update path actually invoked `tool print-skill`
-    // (and the wrapper wrote its stdout to the skill path) rather than the
-    // file existing as a side effect of something else.
+    // it — proves the post-update path actually re-rendered the declarative
+    // skill file rather than the file existing as a side effect of something else.
     mkdirSync(dirname(copilotSkillPath), { recursive: true });
     writeFileSync(copilotSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
 

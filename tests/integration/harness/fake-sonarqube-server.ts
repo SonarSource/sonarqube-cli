@@ -98,9 +98,10 @@ export class FakeSonarQubeServer {
 
   baseUrl(): string {
     // Use `localhost` (not `127.0.0.1`) so CAG's Cloud-API URL transformation
-    // (host → `api.<host>`) lands on `api.localhost`, which resolves to
-    // 127.0.0.1 per RFC 6761 and reaches the same server. `api.127.0.0.1`
-    // would not resolve, breaking any test that exercises Cloud-mode CAG.
+    // (host → `api.<host>`) lands on `api.localhost`, which resolves to a
+    // loopback address per RFC 6761 and reaches the same server.
+    // `api.127.0.0.1` would not resolve, breaking any test that exercises
+    // Cloud-mode CAG.
     return `http://localhost:${this.server.port}`;
   }
 
@@ -299,7 +300,10 @@ export class FakeSonarQubeServerBuilder {
 
     const server = Bun.serve({
       port: 0,
-      hostname: '127.0.0.1',
+      // Dual-stack local listener so both `localhost` and `api.localhost`
+      // resolve to a reachable loopback address across platforms.
+      hostname: '::',
+      ipv6Only: false,
       async fetch(req) {
         const url = new URL(req.url);
         const path = url.pathname;

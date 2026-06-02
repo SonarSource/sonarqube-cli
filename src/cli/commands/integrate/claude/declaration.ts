@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { createContextAugmentationSkillFeature } from '../_common/features/context-augmentation-skill-feature';
+import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
@@ -53,7 +53,7 @@ export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   installSecretsHooks?: boolean;
   installSqaaHook?: boolean;
   installMcp?: boolean;
-  installContextAugmentationSkill?: boolean;
+  installContextAugmentation?: boolean;
 }
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
@@ -160,7 +160,8 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         }),
       ],
     },
-    createContextAugmentationSkillFeature<ClaudeIntegrationOptions>({
+    createContextAugmentationFeature<ClaudeIntegrationOptions>({
+      agentId: 'claude-code',
       agentDisplayName: 'Claude Code',
       targetPath: resolveClaudeSkillPath,
     }),

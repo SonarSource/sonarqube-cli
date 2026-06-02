@@ -58,6 +58,7 @@ export type {
   InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
+  IntegrationExecutionMode,
   IntegrationInvocation,
   LegacyFeatureDeclaration,
   MaybePromise,

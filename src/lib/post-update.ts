@@ -136,6 +136,7 @@ export async function migrateDeclarativeIntegrations(
         applications,
         {
           continueOnFeatureError: true,
+          executionMode: 'update',
           onFeatureError: (application, err) => {
             logger.debug(
               `Declarative migration failed for ${integration.id}.${application.feature.id}: ${err.message}`,

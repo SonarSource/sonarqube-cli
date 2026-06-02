@@ -33,12 +33,7 @@ import { type DiscoveredProject, discoverProject } from '../../../../lib/project
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
-import {
-  reportContextAugmentationFailure,
-  resolveContextAugmentationSetup,
-  setupContextAugmentation,
-} from '../_common/context-augmentation';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../_common/features/context-augmentation-skill-feature';
+import { resolveContextAugmentationSetup } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -120,7 +115,17 @@ export async function integrateClaude(
     skipSecretsHooks,
   });
 
-  const featureAttrs = buildIntegrationAttrs(config);
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth: { ...auth, token },
+        projectKey: options.project || project.projectKey,
+        isGlobal,
+      });
+  const featureAttrs = {
+    ...buildIntegrationAttrs(config),
+    ...(contextAugmentation ? buildContextAugmentationAttrs(contextAugmentation.scaEnabled) : {}),
+  };
   const installRoot = isGlobal ? homedir() : project.rootDir;
   const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
   const integrationOptions = {
@@ -129,57 +134,29 @@ export async function integrateClaude(
     installSecretsHooks: !skipSecretsHooks,
     installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
     installMcp: true,
-    installContextAugmentationSkill: false,
+    installContextAugmentation: contextAugmentation !== null,
   } satisfies ClaudeIntegrationOptions;
-  await installIntegration({
-    integrationId: CLAUDE_INTEGRATION_ID,
-    options: integrationOptions,
-    targetRoot: installRoot,
-    scope: installScope,
-    attrs: featureAttrs,
-  });
+  let installError: Error | undefined;
+  try {
+    await installIntegration({
+      integrationId: CLAUDE_INTEGRATION_ID,
+      options: integrationOptions,
+      targetRoot: installRoot,
+      scope: installScope,
+      auth: { ...auth, token },
+      attrs: featureAttrs,
+    });
+  } catch (error) {
+    installError = error instanceof Error ? error : new Error(String(error));
+  }
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
   await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled, {
     skipSecretsHooks,
   });
-  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
-
-  if (!options.skipContext) {
-    const contextAugmentation = await resolveContextAugmentationSetup({
-      auth: { ...auth, token },
-      projectKey: options.project || project.projectKey,
-      isGlobal,
-    });
-    if (contextAugmentation) {
-      try {
-        await installIntegration({
-          integrationId: CLAUDE_INTEGRATION_ID,
-          options: {
-            ...integrationOptions,
-            installContextAugmentationSkill: true,
-          },
-          targetRoot: project.rootDir,
-          scope: 'project',
-          featureIds: [CONTEXT_AUGMENTATION_FEATURE_ID],
-          attrs: buildContextAugmentationAttrs(
-            { ...auth, token },
-            options.project || project.projectKey,
-            contextAugmentation.scaEnabled,
-          ),
-        });
-        await setupContextAugmentation({
-          auth: { ...auth, token },
-          agentId: 'claude-code',
-          projectRoot: project.rootDir,
-          projectKey: options.project || project.projectKey,
-          scaEnabled: contextAugmentation.scaEnabled,
-        });
-      } catch (error) {
-        reportContextAugmentationFailure(error);
-        warn('Context Augmentation skill setup failed. Skipping tool integration.');
-      }
-    }
+  if (installError) {
+    throw installError;
   }
+  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
 
   blank();
   text('Phase 3/3: Final Verification');
@@ -318,21 +295,14 @@ function buildIntegrationAttrs(
   config: ConfigurationData,
 ): Record<string, IntegrationStateAttribute> {
   return {
-    orgKey: config.organization ?? null,
     projectKey: config.projectKey ?? null,
-    serverUrl: config.serverURL,
   };
 }
 
 function buildContextAugmentationAttrs(
-  auth: ResolvedAuth,
-  projectKey: string | undefined,
   scaEnabled: boolean,
 ): Record<string, IntegrationStateAttribute> {
   return {
-    orgKey: auth.orgKey ?? null,
-    projectKey: projectKey ?? null,
-    serverUrl: auth.serverUrl,
     scaEnabled,
   };
 }

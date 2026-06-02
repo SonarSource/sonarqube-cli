@@ -579,6 +579,41 @@ describe('declarative integration framework', () => {
     expect(installed.operations).toEqual([]);
   });
 
+  it('passes update execution mode to feature operations', async () => {
+    const state = getDefaultState('test');
+    let called = false;
+    const feature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      operations: [
+        {
+          id: 'operation',
+          shouldApply: (context) => context.executionMode === 'install',
+          apply: () => {
+            called = true;
+          },
+        },
+      ],
+    };
+    const integration = makeIntegration({ features: [feature] });
+
+    const installed = await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [
+        {
+          feature,
+          targetRoot: tempDir,
+          scope: 'project',
+        },
+      ],
+      { executionMode: 'update' },
+    );
+
+    expect(called).toBe(false);
+    expect(installed[0]?.operations).toEqual([]);
+  });
+
   it('records multiple features under one installed integration', async () => {
     const state = getDefaultState('test');
     const firstFeature: FeatureDeclaration = {
@@ -902,11 +937,13 @@ function makeContext(
   targetRoot: string,
   attrs?: IntegrationContext['attrs'],
   force?: boolean,
+  executionMode: IntegrationContext['executionMode'] = 'install',
 ): IntegrationContext {
   return {
     state,
     targetRoot,
     scope: 'project',
+    executionMode,
     force,
     attrs,
     resolvedDependencies: new Map(),

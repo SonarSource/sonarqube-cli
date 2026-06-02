@@ -289,23 +289,19 @@ describe('integrate claude — Context Augmentation', () => {
       );
 
       // No withContextAugmentationBinaryInstalled() — let the install pipeline run.
-      const result = await harness.run('integrate claude --non-interactive', {
+      await harness.run('integrate claude --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
 
-      // The binary install should complete even if the subsequent CAG
-      // setup step fails against the fake server.
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('sonar-context-augmentation step failed');
-
       // The versioned binary must be on disk under <cliHome>/bin.
       const versionedName = buildLocalCagBinaryName(detectPlatform());
       expect(harness.cliHome.file('bin', versionedName).exists()).toBe(true);
 
-      // state.json records the installation.
+      // state.json records the installation in the legacy tools section even
+      // when the subsequent feature setup fails.
       const state = loadState(harness);
       const installed = state.tools?.installed.find((t) => t.name === 'sonar-context-augmentation');
       expect(installed).toBeDefined();

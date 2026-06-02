@@ -61,9 +61,8 @@ describe('sonar-context-augmentation codex skill refresh (offline, real binary)'
     codexSkillPath = join(harness.cwd.path, CODEX_SKILL_RELATIVE_PATH);
 
     // Pre-write a sentinel into the skill file so the refresh has to overwrite
-    // it — proves the post-update path actually invoked `tool print-skill`
-    // (and the wrapper wrote its stdout to the skill path) rather than the
-    // file existing as a side effect of something else.
+    // it — proves the post-update path actually re-rendered the declarative
+    // skill file rather than the file existing as a side effect of something else.
     mkdirSync(dirname(codexSkillPath), { recursive: true });
     writeFileSync(codexSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
 

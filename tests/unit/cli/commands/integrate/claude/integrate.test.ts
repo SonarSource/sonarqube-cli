@@ -24,7 +24,6 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import * as contextAugmentation from '../../../../../../src/cli/commands/integrate/_common/context-augmentation';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../../../src/cli/commands/integrate/_common/features/context-augmentation-skill-feature';
 import * as registry from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
 import * as health from '../../../../../../src/cli/commands/integrate/claude/health';
@@ -100,9 +99,6 @@ describe('integrateCommand', () => {
       (...args: any[]) => any
     >
   >;
-  let setupContextAugmentationSpy: Mock<
-    Extract<(typeof contextAugmentation)['setupContextAugmentation'], (...args: any[]) => any>
-  >;
 
   beforeEach(() => {
     setMockUi(true);
@@ -115,10 +111,6 @@ describe('integrateCommand', () => {
       contextAugmentation,
       'resolveContextAugmentationSetup',
     ).mockResolvedValue(null);
-    setupContextAugmentationSpy = spyOn(
-      contextAugmentation,
-      'setupContextAugmentation',
-    ).mockResolvedValue(undefined);
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
@@ -154,7 +146,6 @@ describe('integrateCommand', () => {
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
     resolveContextAugmentationSetupSpy.mockRestore();
-    setupContextAugmentationSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -316,6 +307,11 @@ describe('integrateCommand', () => {
 
     expect(repairTokenSpy).toHaveBeenCalledTimes(1);
     expect(repairTokenSpy).toHaveBeenCalledWith(CLOUD_AUTH.serverUrl, CLOUD_AUTH.orgKey);
+    expect(installIntegrationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: expect.objectContaining({ token: 'repaired-token' }),
+      }),
+    );
   });
 
   it('attempts repair when health fails for token', async () => {
@@ -364,78 +360,58 @@ describe('integrateCommand', () => {
     expect(hasSqaaEntitlementSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('installs the CAG skill declaratively before running tool integration', async () => {
+  it('installs Context Augmentation through the declarative installer in a single call', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: true });
 
     await integrateClaude({}, CLOUD_AUTH);
 
-    expect(installIntegrationSpy).toHaveBeenCalledTimes(2);
-    expect(installIntegrationSpy).toHaveBeenNthCalledWith(
-      1,
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
+    expect(installIntegrationSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         integrationId: 'claude-code',
+        auth: CLOUD_AUTH,
         options: expect.objectContaining({
           projectRoot: '/project/root',
           installSecretsHooks: true,
           installSqaaHook: false,
           installMcp: true,
-          installContextAugmentationSkill: false,
+          installContextAugmentation: true,
         }),
         scope: 'project',
         targetRoot: '/project/root',
         attrs: {
-          orgKey: CLOUD_AUTH.orgKey,
           projectKey: 'a-project',
-          serverUrl: CLOUD_AUTH.serverUrl,
-        },
-      }),
-    );
-    expect(installIntegrationSpy).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        integrationId: 'claude-code',
-        options: expect.objectContaining({
-          projectRoot: '/project/root',
-          installContextAugmentationSkill: true,
-        }),
-        scope: 'project',
-        targetRoot: '/project/root',
-        featureIds: [CONTEXT_AUGMENTATION_FEATURE_ID],
-        attrs: {
-          orgKey: CLOUD_AUTH.orgKey,
-          projectKey: 'a-project',
-          serverUrl: CLOUD_AUTH.serverUrl,
           scaEnabled: true,
         },
       }),
     );
-    expect(setupContextAugmentationSpy).toHaveBeenCalledWith({
-      auth: CLOUD_AUTH,
-      agentId: 'claude-code',
-      projectRoot: '/project/root',
-      projectKey: 'a-project',
-      scaEnabled: true,
-    });
   });
 
-  it('warns and skips tool integration when declarative CAG skill installation fails', async () => {
+  it('rethrows CAG installation failures after updating Claude state', async () => {
     mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
     resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: false });
-    installIntegrationSpy
-      .mockResolvedValueOnce([])
-      .mockRejectedValueOnce(new Error('print failed'));
+    installIntegrationSpy.mockRejectedValueOnce(new Error('print failed'));
 
-    await integrateClaude({}, CLOUD_AUTH);
+    let thrown: unknown;
+    try {
+      await integrateClaude({}, CLOUD_AUTH);
+    } catch (error) {
+      thrown = error;
+    }
 
-    expect(installIntegrationSpy).toHaveBeenCalledTimes(2);
-    expect(setupContextAugmentationSpy).not.toHaveBeenCalled();
-    const warnText = getMockUiCalls().find(
-      (c) =>
-        c.method === 'warn' &&
-        String(c.args[0]) === 'Context Augmentation skill setup failed. Skipping tool integration.',
+    if (!(thrown instanceof Error)) {
+      throw new Error('Expected integrateClaude to reject');
+    }
+    expect(thrown.message).toBe('print failed');
+
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
+    expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
+    expect(runHealthChecksSpy).toHaveBeenCalledTimes(1);
+    const phaseText = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Phase 3/3: Final Verification',
     );
-    expect(warnText).toBeDefined();
+    expect(phaseText).toBeUndefined();
   });
 
   it('runs migration, installs hooks and updates state when health check succeeds', async () => {
@@ -843,15 +819,14 @@ describe('integrateCommand', () => {
     installSqaaHook: boolean;
   }): void {
     const attrs = {
-      orgKey: auth.orgKey ?? null,
       projectKey: projectKey ?? null,
-      serverUrl: auth.serverUrl,
     };
 
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
     expect(installIntegrationSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         integrationId: 'claude-code',
+        auth,
         options: expect.objectContaining({
           projectRoot,
           installSecretsHooks,

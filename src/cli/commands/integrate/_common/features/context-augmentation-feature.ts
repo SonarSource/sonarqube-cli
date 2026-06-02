@@ -21,27 +21,34 @@
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../../lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../lib/signatures';
 import { CommandFailedError } from '../../../_common/error';
-import { printContextAugmentationSkill } from '../context-augmentation';
+import {
+  type ContextAugmentationAgentId,
+  printContextAugmentationSkill,
+  runToolIntegrateCommand,
+} from '../context-augmentation';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
 import { wholeFile } from '../registry/resources';
 import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
 
-export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation-skill';
+export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
 export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file';
+export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
+  'context-augmentation-tool-integrate';
 
 export interface ContextAugmentationSkillFeatureOptions {
+  agentId: ContextAugmentationAgentId;
   agentDisplayName: string;
   targetPath: (context: IntegrationContext) => string;
 }
 
-export function createContextAugmentationSkillFeature<
-  TOptions extends { installContextAugmentationSkill?: boolean },
+export function createContextAugmentationFeature<
+  TOptions extends { installContextAugmentation?: boolean },
 >(options: ContextAugmentationSkillFeatureOptions): FeatureDeclaration<TOptions> {
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
-    displayName: `${options.agentDisplayName} Context Augmentation skill`,
+    displayName: `${options.agentDisplayName} Context Augmentation`,
     when: ({ options: integrationOptions }) =>
-      integrationOptions.installContextAugmentationSkill === true,
+      integrationOptions.installContextAugmentation === true,
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({
@@ -57,6 +64,23 @@ export function createContextAugmentationSkillFeature<
           }),
       }),
     ],
+    operations: [
+      {
+        id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
+        displayName: `${options.agentDisplayName} Context Augmentation tool integration`,
+        shouldApply: (context) => context.executionMode === 'install',
+        apply: async (context) =>
+          runToolIntegrateCommand({
+            state: context.state,
+            agentId: options.agentId,
+            auth: getRequiredAuth(context),
+            binaryPath: resolveContextAugmentationBinaryPath(context),
+            projectRoot: context.targetRoot,
+            projectKey: getOptionalStringAttr(context, 'projectKey'),
+            scaEnabled: context.attrs?.scaEnabled === true,
+          }),
+      },
+    ],
   };
 }
 
@@ -66,4 +90,16 @@ function resolveContextAugmentationBinaryPath(context: IntegrationContext): stri
     throw new CommandFailedError('Context Augmentation binary path is unavailable.');
   }
   return binaryPath;
+}
+
+function getOptionalStringAttr(context: IntegrationContext, key: string): string | undefined {
+  const value = context.attrs?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getRequiredAuth(context: IntegrationContext) {
+  if (!context.auth) {
+    throw new CommandFailedError('Authentication is unavailable for Context Augmentation.');
+  }
+  return context.auth;
 }

@@ -123,7 +123,6 @@ describe('integrate claude', () => {
         dependencies: [{ id: 'sonar-secrets' }],
         attrs: {
           projectKey: 'my-project',
-          serverUrl: server.baseUrl(),
         },
       });
       expect(mcpFeature).toMatchObject({
@@ -761,9 +760,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(sqaaFeature).toMatchObject({
         scope: 'project',
         attrs: {
-          orgKey: 'my-org',
           projectKey: 'my-project',
-          serverUrl,
         },
       });
     },

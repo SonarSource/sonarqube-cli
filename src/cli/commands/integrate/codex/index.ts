@@ -27,12 +27,7 @@ import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
-import {
-  reportContextAugmentationFailure,
-  resolveContextAugmentationSetup,
-  setupContextAugmentation,
-} from '../_common/context-augmentation';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../_common/features/context-augmentation-skill-feature';
+import { resolveContextAugmentationSetup } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -71,13 +66,20 @@ export async function integrateCodex(
 
   const installRoot = isGlobal ? homedir() : project.rootDir;
   const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth,
+        projectKey,
+        isGlobal,
+      });
   const integrationOptions = {
     ...options,
     installSecretsHooks: true,
     installSecretsInstructions: true,
     installSqaaInstructions: includeSqaa,
     installMcp: true,
-    installContextAugmentationSkill: false,
+    installContextAugmentation: contextAugmentation !== null,
   } satisfies CodexIntegrationOptions;
 
   await installIntegration({
@@ -85,45 +87,16 @@ export async function integrateCodex(
     options: integrationOptions,
     targetRoot: installRoot,
     scope: installScope,
-    attrs: buildAttrs({
-      includeSecretsSection: true,
-      projectKey,
-      includeSqaa,
-    }),
+    auth,
+    attrs: {
+      ...buildAttrs({
+        includeSecretsSection: true,
+        projectKey,
+        includeSqaa,
+      }),
+      ...(contextAugmentation ? buildContextAugmentationAttrs(contextAugmentation.scaEnabled) : {}),
+    },
   });
-
-  if (!options.skipContext) {
-    const contextAugmentation = await resolveContextAugmentationSetup({
-      auth,
-      projectKey,
-      isGlobal,
-    });
-    if (contextAugmentation) {
-      try {
-        await installIntegration({
-          integrationId: CODEX_INTEGRATION_ID,
-          options: {
-            ...integrationOptions,
-            installContextAugmentationSkill: true,
-          },
-          targetRoot: project.rootDir,
-          scope: 'project',
-          featureIds: [CONTEXT_AUGMENTATION_FEATURE_ID],
-          attrs: buildContextAugmentationAttrs(auth, projectKey, contextAugmentation.scaEnabled),
-        });
-        await setupContextAugmentation({
-          auth,
-          agentId: 'codex',
-          projectRoot: project.rootDir,
-          projectKey,
-          scaEnabled: contextAugmentation.scaEnabled,
-        });
-      } catch (error) {
-        reportContextAugmentationFailure(error);
-        warn('Context Augmentation skill setup failed. Skipping tool integration.');
-      }
-    }
-  }
 
   if (isGlobal) {
     success('Codex integration successfully configured globally');
@@ -150,14 +123,9 @@ function buildAttrs(args: {
 }
 
 function buildContextAugmentationAttrs(
-  auth: ResolvedAuth,
-  projectKey: string | undefined,
   scaEnabled: boolean,
 ): Record<string, IntegrationStateAttribute> {
   return {
-    orgKey: auth.orgKey ?? null,
-    projectKey: projectKey ?? null,
-    serverUrl: auth.serverUrl,
     scaEnabled,
   };
 }

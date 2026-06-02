@@ -26,12 +26,7 @@ import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
-import {
-  reportContextAugmentationFailure,
-  resolveContextAugmentationSetup,
-  setupContextAugmentation,
-} from '../_common/context-augmentation';
-import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../_common/features/context-augmentation-skill-feature';
+import { resolveContextAugmentationSetup } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -77,6 +72,13 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     warnIfProjectInstructionsShadowGlobal();
   }
 
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth,
+        projectKey,
+        isGlobal,
+      });
   const integrationOptions: CopilotIntegrationOptions = {
     ...options,
     projectRoot: project.rootDir,
@@ -84,7 +86,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     installInstructions: true,
     installSqaaInstructions: sqaaProjectKey !== undefined,
     installMcp: true,
-    installContextAugmentationSkill: false,
+    installContextAugmentation: contextAugmentation !== null,
   };
 
   await installIntegration({
@@ -92,41 +94,12 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     options: integrationOptions,
     targetRoot,
     scope,
-    attrs: buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
+    auth,
+    attrs: {
+      ...buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
+      ...(contextAugmentation ? buildContextAugmentationAttrs(contextAugmentation.scaEnabled) : {}),
+    },
   });
-
-  if (!options.skipContext) {
-    const contextAugmentation = await resolveContextAugmentationSetup({
-      auth,
-      projectKey,
-      isGlobal,
-    });
-    if (contextAugmentation) {
-      try {
-        await installIntegration({
-          integrationId: COPILOT_INTEGRATION_ID,
-          options: {
-            ...integrationOptions,
-            installContextAugmentationSkill: true,
-          },
-          targetRoot: project.rootDir,
-          scope: 'project',
-          featureIds: [CONTEXT_AUGMENTATION_FEATURE_ID],
-          attrs: buildContextAugmentationAttrs(auth, projectKey, contextAugmentation.scaEnabled),
-        });
-        await setupContextAugmentation({
-          auth,
-          agentId: 'copilot-cli',
-          projectRoot: project.rootDir,
-          projectKey,
-          scaEnabled: contextAugmentation.scaEnabled,
-        });
-      } catch (error) {
-        reportContextAugmentationFailure(error);
-        warn('Context Augmentation skill setup failed. Skipping tool integration.');
-      }
-    }
-  }
 
   reportInstallationOutcome({
     isGlobal,
@@ -198,14 +171,9 @@ function buildIntegrationAttrs(
 }
 
 function buildContextAugmentationAttrs(
-  auth: ResolvedAuth,
-  projectKey: string | undefined,
   scaEnabled: boolean,
 ): Record<string, IntegrationStateAttribute> {
   return {
-    orgKey: auth.orgKey ?? null,
-    projectKey: projectKey ?? null,
-    serverUrl: auth.serverUrl,
     scaEnabled,
   };
 }

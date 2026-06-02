@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { createContextAugmentationSkillFeature } from '../_common/features/context-augmentation-skill-feature';
+import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import { tomlPatch, wholeFile } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
@@ -44,7 +44,7 @@ export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   /** Render the post-tool SQAA section into `.codex/AGENTS.md`. */
   installSqaaInstructions?: boolean;
   installMcp?: boolean;
-  installContextAugmentationSkill?: boolean;
+  installContextAugmentation?: boolean;
 }
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
@@ -113,7 +113,8 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         }),
       ],
     },
-    createContextAugmentationSkillFeature<CodexIntegrationOptions>({
+    createContextAugmentationFeature<CodexIntegrationOptions>({
+      agentId: 'codex',
       agentDisplayName: 'Codex',
       targetPath: resolveCodexSkillPath,
     }),
