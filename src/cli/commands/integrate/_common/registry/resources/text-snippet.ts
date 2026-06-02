@@ -67,6 +67,20 @@ export class TextSnippet implements ResourceDeclaration {
     return existing.includes(this.renderManagedBlock());
   }
 
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolvePath(context, this.options.targetPath);
+    const existing = await readTextFile(path);
+    if (!existing?.includes(this.startMarker) || !existing.includes(this.endMarker)) {
+      return;
+    }
+
+    const pattern = new RegExp(
+      String.raw`(?:\r?\n)?${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}(?:\r?\n)?`,
+      'g',
+    );
+    await writeFileIfChanged(path, existing.replaceAll(pattern, ''));
+  }
+
   private async renderContent(path: string): Promise<string> {
     const existing = (await readTextFile(path)) ?? '';
     const managedBlock = this.renderManagedBlock();
@@ -106,5 +120,5 @@ function appendBlock(existing: string, block: string): string {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

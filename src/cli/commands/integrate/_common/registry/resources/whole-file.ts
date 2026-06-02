@@ -18,6 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+
 import { CommandFailedError } from '../../../../_common/error';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
@@ -75,6 +78,13 @@ export class WholeFileResource implements ResourceDeclaration {
     const path = await resolvePath(context, this.options.targetPath);
     const existing = await readTextFile(path);
     return existing === (await this.resolveContent(context));
+  }
+
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolvePath(context, this.options.targetPath);
+    if (existsSync(path)) {
+      await rm(path);
+    }
   }
 
   private async resolveContent(context: IntegrationContext): Promise<string> {

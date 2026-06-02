@@ -23,24 +23,23 @@ import { readFile } from 'node:fs/promises';
 
 import yaml from 'js-yaml';
 
-import type { IntegrationContext, MaybePromise } from '../types';
 import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
 
-export interface YamlPatchOptions extends PatchResourceOptions {
-  patch: (document: unknown, context: IntegrationContext) => MaybePromise<unknown>;
-}
+export type YamlPatchOptions<TDoc = unknown> = PatchResourceOptions<TDoc>;
 
-export function yamlPatch(options: YamlPatchOptions): ResourceDeclaration {
+export function yamlPatch<TDoc = unknown>(options: YamlPatchOptions<TDoc>): ResourceDeclaration {
   return new YamlPatch(options);
 }
 
-export class YamlPatch extends PatchResource<YamlPatchOptions> {
+export class YamlPatch<TDoc = unknown> extends PatchResource<YamlPatchOptions<TDoc>, TDoc> {
   readonly resourceType = 'yaml-patch';
 
-  protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
-    const document = await readYaml(path);
-    const updated = await this.options.patch(document, context);
-    return yaml.dump(updated, { lineWidth: -1 });
+  protected readDocument(path: string): Promise<TDoc> {
+    return readYaml(path) as Promise<TDoc>;
+  }
+
+  protected serializeDocument(document: unknown): string {
+    return yaml.dump(document, { lineWidth: -1 });
   }
 }
 
