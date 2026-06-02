@@ -18,37 +18,26 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
 import { type ResolvedAuth } from '../../../lib/auth-resolver';
-import { CLI_DIR } from '../../../lib/config-constants';
-import logger, { getLogLevelConfig } from '../../../lib/logger';
-import { fetchServerVersion, isAtLeast } from '../../../lib/server-info';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { error, print, warn } from '../../../ui';
-import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
+import { InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
-import { parseAnalysisProperties } from './dependency-risk-helpers/analysis-properties.ts';
+import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
-import {
-  type ScaScannerInvocation,
-  ScaScannerRunner,
-} from './dependency-risk-helpers/sca-scanner.ts';
-import { buildScaUrls } from './dependency-risk-helpers/sca-urls.ts';
+import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
 import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build';
 
 export const VALID_FORMATS = ['json', 'table'];
 
+export const EXIT_CODE_UNRESOLVED_RISKS = 51;
+
 const EXIT_CODE_OK = 0;
 const EXIT_CODE_ERRORS_ONLY = 1;
-const EXIT_CODE_UNRESOLVED_RISKS = 51;
-
-const MIN_SCA_SQS_VERSION = '2026.4';
 
 export interface AnalyzeDependencyRisksOptions {
   project: string;
@@ -66,32 +55,11 @@ export async function analyzeDependencyRisks(
   }
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
-  await assertServerSupportsLocalSca(auth, client);
-
-  const settings = await client.getProjectSettings(options.project);
-  const properties = parseAnalysisProperties(settings);
-  logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
-
-  const { apiBaseUrl, downloadBaseUrl } = buildScaUrls(auth);
-
-  const invocation: ScaScannerInvocation = {
-    baseDir: process.cwd(),
-    apiBaseUrl,
-    downloadBaseUrl,
-    sonarToken: auth.token,
-    projectKey: options.project,
-    cacheDir: join(CLI_DIR, 'sca-scanner-cache'),
-    workDir: join(tmpdir(), `sonar-sca-${Date.now()}`),
-    scannerProperties: properties.scaProperties,
-    excludedPaths: properties.exclusions,
-    includeGitIgnoredPaths: properties.includeGitIgnoredPaths,
-    debug: getLogLevelConfig() === 'DEBUG',
-  };
-
-  const result = await new ScaScannerRunner(
+  const result = await new ScaScanOrchestrator(
+    client,
     new DefaultScaScannerInstaller(),
     new DefaultScaScannerSpawner(),
-  ).run(invocation);
+  ).run(auth, options.project);
 
   const viewModel = buildDependencyRisksViewModel(result, filter);
   if (options.format === 'json') {
@@ -129,46 +97,5 @@ function pluralize(count: number, singular: string): string {
 }
 
 export function countUnresolvedIssues(vm: DependencyRisksViewModel): number {
-  const isUnresolved = buildRiskFilter('active')!.predicate;
-  let count = 0;
-  for (const pkg of vm.packages) {
-    for (const group of pkg.groups) {
-      for (const risk of group.selectedRisks) {
-        if (isUnresolved(risk)) count += 1;
-      }
-    }
-  }
-  return count;
-}
-
-async function assertServerSupportsLocalSca(
-  auth: ResolvedAuth,
-  client: SonarQubeClient,
-): Promise<void> {
-  if (auth.connectionType !== 'cloud') {
-    let serverVersion: string;
-    try {
-      serverVersion = await fetchServerVersion(auth.serverUrl);
-    } catch (err) {
-      throw new CommandFailedError(
-        `Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later.`,
-        { cause: err },
-      );
-    }
-    if (!isAtLeast(serverVersion, MIN_SCA_SQS_VERSION)) {
-      throw new CommandFailedError(
-        `Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later (server is ${serverVersion}).`,
-      );
-    }
-  }
-  const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
-  if (!enabled) {
-    throw new CommandFailedError(
-      'Software Composition Analysis is not available for the current connection.',
-      {
-        remediationHint:
-          'Software Composition Analysis must be enabled by an administrator and requires an eligible SonarQube plan. Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca',
-      },
-    );
-  }
+  return countSelectedRisks(vm, buildRiskFilter('active')!.predicate);
 }

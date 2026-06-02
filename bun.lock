@@ -12,6 +12,7 @@
         "js-yaml": "^4.1.1",
         "openpgp": "^6.0.0",
         "picocolors": "^1.1.1",
+        "picomatch": "^4.0.3",
         "smol-toml": "^1.6.1",
       },
       "devDependencies": {
@@ -23,6 +24,7 @@
         "@types/istanbul-lib-report": "3.0.3",
         "@types/istanbul-reports": "3.0.4",
         "@types/js-yaml": "^4.0.9",
+        "@types/picomatch": "^4.0.2",
         "@typescript-eslint/eslint-plugin": "^8.59.0",
         "@typescript-eslint/parser": "^8.59.0",
         "ajv": "^8.18.0",
@@ -229,6 +231,8 @@
     "@types/pg": ["@types/pg@8.15.6", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/pg/-/pg-8.15.6.tgz", { "dependencies": { "@types/node": "*", "pg-protocol": "*", "pg-types": "^2.2.0" } }, "sha512-NoaMtzhxOrubeL/7UZuNTrejB4MPAJ0RpxZqXQf2qXuVlTPuG6Y8p4u9dKRaue4yjmC7ZhzVO2/Yyyn25znrPQ=="],
 
     "@types/pg-pool": ["@types/pg-pool@2.0.7", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/pg-pool/-/pg-pool-2.0.7.tgz", { "dependencies": { "@types/pg": "*" } }, "sha512-U4CwmGVQcbEuqpyju8/ptOKg6gEC+Tqsvj2xS9o1g71bUh8twxnC6ZL5rZKCsGN0iyH0CwgUyc9VR5owNQF9Ng=="],
+
+    "@types/picomatch": ["@types/picomatch@4.0.3", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/picomatch/-/picomatch-4.0.3.tgz", {}, "sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ=="],
 
     "@types/tedious": ["@types/tedious@4.0.14", "https://repox.jfrog.io/artifactory/api/npm/npm/@types/tedious/-/tedious-4.0.14.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-KHPsfX/FoVbUGbyYvk1q9MMQHLPeRZhRJZdO45Q4YjvFkv4hMNghCWTvy7rdKessBsmtz4euWCWAB6/tVpI1Iw=="],
 
