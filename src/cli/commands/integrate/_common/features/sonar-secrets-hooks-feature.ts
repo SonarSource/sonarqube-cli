@@ -23,7 +23,11 @@ import { join } from 'node:path';
 import { createAgentHookEntry, resolveAgentHookScriptPath, upsertAgentHooks } from '../hooks';
 import { sonarSecretsBinaryDependency } from '../registry/dependencies';
 import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
-import type { FeatureDeclaration, IntegrationContext, VerificationExample } from '../registry/types';
+import type {
+  FeatureDeclaration,
+  IntegrationContext,
+  VerificationExample,
+} from '../registry/types';
 
 export interface SonarSecretsHooksFeatureOptions {
   installSecretsHooks?: boolean;
