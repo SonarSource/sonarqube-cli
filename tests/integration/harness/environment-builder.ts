@@ -32,17 +32,26 @@ import {
 import { join } from 'node:path';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
+import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import {
   type BinarySpec,
   buildLocalBinaryName,
 } from '../../../src/cli/commands/_common/install/binary';
+import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
 import { SCA_SCANNER_SPEC } from '../../../src/cli/commands/_common/install/sca-scanner';
 import { SECRETS_SPEC } from '../../../src/cli/commands/_common/install/secrets';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures.js';
 import { buildDownloadUrl } from '../../../src/lib/sonarsource-releases.js';
-import type { CliState, InstalledTool } from '../../../src/lib/state.js';
+import type {
+  CliState,
+  InstalledIntegrationDependency,
+  InstalledTool,
+} from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
+import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
@@ -58,16 +67,31 @@ interface SqaaExtensionConfig {
   serverUrl?: string;
 }
 
+interface ContextAugmentationSkillConfig {
+  projectRoot: string;
+  projectKey: string;
+  orgKey?: string;
+  serverUrl?: string;
+  scaEnabled?: boolean;
+}
+
 export class EnvironmentBuilder {
   private activeConnectionUrl?: string;
   private activeConnectionType: 'cloud' | 'on-premise' = 'on-premise';
   private activeConnectionOrgKey?: string;
   private activeConnectionTokenName?: string;
   private _installSecretsBinary = false;
+  private _installCagBinary = false;
+  private _cagInitExitCode = 0;
+  private _cagSkillExitCode = 0;
+  private _cagSentinelPath?: string;
+  private _cagStdoutLine?: string;
+  private _cagStderrLine?: string;
   private _installScaScannerBinary = false;
   private _rawStateJson?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
+  private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
 
   withActiveConnection(
     url: string,
@@ -128,6 +152,34 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Installs the pre-compiled CAG stub binary (built by
+   * `bun run pretest:integration`) into <cliHome>/bin so the `sonar context`
+   * passthrough and the integrate-flow CAG step can run without a real CAG
+   * binary. Uses a real native executable rather than a shell/CMD script so
+   * Windows can spawn it as a PE.
+   *
+   * Each invocation appends one JSON line (argv + selected env vars) to
+   * <cliHome>/cag-invocations.jsonl, which tests can read back to assert
+   * the wrapper invoked the binary as expected. Per-subcommand exit codes
+   * are passed to the stub via env vars; see `getExtraEnv()`.
+   */
+  withContextAugmentationBinaryInstalled(
+    options: {
+      initExitCode?: number;
+      skillExitCode?: number;
+      stdoutLine?: string;
+      stderrLine?: string;
+    } = {},
+  ): this {
+    this._installCagBinary = true;
+    this._cagInitExitCode = options.initExitCode ?? 0;
+    this._cagSkillExitCode = options.skillExitCode ?? 0;
+    this._cagStdoutLine = options.stdoutLine;
+    this._cagStderrLine = options.stderrLine;
+    return this;
+  }
+
+  /**
    * Ensures sca-scanner-cli is available inside the isolated test environment.
    * Copies the cached binary from tests/integration/resources/dependency-artifacts/
    * into <tempDir>/bin/ and records it in state.tools.installed.
@@ -135,6 +187,25 @@ export class EnvironmentBuilder {
   withScaScannerBinaryInstalled(): this {
     this._installScaScannerBinary = true;
     return this;
+  }
+
+  /**
+   * Returns env vars the harness should merge into every CLI invocation.
+   * Currently used to parameterize the CAG stub binary (sentinel path +
+   * per-subcommand exit codes). Populated after `writeTo()` runs because the
+   * sentinel path depends on the harness's cliHome.
+   */
+  getExtraEnv(): Record<string, string> {
+    if (!this._installCagBinary || !this._cagSentinelPath) {
+      return {};
+    }
+    return {
+      CAG_STUB_SENTINEL: this._cagSentinelPath,
+      CAG_STUB_INIT_EXIT: String(this._cagInitExitCode),
+      CAG_STUB_SKILL_EXIT: String(this._cagSkillExitCode),
+      ...(this._cagStdoutLine !== undefined && { CAG_STUB_STDOUT_LINE: this._cagStdoutLine }),
+      ...(this._cagStderrLine !== undefined && { CAG_STUB_STDERR_LINE: this._cagStderrLine }),
+    };
   }
 
   /**
@@ -168,8 +239,33 @@ export class EnvironmentBuilder {
     return this;
   }
 
-  build(): CliState {
-    const state = getDefaultState('integration-test');
+  /**
+   * Registers a sonar-context-augmentation skill extension for a project.
+   * This mirrors the state written by `sonar integrate claude|copilot` after
+   * CAG setup succeeds.
+   */
+  withContextAugmentationSkill(
+    projectRoot: string,
+    projectKey: string,
+    orgKey?: string,
+    serverUrl?: string,
+    scaEnabled = false,
+  ): this {
+    this.contextAugmentationSkills.push({
+      projectRoot,
+      projectKey,
+      orgKey,
+      serverUrl,
+      scaEnabled,
+    });
+    return this;
+  }
+
+  build(binDir?: string): CliState {
+    // Default to the current CLI version so post-update is a no-op. Tests that
+    // need to exercise the upgrade migration inject a stale version via
+    // withRawState().
+    const state = getDefaultState(CURRENT_CLI_VERSION);
 
     // disable telemetry for integration tests
     state.telemetry.enabled = false;
@@ -190,12 +286,36 @@ export class EnvironmentBuilder {
       state.auth.activeConnectionId = connectionId;
     }
 
+    // Match production: recordInstallationInState stores the absolute installed
+    // path. binDir is omitted only by the no-arg build() callers that do not
+    // care about path resolution.
+    const resolvePath = (name: string): string => (binDir ? join(binDir, name) : name);
+
     const installed: InstalledTool[] = [];
+    const installedDependencies: InstalledIntegrationDependency[] = [];
     if (this._installSecretsBinary) {
+      const binaryPath = resolvePath(buildLocalBinaryName(SECRETS_SPEC, detectPlatform()));
       installed.push({
         name: SECRETS_SPEC.name,
         version: SECRETS_SPEC.version,
-        path: buildLocalBinaryName(SECRETS_SPEC, detectPlatform()),
+        path: binaryPath,
+        installedAt: new Date().toISOString(),
+        installedByCliVersion: 'integration-test',
+      });
+      installedDependencies.push({
+        id: SECRETS_SPEC.name,
+        dependencyType: 'sonarsource-binary',
+        version: SECRETS_SPEC.version,
+        path: binaryPath,
+        updatedAt: new Date().toISOString(),
+        updatedByCliVersion: 'integration-test',
+      });
+    }
+    if (this._installCagBinary) {
+      installed.push({
+        name: CONTEXT_AUGMENTATION_BINARY_NAME,
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        path: resolvePath(buildLocalCagBinaryName(detectPlatform())),
         installedAt: new Date().toISOString(),
         installedByCliVersion: 'integration-test',
       });
@@ -204,13 +324,16 @@ export class EnvironmentBuilder {
       installed.push({
         name: SCA_SCANNER_SPEC.name,
         version: SCA_SCANNER_SPEC.version,
-        path: buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform()),
+        path: resolvePath(buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform())),
         installedAt: new Date().toISOString(),
         installedByCliVersion: 'integration-test',
       });
     }
     if (installed.length > 0) {
       state.tools = { installed };
+    }
+    if (installedDependencies.length > 0) {
+      state.dependencies = { installed: installedDependencies };
     }
 
     for (const ext of this.sqaaExtensions) {
@@ -238,6 +361,30 @@ export class EnvironmentBuilder {
       });
     }
 
+    for (const skill of this.contextAugmentationSkills) {
+      let resolvedRoot: string;
+      try {
+        resolvedRoot = realpathSync(skill.projectRoot);
+      } catch {
+        resolvedRoot = skill.projectRoot;
+      }
+      state.agentExtensions.push({
+        id: randomUUID(),
+        agentId: 'claude-code',
+        projectRoot: resolvedRoot,
+        global: false,
+        projectKey: skill.projectKey,
+        orgKey: skill.orgKey ?? this.activeConnectionOrgKey,
+        serverUrl: skill.serverUrl ?? this.activeConnectionUrl,
+        updatedByCliVersion: 'integration-test',
+        updatedAt: new Date().toISOString(),
+        kind: 'skill',
+        name: CONTEXT_AUGMENTATION_BINARY_NAME,
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        scaEnabled: skill.scaEnabled ?? false,
+      });
+    }
+
     return state;
   }
 
@@ -246,7 +393,8 @@ export class EnvironmentBuilder {
    */
   writeTo(cliHome: string, keychainFile: string): void {
     mkdirSync(cliHome, { recursive: true });
-    const stateJson = this._rawStateJson ?? JSON.stringify(this.build(), null, 2);
+    const stateJson =
+      this._rawStateJson ?? JSON.stringify(this.build(join(cliHome, 'bin')), null, 2);
     writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
 
     if (this.keychainTokens.length > 0) {
@@ -272,8 +420,46 @@ export class EnvironmentBuilder {
         buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform()),
       );
     }
+
+    if (this._installCagBinary) {
+      this.copyCagStub(cliHome);
+      this._cagSentinelPath = join(cliHome, 'cag-invocations.jsonl');
+    }
+  }
+
+  /**
+   * Copies the pre-compiled CAG stub binary (built by
+   * `bun run pretest:integration`) into <cliHome>/bin under the CAG-versioned
+   * filename. A real native executable rather than a shell/CMD script so
+   * Windows can spawn it as a PE. Per-test parameters (sentinel path,
+   * subcommand exit codes) reach the stub via env vars — see `getExtraEnv()`.
+   */
+  private copyCagStub(cliHome: string): void {
+    const binDir = join(cliHome, 'bin');
+    mkdirSync(binDir, { recursive: true });
+
+    const versionedName = buildLocalCagBinaryName(detectPlatform());
+    const destPath = join(binDir, versionedName);
+    if (existsSync(destPath)) {
+      return;
+    }
+
+    const stubFilename = IS_WINDOWS ? 'cag-stub.exe' : 'cag-stub';
+    const source = join(import.meta.dir, '..', 'resources', stubFilename);
+    if (!existsSync(source)) {
+      throw new Error(
+        `CAG stub binary not found at: ${source}\n` +
+          `Run 'bun run pretest:integration' to compile it.`,
+      );
+    }
+    copyFileSync(source, destPath);
+    if (!IS_WINDOWS) {
+      chmodSync(destPath, EXECUTABLE_PERMS);
+    }
   }
 }
+
+const EXECUTABLE_PERMS = 0o755;
 
 function copyBinaryFixtureInto(cliHome: string, fixture: BinarySpec, versionedName: string): void {
   const binDir = join(cliHome, 'bin');

@@ -560,6 +560,127 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
+  // hasCagEntitlement
+  // -------------------------------------------------------------------------
+
+  describe('hasCagEntitlement', () => {
+    let cloudClient: SonarQubeClient;
+
+    beforeEach(() => {
+      cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+    });
+
+    it('returns not_enabled when organizationKey is not provided', async () => {
+      fetchSpy = mockFetch({});
+      expect(await cloudClient.hasCagEntitlement(undefined)).toBe('not_enabled');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns not_enabled when organizationKey is empty string', async () => {
+      fetchSpy = mockFetch({});
+      expect(await cloudClient.hasCagEntitlement('')).toBe('not_enabled');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns not_enabled when server is not SonarQube Cloud', async () => {
+      const serverClient = new SonarQubeClient(SERVER_URL, TOKEN);
+      fetchSpy = mockFetch({});
+      expect(await serverClient.hasCagEntitlement('my-org')).toBe('not_enabled');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns check_failed when org UUID cannot be resolved', async () => {
+      fetchSpy = mockFetch({}, false, 404);
+      expect(await cloudClient.hasCagEntitlement('unknown-org')).toBe('check_failed');
+    });
+
+    it('returns enabled when org UUID is resolved and entitlement is eligible and enabled', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', eligible: true, enabled: true }),
+        } as Response);
+
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('enabled');
+    });
+
+    it('returns not_enabled when eligible but not enabled', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', eligible: true, enabled: false }),
+        } as Response);
+
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('not_enabled');
+    });
+
+    it('returns not_enabled when enabled but not eligible', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'org-uuid', eligible: false, enabled: true }),
+        } as Response);
+
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('not_enabled');
+    });
+
+    it('returns check_failed when the entitlement check fails with an API error', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: 'org-uuid' }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          statusText: 'Forbidden',
+          json: () => Promise.resolve({}),
+        } as Response);
+
+      expect(await cloudClient.hasCagEntitlement('my-org')).toBe('check_failed');
+    });
+
+    it('hits the correct CAG org config endpoint with the resolved UUID', async () => {
+      const targetUuid = 'cag-specific-uuid';
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ id: 'str-id', uuidV4: targetUuid }]),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: targetUuid, eligible: true, enabled: true }),
+        } as Response);
+
+      await cloudClient.hasCagEntitlement('my-org');
+
+      const entitlementUrl = new URL((fetchSpy.mock.calls[1][0] as URL).toString());
+      expect(entitlementUrl.pathname).toBe(`/a3s-analysis/cag-org-config/${targetUuid}`);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // checkComponent
   // -------------------------------------------------------------------------
 

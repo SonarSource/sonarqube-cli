@@ -151,19 +151,19 @@ describe('confirmPrompt: real prompt path', () => {
 
   it('returns true when prompt confirms', async () => {
     mockConfirmResult = true;
-    const result = await confirmPrompt('Are you sure?');
+    const result = await confirmPrompt('Are you sure?', true);
     expect(result).toBe(true);
   });
 
   it('returns false when prompt declines', async () => {
     mockConfirmResult = false;
-    const result = await confirmPrompt('Are you sure?');
+    const result = await confirmPrompt('Are you sure?', true);
     expect(result).toBe(false);
   });
 
   it('returns null when prompt is cancelled (symbol returned)', async () => {
     mockConfirmResult = Symbol('cancel');
-    const result = await confirmPrompt('Are you sure?');
+    const result = await confirmPrompt('Are you sure?', true);
     expect(result).toBeNull();
   });
 });

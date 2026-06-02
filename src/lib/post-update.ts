@@ -23,9 +23,22 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../package.json';
+import { installContextAugmentationBinary } from '../cli/commands/_common/install/context-augmentation';
 import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
+import { supportedIntegrations } from '../cli/commands/integrate';
+import {
+  type ContextAugmentationAgent,
+  installContextAugmentationSkill,
+  resolveContextAugmentationAgent,
+  stopAllContextAugmentationTools,
+} from '../cli/commands/integrate/_common/context-augmentation';
+import {
+  integrationInstaller,
+  type IntegrationRegistry,
+} from '../cli/commands/integrate/_common/registry';
+import { CLAUDE_INTEGRATION_ID } from '../cli/commands/integrate/claude/declaration';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
-import { SECRETS_BINARY_NAME } from './install-types.js';
+import { CONTEXT_AUGMENTATION_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
 import {
   cleanObsoleteFromState,
@@ -34,7 +47,9 @@ import {
   removeObsoleteHookArtifacts,
 } from './migration.js';
 import { loadState, saveState, stateFileExists } from './repository/state-repository';
-import type { CliState } from './state.js';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from './signatures';
+import type { CliState, HookExtension, SkillExtension } from './state.js';
+import { recordSkillExtensionInState } from './state-manager';
 import { isNewerVersion } from './version';
 
 /**
@@ -62,7 +77,8 @@ export async function runPostUpdateActions(): Promise<void> {
   try {
     await runActions(previousVersion, CURRENT_VERSION);
     // Reload state to pick up changes made by subroutines (migrateClaudeCodeHooks,
-    // updateSecretsBinaryIfNeeded) that load and save their own state copies.
+    // updateSecretsBinaryIfNeeded, updateContextAugmentationIfNeeded) that load
+    // and save their own state copies.
     const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
     cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
@@ -73,8 +89,67 @@ export async function runPostUpdateActions(): Promise<void> {
 }
 
 async function runActions(_previousVersion: string, _currentVersion: string): Promise<void> {
+  await migrateDeclarativeIntegrations();
   await migrateClaudeCodeHooks();
   await updateSecretsBinaryIfNeeded();
+  await updateContextAugmentationIfNeeded();
+}
+
+export async function migrateDeclarativeIntegrations(
+  registry: IntegrationRegistry = supportedIntegrations,
+): Promise<void> {
+  const state = loadState();
+  let stateChanged = false;
+
+  for (const integration of registry.list()) {
+    const installedIntegration = integrationInstaller.findInstalledIntegration(state, integration);
+    if (!installedIntegration) {
+      continue;
+    }
+
+    const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
+    const knownFeatures = installedIntegration.features.filter((feature) =>
+      featuresById.has(feature.featureId),
+    );
+
+    if (knownFeatures.length !== installedIntegration.features.length) {
+      installedIntegration.features = knownFeatures;
+      stateChanged = true;
+    }
+
+    for (const installedFeature of knownFeatures) {
+      const feature = featuresById.get(installedFeature.featureId)!;
+
+      try {
+        const featureContext = {
+          targetRoot: installedFeature.targetRoot,
+          scope: installedFeature.scope,
+          attrs: installedFeature.attrs,
+        };
+        const applied = await integrationInstaller.applyFeature(
+          { state, ...featureContext },
+          installedFeature,
+          feature,
+        );
+        integrationInstaller.recordInstalledFeature(
+          state,
+          featureContext,
+          integration,
+          feature,
+          applied,
+        );
+        stateChanged = true;
+      } catch (err) {
+        logger.debug(
+          `Declarative migration failed for ${integration.id}.${installedFeature.featureId}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
+  if (stateChanged) {
+    saveState(state);
+  }
 }
 
 /**
@@ -84,7 +159,7 @@ async function runActions(_previousVersion: string, _currentVersion: string): Pr
 export async function updateSecretsBinaryIfNeeded(): Promise<void> {
   const state = loadState();
 
-  if (!hasPreviousInstallation(state)) {
+  if (!hasPreviousSecretsInstallation(state)) {
     logger.debug('sonar-secrets not installed — skipping binary update');
     return;
   }
@@ -92,8 +167,188 @@ export async function updateSecretsBinaryIfNeeded(): Promise<void> {
   await installSecretsBinary();
 }
 
-function hasPreviousInstallation(state: CliState): boolean {
-  return (state.tools?.installed ?? []).some((t) => t.name === SECRETS_BINARY_NAME);
+function hasPreviousSecretsInstallation(state: CliState): boolean {
+  return hasBinaryInState(state, SECRETS_BINARY_NAME);
+}
+
+function hasBinaryInState(state: CliState, binaryName: string): boolean {
+  return (state.tools?.installed ?? []).some((t) => t.name === binaryName);
+}
+
+/**
+ * Update sonar-context-augmentation and refresh every registered project skill.
+ * The skill refresh intentionally does not run `cag init`: post-update has no
+ * entitlement/auth context, while the skill template can be regenerated from
+ * the recorded project registration.
+ */
+export async function updateContextAugmentationIfNeeded(): Promise<void> {
+  const state = loadState();
+  const skills = getContextAugmentationSkills(state);
+
+  if (!shouldUpdateContextAugmentation(state, skills)) {
+    logger.debug('sonar-context-augmentation not installed — skipping binary update');
+    return;
+  }
+
+  await stopExistingContextAugmentationTools(state);
+
+  const binaryPath = await installContextAugmentationBinary();
+  await refreshContextAugmentationSkills(binaryPath, skills);
+}
+
+function findInstalledToolPath(state: CliState, toolName: string): string | undefined {
+  return state.tools?.installed.find((t) => t.name === toolName)?.path;
+}
+
+async function stopExistingContextAugmentationTools(state: CliState): Promise<void> {
+  const existingPath = findInstalledToolPath(state, CONTEXT_AUGMENTATION_BINARY_NAME);
+  if (!existingPath) {
+    logger.debug('No previously-installed sonar-context-augmentation — skipping stop');
+    return;
+  }
+  if (!fs.existsSync(existingPath)) {
+    logger.debug(`sonar-context-augmentation binary missing at ${existingPath} — skipping stop`);
+    return;
+  }
+  await stopAllContextAugmentationTools(existingPath);
+}
+
+function shouldUpdateContextAugmentation(state: CliState, skills: SkillExtension[]): boolean {
+  return hasPreviousContextAugmentationInstallation(state) || skills.length > 0;
+}
+
+async function refreshContextAugmentationSkills(
+  binaryPath: string,
+  skills: SkillExtension[],
+): Promise<void> {
+  if (skills.length === 0) {
+    logger.debug('No registered Context Augmentation skills to refresh');
+    return;
+  }
+
+  for (const skill of uniqueContextAugmentationSkills(skills)) {
+    await refreshContextAugmentationSkill(binaryPath, skill);
+  }
+}
+
+function uniqueContextAugmentationSkills(skills: SkillExtension[]): SkillExtension[] {
+  const seen = new Set<string>();
+  return skills.filter((skill) => {
+    const key = JSON.stringify([skill.agentId, skill.projectRoot]);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+async function refreshContextAugmentationSkill(
+  binaryPath: string,
+  skill: SkillExtension,
+): Promise<void> {
+  if (skill.version === SONAR_CONTEXT_AUGMENTATION_VERSION) {
+    logger.debug(
+      `Context Augmentation skill already at ${SONAR_CONTEXT_AUGMENTATION_VERSION}: ${skill.projectRoot}`,
+    );
+    return;
+  }
+
+  const agent = getRefreshableContextAugmentationAgent(skill);
+  if (!agent) {
+    return;
+  }
+
+  const refreshed = await tryRefreshContextAugmentationSkill(binaryPath, skill, agent);
+  if (!refreshed) {
+    return;
+  }
+
+  recordRefreshedContextAugmentationSkill(skill);
+  logger.debug(`Refreshed Context Augmentation skill for: ${skill.projectRoot}`);
+}
+
+function getRefreshableContextAugmentationAgent(
+  skill: SkillExtension,
+): ContextAugmentationAgent | undefined {
+  if (skill.global) {
+    logger.debug(`Skipping global Context Augmentation skill: ${skill.agentId}`);
+    return undefined;
+  }
+
+  const agent = resolveContextAugmentationAgent(skill.agentId);
+  if (!agent) {
+    logger.debug(`Skipping Context Augmentation skill for unsupported agent: ${skill.agentId}`);
+    return undefined;
+  }
+
+  if (!isExistingDirectory(skill.projectRoot)) {
+    logger.debug(`Skipping Context Augmentation skill for missing project: ${skill.projectRoot}`);
+    return undefined;
+  }
+
+  return agent;
+}
+
+async function tryRefreshContextAugmentationSkill(
+  binaryPath: string,
+  skill: SkillExtension,
+  agent: ContextAugmentationAgent,
+): Promise<boolean> {
+  try {
+    const refreshed = await installContextAugmentationSkill({
+      binaryPath,
+      agent,
+      projectRoot: skill.projectRoot,
+      scaEnabled: skill.scaEnabled ?? false,
+      reportFailure: false,
+    });
+    if (!refreshed) {
+      logger.debug(
+        `Context Augmentation skill refresh failed for ${skill.agentId}: ${skill.projectRoot}`,
+      );
+    }
+    return refreshed;
+  } catch (err) {
+    logger.debug(
+      `Context Augmentation skill refresh failed for ${skill.agentId}: ${(err as Error).message}`,
+    );
+    return false;
+  }
+}
+
+function recordRefreshedContextAugmentationSkill(skill: SkillExtension): void {
+  recordSkillExtensionInState({
+    agentId: skill.agentId,
+    projectRoot: skill.projectRoot,
+    global: skill.global,
+    projectKey: skill.projectKey,
+    orgKey: skill.orgKey,
+    serverUrl: skill.serverUrl,
+    updatedByCliVersion: CURRENT_VERSION,
+    name: CONTEXT_AUGMENTATION_BINARY_NAME,
+    version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+    scaEnabled: skill.scaEnabled ?? false,
+  });
+}
+
+function hasPreviousContextAugmentationInstallation(state: CliState): boolean {
+  return hasBinaryInState(state, CONTEXT_AUGMENTATION_BINARY_NAME);
+}
+
+function getContextAugmentationSkills(state: CliState): SkillExtension[] {
+  return state.agentExtensions.filter(
+    (extension): extension is SkillExtension =>
+      extension.kind === 'skill' && extension.name === CONTEXT_AUGMENTATION_BINARY_NAME,
+  );
+}
+
+function isExistingDirectory(path: string): boolean {
+  try {
+    return fs.statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -115,10 +370,17 @@ function hasPreviousInstallation(state: CliState): boolean {
 export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir): Promise<void> {
   const state = loadState();
 
+  if (hasInstalledDeclarativeIntegration(state, CLAUDE_INTEGRATION_ID)) {
+    logger.debug('Declarative Claude Code integration detected — skipping legacy hook migration');
+    return;
+  }
+
   type Location = { projectRoot: string; globalDir: string | undefined };
   const locations: Location[] = [];
 
-  const extensions = state.agentExtensions.filter((e) => e.agentId === 'claude-code');
+  const extensions = state.agentExtensions.filter(
+    (e): e is HookExtension => e.agentId === 'claude-code' && e.kind === 'hook',
+  );
 
   if (extensions.length > 0) {
     // New format: use registry entries, deduplicate by (projectRoot, globalDir)
@@ -150,4 +412,10 @@ export async function migrateClaudeCodeHooks(homedirFn: () => string = homedir):
       );
     }
   }
+}
+
+function hasInstalledDeclarativeIntegration(state: CliState, integrationId: string): boolean {
+  return state.integrations.installed.some(
+    (entry) => entry.integrationId === integrationId && entry.features.length > 0,
+  );
 }

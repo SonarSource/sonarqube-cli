@@ -57,9 +57,12 @@ export async function textPrompt(message: string): Promise<string | null> {
 /**
  * Yes/No confirmation prompt. Returns null if cancelled (Ctrl+C).
  */
-export async function confirmPrompt(message: string): Promise<boolean | null> {
+export async function confirmPrompt(
+  message: string,
+  defaultValue: boolean,
+): Promise<boolean | null> {
   if (isMockActive()) {
-    const value = dequeueMockResponse<boolean>(false);
+    const value = dequeueMockResponse<boolean>(defaultValue);
     recordCall('confirmPrompt', message, value);
     return value;
   }
@@ -67,6 +70,7 @@ export async function confirmPrompt(message: string): Promise<boolean | null> {
   const prompt = new ConfirmPrompt({
     active: 'Yes',
     inactive: 'No',
+    initialValue: defaultValue,
     render() {
       if (this.state === 'submit')
         return `  ${green('✓')}  ${message} ${dim(this.value ? 'Yes' : 'No')}`;

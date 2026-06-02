@@ -22,9 +22,9 @@ import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { blank, print, text } from '../../../ui';
+import { blank, print, text, warn } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
-import { InvalidOptionError } from '../_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import type { RunContext } from './sqaa-analysis';
 import { runAnalyses } from './sqaa-analysis';
 import {
@@ -33,16 +33,21 @@ import {
   readSqaaFileContent,
   toRelativePosixPath,
 } from './sqaa-api';
-import type { CloudAuth } from './sqaa-auth';
+import type { CloudAuth, SqaaAuthResolution } from './sqaa-auth';
 import { confirmLargeChangeset, resolveCloudAuthAndProject } from './sqaa-auth';
 import type { ChangeSetResult } from './sqaa-changeset';
 import { resolveChangeSet } from './sqaa-changeset';
 import {
   applyExitCode,
+  buildJsonReport,
   EXIT_CODE_ISSUES_FOUND,
+  makeReport,
   printFileDetails,
   printJsonReport,
   printSummary,
+  singleFileFailureReport,
+  singleFileSuccessReport,
+  type SqaaJsonReport,
 } from './sqaa-display';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
@@ -61,11 +66,53 @@ export interface AnalyzeSqaaOptions {
   format?: OutputFormat;
 }
 
+/**
+ * Apply the command's policy to an auth/project resolution. This is where the
+ * caller (not the resolver) decides what a missing project means:
+ * - `requireProject` (explicit `analyze agentic` / `verify`): throw so the command
+ *   exits with code 1 instead of skipping silently.
+ * - otherwise (the bare `sonar analyze` catch-all): warn and return null so the
+ *   surrounding command can proceed with its other analyses.
+ *
+ * A non-Cloud connection is always a graceful skip (the warning was already emitted
+ * by resolveCloudAuth), since agentic analysis is Cloud-only.
+ */
+function resolveSqaaContext(
+  resolution: SqaaAuthResolution,
+  policy: { requireProject: boolean; command?: Command },
+): { cloudAuth: CloudAuth; projectKey: string } | null {
+  switch (resolution.kind) {
+    case 'resolved':
+      return { cloudAuth: resolution.cloudAuth, projectKey: resolution.projectKey };
+    case 'no-cloud':
+      return null;
+    case 'no-project':
+      if (policy.requireProject) {
+        throw new CommandFailedError(
+          'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
+          {
+            remediationHint:
+              "Specify one with --project, or run 'sonar integrate' to configure this project.",
+          },
+        );
+      }
+      warn(
+        'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
+      );
+      if (process.stdin.isTTY) policy.command?.outputHelp();
+      return null;
+  }
+}
+
 export async function analyzeSqaa(
   options: AnalyzeSqaaOptions,
   auth: ResolvedAuth,
   command?: Command,
+  runOptions: { requireProject?: boolean } = {},
 ): Promise<void> {
+  // Explicit `analyze agentic` / `verify` require a project (exit 1 when missing);
+  // the bare `sonar analyze` catch-all opts out so it can still run other analyses.
+  const { requireProject = true } = runOptions;
   const { file, staged, base, branch, project, force, format = 'text' } = options;
 
   if (staged && base !== undefined) {
@@ -76,7 +123,7 @@ export async function analyzeSqaa(
     if (!existsSync(file)) {
       throw new InvalidOptionError(`File not found: ${file}`);
     }
-    await runSqaaAnalysis(file, auth, branch, project, command, format);
+    await runSqaaAnalysis(file, auth, branch, project, command, format, requireProject);
     return;
   }
 
@@ -99,7 +146,8 @@ export async function analyzeSqaa(
 
   // Resolve cloud auth + project key BEFORE prompting.
   // Pass repoRoot so we reuse the already-resolved root instead of spawning git again.
-  const resolved = await resolveCloudAuthAndProject(auth, project, command, changeSet.repoRoot);
+  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolved = resolveSqaaContext(resolution, { requireProject, command });
   if (!resolved) return;
 
   // JSON mode is consumed by scripts/CI: never block on an interactive prompt
@@ -118,37 +166,19 @@ async function runSqaaAnalysis(
   explicitProject?: string,
   command?: Command,
   format: OutputFormat = 'text',
+  requireProject = true,
 ): Promise<void> {
-  const resolved = await resolveCloudAuthAndProject(auth, explicitProject, command);
+  const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
+  const resolved = resolveSqaaContext(resolution, { requireProject, command });
   if (!resolved) return;
 
   const { cloudAuth, projectKey } = resolved;
   const fileContent = readSqaaFileContent(file);
 
   if (format === 'json') {
-    const filePath = toRelativePosixPath(file);
-    try {
-      const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch);
-      const report = {
-        files: [{ path: filePath, issues: response.issues, errors: response.errors }],
-        ignored: [],
-        failures: [],
-        skipped: [],
-        summary: { totalIssues: response.issues.length, totalFailures: 0, totalSkipped: 0 },
-      };
-      print(JSON.stringify(report, null, 2));
-      if (response.issues.length > 0) process.exitCode = EXIT_CODE_ISSUES_FOUND;
-    } catch (err) {
-      const report = {
-        files: [],
-        ignored: [],
-        failures: [{ path: filePath, message: (err as Error).message }],
-        skipped: [],
-        summary: { totalIssues: 0, totalFailures: 1, totalSkipped: 0 },
-      };
-      print(JSON.stringify(report, null, 2));
-      process.exitCode = 1;
-    }
+    const report = await fetchSingleFileReport(cloudAuth, projectKey, file, fileContent, branch);
+    print(JSON.stringify(report, null, 2));
+    applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
     return;
   }
 
@@ -203,4 +233,84 @@ async function runSqaaAnalysisOnFiles(
   progress.finish(tally.allResults.length);
   printFileDetails(tally.allResults);
   printSummary(tally.totalIssues, tally.totalErrors, tally.totalFailures);
+}
+
+async function fetchSingleFileReport(
+  cloudAuth: CloudAuth,
+  projectKey: string,
+  file: string,
+  fileContent: string,
+  branch?: string,
+): Promise<SqaaJsonReport> {
+  const filePath = toRelativePosixPath(file);
+  try {
+    const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch);
+    return singleFileSuccessReport(filePath, response.issues, response.errors);
+  } catch (err) {
+    return singleFileFailureReport(filePath, (err as Error).message);
+  }
+}
+
+/**
+ * Run SQAA and return the JSON report without printing it.
+ * Returns null when SQAA is not available (non-Cloud connection or no project configured).
+ * Used by `analyzeAll` to build a combined JSON report.
+ */
+export async function buildSqaaJsonReport(
+  options: AnalyzeSqaaOptions,
+  auth: ResolvedAuth,
+  command?: Command,
+): Promise<SqaaJsonReport | null> {
+  const { file, staged, base, branch, project, force } = options;
+
+  if (file !== undefined) {
+    const resolution = await resolveCloudAuthAndProject(auth, project);
+    const resolved = resolveSqaaContext(resolution, { requireProject: false, command });
+    if (!resolved) return null;
+
+    const { cloudAuth, projectKey } = resolved;
+    const fileContent = readSqaaFileContent(file);
+    return fetchSingleFileReport(cloudAuth, projectKey, file, fileContent, branch);
+  }
+
+  // Change-set mode
+  const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
+  if (changeSet.files.length === 0) {
+    return makeReport(
+      [],
+      [],
+      changeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
+    );
+  }
+
+  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolved = resolveSqaaContext(resolution, { requireProject: false, command });
+  if (!resolved) return null;
+
+  // JSON mode is consumed by scripts/CI: never block on an interactive prompt
+  if (
+    !force &&
+    options.format !== 'json' &&
+    changeSet.files.length > SQAA_LARGE_CHANGESET_THRESHOLD
+  ) {
+    const confirmed = await confirmLargeChangeset(changeSet.files.length);
+    if (!confirmed) return null;
+  }
+
+  const { files, ignored, repoRoot } = changeSet;
+  const { cloudAuth, projectKey } = resolved;
+  const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
+  const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
+  const ctx: RunContext = {
+    files,
+    allPaths,
+    cloudAuth,
+    projectKey,
+    branch,
+    progress: silentProgress,
+    pathBase: repoRoot,
+  };
+
+  const tally = await runAnalyses(ctx);
+  return buildJsonReport(tally, ignored, allPaths, repoRoot);
 }

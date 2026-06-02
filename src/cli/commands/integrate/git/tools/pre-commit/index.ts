@@ -20,13 +20,9 @@
 
 import { join } from 'node:path';
 
-import {
-  type FeatureDeclaration,
-  type IntegrationDeclaration,
-  SonarSourceBinary,
-  sonarSourceBinary,
-  yamlPatch,
-} from '../../../_common/registry';
+import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
+import { yamlPatch } from '../../../_common/registry/resources';
+import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import {
   activatePreCommitFramework,
@@ -49,12 +45,8 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     when: ({ options }) => options.hook === hook,
+    dependencies: [sonarSecretsBinaryDependency],
     resources: [
-      sonarSourceBinary({
-        id: 'sonar-secrets',
-        displayName: 'sonar-secrets binary',
-        binary: SonarSourceBinary.SonarSecrets,
-      }),
       yamlPatch({
         id: 'hook-config',
         displayName: `${hook} hook`,

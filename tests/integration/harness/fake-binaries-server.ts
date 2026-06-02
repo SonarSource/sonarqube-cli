@@ -28,12 +28,23 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
-import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '../../../src/lib/install-types.js';
+import {
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  SCA_SCANNER_BINARY_NAME,
+  SECRETS_BINARY_NAME,
+} from '../../../src/lib/install-types.js';
 import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(
-  String.raw`^(${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME})-.*\.exe(\.asc)?$`,
+  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME})-.*\.exe|` +
+    String.raw`${CONTEXT_AUGMENTATION_BINARY_NAME}-.*\.tar\.gz)(\.asc)?$`,
 );
+
+function pickContentType(filename: string): string {
+  if (filename.endsWith('.asc')) return 'text/plain';
+  if (filename.endsWith('.tar.gz')) return 'application/gzip';
+  return 'application/octet-stream';
+}
 
 export class FakeBinariesServer {
   private readonly server: ReturnType<typeof Bun.serve>;
@@ -73,8 +84,8 @@ export class FakeBinariesServerBuilder {
   start(): Promise<FakeBinariesServer> {
     const requests: RecordedRequest[] = [];
 
-    // Load versioned artifacts from resources for both binaries the CLI installs
-    // (e.g. sonar-secrets-*-linux-x86-64.exe, sca-scanner-cli-*-windows-x86-64.exe.asc).
+    // Load versioned artifacts from resources (sonar-secrets and sca-scanner-cli .exe[.asc],
+    // sonar-context-augmentation .tar.gz[.asc]).
     const files = new Map<string, Buffer>();
     if (this._loadArtifacts) {
       for (const name of readdirSync(DEPENDENCY_ARTIFACTS_DIR)) {
@@ -115,7 +126,7 @@ export class FakeBinariesServerBuilder {
           return new Response('Not Found', { status: 404 });
         }
 
-        const contentType = filename.endsWith('.asc') ? 'text/plain' : 'application/octet-stream';
+        const contentType = pickContentType(filename);
         return new Response(fileBytes, { headers: { 'Content-Type': contentType } });
       },
     });

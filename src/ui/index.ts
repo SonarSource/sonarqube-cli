@@ -34,7 +34,18 @@ export {
 } from './components/prompts.js';
 export { intro, outro } from './components/sections.js';
 export { withSpinner } from './components/spinner.js';
-export { blank, discreetSuccess, error, info, print, success, text, warn } from './messages.js';
+export {
+  blank,
+  discreetSuccess,
+  error,
+  getMessagesForFormattedOutput,
+  info,
+  print,
+  setFormattedOutputMode,
+  success,
+  text,
+  warn,
+} from './messages.js';
 export type { UiCall, UiMethod } from './mock.js';
 export {
   clearMockResponses,

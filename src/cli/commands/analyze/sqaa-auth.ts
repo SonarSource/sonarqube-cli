@@ -22,8 +22,6 @@
 
 import { resolve } from 'node:path';
 
-import type { Command } from 'commander';
-
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
@@ -47,27 +45,36 @@ export interface CloudAuth {
 }
 
 /**
- * Combines cloud-auth validation and project-key resolution.
- * Returns null (with a warning already printed) when SQAA should be skipped.
+ * Outcome of resolving cloud auth + project key for SQAA. This resolver reports
+ * what it found and leaves the policy (skip vs. fail) to the caller:
+ * - `resolved`: usable cloud auth and project key.
+ * - `no-cloud`: connection is not SonarQube Cloud (a warning was already emitted,
+ *   since agentic analysis is Cloud-only and this is always a graceful skip).
+ * - `no-project`: cloud auth is fine but no project is configured. The caller
+ *   decides whether this is an error or a graceful skip.
+ */
+export type SqaaAuthResolution =
+  | { kind: 'resolved'; cloudAuth: CloudAuth; projectKey: string }
+  | { kind: 'no-cloud' }
+  | { kind: 'no-project' };
+
+/**
+ * Combines cloud-auth validation and project-key resolution. Pure with respect to
+ * the missing-project case: it never throws or warns for `no-project` — the caller
+ * owns that decision (see `resolveSqaaContext` in sqaa.ts).
  */
 export async function resolveCloudAuthAndProject(
   auth: ResolvedAuth,
   explicitProject: string | undefined,
-  command: Command | undefined,
   projectRoot?: string,
-): Promise<{ cloudAuth: CloudAuth; projectKey: string } | null> {
+): Promise<SqaaAuthResolution> {
   const cloudAuth = resolveCloudAuth(auth, explicitProject);
-  if (!cloudAuth) return null;
+  if (!cloudAuth) return { kind: 'no-cloud' };
 
-  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(command, projectRoot));
-  if (!projectKey) {
-    warn(
-      'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
-    );
-    return null;
-  }
+  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(projectRoot));
+  if (!projectKey) return { kind: 'no-project' };
 
-  return { cloudAuth, projectKey };
+  return { kind: 'resolved', cloudAuth, projectKey };
 }
 
 /**
@@ -109,10 +116,7 @@ export function resolveCloudAuth(
  * Falls back to `process.cwd()` when not inside a git repository so the
  * single-file path still works outside git.
  */
-export async function resolveSqaaProjectKey(
-  command?: Command,
-  projectRoot?: string,
-): Promise<string | null> {
+export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
   try {
     const root = projectRoot ?? (await tryResolveRepoRoot(process.cwd()));
     const state = loadState();
@@ -125,9 +129,6 @@ export async function resolveSqaaProjectKey(
       logger.debug(
         'SonarQube Agentic Analysis skipped: no project key found in extensions registry',
       );
-      if (process.stdin.isTTY) {
-        command?.outputHelp();
-      }
       return null;
     }
 
@@ -170,7 +171,7 @@ export async function confirmLargeChangeset(fileCount: number): Promise<boolean>
   }
 
   blank();
-  const confirmed = await confirmPrompt('Do you wish to proceed?');
+  const confirmed = await confirmPrompt('Do you wish to proceed?', true);
   if (!confirmed) {
     blank();
     text('Analysis cancelled. Use --force to bypass the file count check.');

@@ -37,6 +37,10 @@ const ARCH_MAP: Record<string, string> = {
   ia32: '386',
 };
 
+export function isWindows(): boolean {
+  return process.platform === 'win32';
+}
+
 /**
  * Detect current platform (OS + architecture)
  */

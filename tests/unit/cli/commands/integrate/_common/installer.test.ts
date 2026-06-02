@@ -110,6 +110,66 @@ describe('generic integration installer', () => {
     expect(hasUiCall('success', 'Applied Setup operation')).toBe(true);
   });
 
+  it('supports feature-specific target routing from a single installer invocation', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const mainRoot = join(tempDir, 'global');
+    const projectRoot = join(tempDir, 'project');
+    const integration = registerIntegration<{
+      installMain?: boolean;
+      installProject?: boolean;
+      projectRoot?: string;
+    }>(registry, 'installer-feature-routing', [
+      {
+        id: 'main',
+        displayName: 'Main feature',
+        when: ({ options }) => options.installMain === true,
+        resources: [
+          wholeFile({
+            id: 'main-file',
+            displayName: 'Main file',
+            targetPath: (context) => join(context.targetRoot, 'main.txt'),
+            content: 'main\n',
+          }),
+        ],
+      },
+      {
+        id: 'project',
+        displayName: 'Project feature',
+        when: ({ options }) => options.installProject === true,
+        targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
+        scope: 'project',
+        resources: [
+          wholeFile({
+            id: 'project-file',
+            displayName: 'Project file',
+            targetPath: (context) => join(context.targetRoot, 'project.txt'),
+            content: 'project\n',
+          }),
+        ],
+      },
+    ]);
+
+    const installed = await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {
+        installMain: true,
+        installProject: true,
+        projectRoot,
+      },
+      targetRoot: mainRoot,
+      scope: 'global',
+    });
+
+    expect(installed).toMatchObject([
+      { featureId: 'main', targetRoot: mainRoot, scope: 'global' },
+      { featureId: 'project', targetRoot: projectRoot, scope: 'project' },
+    ]);
+    expect(await readFile(join(mainRoot, 'main.txt'), 'utf-8')).toBe('main\n');
+    expect(await readFile(join(projectRoot, 'project.txt'), 'utf-8')).toBe('project\n');
+  });
+
   it('skips resources that are already applied and keeps their recorded metadata', async () => {
     const state = getDefaultState('test');
     loadStateSpy.mockReturnValue(state);

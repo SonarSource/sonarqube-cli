@@ -30,14 +30,16 @@ import {
   runMigrations,
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
-import { SonarQubeClient } from '../../../../sonarqube/client';
-import { blank, info, intro, note, outro, print, success, text, warn } from '../../../../ui';
+import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
+import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
-import { installSecretsBinary } from '../../_common/install/secrets';
+import { setupContextAugmentation } from '../_common/context-augmentation';
+import { installIntegration } from '../_common/registry';
+import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
+import { CLAUDE_INTEGRATION_ID } from './declaration';
 import { runHealthChecks } from './health';
-import { detectGlobalSecretsHook, installHooks } from './hooks';
-import { setupMcpServer } from './mcp';
+import { detectGlobalSecretsHook } from './hooks';
 import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
 
@@ -62,9 +64,6 @@ export async function integrateClaude(
   blank();
 
   const project = await discoverProject(process.cwd());
-  for (const configSource of project.configSources) {
-    print(`Found ${configSource}`);
-  }
   const config = loadConfiguration(project, options, auth);
   validateConfiguration(project, config, options.global ?? false);
 
@@ -79,8 +78,6 @@ export async function integrateClaude(
   const globalDir = isGlobal ? homedir() : undefined;
 
   let token = config.token;
-
-  await installSecretsBinary();
 
   blank();
   text('Phase 2/3: Health Check & Repair');
@@ -117,8 +114,22 @@ export async function integrateClaude(
   await runMigrations(project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
     skipSecretsHooks,
   });
-  await installHooks(project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
-    skipSecretsHooks,
+
+  const featureAttrs = buildIntegrationAttrs(config);
+  const installRoot = isGlobal ? homedir() : project.rootDir;
+  const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
+  await installIntegration({
+    integrationId: CLAUDE_INTEGRATION_ID,
+    options: {
+      ...options,
+      projectRoot: project.rootDir,
+      installSecretsHooks: !skipSecretsHooks,
+      installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
+      installMcp: true,
+    },
+    targetRoot: installRoot,
+    scope: installScope,
+    attrs: featureAttrs,
   });
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
   await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled, {
@@ -126,7 +137,15 @@ export async function integrateClaude(
   });
   reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
 
-  await setupMcpServer(project, isGlobal, options.project || project.projectKey);
+  if (!options.skipContext) {
+    await setupContextAugmentation({
+      auth: { ...auth, token },
+      agent: 'claude-code',
+      projectRoot: project.rootDir,
+      projectKey: options.project || project.projectKey,
+      isGlobal,
+    });
+  }
 
   blank();
   text('Phase 3/3: Final Verification');
@@ -229,19 +248,6 @@ function reportHookInstallationOutcome(
 }
 
 /**
- * Check if the organization has SQAA entitlement.
- * Returns false for on-premise, missing org, or failed API call.
- */
-async function resolveSqaaEntitlement(
-  serverURL: string,
-  token: string,
-  organization: string | undefined,
-): Promise<boolean> {
-  const client = new SonarQubeClient(serverURL, token);
-  return client.hasSqaaEntitlement(organization);
-}
-
-/**
  * Print final verification results
  */
 function printFinalVerificationResults(
@@ -272,4 +278,14 @@ function printFinalVerificationResults(
     text('  Sonar will detect the token and block the prompt automatically.');
     blank();
   }
+}
+
+function buildIntegrationAttrs(
+  config: ConfigurationData,
+): Record<string, IntegrationStateAttribute> {
+  return {
+    orgKey: config.organization ?? null,
+    projectKey: config.projectKey ?? null,
+    serverUrl: config.serverURL,
+  };
 }

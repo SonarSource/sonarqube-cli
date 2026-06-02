@@ -22,6 +22,7 @@
 
 import { readFileSync } from 'node:fs';
 
+import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../../lib/fs-utils';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
@@ -33,9 +34,6 @@ import { displaySqaaResults } from './sqaa-display';
 
 /** Maximum number of retries on 503 responses. */
 export const MAX_503_RETRIES = 3;
-
-/** Base delay for 503 retry backoff in milliseconds. Attempt N waits BASE * 2^(N-1): 2s, 4s, 8s. */
-export const RETRY_503_BASE_DELAY_MS = 2000;
 
 /** Interval for the live countdown tick in milliseconds. */
 const COUNTDOWN_TICK_MS = 1000;
@@ -97,10 +95,13 @@ export async function fetchSqaaResponse(
       fileContent,
     });
   } catch (err) {
-    if (err instanceof ServiceUnavailableError) throw err;
+    if (err instanceof ServiceUnavailableError) {
+      throw err;
+    }
     throw new CommandFailedError(
       `SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`,
       {
+        cause: err,
         remediationHint:
           'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.',
       },
@@ -120,21 +121,23 @@ export async function fetchWithRetry(
   onRetry?: (attempt: number) => Promise<void>,
   pathBase?: string,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
+  let lastServiceError: ServiceUnavailableError | undefined;
   for (let attempt = 1; attempt <= MAX_503_RETRIES + 1; attempt++) {
     try {
       return await fetchSqaaResponse(auth, projectKey, file, fileContent, branch, pathBase);
     } catch (err) {
-      const shouldRetry = err instanceof ServiceUnavailableError && attempt <= MAX_503_RETRIES;
-      if (!shouldRetry) throw err;
-      await waitBeforeRetry(attempt, onRetry);
+      if (!(err instanceof ServiceUnavailableError)) {
+        throw err;
+      }
+      lastServiceError = err;
+      if (attempt <= MAX_503_RETRIES) {
+        await waitBeforeRetry(attempt, onRetry);
+      }
     }
   }
   throw new CommandFailedError(
     `SonarQube Agentic Analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
-    {
-      remediationHint:
-        'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.',
-    },
+    { cause: lastServiceError },
   );
 }
 
@@ -142,7 +145,7 @@ export async function waitBeforeRetry(
   attempt: number,
   onRetry?: (attempt: number) => Promise<void>,
 ): Promise<void> {
-  const delayMs = RETRY_503_BASE_DELAY_MS * 2 ** (attempt - 1);
+  const delayMs = getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1);
   if (onRetry) {
     await onRetry(attempt);
   } else {

@@ -25,9 +25,16 @@ import { loadState } from '../lib/repository/state-repository';
 import { initSentry } from '../lib/sentry';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
-import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../telemetry';
+import {
+  flushTelemetry,
+  setPassthroughSubcommand,
+  storeEvent,
+  TELEMETRY_FLUSH_MODE_ENV,
+} from '../telemetry';
+import { blank, error, warn } from '../ui';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
+import { analyzeAll, type AnalyzeAllOptions } from './commands/analyze/analyze-all';
 import {
   analyzeDependencyRisks,
   type AnalyzeDependencyRisksOptions,
@@ -42,20 +49,22 @@ import {
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
-import { authPurge } from './commands/auth/purge';
 import { authStatus } from './commands/auth/status';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
+import { derivePassthroughSubcommand, runContextPassthrough } from './commands/context';
 import {
   agentPostToolUse,
   type AgentPostToolUseOptions,
 } from './commands/hook/agent-post-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
+import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateClaude } from './commands/integrate/claude';
+import { integrateCodex } from './commands/integrate/codex';
 import { integrateCopilot } from './commands/integrate/copilot';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
 import {
@@ -79,6 +88,12 @@ COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
   .version(VERSION, '-v, --version', 'display version for command')
   .enablePositionalOptions()
+  .configureOutput({
+    outputError: (str) => {
+      blank();
+      error(str.trim());
+    },
+  })
   .configureHelp({
     formatHelp: (cmd, helper) => {
       if (!cmd.parent) {
@@ -98,24 +113,22 @@ const auth = COMMAND_TREE.command('auth').description(
 
 auth
   .command('login')
-  .description('Save authentication token to keychain')
+  .description(
+    'Authenticate via browser and save credentials in the system keychain. ' +
+      'Must be run manually — agents cannot authenticate themselves. ' +
+      'For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables',
+  )
   .option(
     '-s, --server <server>',
     'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
   )
   .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
-  .option('-t, --with-token <with-token>', 'Token value (skips browser, non-interactive mode)')
   .anonymousAction((options: AuthLoginOptions) => authLogin(options));
 
 auth
   .command('logout')
   .description('Remove active connection token from keychain')
   .anonymousAction(() => authLogout());
-
-auth
-  .command('purge')
-  .description('Remove all authentication tokens from keychain')
-  .anonymousAction(() => authPurge());
 
 auth
   .command('status')
@@ -147,6 +160,23 @@ const integrateCommand = COMMAND_TREE.command('integrate').description(
   'Setup SonarQube integration for AI coding agents, git and others.',
 );
 
+integrateCommand
+  .command('git')
+  .description(
+    'Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
+  )
+  .option(
+    '--hook <type>',
+    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)',
+  )
+  .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '--global',
+    'Install hook globally for all repositories (sets git config --global core.hooksPath)',
+  )
+  .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
+
 const projectKeyExtraHelp = `
 Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
 Alternatively, add SonarQube for IDE shared binding JSON under .sonarlint/ (for example .sonarlint/connectedMode.json) that includes projectKey.
@@ -162,25 +192,9 @@ integrateCommand
     '-g, --global',
     'Install hooks and config globally to ~/.claude instead of project directory',
   )
+  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateClaude(options, auth));
-
-integrateCommand
-  .command('git')
-  .description(
-    'Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).',
-  )
-  .option(
-    '--hook <type>',
-    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)',
-  )
-  .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
-  .option('--non-interactive', 'Non-interactive mode (no prompts)')
-  .option(
-    '--global',
-    'Install hook globally for all repositories (sets git config --global core.hooksPath)',
-  )
-  .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
 
 integrateCommand
   .command('copilot')
@@ -192,11 +206,43 @@ integrateCommand
     'Install hooks and config globally to ~/.copilot instead of project directory',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
-  .authenticatedAction((_auth, options: IntegrateAgentOptions) => integrateCopilot(_auth, options));
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(auth, options));
+
+// `sonar context` — passthrough wrapper for sonar-context-augmentation.
+// Forwards arguments verbatim to the locally-installed CAG binary; install via
+// `sonar integrate claude` or `sonar integrate copilot`.
+COMMAND_TREE.command('context')
+  .description('Run Context Augmentation actions (analysis context for AI agents)')
+  .argument('[action]', 'Action forwarded to sonar-context-augmentation')
+  .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
+  .helpOption(false)
+  .passThroughOptions()
+  .allowUnknownOption()
+  .anonymousAction(function (this: SonarCommand, action: string | undefined, args: string[]) {
+    setPassthroughSubcommand(this, derivePassthroughSubcommand(action, args));
+    return runContextPassthrough(action, args);
+  });
+
+integrateCommand
+  .command('codex')
+  .description(
+    'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
+  )
+  .option(
+    '-g, --global',
+    'Install hook and config globally to ~/.codex instead of project directory',
+  )
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
+  .addHelpText('after', projectKeyExtraHelp)
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
 // List Sonar resources
-const list = COMMAND_TREE.command('list').description('List issues and projects from SonarQube');
+const list = COMMAND_TREE.command('list').description(
+  'List issues and projects from SonarQube Cloud or Server',
+);
 
 const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
 const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
@@ -248,10 +294,7 @@ COMMAND_TREE.command('remediate')
 // Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')
   .description('Analyze code for quality and security issues')
-  .enablePositionalOptions()
-  .anonymousAction(function (this: Command) {
-    this.outputHelp();
-  });
+  .enablePositionalOptions();
 
 analyze
   .command('secrets')
@@ -262,51 +305,91 @@ analyze
     analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, auth),
   );
 
-// Shared option set for `analyze agentic` and its `verify` alias.
+// Shared option set for `analyze agentic` and `verify`.
 const sqaaFormatOption = new Option('--format <format>', 'Output format')
   .choices(SQAA_FORMATS)
   .default('text');
 
-function applySqaaOptions(cmd: SonarCommand): SonarCommand {
+// Options shared between the bare `analyze` command and its `agentic` subcommand.
+// `--branch` and `--project` are intentionally excluded from the bare command.
+function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
   return cmd
     .option('--file <file>', 'Analyze a single file (skips change set detection)')
     .option('--staged', 'Analyze staged files only (git diff --cached)')
     .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
+    .option('--force', 'Skip the large change set confirmation prompt')
+    .addOption(sqaaFormatOption);
+}
+
+function applySqaaOptions(cmd: SonarCommand): SonarCommand {
+  return applyBaseAgenticOptions(cmd)
     .option('--branch <branch>', 'Branch name for analysis context')
     .option(
       '-p, --project <project>',
       'SonarQube Cloud project key (overrides auto-detected project)',
     )
-    .option('--force', 'Skip the large change set confirmation prompt')
-    .addOption(sqaaFormatOption)
     .authenticatedAction((auth, options: AnalyzeSqaaOptions, innerCmd: Command) =>
       analyzeSqaa(options, auth, innerCmd),
     );
 }
 
+// Default action for `sonar analyze` (no subcommand): run all analyses (secrets + agentic).
+applyBaseAgenticOptions(analyze).authenticatedAction(
+  (auth, options: AnalyzeAllOptions, innerCmd: Command) => analyzeAll(options, auth, innerCmd),
+);
+
 const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')
   .choices(DEPENDENCY_RISKS_FORMATS)
   .default('table');
 
+const dependencyRisksStatusFilterOption = new Option(
+  '--statuses <statuses>',
+  'Filter issues by status\n' +
+    '\n' +
+    '  Raw:       new | open | confirm | accept | safe | fixed\n' +
+    '  Presets:   active | to_fix | all\n' +
+    '    active:  new, open, confirm\n' +
+    '    to_fix:  new, open, confirm, accept\n' +
+    '    all:     new, open, confirm, accept, safe, fixed\n' +
+    '\n' +
+    'Presets and raw statuses can be combined; the resulting set is the union.\n' +
+    '\n' +
+    'Examples:\n' +
+    '    --statuses active\n' +
+    '    --statuses new,confirm\n' +
+    '    --statuses active,safe\n',
+).default('active');
+
 analyze
-  .command('dependency-risks', { hidden: true })
+  .command('dependency-risks')
   .description('Analyze project dependencies for security and license risks')
   .requiredOption('-p, --project <project>', 'Project key')
   .addOption(dependencyRisksFormatOption)
+  .addOption(dependencyRisksStatusFilterOption)
   .authenticatedAction((auth, options: AnalyzeDependencyRisksOptions) =>
     analyzeDependencyRisks(options, auth),
   );
 
 applySqaaOptions(
-  analyze.command('agentic').description('Run server-side Agentic Analysis (SonarQube Cloud only)'),
+  analyze
+    .command('agentic')
+    .description(
+      'Run server-side Agentic Analysis (SonarQube Cloud only). ' +
+        'Limitations apply, see https://www.sonarsource.com/products/sonarqube/agentic-analysis/',
+    ),
 );
 
-// `verify` is a user-facing alias for `analyze agentic` that fits CI/pipeline vocabulary.
-applySqaaOptions(
+// `verify` is deprecated in favour of `sonar analyze`.
+const verifyCmd = applySqaaOptions(
   COMMAND_TREE.command('verify').description(
-    'Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze agentic`, SonarQube Cloud only)',
+    "Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)",
   ),
 );
+verifyCmd.hook('preAction', () => {
+  warn(
+    "sonar verify is deprecated and will be removed in a future major version. Use 'sonar analyze' instead.",
+  );
+});
 
 // Configure things related to the CLI
 const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
@@ -369,6 +452,11 @@ hookCommand
   .command('claude-prompt-submit')
   .description('UserPromptSubmit handler: scan prompts for secrets before sending')
   .anonymousAction(() => agentPromptSubmit());
+
+hookCommand
+  .command('codex-prompt-submit')
+  .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
+  .anonymousAction(() => codexPromptSubmit());
 
 hookCommand
   .command('claude-post-tool-use')

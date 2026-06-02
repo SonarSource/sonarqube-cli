@@ -20,27 +20,24 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { IntegrationRegistry } from '../../../../../../src/cli/commands/integrate/_common/registry';
+import { createIntegrationRegistry } from '../../../../../../src/cli/commands/integrate/_common/registry/core';
 import {
+  GIT_INTEGRATIONS,
   HUSKY_INTEGRATION_ID,
   NATIVE_GIT_INTEGRATION_ID,
   PRE_COMMIT_INTEGRATION_ID,
-  registerGitIntegrations,
 } from '../../../../../../src/cli/commands/integrate/git/tools';
 
-describe('registerGitIntegrations', () => {
-  it('rejects duplicate git integration registration', () => {
-    const registry = new IntegrationRegistry();
-
-    registerGitIntegrations(registry);
-
-    expect(registry.list().map((integration) => integration.id)).toEqual([
+describe('GIT_INTEGRATIONS', () => {
+  it('can seed a registry from the static git integrations list', () => {
+    const expectedIntegrationIds = [
       NATIVE_GIT_INTEGRATION_ID,
       HUSKY_INTEGRATION_ID,
       PRE_COMMIT_INTEGRATION_ID,
-    ]);
-    expect(() => registerGitIntegrations(registry)).toThrow(
-      'Integration declaration already registered: native-git',
-    );
+    ];
+
+    const registry = createIntegrationRegistry(GIT_INTEGRATIONS);
+
+    expect(registry.list().map((integration) => integration.id)).toEqual(expectedIntegrationIds);
   });
 });

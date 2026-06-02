@@ -32,7 +32,12 @@ import * as stateRepository from '../../../src/lib/repository/state-repository.j
 import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
-import { flushTelemetry, storeEvent, TELEMETRY_FLUSH_MODE_ENV } from '../../../src/telemetry';
+import {
+  flushTelemetry,
+  setPassthroughSubcommand,
+  storeEvent,
+  TELEMETRY_FLUSH_MODE_ENV,
+} from '../../../src/telemetry';
 import * as userModule from '../../../src/telemetry/user.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -178,6 +183,27 @@ describe('storeEvent', () => {
       const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
       expect(event.event_payload.command).toBe('analyze');
       expect(event.event_payload.subcommand).toBe('secrets check');
+    });
+
+    it('uses the passthrough subcommand stashed on the command, if any', async () => {
+      const command = makeCommand('context');
+      setPassthroughSubcommand(command, 'get-source');
+
+      await storeEvent(command, true);
+
+      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(event.event_payload.command).toBe('context');
+      expect(event.event_payload.subcommand).toBe('get-source');
+    });
+
+    it('honors a stashed null subcommand even when the command chain has children', async () => {
+      const command = makeCommand('context child');
+      setPassthroughSubcommand(command, null);
+
+      await storeEvent(command, true);
+
+      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(event.event_payload.subcommand).toBeNull();
     });
 
     it('sets result to "success" when success is true', async () => {

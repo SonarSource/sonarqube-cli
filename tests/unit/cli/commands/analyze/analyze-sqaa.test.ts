@@ -128,36 +128,55 @@ describe('analyzeSqaa: input validation', () => {
   });
 });
 
-describe('analyzeSqaa: auth resolution', () => {
-  it('skips SQAA and warns when extension has no projectKey', async () => {
-    const state = getDefaultState('test');
-    stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
-      orgKey: TEST_ORG,
-    });
-    // Extension exists but projectKey is undefined
-    stateManager.upsertAgentExtension(state, {
-      id: 'ext-no-key',
-      agentId: 'claude-code',
-      projectRoot: process.cwd(),
-      global: false,
-      orgKey: TEST_ORG,
-      serverUrl: SONARCLOUD_URL,
-      updatedByCliVersion: '1.0.0',
-      updatedAt: new Date().toISOString(),
-      kind: 'hook',
-      name: 'sonar-sqaa',
-      hookType: 'PostToolUse',
-    });
-    loadStateSpy.mockReturnValue(state);
+function stateWithExtensionMissingProjectKey() {
+  const state = getDefaultState('test');
+  stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
+    orgKey: TEST_ORG,
+  });
+  // Extension exists but projectKey is undefined
+  stateManager.upsertAgentExtension(state, {
+    id: 'ext-no-key',
+    agentId: 'claude-code',
+    projectRoot: process.cwd(),
+    global: false,
+    orgKey: TEST_ORG,
+    serverUrl: SONARCLOUD_URL,
+    updatedByCliVersion: '1.0.0',
+    updatedAt: new Date().toISOString(),
+    kind: 'hook',
+    name: 'sonar-sqaa',
+    hookType: 'PostToolUse',
+  });
+  return state;
+}
 
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+describe('analyzeSqaa: auth resolution', () => {
+  it('throws CommandFailedError when extension has no projectKey (explicit agentic)', async () => {
+    loadStateSpy.mockReturnValue(stateWithExtensionMissingProjectKey());
+
+    let thrown: unknown;
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH).catch((err: unknown) => {
+      thrown = err;
+    });
+
+    expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as Error).message).toContain(
+      'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
+    );
+    expect(analyzeFileSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips SQAA and warns when extension has no projectKey and requireProject is false (bare analyze)', async () => {
+    loadStateSpy.mockReturnValue(stateWithExtensionMissingProjectKey());
+
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH, undefined, { requireProject: false });
 
     expect(analyzeFileSpy).not.toHaveBeenCalled();
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
       .join('\n');
     expect(output).toContain(
-      'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
+      'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
     );
   });
 });

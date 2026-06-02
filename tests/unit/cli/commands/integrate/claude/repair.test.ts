@@ -136,7 +136,7 @@ describe('repairToken', () => {
     expect(caughtError).toBeInstanceOf(Error);
     expect((caughtError as Error | undefined)?.message).toBe('Generated token is invalid.');
     expect((caughtError as { remediationHint?: string } | undefined)?.remediationHint).toBe(
-      "Rerun the browser login flow or authenticate again with '--with-token'.",
+      'Rerun the browser login flow, or set SONARQUBE_CLI_TOKEN (+ SONARQUBE_CLI_SERVER or SONARQUBE_CLI_ORG) for scripted environments.',
     );
   });
 

@@ -25,7 +25,12 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
-import { TestHarness } from '../../harness';
+import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation';
+import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../src/lib/install-types';
+import { detectPlatform } from '../../../../src/lib/platform-detector';
+import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures';
+import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
+import { readCagInvocations } from '../../harness/cag-invocations';
 
 describe('post-update migration', () => {
   let harness: TestHarness;
@@ -107,6 +112,213 @@ describe('post-update migration', () => {
       expect(extensions.some((e) => e.name === 'sonar-secrets')).toBe(true);
       // cliVersion bumped
       expect((state.config as { cliVersion: string }).cliVersion).toBe(CURRENT_VERSION);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'stops running CAG tools and refreshes registered skills after a CLI upgrade',
+    async () => {
+      // Skill recorded with an older CAG version — triggers post-update refresh.
+      const staleSkillVersion = '0.0.0.1';
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: new Date().toISOString(),
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {
+            'claude-code': {
+              configured: true,
+              configuredByCliVersion: '0.5.0',
+              hooks: { installed: [] },
+              skills: { installed: [] },
+            },
+          },
+          config: { cliVersion: '0.5.0' },
+          telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
+          tools: {
+            installed: [
+              {
+                name: CONTEXT_AUGMENTATION_BINARY_NAME,
+                version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+                // Absolute path the harness writes the CAG stub to.
+                path: harness.cliHome.file('bin', buildLocalCagBinaryName(detectPlatform())).path,
+                installedAt: new Date().toISOString(),
+                installedByCliVersion: '0.5.0',
+              },
+            ],
+          },
+          agentExtensions: [
+            {
+              id: randomUUID(),
+              agentId: 'claude-code',
+              projectRoot: harness.cwd.path,
+              global: false,
+              kind: 'skill',
+              name: CONTEXT_AUGMENTATION_BINARY_NAME,
+              version: staleSkillVersion,
+              scaEnabled: false,
+              projectKey: 'p',
+              orgKey: 'o',
+              serverUrl: 'https://sonarcloud.io',
+              updatedByCliVersion: '0.5.0',
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        }),
+      );
+      // Copies the CAG stub into <cliHome>/bin so the stop step can spawn it.
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      await harness.run('--version');
+
+      const invocations = readCagInvocations(harness);
+      const stopIndex = invocations.findIndex(
+        (i) => i.argv[0] === 'tool' && i.argv[1] === 'stop' && i.argv[2] === '--all',
+      );
+      const skillIndex = invocations.findIndex(
+        (i) => i.argv[0] === 'tool' && i.argv[1] === 'install-skill',
+      );
+      expect(stopIndex).toBeGreaterThanOrEqual(0);
+      expect(invocations[skillIndex]?.argv).toEqual([
+        'tool',
+        'install-skill',
+        'claude-code',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=false',
+      ]);
+      // Stop must precede the skill refresh.
+      expect(stopIndex).toBeLessThan(skillIndex);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'refreshes declarative Claude hook resources on CLI upgrade',
+    async () => {
+      const now = new Date().toISOString();
+      const pretoolScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('pretool-secrets')}`;
+      const promptScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('prompt-secrets')}`;
+      const settingsRel = '.claude/settings.json';
+      const expectedPretoolCommand = IS_WINDOWS
+        ? `powershell -NoProfile -File ${pretoolScriptRel}`
+        : pretoolScriptRel;
+      const expectedPromptCommand = IS_WINDOWS
+        ? `powershell -NoProfile -File ${promptScriptRel}`
+        : promptScriptRel;
+
+      harness.cwd.writeFile(
+        pretoolScriptRel,
+        IS_WINDOWS
+          ? '$output = sonar analyze --file $file_path 2>$null\n'
+          : '#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n',
+      );
+      harness.cwd.writeFile(
+        promptScriptRel,
+        IS_WINDOWS
+          ? '$output = sonar analyze --file $file_path 2>$null\n'
+          : '#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n',
+      );
+      harness.cwd.writeFile(
+        settingsRel,
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: 'Read',
+                  hooks: [
+                    {
+                      type: 'command',
+                      command: '.claude/hooks/sonar-secrets/build-scripts/old-pretool.sh',
+                      timeout: 60,
+                    },
+                  ],
+                },
+              ],
+              UserPromptSubmit: [
+                {
+                  matcher: '*',
+                  hooks: [
+                    {
+                      type: 'command',
+                      command: '.claude/hooks/sonar-secrets/build-scripts/old-prompt.sh',
+                      timeout: 60,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: now,
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {
+            'claude-code': {
+              configured: true,
+              configuredByCliVersion: '0.5.0',
+              hooks: { installed: [] },
+              skills: { installed: [] },
+            },
+          },
+          config: { cliVersion: '0.5.0' },
+          telemetry: { enabled: false, firstUseDate: now, events: [] },
+          agentExtensions: [],
+          integrations: {
+            installed: [
+              {
+                id: randomUUID(),
+                integrationId: 'claude-code',
+                installedByCliVersion: '0.5.0',
+                installedAt: now,
+                updatedByCliVersion: '0.5.0',
+                updatedAt: now,
+                features: [
+                  {
+                    featureId: 'sonar-secrets-hooks',
+                    scope: 'project',
+                    targetRoot: harness.cwd.path,
+                    installedByCliVersion: '0.5.0',
+                    installedAt: now,
+                    updatedByCliVersion: '0.5.0',
+                    updatedAt: now,
+                    resources: [],
+                    operations: [],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+
+      const result = await harness.run('--version');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.file(pretoolScriptRel).asText()).toContain(
+        'sonar hook claude-pre-tool-use',
+      );
+      expect(harness.cwd.file(promptScriptRel).asText()).toContain(
+        'sonar hook claude-prompt-submit',
+      );
+
+      const settings = harness.cwd.file(settingsRel).asJson();
+      expect(settings.hooks?.PreToolUse?.[0]).toEqual({
+        matcher: 'Read',
+        hooks: [{ type: 'command', command: expectedPretoolCommand, timeout: 60 }],
+      });
+      expect(settings.hooks?.UserPromptSubmit?.[0]).toEqual({
+        matcher: '*',
+        hooks: [{ type: 'command', command: expectedPromptCommand, timeout: 60 }],
+      });
     },
     { timeout: 15000 },
   );

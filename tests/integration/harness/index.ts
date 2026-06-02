@@ -20,11 +20,12 @@
 
 // TestHarness — main entry point for integration tests
 
-import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '../../../src/lib/config-constants.js';
 import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
@@ -70,8 +71,14 @@ export class TestHarness {
   }
 
   static create(): Promise<TestHarness> {
-    const tempDir = join(tmpdir(), `sonar-cli-harness-${Date.now()}-${crypto.randomUUID()}`);
-    mkdirSync(tempDir, { recursive: true });
+    const rawDir = join(tmpdir(), `sonar-cli-harness-${Date.now()}-${crypto.randomUUID()}`);
+    mkdirSync(rawDir, { recursive: true });
+    // Resolve symlinks (macOS exposes $TMPDIR as `/var/folders/...` which is a
+    // symlink to `/private/var/folders/...`). The CLI canonicalises project
+    // roots via project-workspace::canonicalizePath, so state recordings use
+    // the resolved path; matching that here keeps test assertions stable on
+    // macOS local runs.
+    const tempDir = realpathSync(rawDir);
     return Promise.resolve(new TestHarness(tempDir));
   }
 
@@ -197,6 +204,7 @@ export class TestHarness {
     if (this._envBuilder) {
       this._envBuilder.writeTo(this.cliHome.path, this.keychainJsonFile);
     }
+    const builderExtraEnv = this._envBuilder?.getExtraEnv() ?? {};
 
     const activeBinariesServer = this.binariesServers.at(-1);
     const fakeBinariesEnv: Record<string, string> = activeBinariesServer
@@ -210,10 +218,12 @@ export class TestHarness {
 
     return {
       ...this.systemEnvVars,
+      ...builderExtraEnv,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
+      [ENV_SQAA_RETRY_BASE_DELAY_MS]: '0',
       ...options?.extraEnv,
       ...buildHomeEnv(this.userHome.path),
     };
@@ -234,8 +244,8 @@ export class TestHarness {
     await rm(this.tempDir.path, {
       recursive: true,
       force: true,
-      maxRetries: 5,
-      retryDelay: 1000,
+      maxRetries: IS_WINDOWS ? 15 : 5,
+      retryDelay: IS_WINDOWS ? 200 : 100,
     }).catch(() => {
       /* best-effort: temp dirs are cleaned up by the OS */
     });

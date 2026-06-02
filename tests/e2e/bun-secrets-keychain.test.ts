@@ -22,7 +22,7 @@
  * E2e tests that exercise the real Bun.secrets OS credential store via the CLI binary.
  *
  * Each test starts a FakeSonarQubeServer, runs actual CLI commands (auth login,
- * logout, purge), and verifies tokens are stored/removed from the real OS keychain.
+ * logout, status), and verifies tokens are stored/removed from the real OS keychain.
  * SONARQUBE_CLI_KEYCHAIN_SERVICE isolates tokens per test run.
  */
 
@@ -34,6 +34,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from '
 
 import { generateKeychainAccount } from '../../src/lib/keychain';
 import { getDefaultState } from '../../src/lib/state';
+import { addOrUpdateConnection } from '../../src/lib/state-manager';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../integration/harness';
 import { getCliBinaryPath, runCli } from '../integration/harness/cli-runner';
 import { buildHomeEnv } from '../integration/harness/platform';
@@ -85,7 +86,33 @@ function writeState(cliHome: string): void {
   writeFileSync(join(cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
 }
 
-describe('Bun.secrets keychain via CLI', () => {
+async function setupAuth(ctx: E2eContext): Promise<string> {
+  const token = 'e2e-token';
+  const serverUrl = ctx.server.baseUrl();
+  const account = generateKeychainAccount(serverUrl);
+  ctx.trackedAccounts.add(account);
+
+  await Bun.secrets.set({ service: ctx.serviceName, name: account, value: token });
+
+  const state = getDefaultState('e2e-test');
+  state.telemetry.enabled = false;
+  addOrUpdateConnection(state, serverUrl, 'on-premise');
+  writeFileSync(join(ctx.cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
+
+  return account;
+}
+
+// macOS Keychain attaches a per-process ACL to entries written via
+// `Bun.secrets.set`. The test process is on the ACL list; the CLI subprocess
+// spawned by `runCli` is not, so its `Bun.secrets.get` call fails with
+// `errSecAuthFailed` (no GUI in headless test mode to grant access). CI never
+// runs e2e on macOS (only Linux + Windows in the Build workflow), so skip here
+// to keep `bun run test:e2e` clean on macOS dev machines without losing any
+// coverage CI relies on.
+const describeKeychain =
+  process.platform === 'darwin' && process.env.CI !== 'true' ? describe.skip : describe;
+
+describeKeychain('Bun.secrets keychain via CLI', () => {
   let ctx: E2eContext;
 
   beforeEach(async () => {
@@ -120,43 +147,13 @@ describe('Bun.secrets keychain via CLI', () => {
     rmSync(ctx.tempDir, { recursive: true, force: true });
   });
 
-  it('auth login --with-token stores a token in the OS keychain', async () => {
-    const env = buildEnv(ctx);
-    const result = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Authentication successful');
-
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    const stored = await Bun.secrets.get({ service: ctx.serviceName, name: account });
-    expect(stored).toBe('e2e-token');
-  });
-
   it('auth logout removes the token from the OS keychain', async () => {
     const env = buildEnv(ctx);
+    const account = await setupAuth(ctx);
 
-    // Login first
-    const loginResult = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-    expect(loginResult.exitCode).toBe(0);
-
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    // Verify the token was stored
     const stored = await Bun.secrets.get({ service: ctx.serviceName, name: account });
     expect(stored).toBe('e2e-token');
 
-    // Logout
     const logoutResult = await runCli('auth logout', env, { cwd: ctx.cwd });
     expect(logoutResult.exitCode).toBe(0);
     expect(logoutResult.stdout).toContain('Logged out');
@@ -165,43 +162,12 @@ describe('Bun.secrets keychain via CLI', () => {
     expect(afterLogout).toBeNull();
   });
 
-  it('auth purge removes all tokens from the OS keychain', async () => {
-    const env = buildEnv(ctx);
-
-    // Login to a server
-    const loginResult = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-    expect(loginResult.exitCode).toBe(0);
-
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    // Purge with confirmation
-    const purgeResult = await runCli('auth purge', env, { cwd: ctx.cwd, stdin: 'y\n' });
-    expect(purgeResult.exitCode).toBe(0);
-
-    const afterPurge = await Bun.secrets.get({ service: ctx.serviceName, name: account });
-    expect(afterPurge).toBeNull();
-  });
-
   it('auth status reports connected when token exists in OS keychain', async () => {
     const env = buildEnv(ctx);
+    const account = await setupAuth(ctx);
 
-    // Login first
-    const loginResult = await runCli(
-      `auth login --with-token e2e-token --server ${ctx.server.baseUrl()}`,
-      env,
-      { cwd: ctx.cwd },
-    );
-    expect(loginResult.exitCode).toBe(0);
+    expect(await Bun.secrets.get({ service: ctx.serviceName, name: account })).toBe('e2e-token');
 
-    const account = generateKeychainAccount(ctx.server.baseUrl());
-    ctx.trackedAccounts.add(account);
-
-    // Check status
     const statusResult = await runCli('auth status', env, { cwd: ctx.cwd });
     expect(statusResult.exitCode).toBe(0);
     expect(statusResult.stdout).toContain('Connected');

@@ -59,8 +59,8 @@ export interface AuthConnection {
   /**
    * Server-generated token name, present only for connections created through
    * the browser-based OAuth flow. Used during logout to revoke the token on
-   * the server side via `/api/user_tokens/revoke`. Absent when the user
-   * authenticated with a manually-provided token (`--with-token`).
+   * the server side via `/api/user_tokens/revoke`. Absent for connections
+   * created with older CLI versions that did not capture the token name.
    */
   tokenName?: string;
   /** Timestamp when authenticated */
@@ -151,6 +151,8 @@ export interface SkillExtension extends BaseAgentExtension {
   name: string;
   /** Skill version, if versioned */
   version?: string;
+  /** Whether SCA was enabled on the connection when the skill was installed. */
+  scaEnabled?: boolean;
 }
 
 /**
@@ -253,6 +255,32 @@ export interface ToolsState {
 }
 
 /**
+ * Installed dependency metadata shared across declarative integration features.
+ */
+export interface InstalledIntegrationDependency {
+  /** Stable dependency identifier from the integration declaration */
+  id: string;
+  /** Dependency type from the integration declaration */
+  dependencyType: string;
+  /** Dependency declaration version, when versioned */
+  version?: string;
+  /** Resolved path for dependencies materialized on disk */
+  path?: string;
+  /** CLI version that last updated this dependency */
+  updatedByCliVersion: string;
+  /** ISO timestamp of the last update */
+  updatedAt: string;
+}
+
+/**
+ * Shared dependency installation state.
+ */
+export interface DependenciesState {
+  /** Installed dependencies shared by declarative integrations */
+  installed: InstalledIntegrationDependency[];
+}
+
+/**
  * Scope where an integration feature was installed.
  */
 export type IntegrationScope = 'project' | 'global';
@@ -295,6 +323,14 @@ export interface InstalledIntegrationOperation {
 }
 
 /**
+ * Dependency reference stored on an installed declarative integration feature.
+ */
+export interface InstalledIntegrationDependencyReference {
+  /** Stable dependency identifier from the integration declaration */
+  id: string;
+}
+
+/**
  * Installed declarative integration feature.
  */
 export interface InstalledIntegrationFeature {
@@ -312,6 +348,8 @@ export interface InstalledIntegrationFeature {
   updatedByCliVersion: string;
   /** ISO timestamp of the last update */
   updatedAt: string;
+  /** Shared dependencies required by this feature */
+  dependencies: InstalledIntegrationDependencyReference[];
   /** Resources installed for this feature */
   resources: InstalledIntegrationResource[];
   /** Operations applied for this feature */
@@ -425,6 +463,8 @@ export interface CliState {
   config: CliConfig;
   /** Installed tools */
   tools?: ToolsState;
+  /** Shared declarative integration dependencies */
+  dependencies: DependenciesState;
   /** Telemetry configuration and pending event batch */
   telemetry: TelemetryState;
   /** Registry of all agent extensions (hooks, skills) installed per project */
@@ -462,6 +502,9 @@ export function getDefaultState(cliVersion: string): CliState {
       cliVersion,
     },
     tools: {
+      installed: [],
+    },
+    dependencies: {
       installed: [],
     },
     telemetry: {

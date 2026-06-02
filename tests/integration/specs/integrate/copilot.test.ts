@@ -27,9 +27,8 @@ import { normalizePath, TestHarness } from '../../harness';
 import {
   CopilotHookEntry,
   CopilotHooksJson,
-  findSonarHookExt,
-  findSonarInstructionsExt,
-  findSonarSqaaInstructionsExt,
+  findCopilotFeature,
+  getCopilotIntegration,
   GLOBAL_HOOK_SCRIPT_PATH,
   GLOBAL_HOOKS_JSON_PATH,
   GLOBAL_INSTRUCTIONS_PATH,
@@ -128,17 +127,56 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'records sonar-secrets hook + sonar-prompt-secrets instructions in agentExtensions',
+      'records default project-scope features in integrations.installed',
       async () => {
         await harness.run('integrate copilot');
 
-        const state = harness.stateJsonFile.asJson();
-        expect(state.agents?.['copilot-cli']?.configured).toBe(true);
+        const copilotIntegration = getCopilotIntegration(harness);
+        expect(copilotIntegration).toBeDefined();
+        expect(
+          copilotIntegration?.features
+            .map((feature: { featureId: string }) => feature.featureId)
+            .sort(),
+        ).toEqual(['mcp-server', 'pre-tool-use-hook', 'prompt-secrets-instructions']);
+        expect(findCopilotFeature(harness, 'pre-tool-use-hook')?.scope).toBe('project');
+        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('project');
+      },
+      { timeout: 30000 },
+    );
 
-        const hook = findSonarHookExt(harness);
-        expect(hook).toBeDefined();
-        expect(hook?.hookType).toBe('PreToolUse');
-        expect(findSonarInstructionsExt(harness)).toBeDefined();
+    it(
+      'records declarative Copilot features in integrations.installed for project installs',
+      async () => {
+        await harness.run('integrate copilot --project my-project');
+
+        const state = harness.stateJsonFile.asJson();
+        const copilotIntegration = state.integrations.installed.find(
+          (integration: { integrationId: string }) => integration.integrationId === 'copilot-cli',
+        );
+
+        expect(copilotIntegration).toBeDefined();
+        expect(
+          copilotIntegration.features
+            .map((feature: { featureId: string }) => feature.featureId)
+            .sort(),
+        ).toEqual(['mcp-server', 'pre-tool-use-hook', 'prompt-secrets-instructions']);
+
+        const hookFeature = copilotIntegration.features.find(
+          (feature: { featureId: string }) => feature.featureId === 'pre-tool-use-hook',
+        );
+        expect(hookFeature).toMatchObject({
+          scope: 'project',
+          dependencies: [{ id: 'sonar-secrets' }],
+          attrs: {
+            projectKey: 'my-project',
+          },
+        });
+        expect(state.dependencies.installed).toMatchObject([
+          {
+            id: 'sonar-secrets',
+            dependencyType: 'sonarsource-binary',
+          },
+        ]);
       },
       { timeout: 30000 },
     );
@@ -293,12 +331,12 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'records both extensions as global=true in state',
+      'records hook and prompt instructions as global features in declarative state',
       async () => {
         await harness.run('integrate copilot -g');
 
-        expect(findSonarHookExt(harness)?.global).toBe(true);
-        expect(findSonarInstructionsExt(harness)?.global).toBe(true);
+        expect(findCopilotFeature(harness, 'pre-tool-use-hook')?.scope).toBe('global');
+        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
       },
       { timeout: 30000 },
     );
@@ -375,16 +413,16 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'does not record the sonar-secrets hook in state when the project-level write was skipped',
+      'does not record the declarative hook feature when the project-level write was skipped',
       async () => {
         writeExistingGlobalHook(harness);
 
         await harness.run('integrate copilot');
 
-        expect(findSonarHookExt(harness)).toBeUndefined();
+        expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeUndefined();
         // Instructions are independent — the project-level instructions
         // write still runs because the global instructions file does not exist.
-        expect(findSonarInstructionsExt(harness)).toBeDefined();
+        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
@@ -479,8 +517,8 @@ describe('integrate copilot', () => {
         );
         // Global file is byte-identical (orphan; not touched).
         expect(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText()).toBe(before);
-        // State records the project-scoped prompt-secrets entry.
-        expect(findSonarInstructionsExt(harness)?.global).toBe(false);
+        // Declarative state records the project-scoped prompt-secrets feature.
+        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('project');
         // Orphan warning surfaces the stale global file path.
         expect(result.stderr + result.stdout).toContain('Found existing Copilot instructions at');
         expect(normalizePath(result.stderr + result.stdout)).toContain(
@@ -526,9 +564,8 @@ describe('integrate copilot', () => {
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
 
         const state = harness.stateJsonFile.asJson();
-        expect(state.agents?.['copilot-cli']?.configured).toBe(true);
-        expect(findSonarHookExt(harness)).toBeUndefined();
-        expect(findSonarInstructionsExt(harness)?.global).toBe(false);
+        expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeUndefined();
+        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('project');
 
         const homePathNorm = normalizePath(harness.userHome.path);
         expect(normalizePath(outcomeLine(result.stdout, 'Hook:'))).toContain(
@@ -537,6 +574,17 @@ describe('integrate copilot', () => {
         expect(
           normalizePath(outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):')),
         ).toContain('.github/instructions/sonarqube.instructions.md');
+
+        const copilotIntegration = state.integrations.installed.find(
+          (integration: { integrationId: string }) => integration.integrationId === 'copilot-cli',
+        );
+        expect(copilotIntegration).toBeDefined();
+        expect(
+          copilotIntegration.features
+            .map((feature: { featureId: string }) => feature.featureId)
+            .sort(),
+        ).toEqual(['mcp-server', 'prompt-secrets-instructions']);
+        expect(state.dependencies.installed).toEqual([]);
       },
       { timeout: 30000 },
     );
@@ -544,69 +592,67 @@ describe('integrate copilot', () => {
 
   // ─── Installation failure handling ──────────────────────────────────────────
 
-  // We force file-system failures by pre-creating the would-be artifact paths
-  // as directories. The integration's `writeFile`/`readFile` calls then fail,
-  // exercising the try/catch fallbacks.
+  // We force file-system failures by pre-creating artifact paths as
+  // directories or by writing invalid JSON. The declarative installer now
+  // fails fast, so later features are not applied and declarative state is
+  // only recorded for features that completed before the failure.
 
   describe('installation failure handling', () => {
     it(
-      'warns and continues with MCP + instructions when the hook write fails',
+      'fails and stops before instructions + MCP when the hook configuration write fails',
       async () => {
         obstructHooksJson(harness);
 
         const result = await harness.run('integrate copilot');
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr + result.stdout).toContain(
-          'Failed to set up the pre-tool-use secrets hook',
-        );
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain('contains invalid JSON');
+        expect(result.stdout).not.toContain('Copilot integration successfully configured');
 
-        // Hook artifact was not finalized; the registry must not claim it was.
-        expect(findSonarHookExt(harness)).toBeUndefined();
-        // Outcome line reflects the failure rather than printing a misleading path.
-        expect(outcomeLine(result.stdout, 'Hook:')).toContain('not installed (see warning above)');
+        // The hook feature fails before later features run.
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
+        expect(harness.cwd.exists('.mcp.json')).toBe(false);
 
-        // Instructions still installed.
-        const instructionsFile = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH);
-        expect(instructionsFile.exists()).toBe(true);
-        expect(instructionsFile.asText()).toContain(
-          '# SonarQube secrets scanning for prompts protocol',
-        );
-        expect(findSonarInstructionsExt(harness)).toBeDefined();
-        expect(
-          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
-        ).not.toContain('not installed');
-
-        // MCP still configured.
-        expect(harness.cwd.exists('.mcp.json')).toBe(true);
+        // Declarative integration state is not updated because the integration
+        // did not complete.
+        expect(getCopilotIntegration(harness)).toBeUndefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      'warns and continues with MCP + hook when the instructions write fails',
+      'fails and stops before MCP when the instructions write fails',
       async () => {
         obstructInstructionsFile(harness);
 
         const result = await harness.run('integrate copilot');
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr + result.stdout).toContain('Failed to install Copilot instructions');
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).not.toContain('Copilot integration successfully configured');
+        expect(harness.cwd.exists('.mcp.json')).toBe(false);
 
-        // Instructions registry entry must not be recorded.
-        expect(findSonarInstructionsExt(harness)).toBeUndefined();
+        // The hook feature completed before the instructions write failed, so
+        // only that feature is recorded.
         expect(
-          outcomeLine(result.stdout, 'Instructions (secrets scanning for prompts):'),
-        ).toContain('not installed (see warning above)');
+          getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
+        ).toEqual(['pre-tool-use-hook']);
+      },
+      { timeout: 30000 },
+    );
 
-        // Hook still installed.
-        const scriptFile = harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH);
-        expect(scriptFile.exists()).toBe(true);
-        expect(findSonarHookExt(harness)).toBeDefined();
-        expect(outcomeLine(result.stdout, 'Hook:')).not.toContain('not installed');
+    it(
+      'fails when the existing MCP config contains invalid JSON',
+      async () => {
+        harness.cwd.writeFile('.mcp.json', '{ invalid json\n');
 
-        // MCP still configured.
-        expect(harness.cwd.exists('.mcp.json')).toBe(true);
+        const result = await harness.run('integrate copilot');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain('.mcp.json contains invalid JSON');
+        expect(result.stdout).not.toContain('Copilot integration successfully configured');
+        expect(
+          getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
+        ).toEqual(['pre-tool-use-hook', 'prompt-secrets-instructions']);
       },
       { timeout: 30000 },
     );
@@ -679,13 +725,14 @@ describe('integrate copilot', () => {
         // Project key is baked into the example command.
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
 
-        // Both sections recorded in state with the SQAA entry carrying the cloud attrs.
-        const promptSecrets = findSonarInstructionsExt(harness);
-        expect(promptSecrets?.global).toBe(false);
-        const sqaa = findSonarSqaaInstructionsExt(harness);
-        expect(sqaa?.global).toBe(false);
-        expect(sqaa?.projectKey).toBe(TEST_PROJECT);
-        expect(sqaa?.orgKey).toBe(TEST_ORG);
+        // Project-scope installs keep SQAA in the prompt instructions feature.
+        const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-instructions');
+        expect(promptSecrets?.scope).toBe('project');
+        expect(promptSecrets?.attrs).toMatchObject({
+          projectKey: TEST_PROJECT,
+          sqaaEnabled: true,
+        });
+        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -713,9 +760,9 @@ describe('integrate copilot', () => {
         expect(projectBody).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
         expect(projectBody).not.toContain('# SonarQube secrets scanning for prompts protocol');
 
-        // State: prompt-secrets is global, SQAA is project-scoped.
-        expect(findSonarInstructionsExt(harness)?.global).toBe(true);
-        expect(findSonarSqaaInstructionsExt(harness)?.global).toBe(false);
+        // Declarative state: prompt-secrets is global, SQAA is project-scoped.
+        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
+        expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
 
         // Outcome shows both labeled lines pointing to their respective files.
         const homePathNorm = normalizePath(harness.userHome.path);
@@ -779,7 +826,7 @@ describe('integrate copilot', () => {
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).not.toContain('# SonarQube Agentic Analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
-        expect(findSonarSqaaInstructionsExt(harness)).toBeUndefined();
+        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -844,7 +891,7 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain('❌ Not authenticated.');
-        expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
+        expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
       },
       { timeout: 15000 },
     );

@@ -152,7 +152,7 @@ describe('list issues', () => {
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
       expect(output).toContain('❌ Not authenticated.');
-      expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
+      expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
     },
     { timeout: 15000 },
   );
@@ -165,7 +165,7 @@ describe('list issues', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        "required option '-p, --project <project>' not specified",
+        "❌ error: required option '-p, --project <project>' not specified",
       );
     },
     { timeout: 15000 },
@@ -226,7 +226,7 @@ describe('list issues — argument validation', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        "error: option '--page-size <page-size>' argument 'abc' is invalid. Not a number.",
+        "❌ error: option '--page-size <page-size>' argument 'abc' is invalid. Not a number.",
       );
     },
     { timeout: 15000 },

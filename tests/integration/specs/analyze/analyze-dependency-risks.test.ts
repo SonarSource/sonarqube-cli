@@ -21,7 +21,7 @@
 // Integration tests for `analyze dependency-risks`: pre-flight gates
 // (authentication, SCA availability, project existence) plus the happy path,
 // which currently runs against the no-op scanner runner and emits an empty
-// `AnalyzeProjectResponse`. Once the real scanner is wired, the happy-path
+// list of dependency risks. Once the real scanner is wired, the happy-path
 // assertions will be expanded.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -51,7 +51,7 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(1);
     const output = result.stdout + result.stderr;
     expect(output).toContain('❌ Not authenticated.');
-    expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
+    expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
   });
 
   it('exits with code 1 when project does not exist (settings 404)', async () => {
@@ -81,7 +81,7 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current server connection',
+      'Software Composition Analysis is not available for the current connection.',
     );
   });
 
@@ -162,15 +162,104 @@ describe('analyze dependency-risks', () => {
     { timeout: 30000 },
   );
 
+  it('rejects an unknown --statuses value', async () => {
+    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo --statuses bogus');
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("Invalid --statuses value: 'bogus'");
+  });
+
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
-    const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withVersion('26.4')
+      .start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
     const result = await harness.run('analyze dependency-risks --project demo');
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current server connection',
+      'Software Composition Analysis is not available for the current connection.',
     );
+  });
+
+  it('exits with code 1 when the on-premise server version is below 2026.4', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withVersion('26.3')
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Running Software Composition Analysis from this CLI requires SonarQube Server 2026.4 or later (server is 26.3)',
+    );
+    // Version check runs before the SCA feature-enabled probe.
+    expect(server.getRecordedRequests().some((r) => r.path.endsWith('/sca/feature-enabled'))).toBe(
+      false,
+    );
+  });
+
+  it('proceeds past the version check when the on-premise server version is 2026.4 or newer', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withVersion('2026.4.0.12345')
+      .withScaEnabled(false)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    // Version check passes — failure now comes from the SCA availability check.
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Software Composition Analysis is not available for the current connection.',
+    );
+  });
+
+  it('exits with code 1 when the on-premise server version cannot be determined', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withSystemStatusCode(503)
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server 2026.4 or later.',
+    );
+  });
+
+  it('skips the server version check for cloud connections', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withVersion('1.0')
+      .withScaEnabled(false)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    // Despite the absurdly old "version", the cloud path bypasses the check
+    // and proceeds to the SCA availability probe.
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Software Composition Analysis is not available for the current connection.',
+    );
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/system/status')).toBe(false);
   });
 });

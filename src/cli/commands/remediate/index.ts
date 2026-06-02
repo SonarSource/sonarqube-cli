@@ -82,28 +82,19 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
 
   const { status: entitlement } = await client.checkAiRemediationEntitlement(orgKey);
   if (entitlement === 'not_eligible') {
-    print(`The Remediation Agent is not available for your organization (${orgKey}).`);
-    print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
-    blank();
     throw new CommandFailedError('Remediation Agent unavailable.', {
       remediationHint: `Ask an organization administrator to check eligibility and enable the feature. Learn more: ${AI_REMEDIATION_DOCS_URL}`,
     });
   }
   if (entitlement === 'not_enabled') {
-    print(`The Remediation Agent is not enabled for your organization (${orgKey}).`);
-    print(`Learn more: ${AI_REMEDIATION_DOCS_URL}`);
-    blank();
     throw new CommandFailedError('Remediation Agent unavailable.', {
       remediationHint: `Ask an organization administrator to enable the feature. Learn more: ${AI_REMEDIATION_DOCS_URL}`,
     });
   }
   if (entitlement === 'unknown') {
-    print(
-      'Could not verify Remediation Agent entitlement. Please try again or contact support if the issue persists.',
-    );
-    blank();
     throw new CommandFailedError('Remediation Agent unavailable.', {
-      remediationHint: 'Retry, and contact support if the problem persists.',
+      remediationHint:
+        'Could not verify Remediation Agent entitlement. Retry later, and report to https://github.com/SonarSource/sonarqube-cli/issues if the problem persists.',
     });
   }
 
@@ -144,6 +135,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
   } catch (err) {
     logger.error(`scheduleAgentJob failed: ${(err as Error).message}`);
     throw new CommandFailedError('Remediation job submission failed.', {
+      cause: err,
       remediationHint: mapSubmissionFailureHint((err as Error).message, orgKey),
     });
   }

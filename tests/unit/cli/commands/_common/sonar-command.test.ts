@@ -29,6 +29,7 @@ import {
 import { SonarCommand } from '../../../../../src/cli/commands/_common/sonar-command';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
+import { RateLimitError, ServiceUnavailableError } from '../../../../../src/sonarqube/errors';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const FAKE_AUTH: ResolvedAuth = {
@@ -120,7 +121,42 @@ describe('SonarCommand', () => {
       });
 
       const hintCall = getMockUiCalls().find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe("💡 Run 'sonar auth login' to reauthenticate.");
+      expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to reauthenticate.");
+    });
+
+    it('derives remediation hint from RateLimitError cause when no explicit hint is given', async () => {
+      const cmd = new SonarCommand();
+      await cmd.runCommand(() => {
+        throw new CommandFailedError('API call failed', { cause: new RateLimitError() });
+      });
+
+      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      expect(hintCall?.args[0]).toBe('  → Wait a moment and try again.');
+    });
+
+    it('derives remediation hint from ServiceUnavailableError cause when no explicit hint is given', async () => {
+      const cmd = new SonarCommand();
+      await cmd.runCommand(() => {
+        throw new CommandFailedError('API call failed', {
+          cause: new ServiceUnavailableError(),
+        });
+      });
+
+      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      expect(hintCall?.args[0]).toBe('  → Check your network connection and try again later.');
+    });
+
+    it('cause-derived hint takes precedence over generic remediationHint', async () => {
+      const cmd = new SonarCommand();
+      await cmd.runCommand(() => {
+        throw new CommandFailedError('API call failed', {
+          cause: new RateLimitError(),
+          remediationHint: 'Custom hint.',
+        });
+      });
+
+      const hintCall = getMockUiCalls().find((c) => c.method === 'print');
+      expect(hintCall?.args[0]).toBe('  → Wait a moment and try again.');
     });
   });
 
@@ -221,7 +257,7 @@ describe('SonarCommand', () => {
       const errCall = getMockUiCalls().find((c) => c.method === 'error');
       expect(errCall?.args[0]).toContain('Not authenticated');
       const hintCall = getMockUiCalls().find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe("💡 Run 'sonar auth login' to authenticate.");
+      expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to authenticate.");
     });
 
     it('catches handler errors and sets process.exitCode', async () => {

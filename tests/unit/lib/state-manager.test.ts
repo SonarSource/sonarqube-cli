@@ -39,7 +39,6 @@ import { getDefaultState } from '../../../src/lib/state.js';
 import {
   addInstalledHook,
   addOrUpdateConnection,
-  clearAllConnections,
   findExtensionsByProject,
   generateConnectionId,
   markAgentConfigured,
@@ -334,6 +333,17 @@ describe('loadState: migration', () => {
     expect(state.integrations).toEqual({ installed: [] });
   });
 
+  it('initialises dependencies to empty installed list when absent in state file', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    delete raw['dependencies'];
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.dependencies).toEqual({ installed: [] });
+  });
+
   it('initialises telemetry when absent in state file', () => {
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     delete raw['telemetry'];
@@ -489,7 +499,7 @@ describe('saveState', () => {
 });
 
 // =============================================================================
-// removeConnection / clearAllConnections
+// removeConnection
 // =============================================================================
 
 describe('removeConnection', () => {
@@ -513,19 +523,6 @@ describe('removeConnection', () => {
     expect(state.auth.connections).toHaveLength(1);
     expect(state.auth.activeConnectionId).toBe(conn.id);
     expect(state.auth.isAuthenticated).toBe(true);
-  });
-});
-
-describe('clearAllConnections', () => {
-  it('empties connections and resets auth flags', () => {
-    const state = getDefaultState('1.0.0');
-    addOrUpdateConnection(state, 'https://sonar.internal.com', 'on-premise');
-
-    clearAllConnections(state);
-
-    expect(state.auth.connections).toHaveLength(0);
-    expect(state.auth.activeConnectionId).toBeUndefined();
-    expect(state.auth.isAuthenticated).toBe(false);
   });
 });
 

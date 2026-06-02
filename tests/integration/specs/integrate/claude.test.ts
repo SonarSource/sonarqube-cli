@@ -83,6 +83,120 @@ describe('integrate claude', () => {
   );
 
   it(
+    'records declarative Claude features in integrations.installed for project installs',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+
+      const state = harness.stateJsonFile.asJson();
+      const claudeIntegration = state.integrations.installed.find(
+        (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
+      );
+
+      expect(claudeIntegration).toBeDefined();
+      expect(
+        claudeIntegration.features
+          .map((feature: { featureId: string }) => feature.featureId)
+          .sort(),
+      ).toEqual(['mcp-server', 'sonar-secrets-hooks']);
+
+      const secretsHooksFeature = claudeIntegration.features.find(
+        (feature: { featureId: string }) => feature.featureId === 'sonar-secrets-hooks',
+      );
+      const mcpFeature = claudeIntegration.features.find(
+        (feature: { featureId: string }) => feature.featureId === 'mcp-server',
+      );
+      expect(secretsHooksFeature).toMatchObject({
+        scope: 'project',
+        dependencies: [{ id: 'sonar-secrets' }],
+        attrs: {
+          projectKey: 'my-project',
+          serverUrl: server.baseUrl(),
+        },
+      });
+      expect(mcpFeature).toMatchObject({
+        resources: [
+          {
+            id: 'claude-mcp-config',
+            resourceType: 'json-patch',
+            path: harness.cwd.file('.mcp.json').path,
+          },
+        ],
+        operations: [],
+      });
+      expect(state.dependencies.installed).toMatchObject([
+        {
+          id: 'sonar-secrets',
+          dependencyType: 'sonarsource-binary',
+        },
+      ]);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'fails when the existing Claude settings file contains invalid JSON',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+      harness.cwd.writeFile('.claude/settings.json', '{ invalid json');
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('settings.json contains invalid JSON');
+      expect(output).toContain('Please fix or delete it and re-run.');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'fails when the existing Claude MCP config file contains invalid JSON',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+      harness.cwd.writeFile('.mcp.json', '{ invalid json');
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('.mcp.json contains invalid JSON');
+      expect(output).toContain('Please fix or delete it and re-run.');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'uses SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER env vars for full integration',
     async () => {
       const server = await harness
@@ -473,7 +587,7 @@ describe('integrate claude', () => {
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
       expect(output).toContain('❌ Not authenticated.');
-      expect(output).toContain("💡 Run 'sonar auth login' to authenticate.");
+      expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
     },
     { timeout: 15000 },
   );
@@ -635,6 +749,23 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       expect(sqaaExt).toBeDefined();
       expect(sqaaExt?.global).toBe(false);
+
+      const claudeIntegration = state.integrations.installed.find(
+        (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
+      );
+      const sqaaFeature = claudeIntegration?.features.find(
+        (feature: { featureId: string }) => feature.featureId === 'sonar-sqaa-hook',
+      );
+
+      expect(sqaaFeature).toBeDefined();
+      expect(sqaaFeature).toMatchObject({
+        scope: 'project',
+        attrs: {
+          orgKey: 'my-org',
+          projectKey: 'my-project',
+          serverUrl,
+        },
+      });
     },
     { timeout: 30000 },
   );
@@ -1632,7 +1763,7 @@ describe('integrate — argument validation', () => {
       const result = await harness.run('integrate gemini');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain("error: unknown command 'gemini'");
+      expect(result.stdout + result.stderr).toContain("❌ error: unknown command 'gemini'");
     },
     { timeout: 15000 },
   );

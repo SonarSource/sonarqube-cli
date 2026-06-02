@@ -18,6 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { RateLimitError, ServiceUnavailableError } from '../../../sonarqube/errors.js';
+
+function hintFromCause(cause: unknown): string | undefined {
+  if (cause instanceof RateLimitError) {
+    return 'Wait a moment and try again.';
+  }
+  if (cause instanceof ServiceUnavailableError) {
+    return 'Check your network connection and try again later.';
+  }
+  return undefined;
+}
+
 /**
  * Base class for all CLI errors that carry an exit code.
  * runCommand reads exitCode from any subclass — no instanceof checks needed per type.
@@ -26,10 +38,14 @@ export abstract class CliError extends Error {
   abstract readonly exitCode: number;
   readonly remediationHint?: string;
 
-  protected constructor(message: string, remediationHint?: string) {
-    super(message);
-    this.remediationHint = remediationHint;
+  protected constructor(message: string, options?: CliErrorOptions) {
+    super(message, { cause: options?.cause });
+    this.remediationHint = hintFromCause(options?.cause) ?? options?.remediationHint;
   }
+}
+
+interface CliErrorOptions extends ErrorOptions {
+  remediationHint?: string;
 }
 
 /**
@@ -39,14 +55,13 @@ export abstract class CliError extends Error {
 export class InvalidOptionError extends CliError {
   readonly exitCode = 2;
   constructor(reason: string, remediationHint?: string) {
-    super(reason, remediationHint);
+    super(reason, { remediationHint });
     this.name = 'InvalidOptionError';
   }
 }
 
-export interface CommandFailedErrorOptions {
+export interface CommandFailedErrorOptions extends CliErrorOptions {
   exitCode?: number;
-  remediationHint?: string;
 }
 
 /**
@@ -56,7 +71,7 @@ export interface CommandFailedErrorOptions {
 export class CommandFailedError extends CliError {
   readonly exitCode: number;
   constructor(message: string, options?: CommandFailedErrorOptions) {
-    super(message, options?.remediationHint);
+    super(message, { remediationHint: options?.remediationHint, cause: options?.cause });
     this.name = 'CommandFailedError';
     this.exitCode = options?.exitCode ?? 1;
   }

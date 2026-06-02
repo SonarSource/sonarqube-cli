@@ -22,4 +22,28 @@ export interface IntegrateAgentOptions {
   project?: string;
   nonInteractive?: boolean;
   global?: boolean;
+  /** Skip the sonar-context-augmentation install/init/skill step. */
+  skipContext?: boolean;
+}
+
+export interface HookCommand {
+  type: 'command';
+  command: string;
+  timeout: number;
+}
+
+export interface HookConfig {
+  matcher: string;
+  hooks: HookCommand[];
+}
+
+export interface HooksDocument {
+  hooks?: Record<string, HookConfig[] | undefined>;
+  [key: string]: unknown;
+}
+
+export interface ManagedHookEntry {
+  eventType: string;
+  marker: string;
+  hookConfig: HookConfig;
 }

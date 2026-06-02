@@ -72,15 +72,17 @@ export interface McpJson {
   mcpServers?: Record<string, { command?: string; args?: string[] }>;
 }
 
-export interface AgentExt {
-  kind: string;
-  name: string;
-  hookType?: string;
-  global?: boolean;
-  projectRoot?: string;
-  projectKey?: string;
-  orgKey?: string;
-  serverUrl?: string;
+export interface InstalledIntegrationFeature {
+  featureId: string;
+  scope: string;
+  targetRoot: string;
+  dependencies?: Array<{ id: string }>;
+  attrs?: Record<string, unknown>;
+}
+
+export interface InstalledIntegration {
+  integrationId: string;
+  features: InstalledIntegrationFeature[];
 }
 
 /** Builds a platform-correct `CopilotHookEntry` for the given command path. */
@@ -104,28 +106,22 @@ export function outcomeLine(
   return line ?? '';
 }
 
-/** Returns all `agentExtensions` from the persisted CLI state file. */
-export function getStateExtensions(harness: TestHarness): AgentExt[] {
+/** Returns the persisted declarative Copilot integration entry, if present. */
+export function getCopilotIntegration(harness: TestHarness): InstalledIntegration | undefined {
   const state = harness.stateJsonFile.asJson();
-  return (state.agentExtensions ?? []) as AgentExt[];
+  return (state.integrations?.installed ?? []).find(
+    (integration: { integrationId?: string }) => integration.integrationId === 'copilot-cli',
+  ) as InstalledIntegration | undefined;
 }
 
-/** Finds the `sonar-secrets` hook extension in state, or `undefined` if absent. */
-export function findSonarHookExt(harness: TestHarness): AgentExt | undefined {
-  return getStateExtensions(harness).find((e) => e.kind === 'hook' && e.name === 'sonar-secrets');
-}
-
-/** Finds the `sonar-prompt-secrets` instructions extension in state, or `undefined` if absent. */
-export function findSonarInstructionsExt(harness: TestHarness): AgentExt | undefined {
-  return getStateExtensions(harness).find(
-    (e) => e.kind === 'instructions' && e.name === 'sonar-prompt-secrets',
-  );
-}
-
-/** Finds the `sonar-sqaa` instructions extension in state, or `undefined` if absent. */
-export function findSonarSqaaInstructionsExt(harness: TestHarness): AgentExt | undefined {
-  return getStateExtensions(harness).find(
-    (e) => e.kind === 'instructions' && e.name === 'sonar-sqaa',
+/** Finds a Copilot feature in declarative integration state, or `undefined` if absent. */
+export function findCopilotFeature(
+  harness: TestHarness,
+  featureId: string,
+  scope?: string,
+): InstalledIntegrationFeature | undefined {
+  return getCopilotIntegration(harness)?.features.find(
+    (feature) => feature.featureId === featureId && (!scope || feature.scope === scope),
   );
 }
 
@@ -150,9 +146,8 @@ export function writeExistingGlobalInstructions(harness: TestHarness): void {
 }
 
 /**
- * Force the project-level hook write to fail by pre-creating `hooks.json` as a
- * directory. The integration's `readOrInitJson` then fails with `EISDIR`,
- * exercising the try/catch fallback in `installHooks`.
+ * Force the project-level hook configuration update to fail by pre-creating
+ * `hooks.json` as a directory.
  */
 export function obstructHooksJson(harness: TestHarness): void {
   mkdirSync(harness.cwd.file('.github', 'hooks').path, { recursive: true });
@@ -161,8 +156,7 @@ export function obstructHooksJson(harness: TestHarness): void {
 
 /**
  * Force the project-level instructions write to fail by pre-creating the
- * target file path as a directory. The integration's `writeFile` then fails
- * with `EISDIR`, exercising the try/catch fallback in `installInstructions`.
+ * target file path as a directory.
  */
 export function obstructInstructionsFile(harness: TestHarness): void {
   mkdirSync(harness.cwd.file('.github', 'instructions').path, { recursive: true });

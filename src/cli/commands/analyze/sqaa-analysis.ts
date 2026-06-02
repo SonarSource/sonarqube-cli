@@ -20,14 +20,10 @@
 
 // Concurrent execution engine for SQAA change-set analysis
 
+import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import type { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
-import {
-  fetchWithRetry,
-  MAX_503_RETRIES,
-  readSqaaFileContent,
-  RETRY_503_BASE_DELAY_MS,
-} from './sqaa-api';
+import { fetchWithRetry, MAX_503_RETRIES, readSqaaFileContent } from './sqaa-api';
 import type { CloudAuth } from './sqaa-auth';
 
 /** Maximum number of files analyzed concurrently. */
@@ -131,7 +127,7 @@ async function processFile(ctx: RunContext, idx: number): Promise<FileResult> {
           idx,
           attempt,
           MAX_503_RETRIES,
-          RETRY_503_BASE_DELAY_MS * 2 ** (attempt - 1),
+          getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
         );
         // retrying() already resets status to 'analyzing' when the countdown ends.
       },
