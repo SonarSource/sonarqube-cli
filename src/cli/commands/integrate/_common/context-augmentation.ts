@@ -19,6 +19,8 @@
  */
 
 import { spawn } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
@@ -138,20 +140,22 @@ export async function setupContextAugmentation(p: SetupContextAugmentationParams
   const initOk = await runCagStep(
     `sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
     binaryPath,
-    [
-      'tool',
-      'integrate',
-      '--agent',
-      p.agent,
-      '--invocation-prefix',
-      SONAR_CONTEXT_INVOCATION,
-      `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
-    ],
+    ['tool', 'integrate', '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
     p,
     initEnv,
   );
   if (!initOk) {
     warn('Context Augmentation init failed (see output above). Skipping skill installation.');
+    return;
+  }
+
+  const skillInstalled = await installContextAugmentationSkill({
+    binaryPath,
+    agent: p.agent,
+    projectRoot: p.projectRoot,
+    scaEnabled,
+  });
+  if (!skillInstalled) {
     return;
   }
 
@@ -203,12 +207,30 @@ export async function installContextAugmentationSkill({
   scaEnabled,
   reportFailure = true,
 }: InstallContextAugmentationSkillParams): Promise<boolean> {
-  const result = await runCagSubprocess(binaryPath, buildSkillInstallArgs(agent, scaEnabled), {
+  const result = await runCagSubprocess(binaryPath, buildPrintSkillArgs(scaEnabled), {
     projectRoot,
   });
   if (!result.ok) {
     if (reportFailure) {
       reportCagFailure(result);
+    }
+    return false;
+  }
+
+  if (!result.stdout.trim()) {
+    if (reportFailure) {
+      warn('sonar-context-augmentation tool print-skill produced empty output');
+    }
+    return false;
+  }
+
+  const destination = join(projectRoot, SKILL_RELATIVE_PATH[agent]);
+  try {
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, result.stdout, 'utf8');
+  } catch (err) {
+    if (reportFailure) {
+      warn(`Failed to write skill to ${destination}: ${(err as Error).message}`);
     }
     return false;
   }
@@ -234,16 +256,23 @@ export async function stopAllContextAugmentationTools(binaryPath: string): Promi
   return true;
 }
 
-function buildSkillInstallArgs(agent: ContextAugmentationAgent, scaEnabled: boolean): string[] {
+function buildPrintSkillArgs(scaEnabled: boolean): string[] {
   return [
     'tool',
-    'install-skill',
-    agent,
+    'print-skill',
     '--invocation-prefix',
     SONAR_CONTEXT_INVOCATION,
     `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
   ];
 }
+
+// Workspace-relative SKILL.md destination per agent. The CAG binary no longer
+// places this file — the wrapper redirects `tool print-skill` stdout here.
+const SKILL_RELATIVE_PATH: Record<ContextAugmentationAgent, string> = {
+  'claude-code': '.claude/skills/sonar-context-augmentation/SKILL.md',
+  copilot: '.github/skills/sonar-context-augmentation/SKILL.md',
+  codex: '.agents/skills/sonar-context-augmentation/SKILL.md',
+};
 
 async function runCagStep(
   successMessage: string,

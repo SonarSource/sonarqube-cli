@@ -30,6 +30,10 @@
 //                           callers; covers the modern `tool integrate` flow and the
 //                           legacy `init` subcommand alike.
 //   CAG_STUB_SKILL_EXIT   — exit code returned for the legacy `skill` subcommand (default 0)
+//   CAG_STUB_PRINT_SKILL_EXIT   — exit code returned specifically for `tool print-skill`
+//                                 (default 0); takes precedence over CAG_STUB_INIT_EXIT
+//   CAG_STUB_PRINT_SKILL_EMPTY  — when "1", suppresses the default skill placeholder
+//                                 so `tool print-skill` exits 0 with empty stdout
 //   CAG_STUB_STDOUT_LINE  — a line emitted to stdout on every non-version call
 //   CAG_STUB_STDERR_LINE  — a line emitted to stderr on every non-version call
 
@@ -63,7 +67,19 @@ const stderrLine = process.env.CAG_STUB_STDERR_LINE;
 if (stdoutLine) process.stdout.write(stdoutLine + '\n');
 if (stderrLine) process.stderr.write(stderrLine + '\n');
 
+// `tool print-skill` is expected by the CLI wrapper to emit the rendered SKILL.md
+// on stdout. Emit a non-empty placeholder so the wrapper's empty-stdout guard
+// doesn't reject the stub. Callers can override with CAG_STUB_STDOUT_LINE or
+// force empty output via CAG_STUB_PRINT_SKILL_EMPTY=1.
+const isPrintSkill = args[0] === 'tool' && args[1] === 'print-skill';
+if (isPrintSkill && !stdoutLine && process.env.CAG_STUB_PRINT_SKILL_EMPTY !== '1') {
+  process.stdout.write('# sonar-context-augmentation (stub skill)\n');
+}
+
 const RADIX = 10;
+if (isPrintSkill && process.env.CAG_STUB_PRINT_SKILL_EXIT !== undefined) {
+  process.exit(Number.parseInt(process.env.CAG_STUB_PRINT_SKILL_EXIT, RADIX));
+}
 if (args[0] === 'tool' || args[0] === 'init') {
   process.exit(Number.parseInt(process.env.CAG_STUB_INIT_EXIT ?? '0', RADIX));
 }
