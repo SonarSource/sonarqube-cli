@@ -277,14 +277,15 @@ describe('gitPrePush', () => {
     await gitPrePush(); // must not throw
   });
 
-  it('continues scanning remaining refs after crash with keychain auth (fail soft)', async () => {
+  it('merges files from multiple refs into a single secrets binary invocation', async () => {
     const secondRef = { ...FAKE_REF, localSha: 'def456' };
     readGitPushRefsSpy.mockResolvedValue([FAKE_REF, secondRef]);
-    runSecretsBinarySpy.mockRejectedValue(new Error('binary crashed'));
 
     await gitPrePush();
 
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(2);
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
+    const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
+    expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
   });
 
   it('proceeds normally when git mktree throws (falls back to null OID as empty tree)', async () => {

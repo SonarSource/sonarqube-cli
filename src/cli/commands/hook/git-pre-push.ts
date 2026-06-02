@@ -38,7 +38,10 @@ export interface GitPrePushOptions {
   dependencyRisks?: boolean;
 }
 
-export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void> {
+export async function gitPrePush(
+  options: GitPrePushOptions = {},
+  files: string[] = [],
+): Promise<void> {
   if (options.dependencyRisks && !options.project) {
     throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
   }
@@ -46,11 +49,8 @@ export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void>
   const auth = await resolveAuth().catch(() => null);
   if (!auth) return;
 
-  const refs = await readGitPushRefs();
-  if (refs.length === 0) return;
-
-  const emptyTree = await getEmptyTree();
-  const filesByRef = await collectFilesForRefs(refs, emptyTree);
+  const changedFiles = await getFilesToScan(files);
+  if (changedFiles === null) return;
 
   if (await hasUncommittedChanges()) {
     warn(
@@ -58,11 +58,24 @@ export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void>
     );
   }
 
-  await runSecretsStage(filesByRef, auth);
+  await runSecretsStage(changedFiles, auth);
 
   if (options.dependencyRisks && options.project) {
-    const changedFiles = Array.from(filesByRef.values()).flat();
     await runDepRisksStage({ project: options.project, changedFiles, auth });
+  }
+}
+
+async function getFilesToScan(files: string[]) {
+  if (files.length > 0) {
+    return files;
+  } else {
+    const refs = await readGitPushRefs();
+    if (refs.length === 0) return null;
+
+    const emptyTree = await getEmptyTree();
+    const nonDeletionRefs = refs.filter((ref) => ref.localSha !== GIT_NULL_OID);
+    const filesByRef = await collectFilesForRefs(nonDeletionRefs, emptyTree);
+    return [...new Set(Array.from(filesByRef.values()).flat())];
   }
 }
 
@@ -81,10 +94,6 @@ async function collectFilesForRefs(
 ): Promise<Map<PushRef, string[]>> {
   const out = new Map<PushRef, string[]>();
   for (const ref of refs) {
-    if (ref.localSha === GIT_NULL_OID) {
-      out.set(ref, []);
-      continue;
-    }
     out.set(ref, await getFilesForRef(ref, emptyTree));
   }
   return out;
@@ -149,8 +158,8 @@ async function getFilesForNewBranch(localSha: string, emptyTree: string): Promis
 
 export async function hasUncommittedChanges(): Promise<boolean> {
   try {
-    const result = await spawnProcess('git', ['status', '--porcelain', '-uno']);
-    return result.stdout.trim().length > 0;
+    const result = await spawnProcess('git', ['diff', '--quiet', 'HEAD']);
+    return result.exitCode !== 0;
   } catch {
     return false;
   }

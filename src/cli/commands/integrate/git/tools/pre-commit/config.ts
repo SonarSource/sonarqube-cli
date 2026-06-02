@@ -55,11 +55,11 @@ export interface PreCommitConfig {
   [key: string]: unknown;
 }
 
-function buildSonarPreCommitHook(stage: GitHookType): PreCommitHookEntry {
+function buildSonarHook(stage: GitHookType): PreCommitHookEntry {
   return {
     id: PRE_COMMIT_SONAR_HOOK_ID,
-    name: 'Sonar secrets scan',
-    entry: 'sonar analyze secrets --',
+    name: `Sonar ${stage} scan`,
+    entry: `sonar hook git-${stage}`,
     language: 'system',
     pass_filenames: true,
     stages: [stage],
@@ -127,16 +127,16 @@ export function removeSonarHooksFromPreCommitConfig(document: unknown): PreCommi
   return config;
 }
 
-/** Upserts the sonar-secrets hook into the local repo entry of a config object. */
+/** Upserts the sonar hook for the given stage into the local repo entry of a config object. */
 export function upsertSonarHook(config: PreCommitConfig, stage: GitHookType): void {
-  const sonarHook = buildSonarPreCommitHook(stage);
+  const hook = buildSonarHook(stage);
   const localRepo = findLocalRepo(config);
   if (localRepo) {
     const index = localRepo.hooks.findIndex(isSonarHookEntry);
     const idx = index >= 0 ? index : localRepo.hooks.length;
-    localRepo.hooks[idx] = sonarHook;
+    localRepo.hooks[idx] = hook;
   } else {
-    config.repos.push({ repo: 'local', hooks: [sonarHook] });
+    config.repos.push({ repo: 'local', hooks: [hook] });
   }
 }
 

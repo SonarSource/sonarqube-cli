@@ -27,8 +27,8 @@ import { CommandFailedError } from '../_common/error';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 import { handleScanError, resolveAuthAndSecrets } from './hook-dependencies';
 
-export async function gitPreCommit(): Promise<void> {
-  const stagedFiles = await getStagedFiles();
+export async function gitPreCommit(files: string[] = []): Promise<void> {
+  const stagedFiles = files.length > 0 ? files : await getStagedFiles();
   if (stagedFiles.length === 0) return;
 
   const deps = await resolveAuthAndSecrets();
