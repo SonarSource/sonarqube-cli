@@ -292,6 +292,7 @@ describe('integrate claude', () => {
         // After the interactive browser repair, the installer asks per feature (secrets, mcp);
         // 'y' to each. sqaa is auto-skipped (not a cloud connection).
         stdinChunks: ['y', 'y'],
+        deferStdinUntilBrowserAuth: true,
       });
 
       expect(result.exitCode).toBe(0);
@@ -319,6 +320,7 @@ describe('integrate claude', () => {
         browserToken: 'valid-browser-token',
         // Answer the per-feature prompts (secrets, mcp) that follow the browser repair.
         stdinChunks: ['y', 'y'],
+        deferStdinUntilBrowserAuth: true,
       });
 
       expect(result.exitCode).toBe(0);

@@ -41,6 +41,12 @@ export interface RunOptions {
    */
   stdinChunks?: string[];
   /**
+   * Holds `stdinChunks` until the browser-auth token is delivered. Set it when the
+   * prompts come after browser auth (e.g. `integrate <agent>` repair); leave it
+   * unset when they come before (e.g. `auth login` selection), or the run deadlocks.
+   */
+  deferStdinUntilBrowserAuth?: boolean;
+  /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
    * port (pattern: `port=\d+`), then delivers this token via POST request to
    * the loopback server. Use this to test interactive browser-auth flows.

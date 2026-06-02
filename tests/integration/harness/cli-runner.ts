@@ -58,6 +58,7 @@ export async function runCli(
   options: {
     stdin?: string;
     stdinChunks?: string[];
+    deferStdinUntilBrowserAuth?: boolean;
     timeoutMs?: number;
     cwd: string;
     browserToken?: string;
@@ -94,15 +95,21 @@ export async function runCli(
     sink.end();
   }
 
+  let signalTokenDelivered: (() => void) | undefined;
+  const tokenDelivered = new Promise<void>((resolve) => {
+    signalTokenDelivered = resolve;
+  });
+
   // Pump stdin chunks concurrently (awaited after exit): with browserToken, stdout must stay
   // drained and the loopback token deliverable while chunks feed the prompts that follow repair.
   let stdinPump: Promise<void> | undefined;
   if (options.stdinChunks !== undefined && proc.stdin) {
     const sink = proc.stdin as { write(data: Uint8Array): void; end(): void };
     const encoder = new TextEncoder();
-    // Write each chunk with a delay so readline in the CLI process finishes
-    // handling one prompt before the next chunk arrives for the next prompt.
     stdinPump = (async () => {
+      if (options.deferStdinUntilBrowserAuth) await tokenDelivered;
+      // Write each chunk with a delay so readline in the CLI process finishes
+      // handling one prompt before the next chunk arrives for the next prompt.
       for (const chunk of options.stdinChunks ?? []) {
         await new Promise((r) => setTimeout(r, STDIN_CHUNK_DELAY_MS));
         sink.write(encoder.encode(chunk));
@@ -124,6 +131,7 @@ export async function runCli(
       proc.stdout,
       options.browserToken,
       options.browserTokenName,
+      () => signalTokenDelivered?.(),
     );
   } else {
     stdout = await new Response(proc.stdout).text();
@@ -173,6 +181,7 @@ async function streamStdoutAndDeliverToken(
   stream: ReadableStream<Uint8Array>,
   token: string,
   tokenName?: string,
+  onDelivered?: () => void,
 ): Promise<string> {
   const decoder = new TextDecoder();
   const reader = stream.getReader();
@@ -188,10 +197,13 @@ async function streamStdoutAndDeliverToken(
 
       if (!tokenDelivered) {
         tokenDelivered = tryDeliverToken(accumulated, token, tokenName);
+        if (tokenDelivered) onDelivered?.();
       }
     }
   } finally {
     reader.releaseLock();
+    // Unblock the pump if the token never arrived, so a broken run fails fast.
+    onDelivered?.();
   }
 
   return accumulated;
