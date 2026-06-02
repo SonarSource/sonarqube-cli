@@ -21,7 +21,10 @@
 import { normalizePath } from '../../../../../../lib/fs-utils';
 import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
-import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
+import {
+  sonarScaScannerBinaryDependency,
+  sonarSecretsBinaryDependency,
+} from '../../../_common/registry/dependencies';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { nativeGitHookResource } from './resource';
@@ -33,7 +36,16 @@ const GLOBAL_GIT_CONFIG_REMEDIATION_HINT =
 export const nativeGitIntegration: IntegrationDeclaration<IntegrateGitOptions> = {
   id: NATIVE_GIT_INTEGRATION_ID,
   displayName: 'Native Git integration',
-  features: [createNativeGitFeature('pre-commit'), createNativeGitFeature('pre-push')],
+  features: [
+    createNativeGitFeature('pre-commit'),
+    createNativeGitFeature('pre-push'),
+    {
+      id: 'pre-push-sca-scanner',
+      displayName: 'SCA scanner binary',
+      when: ({ options }) => options.hook === 'pre-push' && options.withDependencyRisks === true,
+      dependencies: [sonarScaScannerBinaryDependency],
+    },
+  ],
 };
 
 function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitOptions> {

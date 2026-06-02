@@ -18,9 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { SONAR_SECRETS_DIST_PREFIX } from '../../../../../../lib/config-constants';
-import { SECRETS_BINARY_NAME } from '../../../../../../lib/install-types';
 import {
+  SCA_SCANNER_CLI_DIST_PREFIX,
+  SONAR_SECRETS_DIST_PREFIX,
+} from '../../../../../../lib/config-constants';
+import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from '../../../../../../lib/install-types';
+import {
+  SCA_SCANNER_CLI_SIGNATURES,
+  SCA_SCANNER_CLI_VERSION,
   SONAR_SECRETS_SIGNATURES,
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
@@ -46,6 +51,16 @@ export const SonarSourceBinary = {
       version: SONAR_SECRETS_VERSION,
       distPrefix: SONAR_SECRETS_DIST_PREFIX,
       signatures: SONAR_SECRETS_SIGNATURES,
+      publicKey: SONARSOURCE_PUBLIC_KEY,
+    },
+  },
+  ScaScanner: {
+    id: SCA_SCANNER_BINARY_NAME,
+    spec: {
+      name: SCA_SCANNER_BINARY_NAME,
+      version: SCA_SCANNER_CLI_VERSION,
+      distPrefix: SCA_SCANNER_CLI_DIST_PREFIX,
+      signatures: SCA_SCANNER_CLI_SIGNATURES,
       publicKey: SONARSOURCE_PUBLIC_KEY,
     },
   },
@@ -92,4 +107,10 @@ export const sonarSecretsBinaryDependency = sonarSourceBinary({
   id: 'sonar-secrets',
   displayName: 'sonar-secrets binary',
   binary: SonarSourceBinary.SonarSecrets,
+});
+
+export const sonarScaScannerBinaryDependency = sonarSourceBinary({
+  id: SCA_SCANNER_BINARY_NAME,
+  displayName: 'sca-scanner binary',
+  binary: SonarSourceBinary.ScaScanner,
 });

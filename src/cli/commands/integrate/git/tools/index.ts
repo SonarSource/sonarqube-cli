@@ -35,4 +35,4 @@ export {
   PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_INTEGRATION_ID,
 } from './pre-commit';
-export { HOOK_MARKER } from './shared';
+export { hasSonarHookMarker, HOOK_MARKER } from './shared';

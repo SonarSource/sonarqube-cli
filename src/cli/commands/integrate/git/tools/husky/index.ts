@@ -20,11 +20,14 @@
 
 import { join } from 'node:path';
 
-import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
+import {
+  sonarScaScannerBinaryDependency,
+  sonarSecretsBinaryDependency,
+} from '../../../_common/registry/dependencies';
 import { textSnippet } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { HOOK_MARKER } from '../shared';
+import { HOOK_MARKER, LEGACY_HOOK_MARKERS } from '../shared';
 import { getHuskySnippetContent } from './shell-fragments';
 
 export const HUSKY_INTEGRATION_ID = 'husky';
@@ -32,7 +35,16 @@ export const HUSKY_INTEGRATION_ID = 'husky';
 export const huskyIntegration: IntegrationDeclaration<IntegrateGitOptions> = {
   id: HUSKY_INTEGRATION_ID,
   displayName: 'Husky integration',
-  features: [createHuskyFeature('pre-commit'), createHuskyFeature('pre-push')],
+  features: [
+    createHuskyFeature('pre-commit'),
+    createHuskyFeature('pre-push'),
+    {
+      id: 'pre-push-sca-scanner',
+      displayName: 'SCA scanner binary',
+      when: ({ options }) => options.hook === 'pre-push' && options.withDependencyRisks === true,
+      dependencies: [sonarScaScannerBinaryDependency],
+    },
+  ],
 };
 
 function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitOptions> {
@@ -50,7 +62,15 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
         executable: true,
         startMarker: `# ${HOOK_MARKER}`,
         endMarker: `# sonar:end husky-${hook}`,
-        content: getHuskySnippetContent(hook).trimEnd(),
+        legacyStartMarkers: LEGACY_HOOK_MARKERS.map((m) => `# ${m}`),
+        content: (context) => {
+          const depsProject = context.attrs?.dependencyRisksProject;
+          const options =
+            typeof depsProject === 'string' && depsProject.length > 0
+              ? { dependencyRisksProject: depsProject }
+              : {};
+          return getHuskySnippetContent(hook, options).trimEnd();
+        },
       }),
     ],
   };

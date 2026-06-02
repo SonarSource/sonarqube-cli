@@ -20,8 +20,16 @@
 
 import type { GitHookType } from '../options';
 
-export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
-export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping secrets scan';
+export const HOOK_MARKER = 'Sonar git hook - installed by sonar integrate git';
+// Legacy marker from earlier CLI versions — kept so re-running `sonar integrate git`
+// recognises and upgrades hooks installed before the marker was generalised.
+export const LEGACY_HOOK_MARKERS = ['Sonar secrets scan - installed by sonar integrate git'];
+export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping sonar hooks';
+
+export function hasSonarHookMarker(content: string): boolean {
+  if (content.includes(HOOK_MARKER)) return true;
+  return LEGACY_HOOK_MARKERS.some((m) => content.includes(m));
+}
 
 export function resolveSonarHookCommand(hook: GitHookType): string {
   return hook === 'pre-commit' ? 'git-pre-commit' : 'git-pre-push';

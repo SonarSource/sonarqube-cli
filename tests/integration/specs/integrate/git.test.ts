@@ -109,6 +109,7 @@ function gitPush(
 }
 
 const INTEGRATION_TEST_TOKEN = 'test-token';
+const TEST_PROJECT_KEY = 'my-project';
 const LEGACY_PRE_COMMIT_REPO = 'https://github.com/SonarSource/sonar-secrets-pre-commit';
 
 type InstalledStateJson = {
@@ -196,13 +197,17 @@ function readYamlFile<T>(path: string): T {
   return yaml.load(readFileSync(path, 'utf-8')) as T;
 }
 
-type SetupAuthOptions = { withSecretsBinary?: boolean };
-
 async function setupAuthenticated(
   harness: TestHarness,
-  options: SetupAuthOptions = {},
+  options: { withSecretsBinary?: boolean } = {},
 ): Promise<void> {
-  const server = await harness.newFakeServer().withAuthToken(INTEGRATION_TEST_TOKEN).start();
+  const server = await harness
+    .newFakeServer()
+    .withAuthToken(INTEGRATION_TEST_TOKEN)
+    .withVersion('2026.4')
+    .withProject(TEST_PROJECT_KEY)
+    .withScaEnabled(true)
+    .start();
   const chain = harness
     .state()
     .withActiveConnection(server.baseUrl())
@@ -418,14 +423,51 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // '\r' confirms 'Install here?'; '\x1b[B' moves the selection down to pre-push; '\r' submits
+      // '\r' confirms 'Install here?'; '\x1b[B' moves the selection down to pre-push; '\r' submits; 'n' declines dep-risks prompt
       const result = await harness.run('integrate git', {
-        stdinChunks: ['\r', '\x1b[B', '\r'],
+        stdinChunks: ['\r', '\x1b[B', '\r', 'n'],
       });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints dependency-risks project line when --with-dependency-risks is set',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        `integrate git --hook pre-push --with-dependency-risks -p ${TEST_PROJECT_KEY} --non-interactive`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `Dependency-risks scanning: enabled for project '${TEST_PROJECT_KEY}'`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints dependency-risks project line when confirmed via interactive prompts',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      // 'y' confirms 'Install here?'; '\x1b[B' + '\r' selects pre-push; 'y' confirms dep-risks; project key + '\r' enters project key
+      const result = await harness.run('integrate git', {
+        stdinChunks: ['y', '\x1b[B', '\r', 'y', `${TEST_PROJECT_KEY}\r`],
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `Dependency-risks scanning: enabled for project '${TEST_PROJECT_KEY}'`,
+      );
     },
     { timeout: 15000 },
   );
@@ -563,6 +605,9 @@ describe('integrate git (husky)', () => {
       const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-commit'), 'utf-8');
       expect(
         countOccurrences(hookContent, '# Sonar secrets scan - installed by sonar integrate git'),
+      ).toBe(0);
+      expect(
+        countOccurrences(hookContent, '# Sonar git hook - installed by sonar integrate git'),
       ).toBe(1);
       expect(countOccurrences(hookContent, 'hook git-pre-commit')).toBe(1);
       expect(hookContent).toContain('# sonar:end husky-pre-commit');
@@ -815,6 +860,97 @@ describe('integrate git (pre-commit framework)', () => {
           hook: 'pre-commit',
         },
       });
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('integrate git (dependency-risks server checks)', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'fails when the project is not found on the server',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(INTEGRATION_TEST_TOKEN)
+        .withVersion('2026.4')
+        .withScaEnabled(true)
+        // no .withProject() — /api/components/show returns 404
+        .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), INTEGRATION_TEST_TOKEN);
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-push --with-dependency-risks --project missing-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('not found on the connected server');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'fails when SCA is not available on the server',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(INTEGRATION_TEST_TOKEN)
+        .withVersion('2026.4')
+        .withProject('test-project')
+        .withScaEnabled(false)
+        .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), INTEGRATION_TEST_TOKEN);
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-push --with-dependency-risks --project test-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'Software Composition Analysis is not available',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'fails when the SonarQube Server version is too old for SCA',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(INTEGRATION_TEST_TOKEN)
+        .withVersion('2026.3')
+        .withProject('test-project')
+        .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), INTEGRATION_TEST_TOKEN);
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-push --with-dependency-risks --project test-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('requires SonarQube Server 2026.4 or later');
     },
     { timeout: 15000 },
   );

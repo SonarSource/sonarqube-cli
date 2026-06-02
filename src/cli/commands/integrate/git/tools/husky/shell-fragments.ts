@@ -21,6 +21,11 @@
 import type { GitHookType } from '../../options';
 import { HOOK_MARKER, resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
 
+export interface HuskySnippetOptions {
+  /** When set on a pre-push snippet, also runs the dependency-risks scan for this project key. */
+  dependencyRisksProject?: string;
+}
+
 function huskyBinBlock(): string {
   return [
     String.raw`CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')`,
@@ -29,18 +34,32 @@ function huskyBinBlock(): string {
   ].join('\n');
 }
 
-export function getHuskySnippetContent(hook: GitHookType): string {
-  return [huskyBinBlock(), `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}`, ''].join('\n');
+export function getHuskySnippetContent(
+  hook: GitHookType,
+  options: HuskySnippetOptions = {},
+): string {
+  const hookCommand = resolveSonarHookCommand(hook);
+  const flags =
+    hook === 'pre-push' && options.dependencyRisksProject
+      ? ` -p '${options.dependencyRisksProject}' --dependency-risks`
+      : '';
+  const lines: string[] = [
+    huskyBinBlock(),
+    `SONAR_HOOK_STDIN=$(cat)`,
+    `printf '%s' "$SONAR_HOOK_STDIN" | "$SONAR_BIN" hook ${hookCommand}${flags}`,
+    '',
+  ];
+  return lines.join('\n');
 }
 
-export function getHuskySnippet(hook: GitHookType): string {
-  return ['', `# ${HOOK_MARKER}`, getHuskySnippetContent(hook)].join('\n');
+export function getHuskySnippet(hook: GitHookType, options: HuskySnippetOptions = {}): string {
+  return ['', `# ${HOOK_MARKER}`, getHuskySnippetContent(hook, options)].join('\n');
 }
 
 export function getHuskyPreCommitSnippet(): string {
   return getHuskySnippet('pre-commit');
 }
 
-export function getHuskyPrePushSnippet(): string {
-  return getHuskySnippet('pre-push');
+export function getHuskyPrePushSnippet(options: HuskySnippetOptions = {}): string {
+  return getHuskySnippet('pre-push', options);
 }

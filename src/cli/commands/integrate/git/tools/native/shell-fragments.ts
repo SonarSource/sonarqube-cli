@@ -21,6 +21,11 @@
 import type { GitHookType } from '../../options';
 import { HOOK_MARKER, resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
 
+export interface HookScriptOptions {
+  /** When set on a pre-push script, also runs the dependency-risks scan for this project key. */
+  dependencyRisksProject?: string;
+}
+
 function nativeBinBlock(): string {
   return [
     // `|| :` avoids exiting under `sh -e` when `command -v` fails (missing sonar).
@@ -29,20 +34,27 @@ function nativeBinBlock(): string {
   ].join('\n');
 }
 
-export function getHookScript(hook: GitHookType): string {
-  return [
+export function getHookScript(hook: GitHookType, options: HookScriptOptions = {}): string {
+  const hookCommand = resolveSonarHookCommand(hook);
+  const flags =
+    hook === 'pre-push' && options.dependencyRisksProject
+      ? ` -p '${options.dependencyRisksProject}' --dependency-risks`
+      : '';
+  const lines: string[] = [
     '#!/bin/sh',
     `# ${HOOK_MARKER}`,
     nativeBinBlock(),
-    `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}`,
+    `SONAR_HOOK_STDIN=$(cat)`,
+    `printf '%s' "$SONAR_HOOK_STDIN" | "$SONAR_BIN" hook ${hookCommand}${flags}`,
     '',
-  ].join('\n');
+  ];
+  return lines.join('\n');
 }
 
 export function getPreCommitHookScript(): string {
   return getHookScript('pre-commit');
 }
 
-export function getPrePushHookScript(): string {
-  return getHookScript('pre-push');
+export function getPrePushHookScript(options: HookScriptOptions = {}): string {
+  return getHookScript('pre-push', options);
 }

@@ -37,16 +37,22 @@ import {
   isGitHookType,
   resolveGitHooksDir,
   resolveHookType,
+  resolveOptionalFeatures,
+  resolveProjectKey,
   showInstallationStatus,
   showPostInstallInfo,
+  validateDependencyRisksOption,
+  validateProjectKeyOption,
 } from '../../../../../../src/cli/commands/integrate/git';
 import { PRE_COMMIT_CONFIG_FILE } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
 import { HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
+import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver.ts';
 import { GLOBAL_HOOKS_DIR } from '../../../../../../src/lib/config-constants';
 import * as processLib from '../../../../../../src/lib/process.js';
 import * as discovery from '../../../../../../src/lib/project-workspace';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
 import { type CliState, getDefaultState } from '../../../../../../src/lib/state';
+import { SonarQubeClient } from '../../../../../../src/sonarqube/client';
 import {
   clearMockUiCalls,
   getMockUiCalls,
@@ -59,12 +65,87 @@ const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 /** Simulate `git config core.hooksPath` returning "not set" (exit code 1). */
 const NO_HOOKS_PATH = { exitCode: 1, stdout: '', stderr: '' };
 
+const MOCK_AUTH: ResolvedAuth = {
+  connectionType: 'cloud',
+  serverUrl: 'https://sonarcloud.io',
+  token: 'mock-token',
+  orgKey: 'my-org',
+};
+
 describe('isGitHookType', () => {
   it('returns true for valid hook types and false otherwise', () => {
     expect(isGitHookType('pre-commit')).toBe(true);
     expect(isGitHookType('pre-push')).toBe(true);
     expect(isGitHookType('commit-msg')).toBe(false);
     expect(isGitHookType('')).toBe(false);
+  });
+});
+
+describe('validateProjectKeyOption', () => {
+  it('does nothing when key is undefined', () => {
+    expect(() => validateProjectKeyOption('--some-option', undefined)).not.toThrow();
+  });
+
+  it('throws when project key is empty', () => {
+    expect(() => validateProjectKeyOption('--some-option', '')).toThrow(InvalidOptionError);
+    expect(() => validateProjectKeyOption('--some-option', '   ')).toThrow(InvalidOptionError);
+  });
+
+  it('throws when project key contains invalid characters', () => {
+    expect(() => validateProjectKeyOption('--some-option', 'proj ect')).toThrow(InvalidOptionError);
+  });
+
+  it('throws when project key exceeds 400 characters', () => {
+    expect(() => validateProjectKeyOption('--some-option', 'a'.repeat(401))).toThrow(
+      InvalidOptionError,
+    );
+  });
+
+  it('accepts a valid project key', () => {
+    expect(() => validateProjectKeyOption('--some-option', 'my-project')).not.toThrow();
+  });
+});
+
+describe('validateDependencyRisksOption', () => {
+  it('does nothing when withDependencyRisks is false/undefined', () => {
+    expect(() => validateDependencyRisksOption({})).not.toThrow();
+    expect(() => validateDependencyRisksOption({ withDependencyRisks: false })).not.toThrow();
+  });
+
+  it('throws when project key is missing in non-interactive mode', () => {
+    expect(() =>
+      validateDependencyRisksOption({ withDependencyRisks: true, nonInteractive: true }),
+    ).toThrow(InvalidOptionError);
+  });
+
+  it('does nothing when project key is missing in interactive mode', () => {
+    expect(() => validateDependencyRisksOption({ withDependencyRisks: true })).not.toThrow();
+  });
+
+  it('throws when combined with a non-pre-push hook', () => {
+    expect(() =>
+      validateDependencyRisksOption({
+        withDependencyRisks: true,
+        project: 'my-project',
+        hook: 'pre-commit',
+      }),
+    ).toThrow(InvalidOptionError);
+  });
+
+  it('does nothing when hook is pre-push', () => {
+    expect(() =>
+      validateDependencyRisksOption({
+        withDependencyRisks: true,
+        project: 'my-project',
+        hook: 'pre-push',
+      }),
+    ).not.toThrow();
+  });
+
+  it('does nothing when hook is not set', () => {
+    expect(() =>
+      validateDependencyRisksOption({ withDependencyRisks: true, project: 'my-project' }),
+    ).not.toThrow();
   });
 });
 
@@ -377,6 +458,112 @@ describe('resolveHookType', () => {
   });
 });
 
+describe('resolveOptionalFeatures', () => {
+  beforeEach(() => {
+    setMockUi(true);
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+  });
+
+  it('disables all features when hook is pre-commit (regardless of other options)', async () => {
+    const result = await resolveOptionalFeatures({}, 'pre-commit');
+    expect(result).toEqual({ dependencyRisks: false });
+  });
+
+  it('enables dependency-risks when --with-dependency-risks flag is set (no prompts)', async () => {
+    const result = await resolveOptionalFeatures(
+      { withDependencyRisks: true, nonInteractive: true },
+      'pre-push',
+    );
+    expect(result).toEqual({ dependencyRisks: true });
+  });
+
+  it('disables all features when non-interactive and no flag', async () => {
+    const result = await resolveOptionalFeatures({ nonInteractive: true }, 'pre-push');
+    expect(result).toEqual({ dependencyRisks: false });
+  });
+
+  it('disables dependency-risks when user declines the confirm prompt', async () => {
+    queueMockResponse(false);
+    const result = await resolveOptionalFeatures({}, 'pre-push');
+    expect(result).toEqual({ dependencyRisks: false });
+  });
+
+  it('enables dependency-risks when user accepts the confirm prompt', async () => {
+    queueMockResponse(true);
+    const result = await resolveOptionalFeatures({}, 'pre-push');
+    expect(result).toEqual({ dependencyRisks: true });
+  });
+
+  it('disables dependency-risks when user cancels the confirm prompt', async () => {
+    queueMockResponse(null);
+    const result = await resolveOptionalFeatures({}, 'pre-push');
+    expect(result).toEqual({ dependencyRisks: false });
+  });
+});
+
+describe('resolveProjectKey', () => {
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+  });
+
+  it('returns the option value silently when --project is valid', async () => {
+    const result = await resolveProjectKey({ project: 'my-project' });
+    expect(result).toBe('my-project');
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'text' && String(c.args[0]).includes('A project key is required'),
+      ),
+    ).toBe(false);
+  });
+
+  it('warns about invalid --project then shows message and prompts', async () => {
+    queueMockResponse('my-project');
+    const result = await resolveProjectKey({ project: 'invalid key!' });
+    expect(result).toBe('my-project');
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'warn' && String(c.args[0]).includes('invalid key!'),
+      ),
+    ).toBe(true);
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'text' && String(c.args[0]).includes('A project key is required'),
+      ),
+    ).toBe(true);
+  });
+
+  it('shows message and prompts when no --project is provided', async () => {
+    queueMockResponse('my-project');
+    const result = await resolveProjectKey({});
+    expect(result).toBe('my-project');
+    expect(
+      getMockUiCalls().some(
+        (c) => c.method === 'text' && String(c.args[0]).includes('A project key is required'),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns null when user cancels the prompt', async () => {
+    queueMockResponse(null);
+    const result = await resolveProjectKey({});
+    expect(result).toBeNull();
+  });
+
+  it('trims whitespace from the prompted value', async () => {
+    queueMockResponse('  my-project  ');
+    const result = await resolveProjectKey({});
+    expect(result).toBe('my-project');
+  });
+});
+
 describe('showPostInstallInfo', () => {
   beforeEach(() => {
     setMockUi(true);
@@ -555,23 +742,29 @@ describe('integrateGit', () => {
   /* eslint-disable @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable */
   it('throws InvalidOptionError when --hook is invalid before git checks', async () => {
     await expect(
-      integrateGit({ nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions),
+      integrateGit(MOCK_AUTH, {
+        nonInteractive: true,
+        hook: 'typo',
+      } as unknown as IntegrateGitOptions),
     ).rejects.toBeInstanceOf(InvalidOptionError);
     await expect(
-      integrateGit({ nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions),
+      integrateGit(MOCK_AUTH, {
+        nonInteractive: true,
+        hook: 'typo',
+      } as unknown as IntegrateGitOptions),
     ).rejects.toThrow('--hook must be pre-commit or pre-push');
   });
 
   it('throws InvalidOptionError for invalid --hook on global install before other work', async () => {
     await expect(
-      integrateGit({
+      integrateGit(MOCK_AUTH, {
         global: true,
         nonInteractive: true,
         hook: 'typo',
       } as unknown as IntegrateGitOptions),
     ).rejects.toBeInstanceOf(InvalidOptionError);
     await expect(
-      integrateGit({
+      integrateGit(MOCK_AUTH, {
         global: true,
         nonInteractive: true,
         hook: 'typo',
@@ -581,14 +774,16 @@ describe('integrateGit', () => {
 
   it('throws CommandFailedError when not inside a git repository', () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/not-a-repo', isGit: false });
-    expect(integrateGit({ nonInteractive: true })).rejects.toThrow('No git repository found');
+    expect(integrateGit(MOCK_AUTH, { nonInteractive: true })).rejects.toThrow(
+      'No git repository found',
+    );
   });
 
   it('asks for confirmation showing the repository path when a git repo is found', async () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/my/project', isGit: true });
     queueMockResponse(null); // user cancels at the confirm prompt
     try {
-      await integrateGit({});
+      await integrateGit(MOCK_AUTH, {});
     } catch {
       // expected cancellation
     }
@@ -610,7 +805,7 @@ describe('integrateGit', () => {
       stderr: '',
     });
     try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' });
+      await integrateGit(MOCK_AUTH, { nonInteractive: true, hook: 'pre-commit' });
       const feature = state.integrations.installed[0]?.features[0];
       expect(state.integrations.installed[0]?.integrationId).toBe('husky');
       expect(feature).toMatchObject({
@@ -653,7 +848,7 @@ describe('integrateGit', () => {
       throw new Error(`Unexpected command: ${command} ${args.join(' ')}`);
     });
     try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' });
+      await integrateGit(MOCK_AUTH, { nonInteractive: true, hook: 'pre-commit' });
       const feature = state.integrations.installed[0]?.features[0];
       expect(state.integrations.installed[0]?.integrationId).toBe('pre-commit');
       expect(feature).toMatchObject({
@@ -685,7 +880,7 @@ describe('integrateGit', () => {
     findGitRootSpy.mockReturnValue({ gitRoot: TEMP_DIR, isGit: true });
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
     try {
-      await integrateGit({ nonInteractive: true, hook: 'pre-commit' });
+      await integrateGit(MOCK_AUTH, { nonInteractive: true, hook: 'pre-commit' });
       expect(existsSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'))).toBe(true);
       const feature = state.integrations.installed[0]?.features[0];
       expect(state.integrations.installed[0]?.integrationId).toBe('native-git');
@@ -711,6 +906,95 @@ describe('integrateGit', () => {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
+  });
+});
+
+describe('integrateGit dep-risks server validation', () => {
+  let findGitRootSpy: ReturnType<typeof spyOn>;
+  let installBinarySpy: ReturnType<typeof spyOn>;
+  let resolveBinaryPathSpy: ReturnType<typeof spyOn>;
+  let loadStateSpy: ReturnType<typeof spyOn>;
+  let saveStateSpy: ReturnType<typeof spyOn>;
+  let checkComponentSpy: ReturnType<typeof spyOn>;
+  let checkScaEnabledSpy: ReturnType<typeof spyOn>;
+  let spawnSpy: ReturnType<typeof spyOn>;
+  let state: CliState;
+
+  const DEP_RISKS_AUTH: ResolvedAuth = {
+    connectionType: 'cloud',
+    serverUrl: 'https://sonarcloud.io',
+    token: 'mock-token',
+    orgKey: 'my-org',
+  };
+
+  const DEP_RISKS_OPTIONS: IntegrateGitOptions = {
+    nonInteractive: true,
+    hook: 'pre-push',
+    withDependencyRisks: true,
+    project: 'my-project',
+  };
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
+    findGitRootSpy = spyOn(discovery, 'findGitRoot').mockReturnValue({
+      gitRoot: TEMP_DIR,
+      isGit: true,
+    });
+    installBinarySpy = spyOn(binaryInstall, 'installBinary').mockResolvedValue({
+      binaryPath: '/usr/local/bin/sonar-secrets',
+      freshlyInstalled: true,
+    });
+    resolveBinaryPathSpy = spyOn(binaryInstall, 'resolveBinaryPath').mockReturnValue(null);
+    state = getDefaultState('test');
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockImplementation(() => state);
+    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
+    checkScaEnabledSpy = spyOn(SonarQubeClient.prototype, 'checkScaEnabled').mockResolvedValue(
+      true,
+    );
+  });
+
+  afterEach(() => {
+    setMockUi(false);
+    findGitRootSpy.mockRestore();
+    installBinarySpy.mockRestore();
+    resolveBinaryPathSpy.mockRestore();
+    loadStateSpy.mockRestore();
+    saveStateSpy.mockRestore();
+    spawnSpy.mockRestore();
+    checkComponentSpy.mockRestore();
+    checkScaEnabledSpy.mockRestore();
+    rmSync(TEMP_DIR, { recursive: true, force: true });
+  });
+
+  it('installs dep-risks hook when project exists and SCA is enabled', async () => {
+    await integrateGit(DEP_RISKS_AUTH, DEP_RISKS_OPTIONS);
+    const feature = state.integrations.installed[0]?.features[0];
+    expect(feature?.attrs?.dependencyRisksProject).toBe('my-project');
+    expect(getMockUiCalls().some((c) => c.method === 'warn')).toBe(false);
+  });
+
+  it('throws CommandFailedError when project is not found on server', async () => {
+    checkComponentSpy.mockResolvedValue(false);
+    await expect(integrateGit(DEP_RISKS_AUTH, DEP_RISKS_OPTIONS)).rejects.toBeInstanceOf(
+      CommandFailedError,
+    );
+    await expect(integrateGit(DEP_RISKS_AUTH, DEP_RISKS_OPTIONS)).rejects.toThrow(
+      'not found on the connected server',
+    );
+  });
+
+  it('throws CommandFailedError when SCA is not enabled on server', async () => {
+    checkScaEnabledSpy.mockResolvedValue(false);
+    await expect(integrateGit(DEP_RISKS_AUTH, DEP_RISKS_OPTIONS)).rejects.toBeInstanceOf(
+      CommandFailedError,
+    );
+    await expect(integrateGit(DEP_RISKS_AUTH, DEP_RISKS_OPTIONS)).rejects.toThrow(
+      'Software Composition Analysis is not available',
+    );
   });
 });
 
@@ -746,7 +1030,7 @@ describe('integrateGitGlobal', () => {
     queueMockResponse(null);
     let caughtMessage = '';
     try {
-      await integrateGit({ global: true, nonInteractive: false, hook: 'pre-commit' });
+      await integrateGit(MOCK_AUTH, { global: true, nonInteractive: false, hook: 'pre-commit' });
     } catch (e) {
       caughtMessage = e instanceof Error ? e.message : '';
     }
@@ -757,7 +1041,7 @@ describe('integrateGitGlobal', () => {
     installBinarySpy.mockRejectedValue(new Error('download failed'));
     let caughtMessage = '';
     try {
-      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' });
+      await integrateGit(MOCK_AUTH, { global: true, nonInteractive: true, hook: 'pre-commit' });
     } catch (e) {
       caughtMessage = e instanceof Error ? e.message : '';
     }
@@ -771,7 +1055,7 @@ describe('integrateGitGlobal', () => {
       stderr: '',
     });
     try {
-      await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' });
+      await integrateGit(MOCK_AUTH, { global: true, nonInteractive: true, hook: 'pre-commit' });
       const calls = getMockUiCalls();
       expect(
         calls.some(
@@ -799,7 +1083,7 @@ describe('integrateGitGlobal', () => {
     try {
       let caughtError: unknown;
       try {
-        await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' });
+        await integrateGit(MOCK_AUTH, { global: true, nonInteractive: true, hook: 'pre-commit' });
       } catch (e) {
         caughtError = e;
       }
@@ -821,7 +1105,7 @@ describe('integrateGitGlobal', () => {
     try {
       let caughtError: unknown;
       try {
-        await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' });
+        await integrateGit(MOCK_AUTH, { global: true, nonInteractive: true, hook: 'pre-commit' });
       } catch (e) {
         caughtError = e;
       }

@@ -22,14 +22,11 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { resolveGitHooksDir } from '../../../../_common/git-repo';
-import type {
-  AppliedResource,
-  IntegrationContext,
-  ResourceDeclaration,
-} from '../../../_common/registry';
+import type { ResourceDeclaration } from '../../../_common/registry/resources';
+import type { AppliedResource, IntegrationContext } from '../../../_common/registry/types';
 import type { GitHookType } from '../../options';
 import { writeManagedGitHook } from './hooks';
-import { getHookScript } from './shell-fragments';
+import { getHookScript, type HookScriptOptions } from './shell-fragments';
 
 interface NativeGitHookResourceOptions {
   id: string;
@@ -53,7 +50,8 @@ class NativeGitHookResource implements ResourceDeclaration {
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
     const path = await resolveNativeGitHookPath(context, this.options.hook);
-    await writeManagedGitHook(path, this.options.hook, context.force === true);
+    const scriptOptions = hookScriptOptionsFromAttrs(context);
+    await writeManagedGitHook(path, this.options.hook, context.force === true, scriptOptions);
     return { id: this.id, resourceType: this.resourceType, path };
   }
 
@@ -61,13 +59,17 @@ class NativeGitHookResource implements ResourceDeclaration {
     const path = await resolveNativeGitHookPath(context, this.options.hook);
     try {
       const existing = await readFile(path, 'utf-8');
-      return (
-        normalizeLineEndings(existing) === normalizeLineEndings(getHookScript(this.options.hook))
-      );
+      const expected = getHookScript(this.options.hook, hookScriptOptionsFromAttrs(context));
+      return normalizeLineEndings(existing) === normalizeLineEndings(expected);
     } catch {
       return false;
     }
   }
+}
+
+function hookScriptOptionsFromAttrs(context: IntegrationContext): HookScriptOptions {
+  const value = context.attrs?.dependencyRisksProject;
+  return typeof value === 'string' && value.length > 0 ? { dependencyRisksProject: value } : {};
 }
 
 function normalizeLineEndings(content: string): string {

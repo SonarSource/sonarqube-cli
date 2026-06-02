@@ -25,4 +25,6 @@ export interface IntegrateGitOptions {
   force?: boolean;
   nonInteractive?: boolean;
   global?: boolean;
+  project?: string;
+  withDependencyRisks?: boolean;
 }
