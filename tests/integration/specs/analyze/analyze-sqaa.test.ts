@@ -457,7 +457,7 @@ describe('analyze agentic', () => {
   );
 
   it(
-    'exits with code 0, warns, and skips SQAA when no extension registered for this project',
+    'exits with code 1 when no extension registered for this project',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -465,16 +465,16 @@ describe('analyze agentic', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      // Connection exists but no withSqaaExtension() → no projectKey in registry → skip
+      // Connection exists but no withSqaaExtension() → no projectKey in registry → error
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       harness.cwd.writeFile('src/index.ts', 'const x = 1;');
 
       const result = await harness.run('analyze agentic --file src/index.ts');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate claude',
+        'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
       );
       const sqaaCalls = server
         .getRecordedRequests()
@@ -975,7 +975,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
   );
 
   it(
-    'exits with code 0 and warns when no project is configured in change-set mode',
+    'exits with code 1 when no project is configured in change-set mode',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -983,13 +983,43 @@ describe('analyze agentic — change-set mode (no --file)', () => {
         .withSqaaResponse({ issues: [] })
         .start();
 
-      // Cloud auth but no extension registered → no projectKey in registry → skip
+      // Cloud auth but no extension registered → no projectKey in registry → error
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('app.ts', 'const a = 1;');
 
       const result = await harness.run('analyze agentic');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
+      );
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 0 and skips agentic gracefully for the bare `analyze` command when no project is configured',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      // Cloud auth but no extension registered. The bare `analyze` catch-all must
+      // still skip agentic gracefully (Option A) rather than failing the command.
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      harness.cwd.writeFile('app.ts', 'const a = 1;');
+
+      const result = await harness.run('analyze');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(

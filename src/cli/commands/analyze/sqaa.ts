@@ -22,9 +22,9 @@ import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { blank, print, text } from '../../../ui';
+import { blank, print, text, warn } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
-import { InvalidOptionError } from '../_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import type { RunContext } from './sqaa-analysis';
 import { runAnalyses } from './sqaa-analysis';
 import {
@@ -33,7 +33,7 @@ import {
   readSqaaFileContent,
   toRelativePosixPath,
 } from './sqaa-api';
-import type { CloudAuth } from './sqaa-auth';
+import type { CloudAuth, SqaaAuthResolution } from './sqaa-auth';
 import { confirmLargeChangeset, resolveCloudAuthAndProject } from './sqaa-auth';
 import type { ChangeSetResult } from './sqaa-changeset';
 import { resolveChangeSet } from './sqaa-changeset';
@@ -66,11 +66,53 @@ export interface AnalyzeSqaaOptions {
   format?: OutputFormat;
 }
 
+/**
+ * Apply the command's policy to an auth/project resolution. This is where the
+ * caller (not the resolver) decides what a missing project means:
+ * - `requireProject` (explicit `analyze agentic` / `verify`): throw so the command
+ *   exits with code 1 instead of skipping silently.
+ * - otherwise (the bare `sonar analyze` catch-all): warn and return null so the
+ *   surrounding command can proceed with its other analyses.
+ *
+ * A non-Cloud connection is always a graceful skip (the warning was already emitted
+ * by resolveCloudAuth), since agentic analysis is Cloud-only.
+ */
+function resolveSqaaContext(
+  resolution: SqaaAuthResolution,
+  policy: { requireProject: boolean; command?: Command },
+): { cloudAuth: CloudAuth; projectKey: string } | null {
+  switch (resolution.kind) {
+    case 'resolved':
+      return { cloudAuth: resolution.cloudAuth, projectKey: resolution.projectKey };
+    case 'no-cloud':
+      return null;
+    case 'no-project':
+      if (policy.requireProject) {
+        throw new CommandFailedError(
+          'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
+          {
+            remediationHint:
+              "Specify one with --project, or run 'sonar integrate' to configure this project.",
+          },
+        );
+      }
+      warn(
+        'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
+      );
+      if (process.stdin.isTTY) policy.command?.outputHelp();
+      return null;
+  }
+}
+
 export async function analyzeSqaa(
   options: AnalyzeSqaaOptions,
   auth: ResolvedAuth,
   command?: Command,
+  runOptions: { requireProject?: boolean } = {},
 ): Promise<void> {
+  // Explicit `analyze agentic` / `verify` require a project (exit 1 when missing);
+  // the bare `sonar analyze` catch-all opts out so it can still run other analyses.
+  const { requireProject = true } = runOptions;
   const { file, staged, base, branch, project, force, format = 'text' } = options;
 
   if (staged && base !== undefined) {
@@ -81,7 +123,7 @@ export async function analyzeSqaa(
     if (!existsSync(file)) {
       throw new InvalidOptionError(`File not found: ${file}`);
     }
-    await runSqaaAnalysis(file, auth, branch, project, command, format);
+    await runSqaaAnalysis(file, auth, branch, project, command, format, requireProject);
     return;
   }
 
@@ -104,7 +146,8 @@ export async function analyzeSqaa(
 
   // Resolve cloud auth + project key BEFORE prompting.
   // Pass repoRoot so we reuse the already-resolved root instead of spawning git again.
-  const resolved = await resolveCloudAuthAndProject(auth, project, command, changeSet.repoRoot);
+  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolved = resolveSqaaContext(resolution, { requireProject, command });
   if (!resolved) return;
 
   // JSON mode is consumed by scripts/CI: never block on an interactive prompt
@@ -123,8 +166,10 @@ async function runSqaaAnalysis(
   explicitProject?: string,
   command?: Command,
   format: OutputFormat = 'text',
+  requireProject = true,
 ): Promise<void> {
-  const resolved = await resolveCloudAuthAndProject(auth, explicitProject, command);
+  const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
+  const resolved = resolveSqaaContext(resolution, { requireProject, command });
   if (!resolved) return;
 
   const { cloudAuth, projectKey } = resolved;
@@ -219,7 +264,8 @@ export async function buildSqaaJsonReport(
   const { file, staged, base, branch, project, force } = options;
 
   if (file !== undefined) {
-    const resolved = await resolveCloudAuthAndProject(auth, project, command);
+    const resolution = await resolveCloudAuthAndProject(auth, project);
+    const resolved = resolveSqaaContext(resolution, { requireProject: false, command });
     if (!resolved) return null;
 
     const { cloudAuth, projectKey } = resolved;
@@ -237,7 +283,8 @@ export async function buildSqaaJsonReport(
     );
   }
 
-  const resolved = await resolveCloudAuthAndProject(auth, project, command, changeSet.repoRoot);
+  const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
+  const resolved = resolveSqaaContext(resolution, { requireProject: false, command });
   if (!resolved) return null;
 
   // JSON mode is consumed by scripts/CI: never block on an interactive prompt
