@@ -81,7 +81,9 @@ export async function analyzeAll(
 
   if (file !== undefined) {
     await analyzeSecrets({ paths: [file] }, auth);
-    await analyzeSqaa({ file, format }, auth, command);
+    // Bare `analyze` is a best-effort catch-all: skip agentic gracefully when no
+    // project is configured rather than failing the whole command.
+    await analyzeSqaa({ file, format }, auth, command, { requireProject: false });
     return;
   }
 
@@ -100,7 +102,8 @@ export async function analyzeAll(
   // analyzeSqaa resolves the change set again internally. The two resolutions may
   // cover slightly different sets if the working tree changes between calls — this
   // is acceptable since the analyses are independent and best-effort.
-  await analyzeSqaa({ staged, base, force, format }, auth, command);
+  // requireProject: false → bare `analyze` skips agentic gracefully when unconfigured.
+  await analyzeSqaa({ staged, base, force, format }, auth, command, { requireProject: false });
 }
 
 async function analyzeAllJson(
