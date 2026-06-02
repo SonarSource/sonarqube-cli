@@ -27,7 +27,7 @@ import {
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
 } from '../../../../lib/signatures';
-import { success } from '../../../../ui';
+import { discreetSuccess } from '../../../../ui';
 import {
   type BinarySpec,
   buildLocalBinaryName as buildBinaryName,
@@ -51,7 +51,7 @@ export const SECRETS_SPEC: BinarySpec = {
 export async function installSecretsBinary(): Promise<string> {
   const { binaryPath, freshlyInstalled } = await resolveSecretsBinary({});
   if (freshlyInstalled) {
-    success(`sonar-secrets installed at ${binaryPath}`);
+    discreetSuccess(`sonar-secrets installed at ${binaryPath}`);
   }
   return binaryPath;
 }

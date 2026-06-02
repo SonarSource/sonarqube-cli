@@ -22,7 +22,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 
-import { info, success } from '../../../../../../ui';
+import { discreetSuccess, info } from '../../../../../../ui';
 import type { GitHookType } from '../../options';
 import { HOOK_MARKER } from '../shared';
 import { getHuskySnippet } from './shell-fragments';
@@ -45,5 +45,5 @@ export async function installViaHusky(huskyHookPath: string, hook: GitHookType):
   }
   const newContent = content ? content.trimEnd() + getHuskySnippet(hook) : getHuskySnippet(hook);
   await writeFile(huskyHookPath, newContent, { encoding: 'utf-8', mode: 0o755 });
-  success(`${hook} hook installed (Husky detected: added to .husky/${hook}).`);
+  discreetSuccess(`${hook} hook installed (Husky detected: added to .husky/${hook}).`);
 }

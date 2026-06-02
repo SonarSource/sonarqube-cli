@@ -107,8 +107,8 @@ describe('generic integration installer', () => {
     expect(operationCalls).toEqual(['called']);
     expect(saveStateSpy).toHaveBeenCalledWith(state);
     expect(hasUiCall('text', 'Installing Test Integration: Feature')).toBe(true);
-    expect(hasUiCall('success', 'Installed Config file')).toBe(true);
-    expect(hasUiCall('success', 'Applied Setup operation')).toBe(true);
+    expect(hasUiCall('discreetSuccess', 'Installed Config file')).toBe(true);
+    expect(hasUiCall('discreetSuccess', 'Applied Setup operation')).toBe(true);
   });
 
   it('supports feature-specific target routing from a single installer invocation', async () => {

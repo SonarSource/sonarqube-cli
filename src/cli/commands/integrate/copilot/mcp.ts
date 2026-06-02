@@ -19,7 +19,7 @@
  */
 import { setupMcpServerForAgent } from '../../../../lib/mcp/mcp-helper';
 import { type DiscoveredProject } from '../../../../lib/project-workspace';
-import { info, success, warn } from '../../../../ui';
+import { discreetSuccess, info, warn } from '../../../../ui';
 
 export async function setupMcpServer(
   project: DiscoveredProject,
@@ -29,7 +29,7 @@ export async function setupMcpServer(
   info(`Setting up SonarQube MCP Server...`);
   try {
     await setupMcpServerForAgent('copilot', project.rootDir, isGlobal, projectKey);
-    success(`SonarQube MCP Server configured`);
+    discreetSuccess(`SonarQube MCP Server configured`);
   } catch (error) {
     if (error instanceof Error) {
       warn(`Failed to setup MCP server: ${error.message}`);

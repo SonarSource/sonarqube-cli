@@ -22,7 +22,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { success, text, warn } from '../../../../../../ui';
+import { discreetSuccess, text, warn } from '../../../../../../ui';
 import { CommandFailedError } from '../../../../_common/error';
 import type { GitHookType } from '../../options';
 import { HOOK_MARKER } from '../shared';
@@ -56,5 +56,5 @@ export async function installViaGitHooks(
 ): Promise<void> {
   const hookPath = join(hooksDir, hook);
   await writeManagedGitHook(hookPath, hook, force);
-  success(`${hook} hook installed at ${hookPath}`);
+  discreetSuccess(`${hook} hook installed at ${hookPath}`);
 }

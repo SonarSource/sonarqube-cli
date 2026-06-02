@@ -36,7 +36,7 @@ import type {
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
 import { getDefaultState } from '../../../../../lib/state';
-import { info, success, text, warn } from '../../../../../ui';
+import { discreetSuccess, info, text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import { supportedIntegrations } from '../../index';
 import type { IntegrationRegistry } from './core';
@@ -677,19 +677,19 @@ export async function installIntegration<TOptions>({
       {
         callbacks: {
           onDependencyInstalled: (dependency) => {
-            success(`Installed ${dependency.displayName ?? dependency.id}`);
+            discreetSuccess(`Installed ${dependency.displayName ?? dependency.id}`);
           },
           onDependencySkipped: (dependency) => {
             info(`${dependency.displayName ?? dependency.id} already installed`);
           },
           onResourceInstalled: (resource) => {
-            success(`Installed ${resource.displayName ?? resource.id}`);
+            discreetSuccess(`Installed ${resource.displayName ?? resource.id}`);
           },
           onResourceSkipped: (resource) => {
             info(`${resource.displayName ?? resource.id} already installed`);
           },
           onOperationApplied: (operation) => {
-            success(`Applied ${operation.displayName ?? operation.id}`);
+            discreetSuccess(`Applied ${operation.displayName ?? operation.id}`);
           },
         },
         executionMode: 'install',

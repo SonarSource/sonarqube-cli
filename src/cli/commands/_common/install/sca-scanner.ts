@@ -27,7 +27,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONARSOURCE_PUBLIC_KEY,
 } from '../../../../lib/signatures';
-import { success } from '../../../../ui';
+import { discreetSuccess } from '../../../../ui';
 import { type BinarySpec, buildLocalBinaryName as buildBinaryName, installBinary } from './binary';
 
 export const SCA_SCANNER_SPEC: BinarySpec = {
@@ -41,7 +41,7 @@ export const SCA_SCANNER_SPEC: BinarySpec = {
 export async function installScaScannerBinary(): Promise<string> {
   const { binaryPath, freshlyInstalled } = await installBinary(SCA_SCANNER_SPEC);
   if (freshlyInstalled) {
-    success(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`);
+    discreetSuccess(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`);
   }
   return binaryPath;
 }
