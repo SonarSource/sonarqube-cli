@@ -39,7 +39,6 @@ import {
   PROJECT_HOOKS_REL_DIR,
   SCRIPT_REL_DIR,
 } from './hooks';
-import { COPILOT_INTEGRATION_ID } from './ids';
 import {
   buildInstructionsBody,
   buildSqaaInstructionsBody,
@@ -47,7 +46,7 @@ import {
   PROJECT_INSTRUCTIONS_REL_DIR,
 } from './instructions';
 
-export { COPILOT_INTEGRATION_ID } from './ids';
+export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;

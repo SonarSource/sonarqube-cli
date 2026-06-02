@@ -28,7 +28,6 @@ import { tomlPatch, wholeFile } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
-import { CODEX_INTEGRATION_ID } from './ids';
 import { buildAgentsMdContent } from './instructions-templates';
 
 const CODEX_CONFIG_DIR = '.codex';
@@ -36,7 +35,7 @@ const HOOKS_FILE = 'hooks.json';
 const AGENTS_MD_FILE = 'AGENTS.md';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
-export { CODEX_INTEGRATION_ID } from './ids';
+export const CODEX_INTEGRATION_ID = 'codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   installSecretsHooks?: boolean;

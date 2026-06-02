@@ -25,15 +25,9 @@ import { printContextAugmentationSkill } from '../context-augmentation';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
 import { wholeFile } from '../registry/resources';
 import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
-import {
-  CONTEXT_AUGMENTATION_FEATURE_ID,
-  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-} from './context-augmentation-skill-ids';
 
-export {
-  CONTEXT_AUGMENTATION_FEATURE_ID,
-  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-} from './context-augmentation-skill-ids';
+export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation-skill';
+export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file';
 
 export interface ContextAugmentationSkillFeatureOptions {
   agentDisplayName: string;

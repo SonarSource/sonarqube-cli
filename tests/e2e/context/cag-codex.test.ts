@@ -28,7 +28,7 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { CODEX_INTEGRATION_ID } from '../../../src/cli/commands/integrate/codex/ids';
+import { CODEX_INTEGRATION_ID } from '../../../src/cli/commands/integrate/codex/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
 import type { CliState } from '../../../src/lib/state';

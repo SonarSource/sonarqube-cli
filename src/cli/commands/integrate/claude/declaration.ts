@@ -29,8 +29,8 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { jsonPatch, wholeFile } from '../_common/registry';
+import { jsonPatch, wholeFile } from '../_common/registry/resources';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -40,14 +40,13 @@ import {
   getSqaaPostToolTemplateUnix,
   getSqaaPostToolTemplateWindows,
 } from './hook-templates';
-import { CLAUDE_INTEGRATION_ID } from './ids';
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
-export { CLAUDE_INTEGRATION_ID } from './ids';
+export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
