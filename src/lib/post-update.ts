@@ -90,7 +90,6 @@ export async function migrateDeclarativeIntegrations(
 ): Promise<void> {
   const state = loadState();
   let stateChanged = false;
-  const executedDependencyBeforeUpdates = new Set<string>();
 
   for (const integration of registry.list()) {
     const installedIntegration = integrationInstaller.findInstalledIntegration(state, integration);
@@ -108,6 +107,7 @@ export async function migrateDeclarativeIntegrations(
       stateChanged = true;
     }
 
+    const applications = [];
     for (const installedFeature of knownFeatures) {
       const feature = featuresById.get(installedFeature.featureId);
       if (!feature) {
@@ -121,36 +121,33 @@ export async function migrateDeclarativeIntegrations(
         continue;
       }
 
-      try {
-        const featureContext = {
-          targetRoot: installedFeature.targetRoot,
-          scope: installedFeature.scope,
-          attrs: installedFeature.attrs,
-          resolvedDependencies: new Map(),
-        };
-        const applied = await integrationInstaller.applyFeature(
-          { state, ...featureContext },
-          installedFeature,
-          feature,
-          {},
-          {
-            runDependencyBeforeUpdate: true,
-            executedDependencyBeforeUpdates,
+      applications.push({
+        feature,
+        targetRoot: installedFeature.targetRoot,
+        scope: installedFeature.scope,
+        attrs: installedFeature.attrs,
+      });
+    }
+
+    try {
+      const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
+        state,
+        integration,
+        applications,
+        {
+          continueOnFeatureError: true,
+          onFeatureError: (application, err) => {
+            logger.debug(
+              `Declarative migration failed for ${integration.id}.${application.feature.id}: ${err.message}`,
+            );
           },
-        );
-        integrationInstaller.recordInstalledFeature(
-          state,
-          featureContext,
-          integration,
-          feature,
-          applied,
-        );
+        },
+      );
+      if (installedFeatures.length > 0) {
         stateChanged = true;
-      } catch (err) {
-        logger.debug(
-          `Declarative migration failed for ${integration.id}.${installedFeature.featureId}: ${(err as Error).message}`,
-        );
       }
+    } catch (err) {
+      logger.debug(`Declarative migration failed for ${integration.id}: ${(err as Error).message}`);
     }
   }
 

@@ -52,6 +52,7 @@ export type {
   AppliedFeature,
   AppliedOperation,
   AppliedResource,
+  DependencyInstallContext,
   FeatureDeclaration,
   FeatureOperation,
   InstalledDependency,

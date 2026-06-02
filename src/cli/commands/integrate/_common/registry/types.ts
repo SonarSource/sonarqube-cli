@@ -102,6 +102,10 @@ export interface InstalledDependency {
   path?: string;
 }
 
+export interface DependencyInstallContext extends IntegrationContext {
+  existingDependency?: InstalledDependency;
+}
+
 export interface AppliedResource {
   id: string;
   resourceType: string;

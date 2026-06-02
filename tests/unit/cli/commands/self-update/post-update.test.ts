@@ -353,10 +353,10 @@ describe('migrateDeclarativeIntegrations', () => {
     });
   });
 
-  it('runs dependency beforeUpdate once and exposes the refreshed dependency to feature resources', async () => {
+  it('installs a shared dependency once and exposes the refreshed dependency to feature resources', async () => {
     const dependencyPathA = join(tempDir, 'feature-a.txt');
     const dependencyPathB = join(tempDir, 'feature-b.txt');
-    const beforeUpdateCalls: string[] = [];
+    const existingDependencyPaths: string[] = [];
     const installCalls: string[] = [];
     const now = '2026-01-01T00:00:00.000Z';
 
@@ -364,10 +364,8 @@ describe('migrateDeclarativeIntegrations', () => {
       id: 'shared-dependency',
       dependencyType: 'binary',
       version: '2',
-      beforeUpdate: ({ installedDependency }) => {
-        beforeUpdateCalls.push(installedDependency?.path ?? 'missing');
-      },
-      install: () => {
+      install: ({ existingDependency }) => {
+        existingDependencyPaths.push(existingDependency?.path ?? 'missing');
         installCalls.push('install');
         return {
           id: 'shared-dependency',
@@ -462,7 +460,7 @@ describe('migrateDeclarativeIntegrations', () => {
 
     await migrateDeclarativeIntegrations(registry);
 
-    expect(beforeUpdateCalls).toEqual(['/old/shared-dependency']);
+    expect(existingDependencyPaths).toEqual(['/old/shared-dependency']);
     expect(installCalls).toEqual(['install']);
     expect(fs.readFileSync(dependencyPathA, 'utf-8')).toBe('/new/shared-dependency');
     expect(fs.readFileSync(dependencyPathB, 'utf-8')).toBe('/new/shared-dependency');

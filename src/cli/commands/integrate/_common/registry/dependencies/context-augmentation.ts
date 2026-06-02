@@ -25,7 +25,7 @@ import {
   resolveContextAugmentationBinaryPath,
 } from '../../../../_common/install/context-augmentation';
 import { stopAllContextAugmentationTools } from '../../context-augmentation';
-import type { InstalledDependency, IntegrationContext } from '../types';
+import type { DependencyInstallContext, InstalledDependency, IntegrationContext } from '../types';
 import type { BaseDependencyOptions, DependencyDeclaration } from './common';
 
 export type ContextAugmentationBinaryDependencyOptions = BaseDependencyOptions;
@@ -35,17 +35,6 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
   readonly displayName?: string;
   readonly dependencyType = 'context-augmentation-binary';
   readonly version: string;
-  readonly beforeUpdate = async ({
-    installedDependency,
-  }: {
-    installedDependency?: InstalledDependency;
-  }) => {
-    const binaryPath = installedDependency?.path ?? resolveContextAugmentationBinaryPath();
-    if (!binaryPath) {
-      return;
-    }
-    await stopAllContextAugmentationTools(binaryPath);
-  };
 
   constructor(options: ContextAugmentationBinaryDependencyOptions) {
     this.id = options.id;
@@ -53,7 +42,13 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
     this.version = options.version ?? SONAR_CONTEXT_AUGMENTATION_VERSION;
   }
 
-  async install(_context: IntegrationContext): Promise<InstalledDependency> {
+  async install(context: DependencyInstallContext): Promise<InstalledDependency> {
+    const previousBinaryPath =
+      context.existingDependency?.path ?? resolveContextAugmentationBinaryPath();
+    if (previousBinaryPath) {
+      await stopAllContextAugmentationTools(previousBinaryPath);
+    }
+
     const binaryPath = await installContextAugmentationBinary();
     return {
       id: this.id,
