@@ -87,6 +87,7 @@ export interface FeatureOperation {
   version?: string;
   shouldApply?: (context: IntegrationContext) => MaybePromise<boolean>;
   apply: (context: IntegrationContext) => MaybePromise<void>;
+  undo?: (context: IntegrationContext) => MaybePromise<void>;
 }
 
 export interface AppliedOperation {

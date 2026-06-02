@@ -30,8 +30,12 @@ export {
 export {
   installIntegration,
   type InstallIntegrationOptions,
+  makeContext,
+} from './install-integration';
+export {
   IntegrationInstaller,
   integrationInstaller,
+  type RemoveFeatureCallbacks,
 } from './installer';
 export {
   jsonPatch,

@@ -24,28 +24,25 @@ import { readFile } from 'node:fs/promises';
 import { parse, stringify } from 'smol-toml';
 
 import { CommandFailedError } from '../../../../_common/error';
-import type { IntegrationContext, MaybePromise } from '../types';
 import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
 
-export interface TomlPatchOptions extends PatchResourceOptions {
+export interface TomlPatchOptions extends PatchResourceOptions<Record<string, unknown>> {
   defaultValue?: Record<string, unknown>;
-  patch: (
-    document: Record<string, unknown>,
-    context: IntegrationContext,
-  ) => MaybePromise<Record<string, unknown>>;
 }
 
 export function tomlPatch(options: TomlPatchOptions): ResourceDeclaration {
   return new TomlPatch(options);
 }
 
-export class TomlPatch extends PatchResource<TomlPatchOptions> {
+export class TomlPatch extends PatchResource<TomlPatchOptions, Record<string, unknown>> {
   readonly resourceType = 'toml-patch';
 
-  protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
-    const document = await readToml(path, this.options.defaultValue ?? {});
-    const updated = await this.options.patch(document, context);
-    return stringify(updated);
+  protected readDocument(path: string): Promise<Record<string, unknown>> {
+    return readToml(path, this.options.defaultValue ?? {});
+  }
+
+  protected serializeDocument(document: unknown): string {
+    return stringify(document);
   }
 }
 
