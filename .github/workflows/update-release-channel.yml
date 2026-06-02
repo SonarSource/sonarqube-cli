@@ -14,6 +14,7 @@ on:
         type: choice
         options:
           - latest
+          - stable
           - dogfood
 
 jobs:

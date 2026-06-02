@@ -26,3 +26,16 @@ jobs:
       slackChannel: C02E6L5C01H # squad-devex-private
       skipJavascriptReleasabilityChecks: true
       createDraftRelease: false
+
+  update-dogfood-channel:
+    needs: release
+    if: ${{ !inputs.dryRun }}
+    runs-on: sonar-xs
+    permissions:
+      id-token: write   # OIDC → Vault
+      contents: read
+    steps:
+      - uses: SonarSource/ci-github-actions/update-release-channel@v1
+        with:
+          version: ${{ inputs.version }}
+          channel: dogfood
