@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { readGitPushRefs, readStdinJson } from '../../src/cli/commands/hook/stdin';
 
 describe('readStdinJson', () => {
-  type StdinListener = (...args: unknown[]) => void;
+  type StdinListener = (...args: any[]) => void;
   const listeners: Record<string, StdinListener[]> = {};
   let onSpy: ReturnType<typeof spyOn>;
 
@@ -43,9 +43,7 @@ describe('readStdinJson', () => {
     for (const key of Object.keys(listeners)) {
       delete listeners[key];
     }
-    onSpy = spyOn(process.stdin, 'on').mockImplementation(
-      captureListener as unknown as typeof process.stdin.on,
-    );
+    onSpy = spyOn(process.stdin, 'on').mockImplementation(captureListener);
   });
 
   afterEach(() => {
@@ -109,7 +107,7 @@ describe('readStdinJson', () => {
 });
 
 describe('readGitPushRefs', () => {
-  type StdinListener = (...args: unknown[]) => void;
+  type StdinListener = (...args: any[]) => void;
   const listeners: Record<string, StdinListener[]> = {};
   let onSpy: ReturnType<typeof spyOn>;
 
@@ -129,9 +127,7 @@ describe('readGitPushRefs', () => {
     for (const key of Object.keys(listeners)) {
       delete listeners[key];
     }
-    onSpy = spyOn(process.stdin, 'on').mockImplementation(
-      captureListener as unknown as typeof process.stdin.on,
-    );
+    onSpy = spyOn(process.stdin, 'on').mockImplementation(captureListener);
   });
 
   afterEach(() => {

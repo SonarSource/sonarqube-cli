@@ -18,50 +18,44 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// git pre-push callback handler — scans files in new commits for secrets before push.
+// git pre-push callback handler — scans files in new commits for secrets and,
+// when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
+import { resolveAuth } from '../../../lib/auth-resolver';
 import { spawnProcess } from '../../../lib/process';
-import { CommandFailedError } from '../_common/error';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
-import type { HookDependencies } from './hook-dependencies';
-import { handleScanError, resolveAuthAndSecrets } from './hook-dependencies';
+import { InvalidOptionError } from '../_common/error';
+import { runDepRisksStage } from './git-pre-push-dependency-risks.ts';
+import { runSecretsStage } from './git-pre-push-secrets.ts';
 import type { PushRef } from './stdin';
 import { readGitPushRefs } from './stdin';
 
-const GIT_NULL_OID = '0000000000000000000000000000000000000000';
+export const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 
-export async function gitPrePush(): Promise<void> {
+export interface GitPrePushOptions {
+  project?: string;
+  dependencyRisks?: boolean;
+}
+
+export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void> {
+  if (options.dependencyRisks && !options.project) {
+    throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
+  }
+
+  const auth = await resolveAuth().catch(() => null);
+  if (!auth) return;
+
   const refs = await readGitPushRefs();
   if (refs.length === 0) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
-
   const emptyTree = await getEmptyTree();
+  const filesByRef = await collectFilesForRefs(refs, emptyTree);
 
-  for (const ref of refs) {
-    await scanRef(ref, emptyTree, deps);
-  }
-}
+  await runSecretsStage(filesByRef, auth);
 
-async function scanRef(ref: PushRef, emptyTree: string, deps: HookDependencies): Promise<void> {
-  if (ref.localSha === GIT_NULL_OID) return; // branch deletion — nothing to scan
-
-  const files = await getFilesForRef(ref, emptyTree);
-  if (files.length === 0) return;
-
-  try {
-    const result = await runSecretsBinary(deps.binaryPath, files, deps.auth);
-    if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
-      throw new CommandFailedError('Secrets detected in pushed commits.', {
-        remediationHint:
-          'Remove the reported secret, amend the commit if needed, then retry the push.',
-      });
-    }
-  } catch (err) {
-    if (err instanceof CommandFailedError) throw err;
-    handleScanError('Push', err as Error);
+  if (options.dependencyRisks && options.project) {
+    const changedFiles = Array.from(filesByRef.values()).flat();
+    await runDepRisksStage({ project: options.project, changedFiles, auth });
   }
 }
 
@@ -72,6 +66,21 @@ async function getEmptyTree(): Promise<string> {
   } catch {
     return GIT_NULL_OID;
   }
+}
+
+async function collectFilesForRefs(
+  refs: PushRef[],
+  emptyTree: string,
+): Promise<Map<PushRef, string[]>> {
+  const out = new Map<PushRef, string[]>();
+  for (const ref of refs) {
+    if (ref.localSha === GIT_NULL_OID) {
+      out.set(ref, []);
+      continue;
+    }
+    out.set(ref, await getFilesForRef(ref, emptyTree));
+  }
+  return out;
 }
 
 async function getFilesForRef(ref: PushRef, emptyTree: string): Promise<string[]> {
@@ -118,7 +127,6 @@ async function getFilesForNewBranch(localSha: string, emptyTree: string): Promis
       return Array.from(fileSet);
     }
 
-    // No other remotes — diff full branch against empty tree
     const result = await spawnProcess('git', [
       'diff',
       '--name-only',
@@ -129,5 +137,14 @@ async function getFilesForNewBranch(localSha: string, emptyTree: string): Promis
     return result.stdout.trim().split('\n').filter(Boolean);
   } catch {
     return [];
+  }
+}
+
+export async function hasUncommittedChanges(): Promise<boolean> {
+  try {
+    const result = await spawnProcess('git', ['status', '--porcelain']);
+    return result.stdout.trim().length > 0;
+  } catch {
+    return false;
   }
 }
