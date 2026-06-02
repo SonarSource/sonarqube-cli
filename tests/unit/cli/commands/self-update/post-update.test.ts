@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { version as CURRENT_VERSION } from '../../../../../package.json';
+import * as scaScannerInstall from '../../../../../src/cli/commands/_common/install/sca-scanner';
 import * as secretsInstall from '../../../../../src/cli/commands/_common/install/secrets';
 import {
   type DependencyDeclaration,
@@ -33,11 +34,13 @@ import {
   wholeFile,
 } from '../../../../../src/cli/commands/integrate/_common/registry';
 import * as hooks from '../../../../../src/cli/commands/integrate/claude/hooks';
+import { SCA_SCANNER_BINARY_NAME } from '../../../../../src/lib/install-types';
 import * as migration from '../../../../../src/lib/migration';
 import {
   migrateClaudeCodeHooks,
   migrateDeclarativeIntegrations,
   runPostUpdateActions,
+  updateScaScannerBinaryIfNeeded,
   updateSecretsBinaryIfNeeded,
 } from '../../../../../src/lib/post-update';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository';
@@ -140,19 +143,21 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // loadState is called 5 times:
+    // loadState is called 6 times:
     //   1. version check in runPostUpdateActions
     //   2. inside migrateDeclarativeIntegrations
     //   3. inside migrateClaudeCodeHooks
     //   4. inside updateSecretsBinaryIfNeeded
-    //   5. the reload after runActions (the fix being tested)
+    //   5. inside updateScaScannerBinaryIfNeeded
+    //   6. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: version check
       .mockReturnValueOnce(makeState()) // call 2: migrateDeclarativeIntegrations
       .mockReturnValueOnce(makeState()) // call 3: migrateClaudeCodeHooks
       .mockReturnValueOnce(makeState()) // call 4: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 5: reload
+      .mockReturnValueOnce(makeState()) // call 5: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 6: reload
 
     await runPostUpdateActions();
 
@@ -777,3 +782,57 @@ describe('updateSecretsBinaryIfNeeded', () => {
     expect(updateSecretsBinaryIfNeeded()).rejects.toThrow('download failed');
   });
 });
+
+function makeStateWithScaScanner(): CliState {
+  const state = makeState();
+  state.tools = {
+    installed: [
+      {
+        name: SCA_SCANNER_BINARY_NAME,
+        version: '0.0.0.1',
+        path: '/fake/bin/sca-scanner-cli-0.0.0.1-linux-x86-64',
+        installedAt: '2026-01-01T00:00:00.000Z',
+        installedByCliVersion: '1.0.0',
+      },
+    ],
+  };
+  return state;
+}
+
+describe('updateScaScannerBinaryIfNeeded', () => {
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let installScaScannerBinarySpy: Mock<typeof scaScannerInstall.installScaScannerBinary>;
+
+  beforeEach(() => {
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeStateWithScaScanner());
+    installScaScannerBinarySpy = spyOn(
+      scaScannerInstall,
+      'installScaScannerBinary',
+    ).mockResolvedValue('/fake/bin/sca-scanner-cli');
+  });
+
+  afterEach(() => {
+    loadStateSpy.mockRestore();
+    installScaScannerBinarySpy.mockRestore();
+  });
+
+  it('does nothing when no previous binary is recorded in state', async () => {
+    loadStateSpy.mockReturnValue(makeState()); // tools.installed is empty
+
+    await updateScaScannerBinaryIfNeeded();
+
+    expect(installScaScannerBinarySpy).not.toHaveBeenCalled();
+  });
+
+  it('calls installScaScannerBinary when a previous installation is recorded in state', async () => {
+    await updateScaScannerBinaryIfNeeded();
+
+    expect(installScaScannerBinarySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates errors from installScaScannerBinary to the caller', () => {
+    installScaScannerBinarySpy.mockRejectedValue(new Error('download failed'));
+
+    expect(updateScaScannerBinaryIfNeeded()).rejects.toThrow('download failed');
+  });
+})
