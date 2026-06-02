@@ -41,6 +41,7 @@ export interface ResourceDeclaration {
   version?: string;
   apply: (context: IntegrationContext) => MaybePromise<AppliedResource>;
   isApplied: (context: IntegrationContext) => MaybePromise<boolean>;
+  remove?: (context: IntegrationContext) => MaybePromise<void>;
 }
 
 export async function resolvePath(
@@ -76,11 +77,16 @@ export async function readTextFile(path: string): Promise<string | undefined> {
   return readFile(path, 'utf-8');
 }
 
-export interface PatchResourceOptions extends BaseResourceOptions {
+export interface PatchResourceOptions<TDoc = unknown> extends BaseResourceOptions {
   targetPath: PathResolver;
+  patch: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
+  removePatch?: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
 }
 
-export abstract class PatchResource<O extends PatchResourceOptions> implements ResourceDeclaration {
+export abstract class PatchResource<
+  O extends PatchResourceOptions<TDoc>,
+  TDoc = unknown,
+> implements ResourceDeclaration {
   readonly id: string;
   readonly displayName?: string;
   readonly version?: string;
@@ -103,5 +109,25 @@ export abstract class PatchResource<O extends PatchResourceOptions> implements R
     return (await readTextFile(path)) === (await this.renderContent(path, context));
   }
 
-  protected abstract renderContent(path: string, context: IntegrationContext): Promise<string>;
+  async remove(context: IntegrationContext): Promise<void> {
+    if (!this.options.removePatch) {
+      return;
+    }
+    const path = await resolvePath(context, this.options.targetPath);
+    if (!existsSync(path)) {
+      return;
+    }
+    const document = await this.readDocument(path);
+    const updatedDocument = await this.options.removePatch(document, context);
+    await writeFileIfChanged(path, this.serializeDocument(updatedDocument ?? document));
+  }
+
+  protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
+    const document = await this.readDocument(path);
+    const updatedDocument = await this.options.patch(document, context);
+    return this.serializeDocument(updatedDocument ?? document);
+  }
+
+  protected abstract readDocument(path: string): Promise<TDoc>;
+  protected abstract serializeDocument(document: unknown): string;
 }

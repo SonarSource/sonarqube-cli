@@ -22,25 +22,25 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import { CommandFailedError } from '../../../../_common/error';
-import type { IntegrationContext, MaybePromise } from '../types';
 import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
 
-export interface JsonPatchOptions extends PatchResourceOptions {
-  defaultValue?: unknown;
-  patch: (document: unknown, context: IntegrationContext) => MaybePromise<unknown>;
+export interface JsonPatchOptions<TDoc = unknown> extends PatchResourceOptions<TDoc> {
+  defaultValue?: TDoc;
 }
 
-export function jsonPatch(options: JsonPatchOptions): ResourceDeclaration {
+export function jsonPatch<TDoc = unknown>(options: JsonPatchOptions<TDoc>): ResourceDeclaration {
   return new JsonPatch(options);
 }
 
-export class JsonPatch extends PatchResource<JsonPatchOptions> {
+export class JsonPatch<TDoc = unknown> extends PatchResource<JsonPatchOptions<TDoc>, TDoc> {
   readonly resourceType = 'json-patch';
 
-  protected async renderContent(path: string, context: IntegrationContext): Promise<string> {
-    const document = await readJson(path, this.options.defaultValue ?? {});
-    const updated = await this.options.patch(document, context);
-    return `${JSON.stringify(updated ?? document, null, 2)}\n`;
+  protected readDocument(path: string): Promise<TDoc> {
+    return readJson(path, this.options.defaultValue ?? {}) as Promise<TDoc>;
+  }
+
+  protected serializeDocument(document: unknown): string {
+    return `${JSON.stringify(document, null, 2)}\n`;
   }
 }
 
