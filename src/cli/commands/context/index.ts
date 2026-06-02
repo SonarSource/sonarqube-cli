@@ -20,19 +20,18 @@
 
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
-import { BIN_DIR, SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
+import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../lib/install-types';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
-import { detectPlatform } from '../../../lib/platform-detector';
 import type { AgentExtension, SkillExtension } from '../../../lib/state';
 import { loadState } from '../../../lib/state-manager';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env';
 import { CommandFailedError } from '../_common/error';
-import { buildLocalCagBinaryName } from '../_common/install/context-augmentation';
+import { resolveContextAugmentationBinaryPath } from '../_common/install/context-augmentation';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
 function buildForwardedArgs(
@@ -174,7 +173,7 @@ export async function runContextPassthrough(
   action: string | undefined,
   args: string[],
 ): Promise<void> {
-  const binaryPath = join(BIN_DIR, buildLocalCagBinaryName(detectPlatform()));
+  const binaryPath = resolveContextAugmentationBinaryPath() ?? 'sonar-context-augmentation';
   const { forwarded, isHelp } = buildForwardedArgs(action, args);
 
   let env: NodeJS.ProcessEnv;

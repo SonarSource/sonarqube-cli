@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import * as contextAugmentation from '../../../../../../src/cli/commands/integrate/_common/context-augmentation';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../../../src/cli/commands/integrate/_common/features/context-augmentation-skill-feature';
 import * as registry from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { integrateClaude } from '../../../../../../src/cli/commands/integrate/claude';
 import * as health from '../../../../../../src/cli/commands/integrate/claude/health';
@@ -93,6 +94,12 @@ describe('integrateCommand', () => {
   let updateStateAfterConfigurationSpy: Mock<
     Extract<(typeof state)['updateStateAfterConfiguration'], (...args: any[]) => any>
   >;
+  let resolveContextAugmentationSetupSpy: Mock<
+    Extract<
+      (typeof contextAugmentation)['resolveContextAugmentationSetup'],
+      (...args: any[]) => any
+    >
+  >;
   let setupContextAugmentationSpy: Mock<
     Extract<(typeof contextAugmentation)['setupContextAugmentation'], (...args: any[]) => any>
   >;
@@ -104,6 +111,10 @@ describe('integrateCommand', () => {
     hasSqaaEntitlementSpy.mockResolvedValue(false);
     hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
     hasCagEntitlementSpy.mockResolvedValue('enabled');
+    resolveContextAugmentationSetupSpy = spyOn(
+      contextAugmentation,
+      'resolveContextAugmentationSetup',
+    ).mockResolvedValue(null);
     setupContextAugmentationSpy = spyOn(
       contextAugmentation,
       'setupContextAugmentation',
@@ -142,6 +153,7 @@ describe('integrateCommand', () => {
     detectGlobalSecretsHookSpy.mockRestore();
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
+    resolveContextAugmentationSetupSpy.mockRestore();
     setupContextAugmentationSpy.mockRestore();
   });
 
@@ -350,6 +362,80 @@ describe('integrateCommand', () => {
     await integrateClaude({}, CLOUD_AUTH);
 
     expect(hasSqaaEntitlementSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('installs the CAG skill declaratively before running tool integration', async () => {
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: true });
+
+    await integrateClaude({}, CLOUD_AUTH);
+
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(2);
+    expect(installIntegrationSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        integrationId: 'claude-code',
+        options: expect.objectContaining({
+          projectRoot: '/project/root',
+          installSecretsHooks: true,
+          installSqaaHook: false,
+          installMcp: true,
+          installContextAugmentationSkill: false,
+        }),
+        scope: 'project',
+        targetRoot: '/project/root',
+        attrs: {
+          orgKey: CLOUD_AUTH.orgKey,
+          projectKey: 'a-project',
+          serverUrl: CLOUD_AUTH.serverUrl,
+        },
+      }),
+    );
+    expect(installIntegrationSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        integrationId: 'claude-code',
+        options: expect.objectContaining({
+          projectRoot: '/project/root',
+          installContextAugmentationSkill: true,
+        }),
+        scope: 'project',
+        targetRoot: '/project/root',
+        featureIds: [CONTEXT_AUGMENTATION_FEATURE_ID],
+        attrs: {
+          orgKey: CLOUD_AUTH.orgKey,
+          projectKey: 'a-project',
+          serverUrl: CLOUD_AUTH.serverUrl,
+          scaEnabled: true,
+        },
+      }),
+    );
+    expect(setupContextAugmentationSpy).toHaveBeenCalledWith({
+      auth: CLOUD_AUTH,
+      agentId: 'claude-code',
+      projectRoot: '/project/root',
+      projectKey: 'a-project',
+      scaEnabled: true,
+    });
+  });
+
+  it('warns and skips tool integration when declarative CAG skill installation fails', async () => {
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: false });
+    installIntegrationSpy
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('print failed'));
+
+    await integrateClaude({}, CLOUD_AUTH);
+
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(2);
+    expect(setupContextAugmentationSpy).not.toHaveBeenCalled();
+    const warnText = getMockUiCalls().find(
+      (c) =>
+        c.method === 'warn' &&
+        String(c.args[0]) === 'Context Augmentation skill setup failed. Skipping tool integration.',
+    );
+    expect(warnText).toBeDefined();
   });
 
   it('runs migration, installs hooks and updates state when health check succeeds', async () => {

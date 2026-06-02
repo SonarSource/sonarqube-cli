@@ -900,5 +900,6 @@ function makeContext(
     scope: 'project',
     force,
     attrs,
+    resolvedDependencies: new Map(),
   };
 }

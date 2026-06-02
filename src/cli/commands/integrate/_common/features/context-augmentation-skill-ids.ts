@@ -18,21 +18,5 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type {
-  BaseDependencyOptions,
-  DependencyBeforeUpdate,
-  DependencyDeclaration,
-  DependencyUpdateContext,
-} from './common';
-export {
-  ContextAugmentationBinaryDependency,
-  contextAugmentationBinaryDependency,
-} from './context-augmentation';
-export {
-  sonarSecretsBinaryDependency,
-  SonarSourceBinary,
-  sonarSourceBinary,
-  SonarSourceBinaryDependency,
-  type SonarSourceBinaryDependencyOptions,
-  type SonarSourceBinaryDescriptor,
-} from './sonarsource-binary';
+export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation-skill';
+export const CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID = 'context-augmentation-skill-file';

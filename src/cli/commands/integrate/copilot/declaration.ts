@@ -23,6 +23,7 @@ import { join, relative } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { CommandFailedError } from '../../_common/error';
+import { createContextAugmentationSkillFeature } from '../_common/features/context-augmentation-skill-feature';
 import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
 import { jsonPatch, wholeFile } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
@@ -38,6 +39,7 @@ import {
   PROJECT_HOOKS_REL_DIR,
   SCRIPT_REL_DIR,
 } from './hooks';
+import { COPILOT_INTEGRATION_ID } from './ids';
 import {
   buildInstructionsBody,
   buildSqaaInstructionsBody,
@@ -45,7 +47,7 @@ import {
   PROJECT_INSTRUCTIONS_REL_DIR,
 } from './instructions';
 
-export const COPILOT_INTEGRATION_ID = 'copilot-cli';
+export { COPILOT_INTEGRATION_ID } from './ids';
 
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
@@ -53,6 +55,7 @@ export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   installInstructions?: boolean;
   installSqaaInstructions?: boolean;
   installMcp?: boolean;
+  installContextAugmentationSkill?: boolean;
 }
 
 export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOptions> = {
@@ -131,6 +134,10 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
         }),
       ],
     },
+    createContextAugmentationSkillFeature<CopilotIntegrationOptions>({
+      agentDisplayName: 'Copilot',
+      targetPath: resolveCopilotSkillPath,
+    }),
   ],
 };
 
@@ -144,6 +151,10 @@ function resolveHooksJsonPath(context: IntegrationContext): string {
 
 function resolveCopilotMcpConfigPath(context: IntegrationContext): string {
   return getMcpConfigFilePath('copilot', context.scope === 'global', context.targetRoot);
+}
+
+function resolveCopilotSkillPath(context: IntegrationContext): string {
+  return join(context.targetRoot, '.github', 'skills', 'sonar-context-augmentation', 'SKILL.md');
 }
 
 function resolveInstructionsPath(context: IntegrationContext): string {

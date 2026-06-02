@@ -24,8 +24,20 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  CONTEXT_AUGMENTATION_FEATURE_ID,
+  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+} from '../../../src/cli/commands/integrate/_common/features/context-augmentation-skill-ids';
+import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/ids';
+import { CODEX_INTEGRATION_ID } from '../../../src/cli/commands/integrate/codex/ids';
+import { COPILOT_INTEGRATION_ID } from '../../../src/cli/commands/integrate/copilot/ids';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
-import type { CliState, SkillExtension } from '../../../src/lib/state';
+import type {
+  CliState,
+  InstalledIntegrationDependency,
+  InstalledIntegrationFeature,
+  SkillExtension,
+} from '../../../src/lib/state';
 import { getDefaultState } from '../../../src/lib/state';
 import type { TestHarness } from '../../integration/harness';
 
@@ -33,6 +45,7 @@ export const STALE_CLI_VERSION = '0.0.1';
 export const STALE_SKILL_VERSION = '0.0.0';
 export const SEEDED_PROJECT_KEY = 'offline-test-project';
 export const SEEDED_ORG_KEY = 'offline-test-org';
+const SEEDED_UPDATED_AT = new Date(0).toISOString();
 
 export const CLAUDE_SKILL_RELATIVE_PATH = join(
   '.claude',
@@ -73,7 +86,7 @@ export function buildSkillExtension(opts: SeedSkillOptions): SkillExtension {
     orgKey: opts.orgKey ?? SEEDED_ORG_KEY,
     serverUrl: 'https://sonarcloud.io',
     updatedByCliVersion: STALE_CLI_VERSION,
-    updatedAt: new Date(0).toISOString(),
+    updatedAt: SEEDED_UPDATED_AT,
     name: CONTEXT_AUGMENTATION_BINARY_NAME,
     version: opts.version ?? STALE_SKILL_VERSION,
     scaEnabled: false,
@@ -91,8 +104,82 @@ export function seedState(harness: TestHarness, options: SeedStateOptions = {}):
   state.telemetry.enabled = false;
   for (const skill of options.skills ?? []) {
     state.agentExtensions.push(buildSkillExtension(skill));
+    seedDeclarativeContextAugmentationFeature(state, skill);
   }
   writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
+}
+
+function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedSkillOptions): void {
+  if (skill.global) {
+    return;
+  }
+
+  const integrationId = resolveIntegrationId(skill.agentId);
+  let integration = state.integrations.installed.find(
+    (entry) => entry.integrationId === integrationId,
+  );
+  if (!integration) {
+    integration = {
+      id: `e2e-integration-${randomUUID()}`,
+      integrationId,
+      installedByCliVersion: STALE_CLI_VERSION,
+      installedAt: SEEDED_UPDATED_AT,
+      updatedByCliVersion: STALE_CLI_VERSION,
+      updatedAt: SEEDED_UPDATED_AT,
+      features: [],
+    };
+    state.integrations.installed.push(integration);
+  }
+
+  integration.features.push({
+    featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+    scope: 'project',
+    targetRoot: skill.projectRoot,
+    installedByCliVersion: STALE_CLI_VERSION,
+    installedAt: SEEDED_UPDATED_AT,
+    updatedByCliVersion: STALE_CLI_VERSION,
+    updatedAt: SEEDED_UPDATED_AT,
+    dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
+    resources: [
+      {
+        id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+        resourceType: 'whole-file',
+        version: skill.version ?? STALE_SKILL_VERSION,
+        path: join(skill.projectRoot, resolveSkillRelativePath(skill.agentId)),
+        updatedByCliVersion: STALE_CLI_VERSION,
+        updatedAt: SEEDED_UPDATED_AT,
+      },
+    ],
+    operations: [],
+    attrs: {
+      orgKey: skill.orgKey ?? SEEDED_ORG_KEY,
+      projectKey: skill.projectKey ?? SEEDED_PROJECT_KEY,
+      serverUrl: 'https://sonarcloud.io',
+      scaEnabled: false,
+    },
+  });
+}
+
+function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
+  switch (agentId) {
+    case 'claude-code':
+      return CLAUDE_INTEGRATION_ID;
+    case 'copilot-cli':
+      return COPILOT_INTEGRATION_ID;
+    case 'codex':
+      return CODEX_INTEGRATION_ID;
+  }
+}
+
+function resolveSkillRelativePath(agentId: SeedSkillOptions['agentId']): string {
+  switch (agentId) {
+    case 'claude-code':
+      return CLAUDE_SKILL_RELATIVE_PATH;
+    case 'copilot-cli':
+      return COPILOT_SKILL_RELATIVE_PATH;
+    case 'codex':
+      return CODEX_SKILL_RELATIVE_PATH;
+  }
 }
 
 export function findRecordedCagSkill(
@@ -105,4 +192,38 @@ export function findRecordedCagSkill(
     }
     return predicate ? predicate(extension) : true;
   });
+}
+
+export interface RecordedCagFeature {
+  integrationId: string;
+  feature: InstalledIntegrationFeature;
+}
+
+export function findRecordedCagFeature(
+  state: CliState,
+  predicate?: (entry: RecordedCagFeature) => boolean,
+): RecordedCagFeature | undefined {
+  for (const integration of state.integrations.installed) {
+    for (const feature of integration.features) {
+      if (feature.featureId !== CONTEXT_AUGMENTATION_FEATURE_ID) {
+        continue;
+      }
+      const entry = {
+        integrationId: integration.integrationId,
+        feature,
+      };
+      if (!predicate || predicate(entry)) {
+        return entry;
+      }
+    }
+  }
+  return undefined;
+}
+
+export function findRecordedCagDependency(
+  state: CliState,
+): InstalledIntegrationDependency | undefined {
+  return state.dependencies.installed.find(
+    (dependency) => dependency.id === CONTEXT_AUGMENTATION_BINARY_NAME,
+  );
 }

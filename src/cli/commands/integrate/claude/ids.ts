@@ -18,21 +18,4 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type {
-  BaseDependencyOptions,
-  DependencyBeforeUpdate,
-  DependencyDeclaration,
-  DependencyUpdateContext,
-} from './common';
-export {
-  ContextAugmentationBinaryDependency,
-  contextAugmentationBinaryDependency,
-} from './context-augmentation';
-export {
-  sonarSecretsBinaryDependency,
-  SonarSourceBinary,
-  sonarSourceBinary,
-  SonarSourceBinaryDependency,
-  type SonarSourceBinaryDependencyOptions,
-  type SonarSourceBinaryDescriptor,
-} from './sonarsource-binary';
+export const CLAUDE_INTEGRATION_ID = 'claude-code';

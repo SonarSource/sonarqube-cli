@@ -22,6 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { createContextAugmentationSkillFeature } from '../_common/features/context-augmentation-skill-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
@@ -39,19 +40,21 @@ import {
   getSqaaPostToolTemplateUnix,
   getSqaaPostToolTemplateWindows,
 } from './hook-templates';
+import { CLAUDE_INTEGRATION_ID } from './ids';
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
-export const CLAUDE_INTEGRATION_ID = 'claude-code';
+export { CLAUDE_INTEGRATION_ID } from './ids';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   installSecretsHooks?: boolean;
   installSqaaHook?: boolean;
   installMcp?: boolean;
+  installContextAugmentationSkill?: boolean;
 }
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
@@ -158,6 +161,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         }),
       ],
     },
+    createContextAugmentationSkillFeature<ClaudeIntegrationOptions>({
+      agentDisplayName: 'Claude Code',
+      targetPath: resolveClaudeSkillPath,
+    }),
   ],
 };
 
@@ -167,6 +174,16 @@ function resolveClaudeSettingsPath(context: IntegrationContext): string {
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {
   return getMcpConfigFilePath('claude', context.scope === 'global', context.targetRoot);
+}
+
+function resolveClaudeSkillPath(context: IntegrationContext): string {
+  return join(
+    context.targetRoot,
+    CLAUDE_CONFIG_DIR,
+    'skills',
+    'sonar-context-augmentation',
+    'SKILL.md',
+  );
 }
 
 function upsertClaudeMcpServer(document: unknown, serverConfig: object): Record<string, unknown> {

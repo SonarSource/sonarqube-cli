@@ -34,6 +34,7 @@ export interface IntegrationContext {
   scope: IntegrationScope;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  resolvedDependencies: ReadonlyMap<string, InstalledDependency>;
 }
 
 export interface IntegrationInvocation<TOptions = Record<string, unknown>> {

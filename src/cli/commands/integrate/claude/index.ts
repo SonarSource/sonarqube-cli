@@ -33,11 +33,16 @@ import { type DiscoveredProject, discoverProject } from '../../../../lib/project
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
-import { setupContextAugmentation } from '../_common/context-augmentation';
+import {
+  reportContextAugmentationFailure,
+  resolveContextAugmentationSetup,
+  setupContextAugmentation,
+} from '../_common/context-augmentation';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../_common/features/context-augmentation-skill-feature';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { CLAUDE_INTEGRATION_ID } from './declaration';
+import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration';
 import { runHealthChecks } from './health';
 import { detectGlobalSecretsHook } from './hooks';
 import { repairToken } from './repair';
@@ -118,15 +123,17 @@ export async function integrateClaude(
   const featureAttrs = buildIntegrationAttrs(config);
   const installRoot = isGlobal ? homedir() : project.rootDir;
   const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
+  const integrationOptions = {
+    ...options,
+    projectRoot: project.rootDir,
+    installSecretsHooks: !skipSecretsHooks,
+    installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
+    installMcp: true,
+    installContextAugmentationSkill: false,
+  } satisfies ClaudeIntegrationOptions;
   await installIntegration({
     integrationId: CLAUDE_INTEGRATION_ID,
-    options: {
-      ...options,
-      projectRoot: project.rootDir,
-      installSecretsHooks: !skipSecretsHooks,
-      installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
-      installMcp: true,
-    },
+    options: integrationOptions,
     targetRoot: installRoot,
     scope: installScope,
     attrs: featureAttrs,
@@ -138,13 +145,40 @@ export async function integrateClaude(
   reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
 
   if (!options.skipContext) {
-    await setupContextAugmentation({
+    const contextAugmentation = await resolveContextAugmentationSetup({
       auth: { ...auth, token },
-      agent: 'claude-code',
-      projectRoot: project.rootDir,
       projectKey: options.project || project.projectKey,
       isGlobal,
     });
+    if (contextAugmentation) {
+      try {
+        await installIntegration({
+          integrationId: CLAUDE_INTEGRATION_ID,
+          options: {
+            ...integrationOptions,
+            installContextAugmentationSkill: true,
+          },
+          targetRoot: project.rootDir,
+          scope: 'project',
+          featureIds: [CONTEXT_AUGMENTATION_FEATURE_ID],
+          attrs: buildContextAugmentationAttrs(
+            { ...auth, token },
+            options.project || project.projectKey,
+            contextAugmentation.scaEnabled,
+          ),
+        });
+        await setupContextAugmentation({
+          auth: { ...auth, token },
+          agentId: 'claude-code',
+          projectRoot: project.rootDir,
+          projectKey: options.project || project.projectKey,
+          scaEnabled: contextAugmentation.scaEnabled,
+        });
+      } catch (error) {
+        reportContextAugmentationFailure(error);
+        warn('Context Augmentation skill setup failed. Skipping tool integration.');
+      }
+    }
   }
 
   blank();
@@ -287,5 +321,18 @@ function buildIntegrationAttrs(
     orgKey: config.organization ?? null,
     projectKey: config.projectKey ?? null,
     serverUrl: config.serverURL,
+  };
+}
+
+function buildContextAugmentationAttrs(
+  auth: ResolvedAuth,
+  projectKey: string | undefined,
+  scaEnabled: boolean,
+): Record<string, IntegrationStateAttribute> {
+  return {
+    orgKey: auth.orgKey ?? null,
+    projectKey: projectKey ?? null,
+    serverUrl: auth.serverUrl,
+    scaEnabled,
   };
 }

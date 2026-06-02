@@ -84,8 +84,8 @@ export class EnvironmentBuilder {
   private _installCagBinary = false;
   private _cagInitExitCode = 0;
   private _cagSkillExitCode = 0;
-  private _cagPrintSkillExitCode?: number;
-  private _cagPrintSkillEmpty = false;
+  private _cagPrintSkillExitCode = 0;
+  private _cagStopAllExitCode = 0;
   private _cagSentinelPath?: string;
   private _cagStdoutLine?: string;
   private _cagStderrLine?: string;
@@ -170,7 +170,7 @@ export class EnvironmentBuilder {
       initExitCode?: number;
       skillExitCode?: number;
       printSkillExitCode?: number;
-      printSkillEmpty?: boolean;
+      stopAllExitCode?: number;
       stdoutLine?: string;
       stderrLine?: string;
     } = {},
@@ -178,8 +178,8 @@ export class EnvironmentBuilder {
     this._installCagBinary = true;
     this._cagInitExitCode = options.initExitCode ?? 0;
     this._cagSkillExitCode = options.skillExitCode ?? 0;
-    this._cagPrintSkillExitCode = options.printSkillExitCode;
-    this._cagPrintSkillEmpty = options.printSkillEmpty ?? false;
+    this._cagPrintSkillExitCode = options.printSkillExitCode ?? 0;
+    this._cagStopAllExitCode = options.stopAllExitCode ?? 0;
     this._cagStdoutLine = options.stdoutLine;
     this._cagStderrLine = options.stderrLine;
     return this;
@@ -209,10 +209,8 @@ export class EnvironmentBuilder {
       CAG_STUB_SENTINEL: this._cagSentinelPath,
       CAG_STUB_INIT_EXIT: String(this._cagInitExitCode),
       CAG_STUB_SKILL_EXIT: String(this._cagSkillExitCode),
-      ...(this._cagPrintSkillExitCode !== undefined && {
-        CAG_STUB_PRINT_SKILL_EXIT: String(this._cagPrintSkillExitCode),
-      }),
-      ...(this._cagPrintSkillEmpty && { CAG_STUB_PRINT_SKILL_EMPTY: '1' }),
+      CAG_STUB_PRINT_SKILL_EXIT: String(this._cagPrintSkillExitCode),
+      CAG_STUB_STOP_ALL_EXIT: String(this._cagStopAllExitCode),
       ...(this._cagStdoutLine !== undefined && { CAG_STUB_STDOUT_LINE: this._cagStdoutLine }),
       ...(this._cagStderrLine !== undefined && { CAG_STUB_STDERR_LINE: this._cagStderrLine }),
     };

@@ -21,6 +21,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { BIN_DIR } from '../../../../lib/config-constants';
 import {
   buildCagPlatformSuffix,
   CONTEXT_AUGMENTATION_BINARY_NAME,
@@ -75,6 +76,15 @@ export function buildLocalCagBinaryName(platform: PlatformInfo): string {
 export async function installContextAugmentationBinary(): Promise<string> {
   const { binaryPath } = await resolveContextAugmentationBinary({});
   return binaryPath;
+}
+
+/**
+ * Returns the path to the installed sonar-context-augmentation binary, or null
+ * if it is not present on disk. Never downloads.
+ */
+export function resolveContextAugmentationBinaryPath(): string | null {
+  const binaryPath = join(BIN_DIR, buildLocalCagBinaryName(detectPlatform()));
+  return existsSync(binaryPath) ? binaryPath : null;
 }
 
 /**

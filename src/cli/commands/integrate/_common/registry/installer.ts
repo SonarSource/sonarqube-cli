@@ -61,6 +61,11 @@ interface ApplyFeatureCallbacks {
   onOperationApplied?: (operation: FeatureOperation) => void;
 }
 
+interface ApplyFeatureOptions {
+  runDependencyBeforeUpdate?: boolean;
+  executedDependencyBeforeUpdates?: Set<string>;
+}
+
 export interface InstallIntegrationOptions<TOptions> {
   registry?: IntegrationRegistry;
   integrationId: string;
@@ -69,10 +74,14 @@ export interface InstallIntegrationOptions<TOptions> {
   scope: IntegrationScope;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  featureIds?: string[];
 }
 
 export class IntegrationInstaller {
-  selectFeatures(integration: IntegrationDeclaration, featureIds: string[]): FeatureDeclaration[] {
+  selectFeatures<TOptions>(
+    integration: IntegrationDeclaration<TOptions>,
+    featureIds: string[],
+  ): FeatureDeclaration<TOptions>[] {
     const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
     return featureIds.map((id) => {
       const feature = featuresById.get(id);
@@ -162,34 +171,49 @@ export class IntegrationInstaller {
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
     callbacks: ApplyFeatureCallbacks = {},
+    options: ApplyFeatureOptions = {},
   ): Promise<AppliedFeature> {
     const dependencies: InstalledDependency[] = [];
     const resources: AppliedResource[] = [];
     const operations: AppliedOperation[] = [];
+    const resolvedDependencies = this.makeResolvedDependencies(context.state, feature);
+    const featureContext = { ...context, resolvedDependencies };
 
     for (const dependency of feature.dependencies ?? []) {
-      if (!(await this.dependencyNeedsInstall(context, dependency))) {
+      if (!(await this.dependencyNeedsInstall(featureContext, dependency))) {
+        const installedDependency = this.findInstalledDependency(featureContext.state, dependency);
+        if (installedDependency) {
+          resolvedDependencies.set(dependency.id, installedDependency);
+        }
         callbacks.onDependencySkipped?.(dependency);
         continue;
       }
-      dependencies.push(await dependency.install(context));
+      const installedDependency = this.findInstalledDependency(featureContext.state, dependency);
+      if (options.runDependencyBeforeUpdate === true) {
+        await this.runDependencyBeforeUpdate(featureContext, dependency, installedDependency, {
+          executedDependencies: options.executedDependencyBeforeUpdates,
+        });
+      }
+      const appliedDependency = await dependency.install(featureContext);
+      dependencies.push(appliedDependency);
+      resolvedDependencies.set(appliedDependency.id, appliedDependency);
       callbacks.onDependencyInstalled?.(dependency);
     }
 
     for (const resource of feature.resources ?? []) {
-      if (!(await this.resourceNeedsApply(context, installedFeature, resource))) {
+      if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
         callbacks.onResourceSkipped?.(resource);
         continue;
       }
-      resources.push(await resource.apply(context));
+      resources.push(await resource.apply(featureContext));
       callbacks.onResourceInstalled?.(resource);
     }
 
     for (const operation of feature.operations ?? []) {
-      if (operation.shouldApply && !(await operation.shouldApply(context))) {
+      if (operation.shouldApply && !(await operation.shouldApply(featureContext))) {
         continue;
       }
-      await operation.apply(context);
+      await operation.apply(featureContext);
       operations.push({ id: operation.id, version: operation.version });
       callbacks.onOperationApplied?.(operation);
     }
@@ -387,6 +411,40 @@ export class IntegrationInstaller {
       ),
     );
   }
+
+  private makeResolvedDependencies(
+    state: CliState,
+    feature: Pick<FeatureDeclaration, 'dependencies'>,
+  ): Map<string, InstalledDependency> {
+    const resolvedDependencies = new Map<string, InstalledDependency>();
+    for (const dependency of feature.dependencies ?? []) {
+      const installedDependency = this.findInstalledDependency(state, dependency);
+      if (installedDependency) {
+        resolvedDependencies.set(dependency.id, installedDependency);
+      }
+    }
+    return resolvedDependencies;
+  }
+
+  private async runDependencyBeforeUpdate(
+    context: IntegrationContext,
+    dependency: DependencyDeclaration,
+    installedDependency: InstalledDependency | undefined,
+    options: { executedDependencies?: Set<string> } = {},
+  ): Promise<void> {
+    if (!dependency.beforeUpdate) {
+      return;
+    }
+    if (options.executedDependencies?.has(dependency.id)) {
+      return;
+    }
+    await dependency.beforeUpdate({
+      ...context,
+      dependency,
+      installedDependency,
+    });
+    options.executedDependencies?.add(dependency.id);
+  }
 }
 
 export const integrationInstaller = new IntegrationInstaller();
@@ -399,10 +457,14 @@ export async function installIntegration<TOptions>({
   scope,
   force,
   attrs,
+  featureIds,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
   const invocation = makeInvocation(options, targetRoot, scope, force, attrs);
-  const features = integrationInstaller.selectFeaturesForInvocation(integration, invocation);
+  const features =
+    featureIds === undefined
+      ? integrationInstaller.selectFeaturesForInvocation(integration, invocation)
+      : integrationInstaller.selectFeatures(integration, featureIds);
   if (features.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
@@ -562,5 +624,6 @@ function makeContext(
     scope,
     force,
     attrs,
+    resolvedDependencies: new Map(),
   };
 }

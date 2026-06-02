@@ -26,11 +26,19 @@ export interface BaseDependencyOptions {
   version?: string;
 }
 
+export interface DependencyUpdateContext extends IntegrationContext {
+  dependency: DependencyDeclaration;
+  installedDependency?: InstalledDependency;
+}
+
+export type DependencyBeforeUpdate = (context: DependencyUpdateContext) => MaybePromise<void>;
+
 export interface DependencyDeclaration {
   id: string;
   displayName?: string;
   dependencyType: string;
   version?: string;
+  beforeUpdate?: DependencyBeforeUpdate;
   install: (context: IntegrationContext) => MaybePromise<InstalledDependency>;
   isInstalled: (context: IntegrationContext) => MaybePromise<boolean>;
 }
