@@ -135,7 +135,7 @@ export class IntegrationInstaller {
         }
         return false;
       case 'ask': {
-        if ((invocation.options as { nonInteractive?: boolean }).nonInteractive) {
+        if (invocation.nonInteractive) {
           return true;
         }
         const confirmed = await confirmPrompt(

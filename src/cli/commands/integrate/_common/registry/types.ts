@@ -49,6 +49,7 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  nonInteractive?: boolean;
 }
 
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =

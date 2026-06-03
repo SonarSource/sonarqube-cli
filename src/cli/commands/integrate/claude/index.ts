@@ -82,6 +82,8 @@ export async function integrateClaude(
 
   let token = config.token;
 
+  const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
+
   blank();
   text('Phase 2/3: Health Check & Repair');
   blank();
@@ -101,8 +103,6 @@ export async function integrateClaude(
     for (const msg of healthResult.errors) {
       text(`  - ${msg}`);
     }
-
-    const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
 
     if (!isNonInteractive && !healthResult.tokenValid) {
       blank();
@@ -154,6 +154,7 @@ export async function integrateClaude(
       scope: installScope,
       auth: { ...auth, token },
       attrs: featureAttrs,
+      nonInteractive: isNonInteractive,
     });
   } catch (error) {
     installError = error instanceof Error ? error : new Error(String(error));

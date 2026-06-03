@@ -389,9 +389,10 @@ describe('declarative integration framework', () => {
     });
 
     const selected = await installer.selectFeaturesForInvocation(integration, {
-      options: { nonInteractive: true },
+      options: {},
       targetRoot: tempDir,
       scope: 'project',
+      nonInteractive: true,
     });
 
     expect(selected.map((feature) => feature.id)).toEqual(['asked', 'defaulted']);

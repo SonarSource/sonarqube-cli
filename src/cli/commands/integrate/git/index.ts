@@ -203,6 +203,7 @@ async function installGitFeatures(
     targetRoot,
     scope,
     force: options.force,
+    nonInteractive: options.nonInteractive,
     attrs: {
       hook: options.hook,
     },
