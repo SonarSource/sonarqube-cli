@@ -55,9 +55,8 @@ const {
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
 
-const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } = await import(
-  '../../../../../../src/ui'
-);
+const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } =
+  await import('../../../../../../src/ui');
 
 describe('declarative integration framework', () => {
   const installer = new IntegrationInstaller();
