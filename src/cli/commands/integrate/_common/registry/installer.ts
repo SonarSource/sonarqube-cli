@@ -139,7 +139,7 @@ export class IntegrationInstaller {
           return true;
         }
         const confirmed = await confirmPrompt(
-          decision.message ?? `Install ${feature.displayName}?`,
+          decision.question ?? `Install ${feature.displayName}?`,
           true,
         );
         if (confirmed === null) {

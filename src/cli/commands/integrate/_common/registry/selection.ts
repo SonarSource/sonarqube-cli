@@ -25,7 +25,7 @@
 export type InstallDecision =
   | { action: 'install' }
   | { action: 'skip'; message?: string }
-  | { action: 'ask'; message?: string };
+  | { action: 'ask'; question?: string };
 
 /** Install the feature without asking. */
 export function install(): InstallDecision {
@@ -38,8 +38,8 @@ export function skip(message?: string): InstallDecision {
 }
 
 /** Ask the user whether to install the feature, with an optional custom prompt. */
-export function askUser(message?: string): InstallDecision {
-  return { action: 'ask', message };
+export function askUser(question?: string): InstallDecision {
+  return { action: 'ask', question };
 }
 
 /**
