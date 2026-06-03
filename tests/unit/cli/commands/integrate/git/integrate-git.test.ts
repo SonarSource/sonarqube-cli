@@ -977,6 +977,17 @@ describe('integrateGit dep-risks server validation', () => {
     expect(getMockUiCalls().some((c) => c.method === 'warn')).toBe(false);
   });
 
+  it('cancels installation when project key prompt is cancelled', async () => {
+    queueMockResponse(true); // confirm "Install here?"
+    queueMockResponse(null); // cancel project key prompt
+    await expect(
+      integrateGit(DEP_RISKS_AUTH, { hook: 'pre-push', withDependencyRisks: true }),
+    ).rejects.toThrow('a project key is required for dependency-risks scanning');
+    expect(checkComponentSpy).not.toHaveBeenCalled();
+    expect(checkScaEnabledSpy).not.toHaveBeenCalled();
+    expect(state.integrations.installed).toHaveLength(0);
+  });
+
   it('throws CommandFailedError when project is not found on server', async () => {
     checkComponentSpy.mockResolvedValue(false);
     await expect(integrateGit(DEP_RISKS_AUTH, DEP_RISKS_OPTIONS)).rejects.toBeInstanceOf(

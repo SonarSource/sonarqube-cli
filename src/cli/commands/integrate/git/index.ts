@@ -343,6 +343,12 @@ export async function integrateGit(
   const depRisksEnabled = features.dependencyRisks;
   const projectKey = depRisksEnabled ? await resolveProjectKey(options) : undefined;
 
+  if (depRisksEnabled && projectKey == null) {
+    throw new CommandFailedError(
+      'Installation cancelled: a project key is required for dependency-risks scanning.'
+    );
+  }
+
   const installDepRisks = depRisksEnabled && projectKey != null;
 
   if (installDepRisks) {
@@ -351,9 +357,6 @@ export async function integrateGit(
       throw new CommandFailedError(`Project '${projectKey}' not found on the connected server.`);
     }
     await assertScaAvailable(client, auth);
-  }
-
-  if (installDepRisks) {
     text(`Dependency-risks scanning: enabled for project '${projectKey}'`);
     blank();
   }
