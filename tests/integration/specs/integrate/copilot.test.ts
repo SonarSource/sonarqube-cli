@@ -324,10 +324,10 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'overwrites pre-existing global instructions (CLI-owned file)',
+      'preserves pre-existing global instructions and appends the managed prompt-secrets block',
       async () => {
-        // sonarqube.instructions.md is CLI-owned, so any pre-existing content
-        // is replaced with the freshly rendered prompt-secrets section.
+        // sonarqube.instructions.md is marker-managed: the CLI only owns
+        // its sonar:begin/end block and preserves any surrounding content.
         harness.userHome.writeFile(
           '.copilot/instructions/sonarqube.instructions.md',
           '# pre-existing\n',
@@ -337,7 +337,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).not.toContain('# pre-existing');
+        expect(body).toContain('# pre-existing');
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
       },
       { timeout: 30000 },
@@ -646,7 +646,7 @@ describe('integrate copilot', () => {
     }
 
     it(
-      'merges the SQAA section into the project file when org is entitled, project scope, and project key is provided',
+      'writes secrets and SQAA as independent marker blocks in the project file when org is entitled, project scope, and project key is provided',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement();
 
@@ -661,14 +661,9 @@ describe('integrate copilot', () => {
         // Project key is baked into the example command.
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
 
-        // Project-scope installs keep SQAA in the prompt instructions feature.
         const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-instructions');
         expect(promptSecrets?.scope).toBe('project');
-        expect(promptSecrets?.attrs).toMatchObject({
-          projectKey: TEST_PROJECT,
-          sqaaEnabled: true,
-        });
-        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
