@@ -161,7 +161,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
     },
     createContextAugmentationFeature<ClaudeIntegrationOptions>({
-      agentId: 'claude-code',
       agentDisplayName: 'Claude Code',
       targetPath: resolveClaudeSkillPath,
     }),

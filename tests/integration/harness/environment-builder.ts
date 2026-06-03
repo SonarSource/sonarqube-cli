@@ -40,6 +40,8 @@ import {
 import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
 import { SCA_SCANNER_SPEC } from '../../../src/cli/commands/_common/install/sca-scanner';
 import { SECRETS_SPEC } from '../../../src/cli/commands/_common/install/secrets';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
+import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
 import { detectPlatform } from '../../../src/lib/platform-detector.js';
@@ -73,6 +75,53 @@ interface ContextAugmentationSkillConfig {
   orgKey?: string;
   serverUrl?: string;
   scaEnabled?: boolean;
+}
+
+function recordContextAugmentationFeature(
+  state: CliState,
+  args: {
+    projectRoot: string;
+    projectKey: string;
+    orgKey?: string;
+    serverUrl?: string;
+    scaEnabled: boolean;
+  },
+): void {
+  const timestamp = new Date().toISOString();
+  let integration = state.integrations.installed.find(
+    (entry) => entry.integrationId === CLAUDE_INTEGRATION_ID,
+  );
+  if (!integration) {
+    integration = {
+      id: randomUUID(),
+      integrationId: CLAUDE_INTEGRATION_ID,
+      installedByCliVersion: 'integration-test',
+      installedAt: timestamp,
+      updatedByCliVersion: 'integration-test',
+      updatedAt: timestamp,
+      features: [],
+    };
+    state.integrations.installed.push(integration);
+  }
+
+  integration.features.push({
+    featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+    scope: 'project',
+    targetRoot: args.projectRoot,
+    installedByCliVersion: 'integration-test',
+    installedAt: timestamp,
+    updatedByCliVersion: 'integration-test',
+    updatedAt: timestamp,
+    dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
+    resources: [],
+    operations: [],
+    attrs: {
+      orgKey: args.orgKey ?? null,
+      projectKey: args.projectKey,
+      scaEnabled: args.scaEnabled,
+      serverUrl: args.serverUrl ?? null,
+    },
+  });
 }
 
 export class EnvironmentBuilder {
@@ -248,9 +297,8 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Registers a sonar-context-augmentation skill extension for a project.
-   * This mirrors the state written by `sonar integrate claude|copilot` after
-   * CAG setup succeeds.
+   * Registers a declaratively tracked Context Augmentation feature for a
+   * project. This mirrors the state consumed by `sonar context`.
    */
   withContextAugmentationSkill(
     projectRoot: string,
@@ -320,12 +368,21 @@ export class EnvironmentBuilder {
       });
     }
     if (this._installCagBinary) {
+      const binaryPath = resolvePath(buildLocalCagBinaryName(detectPlatform()));
       installed.push({
         name: CONTEXT_AUGMENTATION_BINARY_NAME,
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-        path: resolvePath(buildLocalCagBinaryName(detectPlatform())),
+        path: binaryPath,
         installedAt: new Date().toISOString(),
         installedByCliVersion: 'integration-test',
+      });
+      installedDependencies.push({
+        id: CONTEXT_AUGMENTATION_BINARY_NAME,
+        dependencyType: 'context-augmentation-binary',
+        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
+        path: binaryPath,
+        updatedAt: new Date().toISOString(),
+        updatedByCliVersion: 'integration-test',
       });
     }
     if (this._installScaScannerBinary) {
@@ -376,19 +433,11 @@ export class EnvironmentBuilder {
       } catch {
         resolvedRoot = skill.projectRoot;
       }
-      state.agentExtensions.push({
-        id: randomUUID(),
-        agentId: 'claude-code',
+      recordContextAugmentationFeature(state, {
         projectRoot: resolvedRoot,
-        global: false,
         projectKey: skill.projectKey,
         orgKey: skill.orgKey ?? this.activeConnectionOrgKey,
         serverUrl: skill.serverUrl ?? this.activeConnectionUrl,
-        updatedByCliVersion: 'integration-test',
-        updatedAt: new Date().toISOString(),
-        kind: 'skill',
-        name: CONTEXT_AUGMENTATION_BINARY_NAME,
-        version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         scaEnabled: skill.scaEnabled ?? false,
       });
     }

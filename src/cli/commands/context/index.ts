@@ -24,14 +24,14 @@ import { isAbsolute, relative, resolve } from 'node:path';
 
 import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../lib/install-types';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
-import type { AgentExtension, SkillExtension } from '../../../lib/state';
+import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
 import { loadState } from '../../../lib/state-manager';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env';
 import { CommandFailedError } from '../_common/error';
 import { resolveContextAugmentationBinaryPath } from '../_common/install/context-augmentation';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../integrate/_common/features/context-augmentation-feature';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
 function buildForwardedArgs(
@@ -99,38 +99,44 @@ function isPathInside(parent: string, child: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 }
 
-function isProjectContextAugmentationSkill(extension: AgentExtension): extension is SkillExtension {
-  // Global CAG skills are not tied to a project root, so they cannot provide passthrough context.
-  return (
-    extension.kind === 'skill' &&
-    extension.name === CONTEXT_AUGMENTATION_BINARY_NAME &&
-    !extension.global
-  );
+function isProjectContextAugmentationFeature(feature: InstalledIntegrationFeature): boolean {
+  // Global CAG installs are skipped, so only project-scoped feature entries
+  // can provide passthrough context.
+  return feature.featureId === CONTEXT_AUGMENTATION_FEATURE_ID && feature.scope === 'project';
+}
+
+function getOptionalStringAttr(
+  attrs: Record<string, IntegrationStateAttribute> | undefined,
+  key: string,
+): string | undefined {
+  const value = attrs?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function resolveRecordedContextAugmentationConfig(cwd: string): RecordedContextAugmentationConfig {
   try {
     const current = canonicalPath(cwd);
     const matches = loadState()
-      .agentExtensions.filter(isProjectContextAugmentationSkill)
-      .map((extension) => ({
-        extension,
-        projectRoot: canonicalPath(extension.projectRoot),
-      }))
+      .integrations.installed.flatMap((integration) =>
+        integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
+          feature,
+          projectRoot: canonicalPath(feature.targetRoot),
+        })),
+      )
       .filter(({ projectRoot }) => isPathInside(projectRoot, current))
       .sort(
         (a, b) =>
           b.projectRoot.length - a.projectRoot.length ||
-          getUpdatedAtTimestamp(b.extension) - getUpdatedAtTimestamp(a.extension),
+          getUpdatedAtTimestamp(b.feature) - getUpdatedAtTimestamp(a.feature),
       );
-    const match = matches.at(0)?.extension;
+    const match = matches.at(0)?.feature;
     if (!match) {
       return {};
     }
     return {
-      organization: match.orgKey,
-      projectKey: match.projectKey,
-      serverUrl: match.serverUrl,
+      organization: getOptionalStringAttr(match.attrs, 'orgKey'),
+      projectKey: getOptionalStringAttr(match.attrs, 'projectKey'),
+      serverUrl: getOptionalStringAttr(match.attrs, 'serverUrl'),
     };
   } catch (err) {
     logger.debug(
@@ -140,8 +146,8 @@ function resolveRecordedContextAugmentationConfig(cwd: string): RecordedContextA
   }
 }
 
-function getUpdatedAtTimestamp(extension: SkillExtension): number {
-  const timestamp = Date.parse(extension.updatedAt);
+function getUpdatedAtTimestamp(feature: InstalledIntegrationFeature): number {
+  const timestamp = Date.parse(feature.updatedAt);
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 

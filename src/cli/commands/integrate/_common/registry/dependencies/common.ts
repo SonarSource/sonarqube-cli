@@ -36,6 +36,6 @@ export interface DependencyDeclaration {
   displayName?: string;
   dependencyType: string;
   version?: string;
-  install: (context: DependencyInstallContext) => MaybePromise<InstalledDependency>;
+  installOrUpdate: (context: DependencyInstallContext) => MaybePromise<InstalledDependency>;
   isInstalled: (context: IntegrationContext) => MaybePromise<boolean>;
 }

@@ -114,7 +114,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       ],
     },
     createContextAugmentationFeature<CodexIntegrationOptions>({
-      agentId: 'codex',
       agentDisplayName: 'Codex',
       targetPath: resolveCodexSkillPath,
     }),

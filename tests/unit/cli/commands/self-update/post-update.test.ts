@@ -364,7 +364,7 @@ describe('migrateDeclarativeIntegrations', () => {
       id: 'shared-dependency',
       dependencyType: 'binary',
       version: '2',
-      install: ({ existingDependency }) => {
+      installOrUpdate: ({ existingDependency }) => {
         existingDependencyPaths.push(existingDependency?.path ?? 'missing');
         installCalls.push('install');
         return {

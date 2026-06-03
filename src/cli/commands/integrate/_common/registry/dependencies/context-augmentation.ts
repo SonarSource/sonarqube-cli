@@ -42,7 +42,7 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
     this.version = options.version ?? SONAR_CONTEXT_AUGMENTATION_VERSION;
   }
 
-  async install(context: DependencyInstallContext): Promise<InstalledDependency> {
+  async installOrUpdate(context: DependencyInstallContext): Promise<InstalledDependency> {
     const previousBinaryPath =
       context.existingDependency?.path ?? resolveContextAugmentationBinaryPath();
     if (previousBinaryPath) {

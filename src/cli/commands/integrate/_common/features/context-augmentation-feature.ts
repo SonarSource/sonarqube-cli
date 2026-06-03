@@ -21,11 +21,7 @@
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../../lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../lib/signatures';
 import { CommandFailedError } from '../../../_common/error';
-import {
-  type ContextAugmentationAgentId,
-  printContextAugmentationSkill,
-  runToolIntegrateCommand,
-} from '../context-augmentation';
+import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
 import { wholeFile } from '../registry/resources';
 import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
@@ -36,7 +32,6 @@ export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
   'context-augmentation-tool-integrate';
 
 export interface ContextAugmentationSkillFeatureOptions {
-  agentId: ContextAugmentationAgentId;
   agentDisplayName: string;
   targetPath: (context: IntegrationContext) => string;
 }
@@ -71,8 +66,6 @@ export function createContextAugmentationFeature<
         shouldApply: (context) => context.executionMode === 'install',
         apply: async (context) =>
           runToolIntegrateCommand({
-            state: context.state,
-            agentId: options.agentId,
             auth: getRequiredAuth(context),
             binaryPath: resolveContextAugmentationBinaryPath(context),
             projectRoot: context.targetRoot,

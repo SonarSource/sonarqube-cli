@@ -26,7 +26,10 @@ import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
-import { resolveContextAugmentationSetup } from '../_common/context-augmentation';
+import {
+  buildContextAugmentationAttrs,
+  resolveContextAugmentationSetup,
+} from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -97,7 +100,9 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     auth,
     attrs: {
       ...buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
-      ...(contextAugmentation ? buildContextAugmentationAttrs(contextAugmentation.scaEnabled) : {}),
+      ...(contextAugmentation
+        ? buildContextAugmentationAttrs(auth.serverUrl, auth.orgKey, contextAugmentation.scaEnabled)
+        : {}),
     },
   });
 
@@ -167,14 +172,6 @@ function buildIntegrationAttrs(
   return {
     projectKey: projectKey ?? null,
     sqaaEnabled,
-  };
-}
-
-function buildContextAugmentationAttrs(
-  scaEnabled: boolean,
-): Record<string, IntegrationStateAttribute> {
-  return {
-    scaEnabled,
   };
 }
 

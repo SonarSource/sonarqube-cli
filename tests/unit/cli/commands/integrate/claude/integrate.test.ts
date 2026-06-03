@@ -381,8 +381,10 @@ describe('integrateCommand', () => {
         scope: 'project',
         targetRoot: '/project/root',
         attrs: {
+          orgKey: 'cloud-org',
           projectKey: 'a-project',
           scaEnabled: true,
+          serverUrl: 'https://sonarcloud.io',
         },
       }),
     );

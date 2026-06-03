@@ -190,26 +190,5 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       const state = harness.stateJsonFile.asJson() as CliState;
       expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
     });
-
-    it('re-records the pinned declarative CAG state', () => {
-      const state = harness.stateJsonFile.asJson() as CliState;
-      expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-      const feature = findRecordedCagFeature(
-        state,
-        ({ integrationId, feature: installedFeature }) =>
-          integrationId === CLAUDE_INTEGRATION_ID &&
-          installedFeature.targetRoot === harness.cwd.path,
-      );
-      expect(feature).toBeDefined();
-      if (!feature) {
-        throw new Error('Expected a recorded declarative Claude CAG feature after rerun');
-      }
-      const resource = feature.feature.resources.find(
-        (entry) => entry.id === 'context-augmentation-skill-file',
-      );
-      expect(resource).toBeDefined();
-      expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-      expect(resource?.path).toBe(skillPath);
-    });
   });
 });

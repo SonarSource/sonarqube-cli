@@ -91,7 +91,7 @@ interface PreparedDependencies {
   failedDependencies: Map<string, Error>;
 }
 
-interface SharedDependencyExecution<TOptions = Record<string, unknown>> {
+interface UniqueDependencyExecution<TOptions = Record<string, unknown>> {
   dependency: DependencyDeclaration;
   execution: PreparedFeatureExecution<TOptions>;
 }
@@ -213,7 +213,7 @@ export class IntegrationInstaller {
       return [];
     }
 
-    const preparedDependencies = await this.prepareSharedDependencies(
+    const preparedDependencies = await this.prepareUniqueDependencies(
       executions,
       options.callbacks ?? {},
     );
@@ -221,7 +221,7 @@ export class IntegrationInstaller {
 
     for (const execution of executions) {
       try {
-        const applied = await this.applyFeatureWithSharedDependencies(
+        const applied = await this.applyFeatureWithUniqueDependencies(
           execution.context,
           execution.installedFeature,
           execution.application.feature,
@@ -254,7 +254,7 @@ export class IntegrationInstaller {
     feature: FeatureDeclaration<TOptions>,
     callbacks: ApplyFeatureCallbacks = {},
   ): Promise<AppliedFeature> {
-    const preparedDependencies = await this.prepareSharedDependencies(
+    const preparedDependencies = await this.prepareUniqueDependencies(
       [
         {
           application: {
@@ -271,7 +271,7 @@ export class IntegrationInstaller {
       ],
       callbacks,
     );
-    return this.applyFeatureWithSharedDependencies(
+    return this.applyFeatureWithUniqueDependencies(
       context,
       installedFeature,
       feature,
@@ -280,7 +280,7 @@ export class IntegrationInstaller {
     );
   }
 
-  private async prepareSharedDependencies<TOptions>(
+  private async prepareUniqueDependencies<TOptions>(
     executions: PreparedFeatureExecution<TOptions>[],
     callbacks: ApplyFeatureCallbacks = {},
   ): Promise<PreparedDependencies> {
@@ -288,7 +288,7 @@ export class IntegrationInstaller {
     const installedDependencies = new Map<string, InstalledDependency>();
     const failedDependencies = new Map<string, Error>();
 
-    for (const execution of this.collectSharedDependencies(executions)) {
+    for (const execution of this.collectUniqueDependencies(executions)) {
       const existingDependency = this.findInstalledDependency(
         execution.execution.context.state,
         execution.dependency,
@@ -311,7 +311,7 @@ export class IntegrationInstaller {
       }
 
       try {
-        const installedDependency = await execution.dependency.install({
+        const installedDependency = await execution.dependency.installOrUpdate({
           ...dependencyContext,
           existingDependency,
         });
@@ -330,7 +330,7 @@ export class IntegrationInstaller {
     };
   }
 
-  private async applyFeatureWithSharedDependencies<TOptions>(
+  private async applyFeatureWithUniqueDependencies<TOptions>(
     context: IntegrationContext,
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
@@ -588,10 +588,10 @@ export class IntegrationInstaller {
     });
   }
 
-  private collectSharedDependencies<TOptions>(
+  private collectUniqueDependencies<TOptions>(
     executions: PreparedFeatureExecution<TOptions>[],
-  ): SharedDependencyExecution<TOptions>[] {
-    const dependencies = new Map<string, SharedDependencyExecution<TOptions>>();
+  ): UniqueDependencyExecution<TOptions>[] {
+    const dependencies = new Map<string, UniqueDependencyExecution<TOptions>>();
 
     for (const execution of executions) {
       for (const dependency of execution.application.feature.dependencies ?? []) {

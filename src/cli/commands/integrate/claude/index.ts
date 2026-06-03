@@ -33,7 +33,10 @@ import { type DiscoveredProject, discoverProject } from '../../../../lib/project
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
-import { resolveContextAugmentationSetup } from '../_common/context-augmentation';
+import {
+  buildContextAugmentationAttrs,
+  resolveContextAugmentationSetup,
+} from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -124,7 +127,13 @@ export async function integrateClaude(
       });
   const featureAttrs = {
     ...buildIntegrationAttrs(config),
-    ...(contextAugmentation ? buildContextAugmentationAttrs(contextAugmentation.scaEnabled) : {}),
+    ...(contextAugmentation
+      ? buildContextAugmentationAttrs(
+          config.serverURL,
+          config.organization,
+          contextAugmentation.scaEnabled,
+        )
+      : {}),
   };
   const installRoot = isGlobal ? homedir() : project.rootDir;
   const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
@@ -296,13 +305,5 @@ function buildIntegrationAttrs(
 ): Record<string, IntegrationStateAttribute> {
   return {
     projectKey: config.projectKey ?? null,
-  };
-}
-
-function buildContextAugmentationAttrs(
-  scaEnabled: boolean,
-): Record<string, IntegrationStateAttribute> {
-  return {
-    scaEnabled,
   };
 }

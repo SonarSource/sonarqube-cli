@@ -134,7 +134,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       ],
     },
     createContextAugmentationFeature<CopilotIntegrationOptions>({
-      agentId: 'copilot-cli',
       agentDisplayName: 'Copilot',
       targetPath: resolveCopilotSkillPath,
     }),

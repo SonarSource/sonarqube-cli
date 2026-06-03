@@ -769,7 +769,7 @@ describe('declarative integration framework', () => {
 
     expect(await dependency.isInstalled(context)).toBe(true);
 
-    const applied = await dependency.install(context);
+    const applied = await dependency.installOrUpdate(context);
 
     expect(installBinarySpy).toHaveBeenCalledWith(SonarSourceBinary.SonarSecrets.spec);
     expect(applied).toEqual({

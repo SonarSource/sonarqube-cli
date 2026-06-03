@@ -226,7 +226,7 @@ describe('generic integration installer', () => {
       id: 'shared-binary',
       dependencyType: 'binary',
       version: '2',
-      install: () => ({
+      installOrUpdate: () => ({
         id: 'shared-binary',
         dependencyType: 'binary',
         version: '2',

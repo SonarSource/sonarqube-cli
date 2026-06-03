@@ -24,9 +24,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation.js';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature.js';
+import { CLAUDE_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/claude/declaration.js';
+import { CODEX_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/codex/declaration.js';
+import { COPILOT_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/copilot/declaration.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
-import type { CliState } from '../../../../src/lib/state.js';
+import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 import {
   type CagInvocation,
@@ -45,6 +49,57 @@ function findToolInvocation(invocations: CagInvocation[], subcommand: string): C
 
 function loadState(harness: TestHarness): CliState {
   return harness.stateJsonFile.asJson() as CliState;
+}
+
+interface RecordedCagFeature {
+  integrationId: string;
+  feature: InstalledIntegrationFeature;
+}
+
+function findRecordedCagFeature(
+  state: CliState,
+  integrationId?: string,
+): RecordedCagFeature | undefined {
+  for (const integration of state.integrations.installed) {
+    if (integrationId && integration.integrationId !== integrationId) {
+      continue;
+    }
+    for (const feature of integration.features) {
+      if (feature.featureId !== CONTEXT_AUGMENTATION_FEATURE_ID) {
+        continue;
+      }
+      return {
+        integrationId: integration.integrationId,
+        feature,
+      };
+    }
+  }
+  return undefined;
+}
+
+function expectRecordedCagFeature(
+  state: CliState,
+  args: {
+    integrationId: string;
+    projectRoot: string;
+    scaEnabled: boolean;
+    serverUrl: string;
+  },
+): void {
+  const entry = findRecordedCagFeature(state, args.integrationId);
+  expect(entry).toBeDefined();
+  if (!entry) {
+    return;
+  }
+  expect(entry.integrationId).toBe(args.integrationId);
+  expect(entry.feature.scope).toBe('project');
+  expect(entry.feature.targetRoot).toBe(args.projectRoot);
+  expect(entry.feature.attrs).toMatchObject({
+    orgKey: ORG_KEY,
+    projectKey: PROJECT_KEY,
+    scaEnabled: args.scaEnabled,
+    serverUrl: args.serverUrl,
+  });
 }
 
 function expectContextEnv(invocation: CagInvocation, serverUrl: string): void {
@@ -132,14 +187,14 @@ describe('integrate claude — Context Augmentation', () => {
       );
       expectSkillFile(harness, CLAUDE_SKILL_PATH, true);
 
-      // State records the skill extension
+      // State records the declarative feature.
       const state = loadState(harness);
-      const skillExt = state.agentExtensions.find(
-        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-      );
-      expect(skillExt).toBeDefined();
-      expect(skillExt?.agentId).toBe('claude-code');
-      expect(skillExt?.kind === 'skill' && skillExt.scaEnabled).toBe(true);
+      expectRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        projectRoot: harness.cwd.path,
+        scaEnabled: true,
+        serverUrl,
+      });
     },
     { timeout: 30000 },
   );
@@ -181,10 +236,12 @@ describe('integrate claude — Context Augmentation', () => {
       expect(result.stderr).toContain('Could not verify SCA availability');
       expectSkillFile(harness, CLAUDE_SKILL_PATH, false);
       const state = loadState(harness);
-      const skillExt = state.agentExtensions.find(
-        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-      );
-      expect(skillExt?.kind === 'skill' && skillExt.scaEnabled).toBe(false);
+      expectRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        projectRoot: harness.cwd.path,
+        scaEnabled: false,
+        serverUrl,
+      });
     },
     { timeout: 30000 },
   );
@@ -217,10 +274,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       const state = loadState(harness);
-      const skillExt = state.agentExtensions.find(
-        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-      );
-      expect(skillExt).toBeUndefined();
+      expect(findRecordedCagFeature(state)).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -257,11 +311,7 @@ describe('integrate claude — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       const state = loadState(harness);
-      expect(
-        state.agentExtensions.find(
-          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-        ),
-      ).toBeUndefined();
+      expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(result.stderr).toContain('not enabled for your organization');
     },
@@ -389,7 +439,7 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
-    'does not record the skill extension when CAG tool integrate fails',
+    'does not record the declarative feature when CAG tool integrate fails',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -421,11 +471,7 @@ describe('integrate claude — Context Augmentation', () => {
       const integrate = findToolInvocation(invocations, 'integrate');
       expect(integrate?.argv[1]).toBe('integrate');
       const state = loadState(harness);
-      expect(
-        state.agentExtensions.find(
-          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-        ),
-      ).toBeUndefined();
+      expect(findRecordedCagFeature(state)).toBeUndefined();
       expectSkillFile(harness, CLAUDE_SKILL_PATH, false);
       expect(result.stderr).toContain('Context Augmentation tool integration failed.');
     },
@@ -456,11 +502,7 @@ describe('integrate claude — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       const state = loadState(harness);
-      expect(
-        state.agentExtensions.find(
-          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-        ),
-      ).toBeUndefined();
+      expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(result.stderr).toContain('a project key and organization are required');
     },
@@ -552,14 +594,14 @@ describe('integrate copilot — Context Augmentation', () => {
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
       expectSkillFile(harness, COPILOT_SKILL_PATH, false);
 
-      // State records the skill extension under the internal Copilot agent id
+      // State records the declarative feature under the Copilot integration.
       const state = loadState(harness);
-      const skillExt = state.agentExtensions.find(
-        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-      );
-      expect(skillExt).toBeDefined();
-      expect(skillExt?.agentId).toBe('copilot-cli');
-      expect(skillExt?.kind === 'skill' && skillExt.scaEnabled).toBe(false);
+      expectRecordedCagFeature(state, {
+        integrationId: COPILOT_INTEGRATION_ID,
+        projectRoot: harness.cwd.path,
+        scaEnabled: false,
+        serverUrl,
+      });
     },
     { timeout: 30000 },
   );
@@ -618,12 +660,12 @@ describe('integrate codex — Context Augmentation', () => {
       expectSkillFile(harness, CODEX_SKILL_PATH, false);
 
       const state = loadState(harness);
-      const skillExt = state.agentExtensions.find(
-        (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-      );
-      expect(skillExt).toBeDefined();
-      expect(skillExt?.agentId).toBe('codex');
-      expect(skillExt?.kind === 'skill' && skillExt.scaEnabled).toBe(false);
+      expectRecordedCagFeature(state, {
+        integrationId: CODEX_INTEGRATION_ID,
+        projectRoot: harness.cwd.path,
+        scaEnabled: false,
+        serverUrl,
+      });
     },
     { timeout: 30000 },
   );
@@ -660,11 +702,7 @@ describe('integrate codex — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       const state = loadState(harness);
-      expect(
-        state.agentExtensions.find(
-          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-        ),
-      ).toBeUndefined();
+      expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
     },
     { timeout: 30000 },
@@ -771,11 +809,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       const state = loadState(harness);
-      expect(
-        state.agentExtensions.find(
-          (e) => e.kind === 'skill' && e.name === 'sonar-context-augmentation',
-        ),
-      ).toBeUndefined();
+      expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(COPILOT_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);

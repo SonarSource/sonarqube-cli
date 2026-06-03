@@ -19,17 +19,13 @@
  */
 
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 
-import { version as VERSION } from '../../../../../package.json';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../lib/install-types';
 import logger from '../../../../lib/logger';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
-import type { CliState } from '../../../../lib/state';
-import { upsertAgentExtension } from '../../../../lib/state-manager';
+import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import {
   blank,
@@ -44,10 +40,6 @@ import {
 import { buildContextAugmentationEnv } from '../../_common/context-augmentation-env';
 import { CommandFailedError } from '../../_common/error';
 
-export const CONTEXT_AUGMENTATION_SKILL_STATE_NAME = CONTEXT_AUGMENTATION_BINARY_NAME;
-
-export type ContextAugmentationAgentId = 'claude-code' | 'copilot-cli' | 'codex';
-
 export interface ResolveContextAugmentationSetupParams {
   auth: ResolvedAuth;
   projectKey: string | undefined;
@@ -58,9 +50,19 @@ export interface ResolvedContextAugmentationSetup {
   scaEnabled: boolean;
 }
 
+export function buildContextAugmentationAttrs(
+  serverUrl: string,
+  orgKey: string | undefined,
+  scaEnabled: boolean,
+): Record<string, IntegrationStateAttribute> {
+  return {
+    orgKey: orgKey ?? null,
+    scaEnabled,
+    serverUrl,
+  };
+}
+
 export interface ApplyContextAugmentationToolIntegrationParams {
-  state: CliState;
-  agentId: ContextAugmentationAgentId;
   auth: ResolvedAuth;
   binaryPath: string;
   projectRoot: string;
@@ -161,22 +163,6 @@ export async function runToolIntegrateCommand(
     p.projectRoot,
     initEnv,
   );
-
-  upsertAgentExtension(p.state, {
-    id: randomUUID(),
-    kind: 'skill',
-    agentId: p.agentId,
-    projectRoot: p.projectRoot,
-    global: false,
-    projectKey: p.projectKey,
-    orgKey: p.auth.orgKey,
-    serverUrl: p.auth.serverUrl,
-    updatedByCliVersion: VERSION,
-    updatedAt: new Date().toISOString(),
-    name: CONTEXT_AUGMENTATION_SKILL_STATE_NAME,
-    version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-    scaEnabled: p.scaEnabled,
-  });
   success('SonarQube Context Augmentation configured');
 }
 

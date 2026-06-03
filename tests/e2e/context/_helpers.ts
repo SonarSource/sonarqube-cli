@@ -37,7 +37,6 @@ import type {
   CliState,
   InstalledIntegrationDependency,
   InstalledIntegrationFeature,
-  SkillExtension,
 } from '../../../src/lib/state';
 import { getDefaultState } from '../../../src/lib/state';
 import type { TestHarness } from '../../integration/harness';
@@ -76,24 +75,6 @@ export interface SeedSkillOptions {
   orgKey?: string;
 }
 
-export function buildSkillExtension(opts: SeedSkillOptions): SkillExtension {
-  return {
-    id: `e2e-skill-${randomUUID()}`,
-    kind: 'skill',
-    agentId: opts.agentId,
-    projectRoot: opts.projectRoot,
-    global: opts.global ?? false,
-    projectKey: opts.projectKey ?? SEEDED_PROJECT_KEY,
-    orgKey: opts.orgKey ?? SEEDED_ORG_KEY,
-    serverUrl: 'https://sonarcloud.io',
-    updatedByCliVersion: STALE_CLI_VERSION,
-    updatedAt: SEEDED_UPDATED_AT,
-    name: CONTEXT_AUGMENTATION_BINARY_NAME,
-    version: opts.version ?? STALE_SKILL_VERSION,
-    scaEnabled: false,
-  };
-}
-
 export interface SeedStateOptions {
   cliVersion?: string;
   skills?: SeedSkillOptions[];
@@ -104,7 +85,6 @@ export function seedState(harness: TestHarness, options: SeedStateOptions = {}):
   const state = getDefaultState(options.cliVersion ?? STALE_CLI_VERSION);
   state.telemetry.enabled = false;
   for (const skill of options.skills ?? []) {
-    state.agentExtensions.push(buildSkillExtension(skill));
     seedDeclarativeContextAugmentationFeature(state, skill);
   }
   writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
@@ -187,18 +167,6 @@ function resolveSkillRelativePath(agentId: SeedSkillOptions['agentId']): string 
     case 'codex':
       return CODEX_SKILL_RELATIVE_PATH;
   }
-}
-
-export function findRecordedCagSkill(
-  state: CliState,
-  predicate?: (skill: SkillExtension) => boolean,
-): SkillExtension | undefined {
-  return state.agentExtensions.find((extension): extension is SkillExtension => {
-    if (extension.kind !== 'skill' || extension.name !== CONTEXT_AUGMENTATION_BINARY_NAME) {
-      return false;
-    }
-    return predicate ? predicate(extension) : true;
-  });
 }
 
 export interface RecordedCagFeature {
