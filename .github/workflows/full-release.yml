@@ -137,11 +137,18 @@ jobs:
           DRAFT_VERSION: ${{ needs.check-draft-exists.outputs.release-version }}
           RELEASED_VERSION: ${{ needs.release.outputs.released-version }}
         run: |
+          set -euo pipefail
           echo "Copying notes from draft '$DRAFT_VERSION' to published release '$RELEASED_VERSION'..."
           gh release view "$DRAFT_VERSION" --json body --jq '.body' > release-notes.md
           gh release edit "$RELEASED_VERSION" --notes-file release-notes.md
-          # Draft releases do not create a git tag (see https://github.com/orgs/community/discussions/24690),
-          # so --cleanup-tag is intentionally omitted.
-          echo "Deleting draft '$DRAFT_VERSION'..."
-          gh release delete "$DRAFT_VERSION" --yes
+
+          IS_DRAFT=$(gh release view "$DRAFT_VERSION" --json isDraft -q '.isDraft' 2>/dev/null || echo "missing")
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Deleting draft release '$DRAFT_VERSION'..."
+            gh release delete "$DRAFT_VERSION" --yes
+          elif [ "$DRAFT_VERSION" = "$RELEASED_VERSION" ]; then
+            echo "Release '$RELEASED_VERSION' was published from the draft in place; notes copied, skipping delete."
+          else
+            echo "No draft release '$DRAFT_VERSION' to delete (isDraft=$IS_DRAFT)."
+          fi
           echo "Done."
