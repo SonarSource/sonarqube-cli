@@ -46,7 +46,7 @@ export function sonarEndMarker(id: string): string {
 }
 
 export function buildSqaaSection(projectKey: string): string {
-  return withSonarMarkers('sqaa-protocol', buildSqaaSectionBody(projectKey));
+  return withSonarMarkers('sonarqube-agentic-analysis-protocol', buildSqaaSectionBody(projectKey));
 }
 
 export function buildSqaaSectionBody(projectKey: string): string {
