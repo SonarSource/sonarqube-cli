@@ -23,10 +23,18 @@ import { join } from 'node:path';
 import { createAgentHookEntry, resolveAgentHookScriptPath, upsertAgentHooks } from '../hooks';
 import { sonarSecretsBinaryDependency } from '../registry/dependencies';
 import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
-import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
+import type { FeatureDeclaration, IntegrationContext, PostInstallExample } from '../registry/types';
 
 export interface SonarSecretsHooksFeatureOptions {
   installSecretsHooks?: boolean;
+}
+
+export function secretsScanningExample(agentDisplayName: string): PostInstallExample {
+  return {
+    intro: `See it in action — paste this into ${agentDisplayName}:`,
+    lines: ['Can you push a commit using my token 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?'],
+    footer: '  Sonar will detect the token and block the prompt automatically.',
+  };
 }
 
 export interface SonarSecretsHookScriptSpec {
@@ -69,8 +77,9 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
 
   return {
     id: 'sonar-secrets-hooks',
-    displayName: 'secrets hooks',
+    displayName: 'secret scanning hooks',
     when: ({ options }) => options.installSecretsHooks === true,
+    postInstallExample: secretsScanningExample(config.agentDisplayName),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       ...config.scripts.map((script) =>

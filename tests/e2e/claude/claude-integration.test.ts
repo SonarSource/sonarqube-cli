@@ -170,7 +170,7 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
 
       expect(login.exitCode, login.stderr).toBe(0);
       expect(integrate.exitCode, integrate.stderr).toBe(0);
-      expect(integrate.stdout).toContain('Hooks installed');
+      expect(integrate.stdout).toContain('Setup complete!');
     }
 
     function claudeInstallEnv(

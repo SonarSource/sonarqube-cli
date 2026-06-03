@@ -315,6 +315,8 @@ describe('integrate git (native hooks)', () => {
       const result = await harness.run('integrate git --hook pre-commit --non-interactive');
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+      expect(result.stdout).toContain('Setup complete!');
+      expect(result.stdout).toContain('Verify the pre-commit hook works');
 
       const { hookEnv } = setupSonarBinDir(harness);
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -338,6 +340,8 @@ describe('integrate git (native hooks)', () => {
       const result = await harness.run('integrate git --hook pre-push --non-interactive');
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
+      expect(result.stdout).toContain('Setup complete!');
+      expect(result.stdout).toContain('Verify the pre-push hook works');
 
       const { hookEnv } = setupSonarBinDir(harness);
       setupGitUser(harness.cwd.path);

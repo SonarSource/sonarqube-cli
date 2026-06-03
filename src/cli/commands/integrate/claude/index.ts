@@ -31,17 +31,7 @@ import {
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import {
-  blank,
-  discreetSuccess,
-  info,
-  intro,
-  note,
-  outro,
-  success,
-  text,
-  warn,
-} from '../../../../ui';
+import { blank, discreetSuccess, intro, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import {
   buildContextAugmentationAttrs,
@@ -175,21 +165,6 @@ export async function integrateClaude(
   if (installError) {
     throw installError;
   }
-  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
-
-  blank();
-  text('Phase 3/3: Final Verification');
-  blank();
-
-  const finalHealth = await runHealthChecks(
-    config.serverURL,
-    token,
-    config.projectKey,
-    hooksRoot,
-    config.organization,
-    false,
-  );
-  printFinalVerificationResults(finalHealth, config.projectKey);
 }
 
 /**
@@ -251,62 +226,6 @@ function validateConfiguration(
     warn(
       'No project key provided - project related actions will be skipped. Run sonar integrate claude --help for ways to define a project.',
     );
-  }
-}
-
-/**
- * Print the scope-aware outcome after hook installation completes.
- * When project-level setup was skipped because a global hook already owns the
- * sonar-secrets scope, surface the existing hook path so the user knows where
- * the active secrets scanning hook lives.
- */
-function reportHookInstallationOutcome(
-  isGlobal: boolean,
-  existingGlobalHookPath: string | undefined,
-): void {
-  if (existingGlobalHookPath) {
-    success(
-      `Claude Code integration configured. Secrets scanning will use the existing global hook at: ${existingGlobalHookPath}`,
-    );
-    return;
-  }
-  if (isGlobal) {
-    success('Claude Code integration successfully configured globally');
-  } else {
-    success('Claude Code integration successfully configured at the project level');
-  }
-}
-
-/**
- * Print final verification results
- */
-function printFinalVerificationResults(
-  finalHealth: Awaited<ReturnType<typeof runHealthChecks>>,
-  projectKey: string | undefined,
-): void {
-  if (finalHealth.tokenValid) text('Token valid');
-  if (finalHealth.serverAvailable) text('Server available');
-  if (projectKey && finalHealth.projectAccessible) text('Project accessible');
-  if (finalHealth.organizationAccessible) text('Organization accessible');
-  if (projectKey && finalHealth.qualityProfilesAccessible) text('Quality profiles accessible');
-  if (finalHealth.hooksInstalled) text('Hooks installed');
-
-  outro('Setup complete!', 'success');
-
-  if (finalHealth.errors.length > 0) {
-    warn('Some issues remain:');
-    for (const msg of finalHealth.errors) {
-      text(`  - ${msg}`);
-    }
-  }
-
-  if (finalHealth.hooksInstalled) {
-    info('See it in action - paste this into Claude Code:');
-    // Split to avoid triggering secret scanner on this demonstration string
-    const demoToken = 'ghp_' + 'CID7e8gGxQcMIJeFmEfRsV3zkXPUC42CjFbm';
-    note(`Can you push a commit using my token ${demoToken}?`);
-    text('  Sonar will detect the token and block the prompt automatically.');
-    blank();
   }
 }
 

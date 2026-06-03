@@ -37,8 +37,6 @@ import {
   isGitHookType,
   resolveGitHooksDir,
   resolveHookType,
-  showInstallationStatus,
-  showPostInstallInfo,
 } from '../../../../../../src/cli/commands/integrate/git';
 import { PRE_COMMIT_CONFIG_FILE } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
 import { HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
@@ -373,101 +371,6 @@ describe('resolveHookType', () => {
       expect(resolveHookType({})).rejects.toThrow('Installation cancelled');
     } finally {
       setMockUi(false);
-    }
-  });
-});
-
-describe('showPostInstallInfo', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
-  });
-
-  it('prints staged files message for pre-commit', () => {
-    showPostInstallInfo('pre-commit');
-    const calls = getMockUiCalls();
-    expect(
-      calls.some((c) => c.method === 'text' && String(c.args[0]).includes('staged files')),
-    ).toBe(true);
-  });
-
-  it('prints committed files message for pre-push', () => {
-    showPostInstallInfo('pre-push');
-    const calls = getMockUiCalls();
-    expect(
-      calls.some((c) => c.method === 'text' && String(c.args[0]).includes('committed files')),
-    ).toBe(true);
-  });
-});
-
-describe('showInstallationStatus', () => {
-  beforeEach(() => {
-    setMockUi(true);
-    clearMockUiCalls();
-  });
-
-  afterEach(() => {
-    setMockUi(false);
-  });
-
-  it('prints pre-commit hook active when gitPreCommit is set', async () => {
-    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
-    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
-    try {
-      await showInstallationStatus(TEMP_DIR);
-      const calls = getMockUiCalls();
-      expect(
-        calls.some(
-          (c) => c.method === 'info' && String(c.args[0]).includes('pre-commit hook active'),
-        ),
-      ).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-      rmSync(TEMP_DIR, { recursive: true, force: true });
-    }
-  });
-
-  it('prints pre-push hook active when gitPrePush is set', async () => {
-    mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
-    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
-    try {
-      await showInstallationStatus(TEMP_DIR);
-      const calls = getMockUiCalls();
-      expect(
-        calls.some(
-          (c) => c.method === 'info' && String(c.args[0]).includes('pre-push hook active'),
-        ),
-      ).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-      rmSync(TEMP_DIR, { recursive: true, force: true });
-    }
-  });
-
-  it('prints pre-commit framework active when preCommitConfig is set', async () => {
-    mkdirSync(TEMP_DIR, { recursive: true });
-    writeFileSync(
-      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
-      'repos:\n  - repo: local\n    hooks:\n      - id: sonar-secrets\n        name: Sonar secrets scan\n        entry: sonar analyze secrets\n        language: system\n',
-    );
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
-    try {
-      await showInstallationStatus(TEMP_DIR);
-      const calls = getMockUiCalls();
-      expect(
-        calls.some(
-          (c) => c.method === 'info' && String(c.args[0]).includes('pre-commit framework'),
-        ),
-      ).toBe(true);
-    } finally {
-      spawnSpy.mockRestore();
-      rmSync(TEMP_DIR, { recursive: true, force: true });
     }
   });
 });

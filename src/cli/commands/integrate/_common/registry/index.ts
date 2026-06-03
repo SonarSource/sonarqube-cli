@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+export { renderCompletionSummary } from './completion-summary';
 export { createIntegrationRegistry, IntegrationRegistry, registerIntegrations } from './core';
 export {
   type DependencyDeclaration,
@@ -66,4 +67,5 @@ export type {
   IntegrationInvocation,
   LegacyFeatureDeclaration,
   MaybePromise,
+  PostInstallExample,
 } from './types';

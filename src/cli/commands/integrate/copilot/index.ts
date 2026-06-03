@@ -19,12 +19,11 @@
  */
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { intro, success, warn } from '../../../../ui';
+import { intro, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
 import {
   buildContextAugmentationAttrs,
@@ -34,17 +33,8 @@ import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
-import {
-  detectGlobalSecretsHook,
-  hookScriptName,
-  PROJECT_HOOKS_REL_DIR,
-  SCRIPT_REL_DIR,
-} from './hooks';
-import {
-  INSTRUCTIONS_FILENAME,
-  PROJECT_INSTRUCTIONS_REL_DIR,
-  warnIfProjectInstructionsShadowGlobal,
-} from './instructions';
+import { detectGlobalSecretsHook } from './hooks';
+import { warnIfProjectInstructionsShadowGlobal } from './instructions';
 
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {
@@ -105,64 +95,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
         : {}),
     },
   });
-
-  reportInstallationOutcome({
-    isGlobal,
-    hookPath: existingGlobalHookPath ?? expectedHookPath(targetRoot, scope),
-    promptInstructionsPath: expectedPromptInstructionsPath(targetRoot, scope),
-    sqaaInstructionsPath:
-      sqaaProjectKey === undefined ? undefined : expectedSqaaInstructionsPath(project.rootDir),
-  });
-}
-
-interface InstallationOutcome {
-  isGlobal: boolean;
-  hookPath: string;
-  promptInstructionsPath: string;
-  sqaaInstructionsPath?: string;
-}
-
-function reportInstallationOutcome({
-  isGlobal,
-  hookPath,
-  promptInstructionsPath,
-  sqaaInstructionsPath,
-}: InstallationOutcome): void {
-  const scope = isGlobal
-    ? 'Copilot integration successfully configured globally'
-    : 'Copilot integration successfully configured at the project level';
-  const instructionsLines = formatInstructionsLines(promptInstructionsPath, sqaaInstructionsPath);
-  const hookLine = `Hook: ${hookPath}`;
-  success([scope, hookLine, ...instructionsLines].join('\n'));
-}
-
-function formatInstructionsLines(
-  promptInstructionsPath: string,
-  sqaaInstructionsPath?: string,
-): string[] {
-  if (sqaaInstructionsPath && sqaaInstructionsPath === promptInstructionsPath) {
-    return [
-      `Instructions (secrets scanning for prompts, SonarQube Agentic Analysis): ${promptInstructionsPath}`,
-    ];
-  }
-
-  const lines = [`Instructions (secrets scanning for prompts): ${promptInstructionsPath}`];
-  if (sqaaInstructionsPath) {
-    lines.push(`Instructions (SonarQube Agentic Analysis): ${sqaaInstructionsPath}`);
-  }
-  return lines;
-}
-
-function expectedHookPath(targetRoot: string, scope: IntegrationScope): string {
-  return scope === 'global'
-    ? join(targetRoot, '.copilot', 'hooks', SCRIPT_REL_DIR, hookScriptName())
-    : join(targetRoot, PROJECT_HOOKS_REL_DIR, SCRIPT_REL_DIR, hookScriptName());
-}
-
-function expectedPromptInstructionsPath(targetRoot: string, scope: IntegrationScope): string {
-  return scope === 'global'
-    ? join(targetRoot, '.copilot', 'instructions', INSTRUCTIONS_FILENAME)
-    : expectedSqaaInstructionsPath(targetRoot);
 }
 
 function buildIntegrationAttrs(
@@ -173,8 +105,4 @@ function buildIntegrationAttrs(
     projectKey: projectKey ?? null,
     sqaaEnabled,
   };
-}
-
-function expectedSqaaInstructionsPath(projectRoot: string): string {
-  return join(projectRoot, PROJECT_INSTRUCTIONS_REL_DIR, INSTRUCTIONS_FILENAME);
 }

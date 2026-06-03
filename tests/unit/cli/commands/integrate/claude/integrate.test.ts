@@ -477,68 +477,6 @@ describe('integrateCommand', () => {
     );
   });
 
-  it('shows phase 3 text', async () => {
-    await integrateClaude({}, SERVER_AUTH);
-
-    const phaseText = getMockUiCalls().find(
-      (c) => c.method === 'text' && String(c.args[0]) === 'Phase 3/3: Final Verification',
-    );
-    expect(phaseText).toBeDefined();
-  });
-
-  it('shows outro message', async () => {
-    await integrateClaude({}, SERVER_AUTH);
-
-    const phaseText = getMockUiCalls().find(
-      (c) => c.method === 'outro' && String(c.args[0]) === 'Setup complete!',
-    );
-    expect(phaseText).toBeDefined();
-  });
-
-  it('shows warning message when final heath check fails', async () => {
-    repairTokenSpy.mockResolvedValue('repaired-token');
-    mockHealthCheckOnce({ errors: ['HealthError1', 'HealthError2', 'HealthError3'] });
-    mockHealthCheck({ errors: ['RemainingHealthError1', 'RemainingHealthError3'] });
-
-    await integrateClaude({}, SERVER_AUTH);
-
-    const warnText = getMockUiCalls().find(
-      (c) => c.method === 'warn' && String(c.args[0]).includes('Some issues remain:'),
-    );
-    expect(warnText).toBeDefined();
-  });
-
-  it('shows final heath check failures in detail', async () => {
-    repairTokenSpy.mockResolvedValue('repaired-token');
-    mockHealthCheckOnce({ errors: ['HealthError1', 'HealthError2', 'HealthError3'] });
-    mockHealthCheck({ errors: ['RemainingHealthError1', 'RemainingHealthError3'] });
-
-    await integrateClaude({}, SERVER_AUTH);
-
-    const healthText = getMockUiCalls()
-      .filter((c) => c.method === 'text' && String(c.args[0]).includes('RemainingHealthError'))
-      .map((c) => String(c.args[0]));
-    expect(healthText).toBeArrayOfSize(2);
-    expect(healthText).toEqual(['  - RemainingHealthError1', '  - RemainingHealthError3']);
-  });
-
-  it('shows secrets hook example when hooks installed', async () => {
-    await integrateClaude({}, SERVER_AUTH);
-
-    const infoText = getMockUiCalls().find(
-      (c) =>
-        c.method === 'info' &&
-        String(c.args[0]) === 'See it in action - paste this into Claude Code:',
-    );
-    expect(infoText).toBeDefined();
-    const exampleText = getMockUiCalls().find(
-      (c) =>
-        c.method === 'note' &&
-        String(c.args[0]).search(/Can you push a commit using my token \w+/) > -1,
-    );
-    expect(exampleText).toBeDefined();
-  });
-
   it('aborts integration when sonar-secrets installation fails', async () => {
     installIntegrationSpy.mockRejectedValueOnce(new Error('Network error'));
 
@@ -560,31 +498,6 @@ describe('integrateCommand', () => {
       // detectGlobalSecretsHook returns the hook directory path when a healthy
       // global install is found.
       detectGlobalSecretsHookSpy.mockResolvedValue(GLOBAL_HOOK_PATH);
-    });
-
-    it('prints the "configured. Secrets scanning will use the existing global hook at <path>" success message', async () => {
-      await integrateClaude({}, SERVER_AUTH);
-
-      const successMsg = getMockUiCalls().find(
-        (c) =>
-          c.method === 'success' &&
-          String(c.args[0]) ===
-            `Claude Code integration configured. Secrets scanning will use the existing global hook at: ${GLOBAL_HOOK_PATH}`,
-      );
-      expect(successMsg).toBeDefined();
-    });
-
-    it('does not print the "configured at the project level" success message', async () => {
-      await integrateClaude({}, SERVER_AUTH);
-
-      const projectSuccess = getMockUiCalls().find(
-        (c) =>
-          c.method === 'success' &&
-          String(c.args[0]).includes(
-            'Claude Code integration successfully configured at the project level',
-          ),
-      );
-      expect(projectSuccess).toBeUndefined();
     });
 
     it('forwards skipSecretsHooks: true to migrations and skips the declarative secrets-hooks feature', async () => {
@@ -653,18 +566,6 @@ describe('integrateCommand', () => {
       detectGlobalSecretsHookSpy.mockResolvedValue(undefined);
     });
 
-    it('prints the "configured at the project level" success on completion', async () => {
-      await integrateClaude({}, SERVER_AUTH);
-
-      const projectSuccess = getMockUiCalls().find(
-        (c) =>
-          c.method === 'success' &&
-          String(c.args[0]) ===
-            'Claude Code integration successfully configured at the project level',
-      );
-      expect(projectSuccess).toBeDefined();
-    });
-
     it('falls back to a project-level install (does not skip secrets hooks)', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
 
@@ -698,17 +599,6 @@ describe('integrateCommand', () => {
       expect(detectGlobalSecretsHookSpy).not.toHaveBeenCalled();
     });
 
-    it('prints the "configured globally" success on completion', async () => {
-      await integrateClaude({ global: true }, SERVER_AUTH);
-
-      const globalSuccess = getMockUiCalls().find(
-        (c) =>
-          c.method === 'success' &&
-          String(c.args[0]) === 'Claude Code integration successfully configured globally',
-      );
-      expect(globalSuccess).toBeDefined();
-    });
-
     it('does not print the "already configured globally" skip notice (no probe is run)', async () => {
       await integrateClaude({ global: true }, SERVER_AUTH);
 
@@ -718,25 +608,6 @@ describe('integrateCommand', () => {
       );
       expect(skipNotice).toBeUndefined();
     });
-  });
-
-  it('skips secrets hook example when hooks not installed', async () => {
-    mockHealthCheck({ hooksInstalled: false });
-
-    await integrateClaude({}, SERVER_AUTH);
-
-    const infoText = getMockUiCalls().find(
-      (c) =>
-        c.method === 'info' &&
-        String(c.args[0]) === 'See it in action - paste this into Claude Code:',
-    );
-    expect(infoText).not.toBeDefined();
-    const exampleText = getMockUiCalls().find(
-      (c) =>
-        c.method === 'note' &&
-        String(c.args[0]).search(/Can you push a commit using my token \w+/) > -1,
-    );
-    expect(exampleText).not.toBeDefined();
   });
 
   function mockDiscoveredProject(project: Partial<DiscoveredProject>) {

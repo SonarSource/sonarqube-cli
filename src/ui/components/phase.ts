@@ -26,15 +26,24 @@ import type { ColorFn, PhaseItem, PhaseOptions, StepStatus } from '../types.js';
 
 export type { PhaseItem, StepStatus } from '../types.js';
 
-export function phaseItem(text: string, status: StepStatus, detail?: string): PhaseItem {
-  return { text, status, detail };
+export function phaseItem(
+  text: string,
+  status: StepStatus,
+  detail?: string,
+  subItems?: string[],
+): PhaseItem {
+  return { text, status, detail, subItems };
 }
 
 function renderItem(item: PhaseItem, iconColors: Partial<Record<StepStatus, ColorFn>>): string {
   const colorFn: ColorFn = iconColors[item.status] ?? STATUS_COLORS[item.status];
   const icon = colorFn(STATUS_ICONS[item.status]);
   const detail = item.detail ? dim(`: ${item.detail}`) : '';
-  return `    ${icon}  ${item.text}${detail}`;
+  const lines = [`    ${icon}  ${item.text}${detail}`];
+  for (const subItem of item.subItems ?? []) {
+    lines.push(dim(`       * ${subItem}`));
+  }
+  return lines.join('\n');
 }
 
 export function phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}): void {
@@ -58,6 +67,9 @@ export function phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}
       const icon = STATUS_ICONS[item.status];
       const detail = item.detail ? `: ${item.detail}` : '';
       process.stdout.write(`  ${icon}  ${item.text}${detail}\n`);
+      for (const subItem of item.subItems ?? []) {
+        process.stdout.write(`       * ${subItem}\n`);
+      }
     }
     process.stdout.write('\n');
   }

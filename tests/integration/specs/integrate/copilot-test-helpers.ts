@@ -22,8 +22,6 @@
 
 import { mkdirSync } from 'node:fs';
 
-import { expect } from 'bun:test';
-
 import { hookScriptName, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 
 export const HOOK_FIELD = IS_WINDOWS ? 'powershell' : 'bash';
@@ -88,22 +86,6 @@ export interface InstalledIntegration {
 /** Builds a platform-correct `CopilotHookEntry` for the given command path. */
 export function makeHookEntry(commandPath: string): CopilotHookEntry {
   return { type: 'command', timeoutSec: 60, [HOOK_FIELD]: commandPath };
-}
-
-/**
- * Returns the line in `stdout` that begins with `prefix` (e.g. `"Hook:"` or
- * `"Instructions:"`), asserting that exactly one such line exists.
- */
-export function outcomeLine(
-  stdout: string,
-  prefix:
-    | 'Hook:'
-    | 'Instructions (secrets scanning for prompts):'
-    | 'Instructions (SonarQube Agentic Analysis):',
-): string {
-  const line = stdout.split('\n').find((l) => l.startsWith(prefix));
-  expect(line).toBeDefined();
-  return line ?? '';
 }
 
 /** Returns the persisted declarative Copilot integration entry, if present. */
