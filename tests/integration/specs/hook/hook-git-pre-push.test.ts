@@ -147,6 +147,7 @@ describe('sonar hook git-pre-push', () => {
       });
 
       expect(result.exitCode).toBe(1);
+      expect(result.output).toContain('secret.js');
     },
     { timeout: 30000 },
   );
@@ -189,6 +190,7 @@ describe('sonar hook git-pre-push', () => {
       });
 
       expect(result.exitCode).toBe(1);
+      expect(result.output).toContain('secret.js');
     },
     { timeout: 30000 },
   );
