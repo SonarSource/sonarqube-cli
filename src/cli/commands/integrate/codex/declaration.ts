@@ -107,7 +107,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           displayName: 'Codex AGENTS.md SQAA instructions',
           targetPath: resolveCodexAgentsMdPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
-          endMarker: sonarEndMarker('sqaa-protocol'),
+          endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
           content: (context) => buildSqaaSectionBody(getRequiredStringAttr(context, 'projectKey')),
         }),
       ],
