@@ -32,7 +32,8 @@
  *
  * The script:
  *   1. Resolves the previous release tag with `git describe`.
- *   2. Collects commit subjects between the previous tag and the released one.
+ *   2. Collects commit subjects between the previous tag and the released one
+ *      (or HEAD when the release tag has not been pushed yet).
  *   3. Send two GitHub releases as style examples (hardcoded).
  *   4. Extracts JIRA keys from commit subjects and fetches their title/description
  *      from the Atlassian REST API when JIRA_USER / JIRA_TOKEN are set.
@@ -189,23 +190,26 @@ function describeError(err: unknown): string {
   }
 }
 
-function assertTagExists(tag: string): void {
-  const resolved = tryRunCmd(`git rev-parse --verify --quiet "${tag}^{commit}"`);
-  if (!resolved) {
-    throw new Error(
-      `Tag "${tag}" is not in the local git repository. ` +
-        'Make sure to check out with fetch-depth: 0 and fetch-tags: true.',
-    );
+/** Return the tag if it exists in git, otherwise HEAD (pre-release / draft-notes mode). */
+function resolveUpperBound(tag: string): string {
+  if (tryRunCmd(`git rev-parse --verify --quiet "${tag}^{commit}"`)) {
+    return tag;
   }
+  console.error(
+    `Tag "${tag}" not found in local git; using HEAD as upper bound (pre-release mode).`,
+  );
+  return 'HEAD';
 }
 
-function resolvePreviousTag(tag: string): string | undefined {
-  const prev = tryRunCmd(`git describe --tags --abbrev=0 --match '${RELEASE_TAG_GLOB}' "${tag}^"`);
+function resolvePreviousTag(upper: string): string | undefined {
+  const prev = tryRunCmd(
+    `git describe --tags --abbrev=0 --match '${RELEASE_TAG_GLOB}' "${upper}^"`,
+  );
   return prev || undefined;
 }
 
-function listCommits(previousTag: string | undefined, tag: string): CommitEntry[] {
-  const range = previousTag ? `${previousTag}..${tag}` : tag;
+function listCommits(previousTag: string | undefined, endRef: string): CommitEntry[] {
+  const range = previousTag ? `${previousTag}..${endRef}` : endRef;
   const output = tryRunCmd(`git log ${range} --no-merges --pretty=format:%h%x09%s`);
   if (!output) return [];
   return output
@@ -514,18 +518,16 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  // Sanity check: we need the tag locally to compute the change set.
-  // `gh release list` does not need the tag locally and degrades gracefully if `gh` is missing.
-  assertTagExists(releasedVersion);
+  const upper = resolveUpperBound(releasedVersion);
 
-  const previousTag = resolvePreviousTag(releasedVersion);
+  const previousTag = resolvePreviousTag(upper);
   if (previousTag) {
     console.error(`Using previous tag: ${previousTag}`);
   } else {
-    console.error('No previous release tag found — using full history up to the released version.');
+    console.error('No previous release tag found — using full history up to the upper bound.');
   }
 
-  const commits = listCommits(previousTag, releasedVersion);
+  const commits = listCommits(previousTag, upper);
   console.error(`Collected ${commits.length} commit(s).`);
 
   const jiraTickets = await fetchJiraTickets(commits);
