@@ -38,10 +38,13 @@ void mock.module('../../../../../../src/cli/commands/_common/install/binary', ()
 }));
 
 const {
+  askUser,
   createIntegrationRegistry,
+  install,
   IntegrationInstaller,
   IntegrationRegistry,
   jsonPatch,
+  skip,
   SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
@@ -51,6 +54,9 @@ const {
 } = await import('../../../../../../src/cli/commands/integrate/_common/registry');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
+
+const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } =
+  await import('../../../../../../src/ui');
 
 describe('declarative integration framework', () => {
   const installer = new IntegrationInstaller();
@@ -70,6 +76,7 @@ describe('declarative integration framework', () => {
   afterEach(() => {
     installBinarySpy.mockRestore();
     resolveBinaryPathSpy.mockRestore();
+    setMockUi(false);
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -259,7 +266,7 @@ describe('declarative integration framework', () => {
     );
   });
 
-  it('selects features matching an invocation', () => {
+  it('selects features matching an invocation, honoring boolean and decision results', async () => {
     interface GitOptions {
       hook?: 'pre-commit' | 'pre-push';
     }
@@ -268,38 +275,128 @@ describe('declarative integration framework', () => {
         {
           id: 'pre-commit',
           displayName: 'Pre-commit',
-          when: ({ options }) => !options.hook || options.hook === 'pre-commit',
+          shouldInstall: ({ options }) => !options.hook || options.hook === 'pre-commit',
         },
         {
           id: 'pre-push',
           displayName: 'Pre-push',
-          when: ({ options }) => options.hook === 'pre-push',
+          shouldInstall: ({ options }) => options.hook === 'pre-push',
         },
         {
           id: 'always',
           displayName: 'Always',
+          shouldInstall: () => install(),
+        },
+        {
+          id: 'never',
+          displayName: 'Never',
+          shouldInstall: () => skip(),
         },
       ],
     });
 
     expect(
-      installer
-        .selectFeaturesForInvocation(integration, {
+      (
+        await installer.selectFeaturesForInvocation(integration, {
           options: {},
           targetRoot: tempDir,
           scope: 'project',
         })
-        .map((feature) => feature.id),
+      ).map((feature) => feature.id),
     ).toEqual(['pre-commit', 'always']);
     expect(
-      installer
-        .selectFeaturesForInvocation(integration, {
+      (
+        await installer.selectFeaturesForInvocation(integration, {
           options: { hook: 'pre-push' },
           targetRoot: tempDir,
           scope: 'project',
         })
-        .map((feature) => feature.id),
+      ).map((feature) => feature.id),
     ).toEqual(['pre-push', 'always']);
+  });
+
+  it('reports an optional reason when a feature is skipped, and stays silent otherwise', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [
+        { id: 'with-reason', displayName: 'With reason', shouldInstall: () => skip('covered') },
+        { id: 'silent', displayName: 'Silent', shouldInstall: () => skip() },
+      ],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(selected).toEqual([]);
+    expect(findMockUiCall('info', 'covered')).toBeDefined();
+    expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
+  });
+
+  it('prompts the user when a feature asks, installing on confirm and skipping on decline', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [
+        { id: 'accepted', displayName: 'Accepted', shouldInstall: () => askUser() },
+        {
+          id: 'declined',
+          displayName: 'Declined',
+          shouldInstall: () => askUser('Install the thing?'),
+        },
+      ],
+    });
+    queueMockResponse(true);
+    queueMockResponse(false);
+
+    const selected = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(selected.map((feature) => feature.id)).toEqual(['accepted']);
+    const confirmCalls = getMockUiCalls().filter((call) => call.method === 'confirmPrompt');
+    expect(confirmCalls).toHaveLength(2);
+    expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
+  });
+
+  it('defaults to asking the user when a feature omits shouldInstall', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [{ id: 'feature', displayName: 'Feature' }],
+    });
+    queueMockResponse(false);
+
+    const selected = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(selected).toEqual([]);
+    expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(1);
+  });
+
+  it('auto-confirms ask decisions in non-interactive mode without prompting', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [
+        { id: 'asked', displayName: 'Asked', shouldInstall: () => askUser() },
+        { id: 'defaulted', displayName: 'Defaulted' },
+      ],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      nonInteractive: true,
+    });
+
+    expect(selected.map((feature) => feature.id)).toEqual(['asked', 'defaulted']);
+    expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(0);
   });
 
   it('applies declared resources and records the feature once', async () => {

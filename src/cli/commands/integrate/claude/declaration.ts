@@ -105,7 +105,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
-      when: ({ options }) => options.installSqaaHook === true,
+      shouldInstall: ({ options }) => options.installSqaaHook === true,
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
@@ -148,7 +148,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      when: ({ options }) => options.installMcp === true,
+      shouldInstall: ({ options }) => options.installMcp === true,
       resources: [
         jsonPatch({
           id: 'claude-mcp-config',

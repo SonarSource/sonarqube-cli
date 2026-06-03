@@ -91,6 +91,7 @@ export async function integrateCodex(
     targetRoot: installRoot,
     scope: installScope,
     auth,
+    nonInteractive: options.nonInteractive,
     attrs: {
       ...buildAttrs({
         includeSecretsSection: true,

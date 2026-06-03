@@ -54,6 +54,7 @@ export interface InstallIntegrationOptions<TOptions> {
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   featureIds?: string[];
+  nonInteractive?: boolean;
 }
 
 export async function installIntegration<TOptions>({
@@ -66,12 +67,13 @@ export async function installIntegration<TOptions>({
   force,
   attrs,
   featureIds,
+  nonInteractive,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
-  const invocation = makeInvocation(options, targetRoot, scope, auth, force, attrs);
+  const invocation = makeInvocation(options, targetRoot, scope, auth, force, attrs, nonInteractive);
   const features =
     featureIds === undefined
-      ? integrationInstaller.selectFeaturesForInvocation(integration, invocation)
+      ? await integrationInstaller.selectFeaturesForInvocation(integration, invocation)
       : integrationInstaller.selectFeatures(integration, featureIds);
   if (features.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
@@ -195,8 +197,9 @@ function makeInvocation<TOptions>(
   auth: ResolvedAuth | undefined,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
+  nonInteractive: boolean | undefined,
 ): IntegrationInvocation<TOptions> {
-  return { options, targetRoot, scope, auth, force, attrs };
+  return { options, targetRoot, scope, auth, force, attrs, nonInteractive };
 }
 
 async function resolveFeatureContext<TOptions>(

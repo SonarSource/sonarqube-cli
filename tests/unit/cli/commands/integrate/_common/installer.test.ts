@@ -124,7 +124,7 @@ describe('generic integration installer', () => {
       {
         id: 'main',
         displayName: 'Main feature',
-        when: ({ options }) => options.installMain === true,
+        shouldInstall: ({ options }) => options.installMain === true,
         resources: [
           wholeFile({
             id: 'main-file',
@@ -137,7 +137,7 @@ describe('generic integration installer', () => {
       {
         id: 'project',
         displayName: 'Project feature',
-        when: ({ options }) => options.installProject === true,
+        shouldInstall: ({ options }) => options.installProject === true,
         targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
         scope: 'project',
         resources: [
@@ -179,7 +179,7 @@ describe('generic integration installer', () => {
         {
           id: 'main',
           displayName: 'Main feature',
-          when: ({ options }) => options.installMain === true,
+          shouldInstall: ({ options }) => options.installMain === true,
           resources: [
             wholeFile({
               id: 'main-file',
@@ -192,7 +192,7 @@ describe('generic integration installer', () => {
         {
           id: 'context-skill',
           displayName: 'Context skill',
-          when: () => false,
+          shouldInstall: () => false,
           resources: [
             wholeFile({
               id: 'skill-file',
@@ -405,7 +405,7 @@ describe('generic integration installer', () => {
         {
           id: 'feature',
           displayName: 'Feature',
-          when: ({ options }) => options.enabled === true,
+          shouldInstall: ({ options }) => options.enabled === true,
         },
       ],
     );
