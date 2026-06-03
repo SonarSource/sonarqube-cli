@@ -26,7 +26,7 @@ tools:
 mcp-servers:
   atlassian:
     type: http
-    url: https://mcp.atlassian.com/v1/mcp
+    url: https://mcp.atlassian.com/v1/mcp/authv2
     headers:
       Authorization: "${{ needs.atlassian_mcp_auth.outputs.authorization_header }}"
     allowed:
