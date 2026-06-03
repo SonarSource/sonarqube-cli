@@ -27,9 +27,11 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
+import { confirmPrompt, info } from '../../../../../ui';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
 import type { ResourceDeclaration } from './resources';
+import { normalizeDecision } from './selection';
 import type {
   AppliedFeature,
   AppliedOperation,
@@ -105,11 +107,43 @@ export class IntegrationInstaller {
     });
   }
 
-  selectFeaturesForInvocation<TOptions>(
+  async selectFeaturesForInvocation<TOptions>(
     integration: IntegrationDeclaration<TOptions>,
     invocation: IntegrationInvocation<TOptions>,
-  ): FeatureDeclaration<TOptions>[] {
-    return integration.features.filter((feature) => !feature.when || feature.when(invocation));
+  ): Promise<FeatureDeclaration<TOptions>[]> {
+    const selected: FeatureDeclaration<TOptions>[] = [];
+    for (const feature of integration.features) {
+      if (await this.shouldInstallFeature(feature, invocation)) {
+        selected.push(feature);
+      }
+    }
+    return selected;
+  }
+
+  private async shouldInstallFeature<TOptions>(
+    feature: FeatureDeclaration<TOptions>,
+    invocation: IntegrationInvocation<TOptions>,
+  ): Promise<boolean> {
+    const decision = normalizeDecision(await feature.shouldInstall?.(invocation));
+    switch (decision.action) {
+      case 'install':
+        return true;
+      case 'skip':
+        if (decision.message) {
+          info(decision.message);
+        }
+        return false;
+      case 'ask': {
+        if ((invocation.options as { nonInteractive?: boolean }).nonInteractive) {
+          return true;
+        }
+        const confirmed = await confirmPrompt(
+          decision.message ?? `Install ${feature.displayName}?`,
+          true,
+        );
+        return confirmed === true;
+      }
+    }
   }
 
   findInstalledFeature<TOptions>(

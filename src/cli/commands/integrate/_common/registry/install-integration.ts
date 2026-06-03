@@ -71,7 +71,7 @@ export async function installIntegration<TOptions>({
   const invocation = makeInvocation(options, targetRoot, scope, auth, force, attrs);
   const features =
     featureIds === undefined
-      ? integrationInstaller.selectFeaturesForInvocation(integration, invocation)
+      ? await integrationInstaller.selectFeaturesForInvocation(integration, invocation)
       : integrationInstaller.selectFeatures(integration, featureIds);
   if (features.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);

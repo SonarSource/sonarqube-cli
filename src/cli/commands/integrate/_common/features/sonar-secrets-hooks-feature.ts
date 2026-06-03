@@ -78,7 +78,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
   return {
     id: 'sonar-secrets-hooks',
     displayName: 'secret scanning hooks',
-    when: ({ options }) => options.installSecretsHooks === true,
+    shouldInstall: ({ options }) => options.installSecretsHooks === true,
     postInstallExample: secretsScanningExample(config.agentDisplayName),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
