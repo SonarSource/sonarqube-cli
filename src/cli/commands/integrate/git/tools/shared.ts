@@ -20,7 +20,7 @@
 
 import { platform } from 'node:os';
 
-import type { VerificationExample } from '../../_common/registry';
+import type { PostInstallExample } from '../../_common/registry';
 import type { GitHookType } from '../options';
 
 export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
@@ -33,7 +33,7 @@ export function resolveSonarHookCommand(hook: GitHookType): string {
 const VERIFY_FILE_NAME = 'sonar-hook-verify.js';
 const VERIFY_SECRET_CONTENT = 'const API_KEY = "sqp_b4556a16fa2d28519d2451a911d2e073024010bc";';
 
-export function gitHookVerificationExample(hook: GitHookType): VerificationExample {
+export function gitHookExample(hook: GitHookType): PostInstallExample {
   const deleteCommand = platform() === 'win32' ? 'del' : 'rm';
   const command = hook === 'pre-commit' ? 'git commit' : 'git push';
   return {
