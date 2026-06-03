@@ -17,39 +17,42 @@ checkout:
 network:
   allowed:
     - defaults
-    - mcp.atlassian.com
+    - acli.atlassian.com
+    - api.atlassian.com
+    - sonarsource.atlassian.net
 
 tools:
   github:
     toolsets: [context, repos, pull_requests]
 
-mcp-servers:
-  atlassian:
-    type: http
-    url: https://mcp.atlassian.com/v1/mcp/authv2
-    headers:
-      Authorization: "${{ needs.atlassian_mcp_auth.outputs.authorization_header }}"
-    allowed:
-      - getAccessibleAtlassianResources
-      - searchJiraIssuesUsingJql
-      - getJiraIssue
-      - getJiraIssueRemoteIssueLinks
-
 env:
-  NIGHT_OWL_BASE_BRANCH: master
+  NIGHT_OWL_BASE_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || 'master' }}
   NIGHT_OWL_CANDIDATE_JQL: 'project = CLI AND labels = "for-agent" AND statusCategory = "To Do" ORDER BY created ASC'
   NIGHT_OWL_JIRA_LABEL: for-agent
   NIGHT_OWL_JIRA_PROJECT: CLI
+  NIGHT_OWL_JIRA_SITE: sonarsource.atlassian.net
   NIGHT_OWL_SLACK_CHANNEL_ID: C0B7GN16473
 
 jobs:
-  atlassian_mcp_auth:
+  night_owl_prepare:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      contents: read
+      pull-requests: read
     outputs:
-      authorization_header: ${{ steps.build_auth_header.outputs.authorization_header }}
+      prep_status: ${{ steps.prepare.outputs.prep_status }}
+      issue_key: ${{ steps.prepare.outputs.issue_key }}
+      issue_url: ${{ steps.prepare.outputs.issue_url }}
+      issue_summary: ${{ steps.prepare.outputs.issue_summary }}
+      parent_key: ${{ steps.prepare.outputs.parent_key }}
+      parent_url: ${{ steps.prepare.outputs.parent_url }}
+      parent_summary: ${{ steps.prepare.outputs.parent_summary }}
+      context_markdown: ${{ steps.prepare.outputs.context_markdown }}
+      slack_message: ${{ steps.prepare.outputs.slack_message }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Get Jira credentials from Vault
         id: secrets
         uses: SonarSource/vault-action-wrapper@c154b4a417b51cb98dd71137f49bf20e77c56820
@@ -57,16 +60,63 @@ jobs:
           secrets: |
             development/kv/data/jira user | JIRA_USER;
             development/kv/data/jira token | JIRA_TOKEN;
-      - name: Build Atlassian MCP authorization header
-        id: build_auth_header
+            development/kv/data/slack token | SLACK_BOT_TOKEN;
+      - name: Install Atlassian CLI
         shell: bash
         run: |
-          encoded=$(printf '%s' "${JIRA_USER}:${JIRA_TOKEN}" | base64 | tr -d '\n')
-          echo "::add-mask::${encoded}"
-          echo "authorization_header=Basic ${encoded}" >> "$GITHUB_OUTPUT"
+          case "${RUNNER_ARCH}" in
+            X64) platform=amd64 ;;
+            ARM64) platform=arm64 ;;
+            *)
+              echo "::error::Unsupported runner architecture: ${RUNNER_ARCH}"
+              exit 1
+              ;;
+          esac
+
+          curl -fsSLo "${RUNNER_TEMP}/acli" "https://acli.atlassian.com/linux/latest/acli_linux_${platform}/acli"
+          chmod +x "${RUNNER_TEMP}/acli"
+          install_dir="${RUNNER_TEMP}/night-owl-bin"
+          mkdir -p "${install_dir}"
+          mv "${RUNNER_TEMP}/acli" "${install_dir}/acli"
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+      - name: Authenticate Atlassian CLI
+        shell: bash
+        run: |
+          echo "::add-mask::${JIRA_TOKEN}"
+          printf '%s\n' "${JIRA_TOKEN}" | acli jira auth login --email "${JIRA_USER}" --site "${NIGHT_OWL_JIRA_SITE}" --token
         env:
           JIRA_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).JIRA_TOKEN }}
           JIRA_USER: ${{ fromJSON(steps.secrets.outputs.vault).JIRA_USER }}
+      - name: Prepare Jira context for Night Owl
+        id: prepare
+        continue-on-error: true
+        shell: bash
+        run: bash .github/scripts/night-owl/prepare-jira-context.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Post starvation message to Slack
+        if: ${{ steps.prepare.outcome == 'success' && steps.prepare.outputs.prep_status == 'starving' }}
+        uses: slackapi/slack-github-action@70cd7be8e40a46e8b0eced40b0de447bdb42f68e
+        env:
+          SLACK_BOT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ env.NIGHT_OWL_SLACK_CHANNEL_ID }}
+          slack-message: ${{ steps.prepare.outputs.slack_message }}
+      - name: Post preparation failure to Slack
+        if: ${{ steps.prepare.outcome == 'failure' }}
+        uses: slackapi/slack-github-action@70cd7be8e40a46e8b0eced40b0de447bdb42f68e
+        env:
+          SLACK_BOT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SLACK_BOT_TOKEN }}
+        with:
+          channel-id: ${{ env.NIGHT_OWL_SLACK_CHANNEL_ID }}
+          slack-message: |
+            Night Owl: :warning: preparation failure
+            Outcome: Jira preparation failed before the coding agent could start.
+            Action needed: Inspect the `night_owl_prepare` job logs for this workflow run and verify ACLI installation, ACLI authentication, and Jira access for `${{ env.NIGHT_OWL_JIRA_SITE }}`.
+      - name: Fail job when preparation fails
+        if: ${{ steps.prepare.outcome == 'failure' }}
+        shell: bash
+        run: exit 1
 
 safe-outputs:
   noop: false
@@ -74,7 +124,7 @@ safe-outputs:
     draft: true
     title-prefix: "[night-owl] "
     labels: [night-owl, automated]
-    protected-files: allowed
+    protected-files: fallback-to-issue
     base-branch: ${{ env.NIGHT_OWL_BASE_BRANCH }}
   jobs:
     slack-notify:
@@ -127,39 +177,28 @@ This workflow is temporarily repurposed to run the Night Owl implementation flow
 ## Instructions
 
 1. Read `AGENTS.md` and `CLAUDE.md` before changing code so you follow the repository-specific rules.
-2. Use Atlassian MCP for all Jira discovery and ticket reading. Do not rely on any separate hand-written brief.
+2. Jira preparation has already been done for you by the workflow using Atlassian CLI. Do not call Jira, Atlassian MCP, or `acli` yourself.
 3. Use GitHub MCP plus the local checkout for repository context, implementation work, and PR checks.
-4. Emit exactly one `slack_notify` safe output for every terminal outcome:
-   - `starving`: no eligible Jira ticket remains after filtering and open-PR deduplication;
-   - `blocked`: the selected ticket or its parent/linked context is missing key product or implementation decisions;
+4. Emit exactly one `slack_notify` safe output for every terminal outcome after Jira prep succeeds:
+   - `blocked`: the selected ticket or its prepared parent/linked context is missing key product or implementation decisions;
    - `draft-pr-opened`: the implementation is done and a draft PR was created.
+5. If the prepared Jira status below is not `ready`, stop immediately without emitting any safe outputs. The workflow already handled starvation or infrastructure notification.
 
-## 1. Discover candidate Jira tickets
+## Prepared Jira Inputs
 
-1. Use `getAccessibleAtlassianResources` to find the SonarSource Jira Cloud site.
-2. Use `searchJiraIssuesUsingJql` with `$NIGHT_OWL_CANDIDATE_JQL`.
-3. Process candidates in the order returned by Jira. Do not randomize.
-4. Keep only issues whose current status name is exactly `Open`, `TODO`, or `To Do`.
-5. Work only on issues in project `$NIGHT_OWL_JIRA_PROJECT` with label `$NIGHT_OWL_JIRA_LABEL`.
+- Prep status: `${{ needs.night_owl_prepare.outputs.prep_status }}`
+- Ticket: `${{ needs.night_owl_prepare.outputs.issue_key }}`
+- Ticket URL: `${{ needs.night_owl_prepare.outputs.issue_url }}`
+- Ticket summary: `${{ needs.night_owl_prepare.outputs.issue_summary }}`
+- Parent: `${{ needs.night_owl_prepare.outputs.parent_key }}`
+- Parent URL: `${{ needs.night_owl_prepare.outputs.parent_url }}`
+- Parent summary: `${{ needs.night_owl_prepare.outputs.parent_summary }}`
 
-## 2. Skip tickets already in flight
+${{ needs.night_owl_prepare.outputs.context_markdown }}
 
-For each candidate issue:
+Treat the prepared Jira content above as the source of truth. Do not invent missing Jira details and do not assume you can fetch more Jira data later.
 
-1. Use GitHub MCP to inspect open pull requests in this repository.
-2. If an open PR title, body, branch name, or obvious linked reference already targets the Jira key, skip that issue and continue with the next one.
-3. If no eligible candidate remains after this deduplication, emit a `slack_notify` message that Night Owl is starving and stop successfully.
-
-## 3. Gather Jira context
-
-For the first eligible issue that is not already in flight:
-
-1. Read the Jira issue details, including summary, description, issue type, status, labels, comments, subtasks, and issue links.
-2. If the issue has a parent or epic, read that issue too before making decisions.
-3. Read additional linked Jira tickets only when they are directly relevant to implementation or acceptance criteria.
-4. Treat Jira as the source of truth for the ticket context.
-
-## 4. Decide whether the ticket is actionable
+## 1. Decide whether the ticket is actionable
 
 Stop and emit a `slack_notify` message without creating a PR if any required behavior is missing or ambiguous, including:
 
@@ -176,7 +215,7 @@ The blocked Slack message must include:
 - a short explanation of why you stopped,
 - the concrete missing decisions or questions that a human needs to answer.
 
-## 5. Implement the ticket
+## 2. Implement the ticket
 
 If the issue is actionable:
 
@@ -186,7 +225,7 @@ If the issue is actionable:
 4. Run the smallest set of meaningful checks that match the files you changed. If you edit TypeScript, follow the repository formatting requirements before you finish.
 5. If you cannot finish a coherent implementation or cannot validate it well enough to justify a draft PR, stop and emit a blocked Slack message explaining what remains.
 
-## 6. Open a draft PR
+## 3. Open a draft PR
 
 When the implementation is complete:
 
@@ -199,13 +238,13 @@ When the implementation is complete:
    - the checks you ran,
    - any open questions or follow-ups that remain.
 
-## 7. Notify Slack
+## 4. Notify Slack
 
-Emit a `slack_notify` message for every terminal outcome.
+Emit a `slack_notify` message for every terminal outcome you handle in the agent.
 
 The message should be structured and concise:
 
-- `Night Owl`: starving, blocked, or draft PR opened
+- `Night Owl`: blocked or draft PR opened
 - `Ticket`: Jira key, link, and summary when applicable
 - `Parent`: parent Jira key and summary when applicable
 - `Outcome`: one or two sentences

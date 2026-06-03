@@ -111,8 +111,8 @@ When adding, removing, or changing commands, scripts, or project structure, upda
 ## GitHub Agentic Workflows
 
 - Agentic workflow source files live in `.github/workflows/*.md`. Generated `.lock.yml` files are compiler output; update them with `gh aw compile <workflow>` instead of editing them directly.
-- `ci-failure-triage-agent.md` watches failed workflow runs and can open draft remediation PRs.
-- `night-owl.md` runs nightly at `00:00 UTC`, uses GitHub MCP plus Atlassian MCP to select one `CLI` Jira ticket labeled `for-agent` in a to-do status, reads the ticket and parent context from Jira, opens draft PRs when the work is implementable, and posts Slack updates for starvation, blocked tickets, and draft PR creation.
+- `night-owl.md` runs nightly at `00:00 UTC`, installs Atlassian CLI in a prep job, authenticates with Vault-provided Jira bot credentials, selects the first `CLI` Jira ticket labeled `for-agent` in status `Open`, `TODO`, or `To Do`, materializes the ticket plus parent/comment/link context, posts Slack when the queue is starving or prep fails, then lets the agent work only from that prepared Jira context and open draft PRs. Scheduled runs target `master`; manual `workflow_dispatch` runs target the branch they were launched from so Night Owl testing on feature branches does not drag workflow changes into the generated PR patch.
+- `ci-failure-triage-agent.md` is temporarily repurposed to mirror `night-owl.md` so the Night Owl flow can be triggered from the existing workflow slot during rollout; like `night-owl.md`, manual dispatches target the selected branch while the nightly schedule targets `master`.
 
 ## Docs site (`docs/`)
 
