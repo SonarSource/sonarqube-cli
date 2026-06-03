@@ -32,6 +32,7 @@ import {
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
+import { discoverProjectWithSpinner, printAgentSetupSummary } from '../_common/setup-summary';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaration';
@@ -46,9 +47,9 @@ export async function integrateCodex(
     );
   }
 
-  intro('SonarQube integration for Codex');
+  intro('SonarQube Integration Setup for Codex');
 
-  const project = await discoverProject(process.cwd());
+  const project = await discoverProjectWithSpinner(() => discoverProject(process.cwd()));
   const isGlobal = options.global ?? false;
   const projectKey = options.project || project.projectKey;
   if (!isGlobal && !projectKey) {
@@ -56,6 +57,15 @@ export async function integrateCodex(
       'No project key provided - project related actions will be skipped. Run `sonar integrate codex --help` for ways to define a project.',
     );
   }
+
+  await printAgentSetupSummary({
+    serverUrl: auth.serverUrl,
+    organization: auth.orgKey,
+    token: auth.token,
+    project,
+    projectKey,
+    cliProjectKey: options.project,
+  });
 
   // SQAA is always project-scoped:
   //  - project install: include the SQAA section if the org is entitled AND

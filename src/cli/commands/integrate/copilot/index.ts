@@ -30,6 +30,7 @@ import {
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
+import { discoverProjectWithSpinner, printAgentSetupSummary } from '../_common/setup-summary';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
@@ -42,9 +43,9 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     );
   }
 
-  intro('SonarQube integration for Copilot');
+  intro('SonarQube Integration Setup for Copilot');
 
-  const project = await discoverProject(process.cwd());
+  const project = await discoverProjectWithSpinner(() => discoverProject(process.cwd()));
   const isGlobal = options.global ?? false;
   const projectKey = options.project || project.projectKey;
   if (!isGlobal && !projectKey) {
@@ -52,6 +53,15 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
       'No project key provided - project related actions will be skipped. Run `sonar integrate copilot --help` for ways to define a project.',
     );
   }
+
+  await printAgentSetupSummary({
+    serverUrl: auth.serverUrl,
+    organization: auth.orgKey,
+    token: auth.token,
+    project,
+    projectKey,
+    cliProjectKey: options.project,
+  });
 
   const entitled = await resolveSqaaEntitlement(auth.serverUrl, auth.token, auth.orgKey);
   const sqaaProjectKey = entitled && projectKey ? projectKey : undefined;
