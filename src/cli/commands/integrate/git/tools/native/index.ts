@@ -24,6 +24,7 @@ import { CommandFailedError } from '../../../../_common/error';
 import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
+import { gitHookWhen } from '../shared';
 import { nativeGitHookResource } from './resource';
 
 export const NATIVE_GIT_INTEGRATION_ID = 'native-git';
@@ -41,8 +42,7 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     hint: hook === 'pre-commit' ? 'scan staged files' : 'scan files in unpushed commits',
-    when: ({ options }) =>
-      options.nonInteractive === true && hook !== 'pre-commit' ? { kind: 'skip' } : { kind: 'ask' },
+    when: gitHookWhen(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       nativeGitHookResource({

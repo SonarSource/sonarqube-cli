@@ -34,7 +34,12 @@ import {
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
 import { getDefaultState } from '../../../../../../src/lib/state';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
+import {
+  clearMockUiCalls,
+  getMockUiCalls,
+  queueMockResponse,
+  setMockUi,
+} from '../../../../../../src/ui';
 
 describe('generic integration installer', () => {
   let tempDir: string;
@@ -276,6 +281,29 @@ describe('generic integration installer', () => {
 
     expect(installed).toEqual([]);
     expect(hasUiCall('info', 'Nothing to install for Test Integration')).toBe(true);
+  });
+
+  it('selects a feature whose when returns install without prompting', async () => {
+    const integration = registerIntegration(registry, 'installer-auto-install', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        when: () => ({ kind: 'install' }),
+        operations: [{ id: 'operation', apply: () => undefined }],
+      },
+    ]);
+
+    // Interactive mode with a queued "no" answer: install must ignore the prompt and select anyway.
+    queueMockResponse(false);
+    const installed = await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(installed.map((feature) => feature.featureId)).toEqual(['feature']);
   });
 
   it('passes force through the integration context for protected whole files', async () => {

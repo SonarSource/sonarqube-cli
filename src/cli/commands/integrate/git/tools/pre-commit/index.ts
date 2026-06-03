@@ -24,6 +24,7 @@ import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependen
 import { yamlPatch } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
+import { gitHookWhen } from '../shared';
 import {
   activatePreCommitFramework,
   normalizePreCommitConfig,
@@ -45,8 +46,7 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     hint: hook === 'pre-commit' ? 'scan staged files' : 'scan files in unpushed commits',
-    when: ({ options }) =>
-      options.nonInteractive === true && hook !== 'pre-commit' ? { kind: 'skip' } : { kind: 'ask' },
+    when: gitHookWhen(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       yamlPatch({

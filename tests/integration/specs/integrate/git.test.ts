@@ -417,6 +417,52 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
+    'installs only the pre-push hook with --hook pre-push --non-interactive',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run('integrate git --hook pre-push --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(false);
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      expect(gitIntegration.features).toHaveLength(1);
+      expect(gitIntegration.features[0]).toMatchObject({
+        featureId: 'pre-push-hook',
+        scope: 'project',
+        targetRoot: harness.cwd.path,
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'installs only the pre-commit hook with --hook pre-commit --non-interactive',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(false);
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      expect(gitIntegration.features).toHaveLength(1);
+      expect(gitIntegration.features[0]).toMatchObject({
+        featureId: 'pre-commit-hook',
+        scope: 'project',
+        targetRoot: harness.cwd.path,
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'installs native pre-push hook via interactive prompts when secrets is already installed',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });

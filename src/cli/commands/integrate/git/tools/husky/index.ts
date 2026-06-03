@@ -24,7 +24,7 @@ import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependen
 import { textSnippet } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { HOOK_MARKER } from '../shared';
+import { gitHookWhen, HOOK_MARKER } from '../shared';
 import { getHuskySnippetContent } from './shell-fragments';
 
 export const HUSKY_INTEGRATION_ID = 'husky';
@@ -40,8 +40,7 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     hint: hook === 'pre-commit' ? 'scan staged files' : 'scan files in unpushed commits',
-    when: ({ options }) =>
-      options.nonInteractive === true && hook !== 'pre-commit' ? { kind: 'skip' } : { kind: 'ask' },
+    when: gitHookWhen(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       textSnippet({

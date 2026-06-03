@@ -99,24 +99,35 @@ export class IntegrationInstaller {
     const selected: FeatureDeclaration<TOptions>[] = [];
     for (const feature of integration.features) {
       const result: WhenResult = feature.when ? await feature.when(whenCtx) : { kind: 'ask' };
-
-      if (result.kind === 'skip') {
-        if (result.reason) {
-          info(`${feature.displayName}: ${result.reason}`);
-        }
-        continue;
-      }
-
-      const question = this.buildPromptQuestion(feature, result);
-      const answer = invocation.nonInteractive ? true : await confirmPrompt(question, true);
-      if (answer === null) {
-        throw new CommandFailedError('Installation cancelled');
-      }
-      if (answer) {
+      if (await this.shouldSelectFeature(feature, result, invocation.nonInteractive)) {
         selected.push(feature);
       }
     }
     return selected;
+  }
+
+  private async shouldSelectFeature<TOptions>(
+    feature: FeatureDeclaration<TOptions>,
+    result: WhenResult,
+    nonInteractive: boolean | undefined,
+  ): Promise<boolean> {
+    if (result.kind === 'skip') {
+      if (result.reason) {
+        info(`${feature.displayName}: ${result.reason}`);
+      }
+      return false;
+    }
+
+    if (result.kind === 'install') {
+      return true;
+    }
+
+    const question = this.buildPromptQuestion(feature, result);
+    const answer = nonInteractive ? true : await confirmPrompt(question, true);
+    if (answer === null) {
+      throw new CommandFailedError('Installation cancelled');
+    }
+    return answer;
   }
 
   private buildPromptQuestion<TOptions>(

@@ -165,6 +165,10 @@ integrateCommand
   .description(
     'Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
   )
+  .option(
+    '--hook <type>',
+    'Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)',
+  )
   .option('--force', 'Overwrite existing hook if it is not from sonar integrate git')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option(

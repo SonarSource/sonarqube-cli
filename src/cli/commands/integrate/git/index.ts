@@ -28,7 +28,7 @@ import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
 import { blank, confirmPrompt, info, intro, note, text, warn } from '../../../../ui';
-import { CommandFailedError } from '../../_common/error';
+import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { installIntegration } from '../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from './options';
@@ -45,6 +45,17 @@ export type { GitHookType, IntegrateGitOptions } from './options';
 export { installViaGitHooks } from './tools';
 
 type GitIntegrationId = 'native-git' | 'husky' | 'pre-commit';
+
+export function isGitHookType(s: string): s is GitHookType {
+  return s === 'pre-commit' || s === 'pre-push';
+}
+
+/** Rejects invalid `--hook` when it is set */
+export function validateHookOption(hook: string | undefined): void {
+  if (hook !== undefined && !isGitHookType(hook)) {
+    throw new InvalidOptionError('--hook must be pre-commit or pre-push');
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Hook detection
@@ -135,6 +146,8 @@ export async function showInstallationStatus(root: string): Promise<void> {
 }
 
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
+  validateHookOption(options.hook);
+
   warn('Global hook installation');
   text('  Git prioritizes local repository settings over global ones.');
   text('  If a project has a local core.hooksPath set,');
@@ -163,6 +176,8 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
 }
 
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
+  validateHookOption(options.hook);
+
   intro('SonarQube Git integration (secrets scanning)');
   blank();
 

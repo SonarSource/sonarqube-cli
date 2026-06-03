@@ -45,7 +45,10 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   nonInteractive?: boolean;
 }
 
-export type WhenResult = { kind: 'ask'; question?: string } | { kind: 'skip'; reason?: string };
+export type WhenResult =
+  | { kind: 'ask'; question?: string }
+  | { kind: 'skip'; reason?: string }
+  | { kind: 'install' };
 
 export interface FeatureWhenContext<TOptions = Record<string, unknown>> {
   options: TOptions;

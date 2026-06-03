@@ -18,11 +18,28 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { GitHookType } from '../options';
+import type { FeatureWhenContext, WhenResult } from '../../_common/registry/types';
+import type { GitHookType, IntegrateGitOptions } from '../options';
 
 export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
 export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping secrets scan';
 
 export function resolveSonarHookCommand(hook: GitHookType): string {
   return hook === 'pre-commit' ? 'git-pre-commit' : 'git-pre-push';
+}
+
+/**
+ * Shared `when` gate for git hook features.
+ * - With `--hook`: auto-install the matching hook and skip the other (no prompt).
+ * - Without `--hook`: ask, except non-interactive defaults to pre-commit only.
+ */
+export function gitHookWhen(hook: GitHookType) {
+  return ({ options }: FeatureWhenContext<IntegrateGitOptions>): WhenResult => {
+    if (options.hook !== undefined) {
+      return options.hook === hook ? { kind: 'install' } : { kind: 'skip' };
+    }
+    return options.nonInteractive === true && hook !== 'pre-commit'
+      ? { kind: 'skip' }
+      : { kind: 'ask' };
+  };
 }

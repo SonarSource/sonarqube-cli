@@ -23,13 +23,18 @@ import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error.js';
+import {
+  CommandFailedError,
+  InvalidOptionError,
+} from '../../../../../../src/cli/commands/_common/error.js';
 import * as binaryInstall from '../../../../../../src/cli/commands/_common/install/binary';
 import {
   detectSonarHookInstallation as detectHookInstallation,
   hasMarker,
   installViaGitHooks,
   integrateGit,
+  type IntegrateGitOptions,
+  isGitHookType,
   resolveGitHooksDir,
   showInstallationStatus,
   showPostInstallInfo,
@@ -52,6 +57,15 @@ const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 
 /** Simulate `git config core.hooksPath` returning "not set" (exit code 1). */
 const NO_HOOKS_PATH = { exitCode: 1, stdout: '', stderr: '' };
+
+describe('isGitHookType', () => {
+  it('returns true for valid hook types and false otherwise', () => {
+    expect(isGitHookType('pre-commit')).toBe(true);
+    expect(isGitHookType('pre-push')).toBe(true);
+    expect(isGitHookType('commit-msg')).toBe(false);
+    expect(isGitHookType('')).toBe(false);
+  });
+});
 
 describe('hasMarker', () => {
   it('returns true only when the file exists and contains the marker', () => {
@@ -487,6 +501,34 @@ describe('integrateGit', () => {
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
   });
+
+  /* eslint-disable @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable */
+  it('throws InvalidOptionError when --hook is invalid before git checks', async () => {
+    await expect(
+      integrateGit({ nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions),
+    ).rejects.toBeInstanceOf(InvalidOptionError);
+    await expect(
+      integrateGit({ nonInteractive: true, hook: 'typo' } as unknown as IntegrateGitOptions),
+    ).rejects.toThrow('--hook must be pre-commit or pre-push');
+  });
+
+  it('throws InvalidOptionError for invalid --hook on global install before other work', async () => {
+    await expect(
+      integrateGit({
+        global: true,
+        nonInteractive: true,
+        hook: 'typo',
+      } as unknown as IntegrateGitOptions),
+    ).rejects.toBeInstanceOf(InvalidOptionError);
+    await expect(
+      integrateGit({
+        global: true,
+        nonInteractive: true,
+        hook: 'typo',
+      } as unknown as IntegrateGitOptions),
+    ).rejects.toThrow('--hook must be pre-commit or pre-push');
+  });
+  /* eslint-enable @typescript-eslint/await-thenable */
 
   it('throws CommandFailedError when not inside a git repository', () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/not-a-repo', isGit: false });

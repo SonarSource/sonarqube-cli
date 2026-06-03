@@ -21,6 +21,7 @@
 export type GitHookType = 'pre-commit' | 'pre-push';
 
 export interface IntegrateGitOptions {
+  hook?: GitHookType;
   force?: boolean;
   nonInteractive?: boolean;
   global?: boolean;
