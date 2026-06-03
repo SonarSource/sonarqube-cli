@@ -520,6 +520,44 @@ describe('declarative integration framework', () => {
     );
   });
 
+  it('upgrades legacy start markers in place when the end marker is still present', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const targetPath = join(tempDir, 'legacy-with-end.txt');
+    await writeFile(
+      targetPath,
+      [
+        '#!/bin/sh',
+        '# sonar:begin legacy',
+        'old managed content',
+        '# sonar:end feature',
+        'npm test',
+        '',
+      ].join('\n'),
+    );
+    const resource = textSnippet({
+      id: 'feature',
+      targetPath,
+      content: 'new managed content',
+      startMarker: '# sonar:begin feature',
+      endMarker: '# sonar:end feature',
+      legacyStartMarkers: ['# sonar:begin legacy'],
+    });
+
+    await resource.apply(context);
+
+    expect(await readFile(targetPath, 'utf-8')).toBe(
+      [
+        '#!/bin/sh',
+        '# sonar:begin feature',
+        'new managed content',
+        '# sonar:end feature',
+        'npm test',
+        '',
+      ].join('\n'),
+    );
+  });
+
   it('replaces legacy text snippets that only contain the start marker', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);

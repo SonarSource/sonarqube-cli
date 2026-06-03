@@ -75,26 +75,22 @@ export class TextSnippet implements ResourceDeclaration {
   private async renderContent(path: string, context: IntegrationContext): Promise<string> {
     const existing = (await readTextFile(path)) ?? '';
     const managedBlock = this.renderManagedBlock(context);
-    const pattern = new RegExp(
-      String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
-    );
-    if (pattern.test(existing)) {
-      return existing.replace(pattern, managedBlock);
+    const startIndex = findFirstIndex(existing, [
+      this.startMarker,
+      ...(this.options.legacyStartMarkers ?? []),
+    ]);
+
+    if (startIndex < 0) {
+      return appendBlock(existing, managedBlock);
     }
 
-    const startMarkerIndex = existing.indexOf(this.startMarker);
-    if (startMarkerIndex >= 0) {
-      return `${existing.slice(0, startMarkerIndex)}${managedBlock}\n`;
+    const endIndex = existing.indexOf(this.endMarker, startIndex);
+    if (endIndex >= 0) {
+      const blockEnd = endIndex + this.endMarker.length;
+      return `${existing.slice(0, startIndex)}${managedBlock}${existing.slice(blockEnd)}`;
     }
 
-    for (const legacyMarker of this.options.legacyStartMarkers ?? []) {
-      const legacyIndex = existing.indexOf(legacyMarker);
-      if (legacyIndex >= 0) {
-        return `${existing.slice(0, legacyIndex)}${managedBlock}\n`;
-      }
-    }
-
-    return appendBlock(existing, managedBlock);
+    return `${existing.slice(0, startIndex)}${managedBlock}\n`;
   }
 
   private renderManagedBlock(context: IntegrationContext): string {
@@ -121,6 +117,12 @@ function appendBlock(existing: string, block: string): string {
   return `${existing.trimEnd()}\n\n${block}\n`;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+function findFirstIndex(haystack: string, needles: string[]): number {
+  for (const needle of needles) {
+    const index = haystack.indexOf(needle);
+    if (index >= 0) {
+      return index;
+    }
+  }
+  return -1;
 }
