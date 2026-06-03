@@ -20,8 +20,8 @@
 
 /**
  * Offline e2e covering the post-update edge cases for sonar-context-augmentation:
- * skills with missing project roots, global skills, multi-skill refresh, no-op when
- * the CLI version is already current, and stale-binary cleanup.
+ * skills with missing project roots, multi-skill refresh, no-op when the CLI
+ * version is already current, and stale-binary cleanup.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -31,6 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from '
 
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
+import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { detectPlatform } from '../../../src/lib/platform-detector';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
@@ -38,7 +39,8 @@ import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,
-  findRecordedCagSkill,
+  findRecordedCagDependency,
+  findRecordedCagFeature,
   seedState,
   STALE_CLI_VERSION,
   STALE_SKILL_VERSION,
@@ -72,27 +74,28 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
 
-    expect(existsSync(cagBinaryPath), 'binary should still be downloaded').toBe(true);
+    expect(existsSync(cagBinaryPath), 'binary should not be downloaded for a deleted project').toBe(
+      false,
+    );
     expect(existsSync(join(missingRoot, CLAUDE_SKILL_RELATIVE_PATH))).toBe(false);
 
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
-    expect(findRecordedCagSkill(state)?.version).toBe(STALE_SKILL_VERSION);
-  });
-
-  it('skips skill refresh for skills flagged as global', async () => {
-    seedState(harness, {
-      skills: [{ agentId: 'claude-code', projectRoot: harness.cwd.path, global: true }],
-    });
-
-    const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
-    expect(result.exitCode, result.stderr).toBe(0);
-
-    expect(existsSync(cagBinaryPath)).toBe(true);
-    expect(existsSync(join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH))).toBe(false);
-
-    const state = harness.stateJsonFile.asJson() as CliState;
-    expect(findRecordedCagSkill(state)?.version).toBe(STALE_SKILL_VERSION);
+    expect(findRecordedCagDependency(state)).toBeUndefined();
+    const feature = findRecordedCagFeature(
+      state,
+      ({ integrationId, feature: installedFeature }) =>
+        integrationId === CLAUDE_INTEGRATION_ID && installedFeature.targetRoot === missingRoot,
+    );
+    expect(feature).toBeDefined();
+    if (!feature) {
+      throw new Error('Expected the deleted-root declarative CAG feature to remain recorded');
+    }
+    const resource = feature.feature.resources.find(
+      (entry) => entry.id === 'context-augmentation-skill-file',
+    );
+    expect(resource).toBeDefined();
+    expect(resource?.version).toBe(STALE_SKILL_VERSION);
   });
 
   it('refreshes every recorded skill across multiple project roots in one post-update', async () => {
@@ -130,10 +133,34 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     expect(contentB).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
 
     const state = harness.stateJsonFile.asJson() as CliState;
-    const skillA = findRecordedCagSkill(state, (s) => s.projectRoot === projectA);
-    const skillB = findRecordedCagSkill(state, (s) => s.projectRoot === projectB);
-    expect(skillA?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(skillB?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    const featureA = findRecordedCagFeature(
+      state,
+      ({ integrationId, feature }) =>
+        integrationId === CLAUDE_INTEGRATION_ID && feature.targetRoot === projectA,
+    );
+    const featureB = findRecordedCagFeature(
+      state,
+      ({ integrationId, feature }) =>
+        integrationId === CLAUDE_INTEGRATION_ID && feature.targetRoot === projectB,
+    );
+    expect(featureA).toBeDefined();
+    expect(featureB).toBeDefined();
+    if (!featureA || !featureB) {
+      throw new Error('Expected both declarative Claude CAG features to remain recorded');
+    }
+    const resourceA = featureA.feature.resources.find(
+      (entry) => entry.id === 'context-augmentation-skill-file',
+    );
+    const resourceB = featureB.feature.resources.find(
+      (entry) => entry.id === 'context-augmentation-skill-file',
+    );
+    expect(resourceA).toBeDefined();
+    expect(resourceB).toBeDefined();
+    expect(resourceA?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    expect(resourceB?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    expect(resourceA?.path).toBe(skillPathA);
+    expect(resourceB?.path).toBe(skillPathB);
   });
 
   it('is a no-op when state.config.cliVersion already matches the current CLI version', async () => {
@@ -150,7 +177,21 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
 
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(state.config.cliVersion).toBe(CURRENT_CLI_VERSION);
-    expect(findRecordedCagSkill(state)?.version).toBe(STALE_SKILL_VERSION);
+    expect(findRecordedCagDependency(state)).toBeUndefined();
+    const feature = findRecordedCagFeature(
+      state,
+      ({ integrationId, feature: installedFeature }) =>
+        integrationId === CLAUDE_INTEGRATION_ID && installedFeature.targetRoot === harness.cwd.path,
+    );
+    expect(feature).toBeDefined();
+    if (!feature) {
+      throw new Error('Expected the no-op declarative CAG feature to remain recorded');
+    }
+    const resource = feature.feature.resources.find(
+      (entry) => entry.id === 'context-augmentation-skill-file',
+    );
+    expect(resource).toBeDefined();
+    expect(resource?.version).toBe(STALE_SKILL_VERSION);
   });
 
   it('removes stale-version binaries left in the bin directory after a refresh', async () => {
@@ -174,5 +215,8 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
       f.startsWith(`${CONTEXT_AUGMENTATION_BINARY_NAME}-`),
     );
     expect(lingeringCagBinaries).toEqual([buildLocalCagBinaryName(detectPlatform())]);
+
+    const state = harness.stateJsonFile.asJson() as CliState;
+    expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
   });
 });

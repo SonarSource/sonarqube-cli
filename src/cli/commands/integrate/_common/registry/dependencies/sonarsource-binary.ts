@@ -30,7 +30,7 @@ import {
   installBinary,
   resolveBinaryPath,
 } from '../../../../_common/install/binary';
-import type { InstalledDependency, IntegrationContext } from '../types';
+import type { DependencyInstallContext, InstalledDependency, IntegrationContext } from '../types';
 import { type BaseDependencyOptions, type DependencyDeclaration } from './common';
 
 export interface SonarSourceBinaryDescriptor {
@@ -73,7 +73,7 @@ export class SonarSourceBinaryDependency implements DependencyDeclaration {
     this.version = options.version ?? options.binary.spec.version;
   }
 
-  async install(_context: IntegrationContext): Promise<InstalledDependency> {
+  async installOrUpdate(_context: DependencyInstallContext): Promise<InstalledDependency> {
     const result = await installBinary(this.options.binary.spec);
     return {
       id: this.id,

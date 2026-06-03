@@ -22,14 +22,15 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { jsonPatch, wholeFile } from '../_common/registry';
+import { jsonPatch, wholeFile } from '../_common/registry/resources';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -52,6 +53,7 @@ export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   installSecretsHooks?: boolean;
   installSqaaHook?: boolean;
   installMcp?: boolean;
+  installContextAugmentation?: boolean;
 }
 
 export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions> = {
@@ -158,6 +160,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         }),
       ],
     },
+    createContextAugmentationFeature<ClaudeIntegrationOptions>({
+      agentDisplayName: 'Claude Code',
+      targetPath: resolveClaudeSkillPath,
+    }),
   ],
 };
 
@@ -167,6 +173,16 @@ function resolveClaudeSettingsPath(context: IntegrationContext): string {
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {
   return getMcpConfigFilePath('claude', context.scope === 'global', context.targetRoot);
+}
+
+function resolveClaudeSkillPath(context: IntegrationContext): string {
+  return join(
+    context.targetRoot,
+    CLAUDE_CONFIG_DIR,
+    'skills',
+    'sonar-context-augmentation',
+    'SKILL.md',
+  );
 }
 
 function upsertClaudeMcpServer(document: unknown, serverConfig: object): Record<string, unknown> {

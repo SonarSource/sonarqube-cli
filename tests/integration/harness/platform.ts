@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
 
 export const IS_WINDOWS = process.platform === 'win32';
@@ -27,10 +29,18 @@ export const SCRIPT_EXT = IS_WINDOWS ? '.ps1' : '.sh';
  * Build the HOME-related env vars needed to override a user's home directory.
  * On Windows both USERPROFILE and HOME are set because Git for Windows runs
  * hooks in MSYS2 bash, which derives HOME from HOMEDRIVE+HOMEPATH when HOME
- * is unset.
+ * is unset. APPDATA/LOCALAPPDATA are also set so native Windows tools that
+ * resolve config/state via those folders see a coherent profile.
  */
 export function buildHomeEnv(homePath: string): Record<string, string> {
-  return IS_WINDOWS ? { USERPROFILE: homePath, HOME: homePath } : { HOME: homePath };
+  return IS_WINDOWS
+    ? {
+        USERPROFILE: homePath,
+        HOME: homePath,
+        APPDATA: join(homePath, 'AppData', 'Roaming'),
+        LOCALAPPDATA: join(homePath, 'AppData', 'Local'),
+      }
+    : { HOME: homePath };
 }
 
 /**

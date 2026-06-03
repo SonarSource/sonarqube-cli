@@ -27,8 +27,8 @@
  *   - Cloud connections where the org's CAG entitlement is disabled.
  *
  * Both paths must exit before `installContextAugmentationBinary()` runs, so
- * we assert no binary lands under `<cliHome>/bin/` and no skill extension is
- * recorded in state.
+ * we assert no binary lands under `<cliHome>/bin/` and no declarative CAG
+ * feature is recorded in state.
  *
  * The positive happy-path (Cloud + entitled + real binary install + real
  * `tool integrate`) is intentionally NOT covered here: CAG's daemon socket
@@ -38,7 +38,7 @@
  * prefix. A live-server e2e against real SQ Cloud would side-step the harness
  * entirely; until then, the integrate happy path remains covered by
  * `tests/integration/specs/integrate/context-augmentation.test.ts` (stub
- * binary) and the post-update print-skill path is covered by the rest of
+ * binary) and the post-update replay path is covered by the rest of
  * `tests/e2e/context/` (real binary, no daemon).
  */
 
@@ -51,7 +51,7 @@ import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/insta
 import { detectPlatform } from '../../../src/lib/platform-detector';
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
-import { findRecordedCagSkill } from './_helpers';
+import { findRecordedCagFeature } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const INTEGRATE_TIMEOUT_MS = 30_000;
@@ -100,7 +100,7 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
       'Skipping Context Augmentation: not available on SonarQube Server.',
     );
     expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
-    expect(findRecordedCagSkill(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
+    expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
 
   it('skips CAG when entitlement is not enabled on the Cloud org', async () => {
@@ -135,6 +135,6 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
       'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
     );
     expect(existsSync(cagBinaryPath), 'no CAG download when entitlement is disabled').toBe(false);
-    expect(findRecordedCagSkill(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
+    expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
 });

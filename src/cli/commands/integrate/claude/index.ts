@@ -33,11 +33,14 @@ import { type DiscoveredProject, discoverProject } from '../../../../lib/project
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { blank, info, intro, note, outro, success, text, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
-import { setupContextAugmentation } from '../_common/context-augmentation';
+import {
+  buildContextAugmentationAttrs,
+  resolveContextAugmentationSetup,
+} from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { CLAUDE_INTEGRATION_ID } from './declaration';
+import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration';
 import { runHealthChecks } from './health';
 import { detectGlobalSecretsHook } from './hooks';
 import { repairToken } from './repair';
@@ -115,37 +118,54 @@ export async function integrateClaude(
     skipSecretsHooks,
   });
 
-  const featureAttrs = buildIntegrationAttrs(config);
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth: { ...auth, token },
+        projectKey: options.project || project.projectKey,
+        isGlobal,
+      });
+  const featureAttrs = {
+    ...buildIntegrationAttrs(config),
+    ...(contextAugmentation
+      ? buildContextAugmentationAttrs(
+          config.serverURL,
+          config.organization,
+          contextAugmentation.scaEnabled,
+        )
+      : {}),
+  };
   const installRoot = isGlobal ? homedir() : project.rootDir;
   const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
-  await installIntegration({
-    integrationId: CLAUDE_INTEGRATION_ID,
-    options: {
-      ...options,
-      projectRoot: project.rootDir,
-      installSecretsHooks: !skipSecretsHooks,
-      installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
-      installMcp: true,
-    },
-    targetRoot: installRoot,
-    scope: installScope,
-    attrs: featureAttrs,
-  });
+  const integrationOptions = {
+    ...options,
+    projectRoot: project.rootDir,
+    installSecretsHooks: !skipSecretsHooks,
+    installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
+    installMcp: true,
+    installContextAugmentation: contextAugmentation !== null,
+  } satisfies ClaudeIntegrationOptions;
+  let installError: Error | undefined;
+  try {
+    await installIntegration({
+      integrationId: CLAUDE_INTEGRATION_ID,
+      options: integrationOptions,
+      targetRoot: installRoot,
+      scope: installScope,
+      auth: { ...auth, token },
+      attrs: featureAttrs,
+    });
+  } catch (error) {
+    installError = error instanceof Error ? error : new Error(String(error));
+  }
   await removeObsoleteHookArtifacts(project.rootDir, OBSOLETE_A3S_MARKER);
   await updateStateAfterConfiguration(config, project.rootDir, isGlobal, sqaaEnabled, {
     skipSecretsHooks,
   });
-  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
-
-  if (!options.skipContext) {
-    await setupContextAugmentation({
-      auth: { ...auth, token },
-      agent: 'claude-code',
-      projectRoot: project.rootDir,
-      projectKey: options.project || project.projectKey,
-      isGlobal,
-    });
+  if (installError) {
+    throw installError;
   }
+  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
 
   blank();
   text('Phase 3/3: Final Verification');
@@ -284,8 +304,6 @@ function buildIntegrationAttrs(
   config: ConfigurationData,
 ): Record<string, IntegrationStateAttribute> {
   return {
-    orgKey: config.organization ?? null,
     projectKey: config.projectKey ?? null,
-    serverUrl: config.serverURL,
   };
 }

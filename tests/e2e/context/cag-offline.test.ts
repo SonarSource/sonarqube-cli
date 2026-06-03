@@ -22,15 +22,15 @@
  * Offline e2e for sonar-context-augmentation.
  *
  * Exercises the *real* CAG binary download, PGP signature verification,
- * tar extraction and `tool print-skill` rendering — without touching
+ * tar extraction, and declarative skill refresh — without touching
  * SonarQube/Cloud. Only network reach is `binaries.sonarsource.com` for
- * the archive and detached signature.
+ * the archive and detached signature; post-update refreshes the declarative
+ * skill file but does not rerun `tool integrate`.
  *
- * Trigger path: pre-seed `state.json` so CAG looks "previously installed"
- * with a stale-version skill entry + a stale `config.cliVersion`. The next
- * `sonar` invocation runs `runPostUpdateActions()` which calls
- * `updateContextAugmentationIfNeeded()` — that path explicitly does not
- * run `cag init` and does not need auth.
+ * Trigger path: pre-seed `state.json` with a stale declarative CAG feature and
+ * a stale `config.cliVersion`. The next `sonar` invocation runs
+ * `runPostUpdateActions()` which reconciles declarative integrations and
+ * refreshes the recorded CAG features.
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -39,6 +39,7 @@ import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
+import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { detectPlatform } from '../../../src/lib/platform-detector';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
@@ -46,10 +47,10 @@ import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,
-  findRecordedCagSkill,
+  findRecordedCagDependency,
+  findRecordedCagFeature,
   seedState,
   STALE_CLI_VERSION,
-  STALE_SKILL_VERSION,
 } from './_helpers';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
@@ -77,8 +78,8 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     });
 
     // Pre-write a sentinel into the skill file so the refresh has to overwrite
-    // it — proves the post-update path actually invoked `tool print-skill`
-    // rather than the file existing as a side effect of something else.
+    // it — proves the post-update path actually re-rendered the declarative
+    // skill file rather than the file existing as a side effect of something else.
     const seededSkillPath = join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH);
     mkdirSync(dirname(seededSkillPath), { recursive: true });
     writeFileSync(seededSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
@@ -117,12 +118,25 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
   });
 
-  it('refreshes the recorded skill version to the pinned CAG version', () => {
+  it('refreshes the declarative CAG dependency and skill resource to the pinned version', () => {
     const state = harness.stateJsonFile.asJson() as CliState;
-    const skill = findRecordedCagSkill(state);
-    expect(skill, 'expected a recorded CAG skill in state.json').toBeDefined();
-    expect(skill!.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(skill!.updatedAt > new Date(0).toISOString()).toBe(true);
+    expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+
+    const feature = findRecordedCagFeature(
+      state,
+      ({ integrationId, feature: installedFeature }) =>
+        integrationId === CLAUDE_INTEGRATION_ID && installedFeature.targetRoot === harness.cwd.path,
+    );
+    expect(feature, 'expected a recorded declarative CAG feature in state.json').toBeDefined();
+    if (!feature) {
+      throw new Error('Expected a recorded declarative Claude CAG feature');
+    }
+    const resource = feature.feature.resources.find(
+      (entry) => entry.id === 'context-augmentation-skill-file',
+    );
+    expect(resource).toBeDefined();
+    expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    expect(resource?.path).toBe(join(harness.cwd.path, CLAUDE_SKILL_RELATIVE_PATH));
   });
 
   it('forwards `sonar context --help` to the real binary without requiring auth', async () => {
@@ -149,22 +163,14 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
       preMutationContent = readFileSync(skillPath, 'utf-8');
 
       // Simulate a fresh CLI upgrade landing on the same machine: rewind the
-      // persisted CLI version (forces runPostUpdateActions to fire again) and
-      // the recorded CAG skill version (forces refreshContextAugmentationSkill
-      // to actually run `tool print-skill` instead of the early-return
-      // shortcut when versions already match).
+      // persisted CLI version so `runPostUpdateActions()` fires again.
       const state = harness.stateJsonFile.asJson() as CliState;
       state.config.cliVersion = STALE_CLI_VERSION;
-      const recordedSkill = findRecordedCagSkill(state);
-      if (!recordedSkill) {
-        throw new Error('Expected a recorded CAG skill from the initial post-update');
-      }
-      recordedSkill.version = STALE_SKILL_VERSION;
       writeFileSync(harness.stateJsonFile.path, JSON.stringify(state, null, 2), 'utf-8');
 
       // Delete the rendered skill so the rerun has to write it again — proves
-      // the refresh actually invoked the binary's `tool print-skill` rather
-      // than only bumping state.
+      // the refresh re-applied the declarative resource rather than only
+      // bumping state.
       rmSync(skillPath);
 
       refreshResult = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
@@ -183,11 +189,6 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     it('re-bumps state.config.cliVersion past the rewound stale value', () => {
       const state = harness.stateJsonFile.asJson() as CliState;
       expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
-    });
-
-    it('re-refreshes the recorded skill version to the pinned CAG version', () => {
-      const state = harness.stateJsonFile.asJson() as CliState;
-      expect(findRecordedCagSkill(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
     });
   });
 });

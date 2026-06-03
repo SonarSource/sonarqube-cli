@@ -93,8 +93,11 @@ describe('integrateCommand', () => {
   let updateStateAfterConfigurationSpy: Mock<
     Extract<(typeof state)['updateStateAfterConfiguration'], (...args: any[]) => any>
   >;
-  let setupContextAugmentationSpy: Mock<
-    Extract<(typeof contextAugmentation)['setupContextAugmentation'], (...args: any[]) => any>
+  let resolveContextAugmentationSetupSpy: Mock<
+    Extract<
+      (typeof contextAugmentation)['resolveContextAugmentationSetup'],
+      (...args: any[]) => any
+    >
   >;
 
   beforeEach(() => {
@@ -104,10 +107,10 @@ describe('integrateCommand', () => {
     hasSqaaEntitlementSpy.mockResolvedValue(false);
     hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
     hasCagEntitlementSpy.mockResolvedValue('enabled');
-    setupContextAugmentationSpy = spyOn(
+    resolveContextAugmentationSetupSpy = spyOn(
       contextAugmentation,
-      'setupContextAugmentation',
-    ).mockResolvedValue(undefined);
+      'resolveContextAugmentationSetup',
+    ).mockResolvedValue(null);
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
@@ -142,7 +145,7 @@ describe('integrateCommand', () => {
     detectGlobalSecretsHookSpy.mockRestore();
     runMigrationsSpy.mockRestore();
     updateStateAfterConfigurationSpy.mockRestore();
-    setupContextAugmentationSpy.mockRestore();
+    resolveContextAugmentationSetupSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -304,6 +307,11 @@ describe('integrateCommand', () => {
 
     expect(repairTokenSpy).toHaveBeenCalledTimes(1);
     expect(repairTokenSpy).toHaveBeenCalledWith(CLOUD_AUTH.serverUrl, CLOUD_AUTH.orgKey);
+    expect(installIntegrationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: expect.objectContaining({ token: 'repaired-token' }),
+      }),
+    );
   });
 
   it('attempts repair when health fails for token', async () => {
@@ -350,6 +358,62 @@ describe('integrateCommand', () => {
     await integrateClaude({}, CLOUD_AUTH);
 
     expect(hasSqaaEntitlementSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('installs Context Augmentation through the declarative installer in a single call', async () => {
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: true });
+
+    await integrateClaude({}, CLOUD_AUTH);
+
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
+    expect(installIntegrationSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integrationId: 'claude-code',
+        auth: CLOUD_AUTH,
+        options: expect.objectContaining({
+          projectRoot: '/project/root',
+          installSecretsHooks: true,
+          installSqaaHook: false,
+          installMcp: true,
+          installContextAugmentation: true,
+        }),
+        scope: 'project',
+        targetRoot: '/project/root',
+        attrs: {
+          orgKey: 'cloud-org',
+          projectKey: 'a-project',
+          scaEnabled: true,
+          serverUrl: 'https://sonarcloud.io',
+        },
+      }),
+    );
+  });
+
+  it('rethrows CAG installation failures after updating Claude state', async () => {
+    mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+    resolveContextAugmentationSetupSpy.mockResolvedValue({ scaEnabled: false });
+    installIntegrationSpy.mockRejectedValueOnce(new Error('print failed'));
+
+    let thrown: unknown;
+    try {
+      await integrateClaude({}, CLOUD_AUTH);
+    } catch (error) {
+      thrown = error;
+    }
+
+    if (!(thrown instanceof Error)) {
+      throw new Error('Expected integrateClaude to reject');
+    }
+    expect(thrown.message).toBe('print failed');
+
+    expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
+    expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
+    expect(runHealthChecksSpy).toHaveBeenCalledTimes(1);
+    const phaseText = getMockUiCalls().find(
+      (c) => c.method === 'text' && String(c.args[0]) === 'Phase 3/3: Final Verification',
+    );
+    expect(phaseText).toBeUndefined();
   });
 
   it('runs migration, installs hooks and updates state when health check succeeds', async () => {
@@ -757,15 +821,14 @@ describe('integrateCommand', () => {
     installSqaaHook: boolean;
   }): void {
     const attrs = {
-      orgKey: auth.orgKey ?? null,
       projectKey: projectKey ?? null,
-      serverUrl: auth.serverUrl,
     };
 
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
     expect(installIntegrationSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         integrationId: 'claude-code',
+        auth,
         options: expect.objectContaining({
           projectRoot,
           installSecretsHooks,

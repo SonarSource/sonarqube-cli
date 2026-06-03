@@ -26,9 +26,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../src/lib/install-types';
 import { detectPlatform } from '../../../../src/lib/platform-detector';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures';
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
 import { readCagInvocations } from '../../harness/cag-invocations';
 
@@ -117,10 +117,13 @@ describe('post-update migration', () => {
   );
 
   it(
-    'stops running CAG tools and refreshes registered skills after a CLI upgrade',
+    'stops running CAG tools and refreshes declaratively tracked skills after a CLI upgrade',
     async () => {
-      // Skill recorded with an older CAG version — triggers post-update refresh.
-      const staleSkillVersion = '0.0.0.1';
+      const staleCagVersion = '0.0.0.1';
+      const installedBinaryPath = harness.cliHome.file(
+        'bin',
+        buildLocalCagBinaryName(detectPlatform()),
+      ).path;
       harness.state().withRawState(
         JSON.stringify({
           version: '1.0',
@@ -140,34 +143,61 @@ describe('post-update migration', () => {
             installed: [
               {
                 name: CONTEXT_AUGMENTATION_BINARY_NAME,
-                version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-                // Absolute path the harness writes the CAG stub to.
-                path: harness.cliHome.file('bin', buildLocalCagBinaryName(detectPlatform())).path,
+                version: staleCagVersion,
+                path: installedBinaryPath,
                 installedAt: new Date().toISOString(),
                 installedByCliVersion: '0.5.0',
               },
             ],
           },
-          agentExtensions: [
-            {
-              id: randomUUID(),
-              agentId: 'claude-code',
-              projectRoot: harness.cwd.path,
-              global: false,
-              kind: 'skill',
-              name: CONTEXT_AUGMENTATION_BINARY_NAME,
-              version: staleSkillVersion,
-              scaEnabled: false,
-              projectKey: 'p',
-              orgKey: 'o',
-              serverUrl: 'https://sonarcloud.io',
-              updatedByCliVersion: '0.5.0',
-              updatedAt: new Date().toISOString(),
-            },
-          ],
+          dependencies: {
+            installed: [
+              {
+                id: CONTEXT_AUGMENTATION_BINARY_NAME,
+                dependencyType: 'context-augmentation-binary',
+                version: staleCagVersion,
+                path: installedBinaryPath,
+                updatedByCliVersion: '0.5.0',
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          },
+          integrations: {
+            installed: [
+              {
+                id: randomUUID(),
+                integrationId: 'claude-code',
+                installedByCliVersion: '0.5.0',
+                installedAt: new Date().toISOString(),
+                updatedByCliVersion: '0.5.0',
+                updatedAt: new Date().toISOString(),
+                features: [
+                  {
+                    featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+                    scope: 'project',
+                    targetRoot: harness.cwd.path,
+                    installedByCliVersion: '0.5.0',
+                    installedAt: new Date().toISOString(),
+                    updatedByCliVersion: '0.5.0',
+                    updatedAt: new Date().toISOString(),
+                    dependencies: [{ id: CONTEXT_AUGMENTATION_BINARY_NAME }],
+                    resources: [],
+                    operations: [],
+                    attrs: {
+                      orgKey: 'o',
+                      projectKey: 'p',
+                      serverUrl: 'https://sonarcloud.io',
+                      scaEnabled: false,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          agentExtensions: [],
         }),
       );
-      // Copies the CAG stub into <cliHome>/bin so the stop step can spawn it.
+      // Copies the current-version CAG stub into <cliHome>/bin so the stop step can spawn it.
       harness.state().withContextAugmentationBinaryInstalled();
 
       await harness.run('--version');
@@ -176,19 +206,20 @@ describe('post-update migration', () => {
       const stopIndex = invocations.findIndex(
         (i) => i.argv[0] === 'tool' && i.argv[1] === 'stop' && i.argv[2] === '--all',
       );
-      const skillIndex = invocations.findIndex(
+      const printSkillIndex = invocations.findIndex(
         (i) => i.argv[0] === 'tool' && i.argv[1] === 'print-skill',
       );
       expect(stopIndex).toBeGreaterThanOrEqual(0);
-      expect(invocations[skillIndex]?.argv).toEqual([
+      expect(invocations[printSkillIndex]?.argv).toEqual([
         'tool',
         'print-skill',
-        '--invocation-prefix',
-        'sonar context',
         '--sca-enabled=false',
       ]);
       // Stop must precede the skill refresh.
-      expect(stopIndex).toBeLessThan(skillIndex);
+      expect(stopIndex).toBeLessThan(printSkillIndex);
+      expect(
+        harness.cwd.file('.claude', 'skills', 'sonar-context-augmentation', 'SKILL.md').asText(),
+      ).toContain('# Generated CAG skill');
     },
     { timeout: 30000 },
   );

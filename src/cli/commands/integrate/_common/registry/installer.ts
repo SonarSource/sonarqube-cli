@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { version as VERSION } from '../../../../../../package.json';
+import type { ResolvedAuth } from '../../../../../lib/auth-resolver';
 import logger from '../../../../../lib/logger';
 import { loadState, saveState } from '../../../../../lib/repository/state-repository';
 import type {
@@ -50,6 +51,7 @@ import type {
   InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
+  IntegrationExecutionMode,
   IntegrationInvocation,
 } from './types';
 
@@ -61,18 +63,56 @@ interface ApplyFeatureCallbacks {
   onOperationApplied?: (operation: FeatureOperation) => void;
 }
 
+interface FeatureApplication<TOptions = Record<string, unknown>> {
+  feature: FeatureDeclaration<TOptions>;
+  targetRoot: string;
+  scope: IntegrationScope;
+  auth?: ResolvedAuth;
+  force?: boolean;
+  attrs?: Record<string, IntegrationStateAttribute>;
+}
+
+interface ApplyAndRecordFeaturesOptions<TOptions = Record<string, unknown>> {
+  callbacks?: ApplyFeatureCallbacks;
+  continueOnFeatureError?: boolean;
+  executionMode?: IntegrationExecutionMode;
+  onFeatureError?: (application: FeatureApplication<TOptions>, error: Error) => void;
+}
+
+interface PreparedFeatureExecution<TOptions = Record<string, unknown>> {
+  application: FeatureApplication<TOptions>;
+  context: IntegrationContext;
+  installedFeature: InstalledIntegrationFeature | undefined;
+}
+
+interface PreparedDependencies {
+  resolvedDependencies: Map<string, InstalledDependency>;
+  installedDependencies: Map<string, InstalledDependency>;
+  failedDependencies: Map<string, Error>;
+}
+
+interface UniqueDependencyExecution<TOptions = Record<string, unknown>> {
+  dependency: DependencyDeclaration;
+  execution: PreparedFeatureExecution<TOptions>;
+}
+
 export interface InstallIntegrationOptions<TOptions> {
   registry?: IntegrationRegistry;
   integrationId: string;
   options: TOptions;
   targetRoot: string;
   scope: IntegrationScope;
+  auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  featureIds?: string[];
 }
 
 export class IntegrationInstaller {
-  selectFeatures(integration: IntegrationDeclaration, featureIds: string[]): FeatureDeclaration[] {
+  selectFeatures<TOptions>(
+    integration: IntegrationDeclaration<TOptions>,
+    featureIds: string[],
+  ): FeatureDeclaration<TOptions>[] {
     const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
     return featureIds.map((id) => {
       const feature = featuresById.get(id);
@@ -157,39 +197,185 @@ export class IntegrationInstaller {
     return !installedOperation || installedOperation.version !== operation.version;
   }
 
+  async applyAndRecordFeatures<TOptions>(
+    state: CliState,
+    integration: IntegrationDeclaration<TOptions>,
+    applications: FeatureApplication<TOptions>[],
+    options: ApplyAndRecordFeaturesOptions<TOptions> = {},
+  ): Promise<InstalledIntegrationFeature[]> {
+    const executions = this.prepareFeatureExecutions(
+      state,
+      integration,
+      applications,
+      options.executionMode ?? 'install',
+    );
+    if (executions.length === 0) {
+      return [];
+    }
+
+    const preparedDependencies = await this.prepareUniqueDependencies(
+      executions,
+      options.callbacks ?? {},
+    );
+    const installedFeatures: InstalledIntegrationFeature[] = [];
+
+    for (const execution of executions) {
+      try {
+        const applied = await this.applyFeatureWithUniqueDependencies(
+          execution.context,
+          execution.installedFeature,
+          execution.application.feature,
+          preparedDependencies,
+          options.callbacks ?? {},
+        );
+        installedFeatures.push(
+          this.recordInstalledFeature(
+            state,
+            execution.context,
+            integration,
+            execution.application.feature,
+            applied,
+          ),
+        );
+      } catch (error) {
+        if (options.continueOnFeatureError !== true) {
+          throw error;
+        }
+        options.onFeatureError?.(execution.application, error as Error);
+      }
+    }
+
+    return installedFeatures;
+  }
+
   async applyFeature<TOptions>(
     context: IntegrationContext,
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
     callbacks: ApplyFeatureCallbacks = {},
   ): Promise<AppliedFeature> {
+    const preparedDependencies = await this.prepareUniqueDependencies(
+      [
+        {
+          application: {
+            feature,
+            targetRoot: context.targetRoot,
+            scope: context.scope,
+            auth: context.auth,
+            force: context.force,
+            attrs: context.attrs,
+          },
+          context,
+          installedFeature,
+        },
+      ],
+      callbacks,
+    );
+    return this.applyFeatureWithUniqueDependencies(
+      context,
+      installedFeature,
+      feature,
+      preparedDependencies,
+      callbacks,
+    );
+  }
+
+  private async prepareUniqueDependencies<TOptions>(
+    executions: PreparedFeatureExecution<TOptions>[],
+    callbacks: ApplyFeatureCallbacks = {},
+  ): Promise<PreparedDependencies> {
+    const resolvedDependencies = new Map<string, InstalledDependency>();
+    const installedDependencies = new Map<string, InstalledDependency>();
+    const failedDependencies = new Map<string, Error>();
+
+    for (const execution of this.collectUniqueDependencies(executions)) {
+      const existingDependency = this.findInstalledDependency(
+        execution.execution.context.state,
+        execution.dependency,
+      );
+      const dependencyContext = {
+        ...execution.execution.context,
+        resolvedDependencies: this.makeResolvedDependencies(
+          execution.execution.context.state,
+          execution.execution.application.feature,
+          resolvedDependencies,
+        ),
+      };
+
+      if (!(await this.dependencyNeedsInstall(dependencyContext, execution.dependency))) {
+        if (existingDependency) {
+          resolvedDependencies.set(execution.dependency.id, existingDependency);
+        }
+        callbacks.onDependencySkipped?.(execution.dependency);
+        continue;
+      }
+
+      try {
+        const installedDependency = await execution.dependency.installOrUpdate({
+          ...dependencyContext,
+          existingDependency,
+        });
+        resolvedDependencies.set(installedDependency.id, installedDependency);
+        installedDependencies.set(installedDependency.id, installedDependency);
+        callbacks.onDependencyInstalled?.(execution.dependency);
+      } catch (error) {
+        failedDependencies.set(execution.dependency.id, error as Error);
+      }
+    }
+
+    return {
+      resolvedDependencies,
+      installedDependencies,
+      failedDependencies,
+    };
+  }
+
+  private async applyFeatureWithUniqueDependencies<TOptions>(
+    context: IntegrationContext,
+    installedFeature: InstalledIntegrationFeature | undefined,
+    feature: FeatureDeclaration<TOptions>,
+    preparedDependencies: PreparedDependencies,
+    callbacks: ApplyFeatureCallbacks = {},
+  ): Promise<AppliedFeature> {
+    const dependencyIds = new Set<string>();
     const dependencies: InstalledDependency[] = [];
     const resources: AppliedResource[] = [];
     const operations: AppliedOperation[] = [];
 
     for (const dependency of feature.dependencies ?? []) {
-      if (!(await this.dependencyNeedsInstall(context, dependency))) {
-        callbacks.onDependencySkipped?.(dependency);
-        continue;
+      const dependencyError = preparedDependencies.failedDependencies.get(dependency.id);
+      if (dependencyError) {
+        throw dependencyError;
       }
-      dependencies.push(await dependency.install(context));
-      callbacks.onDependencyInstalled?.(dependency);
+
+      const installedDependency = preparedDependencies.installedDependencies.get(dependency.id);
+      if (installedDependency && !dependencyIds.has(dependency.id)) {
+        dependencies.push(installedDependency);
+        dependencyIds.add(dependency.id);
+      }
     }
 
+    const resolvedDependencies = this.makeResolvedDependencies(
+      context.state,
+      feature,
+      preparedDependencies.resolvedDependencies,
+    );
+    const featureContext = { ...context, resolvedDependencies };
+
     for (const resource of feature.resources ?? []) {
-      if (!(await this.resourceNeedsApply(context, installedFeature, resource))) {
+      if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
         callbacks.onResourceSkipped?.(resource);
         continue;
       }
-      resources.push(await resource.apply(context));
+      resources.push(await resource.apply(featureContext));
       callbacks.onResourceInstalled?.(resource);
     }
 
     for (const operation of feature.operations ?? []) {
-      if (operation.shouldApply && !(await operation.shouldApply(context))) {
+      if (operation.shouldApply && !(await operation.shouldApply(featureContext))) {
         continue;
       }
-      await operation.apply(context);
+      await operation.apply(featureContext);
       operations.push({ id: operation.id, version: operation.version });
       callbacks.onOperationApplied?.(operation);
     }
@@ -197,23 +383,7 @@ export class IntegrationInstaller {
     return { dependencies, resources, operations };
   }
 
-  async applyAndRecordFeature<TOptions>(
-    context: IntegrationContext,
-    integration: IntegrationDeclaration<TOptions>,
-    feature: FeatureDeclaration<TOptions>,
-    callbacks: ApplyFeatureCallbacks = {},
-  ): Promise<InstalledIntegrationFeature> {
-    const installedFeature = this.findInstalledFeature(
-      context.state,
-      context,
-      integration,
-      feature,
-    );
-    const applied = await this.applyFeature(context, installedFeature, feature, callbacks);
-    return this.recordInstalledFeature(context.state, context, integration, feature, applied);
-  }
-
-  recordInstalledFeature<TOptions>(
+  private recordInstalledFeature<TOptions>(
     state: CliState,
     context: Omit<IntegrationContext, 'state'>,
     integration: IntegrationDeclaration<TOptions>,
@@ -387,6 +557,78 @@ export class IntegrationInstaller {
       ),
     );
   }
+
+  private prepareFeatureExecutions<TOptions>(
+    state: CliState,
+    integration: IntegrationDeclaration<TOptions>,
+    applications: FeatureApplication<TOptions>[],
+    executionMode: IntegrationExecutionMode,
+  ): PreparedFeatureExecution<TOptions>[] {
+    return applications.map((application) => {
+      const context = makeContext(
+        state,
+        application.targetRoot,
+        application.scope,
+        executionMode,
+        application.auth,
+        application.force,
+        application.attrs,
+      );
+
+      return {
+        application,
+        context,
+        installedFeature: this.findInstalledFeature(
+          state,
+          context,
+          integration,
+          application.feature,
+        ),
+      };
+    });
+  }
+
+  private collectUniqueDependencies<TOptions>(
+    executions: PreparedFeatureExecution<TOptions>[],
+  ): UniqueDependencyExecution<TOptions>[] {
+    const dependencies = new Map<string, UniqueDependencyExecution<TOptions>>();
+
+    for (const execution of executions) {
+      for (const dependency of execution.application.feature.dependencies ?? []) {
+        const existing = dependencies.get(dependency.id);
+        if (existing && existing.dependency !== dependency) {
+          throw new Error(
+            `Dependency ${dependency.id} is declared by multiple instances. Reuse the same dependency declaration when sharing a dependency across features.`,
+          );
+        }
+
+        if (!existing) {
+          dependencies.set(dependency.id, {
+            dependency,
+            execution,
+          });
+        }
+      }
+    }
+
+    return [...dependencies.values()];
+  }
+
+  private makeResolvedDependencies(
+    state: CliState,
+    feature: Pick<FeatureDeclaration, 'dependencies'>,
+    overrides: ReadonlyMap<string, InstalledDependency> = new Map(),
+  ): Map<string, InstalledDependency> {
+    const resolvedDependencies = new Map<string, InstalledDependency>();
+    for (const dependency of feature.dependencies ?? []) {
+      const installedDependency =
+        overrides.get(dependency.id) ?? this.findInstalledDependency(state, dependency);
+      if (installedDependency) {
+        resolvedDependencies.set(dependency.id, installedDependency);
+      }
+    }
+    return resolvedDependencies;
+  }
 }
 
 export const integrationInstaller = new IntegrationInstaller();
@@ -397,81 +639,84 @@ export async function installIntegration<TOptions>({
   options,
   targetRoot,
   scope,
+  auth,
   force,
   attrs,
+  featureIds,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
-  const invocation = makeInvocation(options, targetRoot, scope, force, attrs);
-  const features = integrationInstaller.selectFeaturesForInvocation(integration, invocation);
+  const invocation = makeInvocation(options, targetRoot, scope, auth, force, attrs);
+  const features =
+    featureIds === undefined
+      ? integrationInstaller.selectFeaturesForInvocation(integration, invocation)
+      : integrationInstaller.selectFeatures(integration, featureIds);
   if (features.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
 
-  const installedFeatures: InstalledIntegrationFeature[] = [];
+  const state = loadStateForInstallation();
+  const applications: FeatureApplication<TOptions>[] = [];
   for (const feature of features) {
-    const context = await resolveFeatureContext(loadStateForInstallation(), invocation, feature);
-    const installedFeature = integrationInstaller.findInstalledFeature(
-      context.state,
-      context,
-      integration,
+    const context = await resolveFeatureContext(state, invocation, feature, 'install');
+    applications.push({
       feature,
-    );
-    text(`Installing ${integration.displayName}: ${feature.displayName}`);
-    const applied = await integrationInstaller.applyFeature(context, installedFeature, feature, {
-      onDependencyInstalled: (dependency) => {
-        success(`Installed ${dependency.displayName ?? dependency.id}`);
-      },
-      onDependencySkipped: (dependency) => {
-        info(`${dependency.displayName ?? dependency.id} already installed`);
-      },
-      onResourceInstalled: (resource) => {
-        success(`Installed ${resource.displayName ?? resource.id}`);
-      },
-      onResourceSkipped: (resource) => {
-        info(`${resource.displayName ?? resource.id} already installed`);
-      },
-      onOperationApplied: (operation) => {
-        success(`Applied ${operation.displayName ?? operation.id}`);
-      },
+      targetRoot: context.targetRoot,
+      scope: context.scope,
+      auth: context.auth,
+      force: context.force,
+      attrs: context.attrs,
     });
-    const installed = recordFeatureInstallation(integration, feature, context, applied);
-    if (installed) {
-      installedFeatures.push(installed);
-    }
+    text(`Installing ${integration.displayName}: ${feature.displayName}`);
   }
 
-  return installedFeatures;
+  try {
+    const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
+      state,
+      integration,
+      applications,
+      {
+        callbacks: {
+          onDependencyInstalled: (dependency) => {
+            success(`Installed ${dependency.displayName ?? dependency.id}`);
+          },
+          onDependencySkipped: (dependency) => {
+            info(`${dependency.displayName ?? dependency.id} already installed`);
+          },
+          onResourceInstalled: (resource) => {
+            success(`Installed ${resource.displayName ?? resource.id}`);
+          },
+          onResourceSkipped: (resource) => {
+            info(`${resource.displayName ?? resource.id} already installed`);
+          },
+          onOperationApplied: (operation) => {
+            success(`Applied ${operation.displayName ?? operation.id}`);
+          },
+        },
+        executionMode: 'install',
+      },
+    );
+
+    return saveInstalledFeatures(state) ? installedFeatures : [];
+  } catch (error) {
+    saveInstalledFeatures(state);
+    throw error;
+  }
 }
 
-function recordFeatureInstallation<TOptions>(
-  integration: IntegrationDeclaration<TOptions>,
-  feature: FeatureDeclaration<TOptions>,
-  context: Omit<IntegrationContext, 'state'>,
-  applied: AppliedFeature,
-): InstalledIntegrationFeature | undefined {
+function saveInstalledFeatures(state: CliState): boolean {
   try {
-    const state = loadState();
-    const featureContext = makeContext(
-      state,
-      context.targetRoot,
-      context.scope,
-      context.force,
-      context.attrs,
-    );
-    const installed = integrationInstaller.recordInstalledFeature(
-      state,
-      featureContext,
-      integration,
-      feature,
-      applied,
-    );
+    try {
+      state.tools = loadState().tools;
+    } catch (err) {
+      logger.debug(`Failed to merge latest tools state before save: ${(err as Error).message}`);
+    }
     saveState(state);
-    return installed;
+    return true;
   } catch (err) {
     const msg = (err as Error).message;
     warn(`Failed to update configuration state: ${msg}`);
     logger.warn(`Failed to update configuration state: ${msg}`);
-    return undefined;
+    return false;
   }
 }
 
@@ -501,6 +746,7 @@ function makeInvocation<TOptions>(
   options: TOptions,
   targetRoot: string,
   scope: IntegrationScope,
+  auth: ResolvedAuth | undefined,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): IntegrationInvocation<TOptions> {
@@ -508,6 +754,7 @@ function makeInvocation<TOptions>(
     options,
     targetRoot,
     scope,
+    auth,
     force,
     attrs,
   };
@@ -517,11 +764,14 @@ async function resolveFeatureContext<TOptions>(
   state: CliState,
   invocation: IntegrationInvocation<TOptions>,
   feature: FeatureDeclaration<TOptions>,
+  executionMode: IntegrationExecutionMode,
 ): Promise<IntegrationContext> {
   return makeContext(
     state,
     await resolveFeatureTargetRoot(invocation, feature),
     await resolveFeatureScope(invocation, feature),
+    executionMode,
+    invocation.auth,
     invocation.force,
     invocation.attrs,
   );
@@ -553,6 +803,8 @@ function makeContext(
   state: CliState,
   targetRoot: string,
   scope: IntegrationScope,
+  executionMode: IntegrationExecutionMode,
+  auth: ResolvedAuth | undefined,
   force: boolean | undefined,
   attrs: Record<string, IntegrationStateAttribute> | undefined,
 ): IntegrationContext {
@@ -560,7 +812,10 @@ function makeContext(
     state,
     targetRoot,
     scope,
+    executionMode,
+    auth,
     force,
     attrs,
+    resolvedDependencies: new Map(),
   };
 }

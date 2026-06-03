@@ -54,6 +54,8 @@ describe('nativeGitHookResource', () => {
       state: getDefaultState('test'),
       targetRoot: TEMP_DIR,
       scope: 'global',
+      executionMode: 'install',
+      resolvedDependencies: new Map(),
     });
 
     expect(isApplied).toBe(true);

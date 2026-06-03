@@ -26,7 +26,10 @@ import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
-import { setupContextAugmentation } from '../_common/context-augmentation';
+import {
+  buildContextAugmentationAttrs,
+  resolveContextAugmentationSetup,
+} from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -72,6 +75,13 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     warnIfProjectInstructionsShadowGlobal();
   }
 
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth,
+        projectKey,
+        isGlobal,
+      });
   const integrationOptions: CopilotIntegrationOptions = {
     ...options,
     projectRoot: project.rootDir,
@@ -79,6 +89,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     installInstructions: true,
     installSqaaInstructions: sqaaProjectKey !== undefined,
     installMcp: true,
+    installContextAugmentation: contextAugmentation !== null,
   };
 
   await installIntegration({
@@ -86,18 +97,14 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     options: integrationOptions,
     targetRoot,
     scope,
-    attrs: buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
+    auth,
+    attrs: {
+      ...buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
+      ...(contextAugmentation
+        ? buildContextAugmentationAttrs(auth.serverUrl, auth.orgKey, contextAugmentation.scaEnabled)
+        : {}),
+    },
   });
-
-  if (!options.skipContext) {
-    await setupContextAugmentation({
-      auth,
-      agent: 'copilot',
-      projectRoot: project.rootDir,
-      projectKey,
-      isGlobal,
-    });
-  }
 
   reportInstallationOutcome({
     isGlobal,

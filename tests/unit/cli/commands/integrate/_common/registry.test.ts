@@ -30,7 +30,7 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
-import { getDefaultState } from '../../../../../../src/lib/state';
+import { getDefaultState, type InstalledIntegrationFeature } from '../../../../../../src/lib/state';
 
 const binaryInstall = await import('../../../../../../src/cli/commands/_common/install/binary');
 void mock.module('../../../../../../src/cli/commands/_common/install/binary', () => ({
@@ -49,6 +49,8 @@ const {
   wholeFile,
   yamlPatch,
 } = await import('../../../../../../src/cli/commands/integrate/_common/registry');
+
+type Installer = InstanceType<typeof IntegrationInstaller>;
 
 describe('declarative integration framework', () => {
   const installer = new IntegrationInstaller();
@@ -356,8 +358,8 @@ describe('declarative integration framework', () => {
     const integration = makeIntegration({ features: [feature] });
     const context = makeContext(state, tempDir, { projectKey: 'project' });
 
-    const first = await installer.applyAndRecordFeature(context, integration, feature);
-    const second = await installer.applyAndRecordFeature(context, integration, feature);
+    const first = await applyAndRecord(installer, context, integration, feature);
+    const second = await applyAndRecord(installer, context, integration, feature);
 
     expect(first.featureId).toBe(second.featureId);
     expect(state.integrations.installed).toHaveLength(1);
@@ -566,7 +568,8 @@ describe('declarative integration framework', () => {
     };
     const integration = makeIntegration({ features: [feature] });
 
-    const installed = await installer.applyAndRecordFeature(
+    const installed = await applyAndRecord(
+      installer,
       makeContext(state, tempDir),
       integration,
       feature,
@@ -574,6 +577,41 @@ describe('declarative integration framework', () => {
 
     expect(called).toBe(false);
     expect(installed.operations).toEqual([]);
+  });
+
+  it('passes update execution mode to feature operations', async () => {
+    const state = getDefaultState('test');
+    let called = false;
+    const feature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      operations: [
+        {
+          id: 'operation',
+          shouldApply: (context) => context.executionMode === 'install',
+          apply: () => {
+            called = true;
+          },
+        },
+      ],
+    };
+    const integration = makeIntegration({ features: [feature] });
+
+    const installed = await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [
+        {
+          feature,
+          targetRoot: tempDir,
+          scope: 'project',
+        },
+      ],
+      { executionMode: 'update' },
+    );
+
+    expect(called).toBe(false);
+    expect(installed[0]?.operations).toEqual([]);
   });
 
   it('records multiple features under one installed integration', async () => {
@@ -591,8 +629,8 @@ describe('declarative integration framework', () => {
     const integration = makeIntegration({ features: [firstFeature, secondFeature] });
     const context = makeContext(state, tempDir);
 
-    await installer.applyAndRecordFeature(context, integration, firstFeature);
-    await installer.applyAndRecordFeature(context, integration, secondFeature);
+    await applyAndRecord(installer, context, integration, firstFeature);
+    await applyAndRecord(installer, context, integration, secondFeature);
 
     expect(state.integrations.installed).toHaveLength(1);
     expect(state.integrations.installed[0].integrationId).toBe('test-integration');
@@ -611,12 +649,14 @@ describe('declarative integration framework', () => {
     };
     const integration = makeIntegration({ features: [feature] });
 
-    await installer.applyAndRecordFeature(
+    await applyAndRecord(
+      installer,
       makeContext(state, join(tempDir, 'project')),
       integration,
       feature,
     );
-    await installer.applyAndRecordFeature(
+    await applyAndRecord(
+      installer,
       makeContext(state, join(tempDir, 'global')),
       integration,
       feature,
@@ -649,12 +689,14 @@ describe('declarative integration framework', () => {
       ],
     };
 
-    await installer.applyAndRecordFeature(
+    await applyAndRecord(
+      installer,
       context,
       makeIntegration({ features: [legacyFeature] }),
       legacyFeature,
     );
-    const installed = await installer.applyAndRecordFeature(
+    const installed = await applyAndRecord(
+      installer,
       context,
       makeIntegration({ features: [currentFeature] }),
       currentFeature,
@@ -695,12 +737,14 @@ describe('declarative integration framework', () => {
       ],
     };
 
-    await installer.applyAndRecordFeature(
+    await applyAndRecord(
+      installer,
       context,
       makeIntegration({ features: [legacyFeature] }),
       legacyFeature,
     );
-    const installed = await installer.applyAndRecordFeature(
+    const installed = await applyAndRecord(
+      installer,
       context,
       makeIntegration({ features: [currentFeature] }),
       currentFeature,
@@ -725,7 +769,7 @@ describe('declarative integration framework', () => {
 
     expect(await dependency.isInstalled(context)).toBe(true);
 
-    const applied = await dependency.install(context);
+    const applied = await dependency.installOrUpdate(context);
 
     expect(installBinarySpy).toHaveBeenCalledWith(SonarSourceBinary.SonarSecrets.spec);
     expect(applied).toEqual({
@@ -770,7 +814,7 @@ describe('declarative integration framework', () => {
       installer.operationNeedsApply(undefined, { id: 'unversioned', apply: () => undefined }),
     ).toBe(true);
 
-    const installed = await installer.applyAndRecordFeature(context, integration, feature);
+    const installed = await applyAndRecord(installer, context, integration, feature);
     const found = installer.findInstalledFeature(state, context, integration, feature);
     resolveBinaryPathSpy.mockReturnValue(join(tempDir, 'bin', 'sonar-secrets'));
 
@@ -893,12 +937,38 @@ function makeContext(
   targetRoot: string,
   attrs?: IntegrationContext['attrs'],
   force?: boolean,
+  executionMode: IntegrationContext['executionMode'] = 'install',
 ): IntegrationContext {
   return {
     state,
     targetRoot,
     scope: 'project',
+    executionMode,
     force,
     attrs,
+    resolvedDependencies: new Map(),
   };
+}
+
+async function applyAndRecord<TOptions>(
+  installer: Installer,
+  context: IntegrationContext,
+  integration: IntegrationDeclaration<TOptions>,
+  feature: FeatureDeclaration<TOptions>,
+): Promise<InstalledIntegrationFeature> {
+  const installed = await installer.applyAndRecordFeatures(context.state, integration, [
+    {
+      feature,
+      targetRoot: context.targetRoot,
+      scope: context.scope,
+      force: context.force,
+      attrs: context.attrs,
+    },
+  ]);
+
+  if (installed.length === 0) {
+    throw new Error('Feature was not recorded');
+  }
+
+  return installed[0];
 }

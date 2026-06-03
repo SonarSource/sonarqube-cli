@@ -20,6 +20,10 @@
 
 export type { BaseDependencyOptions, DependencyDeclaration } from './common';
 export {
+  ContextAugmentationBinaryDependency,
+  contextAugmentationBinaryDependency,
+} from './context-augmentation';
+export {
   sonarSecretsBinaryDependency,
   SonarSourceBinary,
   sonarSourceBinary,

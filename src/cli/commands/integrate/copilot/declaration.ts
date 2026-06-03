@@ -23,6 +23,7 @@ import { join, relative } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { CommandFailedError } from '../../_common/error';
+import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
 import { jsonPatch, wholeFile } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
@@ -53,6 +54,7 @@ export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   installInstructions?: boolean;
   installSqaaInstructions?: boolean;
   installMcp?: boolean;
+  installContextAugmentation?: boolean;
 }
 
 export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOptions> = {
@@ -131,6 +133,10 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
         }),
       ],
     },
+    createContextAugmentationFeature<CopilotIntegrationOptions>({
+      agentDisplayName: 'Copilot',
+      targetPath: resolveCopilotSkillPath,
+    }),
   ],
 };
 
@@ -144,6 +150,10 @@ function resolveHooksJsonPath(context: IntegrationContext): string {
 
 function resolveCopilotMcpConfigPath(context: IntegrationContext): string {
   return getMcpConfigFilePath('copilot', context.scope === 'global', context.targetRoot);
+}
+
+function resolveCopilotSkillPath(context: IntegrationContext): string {
+  return join(context.targetRoot, '.github', 'skills', 'sonar-context-augmentation', 'SKILL.md');
 }
 
 function resolveInstructionsPath(context: IntegrationContext): string {

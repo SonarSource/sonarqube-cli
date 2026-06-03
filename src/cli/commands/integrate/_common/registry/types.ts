@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '../../../../../lib/auth-resolver';
 import type {
   CliState,
   IntegrationScope,
@@ -27,19 +28,24 @@ import type { DependencyDeclaration } from './dependencies';
 import type { ResourceDeclaration } from './resources';
 
 export type MaybePromise<T> = T | Promise<T>;
+export type IntegrationExecutionMode = 'install' | 'update';
 
 export interface IntegrationContext {
   state: CliState;
   targetRoot: string;
   scope: IntegrationScope;
+  executionMode: IntegrationExecutionMode;
+  auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  resolvedDependencies: ReadonlyMap<string, InstalledDependency>;
 }
 
 export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   options: TOptions;
   targetRoot: string;
   scope: IntegrationScope;
+  auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
 }
@@ -99,6 +105,10 @@ export interface InstalledDependency {
   dependencyType: string;
   version?: string;
   path?: string;
+}
+
+export interface DependencyInstallContext extends IntegrationContext {
+  existingDependency?: InstalledDependency;
 }
 
 export interface AppliedResource {

@@ -18,7 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { InstalledDependency, IntegrationContext, MaybePromise } from '../types';
+import type {
+  DependencyInstallContext,
+  InstalledDependency,
+  IntegrationContext,
+  MaybePromise,
+} from '../types';
 
 export interface BaseDependencyOptions {
   id: string;
@@ -31,6 +36,6 @@ export interface DependencyDeclaration {
   displayName?: string;
   dependencyType: string;
   version?: string;
-  install: (context: IntegrationContext) => MaybePromise<InstalledDependency>;
+  installOrUpdate: (context: DependencyInstallContext) => MaybePromise<InstalledDependency>;
   isInstalled: (context: IntegrationContext) => MaybePromise<boolean>;
 }

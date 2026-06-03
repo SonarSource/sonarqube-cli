@@ -23,8 +23,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../src/lib/install-types.js';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../src/lib/signatures.js';
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
+import { CLAUDE_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/claude/declaration';
+import { COPILOT_INTEGRATION_ID } from '../../../../src/cli/commands/integrate/copilot/declaration';
+import type { CliState, InstalledIntegrationFeature } from '../../../../src/lib/state.js';
 import { TestHarness } from '../../harness';
 import {
   type CagInvocation,
@@ -42,6 +44,54 @@ function findInvocation(invocations: CagInvocation[], argv: string[]): CagInvoca
     throw new Error(`Expected CAG invocation: ${JSON.stringify(argv)}`);
   }
   return match;
+}
+
+function appendRecordedCagFeature(
+  state: CliState,
+  args: {
+    integrationId: string;
+    targetRoot: string;
+    updatedAt: string;
+    projectKey: string;
+    orgKey: string;
+    serverUrl: string;
+  },
+): void {
+  let integration = state.integrations.installed.find(
+    (entry) => entry.integrationId === args.integrationId,
+  );
+  if (!integration) {
+    integration = {
+      id: `${args.integrationId}-integration`,
+      integrationId: args.integrationId,
+      installedByCliVersion: 'integration-test',
+      installedAt: args.updatedAt,
+      updatedByCliVersion: 'integration-test',
+      updatedAt: args.updatedAt,
+      features: [],
+    };
+    state.integrations.installed.push(integration);
+  }
+
+  const feature: InstalledIntegrationFeature = {
+    featureId: CONTEXT_AUGMENTATION_FEATURE_ID,
+    scope: 'project',
+    targetRoot: args.targetRoot,
+    installedByCliVersion: 'integration-test',
+    installedAt: args.updatedAt,
+    updatedByCliVersion: 'integration-test',
+    updatedAt: args.updatedAt,
+    dependencies: [],
+    resources: [],
+    operations: [],
+    attrs: {
+      orgKey: args.orgKey,
+      projectKey: args.projectKey,
+      scaEnabled: false,
+      serverUrl: args.serverUrl,
+    },
+  };
+  integration.features.push(feature);
 }
 
 const ORG_KEY = 'expected-org';
@@ -118,7 +168,7 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'uses the latest recorded CAG skill when multiple entries share the same project root',
+    'uses the latest recorded CAG feature when multiple entries share the same project root',
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
@@ -127,36 +177,22 @@ describe('sonar context passthrough', () => {
         .withAuth(serverUrl, 'current-token', 'current-org')
         .withContextAugmentationBinaryInstalled();
       const state = stateBuilder.build();
-      state.agentExtensions.push(
-        {
-          id: 'stale-skill',
-          agentId: 'claude-code',
-          projectRoot: harness.cwd.path,
-          global: false,
-          projectKey: 'stale-project',
-          orgKey: 'stale-org',
-          serverUrl,
-          updatedByCliVersion: 'integration-test',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-          kind: 'skill',
-          name: CONTEXT_AUGMENTATION_BINARY_NAME,
-          version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-        },
-        {
-          id: 'current-skill',
-          agentId: 'copilot-cli',
-          projectRoot: harness.cwd.path,
-          global: false,
-          projectKey: 'current-project',
-          orgKey: 'current-org',
-          serverUrl,
-          updatedByCliVersion: 'integration-test',
-          updatedAt: '2026-02-01T00:00:00.000Z',
-          kind: 'skill',
-          name: CONTEXT_AUGMENTATION_BINARY_NAME,
-          version: SONAR_CONTEXT_AUGMENTATION_VERSION,
-        },
-      );
+      appendRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        targetRoot: harness.cwd.path,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        projectKey: 'stale-project',
+        orgKey: 'stale-org',
+        serverUrl,
+      });
+      appendRecordedCagFeature(state, {
+        integrationId: COPILOT_INTEGRATION_ID,
+        targetRoot: harness.cwd.path,
+        updatedAt: '2026-02-01T00:00:00.000Z',
+        projectKey: 'current-project',
+        orgKey: 'current-org',
+        serverUrl,
+      });
       stateBuilder.withRawState(JSON.stringify(state, null, 2));
 
       const result = await harness.run('context status');
@@ -216,7 +252,7 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'does not inherit caller SONAR_CONTEXT_PROJECT when no recorded CAG skill matches the cwd',
+    'does not inherit caller SONAR_CONTEXT_PROJECT when no recorded CAG feature matches the cwd',
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();

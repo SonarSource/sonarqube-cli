@@ -28,13 +28,15 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import { COPILOT_INTEGRATION_ID } from '../../../src/cli/commands/integrate/copilot/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   COPILOT_SKILL_RELATIVE_PATH,
-  findRecordedCagSkill,
+  findRecordedCagDependency,
+  findRecordedCagFeature,
   seedState,
   STALE_CLI_VERSION,
 } from './_helpers';
@@ -59,9 +61,8 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     copilotSkillPath = join(harness.cwd.path, COPILOT_SKILL_RELATIVE_PATH);
 
     // Pre-write a sentinel into the skill file so the refresh has to overwrite
-    // it — proves the post-update path actually invoked `tool print-skill`
-    // (and the wrapper wrote its stdout to the skill path) rather than the
-    // file existing as a side effect of something else.
+    // it — proves the post-update path actually re-rendered the declarative
+    // skill file rather than the file existing as a side effect of something else.
     mkdirSync(dirname(copilotSkillPath), { recursive: true });
     writeFileSync(copilotSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
 
@@ -80,10 +81,26 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     expect(content).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
   });
 
-  it('refreshes the recorded copilot-cli skill version and bumps cliVersion', () => {
+  it('refreshes the declarative copilot CAG state and bumps cliVersion', () => {
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(state.config.cliVersion).not.toBe(STALE_CLI_VERSION);
-    const skill = findRecordedCagSkill(state, (s) => s.agentId === 'copilot-cli');
-    expect(skill?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+
+    const feature = findRecordedCagFeature(
+      state,
+      ({ integrationId, feature: installedFeature }) =>
+        integrationId === COPILOT_INTEGRATION_ID &&
+        installedFeature.targetRoot === harness.cwd.path,
+    );
+    expect(feature).toBeDefined();
+    if (!feature) {
+      throw new Error('Expected a recorded declarative Copilot CAG feature');
+    }
+    const resource = feature.feature.resources.find(
+      (entry) => entry.id === 'context-augmentation-skill-file',
+    );
+    expect(resource).toBeDefined();
+    expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
+    expect(resource?.path).toBe(copilotSkillPath);
   });
 });

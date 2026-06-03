@@ -27,11 +27,14 @@ import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, success, warn } from '../../../../ui';
 import { InvalidOptionError } from '../../_common/error';
-import { setupContextAugmentation } from '../_common/context-augmentation';
+import {
+  buildContextAugmentationAttrs,
+  resolveContextAugmentationSetup,
+} from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { CODEX_INTEGRATION_ID } from './declaration';
+import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaration';
 
 export async function integrateCodex(
   options: IntegrateAgentOptions,
@@ -66,34 +69,39 @@ export async function integrateCodex(
 
   const installRoot = isGlobal ? homedir() : project.rootDir;
   const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth,
+        projectKey,
+        isGlobal,
+      });
+  const integrationOptions = {
+    ...options,
+    installSecretsHooks: true,
+    installSecretsInstructions: true,
+    installSqaaInstructions: includeSqaa,
+    installMcp: true,
+    installContextAugmentation: contextAugmentation !== null,
+  } satisfies CodexIntegrationOptions;
 
   await installIntegration({
     integrationId: CODEX_INTEGRATION_ID,
-    options: {
-      ...options,
-      installSecretsHooks: true,
-      installSecretsInstructions: true,
-      installSqaaInstructions: includeSqaa,
-      installMcp: true,
-    },
+    options: integrationOptions,
     targetRoot: installRoot,
     scope: installScope,
-    attrs: buildAttrs({
-      includeSecretsSection: true,
-      projectKey,
-      includeSqaa,
-    }),
+    auth,
+    attrs: {
+      ...buildAttrs({
+        includeSecretsSection: true,
+        projectKey,
+        includeSqaa,
+      }),
+      ...(contextAugmentation
+        ? buildContextAugmentationAttrs(auth.serverUrl, auth.orgKey, contextAugmentation.scaEnabled)
+        : {}),
+    },
   });
-
-  if (!options.skipContext) {
-    await setupContextAugmentation({
-      auth,
-      agent: 'codex',
-      projectRoot: project.rootDir,
-      projectKey,
-      isGlobal,
-    });
-  }
 
   if (isGlobal) {
     success('Codex integration successfully configured globally');

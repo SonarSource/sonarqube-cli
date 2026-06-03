@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import {
+  type DependencyDeclaration,
   type FeatureDeclaration,
   installIntegration,
   type IntegrationDeclaration,
@@ -170,6 +171,106 @@ describe('generic integration installer', () => {
     expect(await readFile(join(projectRoot, 'project.txt'), 'utf-8')).toBe('project\n');
   });
 
+  it('supports explicit feature selection independently of the feature predicates', async () => {
+    const integration = registerIntegration<{ installMain?: boolean }>(
+      registry,
+      'installer-feature-selection',
+      [
+        {
+          id: 'main',
+          displayName: 'Main feature',
+          when: ({ options }) => options.installMain === true,
+          resources: [
+            wholeFile({
+              id: 'main-file',
+              displayName: 'Main file',
+              targetPath: join(tempDir, 'main.txt'),
+              content: 'main\n',
+            }),
+          ],
+        },
+        {
+          id: 'context-skill',
+          displayName: 'Context skill',
+          when: () => false,
+          resources: [
+            wholeFile({
+              id: 'skill-file',
+              displayName: 'Skill file',
+              targetPath: join(tempDir, 'skill.txt'),
+              content: 'skill\n',
+            }),
+          ],
+        },
+      ],
+    );
+
+    const installed = await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      featureIds: ['context-skill'],
+    });
+
+    expect(installed).toMatchObject([{ featureId: 'context-skill' }]);
+    expect(await readFile(join(tempDir, 'skill.txt'), 'utf-8')).toBe('skill\n');
+    expect(await Bun.file(join(tempDir, 'main.txt')).exists()).toBe(false);
+  });
+
+  it('passes resolved dependency metadata to feature resources after dependency installation', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const dependency: DependencyDeclaration = {
+      id: 'shared-binary',
+      dependencyType: 'binary',
+      version: '2',
+      installOrUpdate: () => ({
+        id: 'shared-binary',
+        dependencyType: 'binary',
+        version: '2',
+        path: '/opt/sonar/shared-binary',
+      }),
+      isInstalled: () => false,
+    };
+    const integration = registerIntegration(registry, 'installer-resolved-dependency', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        dependencies: [dependency],
+        resources: [
+          wholeFile({
+            id: 'dependency-aware-file',
+            displayName: 'Dependency-aware file',
+            targetPath: join(tempDir, 'dependency.txt'),
+            content: (context) => String(context.resolvedDependencies.get(dependency.id)?.path),
+          }),
+        ],
+      },
+    ]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(await readFile(join(tempDir, 'dependency.txt'), 'utf-8')).toBe(
+      '/opt/sonar/shared-binary',
+    );
+    expect(state.dependencies.installed).toMatchObject([
+      {
+        id: 'shared-binary',
+        dependencyType: 'binary',
+        version: '2',
+        path: '/opt/sonar/shared-binary',
+      },
+    ]);
+  });
+
   it('skips resources that are already applied and keeps their recorded metadata', async () => {
     const state = getDefaultState('test');
     loadStateSpy.mockReturnValue(state);
@@ -242,6 +343,46 @@ describe('generic integration installer', () => {
     );
   });
 
+  it('passes install execution mode through installIntegration', async () => {
+    let seenExecutionMode: string | undefined;
+    let seenAuthToken: string | undefined;
+    const integration = registerIntegration(registry, 'installer-execution-mode', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        operations: [
+          {
+            id: 'operation',
+            shouldApply: (context) => {
+              seenExecutionMode = context.executionMode;
+              return true;
+            },
+            apply: (context) => {
+              seenAuthToken = context.auth?.token;
+            },
+          },
+        ],
+      },
+    ]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      auth: {
+        token: 'test-token',
+        serverUrl: 'https://sonarcloud.io',
+        connectionType: 'cloud',
+        orgKey: 'test-org',
+      },
+    });
+
+    expect(seenExecutionMode).toBe('install');
+    expect(seenAuthToken).toBe('test-token');
+  });
+
   it('throws when the integration is unknown or no feature matches the invocation', async () => {
     const missingError = await catchError(() =>
       installIntegration({
@@ -304,15 +445,22 @@ describe('generic integration installer', () => {
       },
     ]);
 
-    expect(
-      installIntegration({
+    let forceError: unknown;
+    try {
+      await installIntegration({
         registry,
         integrationId: integration.id,
         options: {},
         targetRoot: tempDir,
         scope: 'project',
-      }),
-    ).rejects.toThrow(
+      });
+    } catch (error) {
+      forceError = error;
+    }
+    if (!(forceError instanceof Error)) {
+      throw new Error('Expected installIntegration to reject without --force');
+    }
+    expect(forceError.message).toBe(
       `Refusing to overwrite existing pre-commit hook at ${targetPath}. Use --force to replace.`,
     );
 
@@ -326,6 +474,64 @@ describe('generic integration installer', () => {
     });
 
     expect(await readFile(targetPath, 'utf-8')).toBe('#!/bin/sh\n# sonar-managed\necho sonar\n');
+  });
+
+  it('saves features that succeeded before a later feature throws', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const firstPath = join(tempDir, 'first.txt');
+    const integration = registerIntegration(registry, 'installer-partial-save', [
+      {
+        id: 'first',
+        displayName: 'First feature',
+        resources: [
+          wholeFile({
+            id: 'first-file',
+            displayName: 'First file',
+            targetPath: firstPath,
+            content: 'first\n',
+          }),
+        ],
+      },
+      {
+        id: 'second',
+        displayName: 'Second feature',
+        operations: [
+          {
+            id: 'failing-operation',
+            apply: () => {
+              throw new Error('boom');
+            },
+          },
+        ],
+      },
+    ]);
+
+    let thrown: unknown;
+    try {
+      await installIntegration({
+        registry,
+        integrationId: integration.id,
+        options: {},
+        targetRoot: tempDir,
+        scope: 'project',
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    if (!(thrown instanceof Error)) {
+      throw new Error('Expected installIntegration to reject');
+    }
+    expect(thrown.message).toBe('boom');
+
+    expect(await readFile(firstPath, 'utf-8')).toBe('first\n');
+    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(state.integrations.installed).toMatchObject([
+      {
+        integrationId: integration.id,
+        features: [{ featureId: 'first' }],
+      },
+    ]);
   });
 
   it('warns and continues when reading or writing state fails', async () => {
