@@ -184,7 +184,7 @@ export async function runContextPassthrough(
 
   let env: NodeJS.ProcessEnv;
   if (isHelp) {
-    env = process.env;
+    env = buildContextAugmentationEnv();
   } else {
     const auth = await resolveAuth();
     if (!auth) {

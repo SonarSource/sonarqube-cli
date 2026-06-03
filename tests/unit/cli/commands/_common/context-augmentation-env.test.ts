@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildContextAugmentationEnv } from '../../../../../src/cli/commands/_common/context-augmentation-env';
+import { INVOCATION_ID } from '../../../../../src/lib/invocation-id';
 
 const KEYS = [
   'SONAR_CONTEXT_ORGANIZATION',
@@ -111,5 +112,29 @@ describe('buildContextAugmentationEnv', () => {
     env.SONAR_CONTEXT_ORGANIZATION = 'mutated';
 
     expect(process.env.SONAR_CONTEXT_ORGANIZATION).toBe('inherited-SONAR_CONTEXT_ORGANIZATION');
+  });
+
+  it('sets SONAR_CONTEXT_INVOCATION_ID to the shared INVOCATION_ID when called with no argument', () => {
+    const env = buildContextAugmentationEnv();
+
+    expect(env.SONAR_CONTEXT_INVOCATION_ID).toBe(INVOCATION_ID);
+  });
+
+  it('sets SONAR_CONTEXT_INVOCATION_ID to the shared INVOCATION_ID when called with a context', () => {
+    const env = buildContextAugmentationEnv({
+      organization: 'my-org',
+      projectKey: 'my-project',
+      serverUrl: 'https://sonar.example',
+      token: 'tok',
+    });
+
+    expect(env.SONAR_CONTEXT_INVOCATION_ID).toBe(INVOCATION_ID);
+  });
+
+  it('returns the same SONAR_CONTEXT_INVOCATION_ID on successive calls within the same process', () => {
+    const first = buildContextAugmentationEnv();
+    const second = buildContextAugmentationEnv({ organization: 'my-org' });
+
+    expect(first.SONAR_CONTEXT_INVOCATION_ID).toBe(second.SONAR_CONTEXT_INVOCATION_ID);
   });
 });
