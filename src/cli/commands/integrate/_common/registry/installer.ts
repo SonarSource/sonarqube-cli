@@ -135,11 +135,7 @@ export class IntegrationInstaller {
         }
         return false;
       case 'ask': {
-        const nonInteractive =
-          Boolean((invocation.options as { nonInteractive?: boolean }).nonInteractive) ||
-          process.env.CI === 'true' ||
-          !process.stdin.isTTY;
-        if (nonInteractive) {
+        if ((invocation.options as { nonInteractive?: boolean }).nonInteractive) {
           return true;
         }
         const confirmed = await confirmPrompt(
