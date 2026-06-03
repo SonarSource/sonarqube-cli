@@ -24,7 +24,7 @@ import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependen
 import { yamlPatch } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { gitHookVerificationExample } from '../shared';
+import { gitHookExample } from '../shared';
 import {
   activatePreCommitFramework,
   normalizePreCommitConfig,
@@ -46,7 +46,7 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     when: ({ options }) => options.hook === hook,
-    verificationExample: gitHookVerificationExample(hook),
+    postInstallExample: gitHookExample(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       yamlPatch({

@@ -25,10 +25,11 @@
 // integrations.
 
 import { homedir } from 'node:os';
+import { sep } from 'node:path';
 
 import type { InstalledIntegrationFeature } from '../../../../../lib/state';
 import { info, note, outro, phase, phaseItem, text } from '../../../../../ui';
-import type { FeatureDeclaration, IntegrationDeclaration, VerificationExample } from './types';
+import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } from './types';
 
 export function renderCompletionSummary<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
@@ -40,7 +41,7 @@ export function renderCompletionSummary<TOptions>(
 
   renderInstalledList(integration, installedFeatures);
   outro('Setup complete!', 'success');
-  renderVerificationExamples(integration, installedFeatures);
+  renderPostInstallExamples(integration, installedFeatures);
 }
 
 function renderInstalledList<TOptions>(
@@ -60,22 +61,23 @@ function renderInstalledList<TOptions>(
 }
 
 function formatPath(path: string, home: string): string {
-  return path.startsWith(home) ? '~' + path.slice(home.length) : path;
+  if (path === home) return '~';
+  return path.startsWith(home + sep) ? '~' + path.slice(home.length) : path;
 }
 
-function renderVerificationExamples<TOptions>(
+function renderPostInstallExamples<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
 ): void {
   for (const installed of installedFeatures) {
-    const { verificationExample } = featureDeclaration(integration, installed.featureId);
-    if (verificationExample) {
-      renderVerificationExample(verificationExample);
+    const { postInstallExample } = featureDeclaration(integration, installed.featureId);
+    if (postInstallExample) {
+      renderPostInstallExample(postInstallExample);
     }
   }
 }
 
-function renderVerificationExample(example: VerificationExample): void {
+function renderPostInstallExample(example: PostInstallExample): void {
   if (example.intro) {
     info(example.intro);
   }

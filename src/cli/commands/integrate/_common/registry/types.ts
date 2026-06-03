@@ -65,7 +65,7 @@ export interface IntegrationDeclaration<TOptions = Record<string, unknown>> {
   legacyFeatures?: LegacyFeatureDeclaration[];
 }
 
-export interface VerificationExample {
+export interface PostInstallExample {
   /** Boxed-note title. */
   title?: string;
   /** Info line printed above the box. */
@@ -89,7 +89,7 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
    * Optional "try it out" example rendered by the framework completion summary
    * when this feature is installed.
    */
-  verificationExample?: VerificationExample;
+  postInstallExample?: PostInstallExample;
 }
 
 export interface LegacyFeatureDeclaration {

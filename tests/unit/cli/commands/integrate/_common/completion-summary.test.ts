@@ -18,6 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { homedir } from 'node:os';
+import { join, sep } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
@@ -45,6 +48,33 @@ function installedFeature(
     operations: [],
     ...overrides,
   };
+}
+
+function renderWithResourcePath(path: string): string[] {
+  clearMockUiCalls();
+  const integration: IntegrationDeclaration = {
+    id: 'test',
+    displayName: 'Test',
+    features: [{ id: 'a', displayName: 'Feature A' }],
+  };
+
+  renderCompletionSummary(integration, [
+    installedFeature('a', {
+      resources: [
+        {
+          id: 'r1',
+          resourceType: 'whole-file',
+          path,
+          updatedByCliVersion: 'test',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    }),
+  ]);
+
+  const phaseCall = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === 'Installed');
+  const items = (phaseCall?.args[1] ?? []) as PhaseItem[];
+  return items[0]?.subItems ?? [];
 }
 
 describe('renderCompletionSummary', () => {
@@ -107,6 +137,21 @@ describe('renderCompletionSummary', () => {
     expect(outroCall?.args[1]).toBe('success');
   });
 
+  it('abbreviates the home directory with ~ only on a path boundary', () => {
+    // Exact home dir collapses to ~
+    expect(renderWithResourcePath(homedir())).toEqual(['~']);
+
+    // Paths inside the home dir get a ~ prefix
+    expect(renderWithResourcePath(join(homedir(), 'project', '.sonar', 'hook.sh'))).toEqual([
+      `~${sep}project${sep}.sonar${sep}hook.sh`,
+    ]);
+
+    // A sibling sharing the home prefix is left intact
+    // (home=/home/user must not rewrite /home/username/foo to ~name/foo)
+    const sibling = `${homedir()}-sibling${sep}foo`;
+    expect(renderWithResourcePath(sibling)).toEqual([sibling]);
+  });
+
   it('throws when an installed feature has no matching declaration', () => {
     const integration: IntegrationDeclaration = {
       id: 'test',
@@ -119,7 +164,7 @@ describe('renderCompletionSummary', () => {
     );
   });
 
-  it('renders a feature verification example (intro, boxed note, footer)', () => {
+  it('renders a feature post-install example (intro, boxed note, footer)', () => {
     const integration: IntegrationDeclaration = {
       id: 'test',
       displayName: 'Test Agent',
@@ -127,7 +172,7 @@ describe('renderCompletionSummary', () => {
         {
           id: 'a',
           displayName: 'Feature A',
-          verificationExample: {
+          postInstallExample: {
             title: 'Verify it',
             intro: 'Paste this into Test Agent:',
             lines: ['do the thing'],

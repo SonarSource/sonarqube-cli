@@ -67,5 +67,5 @@ export type {
   IntegrationInvocation,
   LegacyFeatureDeclaration,
   MaybePromise,
-  VerificationExample,
+  PostInstallExample,
 } from './types';
