@@ -53,6 +53,7 @@ export {
   yamlPatch,
   type YamlPatchOptions,
 } from './resources';
+export { askUser, install, type InstallDecision, skip } from './selection';
 export type {
   AppliedFeature,
   AppliedOperation,

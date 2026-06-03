@@ -83,7 +83,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       // inclusion is then decided from attrs by the content function, so the
       // two flags act as independent toggles even though both sections share
       // a single file.
-      when: ({ options }) =>
+      shouldInstall: ({ options }) =>
         options.installSecretsInstructions === true || options.installSqaaInstructions === true,
       resources: [
         wholeFile({
@@ -102,7 +102,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      when: ({ options }) => options.installMcp === true,
+      shouldInstall: ({ options }) => options.installMcp === true,
       resources: [
         tomlPatch({
           id: 'codex-mcp-config',

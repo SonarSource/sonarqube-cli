@@ -65,7 +65,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
-      when: ({ options }) => options.installHook === true,
+      shouldInstall: ({ options }) => options.installHook === true,
       postInstallExample: secretsScanningExample('Copilot'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
@@ -91,7 +91,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'prompt-secrets-instructions',
       displayName: 'prompt-secrets instructions',
-      when: ({ options }) => options.installInstructions === true,
+      shouldInstall: ({ options }) => options.installInstructions === true,
       resources: [
         wholeFile({
           id: 'prompt-secrets-instructions-file',
@@ -107,7 +107,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      when: ({ options, scope }) => scope === 'global' && options.installSqaaInstructions === true,
+      shouldInstall: ({ options, scope }) =>
+        scope === 'global' && options.installSqaaInstructions === true,
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
@@ -123,7 +124,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      when: ({ options }) => options.installMcp === true,
+      shouldInstall: ({ options }) => options.installMcp === true,
       resources: [
         jsonPatch({
           id: 'copilot-mcp-config',

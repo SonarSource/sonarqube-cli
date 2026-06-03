@@ -42,7 +42,7 @@ export function createContextAugmentationFeature<
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: `${options.agentDisplayName} Context Augmentation`,
-    when: ({ options: integrationOptions }) =>
+    shouldInstall: ({ options: integrationOptions }) =>
       integrationOptions.installContextAugmentation === true,
     dependencies: [contextAugmentationBinaryDependency],
     resources: [

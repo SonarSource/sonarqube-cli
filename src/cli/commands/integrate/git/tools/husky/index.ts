@@ -39,7 +39,7 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
   return {
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
-    when: ({ options }) => options.hook === hook,
+    shouldInstall: ({ options }) => options.hook === hook,
     postInstallExample: gitHookExample(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [

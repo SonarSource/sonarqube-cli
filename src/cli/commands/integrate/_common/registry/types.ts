@@ -26,6 +26,7 @@ import type {
 } from '../../../../../lib/state';
 import type { DependencyDeclaration } from './dependencies';
 import type { ResourceDeclaration } from './resources';
+import type { InstallDecision } from './selection';
 
 export type MaybePromise<T> = T | Promise<T>;
 export type IntegrationExecutionMode = 'install' | 'update';
@@ -48,6 +49,7 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  nonInteractive?: boolean;
 }
 
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =
@@ -79,7 +81,9 @@ export interface PostInstallExample {
 export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
-  when?: (invocation: IntegrationInvocation<TOptions>) => boolean;
+  shouldInstall?: (
+    invocation: IntegrationInvocation<TOptions>,
+  ) => MaybePromise<boolean | InstallDecision>;
   targetRoot?: FeatureTargetRoot<TOptions>;
   scope?: FeatureScope<TOptions>;
   dependencies?: DependencyDeclaration[];

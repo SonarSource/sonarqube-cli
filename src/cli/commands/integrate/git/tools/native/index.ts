@@ -41,7 +41,7 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
   return {
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
-    when: ({ options }) => options.hook === hook,
+    shouldInstall: ({ options }) => options.hook === hook,
     postInstallExample: gitHookExample(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [

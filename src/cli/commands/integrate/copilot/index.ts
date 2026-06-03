@@ -88,6 +88,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     targetRoot,
     scope,
     auth,
+    nonInteractive: options.nonInteractive,
     attrs: {
       ...buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
       ...(contextAugmentation
