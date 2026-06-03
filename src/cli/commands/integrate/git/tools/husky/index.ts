@@ -24,7 +24,7 @@ import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependen
 import { textSnippet } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { HOOK_MARKER } from '../shared';
+import { gitHookExample, HOOK_MARKER } from '../shared';
 import { getHuskySnippetContent } from './shell-fragments';
 
 export const HUSKY_INTEGRATION_ID = 'husky';
@@ -40,6 +40,7 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     when: ({ options }) => options.hook === hook,
+    postInstallExample: gitHookExample(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
       textSnippet({

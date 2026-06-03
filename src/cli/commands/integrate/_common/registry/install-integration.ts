@@ -32,6 +32,7 @@ import { getDefaultState } from '../../../../../lib/state';
 import { discreetSuccess, info, text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import { supportedIntegrations } from '../../index';
+import { renderCompletionSummary } from './completion-summary';
 import type { IntegrationRegistry } from './core';
 import type { FeatureApplication } from './installer';
 import { integrationInstaller } from './installer';
@@ -117,6 +118,8 @@ export async function installIntegration<TOptions>({
         executionMode: 'install',
       },
     );
+
+    renderCompletionSummary(integration, installedFeatures);
 
     return saveInstalledFeatures(state) ? installedFeatures : [];
   } catch (error) {

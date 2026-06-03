@@ -65,6 +65,17 @@ export interface IntegrationDeclaration<TOptions = Record<string, unknown>> {
   legacyFeatures?: LegacyFeatureDeclaration[];
 }
 
+export interface PostInstallExample {
+  /** Boxed-note title. */
+  title?: string;
+  /** Info line printed above the box. */
+  intro?: string;
+  /** Box body lines. */
+  lines: string[];
+  /** Text line printed under the box. */
+  footer?: string;
+}
+
 export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
@@ -74,6 +85,11 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   dependencies?: DependencyDeclaration[];
   resources?: ResourceDeclaration[];
   operations?: FeatureOperation[];
+  /**
+   * Optional "try it out" example rendered by the framework completion summary
+   * when this feature is installed.
+   */
+  postInstallExample?: PostInstallExample;
 }
 
 export interface LegacyFeatureDeclaration {

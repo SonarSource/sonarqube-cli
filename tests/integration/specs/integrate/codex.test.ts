@@ -79,6 +79,11 @@ describe('integrate codex', () => {
         expect(entry?.matcher).toBe('*');
         expect(entry?.hooks?.[0]?.type).toBe('command');
         expect(entry?.hooks?.[0]?.command).toContain('sonar-secrets');
+
+        // Completion summary
+        expect(result.stdout).toContain('Installed');
+        expect(result.stdout).toContain('Setup complete!');
+        expect(result.stdout).toContain('paste this into Codex');
       },
       { timeout: 30000 },
     );
