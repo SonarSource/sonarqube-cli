@@ -345,7 +345,7 @@ export async function integrateGit(
 
   if (depRisksEnabled && projectKey == null) {
     throw new CommandFailedError(
-      'Installation cancelled: a project key is required for dependency-risks scanning.'
+      'Installation cancelled: a project key is required for dependency-risks scanning.',
     );
   }
 
