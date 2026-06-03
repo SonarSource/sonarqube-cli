@@ -22,6 +22,7 @@
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import { spawnProcess } from '../../../lib/process';
+import { print } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
 import type { HookDependencies } from './hook-dependencies';
@@ -54,6 +55,8 @@ async function scanRef(ref: PushRef, emptyTree: string, deps: HookDependencies):
   try {
     const result = await runSecretsBinary(deps.binaryPath, files, deps.auth);
     if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
+      const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
+      if (output) print(output);
       throw new CommandFailedError('Secrets detected in pushed commits.', {
         remediationHint:
           'Remove the reported secret, amend the commit if needed, then retry the push.',

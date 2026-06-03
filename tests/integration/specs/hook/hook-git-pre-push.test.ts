@@ -147,6 +147,10 @@ describe('sonar hook git-pre-push', () => {
       });
 
       expect(result.exitCode).toBe(1);
+      // The secrets binary output (file name + location) must be printed so the user knows
+      // where the secret was detected.
+      const combined = [result.stderr, result.stdout].filter(Boolean).join('\n');
+      expect(combined).toContain('secret.js');
     },
     { timeout: 30000 },
   );
@@ -189,6 +193,10 @@ describe('sonar hook git-pre-push', () => {
       });
 
       expect(result.exitCode).toBe(1);
+      // The secrets binary output (file name + location) must be printed so the user knows
+      // where the secret was detected.
+      const combined = [result.stderr, result.stdout].filter(Boolean).join('\n');
+      expect(combined).toContain('secret.js');
     },
     { timeout: 30000 },
   );
