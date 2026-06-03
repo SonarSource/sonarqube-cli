@@ -1,5 +1,5 @@
 {
-  "version": "0.13.0",
+  "version": "0.14.0",
   "commands": [
     {
       "id": "sonar",
@@ -18,6 +18,7 @@
         "sonar-auth",
         "sonar-api",
         "sonar-integrate",
+        "sonar-context",
         "sonar-list",
         "sonar-remediate",
         "sonar-analyze",
@@ -42,7 +43,6 @@
       "children": [
         "sonar-auth-login",
         "sonar-auth-logout",
-        "sonar-auth-purge",
         "sonar-auth-status"
       ]
     },
@@ -50,7 +50,7 @@
       "id": "sonar-auth-login",
       "name": "login",
       "fullName": "sonar auth login",
-      "description": "Save authentication token to keychain",
+      "description": "Authenticate via browser and save credentials in the system keychain. Must be run manually — agents cannot authenticate themselves. For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": false,
@@ -73,14 +73,6 @@
           "description": "SonarQube Cloud organization key (required for SonarQube Cloud)",
           "type": "string",
           "required": false
-        },
-        {
-          "flags": "-t, --with-token <with-token>",
-          "long": "--with-token",
-          "short": "-t",
-          "description": "Token value (skips browser, non-interactive mode)",
-          "type": "string",
-          "required": false
         }
       ],
       "examples": [
@@ -89,12 +81,8 @@
           "description": "Interactive login for SonarQube Cloud with browser"
         },
         {
-          "command": "sonar auth login -o my-org -t squ_abc123",
-          "description": "Non-interactive login with direct token"
-        },
-        {
-          "command": "sonar auth login -s https://my-sonarqube.io --with-token squ_def456",
-          "description": "Non-interactive login for SonarQube Server with token"
+          "command": "sonar auth login -s https://sonarqube.my.com/sonarqube",
+          "description": "Interactive login for SonarQube Server with browser with a server specified"
         }
       ],
       "children": []
@@ -115,26 +103,6 @@
         {
           "command": "sonar auth logout",
           "description": "Remove active connection token from keychain"
-        }
-      ],
-      "children": []
-    },
-    {
-      "id": "sonar-auth-purge",
-      "name": "purge",
-      "fullName": "sonar auth purge",
-      "description": "Remove all authentication tokens from keychain",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 2,
-      "parentId": "sonar-auth",
-      "arguments": [],
-      "options": [],
-      "examples": [
-        {
-          "command": "sonar auth purge",
-          "description": "Interactively remove all saved tokens"
         }
       ],
       "children": []
@@ -256,55 +224,17 @@
         }
       ],
       "children": [
-        "sonar-integrate-claude",
         "sonar-integrate-git",
-        "sonar-integrate-copilot"
+        "sonar-integrate-claude",
+        "sonar-integrate-copilot",
+        "sonar-integrate-codex"
       ]
-    },
-    {
-      "id": "sonar-integrate-claude",
-      "name": "claude",
-      "fullName": "sonar integrate claude",
-      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": true,
-      "depth": 2,
-      "parentId": "sonar-integrate",
-      "arguments": [],
-      "options": [
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key. Ignored when --global is used.",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--non-interactive",
-          "long": "--non-interactive",
-          "description": "Non-interactive mode (no prompts)",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "-g, --global",
-          "long": "--global",
-          "short": "-g",
-          "description": "Install hooks and config globally to ~/.claude instead of project directory",
-          "type": "boolean",
-          "required": false
-        }
-      ],
-      "examples": [],
-      "children": []
     },
     {
       "id": "sonar-integrate-git",
       "name": "git",
       "fullName": "sonar integrate git",
-      "description": "Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).",
+      "description": "Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -362,6 +292,52 @@
       "children": []
     },
     {
+      "id": "sonar-integrate-claude",
+      "name": "claude",
+      "fullName": "sonar integrate claude",
+      "description": "Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-integrate",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key. Ignored when --global is used.",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Install hooks and config globally to ~/.claude instead of project directory",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--skip-context",
+          "long": "--skip-context",
+          "description": "Skip the sonar-context-augmentation install/init/skill step",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
       "id": "sonar-integrate-copilot",
       "name": "copilot",
       "fullName": "sonar integrate copilot",
@@ -388,8 +364,82 @@
           "description": "Project key. Mutually exclusive with --global.",
           "type": "string",
           "required": false
+        },
+        {
+          "flags": "--skip-context",
+          "long": "--skip-context",
+          "description": "Skip the sonar-context-augmentation install/init/skill step",
+          "type": "boolean",
+          "required": false
         }
       ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-integrate-codex",
+      "name": "codex",
+      "fullName": "sonar integrate codex",
+      "description": "Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-integrate",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Install hook and config globally to ~/.codex instead of project directory",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key. Mutually exclusive with --global.",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--skip-context",
+          "long": "--skip-context",
+          "description": "Skip the sonar-context-augmentation install/init/skill step",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-context",
+      "name": "context",
+      "fullName": "sonar context",
+      "description": "Run Context Augmentation actions (analysis context for AI agents)",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [
+        {
+          "name": "action",
+          "description": "Action forwarded to sonar-context-augmentation",
+          "required": false,
+          "variadic": false
+        },
+        {
+          "name": "args",
+          "description": "Additional arguments forwarded to sonar-context-augmentation",
+          "required": false,
+          "variadic": true
+        }
+      ],
+      "options": [],
       "examples": [],
       "children": []
     },
@@ -397,7 +447,7 @@
       "id": "sonar-list",
       "name": "list",
       "fullName": "sonar list",
-      "description": "List issues and projects from SonarQube",
+      "description": "List issues and projects from SonarQube Cloud or Server",
       "isGroup": true,
       "isRoot": false,
       "requiresAuth": false,
@@ -593,14 +643,56 @@
       "description": "Analyze code for quality and security issues",
       "isGroup": true,
       "isRoot": false,
-      "requiresAuth": false,
+      "requiresAuth": true,
       "depth": 1,
       "parentId": "sonar",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "flags": "--file <file>",
+          "long": "--file",
+          "description": "Analyze a single file (skips change set detection)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--staged",
+          "long": "--staged",
+          "description": "Analyze staged files only (git diff --cached)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--base <ref>",
+          "long": "--base",
+          "description": "Analyze files changed vs a branch or ref (e.g. main)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--force",
+          "long": "--force",
+          "description": "Skip the large change set confirmation prompt",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "json"
+          ]
+        }
+      ],
       "examples": [],
       "children": [
         "sonar-analyze-secrets",
+        "sonar-analyze-dependency-risks",
         "sonar-analyze-agentic"
       ]
     },
@@ -648,10 +740,54 @@
       "children": []
     },
     {
+      "id": "sonar-analyze-dependency-risks",
+      "name": "dependency-risks",
+      "fullName": "sonar analyze dependency-risks",
+      "description": "Analyze project dependencies for security and license risks",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-analyze",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": true
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "table",
+          "allowedValues": [
+            "json",
+            "table"
+          ]
+        },
+        {
+          "flags": "--statuses <statuses>",
+          "long": "--statuses",
+          "description": "Filter issues by status\n\n  Raw:       new | open | confirm | accept | safe | fixed\n  Presets:   active | to_fix | all\n    active:  new, open, confirm\n    to_fix:  new, open, confirm, accept\n    all:     new, open, confirm, accept, safe, fixed\n\nPresets and raw statuses can be combined; the resulting set is the union.\n\nExamples:\n    --statuses active\n    --statuses new,confirm\n    --statuses active,safe\n",
+          "type": "string",
+          "required": false,
+          "defaultValue": "active"
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
       "id": "sonar-analyze-agentic",
       "name": "agentic",
       "fullName": "sonar analyze agentic",
-      "description": "Run server-side Agentic Analysis (SonarQube Cloud only)",
+      "description": "Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply, see https://www.sonarsource.com/products/sonarqube/agentic-analysis/",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -681,21 +817,6 @@
           "required": false
         },
         {
-          "flags": "--branch <branch>",
-          "long": "--branch",
-          "description": "Branch name for analysis context",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "SonarQube Cloud project key (overrides auto-detected project)",
-          "type": "string",
-          "required": false
-        },
-        {
           "flags": "--force",
           "long": "--force",
           "description": "Skip the large change set confirmation prompt",
@@ -713,6 +834,21 @@
             "text",
             "json"
           ]
+        },
+        {
+          "flags": "--branch <branch>",
+          "long": "--branch",
+          "description": "Branch name for analysis context",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "SonarQube Cloud project key (overrides auto-detected project)",
+          "type": "string",
+          "required": false
         }
       ],
       "examples": [],
@@ -722,7 +858,7 @@
       "id": "sonar-verify",
       "name": "verify",
       "fullName": "sonar verify",
-      "description": "Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze agentic`, SonarQube Cloud only)",
+      "description": "Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -752,21 +888,6 @@
           "required": false
         },
         {
-          "flags": "--branch <branch>",
-          "long": "--branch",
-          "description": "Branch name for analysis context",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "SonarQube Cloud project key (overrides auto-detected project)",
-          "type": "string",
-          "required": false
-        },
-        {
           "flags": "--force",
           "long": "--force",
           "description": "Skip the large change set confirmation prompt",
@@ -784,6 +905,21 @@
             "text",
             "json"
           ]
+        },
+        {
+          "flags": "--branch <branch>",
+          "long": "--branch",
+          "description": "Branch name for analysis context",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "SonarQube Cloud project key (overrides auto-detected project)",
+          "type": "string",
+          "required": false
         }
       ],
       "examples": [],

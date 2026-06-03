@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 0.13.0
+- Version: 0.14.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://cli.sonarqube.com/data/commands.json
@@ -24,18 +24,16 @@ Commands marked with * require prior authentication via `sonar auth login`.
 Manage authentication tokens and credentials
 
 ### sonar auth login
-Save authentication token to keychain
-Usage: sonar auth login [-s <value>] [-o <value>] [-t <value>]
+Authenticate via browser and save credentials in the system keychain. Must be run manually — agents cannot authenticate themselves. For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables
+Usage: sonar auth login [-s <value>] [-o <value>]
 
 Options:
   --server, -s  <string>   SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.
   --org, -o  <string>   SonarQube Cloud organization key (required for SonarQube Cloud)
-  --with-token, -t  <string>   Token value (skips browser, non-interactive mode)
 
 Examples:
   sonar auth login
-  sonar auth login -o my-org -t squ_abc123
-  sonar auth login -s https://my-sonarqube.io --with-token squ_def456
+  sonar auth login -s https://sonarqube.my.com/sonarqube
 
 ### sonar auth logout
 Remove active connection token from keychain
@@ -43,13 +41,6 @@ Usage: sonar auth logout
 
 Examples:
   sonar auth logout
-
-### sonar auth purge
-Remove all authentication tokens from keychain
-Usage: sonar auth purge
-
-Examples:
-  sonar auth purge
 
 ### sonar auth status
 Show active authentication connection with token verification
@@ -82,17 +73,8 @@ Examples:
   sonar integrate claude -s https://sonarcloud.io -p my-project
   sonar integrate claude -g
 
-### sonar integrate claude *
-Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
-Usage: sonar integrate claude [-p <value>] [--non-interactive] [--global]
-
-Options:
-  --project, -p  <string>   Project key. Ignored when --global is used.
-  --non-interactive   Non-interactive mode (no prompts)
-  --global, -g   Install hooks and config globally to ~/.claude instead of project directory
-
 ### sonar integrate git *
-Install a git hook that scans staged files for secrets before each commit (pre-commit) or scans committed files for secrets before each push (pre-push).
+Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.
 Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--global]
 
 Options:
@@ -107,16 +89,40 @@ Examples:
   sonar integrate git --global
   sonar integrate git --hook pre-push --global --non-interactive
 
+### sonar integrate claude *
+Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
+Usage: sonar integrate claude [-p <value>] [--non-interactive] [--global] [--skip-context]
+
+Options:
+  --project, -p  <string>   Project key. Ignored when --global is used.
+  --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Install hooks and config globally to ~/.claude instead of project directory
+  --skip-context   Skip the sonar-context-augmentation install/init/skill step
+
 ### sonar integrate copilot *
 Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
-Usage: sonar integrate copilot [--global] [-p <value>]
+Usage: sonar integrate copilot [--global] [-p <value>] [--skip-context]
 
 Options:
   --global, -g   Install hooks and config globally to ~/.copilot instead of project directory
   --project, -p  <string>   Project key. Mutually exclusive with --global.
+  --skip-context   Skip the sonar-context-augmentation install/init/skill step
+
+### sonar integrate codex *
+Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.
+Usage: sonar integrate codex [--global] [-p <value>] [--skip-context]
+
+Options:
+  --global, -g   Install hook and config globally to ~/.codex instead of project directory
+  --project, -p  <string>   Project key. Mutually exclusive with --global.
+  --skip-context   Skip the sonar-context-augmentation install/init/skill step
+
+### sonar context
+Run Context Augmentation actions (analysis context for AI agents)
+Usage: sonar context [action] [args]
 
 ### sonar list
-List issues and projects from SonarQube
+List issues and projects from SonarQube Cloud or Server
 
 ### sonar list issues *
 Search for issues in SonarQube
@@ -158,7 +164,7 @@ Options:
   --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
   --issues  <string>   Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.
 
-### sonar analyze
+### sonar analyze *
 Analyze code for quality and security issues
 
 ### sonar analyze secrets *
@@ -173,31 +179,54 @@ Examples:
   sonar analyze secrets src/file1.ts src/file2.ts
   cat .env | sonar analyze secrets --stdin
 
+### sonar analyze dependency-risks *
+Analyze project dependencies for security and license risks
+Usage: sonar analyze dependency-risks [-p <value>] [--format <value>] [--statuses <value>]
+
+Options:
+  --project, -p  <string>   Project key
+  --format  <string>   Output format
+  --statuses  <string>   Filter issues by status
+
+  Raw:       new | open | confirm | accept | safe | fixed
+  Presets:   active | to_fix | all
+    active:  new, open, confirm
+    to_fix:  new, open, confirm, accept
+    all:     new, open, confirm, accept, safe, fixed
+
+Presets and raw statuses can be combined; the resulting set is the union.
+
+Examples:
+    --statuses active
+    --statuses new,confirm
+    --statuses active,safe
+
+
 ### sonar analyze agentic *
-Run server-side Agentic Analysis (SonarQube Cloud only)
-Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [--branch <value>] [-p <value>] [--force] [--format <value>]
+Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply, see https://www.sonarsource.com/products/sonarqube/agentic-analysis/
+Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [--force] [--format <value>] [--branch <value>] [-p <value>]
 
 Options:
   --file  <string>   Analyze a single file (skips change set detection)
   --staged   Analyze staged files only (git diff --cached)
   --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
-  --branch  <string>   Branch name for analysis context
-  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
   --force   Skip the large change set confirmation prompt
   --format  <string>   Output format
+  --branch  <string>   Branch name for analysis context
+  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
 
 ### sonar verify *
-Run server-side SonarQube Agentic Analysis on the local change set (alias of `analyze agentic`, SonarQube Cloud only)
-Usage: sonar verify [--file <value>] [--staged] [--base <value>] [--branch <value>] [-p <value>] [--force] [--format <value>]
+Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)
+Usage: sonar verify [--file <value>] [--staged] [--base <value>] [--force] [--format <value>] [--branch <value>] [-p <value>]
 
 Options:
   --file  <string>   Analyze a single file (skips change set detection)
   --staged   Analyze staged files only (git diff --cached)
   --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
-  --branch  <string>   Branch name for analysis context
-  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
   --force   Skip the large change set confirmation prompt
   --format  <string>   Output format
+  --branch  <string>   Branch name for analysis context
+  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
 
 ### sonar config
 Configure CLI settings
