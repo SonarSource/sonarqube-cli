@@ -23,6 +23,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../package.json';
+import { installScaScannerBinary } from '../cli/commands/_common/install/sca-scanner';
 import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
 import { supportedIntegrations } from '../cli/commands/integrate';
 import {
@@ -31,7 +32,7 @@ import {
 } from '../cli/commands/integrate/_common/registry';
 import { CLAUDE_INTEGRATION_ID } from '../cli/commands/integrate/claude/declaration';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
-import { SECRETS_BINARY_NAME } from './install-types.js';
+import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
 import {
   cleanObsoleteFromState,
@@ -83,6 +84,7 @@ async function runActions(_previousVersion: string, _currentVersion: string): Pr
   await migrateDeclarativeIntegrations();
   await migrateClaudeCodeHooks();
   await updateSecretsBinaryIfNeeded();
+  await updateScaScannerBinaryIfNeeded();
 }
 
 export async function migrateDeclarativeIntegrations(
@@ -174,6 +176,21 @@ export async function updateSecretsBinaryIfNeeded(): Promise<void> {
 
 function hasPreviousSecretsInstallation(state: CliState): boolean {
   return hasBinaryInState(state, SECRETS_BINARY_NAME);
+}
+
+/**
+ * Update the sca-scanner-cli binary if it is already installed but targets a different version
+ * than the one bundled with this CLI release.
+ */
+export async function updateScaScannerBinaryIfNeeded(): Promise<void> {
+  const state = loadState();
+
+  if (!hasBinaryInState(state, SCA_SCANNER_BINARY_NAME)) {
+    logger.debug('sca-scanner-cli not installed — skipping binary update');
+    return;
+  }
+
+  await installScaScannerBinary();
 }
 
 function hasBinaryInState(state: CliState, binaryName: string): boolean {

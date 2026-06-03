@@ -40,7 +40,7 @@ const FAKE_AUTH: ResolvedAuth = {
 
 describe('SonarCommand', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
-  let originalExitCode: number | string | undefined;
+  let originalExitCode: number | string | null | undefined;
 
   beforeEach(() => {
     setMockUi(true);
