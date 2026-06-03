@@ -22,13 +22,19 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { CommandFailedError } from '../../_common/error';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
-import { tomlPatch, wholeFile } from '../_common/registry/resources';
+import {
+  buildSqaaSectionBody,
+  sonarBeginMarker,
+  sonarEndMarker,
+} from '../_common/instructions-templates';
+import { textSnippet, tomlPatch } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
-import { buildAgentsMdContent } from './instructions-templates';
+import { SECRETS_ON_READ_BODY } from './instructions-templates';
 
 const CODEX_CONFIG_DIR = '.codex';
 const HOOKS_FILE = 'hooks.json';
@@ -39,9 +45,9 @@ export const CODEX_INTEGRATION_ID = 'codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   installSecretsHooks?: boolean;
-  /** Render the pre-tool secrets-on-read section into `.codex/AGENTS.md`. */
+  /** Write the secrets-on-read marker block into `.codex/AGENTS.md`. */
   installSecretsInstructions?: boolean;
-  /** Render the post-tool SQAA section into `.codex/AGENTS.md`. */
+  /** Write the SQAA marker block into `.codex/AGENTS.md`. */
   installSqaaInstructions?: boolean;
   installMcp?: boolean;
   installContextAugmentation?: boolean;
@@ -77,25 +83,32 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       ],
     }),
     {
-      id: 'agents-md-instructions',
-      displayName: 'Codex AGENTS.md instructions',
-      // Fires whenever at least one section is enabled. Each section's
-      // inclusion is then decided from attrs by the content function, so the
-      // two flags act as independent toggles even though both sections share
-      // a single file.
-      shouldInstall: ({ options }) =>
-        options.installSecretsInstructions === true || options.installSqaaInstructions === true,
+      id: 'secrets-instructions',
+      displayName: 'secrets-on-read instructions',
+      shouldInstall: ({ options }) => options.installSecretsInstructions === true,
       resources: [
-        wholeFile({
-          id: 'codex-agents-md',
-          displayName: 'Codex AGENTS.md',
+        textSnippet({
+          id: 'codex-secrets-instructions',
+          displayName: 'Codex AGENTS.md secrets instructions',
           targetPath: resolveCodexAgentsMdPath,
-          content: (context) =>
-            buildAgentsMdContent({
-              includeSecrets: getOptionalBoolAttr(context, 'includeSecretsSection'),
-              includeSqaa: getOptionalBoolAttr(context, 'includeSqaa'),
-              projectKey: getOptionalStringAttr(context, 'projectKey'),
-            }),
+          startMarker: sonarBeginMarker('codex-secrets-on-read'),
+          endMarker: sonarEndMarker('codex-secrets-on-read'),
+          content: SECRETS_ON_READ_BODY,
+        }),
+      ],
+    },
+    {
+      id: 'sqaa-instructions',
+      displayName: 'SonarQube Agentic Analysis instructions',
+      shouldInstall: ({ options }) => options.installSqaaInstructions === true,
+      resources: [
+        textSnippet({
+          id: 'codex-sqaa-instructions',
+          displayName: 'Codex AGENTS.md SQAA instructions',
+          targetPath: resolveCodexAgentsMdPath,
+          startMarker: sonarBeginMarker('sqaa-protocol'),
+          endMarker: sonarEndMarker('sqaa-protocol'),
+          content: (context) => buildSqaaSectionBody(getRequiredStringAttr(context, 'projectKey')),
         }),
       ],
     },
@@ -170,6 +183,10 @@ function getOptionalStringAttr(context: IntegrationContext, key: string): string
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function getOptionalBoolAttr(context: IntegrationContext, key: string): boolean {
-  return context.attrs?.[key] === true;
+function getRequiredStringAttr(context: IntegrationContext, key: string): string {
+  const value = context.attrs?.[key];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new CommandFailedError(`Missing required integration attribute: ${key}`);
+  }
+  return value;
 }
