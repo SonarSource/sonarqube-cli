@@ -35,7 +35,7 @@ export function intro(title: string, subtitle?: string): void {
 
   if (isTTY) {
     process.stdout.write(`\n  ${DIVIDER}\n`);
-    process.stdout.write(`  🚀  ${bold(title)}\n`);
+    process.stdout.write(`  ${bold(title)}\n`);
     if (subtitle) process.stdout.write(`       ${subtitle}\n`);
     process.stdout.write(`  ${DIVIDER}\n\n`);
   } else {

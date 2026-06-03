@@ -276,7 +276,7 @@ describe('integrate claude', () => {
   // --- Without --non-interactive (interactive browser auth via browserToken) ---
 
   it(
-    'triggers browser auth repair when stored token fails health check',
+    'aborts when stored token fails setup summary validation',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -284,7 +284,6 @@ describe('integrate claude', () => {
         .withProject('browser-project')
         .start();
 
-      // Set up auth with an invalid token so health check fails and repair is triggered
       harness.withAuth(server.baseUrl(), 'initial-invalid-token');
       harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile(
@@ -296,33 +295,9 @@ describe('integrate claude', () => {
         browserToken: 'browser-token',
       });
 
-      expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists('.claude', 'settings.json')).toBe(true);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'replaces invalid token via browser auth and completes full integration',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('valid-browser-token')
-        .withProject('repair-project')
-        .start();
-      harness.withAuth(server.baseUrl(), 'invalid-token');
-      harness.state().withSecretsBinaryInstalled();
-      harness.cwd.writeFile(
-        'sonar-project.properties',
-        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=repair-project'].join('\n'),
-      );
-
-      const result = await harness.run('integrate claude', {
-        browserToken: 'valid-browser-token',
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists('.claude', 'settings.json')).toBe(true);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Token is invalid');
+      expect(harness.cwd.exists('.claude', 'settings.json')).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -330,7 +305,7 @@ describe('integrate claude', () => {
   // --- With --non-interactive ---
 
   it(
-    'installs hooks even when token is invalid (--non-interactive degraded mode)',
+    'aborts before installing hooks when token is invalid (--non-interactive)',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -346,7 +321,8 @@ describe('integrate claude', () => {
 
       const result = await harness.run('integrate claude --non-interactive');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Token is invalid');
       expect(
         harness.cwd.exists(
           '.claude',
@@ -355,13 +331,13 @@ describe('integrate claude', () => {
           'build-scripts',
           hookScriptName('pretool-secrets'),
         ),
-      ).toBe(true);
+      ).toBe(false);
     },
     { timeout: 30000 },
   );
 
   it(
-    'installs hooks in degraded mode when token is invalid and --non-interactive',
+    'aborts when token is invalid and --non-interactive (no degraded install)',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -377,7 +353,8 @@ describe('integrate claude', () => {
 
       const result = await harness.run('integrate claude --non-interactive');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Token is invalid');
       expect(
         harness.cwd.exists(
           '.claude',
@@ -386,7 +363,7 @@ describe('integrate claude', () => {
           'build-scripts',
           hookScriptName('pretool-secrets'),
         ),
-      ).toBe(true);
+      ).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -394,9 +371,8 @@ describe('integrate claude', () => {
   it(
     'does not open browser when env vars are set but token is invalid (env vars imply non-interactive)',
     async () => {
-      // Regression test: when SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER are set but the token is
-      // rejected by the server, the command must NOT open a browser — env vars imply CI/automated
-      // context. Without the fix this test hangs (browser auth is triggered, loopback server waits).
+      // When SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER are set but the token is rejected by the
+      // server, setup summary validation fails fast without opening a browser.
       const server = await harness
         .newFakeServer()
         .withAuthToken('valid-token') // server only accepts 'valid-token'
@@ -412,14 +388,15 @@ describe('integrate claude', () => {
         'integrate claude', // no --non-interactive flag
         {
           extraEnv: {
-            SONARQUBE_CLI_TOKEN: 'invalid-token', // rejected by server → tokenValid = false
+            SONARQUBE_CLI_TOKEN: 'invalid-token', // rejected by server
             SONARQUBE_CLI_SERVER: server.baseUrl(),
             // no browserToken: if browser auth is triggered the test times out
           },
         },
       );
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Token is invalid');
       expect(
         harness.cwd.exists(
           '.claude',
@@ -428,7 +405,7 @@ describe('integrate claude', () => {
           'build-scripts',
           hookScriptName('pretool-secrets'),
         ),
-      ).toBe(true);
+      ).toBe(false);
     },
     { timeout: 15000 },
   );

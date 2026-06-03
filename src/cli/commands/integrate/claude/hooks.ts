@@ -132,7 +132,7 @@ async function installHook(params: HookInstallParams): Promise<void> {
 /**
  * Result of probing for a Sonar secrets hook installation under a given root.
  * Internal — surfaced to callers via {@link detectGlobalSecretsHook} (noisy,
- * for the integrate flow) and {@link areHooksInstalled} (silent, for health).
+ * for the integrate flow) and {@link areHooksInstalled} (silent probe).
  *
  *  - `installed`: settings entry references sonar-secrets AND the backing
  *    script directory exists. `hookDir` is the absolute path of that directory.
@@ -215,8 +215,7 @@ export async function detectGlobalSecretsHook(hooksRoot: string): Promise<string
 /**
  * Check whether a Sonar secrets hook is fully installed under `hooksRoot`.
  *
- * Silent — used by health checks where probing must not emit user-facing
- * messages.
+ * Silent — probing must not emit user-facing messages.
  */
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
   return (await probeSecretsHook(hooksRoot)).kind === 'installed';

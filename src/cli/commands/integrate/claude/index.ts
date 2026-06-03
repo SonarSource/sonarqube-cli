@@ -23,7 +23,7 @@
 import { homedir } from 'node:os';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import { isEnvBasedAuth, isSonarQubeCloud } from '../../../../lib/auth-resolver';
+import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import {
   OBSOLETE_A3S_MARKER,
   removeObsoleteHookArtifacts,
@@ -31,19 +31,22 @@ import {
 } from '../../../../lib/migration';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { blank, discreetSuccess, intro, text, warn } from '../../../../ui';
+import { intro, success, warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
+import {
+  discoverProjectWithSpinner,
+  printAgentSetupSummary,
+  warnAuthProjectMismatches,
+} from '../_common/setup-summary';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration';
-import { runHealthChecks } from './health';
 import { detectGlobalSecretsHook } from './hooks';
-import { repairToken } from './repair';
 import { updateStateAfterConfiguration } from './state';
 
 export interface ConfigurationData {
@@ -60,15 +63,20 @@ export async function integrateClaude(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  intro(`SonarQube Integration Setup for Claude Code`);
+  intro('SonarQube Integration Setup for Claude');
 
-  blank();
-  text('Phase 1/3: Discovery & Validation');
-  blank();
-
-  const project = await discoverProject(process.cwd());
+  const project = await discoverProjectWithSpinner(() => discoverProject(process.cwd()));
   const config = loadConfiguration(project, options, auth);
-  validateConfiguration(project, config, options.global ?? false);
+  validateConfiguration(config, options.global ?? false);
+
+  await printAgentSetupSummary({
+    serverUrl: config.serverURL,
+    organization: config.organization,
+    token: config.token,
+    project,
+    projectKey: config.projectKey,
+    cliProjectKey: options.project,
+  });
 
   const isGlobal = options.global ?? false;
   // For project-level installs, probe the user home for a pre-existing global
@@ -76,41 +84,8 @@ export async function integrateClaude(
   // returns the hook dir when we should skip project-level secrets hooks.
   const existingGlobalHookPath = isGlobal ? undefined : await detectGlobalSecretsHook(homedir());
   const skipSecretsHooks = !!existingGlobalHookPath;
-  // Health check looks at the directory that actually owns the secrets hooks.
-  const hooksRoot = isGlobal || skipSecretsHooks ? homedir() : project.rootDir;
   const globalDir = isGlobal ? homedir() : undefined;
-
-  let token = config.token;
-
-  const isNonInteractive = !!options.nonInteractive || isEnvBasedAuth();
-
-  blank();
-  text('Phase 2/3: Health Check & Repair');
-  blank();
-
-  const healthResult = await runHealthChecks(
-    config.serverURL,
-    token,
-    config.projectKey,
-    hooksRoot,
-    config.organization,
-  );
-
-  if (healthResult.errors.length === 0) {
-    discreetSuccess('All checks passed! Configuration is healthy.');
-  } else {
-    warn(`Found ${healthResult.errors.length} issue(s):`);
-    for (const msg of healthResult.errors) {
-      text(`  - ${msg}`);
-    }
-
-    if (!isNonInteractive && !healthResult.tokenValid) {
-      blank();
-      text('Running token repair...');
-
-      token = await repairToken(config.serverURL, config.organization);
-    }
-  }
+  const token = config.token;
 
   const sqaaEnabled = await resolveSqaaEntitlement(config.serverURL, token, config.organization);
 
@@ -154,7 +129,7 @@ export async function integrateClaude(
       scope: installScope,
       auth: { ...auth, token },
       attrs: featureAttrs,
-      nonInteractive: isNonInteractive,
+      nonInteractive: options.nonInteractive,
     });
   } catch (error) {
     installError = error instanceof Error ? error : new Error(String(error));
@@ -166,6 +141,7 @@ export async function integrateClaude(
   if (installError) {
     throw installError;
   }
+  reportHookInstallationOutcome(isGlobal, existingGlobalHookPath);
 }
 
 /**
@@ -176,17 +152,7 @@ function loadConfiguration(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): ConfigurationData {
-  if (!!auth.serverUrl && !!project.serverUrl && auth.serverUrl != project.serverUrl) {
-    warn(
-      'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
-
-  if (!!auth.orgKey && !!project.organization && auth.orgKey != project.organization) {
-    warn(
-      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
+  warnAuthProjectMismatches(auth, project);
 
   return {
     serverURL: auth.serverUrl,
@@ -196,11 +162,7 @@ function loadConfiguration(
   };
 }
 
-function validateConfiguration(
-  project: DiscoveredProject,
-  config: ConfigurationData,
-  isGlobal: boolean,
-): void {
+function validateConfiguration(config: ConfigurationData, isGlobal: boolean): void {
   if (isSonarQubeCloud(config.serverURL) && !config.organization) {
     throw new CommandFailedError('SonarQube Cloud requires an organization.', {
       remediationHint:
@@ -208,25 +170,33 @@ function validateConfiguration(
     });
   }
 
-  blank();
-  text(`Server: ${config.serverURL}`);
-
-  if (config.organization) {
-    text(`Organization: ${config.organization}`);
-  }
-
-  if (project.isGitRepo) {
-    text('Git repository detected');
-  }
-
-  text(`Project root: ${project.rootDir}`);
-
-  if (config.projectKey) {
-    text(`Project: ${config.projectKey}`);
-  } else if (!isGlobal) {
+  if (!config.projectKey && !isGlobal) {
     warn(
       'No project key provided - project related actions will be skipped. Run sonar integrate claude --help for ways to define a project.',
     );
+  }
+}
+
+/**
+ * Print the scope-aware outcome after hook installation completes.
+ * When project-level setup was skipped because a global hook already owns the
+ * sonar-secrets scope, surface the existing hook path so the user knows where
+ * the active secrets scanning hook lives.
+ */
+function reportHookInstallationOutcome(
+  isGlobal: boolean,
+  existingGlobalHookPath: string | undefined,
+): void {
+  if (existingGlobalHookPath) {
+    success(
+      `Claude Code integration configured. Secrets scanning will use the existing global hook at: ${existingGlobalHookPath}`,
+    );
+    return;
+  }
+  if (isGlobal) {
+    success('Claude Code integration successfully configured globally');
+  } else {
+    success('Claude Code integration successfully configured at the project level');
   }
 }
 

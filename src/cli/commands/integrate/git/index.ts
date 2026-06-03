@@ -26,10 +26,11 @@ import { join } from 'node:path';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, intro, selectPrompt, text, warn } from '../../../../ui';
+import { blank, confirmPrompt, intro, selectPrompt, text, warn, withSpinner } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { installIntegration } from '../_common/registry';
+import { printGitRepositorySummary } from '../_common/setup-summary';
 import type { GitHookType, IntegrateGitOptions } from './options';
 import {
   hasSonarHookInPreCommitConfig,
@@ -158,14 +159,15 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
   validateHookOption(options.hook);
 
-  intro('SonarQube Git integration (secrets scanning)');
-  blank();
+  intro('SonarQube Git Integration (secrets scanning)');
 
   if (options.global) {
     return integrateGitGlobal(options);
   }
 
-  const { gitRoot, isGit } = findGitRoot(process.cwd());
+  const { gitRoot, isGit } = await withSpinner('Discovering project...', () =>
+    Promise.resolve(findGitRoot(process.cwd())),
+  );
   if (!isGit) {
     throw new CommandFailedError('No git repository found.', {
       remediationHint:
@@ -173,8 +175,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
     });
   }
 
-  text(`We will install the hook in this repository: ${gitRoot}`);
-  blank();
+  await printGitRepositorySummary(gitRoot);
 
   if (!options.nonInteractive) {
     const confirmed = await confirmPrompt('Install here?', true);

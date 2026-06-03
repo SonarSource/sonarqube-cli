@@ -28,6 +28,7 @@ import {
   InvalidOptionError,
 } from '../../../../../../src/cli/commands/_common/error.js';
 import * as binaryInstall from '../../../../../../src/cli/commands/_common/install/binary';
+import * as setupSummary from '../../../../../../src/cli/commands/integrate/_common/setup-summary';
 import {
   detectSonarHookInstallation as detectHookInstallation,
   hasMarker,
@@ -426,6 +427,7 @@ describe('installViaGitHooks', () => {
 
 describe('integrateGit', () => {
   let findGitRootSpy: ReturnType<typeof spyOn>;
+  let printGitRepositorySummarySpy: ReturnType<typeof spyOn>;
   let installBinarySpy: ReturnType<typeof spyOn>;
   let resolveBinaryPathSpy: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
@@ -436,6 +438,10 @@ describe('integrateGit', () => {
     setMockUi(true);
     clearMockUiCalls();
     findGitRootSpy = spyOn(discovery, 'findGitRoot');
+    printGitRepositorySummarySpy = spyOn(
+      setupSummary,
+      'printGitRepositorySummary',
+    ).mockResolvedValue(undefined);
     installBinarySpy = spyOn(binaryInstall, 'installBinary').mockResolvedValue({
       binaryPath: '/usr/local/bin/sonar-secrets',
       freshlyInstalled: true,
@@ -449,6 +455,7 @@ describe('integrateGit', () => {
   afterEach(() => {
     setMockUi(false);
     findGitRootSpy.mockRestore();
+    printGitRepositorySummarySpy.mockRestore();
     installBinarySpy.mockRestore();
     resolveBinaryPathSpy.mockRestore();
     loadStateSpy.mockRestore();
@@ -487,7 +494,7 @@ describe('integrateGit', () => {
     expect(integrateGit({ nonInteractive: true })).rejects.toThrow('No git repository found');
   });
 
-  it('asks for confirmation showing the repository path when a git repo is found', async () => {
+  it('shows repository summary then asks for confirmation when a git repo is found', async () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/my/project', isGit: true });
     queueMockResponse(null); // user cancels at the confirm prompt
     try {
@@ -497,11 +504,10 @@ describe('integrateGit', () => {
     }
     expect(
       getMockUiCalls().some(
-        (c) =>
-          c.method === 'text' &&
-          String(c.args[0]).includes('We will install the hook in this repository: /my/project'),
+        (c) => c.method === 'spinner' && String(c.args[0]) === 'Discovering project...',
       ),
     ).toBe(true);
+    expect(printGitRepositorySummarySpy).toHaveBeenCalledWith('/my/project');
   });
 
   it('records the husky integration when core.hooksPath points to .husky', async () => {
