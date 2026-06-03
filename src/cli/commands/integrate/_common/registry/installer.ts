@@ -28,6 +28,7 @@ import type {
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
 import { confirmPrompt, info } from '../../../../../ui';
+import { CommandFailedError } from '../../../_common/error';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
 import type { ResourceDeclaration } from './resources';
@@ -134,14 +135,21 @@ export class IntegrationInstaller {
         }
         return false;
       case 'ask': {
-        if ((invocation.options as { nonInteractive?: boolean }).nonInteractive) {
+        const nonInteractive =
+          Boolean((invocation.options as { nonInteractive?: boolean }).nonInteractive) ||
+          process.env.CI === 'true' ||
+          !process.stdin.isTTY;
+        if (nonInteractive) {
           return true;
         }
         const confirmed = await confirmPrompt(
           decision.message ?? `Install ${feature.displayName}?`,
           true,
         );
-        return confirmed === true;
+        if (confirmed === null) {
+          throw new CommandFailedError('Installation cancelled');
+        }
+        return confirmed;
       }
     }
   }
