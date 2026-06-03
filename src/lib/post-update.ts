@@ -32,10 +32,7 @@ import {
 } from '../cli/commands/integrate/_common/registry';
 import { CLAUDE_INTEGRATION_ID } from '../cli/commands/integrate/claude/declaration';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
-import {
-  SCA_SCANNER_BINARY_NAME,
-  SECRETS_BINARY_NAME,
-} from './install-types.js';
+import { SCA_SCANNER_BINARY_NAME, SECRETS_BINARY_NAME } from './install-types.js';
 import logger from './logger';
 import {
   cleanObsoleteFromState,

@@ -835,4 +835,4 @@ describe('updateScaScannerBinaryIfNeeded', () => {
 
     expect(updateScaScannerBinaryIfNeeded()).rejects.toThrow('download failed');
   });
-})
+});
