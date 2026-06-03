@@ -45,10 +45,6 @@ export function sonarEndMarker(id: string): string {
   return `<!-- sonar:end:${id} -->`;
 }
 
-export function buildSqaaSection(projectKey: string): string {
-  return withSonarMarkers('sonarqube-agentic-analysis-protocol', buildSqaaSectionBody(projectKey));
-}
-
 export function buildSqaaSectionBody(projectKey: string): string {
   return `# SonarQube Agentic Analysis protocol
 
