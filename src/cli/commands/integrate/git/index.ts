@@ -333,7 +333,7 @@ export async function integrateGit(
 
   const hook = await resolveHookType(
     options,
-    'pre-push (scan files in unpushed commits, supports analysis of dependency risks)',
+    'pre-push (scan files in unpushed commits + dependency risks analysis)',
   );
   text(`Hook: ${hook}`);
   blank();
@@ -374,6 +374,11 @@ export async function integrateGit(
 
   showPostInstallInfo(hook);
   await showInstallationStatus(gitRoot);
+  if (hook === 'pre-commit') {
+    info('Dependency risk analysis requires the pre-push hook.');
+    text('   Run `sonar integrate git` again to add it.');
+    blank();
+  }
   showVerificationGuide(hook);
 }
 
