@@ -43,3 +43,40 @@ export async function resolveSqaaEntitlement(
     return false;
   }
 }
+
+/**
+ * Consistent notice shown across all agent integrations when SonarQube Agentic
+ * Analysis is skipped because the integration is global.
+ */
+export const SQAA_GLOBAL_SKIP_MESSAGE =
+  'Skipping SonarQube Agentic Analysis: not supported with --global. Re-run without --global from a project directory to install it there.';
+
+export interface ResolveSqaaSetupParams {
+  serverURL: string;
+  token: string;
+  organization: string | undefined;
+  isGlobal: boolean;
+}
+
+/**
+ * Resolve whether SonarQube Agentic Analysis (SQAA) should be installed.
+ *
+ * SQAA is always project-scoped, so a `--global` integration can never install
+ * it. We still resolve org entitlement first so that, on a global install, the
+ * skip notice is only shown to orgs that could actually use SQAA (avoiding noise
+ * for unentitled orgs). For project installs this returns the raw entitlement.
+ */
+export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<boolean> {
+  const entitled = await resolveSqaaEntitlement(
+    params.serverURL,
+    params.token,
+    params.organization,
+  );
+  if (params.isGlobal) {
+    if (entitled) {
+      warn(SQAA_GLOBAL_SKIP_MESSAGE);
+    }
+    return false;
+  }
+  return entitled;
+}

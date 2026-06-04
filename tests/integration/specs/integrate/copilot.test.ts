@@ -690,7 +690,7 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'writes the SQAA section to the project file under -g when org is entitled and a project key is discoverable from sonar-project.properties',
+      'skips the SQAA section under -g even when org is entitled and a project key is discoverable, and warns',
       async () => {
         // `--global` and `--project` are mutually exclusive on the CLI, so the
         // project key must be discovered from disk in the global flow.
@@ -700,21 +700,19 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot -g --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
 
         // Global file holds prompt-secrets, NOT SQAA.
         const globalBody = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
         expect(globalBody).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(globalBody).not.toContain('# SonarQube Agentic Analysis');
 
-        // Project file holds SQAA, NOT prompt-secrets.
-        const projectBody = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(projectBody).toContain('# SonarQube Agentic Analysis protocol');
-        expect(projectBody).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
-        expect(projectBody).not.toContain('# SonarQube secrets scanning for prompts protocol');
+        // SQAA is never written project-side on a global install.
+        expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).exists()).toBe(false);
 
-        // Declarative state: prompt-secrets is global, SQAA is project-scoped.
+        // Declarative state: prompt-secrets is global, SQAA is not recorded.
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
-        expect(findCopilotFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+        expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -773,10 +771,12 @@ describe('integrate copilot', () => {
         expect(body).not.toContain('# SonarQube Agentic Analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
         expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
-        // The org IS entitled, so the skip reason must point at the missing
-        // project key rather than the Cloud promotion message.
+        // SQAA is project-scoped, so a --global install skips it with the same
+        // central notice used by every agent — no project-oriented missing-key
+        // or Cloud-promotion message on the global path.
         const output = result.stdout + result.stderr;
-        expect(output).toContain('no project key could be resolved');
+        expect(output).toContain('not supported with --global');
+        expect(output).not.toContain('no project key could be resolved');
         expect(output).not.toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
       },
       { timeout: 30000 },

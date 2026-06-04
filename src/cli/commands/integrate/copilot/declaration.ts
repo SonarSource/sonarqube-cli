@@ -123,9 +123,15 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options }) => {
+      shouldInstall: ({ options, scope }) => {
         if (options.installSqaaInstructions === true) {
           return askUser();
+        }
+        // SQAA is project-scoped; on a --global install the central
+        // "not supported with --global" notice already explains the skip, so
+        // stay silent rather than emitting a project-oriented reason.
+        if (scope === 'global') {
+          return skip();
         }
         return skip(
           options.sqaaEntitled === true ? SQAA_MISSING_PROJECT_KEY_MESSAGE : SQAA_PROMOTION_MESSAGE,

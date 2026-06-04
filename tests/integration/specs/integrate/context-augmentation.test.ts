@@ -857,9 +857,13 @@ describe('integrate <agent> --global — Context Augmentation', () => {
     ['copilot', 'integrate copilot -g --non-interactive'],
     ['codex', 'integrate codex -g'],
   ])(
-    'skips CAG entirely on "integrate %s --global"',
+    'skips CAG entirely on "integrate %s --global" and warns when the org is entitled',
     async (_agent, command) => {
-      const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withCagEntitlement(ORG_KEY)
+        .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
 
@@ -878,7 +882,38 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(COPILOT_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain('not supported with --global');
+      expect(result.stderr).toContain('Skipping Context Augmentation: not supported with --global');
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    ['claude', 'integrate claude -g --non-interactive'],
+    ['copilot', 'integrate copilot -g --non-interactive'],
+    ['codex', 'integrate codex -g'],
+  ])(
+    'skips CAG entirely on "integrate %s --global" without warning when the org is not entitled',
+    async (_agent, command) => {
+      // No CAG entitlement configured on the server.
+      const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+
+      const result = await harness.run(command, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      const state = loadState(harness);
+      expect(findRecordedCagFeature(state)).toBeUndefined();
+      expect(`${result.stdout}\n${result.stderr}`).not.toContain(
+        'Skipping Context Augmentation: not supported with --global',
+      );
     },
     { timeout: 30000 },
   );
