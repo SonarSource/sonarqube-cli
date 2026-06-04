@@ -149,7 +149,7 @@ async function getFilesForNewBranch(localSha: string, emptyTree: string): Promis
 
 export async function hasUncommittedChanges(): Promise<boolean> {
   try {
-    const result = await spawnProcess('git', ['status', '--porcelain']);
+    const result = await spawnProcess('git', ['status', '--porcelain', '-uno']);
     return result.stdout.trim().length > 0;
   } catch {
     return false;
