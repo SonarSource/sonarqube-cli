@@ -182,7 +182,13 @@ describe('integrate claude — Context Augmentation', () => {
       const invocations = readInvocations(harness);
       const printSkill = findToolInvocation(invocations, 'print-skill');
       const integrate = findToolInvocation(invocations, 'integrate');
-      expect(printSkill.argv).toEqual(['tool', 'print-skill', '--sca-enabled=true']);
+      expect(printSkill.argv).toEqual([
+        'tool',
+        'print-skill',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=true',
+      ]);
       expectNoContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
@@ -596,7 +602,13 @@ describe('integrate copilot — Context Augmentation', () => {
       const invocations = readInvocations(harness);
       const printSkill = findToolInvocation(invocations, 'print-skill');
       const integrate = findToolInvocation(invocations, 'integrate');
-      expect(printSkill.argv).toEqual(['tool', 'print-skill', '--sca-enabled=false']);
+      expect(printSkill.argv).toEqual([
+        'tool',
+        'print-skill',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=false',
+      ]);
       expectNoContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
@@ -661,7 +673,13 @@ describe('integrate codex — Context Augmentation', () => {
       const invocations = readInvocations(harness);
       const printSkill = findToolInvocation(invocations, 'print-skill');
       const integrate = findToolInvocation(invocations, 'integrate');
-      expect(printSkill.argv).toEqual(['tool', 'print-skill', '--sca-enabled=false']);
+      expect(printSkill.argv).toEqual([
+        'tool',
+        'print-skill',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=false',
+      ]);
       expectNoContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);

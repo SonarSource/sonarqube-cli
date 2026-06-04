@@ -163,7 +163,13 @@ export async function printContextAugmentationSkill({
 }: PrintContextAugmentationSkillParams): Promise<string> {
   const result = await runCagSubprocess(
     binaryPath,
-    ['tool', 'print-skill', `--sca-enabled=${scaEnabled ? 'true' : 'false'}`],
+    [
+      'tool',
+      'print-skill',
+      '--invocation-prefix',
+      SONAR_CONTEXT_INVOCATION,
+      `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
+    ],
     {
       projectRoot,
       env: buildContextAugmentationEnv({}),
