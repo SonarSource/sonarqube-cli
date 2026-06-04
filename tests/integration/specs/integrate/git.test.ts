@@ -111,6 +111,12 @@ function gitPush(
 const INTEGRATION_TEST_TOKEN = 'test-token';
 const LEGACY_PRE_COMMIT_REPO = 'https://github.com/SonarSource/sonar-secrets-pre-commit';
 
+// Project-scope interactive runs spawn `git` (e.g. resolveGitIntegrationId ->
+// usesHusky) between the per-feature confirm prompts. That latency races the
+// default 300 ms stdin chunk spacing and can drop a keystroke before the next
+// prompt starts listening, so give those chunks extra room.
+const PROJECT_PROMPT_CHUNK_DELAY_MS = 900;
+
 type InstalledStateJson = {
   dependencies: {
     installed: Array<{
@@ -361,7 +367,10 @@ describe('integrate git (native hooks)', () => {
 
       // Per-feature confirm flow: '\r' confirms 'Install here?', '\r' accepts the
       // 'Install pre-commit hook?' prompt, 'n' declines 'Install pre-push hook?'.
-      const result = await harness.run('integrate git', { stdinChunks: ['\r', '\r', 'n'] });
+      const result = await harness.run('integrate git', {
+        stdinChunks: ['\r', '\r', 'n'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
@@ -407,6 +416,7 @@ describe('integrate git (native hooks)', () => {
       // 'Install pre-commit hook?' prompt, '\r' accepts 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', 'n', '\r'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
@@ -425,7 +435,10 @@ describe('integrate git (native hooks)', () => {
 
       // Per-feature confirm flow: '\r' confirms 'Install here?', then '\r' accepts
       // both the 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
-      const result = await harness.run('integrate git', { stdinChunks: ['\r', '\r', '\r'] });
+      const result = await harness.run('integrate git', {
+        stdinChunks: ['\r', '\r', '\r'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
+      });
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;

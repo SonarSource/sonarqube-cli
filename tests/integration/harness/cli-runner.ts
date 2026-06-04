@@ -58,6 +58,7 @@ export async function runCli(
   options: {
     stdin?: string;
     stdinChunks?: string[];
+    stdinChunkDelayMs?: number;
     timeoutMs?: number;
     cwd: string;
     browserToken?: string;
@@ -99,9 +100,10 @@ export async function runCli(
     const encoder = new TextEncoder();
     // Write each chunk with a delay so readline in the CLI process finishes
     // handling one prompt before the next chunk arrives for the next prompt.
+    const chunkDelayMs = options.stdinChunkDelayMs ?? STDIN_CHUNK_DELAY_MS;
     await (async () => {
       for (const chunk of options.stdinChunks ?? []) {
-        await new Promise((r) => setTimeout(r, STDIN_CHUNK_DELAY_MS));
+        await new Promise((r) => setTimeout(r, chunkDelayMs));
         sink.write(encoder.encode(chunk));
       }
       sink.end();

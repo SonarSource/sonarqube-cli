@@ -34,12 +34,18 @@ export interface RunOptions {
   timeoutMs?: number;
   stdin?: string;
   /**
-   * Writes stdin in separate chunks with a 300 ms delay between each. Use
-   * this when the CLI shows multiple sequential interactive prompts: sending
-   * all bytes at once causes readline to buffer and discard later bytes before
-   * the next prompt has started listening.
+   * Writes stdin in separate chunks with a delay between each (see
+   * `stdinChunkDelayMs`). Use this when the CLI shows multiple sequential
+   * interactive prompts: sending all bytes at once causes readline to buffer
+   * and discard later bytes before the next prompt has started listening.
    */
   stdinChunks?: string[];
+  /**
+   * Delay in milliseconds between successive `stdinChunks` writes. Defaults to
+   * 300 ms. Raise this when slow work (e.g. spawning `git` subprocesses)
+   * happens between prompts, so each chunk lands after its prompt is listening.
+   */
+  stdinChunkDelayMs?: number;
   /**
    * When set, the harness streams CLI stdout looking for the loopback OAuth
    * port (pattern: `port=\d+`), then delivers this token via POST request to
