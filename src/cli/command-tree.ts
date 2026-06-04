@@ -61,7 +61,7 @@ import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
-import { gitPrePush } from './commands/hook/git-pre-push';
+import { gitPrePush, type GitPrePushOptions } from './commands/hook/git-pre-push';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateClaude } from './commands/integrate/claude';
 import { integrateCodex } from './commands/integrate/codex';
@@ -471,8 +471,15 @@ hookCommand
 
 hookCommand
   .command('git-pre-push')
-  .description('git pre-push handler: scan files in new commits for secrets')
-  .anonymousAction(() => gitPrePush());
+  .description(
+    'git pre-push handler: scan files in new commits for secrets, optionally scan dependency manifests for risks',
+  )
+  .option('-p, --project <project>', 'Project key (required when --dependency-risks is set)')
+  .option(
+    '--dependency-risks',
+    'Also run a dependency-risks scan after the secrets scan (requires -p)',
+  )
+  .anonymousAction((options: GitPrePushOptions) => gitPrePush(options));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
