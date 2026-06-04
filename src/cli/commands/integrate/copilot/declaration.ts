@@ -59,9 +59,7 @@ export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   installHook?: boolean;
-  installInstructions?: boolean;
   installSqaaInstructions?: boolean;
-  installMcp?: boolean;
   installContextAugmentation?: boolean;
 }
 
