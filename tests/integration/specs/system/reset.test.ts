@@ -20,11 +20,12 @@
 
 // Integration tests for `sonar system reset`
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { TestHarness } from '../../harness';
 
@@ -81,11 +82,9 @@ describe('system reset --force', () => {
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Reset');
+      expect(result.stdout).toContain('Cleaning up SonarQube CLI environment');
       expect(result.stdout).toContain('Authentication: 0 tokens removed from keychain.');
-      expect(result.stdout).toContain('Binaries: Pending CLI-565.');
-      expect(result.stdout).toContain('Integrations: Pending CLI-565.');
-      expect(result.stdout).toContain('CLI has been partially reset.');
+      expect(result.stdout).toContain('CLI has been successfully reset to factory settings.');
     },
     { timeout: 15000 },
   );
@@ -113,14 +112,22 @@ describe('system reset --force', () => {
   );
 
   it(
-    'prints binary cleanup stub (CLI-565 will wire WholeFileResource.remove)',
+    'removes binaries recorded in state',
     async () => {
       harness.state().withSecretsBinaryInstalled();
 
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Binaries: Pending CLI-565.');
+      expect(result.stdout).toMatch(/Binaries:.*Removed 1 binary/);
+
+      const binDir = join(harness.cliHome.path, 'bin');
+      const state = readState(harness.stateJsonFile.path);
+      expect(state.dependencies.installed).toHaveLength(0);
+      if (existsSync(binDir)) {
+        const remaining = readdirSync(binDir).filter((name) => name.includes('sonar'));
+        expect(remaining.length).toBe(0);
+      }
     },
     { timeout: 15000 },
   );
@@ -168,29 +175,53 @@ describe('system reset --force', () => {
   );
 
   it(
-    'clears the logs directory but leaves bin alone',
+    'clears logs and sca cache directories',
     async () => {
-      const binDir = join(harness.cliHome.path, 'bin');
       const logDir = join(harness.cliHome.path, 'logs');
+      const cacheDir = join(harness.cliHome.path, 'sca-scanner-cache');
       harness.state().withSecretsBinaryInstalled();
 
-      await harness.run('auth status');
+      mkdirSync(logDir, { recursive: true });
+      mkdirSync(cacheDir, { recursive: true });
       writeFileSync(join(logDir, 'sonarqube-cli.log'), 'fake log content', 'utf-8');
+      writeFileSync(join(cacheDir, 'entry.cache'), 'cache', 'utf-8');
 
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Filesystem:.*Cleared CLI cache and logs/);
       expect(existsSync(logDir)).toBe(false);
-      // BIN_DIR cleanup belongs to CLI-565 (removeBinaries via WholeFileResource).
-      expect(existsSync(binDir)).toBe(true);
+      expect(existsSync(cacheDir)).toBe(false);
+      expect(SCA_SCANNER_CACHE_DIR).toContain('sca-scanner-cache');
     },
     { timeout: 15000 },
   );
 
   it(
-    'leaves integration state alone (CLI-565 stub)',
+    'clears legacy agentExtensions registry entries',
     async () => {
       const server = await harness.newFakeServer().start();
+      const settingsPath = join(harness.cwd.path, '.claude', 'settings.json');
+      mkdirSync(join(harness.cwd.path, '.claude'), { recursive: true });
+      writeFileSync(
+        settingsPath,
+        JSON.stringify(
+          {
+            hooks: {
+              PostToolUse: [
+                {
+                  matcher: 'Edit|Write',
+                  hooks: [{ type: 'command', command: 'sonar-sqaa/build-scripts/posttool-sqaa' }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+        'utf-8',
+      );
+
       harness
         .state()
         .withAuth(server.baseUrl(), 'tok', 'org-key')
@@ -199,13 +230,70 @@ describe('system reset --force', () => {
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Integrations: Pending CLI-565.');
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
 
-      // The stub reports nothing cleaned, so agentExtensions and integrations.installed
-      // are preserved in state — the user can see what still needs cleanup once CLI-565 is wired.
       const state = readState(harness.stateJsonFile.path);
-      expect(state.agentExtensions).toHaveLength(1);
-      expect(state.integrations.installed).toHaveLength(0); // seeded via agentExtensions, not integrations
+      expect(state.agentExtensions).toHaveLength(0);
+
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as {
+        hooks?: { PostToolUse?: unknown[] };
+      };
+      expect(settings.hooks?.PostToolUse ?? []).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects dependency paths outside BIN_DIR',
+    async () => {
+      const outside = join(harness.cwd.path, 'outside-binary');
+      mkdirSync(harness.cwd.path, { recursive: true });
+      writeFileSync(outside, 'fake', 'utf-8');
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: new Date().toISOString(),
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {
+            'claude-code': {
+              configured: false,
+              hooks: { installed: [] },
+              skills: { installed: [] },
+            },
+          },
+          config: { cliVersion: '0.0.0' },
+          tools: { installed: [] },
+          dependencies: {
+            installed: [
+              {
+                id: 'sonar-secrets',
+                dependencyType: 'binary',
+                path: outside,
+                updatedByCliVersion: '0.0.0',
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          },
+          telemetry: {
+            enabled: false,
+            installationId: '00000000-0000-0000-0000-000000000000',
+            firstUseDate: new Date().toISOString(),
+            events: [],
+          },
+          agentExtensions: [],
+          integrations: { installed: [] },
+        }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Binaries:');
+      expect(result.stdout).toContain('failed');
+
+      const state = readState(harness.stateJsonFile.path);
+      expect(state.dependencies.installed).toHaveLength(1);
+      expect(existsSync(outside)).toBe(true);
     },
     { timeout: 15000 },
   );
@@ -235,7 +323,6 @@ describe('system reset (no --force)', () => {
         'Reset cancelled. Use --force to skip the prompt in non-interactive mode.',
       );
 
-      // Auth must still be intact — no cleanup ran.
       const state = readState(harness.stateJsonFile.path);
       expect(state.auth.connections).toHaveLength(1);
       expect(state.auth.isAuthenticated).toBe(true);
