@@ -24,6 +24,7 @@
 
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { spawnProcess } from '../../../lib/process';
+import { warn } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 import { runDepRisksStage } from './git-pre-push-dependency-risks.ts';
 import { runSecretsStage } from './git-pre-push-secrets.ts';
@@ -50,6 +51,12 @@ export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void>
 
   const emptyTree = await getEmptyTree();
   const filesByRef = await collectFilesForRefs(refs, emptyTree);
+
+  if (await hasUncommittedChanges()) {
+    warn(
+      'Uncommitted changes detected — they are not part of this push but will be included in the scan.',
+    );
+  }
 
   await runSecretsStage(filesByRef, auth);
 

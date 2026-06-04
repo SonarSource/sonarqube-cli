@@ -252,6 +252,26 @@ describe('sonar hook git-pre-push', () => {
   );
 
   it(
+    'warns about uncommitted changes during a push',
+    async () => {
+      initGitRepo(harness.cwd.path);
+      const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
+      stageFile(harness.cwd.path, 'extra.ts', CLEAN_CONTENT);
+
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+
+      const result = await harness.run('hook git-pre-push', {
+        stdin: pushRefLine(sha, GIT_NULL_OID),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('Uncommitted changes detected');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'exits 0 when -p is set without --dependency-risks (secrets-only, no dep-risks side effects)',
     async () => {
       initGitRepo(harness.cwd.path);
@@ -330,26 +350,6 @@ describe('sonar hook git-pre-push', () => {
     );
 
     it(
-      'does not warn about uncommitted changes when no manifests changed',
-      async () => {
-        initGitRepo(harness.cwd.path);
-        const sha = commitFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
-        stageFile(harness.cwd.path, 'extra.ts', CLEAN_CONTENT);
-
-        harness.state().withScaScannerBinaryInstalled();
-        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
-
-        const result = await harness.run('hook git-pre-push -p demo --dependency-risks', {
-          stdin: pushRefLine(sha, GIT_NULL_OID),
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr).not.toContain('Uncommitted changes detected');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
       'exits 0 (fail-open) when a manifest changed but the SCA backend is unavailable',
       async () => {
         initGitRepo(harness.cwd.path);
@@ -375,26 +375,6 @@ describe('sonar hook git-pre-push', () => {
         expect(result.stderr).toContain('push not blocked');
       },
       { timeout: 60000 },
-    );
-
-    it(
-      'warns when the working tree has uncommitted changes',
-      async () => {
-        initGitRepo(harness.cwd.path);
-        const sha = commitFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
-        stageFile(harness.cwd.path, 'extra.ts', CLEAN_CONTENT);
-
-        harness.state().withScaScannerBinaryInstalled();
-        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
-
-        const result = await harness.run('hook git-pre-push -p demo --dependency-risks', {
-          stdin: pushRefLine(sha, GIT_NULL_OID),
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr).toContain('Uncommitted changes detected');
-      },
-      { timeout: 30000 },
     );
   });
 });

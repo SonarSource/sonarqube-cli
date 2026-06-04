@@ -43,7 +43,6 @@ import {
 } from '../analyze/dependency-risk-helpers/sca-watch-patterns';
 import { formatDependencyRisksTable } from '../analyze/dependency-risk-helpers/table';
 import { buildDependencyRisksViewModel } from '../analyze/dependency-risk-helpers/view-model/build';
-import { hasUncommittedChanges } from './git-pre-push';
 
 const HOOK_STATUS_FILTER = 'new';
 
@@ -62,12 +61,6 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
 
   if (!(await shouldRunDependencyRiskAnalysis(binaryPath, options.changedFiles))) {
     return;
-  }
-
-  if (await hasUncommittedChanges()) {
-    warn(
-      'Uncommitted changes detected — they are not part of this push, but will be included in the dependency-risks scan.',
-    );
   }
 
   const filter = buildRiskFilter(HOOK_STATUS_FILTER);
@@ -97,7 +90,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
 
   print(formatDependencyRisksTable(viewModel));
   throw new CommandFailedError(
-    `Dependency risks detected in this push (${matchedCount} matching the configured filter).`,
+    `Dependency risks detected (${matchedCount} matching the configured filter).`,
     {
       remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' to inspect, fix or accept the risks, then retry the push.`,
     },
