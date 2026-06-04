@@ -20,41 +20,9 @@
 
 import { deleteToken, getToken } from '../../../lib/keychain';
 import { loadState, saveState } from '../../../lib/repository/state-repository';
-import type { AuthConnection } from '../../../lib/state';
 import { getActiveConnection, removeConnection } from '../../../lib/state-manager';
-import { SonarQubeClient } from '../../../sonarqube/client';
-import { print, success, warn } from '../../../ui';
-
-/**
- * Attempt to revoke the server-side token before local cleanup.
- * Best-effort: warns and returns on failure so that local logout always proceeds.
- */
-async function revokeServerTokenIfPossible(
-  active: AuthConnection,
-  token: string | undefined,
-): Promise<void> {
-  if (!active.tokenName) {
-    warn(
-      'The server-side token name is unknown for this connection, so the token could not be revoked automatically. Revoke it manually on the server if needed.',
-    );
-    return;
-  }
-
-  if (!token) {
-    warn(
-      `Could not retrieve the local token from the keychain, so the server-side token "${active.tokenName}" could not be revoked automatically. Revoke it manually on the server if needed.`,
-    );
-    return;
-  }
-
-  try {
-    await new SonarQubeClient(active.serverUrl, token).revokeUserToken(active.tokenName);
-  } catch (error) {
-    warn(
-      `Failed to revoke the server-side token "${active.tokenName}": ${(error as Error).message}. Continuing with local logout.`,
-    );
-  }
-}
+import { print, success } from '../../../ui';
+import { revokeServerTokenIfPossible } from './revoke-server-token';
 
 /**
  * Logout command - remove token from keychain

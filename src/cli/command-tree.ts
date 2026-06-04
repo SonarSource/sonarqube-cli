@@ -78,6 +78,7 @@ import { listProjects, type ListProjectsOptions } from './commands/list/projects
 import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
+import { systemReset, type SystemResetOptions } from './commands/system/reset';
 import { getBanner, getCustomRootHelp } from './root-help.js';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
@@ -409,6 +410,19 @@ COMMAND_TREE.command('self-update')
   .option('--status', 'Check for a newer version without installing')
   .option('--force', 'Install the latest version even if already up to date')
   .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
+
+const system = COMMAND_TREE.command('system').description(
+  'System maintenance commands for the SonarQube CLI installation.',
+);
+
+system
+  .command('reset')
+  .description(
+    'Reset the CLI to factory defaults: remove tokens, binaries, integrations, and cached files. ' +
+      'Telemetry settings are preserved.',
+  )
+  .option('--force', 'Skip the interactive confirmation prompt (required for non-interactive use)')
+  .anonymousAction((options: SystemResetOptions) => systemReset(options));
 
 const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
   'Run SonarQube services',

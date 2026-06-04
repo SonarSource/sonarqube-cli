@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import { CLI_DIR } from '../../../../lib/config-constants';
+import { SCA_SCANNER_CACHE_DIR } from '../../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../../lib/logger';
 import { type SonarQubeClient } from '../../../../sonarqube/client';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
@@ -55,7 +55,7 @@ export class ScaScanOrchestrator {
       downloadBaseUrl,
       sonarToken: auth.token,
       projectKey,
-      cacheDir: join(CLI_DIR, 'sca-scanner-cache'),
+      cacheDir: SCA_SCANNER_CACHE_DIR,
       workDir: join(tmpdir(), `sonar-sca-${Date.now()}`),
       scannerProperties: properties.scaProperties,
       excludedPaths: properties.exclusions,

@@ -52,6 +52,19 @@ After the CAG entitlement check passes, the integrate flow also queries SCA avai
 
 The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) handles `.tar.gz` archives: download → verify detached `.asc` PGP signature → gunzip + USTAR-extract the inner binary into `~/.sonar/sonarqube-cli/bin/`. Tar reading is in `src/cli/commands/_common/install/tar.ts` (no external dep). The pinned CAG version is in `package.json#externalBinaries["sonar-context-augmentation"]` and `src/lib/signatures.ts`. In the declarative framework, the CAG binary is managed as a shared dependency (`sonar-context-augmentation`), while a single declarative feature owns both the skill file resource and the install-only `tool integrate` operation with the invocation prefix forced to `sonar context`.
 
+### System reset
+
+`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Core implementation: `reset.ts`, `reset-auth.ts`, `reset-binaries.ts`, `reset-filesystem.ts`, and `safe-path.ts`. Integration teardown ships in a follow-up PR (`reset-integrations.ts`).
+
+- **Confirmation:** interactive runs require typing `RESET`; non-interactive runs require `--force`.
+- **Authentication:** best-effort server token revoke via shared `revoke-server-token.ts` (same hints as `auth logout`) then keychain deletion; only successfully removed connections are dropped from `state.auth`.
+- **Binaries:** deletes paths from `state.dependencies.installed` and legacy `state.tools.installed` under `BIN_DIR` (`resolveSafePath`); stops CAG daemons before removing the context-augmentation binary.
+- **Integrations:** not wired in this PR (phase reports a follow-up message).
+- **Filesystem:** removes `LOG_DIR`, `SCA_SCANNER_CACHE_DIR`, and `GLOBAL_HOOKS_DIR` under `CLI_DIR`; reports approximate bytes cleared.
+- **Telemetry:** never disabled; `installationId`, `firstUseDate`, and pending `events` are preserved.
+- **Legacy fields:** `state.agents` is reset; `state.tools` is reset only when no installed tools remain after binary cleanup.
+- **Exit code:** `1` when any step reports warnings (partial reset).
+
 ## Error handling
 
 Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
