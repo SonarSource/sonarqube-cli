@@ -29,12 +29,12 @@ import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { COPILOT_INTEGRATION_ID } from '../../../src/cli/commands/integrate/copilot/declaration';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   COPILOT_SKILL_RELATIVE_PATH,
+  expectSkillRendersWithWrapperInvocation,
   findRecordedCagDependency,
   findRecordedCagFeature,
   seedState,
@@ -78,7 +78,7 @@ describe('sonar-context-augmentation copilot skill refresh (offline, real binary
     expect(existsSync(copilotSkillPath)).toBe(true);
     const content = readFileSync(copilotSkillPath, 'utf-8');
     expect(content).not.toContain(STALE_SKILL_SENTINEL);
-    expect(content).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
+    expectSkillRendersWithWrapperInvocation(content);
   });
 
   it('refreshes the declarative copilot CAG state and bumps cliVersion', () => {

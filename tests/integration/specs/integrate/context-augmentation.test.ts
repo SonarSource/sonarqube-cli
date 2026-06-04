@@ -182,7 +182,13 @@ describe('integrate claude — Context Augmentation', () => {
       const invocations = readInvocations(harness);
       const printSkill = findToolInvocation(invocations, 'print-skill');
       const integrate = findToolInvocation(invocations, 'integrate');
-      expect(printSkill.argv).toEqual(['tool', 'print-skill', '--sca-enabled=true']);
+      expect(printSkill.argv).toEqual([
+        'tool',
+        'print-skill',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=true',
+      ]);
       expectNoContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
@@ -251,6 +257,44 @@ describe('integrate claude — Context Augmentation', () => {
         scaEnabled: false,
         serverUrl,
       });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'fails the install and does not write SKILL.md when print-skill produces empty output',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(true)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled({ printSkillEmpty: true });
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(
+        'sonar-context-augmentation tool print-skill produced empty output',
+      );
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -596,7 +640,13 @@ describe('integrate copilot — Context Augmentation', () => {
       const invocations = readInvocations(harness);
       const printSkill = findToolInvocation(invocations, 'print-skill');
       const integrate = findToolInvocation(invocations, 'integrate');
-      expect(printSkill.argv).toEqual(['tool', 'print-skill', '--sca-enabled=false']);
+      expect(printSkill.argv).toEqual([
+        'tool',
+        'print-skill',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=false',
+      ]);
       expectNoContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
@@ -661,7 +711,13 @@ describe('integrate codex — Context Augmentation', () => {
       const invocations = readInvocations(harness);
       const printSkill = findToolInvocation(invocations, 'print-skill');
       const integrate = findToolInvocation(invocations, 'integrate');
-      expect(printSkill.argv).toEqual(['tool', 'print-skill', '--sca-enabled=false']);
+      expect(printSkill.argv).toEqual([
+        'tool',
+        'print-skill',
+        '--invocation-prefix',
+        'sonar context',
+        '--sca-enabled=false',
+      ]);
       expectNoContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);

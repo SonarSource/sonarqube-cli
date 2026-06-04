@@ -24,6 +24,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { expect } from 'bun:test';
+
 import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
@@ -201,4 +203,25 @@ export function findRecordedCagDependency(
   return state.dependencies.installed.find(
     (dependency) => dependency.id === CONTEXT_AUGMENTATION_BINARY_NAME,
   );
+}
+
+const MIN_WRAPPER_INVOCATIONS_IN_SKILL = 5;
+
+/**
+ * The rendered SKILL.md must reference the wrapper command (`sonar context …`)
+ * everywhere, with the raw `sonar-context-augmentation` binary name appearing
+ * only once — in the YAML frontmatter `name:` field. Catches regressions where
+ * `tool print-skill` is invoked without `--invocation-prefix "sonar context"`.
+ */
+export function expectSkillRendersWithWrapperInvocation(content: string): void {
+  const matches = [...content.matchAll(new RegExp(CONTEXT_AUGMENTATION_BINARY_NAME, 'g'))];
+  expect(
+    matches.length,
+    `expected exactly one '${CONTEXT_AUGMENTATION_BINARY_NAME}' mention (the skill name in frontmatter) in SKILL.md`,
+  ).toBe(1);
+  const wrapperInvocations = [...content.matchAll(/\bsonar context\b/g)];
+  expect(
+    wrapperInvocations.length,
+    `expected more than ${MIN_WRAPPER_INVOCATIONS_IN_SKILL} \`sonar context\` command examples in SKILL.md`,
+  ).toBeGreaterThan(MIN_WRAPPER_INVOCATIONS_IN_SKILL);
 }

@@ -213,6 +213,8 @@ describe('post-update migration', () => {
       expect(invocations[printSkillIndex]?.argv).toEqual([
         'tool',
         'print-skill',
+        '--invocation-prefix',
+        'sonar context',
         '--sca-enabled=false',
       ]);
       // Stop must precede the skill refresh.

@@ -31,6 +31,7 @@
 //                           subcommand alike.
 //   CAG_STUB_SKILL_EXIT   — exit code returned for the legacy `skill` subcommand (default 0)
 //   CAG_STUB_PRINT_SKILL_EXIT — exit code returned for `tool print-skill` (default 0)
+//   CAG_STUB_PRINT_SKILL_EMPTY — when "1", `tool print-skill` exits 0 with empty stdout
 //   CAG_STUB_STOP_ALL_EXIT — exit code returned for `tool stop --all` (default 0)
 //   CAG_STUB_STDOUT_LINE  — a line emitted to stdout on non-`print-skill` calls
 //   CAG_STUB_STDERR_LINE  — a line emitted to stderr on non-`print-skill` calls
@@ -64,7 +65,7 @@ if (sentinel) {
 const RADIX = 10;
 if (args[0] === 'tool' && args[1] === 'print-skill') {
   const exitCode = Number.parseInt(process.env.CAG_STUB_PRINT_SKILL_EXIT ?? '0', RADIX);
-  if (exitCode === 0) {
+  if (exitCode === 0 && process.env.CAG_STUB_PRINT_SKILL_EMPTY !== '1') {
     const scaEnabledArg = args.find((arg) => arg.startsWith('--sca-enabled='));
     process.stdout.write(`# Generated CAG skill\n${scaEnabledArg ?? '--sca-enabled=false'}\n`);
   }
