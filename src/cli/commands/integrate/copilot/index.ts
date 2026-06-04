@@ -59,7 +59,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   const targetRoot = isGlobal ? homedir() : project.rootDir;
   const scope: IntegrationScope = isGlobal ? 'global' : 'project';
   const existingGlobalHookPath = isGlobal ? undefined : await detectGlobalSecretsHook();
-  const installHook = existingGlobalHookPath === undefined;
+  const globalSecretsHookExists = existingGlobalHookPath !== undefined;
 
   const contextAugmentation = options.skipContext
     ? null
@@ -71,7 +71,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   const integrationOptions: CopilotIntegrationOptions = {
     ...options,
     projectRoot: project.rootDir,
-    installHook,
+    globalSecretsHookExists,
     installSqaaInstructions: sqaaProjectKey !== undefined,
     sqaaEntitled: entitled,
     installContextAugmentation: contextAugmentation !== null,

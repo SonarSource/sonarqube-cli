@@ -59,7 +59,7 @@ export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 
 export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
-  installHook?: boolean;
+  globalSecretsHookExists?: boolean;
   installSqaaInstructions?: boolean;
   sqaaEntitled?: boolean;
   installContextAugmentation?: boolean;
@@ -73,11 +73,11 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
       shouldInstall: ({ options }) =>
-        options.installHook === true
-          ? askUser()
-          : skip(
+        options.globalSecretsHookExists === true
+          ? skip(
               'Skipping the project-level pre-tool-use hook because a global secrets scanning hook is already configured.',
-            ),
+            )
+          : askUser(),
       postInstallExample: secretsScanningExample('Copilot'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
