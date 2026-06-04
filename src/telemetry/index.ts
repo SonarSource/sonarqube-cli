@@ -24,6 +24,7 @@ import { type Command } from 'commander';
 
 import { version as VERSION } from '../../package.json';
 import { detectCallerAgent } from '../lib/agent-detector.js';
+import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
 import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
@@ -81,7 +82,7 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
     cli_version: VERSION,
     command: topCommand,
     subcommand,
-    invocation_id: randomUUID(),
+    invocation_id: INVOCATION_ID,
     result: success ? 'success' : 'failure',
     os: process.platform,
     connection_type: connectionType,

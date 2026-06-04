@@ -107,10 +107,14 @@ function expectContextEnv(invocation: CagInvocation, serverUrl: string): void {
   expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
   expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
   expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+  expect(invocation.env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
 }
 
 function expectNoContextEnv(invocation: CagInvocation): void {
-  expect(invocation.env).toEqual({});
+  expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBeUndefined();
+  expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
+  expect(invocation.env.SONAR_CONTEXT_TOKEN).toBeUndefined();
+  expect(invocation.env.SONAR_CONTEXT_URL).toBeUndefined();
 }
 
 function expectSkillFile(harness: TestHarness, relativePath: string, scaEnabled: boolean): void {
@@ -127,6 +131,7 @@ const TOKEN = 'cloud-token';
 const CLAUDE_SKILL_PATH = '.claude/skills/sonar-context-augmentation/SKILL.md';
 const COPILOT_SKILL_PATH = '.github/skills/sonar-context-augmentation/SKILL.md';
 const CODEX_SKILL_PATH = '.agents/skills/sonar-context-augmentation/SKILL.md';
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe('integrate claude — Context Augmentation', () => {
   let harness: TestHarness;
@@ -181,6 +186,10 @@ describe('integrate claude — Context Augmentation', () => {
       expectNoContextEnv(printSkill);
       expect(integrate.argv).toEqual(['tool', 'integrate', '--invocation-prefix', 'sonar context']);
       expectContextEnv(integrate, serverUrl);
+      // Both CAG spawns within one CLI run share the same SONAR_CONTEXT_INVOCATION_ID.
+      expect(printSkill.env.SONAR_CONTEXT_INVOCATION_ID).toBe(
+        integrate.env.SONAR_CONTEXT_INVOCATION_ID,
+      );
       expect(result.stdout).not.toContain('Running: sonar-context-augmentation');
       expect(result.stdout).toContain(
         `✓  sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,

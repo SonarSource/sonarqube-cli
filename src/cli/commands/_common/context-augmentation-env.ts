@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { INVOCATION_ID } from '../../../lib/invocation-id';
+
 export interface ContextAugmentationEnvContext {
   organization?: string;
   projectKey?: string;
@@ -38,11 +40,16 @@ type ContextAugmentationEnvKey =
  * - Called with a context object: missing fields are unset (deleted), not inherited
  *   from the parent env. This prevents mixed contexts where e.g. an explicit token
  *   from active auth would otherwise be paired with an inherited project key.
+ *
+ * Always sets SONAR_CONTEXT_INVOCATION_ID to the per-CLI-process INVOCATION_ID
+ * so the CAG client forwards it to the daemon (x-sonar-invocation-id header)
+ * and telemetry can correlate CLI and daemon-side events.
  */
 export function buildContextAugmentationEnv(
   context?: ContextAugmentationEnvContext,
 ): NodeJS.ProcessEnv {
   const env = { ...process.env };
+  env.SONAR_CONTEXT_INVOCATION_ID = INVOCATION_ID;
   if (context === undefined) {
     return env;
   }
