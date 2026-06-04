@@ -22,7 +22,7 @@
 
 import { homedir } from 'node:os';
 
-import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { isEnvBasedAuth, type ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, warn } from '../../../../ui';
@@ -91,7 +91,7 @@ export async function integrateCodex(
     targetRoot: installRoot,
     scope: installScope,
     auth,
-    nonInteractive: options.nonInteractive,
+    nonInteractive: !!options.nonInteractive || isEnvBasedAuth(),
     attrs: {
       ...buildAttrs({
         includeSecretsSection: true,

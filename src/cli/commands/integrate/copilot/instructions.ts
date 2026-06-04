@@ -31,8 +31,6 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { warn } from '../../../../ui';
-
 export const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
 export const PROJECT_INSTRUCTIONS_REL_DIR = join('.github', 'instructions');
 export const GLOBAL_INSTRUCTIONS_DIR = join(homedir(), '.copilot', 'instructions');
@@ -60,12 +58,6 @@ If the prompt appears to contain any such secret (either by your judgement or th
 2. Advise them to rotate the leaked credential immediately at its source of truth.
 `;
 
-export function warnIfProjectInstructionsShadowGlobal(): void {
-  const filePath = join(GLOBAL_INSTRUCTIONS_DIR, INSTRUCTIONS_FILENAME);
-  if (!existsSync(filePath)) {
-    return;
-  }
-  warn(
-    `Found existing Copilot instructions at '${filePath}'; this run only updates the project-level file. Remove the existing one if it is no longer needed.`,
-  );
+export function globalCopilotInstructionsExist(): boolean {
+  return existsSync(join(GLOBAL_INSTRUCTIONS_DIR, INSTRUCTIONS_FILENAME));
 }

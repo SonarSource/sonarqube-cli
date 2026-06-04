@@ -28,6 +28,8 @@
 // instructions file (i.e. without clobbering anything the user appended
 // around it).
 
+import { AGENTIC_ANALYSIS_DOCS_URL } from '../../../../lib/config-constants';
+
 /**
  * Wrap a markdown body in stable HTML-comment markers. The `id` must remain
  * unique and stable across CLI versions — it is the only identifier we have
@@ -44,6 +46,11 @@ export function sonarBeginMarker(id: string): string {
 export function sonarEndMarker(id: string): string {
   return `<!-- sonar:end:${id} -->`;
 }
+
+/**
+ * Shown when SQAA cannot be set up for the current connection.
+ */
+export const SQAA_PROMOTION_MESSAGE = `SonarQube Agentic Analysis is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
 
 export function buildSqaaSectionBody(projectKey: string): string {
   return `# SonarQube Agentic Analysis protocol

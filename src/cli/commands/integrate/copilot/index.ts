@@ -20,7 +20,7 @@
 
 import { homedir } from 'node:os';
 
-import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import { isEnvBasedAuth, type ResolvedAuth } from '../../../../lib/auth-resolver';
 import { discoverProject } from '../../../../lib/project-workspace';
 import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, warn } from '../../../../ui';
@@ -34,7 +34,6 @@ import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
-import { warnIfProjectInstructionsShadowGlobal } from './instructions';
 
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   if (options.global && options.project) {
@@ -61,9 +60,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   const scope: IntegrationScope = isGlobal ? 'global' : 'project';
   const existingGlobalHookPath = isGlobal ? undefined : await detectGlobalSecretsHook();
   const installHook = existingGlobalHookPath === undefined;
-  if (!isGlobal) {
-    warnIfProjectInstructionsShadowGlobal();
-  }
 
   const contextAugmentation = options.skipContext
     ? null
@@ -88,7 +84,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     targetRoot,
     scope,
     auth,
-    nonInteractive: options.nonInteractive,
+    nonInteractive: !!options.nonInteractive || isEnvBasedAuth(),
     attrs: {
       ...buildIntegrationAttrs(projectKey),
       ...(contextAugmentation

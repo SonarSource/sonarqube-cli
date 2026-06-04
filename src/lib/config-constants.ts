@@ -111,6 +111,8 @@ export const AI_REMEDIATION_DOCS_URL =
 export const SERVER_API_DOCS_URL =
   'https://docs.sonarsource.com/sonarqube-server/extension-guide/web-api';
 export const SUPPORT_URL = 'https://community.sonarsource.com';
+export const AGENTIC_ANALYSIS_DOCS_URL =
+  'https://docs.sonarsource.com/agent-centric-development-cycle/features/agentic-analysis';
 
 // ---------------------------------------------------------------------------
 // Application paths

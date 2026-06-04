@@ -29,9 +29,11 @@ import {
   buildSqaaSectionBody,
   sonarBeginMarker,
   sonarEndMarker,
+  SQAA_PROMOTION_MESSAGE,
 } from '../_common/instructions-templates';
 import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
 import { jsonPatch, textSnippet, wholeFile } from '../_common/registry/resources';
+import { askUser, skip } from '../_common/registry/selection';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
@@ -46,6 +48,7 @@ import {
   SCRIPT_REL_DIR,
 } from './hooks';
 import {
+  globalCopilotInstructionsExist,
   INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_REL_DIR,
   PROMPT_SECRETS_BODY,
@@ -69,7 +72,12 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
-      shouldInstall: ({ options }) => options.installHook === true,
+      shouldInstall: ({ options }) =>
+        options.installHook === true
+          ? askUser()
+          : skip(
+              'Skipping the project-level pre-tool-use hook because a global secrets scanning hook is already configured.',
+            ),
       postInstallExample: secretsScanningExample('Copilot'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
@@ -95,7 +103,12 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'prompt-secrets-instructions',
       displayName: 'prompt-secrets instructions',
-      shouldInstall: ({ options }) => options.installInstructions === true,
+      shouldInstall: ({ scope }) =>
+        scope === 'project' && globalCopilotInstructionsExist()
+          ? askUser(
+              'Global Copilot instructions already exist. Do you also want to create a project-local copy for this repo?',
+            )
+          : askUser(),
       resources: [
         textSnippet({
           id: 'prompt-secrets-instructions-file',
@@ -110,7 +123,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options }) => options.installSqaaInstructions === true,
+      shouldInstall: ({ options }) =>
+        options.installSqaaInstructions === true ? askUser() : skip(SQAA_PROMOTION_MESSAGE),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
@@ -130,7 +144,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      shouldInstall: ({ options }) => options.installMcp === true,
       resources: [
         jsonPatch({
           id: 'copilot-mcp-config',
