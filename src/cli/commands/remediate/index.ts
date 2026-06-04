@@ -100,7 +100,7 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
 
   let projectKey = options.project;
   if (!projectKey) {
-    const discovered = await discoverProject(process.cwd());
+    const discovered = await discoverProject(process.cwd(), false, { auth });
     projectKey = discovered.projectKey;
   }
   if (!projectKey) {

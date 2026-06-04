@@ -33,7 +33,9 @@ import {
   discoverProject,
   discoverProjectInfo,
   discoverServer,
+  GIT_REMOTE_BINDING_SOURCE,
 } from '../../../../src/lib/project-workspace';
+import * as discoverByRemote from '../../../../src/lib/project-workspace/discover-project-by-remote';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../src/ui';
 
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
@@ -343,6 +345,81 @@ describe('discoverProject', () => {
       'sonar-project.properties',
       join('.sonarlint', 'connectedMode.json'),
     ]);
+  });
+
+  it('resolves projectKey from git remote when authenticated and no local project key', async () => {
+    mkdirSync(join(testDir, '.git'), { recursive: true });
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+      exitCode: 0,
+      stdout: 'https://github.com/example/remote-bound.git',
+      stderr: '',
+    });
+    const remoteSpy = spyOn(discoverByRemote, 'discoverProjectKeyByGitRemote').mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+      organization: 'my-org',
+    });
+
+    try {
+      const result = await discoverProject(testDir, false, {
+        auth: {
+          token: 'token',
+          serverUrl: 'https://sonarcloud.io',
+          orgKey: 'my-org',
+          connectionType: 'cloud',
+        },
+      });
+      expect(result.projectKey).toBe('from-remote');
+      expect(result.organization).toBe('my-org');
+      expect(result.configSources).toEqual([GIT_REMOTE_BINDING_SOURCE]);
+      expect(remoteSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ orgKey: 'my-org' }),
+        'https://github.com/example/remote-bound.git',
+      );
+    } finally {
+      spawnSpy.mockRestore();
+      remoteSpy.mockRestore();
+    }
+  });
+
+  it('does not call git remote lookup when projectKey is already in local config', async () => {
+    mkdirSync(join(testDir, '.git'), { recursive: true });
+    writeFileSync(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=local_key\n',
+    );
+    const remoteSpy = spyOn(discoverByRemote, 'discoverProjectKeyByGitRemote').mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    try {
+      const result = await discoverProject(testDir, false, {
+        auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+      });
+      expect(result.projectKey).toBe('local_key');
+      expect(remoteSpy).not.toHaveBeenCalled();
+    } finally {
+      remoteSpy.mockRestore();
+    }
+  });
+
+  it('skips git remote lookup when tryGitRemoteBinding is false', async () => {
+    mkdirSync(join(testDir, '.git'), { recursive: true });
+    const remoteSpy = spyOn(discoverByRemote, 'discoverProjectKeyByGitRemote').mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    try {
+      await discoverProject(testDir, true, {
+        auth: { token: 't', serverUrl: 'https://sonarcloud.io', connectionType: 'cloud' },
+        tryGitRemoteBinding: false,
+      });
+      expect(remoteSpy).not.toHaveBeenCalled();
+    } finally {
+      remoteSpy.mockRestore();
+    }
   });
 });
 
