@@ -29,6 +29,7 @@ import {
   buildSqaaSectionBody,
   sonarBeginMarker,
   sonarEndMarker,
+  SQAA_MISSING_PROJECT_KEY_MESSAGE,
   SQAA_PROMOTION_MESSAGE,
 } from '../_common/instructions-templates';
 import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
@@ -60,6 +61,7 @@ export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   installHook?: boolean;
   installSqaaInstructions?: boolean;
+  sqaaEntitled?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -121,8 +123,14 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options }) =>
-        options.installSqaaInstructions === true ? askUser() : skip(SQAA_PROMOTION_MESSAGE),
+      shouldInstall: ({ options }) => {
+        if (options.installSqaaInstructions === true) {
+          return askUser();
+        }
+        return skip(
+          options.sqaaEntitled === true ? SQAA_MISSING_PROJECT_KEY_MESSAGE : SQAA_PROMOTION_MESSAGE,
+        );
+      },
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [

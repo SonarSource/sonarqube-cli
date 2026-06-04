@@ -773,6 +773,11 @@ describe('integrate copilot', () => {
         expect(body).not.toContain('# SonarQube Agentic Analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
         expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        // The org IS entitled, so the skip reason must point at the missing
+        // project key rather than the Cloud promotion message.
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('no project key could be resolved');
+        expect(output).not.toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
       },
       { timeout: 30000 },
     );

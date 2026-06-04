@@ -73,6 +73,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     projectRoot: project.rootDir,
     installHook,
     installSqaaInstructions: sqaaProjectKey !== undefined,
+    sqaaEntitled: entitled,
     installContextAugmentation: contextAugmentation !== null,
   };
 

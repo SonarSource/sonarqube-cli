@@ -48,9 +48,13 @@ export function sonarEndMarker(id: string): string {
 }
 
 /**
- * Shown when SQAA cannot be set up for the current connection.
+ * Shown when SQAA is not available for the current connection.
  */
 export const SQAA_PROMOTION_MESSAGE = `SonarQube Agentic Analysis is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
+
+/** Shown when SQAA is available for the connection but cannot be set up because no project key could be resolved. */
+export const SQAA_MISSING_PROJECT_KEY_MESSAGE =
+  'Skipping SonarQube Agentic Analysis instructions because no project key could be resolved. Re-run with --project <key> or from a directory with a configured project.';
 
 export function buildSqaaSectionBody(projectKey: string): string {
   return `# SonarQube Agentic Analysis protocol
