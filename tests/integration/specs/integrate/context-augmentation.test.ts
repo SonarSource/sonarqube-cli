@@ -262,6 +262,44 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
+    'fails the install and does not write SKILL.md when print-skill produces empty output',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(true)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled({ printSkillEmpty: true });
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(
+        'sonar-context-augmentation tool print-skill produced empty output',
+      );
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'skips CAG entirely when --skip-context is passed',
     async () => {
       const server = await harness
