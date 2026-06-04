@@ -29,7 +29,6 @@ import {
   runMigrations,
 } from '../../../../lib/migration';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
-import { success } from '../../../../ui';
 import {
   displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,
@@ -131,7 +130,6 @@ export async function integrateClaude(
   if (installError) {
     throw installError;
   }
-  reportHookInstallationOutcome(ctx.isGlobal, existingGlobalHookPath);
 }
 
 function toConfigurationData(ctx: {
@@ -146,29 +144,6 @@ function toConfigurationData(ctx: {
     projectKey: ctx.projectKey,
     token: ctx.token,
   };
-}
-
-/**
- * Print the scope-aware outcome after hook installation completes.
- * When project-level setup was skipped because a global hook already owns the
- * sonar-secrets scope, surface the existing hook path so the user knows where
- * the active secrets scanning hook lives.
- */
-function reportHookInstallationOutcome(
-  isGlobal: boolean,
-  existingGlobalHookPath: string | undefined,
-): void {
-  if (existingGlobalHookPath) {
-    success(
-      `Claude Code integration configured. Secrets scanning will use the existing global hook at: ${existingGlobalHookPath}`,
-    );
-    return;
-  }
-  if (isGlobal) {
-    success('Claude Code integration successfully configured globally');
-  } else {
-    success('Claude Code integration successfully configured at the project level');
-  }
 }
 
 function buildIntegrationAttrs(
