@@ -307,6 +307,86 @@ describe('generic integration installer', () => {
     expect(hasUiCall('text', 'Config file already installed')).toBe(true);
   });
 
+  it('falls back to the resource id in the skip message when no displayName is set', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const feature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      resources: [
+        wholeFile({
+          id: 'unnamed-file',
+          targetPath: join(tempDir, 'unnamed.txt'),
+          content: 'enabled=true\n',
+        }),
+      ],
+    };
+    const integration = registerIntegration(registry, 'installer-skip-unnamed-resource', [feature]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+    clearMockUiCalls();
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(hasUiCall('text', 'unnamed-file already installed')).toBe(true);
+  });
+
+  it('falls back to the dependency id in the skip message when no displayName is set', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const dependency: DependencyDeclaration = {
+      id: 'unnamed-binary',
+      dependencyType: 'binary',
+      version: '1',
+      installOrUpdate: () => ({
+        id: 'unnamed-binary',
+        dependencyType: 'binary',
+        version: '1',
+        path: '/opt/sonar/unnamed-binary',
+      }),
+      isInstalled: () => true,
+    };
+    const integration = registerIntegration(registry, 'installer-skip-unnamed-dependency', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        dependencies: [dependency],
+        operations: [{ id: 'noop', apply: () => undefined }],
+      },
+    ]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+    clearMockUiCalls();
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(hasUiCall('text', 'unnamed-binary already installed')).toBe(true);
+  });
+
   it('does not run operations when shouldApply returns false', async () => {
     let called = false;
     const integration = registerIntegration(registry, 'installer-should-apply', [
