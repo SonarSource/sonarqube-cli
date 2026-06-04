@@ -461,6 +461,29 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
+    'fails with an explicit notice when the user declines every per-feature prompt',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      // Per-feature confirm flow: '\r' confirms 'Install here?', then 'n' declines
+      // both the 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
+      const result = await harness.run('integrate git', {
+        stdinChunks: ['\r', 'n', 'n'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'No feature selected for Native Git integration',
+      );
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(false);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'installs native global pre-commit hook via interactive prompts when secrets is already installed',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });

@@ -23,8 +23,7 @@ import { platform } from 'node:os';
 import type { PostInstallExample } from '../../_common/registry';
 import type { InstallDecision } from '../../_common/registry/selection';
 import { askUser, install, skip } from '../../_common/registry/selection';
-import type { IntegrateGitOptions } from '../options';
-import type { GitHookType } from '../options';
+import type { GitHookType, IntegrateGitOptions } from '../options';
 
 export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
 
