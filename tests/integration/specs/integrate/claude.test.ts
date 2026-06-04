@@ -710,6 +710,46 @@ describe('integrate claude — SQAA entitlement guard', () => {
   });
 
   it(
+    'skips the sonar-sqaa hook on a -g install even when the org is entitled, and warns',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+
+      const result = await harness.run('integrate claude -g', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
+
+      const state = harness.stateJsonFile.asJson();
+      const sqaaExt = (state.agentExtensions as Array<{ name: string; global: boolean }>).find(
+        (e) => e.name === 'sonar-sqaa',
+      );
+      expect(sqaaExt).toBeUndefined();
+
+      const claudeIntegration = state.integrations.installed.find(
+        (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
+      );
+      const sqaaFeature = claudeIntegration?.features.find(
+        (feature: { featureId: string }) => feature.featureId === 'sonar-sqaa-hook',
+      );
+      expect(sqaaFeature).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'removes obsolete sonar-a3s hook entry when sonar-sqaa is installed',
     async () => {
       const server = await harness
@@ -1332,11 +1372,9 @@ describe('integrate claude — file placement (local vs global)', () => {
         const globalSecretsHooks = extensions.filter((e) => e.name === 'sonar-secrets' && e.global);
         expect(globalSecretsHooks.length).toBeGreaterThan(0);
 
-        // sonar-sqaa is always project-level, even when -g is used
+        // sonar-sqaa is never installed on a -g install (it is project-scoped only)
         const sqaaHooks = extensions.filter((e) => e.name === 'sonar-sqaa');
-        for (const hook of sqaaHooks) {
-          expect(hook.global).toBe(false);
-        }
+        expect(sqaaHooks).toHaveLength(0);
       },
       { timeout: 30000 },
     );

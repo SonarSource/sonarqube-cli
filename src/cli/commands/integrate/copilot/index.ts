@@ -29,7 +29,7 @@ import {
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
+import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
@@ -37,7 +37,17 @@ import { detectGlobalSecretsHook } from './hooks';
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   const ctx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
-  const entitled = await resolveSqaaEntitlement(ctx.serverUrl, ctx.token, ctx.organization);
+  // SQAA is always project-scoped. resolveSqaaSetup returns false (and surfaces
+  // the consistent "not supported with --global" notice when the org is
+  // entitled) on a global install; on a project install it returns the raw
+  // entitlement, which drives the declarative skip messaging (missing-key vs
+  // promotion).
+  const entitled = await resolveSqaaSetup({
+    serverURL: ctx.serverUrl,
+    token: ctx.token,
+    organization: ctx.organization,
+    isGlobal: ctx.isGlobal,
+  });
   const sqaaProjectKey = entitled && ctx.projectKey ? ctx.projectKey : undefined;
 
   const { installRoot: targetRoot, installScope: scope } = resolveIntegrateInstallTarget(

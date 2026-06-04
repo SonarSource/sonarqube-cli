@@ -148,9 +148,3 @@ export function resolveIntegrateInstallTarget(
     installScope: isGlobal ? 'global' : 'project',
   };
 }
-
-export function warnGlobalSqaaRequiresProject(subcommand: AgentIntegrateSubcommand): void {
-  warn(
-    `SonarQube Agentic Analysis is project-scoped and is not enabled by this global install. Run \`sonar integrate ${subcommand} --project <key>\` from a project directory to enable it for that project.`,
-  );
-}

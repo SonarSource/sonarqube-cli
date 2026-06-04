@@ -95,9 +95,17 @@ export async function resolveContextAugmentationSetup(
   }
 
   if (p.isGlobal) {
-    warn(
-      'Skipping Context Augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
-    );
+    // CAG is project-scoped, so a global install can never set it up. Only show
+    // the skip notice to orgs that are actually entitled (avoids noise for orgs
+    // that could not use CAG anyway).
+    if (p.auth.orgKey) {
+      const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
+      if ((await client.hasCagEntitlement(p.auth.orgKey)) === 'enabled') {
+        warn(
+          'Skipping Context Augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
+        );
+      }
+    }
     return null;
   }
 

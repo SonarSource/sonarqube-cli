@@ -415,13 +415,13 @@ describe('integrate codex', () => {
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).not.toContain('sonar integrate codex --project');
+        expect(output).not.toContain('Skipping SonarQube Agentic Analysis');
       },
       { timeout: 30000 },
     );
 
     it(
-      'on global install, does not write SQAA project-side but warns to run per-project when the org is entitled',
+      'on global install, does not write SQAA project-side but warns it is not supported with --global when the org is entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -449,8 +449,8 @@ describe('integrate codex', () => {
         expect(globalBody).not.toContain(SQAA_HEADING);
 
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).toContain('SonarQube Agentic Analysis');
-        expect(output).toContain('sonar integrate codex --project');
+        expect(output).toContain('Skipping SonarQube Agentic Analysis');
+        expect(output).toContain('not supported with --global');
       },
       { timeout: 30000 },
     );

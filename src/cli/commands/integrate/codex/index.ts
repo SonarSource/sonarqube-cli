@@ -25,14 +25,13 @@ import type { IntegrationStateAttribute } from '../../../../lib/state';
 import {
   displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,
-  warnGlobalSqaaRequiresProject,
 } from '../_common/agent-integrate-prelude';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
+import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaration';
 
@@ -42,15 +41,16 @@ export async function integrateCodex(
 ): Promise<void> {
   const ctx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth);
 
-  // SQAA is always project-scoped:
-  //  - project install: include the SQAA section if the org is entitled AND
-  //    we know a project key.
-  //  - global install: don't write SQAA anywhere, but if the org is entitled
-  //    surface a hint pointing the user at the per-project command. We skip
-  //    the warning for unentitled orgs to avoid noise about a feature they
-  //    cannot use.
-  const sqaaEligible = await resolveSqaaEntitlement(ctx.serverUrl, ctx.token, ctx.organization);
-  const includeSqaa = !ctx.isGlobal && sqaaEligible && Boolean(ctx.projectKey);
+  // SQAA is always project-scoped. resolveSqaaSetup returns false (and surfaces
+  // the consistent skip notice when the org is entitled) on a global install, so
+  // here we only include the SQAA section for a project install with a known key.
+  const sqaaEligible = await resolveSqaaSetup({
+    serverURL: ctx.serverUrl,
+    token: ctx.token,
+    organization: ctx.organization,
+    isGlobal: ctx.isGlobal,
+  });
+  const includeSqaa = sqaaEligible && Boolean(ctx.projectKey);
 
   const { installRoot, installScope } = resolveIntegrateInstallTarget(
     ctx.isGlobal,
@@ -90,10 +90,6 @@ export async function integrateCodex(
         : {}),
     },
   });
-
-  if (ctx.isGlobal && sqaaEligible) {
-    warnGlobalSqaaRequiresProject('codex');
-  }
 }
 
 function buildAttrs(args: {

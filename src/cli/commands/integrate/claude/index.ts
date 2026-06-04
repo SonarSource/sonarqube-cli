@@ -39,7 +39,7 @@ import {
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
+import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
@@ -71,11 +71,12 @@ export async function integrateClaude(
   const skipSecretsHooks = !!existingGlobalHookPath;
   const globalDir = ctx.isGlobal ? homedir() : undefined;
 
-  const sqaaEnabled = await resolveSqaaEntitlement(
-    config.serverURL,
-    config.token,
-    config.organization,
-  );
+  const sqaaEnabled = await resolveSqaaSetup({
+    serverURL: config.serverURL,
+    token: config.token,
+    organization: config.organization,
+    isGlobal: ctx.isGlobal,
+  });
 
   await runMigrations(ctx.project.rootDir, globalDir, sqaaEnabled, config.projectKey, {
     skipSecretsHooks,

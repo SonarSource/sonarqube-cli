@@ -359,12 +359,14 @@ describe('integrateCommand', () => {
 
     await integrateClaude({ global: true }, CLOUD_AUTH);
 
+    // SQAA is project-scoped, so a global install never enables it even when the
+    // org is entitled — sqaaEnabled flows through as false.
     assertMigrationHookInstallationAndStateUpdateRan(
       'a-project',
       '/project/root',
       homedir(),
       true,
-      true,
+      false,
     );
   });
 
@@ -505,6 +507,46 @@ describe('integrateCommand', () => {
           c.method === 'info' && String(c.args[0]).includes('already configured for SonarQube'),
       );
       expect(skipNotice).toBeUndefined();
+    });
+
+    it('skips the SQAA hook (and warns) even when the org is entitled', async () => {
+      mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
+      mockSqaaEntitlement(true);
+
+      await integrateClaude({ global: true }, CLOUD_AUTH);
+
+      // SQAA is never installed on a global run, and the install/migration/state
+      // paths all see sqaaEnabled = false.
+      expectClaudeInstallCall({
+        targetRoot: homedir(),
+        scope: 'global',
+        auth: CLOUD_AUTH,
+        projectRoot: '/project/root',
+        projectKey: 'a-project',
+        installSecretsHooks: true,
+        installSqaaHook: false,
+      });
+      expect(runMigrationsSpy).toHaveBeenLastCalledWith(
+        '/project/root',
+        homedir(),
+        false,
+        'a-project',
+        {
+          skipSecretsHooks: false,
+        },
+      );
+      expect(updateStateAfterConfigurationSpy).toHaveBeenLastCalledWith(
+        expect.anything(),
+        '/project/root',
+        true,
+        false,
+        { skipSecretsHooks: false },
+      );
+
+      const warnNotice = getMockUiCalls().find(
+        (c) => c.method === 'warn' && String(c.args[0]).includes('not supported with --global'),
+      );
+      expect(warnNotice).toBeDefined();
     });
   });
 
