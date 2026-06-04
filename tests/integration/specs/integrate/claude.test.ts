@@ -36,6 +36,11 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
+import { findInstalledFeature } from './integration-state-helpers';
+
+function findClaudeFeature(harness: TestHarness, featureId: string, scope?: string) {
+  return findInstalledFeature(harness, 'claude-code', featureId, scope);
+}
 
 describe('integrate claude', () => {
   let harness: TestHarness;
@@ -1969,6 +1974,131 @@ describe('integrate claude — hook migration scenarios', () => {
       };
       const bashEntry = settings.hooks?.PostToolUse?.find((e) => e.matcher === 'Bash');
       expect(bashEntry).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+});
+
+// ─── Interactive feature selection ────────────────────────────────────────────
+
+describe('integrate claude — interactive feature selection', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'prompts per feature, installs accepted features, and silently skips SQAA when not entitled',
+    async () => {
+      // On-premise auth with no org: SQAA and Context Augmentation are not
+      // available, so both are skipped silently. The secret scanning hooks and
+      // MCP server features each ask.
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude', {
+        stdinChunks: ['\r', '\r'],
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain('Install secret scanning hooks?');
+      expect(output).toContain('Install MCP server?');
+      // SQAA is not eligible, so it is skipped silently without a prompt.
+      expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+
+      // Accepted features are installed on disk.
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-secrets',
+          'build-scripts',
+          hookScriptName('pretool-secrets'),
+        ),
+      ).toBe(true);
+      expect(harness.cwd.exists('.mcp.json')).toBe(true);
+
+      // Declarative state records only the accepted features.
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips a feature when the user declines its prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      // Decline the secret scanning hooks ('n'), accept MCP ('\r').
+      const result = await harness.run('integrate claude', {
+        stdinChunks: ['n', '\r'],
+      });
+
+      expect(result.exitCode).toBe(0);
+      // Hooks were declined: no hook artifacts and no state entry.
+      expect(harness.cwd.exists('.claude', 'hooks', 'sonar-secrets')).toBe(false);
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+      // The accepted MCP feature still installs.
+      expect(harness.cwd.exists('.mcp.json')).toBe(true);
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'asks before installing the SQAA hook when the org is entitled and a project key is known',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withSqaaEntitlement('my-org', 'test-uuid-1234')
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+
+      const result = await harness.run('integrate claude --project my-project', {
+        stdinChunks: ['\r', '\r', '\r'],
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain('Install SonarQube Agentic Analysis hook?');
+
+      // Accepting installs the PostToolUse SQAA hook script and records it.
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(true);
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeDefined();
     },
     { timeout: 30000 },
   );

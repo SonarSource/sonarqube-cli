@@ -23,6 +23,14 @@
 import { mkdirSync } from 'node:fs';
 
 import { hookScriptName, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
+import {
+  findInstalledFeature,
+  getInstalledIntegration,
+  type InstalledIntegration,
+  type InstalledIntegrationFeature,
+} from './integration-state-helpers';
+
+export type { InstalledIntegration, InstalledIntegrationFeature };
 
 export const HOOK_FIELD = IS_WINDOWS ? 'powershell' : 'bash';
 
@@ -70,19 +78,6 @@ export interface McpJson {
   mcpServers?: Record<string, { command?: string; args?: string[] }>;
 }
 
-export interface InstalledIntegrationFeature {
-  featureId: string;
-  scope: string;
-  targetRoot: string;
-  dependencies?: Array<{ id: string }>;
-  attrs?: Record<string, unknown>;
-}
-
-export interface InstalledIntegration {
-  integrationId: string;
-  features: InstalledIntegrationFeature[];
-}
-
 /** Builds a platform-correct `CopilotHookEntry` for the given command path. */
 export function makeHookEntry(commandPath: string): CopilotHookEntry {
   return { type: 'command', timeoutSec: 60, [HOOK_FIELD]: commandPath };
@@ -90,10 +85,7 @@ export function makeHookEntry(commandPath: string): CopilotHookEntry {
 
 /** Returns the persisted declarative Copilot integration entry, if present. */
 export function getCopilotIntegration(harness: TestHarness): InstalledIntegration | undefined {
-  const state = harness.stateJsonFile.asJson();
-  return (state.integrations?.installed ?? []).find(
-    (integration: { integrationId?: string }) => integration.integrationId === 'copilot-cli',
-  ) as InstalledIntegration | undefined;
+  return getInstalledIntegration(harness, 'copilot-cli');
 }
 
 /** Finds a Copilot feature in declarative integration state, or `undefined` if absent. */
@@ -102,9 +94,7 @@ export function findCopilotFeature(
   featureId: string,
   scope?: string,
 ): InstalledIntegrationFeature | undefined {
-  return getCopilotIntegration(harness)?.features.find(
-    (feature) => feature.featureId === featureId && (!scope || feature.scope === scope),
-  );
+  return findInstalledFeature(harness, 'copilot-cli', featureId, scope);
 }
 
 /** Simulates a previous `sonar integrate copilot -g` run on disk. */
