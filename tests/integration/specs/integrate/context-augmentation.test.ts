@@ -629,7 +629,7 @@ describe('integrate copilot — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate copilot', {
+      const result = await harness.run('integrate copilot --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -700,7 +700,7 @@ describe('integrate codex — Context Augmentation', () => {
         ].join('\n'),
       );
 
-      const result = await harness.run('integrate codex', {
+      const result = await harness.run('integrate codex --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -731,6 +731,54 @@ describe('integrate codex — Context Augmentation', () => {
         scaEnabled: false,
         serverUrl,
       });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'env-based auth implies non-interactive: installs CAG without prompting or stdin',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(false)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      // SONARQUBE_CLI_TOKEN + _SERVER + _ORG ⇒ isEnvBasedAuth() ⇒ the Context
+      // Augmentation ask auto-installs with no --non-interactive flag and no
+      // stdin.
+      const result = await harness.run('integrate codex', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          SONARQUBE_CLI_TOKEN: TOKEN,
+          SONARQUBE_CLI_SERVER: serverUrl,
+          SONARQUBE_CLI_ORG: ORG_KEY,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain('Install Codex Context Augmentation?');
+      expect(findToolInvocation(readInvocations(harness), 'integrate').argv).toEqual([
+        'tool',
+        'integrate',
+        '--invocation-prefix',
+        'sonar context',
+      ]);
+      expectSkillFile(harness, CODEX_SKILL_PATH, false);
     },
     { timeout: 30000 },
   );
@@ -854,7 +902,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
 
   it.each([
     ['claude', 'integrate claude -g --non-interactive'],
-    ['copilot', 'integrate copilot -g'],
+    ['copilot', 'integrate copilot -g --non-interactive'],
     ['codex', 'integrate codex -g'],
   ])(
     'skips CAG entirely on "integrate %s --global"',

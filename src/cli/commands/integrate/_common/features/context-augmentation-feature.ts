@@ -25,6 +25,7 @@ import { getOptionalStringAttr } from '../attrs';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
 import { wholeFile } from '../registry/resources';
+import { askUser, skip } from '../registry/selection';
 import type { FeatureDeclaration, IntegrationContext } from '../registry/types';
 
 export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
@@ -44,7 +45,7 @@ export function createContextAugmentationFeature<
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: `${options.agentDisplayName} Context Augmentation`,
     shouldInstall: ({ options: integrationOptions }) =>
-      integrationOptions.installContextAugmentation === true,
+      integrationOptions.installContextAugmentation === true ? askUser() : skip(),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({

@@ -206,6 +206,7 @@ integrateCommand
     'Install hooks and config globally to ~/.copilot instead of project directory',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(auth, options));
@@ -235,6 +236,7 @@ integrateCommand
     'Install hook and config globally to ~/.codex instead of project directory',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
