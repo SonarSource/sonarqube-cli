@@ -22,6 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
+import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
@@ -119,7 +120,11 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
               'sonar-sqaa/build-scripts/posttool-sqaa',
             ),
           content: (context) => {
-            const projectKey = getRequiredStringAttr(context, 'projectKey');
+            const projectKey = getRequiredStringAttr(
+              context,
+              'projectKey',
+              claudeIntegration.displayName,
+            );
             return process.platform === 'win32'
               ? getSqaaPostToolTemplateWindows(projectKey)
               : getSqaaPostToolTemplateUnix(projectKey);
@@ -227,17 +232,4 @@ function toMcpSettings(document: unknown): {
         ? { ...(settings.mcpServers as Record<string, unknown>) }
         : {},
   };
-}
-
-function getOptionalStringAttr(context: IntegrationContext, key: string): string | undefined {
-  const value = context.attrs?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function getRequiredStringAttr(context: IntegrationContext, key: string): string {
-  const value = getOptionalStringAttr(context, key);
-  if (!value) {
-    throw new Error(`Missing integration attribute: ${key}`);
-  }
-  return value;
 }

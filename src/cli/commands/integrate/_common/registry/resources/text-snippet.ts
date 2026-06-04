@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { AppliedResource, IntegrationContext } from '../types';
+import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
   type PathResolver,
@@ -30,7 +30,7 @@ import {
 
 export interface TextSnippetResourceOptions extends BaseResourceOptions {
   targetPath: PathResolver;
-  content: string;
+  content: string | ((context: IntegrationContext) => MaybePromise<string>);
   executable?: boolean;
   startMarker: string;
   endMarker?: string;
@@ -54,7 +54,12 @@ export class TextSnippet implements ResourceDeclaration {
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
     const path = await resolvePath(context, this.options.targetPath);
-    await writeFileIfChanged(path, await this.renderContent(path), this.options.executable);
+    const content = await this.resolveContent(context);
+    await writeFileIfChanged(
+      path,
+      await this.renderContent(path, content),
+      this.options.executable,
+    );
     return { id: this.id, resourceType: this.resourceType, version: this.version, path };
   }
 
@@ -64,7 +69,7 @@ export class TextSnippet implements ResourceDeclaration {
     if (existing === undefined) {
       return false;
     }
-    return existing.includes(this.renderManagedBlock());
+    return existing.includes(this.renderManagedBlock(await this.resolveContent(context)));
   }
 
   async remove(context: IntegrationContext): Promise<void> {
@@ -81,9 +86,14 @@ export class TextSnippet implements ResourceDeclaration {
     await writeFileIfChanged(path, existing.replaceAll(pattern, ''));
   }
 
-  private async renderContent(path: string): Promise<string> {
+  private async resolveContent(context: IntegrationContext): Promise<string> {
+    const { content } = this.options;
+    return typeof content === 'function' ? content(context) : content;
+  }
+
+  private async renderContent(path: string, content: string): Promise<string> {
     const existing = (await readTextFile(path)) ?? '';
-    const managedBlock = this.renderManagedBlock();
+    const managedBlock = this.renderManagedBlock(content);
     const pattern = new RegExp(
       String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
     );
@@ -99,8 +109,8 @@ export class TextSnippet implements ResourceDeclaration {
     return appendBlock(existing, managedBlock);
   }
 
-  private renderManagedBlock(): string {
-    return `${this.startMarker}\n${this.options.content.trimEnd()}\n${this.endMarker}`;
+  private renderManagedBlock(content: string): string {
+    return `${this.startMarker}\n${content.trimEnd()}\n${this.endMarker}`;
   }
 
   private get startMarker(): string {

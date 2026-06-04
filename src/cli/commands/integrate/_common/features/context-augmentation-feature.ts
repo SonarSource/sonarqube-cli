@@ -21,6 +21,7 @@
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../../lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../lib/signatures';
 import { CommandFailedError } from '../../../_common/error';
+import { getOptionalStringAttr } from '../attrs';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
 import { wholeFile } from '../registry/resources';
@@ -83,11 +84,6 @@ function resolveContextAugmentationBinaryPath(context: IntegrationContext): stri
     throw new CommandFailedError('Context Augmentation binary path is unavailable.');
   }
   return binaryPath;
-}
-
-function getOptionalStringAttr(context: IntegrationContext, key: string): string | undefined {
-  const value = context.attrs?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function getRequiredAuth(context: IntegrationContext) {

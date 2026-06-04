@@ -110,6 +110,7 @@ export const AI_REMEDIATION_DOCS_URL =
   'https://docs.sonarsource.com/sonarqube-cloud/administering-sonarcloud/ai-features/sonarqube-remediation-agent';
 export const SERVER_API_DOCS_URL =
   'https://docs.sonarsource.com/sonarqube-server/extension-guide/web-api';
+export const SUPPORT_URL = 'https://community.sonarsource.com';
 
 // ---------------------------------------------------------------------------
 // Application paths
