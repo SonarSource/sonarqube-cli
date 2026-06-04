@@ -36,7 +36,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
-import { findInstalledFeature } from './integration-state-helpers';
+import { findInstalledFeature } from './state-helpers';
 
 function findClaudeFeature(harness: TestHarness, featureId: string, scope?: string) {
   return findInstalledFeature(harness, 'claude-code', featureId, scope);

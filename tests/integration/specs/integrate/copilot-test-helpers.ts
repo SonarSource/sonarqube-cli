@@ -28,7 +28,7 @@ import {
   getInstalledIntegration,
   type InstalledIntegration,
   type InstalledIntegrationFeature,
-} from './integration-state-helpers';
+} from './state-helpers';
 
 export type { InstalledIntegration, InstalledIntegrationFeature };
 

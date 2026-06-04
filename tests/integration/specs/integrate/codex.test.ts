@@ -29,7 +29,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { codexIntegration } from '../../../../src/cli/commands/integrate/codex/declaration';
 import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
-import { findInstalledFeature } from './integration-state-helpers';
+import { findInstalledFeature } from './state-helpers';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
