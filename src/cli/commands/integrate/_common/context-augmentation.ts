@@ -81,7 +81,7 @@ interface CagSubprocessOptions {
 
 export class CagStepFailedError extends Error {
   constructor(readonly result: CagSubprocessResult) {
-    super('sonar-context-augmentation step failed');
+    super(result.failureMessage ?? 'sonar-context-augmentation step failed');
   }
 }
 
@@ -163,7 +163,13 @@ export async function printContextAugmentationSkill({
 }: PrintContextAugmentationSkillParams): Promise<string> {
   const result = await runCagSubprocess(
     binaryPath,
-    ['tool', 'print-skill', `--sca-enabled=${scaEnabled ? 'true' : 'false'}`],
+    [
+      'tool',
+      'print-skill',
+      '--invocation-prefix',
+      SONAR_CONTEXT_INVOCATION,
+      `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
+    ],
     {
       projectRoot,
       env: buildContextAugmentationEnv({}),
@@ -171,6 +177,13 @@ export async function printContextAugmentationSkill({
   );
   if (!result.ok) {
     throw new CagStepFailedError(result);
+  }
+  if (result.stdout.trim().length === 0) {
+    throw new CagStepFailedError({
+      ...result,
+      ok: false,
+      failureMessage: 'sonar-context-augmentation tool print-skill produced empty output',
+    });
   }
   return result.stdout;
 }

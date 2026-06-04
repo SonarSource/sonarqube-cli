@@ -39,6 +39,7 @@ import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,
+  expectSkillRendersWithWrapperInvocation,
   findRecordedCagDependency,
   findRecordedCagFeature,
   seedState,
@@ -129,8 +130,8 @@ describe('sonar-context-augmentation post-update edge cases (offline, real binar
     const contentB = readFileSync(skillPathB, 'utf-8');
     expect(contentA).not.toContain(sentinelA);
     expect(contentB).not.toContain(sentinelB);
-    expect(contentA).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
-    expect(contentB).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
+    expectSkillRendersWithWrapperInvocation(contentA);
+    expectSkillRendersWithWrapperInvocation(contentB);
 
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(findRecordedCagDependency(state)?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);

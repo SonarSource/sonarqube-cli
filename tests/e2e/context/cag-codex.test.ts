@@ -29,12 +29,12 @@ import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { CODEX_INTEGRATION_ID } from '../../../src/cli/commands/integrate/codex/declaration';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CODEX_SKILL_RELATIVE_PATH,
+  expectSkillRendersWithWrapperInvocation,
   findRecordedCagDependency,
   findRecordedCagFeature,
   seedState,
@@ -78,7 +78,7 @@ describe('sonar-context-augmentation codex skill refresh (offline, real binary)'
     expect(existsSync(codexSkillPath)).toBe(true);
     const content = readFileSync(codexSkillPath, 'utf-8');
     expect(content).not.toContain(STALE_SKILL_SENTINEL);
-    expect(content).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
+    expectSkillRendersWithWrapperInvocation(content);
   });
 
   it('refreshes the declarative codex CAG state and bumps cliVersion', () => {
