@@ -1111,11 +1111,8 @@ describe('integrate claude — file placement (local vs global)', () => {
         const result = await harness.run('integrate claude --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(
-          'A global secrets scanning hook is already configured for SonarQube at',
-        );
-        expect(result.stdout).toContain(
-          'To avoid duplicate execution, project-level secrets hooks were skipped.',
+        expect(`${result.stdout}\n${result.stderr}`).toContain(
+          'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
         );
       },
       { timeout: 30000 },

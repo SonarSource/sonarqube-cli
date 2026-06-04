@@ -105,7 +105,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
     shouldInstall: ({ options, scope, state }) =>
       globalSecretsHookAlreadyConfigured(config.integrationId, options, scope, state)
         ? skip(
-            'Skipping the project-level secret scanning hooks because a global secrets scanning hook is already configured.',
+            'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
           )
         : askUser(),
     postInstallExample: secretsScanningExample(config.agentDisplayName),

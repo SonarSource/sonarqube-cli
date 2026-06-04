@@ -191,7 +191,7 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         expect(`${result.stdout}\n${result.stderr}`).toContain(
-          'Skipping the project-level secret scanning hooks because a global secrets scanning hook is already configured.',
+          'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
         );
         // No project-level hook artifacts were written.
         expect(harness.cwd.exists('.codex', 'hooks')).toBe(false);
