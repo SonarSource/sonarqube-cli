@@ -22,11 +22,16 @@ import { join, relative } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { CommandFailedError } from '../../_common/error';
+import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
+import {
+  buildSqaaSectionBody,
+  sonarBeginMarker,
+  sonarEndMarker,
+} from '../_common/instructions-templates';
 import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
-import { jsonPatch, wholeFile } from '../_common/registry/resources';
+import { jsonPatch, textSnippet, wholeFile } from '../_common/registry/resources';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
@@ -41,10 +46,9 @@ import {
   SCRIPT_REL_DIR,
 } from './hooks';
 import {
-  buildInstructionsBody,
-  buildSqaaInstructionsBody,
   INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_REL_DIR,
+  PROMPT_SECRETS_BODY,
 } from './instructions';
 
 export const COPILOT_INTEGRATION_ID = 'copilot-cli';
@@ -93,31 +97,33 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       displayName: 'prompt-secrets instructions',
       shouldInstall: ({ options }) => options.installInstructions === true,
       resources: [
-        wholeFile({
+        textSnippet({
           id: 'prompt-secrets-instructions-file',
           displayName: 'Copilot prompt-secrets instructions',
           targetPath: resolveInstructionsPath,
-          content: (context) =>
-            context.scope === 'project' && getBooleanAttr(context, 'sqaaEnabled')
-              ? buildInstructionsBody(getRequiredStringAttr(context, 'projectKey'))
-              : buildInstructionsBody(),
+          startMarker: sonarBeginMarker('copilot-prompt-secrets'),
+          endMarker: sonarEndMarker('copilot-prompt-secrets'),
+          content: PROMPT_SECRETS_BODY,
         }),
       ],
     },
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options, scope }) =>
-        scope === 'global' && options.installSqaaInstructions === true,
+      shouldInstall: ({ options }) => options.installSqaaInstructions === true,
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
-        wholeFile({
+        textSnippet({
           id: 'sqaa-instructions-file',
           displayName: 'Copilot SQAA instructions',
           targetPath: resolveInstructionsPath,
+          startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
+          endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
           content: (context) =>
-            buildSqaaInstructionsBody(getRequiredStringAttr(context, 'projectKey')),
+            buildSqaaSectionBody(
+              getRequiredStringAttr(context, 'projectKey', copilotIntegration.displayName),
+            ),
         }),
       ],
     },
@@ -234,26 +240,9 @@ function getDesiredCopilotMcpConfig(context: IntegrationContext) {
       : {
           withFsMount: true,
           projectRoot: context.targetRoot,
-          projectKey: getOptionalProjectKey(context),
+          projectKey: getOptionalStringAttr(context, 'projectKey'),
         },
   );
-}
-
-function getOptionalProjectKey(context: IntegrationContext): string | undefined {
-  const value = context.attrs?.projectKey;
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function getRequiredStringAttr(context: IntegrationContext, key: string): string {
-  const value = context.attrs?.[key];
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new CommandFailedError(`Missing required integration attribute: ${key}`);
-  }
-  return value;
-}
-
-function getBooleanAttr(context: IntegrationContext, key: string): boolean {
-  return context.attrs?.[key] === true;
 }
 
 function toJsonObject(document: unknown): Record<string, unknown> {

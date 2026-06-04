@@ -90,7 +90,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     auth,
     nonInteractive: options.nonInteractive,
     attrs: {
-      ...buildIntegrationAttrs(projectKey, sqaaProjectKey !== undefined),
+      ...buildIntegrationAttrs(projectKey),
       ...(contextAugmentation
         ? buildContextAugmentationAttrs(auth.serverUrl, auth.orgKey, contextAugmentation.scaEnabled)
         : {}),
@@ -100,10 +100,8 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
 
 function buildIntegrationAttrs(
   projectKey: string | undefined,
-  sqaaEnabled: boolean,
 ): Record<string, IntegrationStateAttribute> {
   return {
     projectKey: projectKey ?? null,
-    sqaaEnabled,
   };
 }
