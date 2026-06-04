@@ -29,8 +29,8 @@ import { findGitRoot } from '../../../../lib/project-workspace';
 import { blank, confirmPrompt, intro, selectPrompt, text, warn } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
+import { printGitPreflightSummary } from '../_common/preflight-summary';
 import { installIntegration } from '../_common/registry';
-import { printGitRepositorySummary } from '../_common/setup-summary';
 import type { GitHookType, IntegrateGitOptions } from './options';
 import {
   hasSonarHookInPreCommitConfig,
@@ -173,7 +173,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
     });
   }
 
-  await printGitRepositorySummary(gitRoot);
+  await printGitPreflightSummary(gitRoot);
 
   if (!options.nonInteractive) {
     const confirmed = await confirmPrompt('Install here?', true);

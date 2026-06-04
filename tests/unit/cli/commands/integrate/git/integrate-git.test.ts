@@ -28,7 +28,7 @@ import {
   InvalidOptionError,
 } from '../../../../../../src/cli/commands/_common/error.js';
 import * as binaryInstall from '../../../../../../src/cli/commands/_common/install/binary';
-import * as setupSummary from '../../../../../../src/cli/commands/integrate/_common/setup-summary';
+import * as preflightSummary from '../../../../../../src/cli/commands/integrate/_common/preflight-summary';
 import {
   detectSonarHookInstallation as detectHookInstallation,
   hasMarker,
@@ -427,7 +427,7 @@ describe('installViaGitHooks', () => {
 
 describe('integrateGit', () => {
   let findGitRootSpy: ReturnType<typeof spyOn>;
-  let printGitRepositorySummarySpy: ReturnType<typeof spyOn>;
+  let printGitPreflightSummarySpy: ReturnType<typeof spyOn>;
   let installBinarySpy: ReturnType<typeof spyOn>;
   let resolveBinaryPathSpy: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
@@ -438,9 +438,9 @@ describe('integrateGit', () => {
     setMockUi(true);
     clearMockUiCalls();
     findGitRootSpy = spyOn(discovery, 'findGitRoot');
-    printGitRepositorySummarySpy = spyOn(
-      setupSummary,
-      'printGitRepositorySummary',
+    printGitPreflightSummarySpy = spyOn(
+      preflightSummary,
+      'printGitPreflightSummary',
     ).mockResolvedValue(undefined);
     installBinarySpy = spyOn(binaryInstall, 'installBinary').mockResolvedValue({
       binaryPath: '/usr/local/bin/sonar-secrets',
@@ -455,7 +455,7 @@ describe('integrateGit', () => {
   afterEach(() => {
     setMockUi(false);
     findGitRootSpy.mockRestore();
-    printGitRepositorySummarySpy.mockRestore();
+    printGitPreflightSummarySpy.mockRestore();
     installBinarySpy.mockRestore();
     resolveBinaryPathSpy.mockRestore();
     loadStateSpy.mockRestore();
@@ -502,7 +502,7 @@ describe('integrateGit', () => {
     } catch {
       // expected cancellation
     }
-    expect(printGitRepositorySummarySpy).toHaveBeenCalledWith('/my/project');
+    expect(printGitPreflightSummarySpy).toHaveBeenCalledWith('/my/project');
   });
 
   it('records the husky integration when core.hooksPath points to .husky', async () => {

@@ -23,10 +23,10 @@
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import {
+  displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,
-  runAgentIntegratePrelude,
   warnGlobalSqaaRequiresProject,
-} from '../_common/agent-prelude';
+} from '../_common/agent-integrate-prelude';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
@@ -40,7 +40,7 @@ export async function integrateCodex(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  const ctx = await runAgentIntegratePrelude('Codex', 'codex', options, auth);
+  const ctx = await displayAgentIntegratePrelude('Codex', 'codex', options, auth);
 
   // SQAA is always project-scoped:
   //  - project install: include the SQAA section if the org is entitled AND

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared opening sequence for agent integrate commands (claude, codex, copilot).
+// Shared preflight opening for agent integrate commands (claude, codex, copilot).
 
 import { homedir } from 'node:os';
 
@@ -27,7 +27,7 @@ import { type DiscoveredProject, discoverProject } from '../../../../lib/project
 import type { IntegrationScope } from '../../../../lib/state';
 import { intro, warn, withSpinner } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
-import { printAgentSetupSummary } from './setup-summary';
+import { printAgentPreflightSummary } from './preflight-summary';
 import type { IntegrateAgentOptions } from './types';
 
 export type AgentIntegrateSubcommand = 'claude' | 'codex' | 'copilot';
@@ -111,11 +111,11 @@ export function buildAgentIntegrateContext(
 }
 
 /**
- * Shared opening for all agent integrate commands: scope validation, intro,
+ * Shared preflight for all agent integrate commands: scope validation, intro,
  * project discovery, mismatch warnings, missing project-key notice, cloud org
- * check, and Connection/Project setup summary (including token validation).
+ * check, and Connection/Project preflight summary (including token validation).
  */
-export async function runAgentIntegratePrelude(
+export async function displayAgentIntegratePrelude(
   agentDisplayName: string,
   subcommand: AgentIntegrateSubcommand,
   options: IntegrateAgentOptions,
@@ -128,7 +128,7 @@ export async function runAgentIntegratePrelude(
   const ctx = buildAgentIntegrateContext(options, auth, project);
   warnMissingIntegrateProjectKey(subcommand, ctx.isGlobal, ctx.projectKey);
   assertSonarCloudOrganization(ctx.serverUrl, ctx.organization);
-  await printAgentSetupSummary({
+  await printAgentPreflightSummary({
     serverUrl: ctx.serverUrl,
     organization: ctx.organization,
     token: ctx.token,

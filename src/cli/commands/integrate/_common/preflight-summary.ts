@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Consolidated opening sequence for integrate commands
+// Preflight summaries shown at the start of integrate commands, before install.
 
 import type { DiscoveredProject } from '../../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -28,7 +28,7 @@ import { CommandFailedError } from '../../_common/error';
 import { GitRepo } from '../../_common/git-repo';
 import { checkTokenStatus, type TokenStatus } from '../../_common/token';
 
-export interface AgentSetupSummaryOptions {
+export interface AgentPreflightSummaryOptions {
   serverUrl: string;
   organization?: string;
   token: string;
@@ -38,7 +38,9 @@ export interface AgentSetupSummaryOptions {
   cliProjectKey?: string;
 }
 
-export async function printAgentSetupSummary(options: AgentSetupSummaryOptions): Promise<void> {
+export async function printAgentPreflightSummary(
+  options: AgentPreflightSummaryOptions,
+): Promise<void> {
   const tokenStatus = await checkTokenStatus(options.serverUrl, options.token);
   phase('Connection', await buildConnectionItems(options, tokenStatus));
   phase('Project', await buildProjectItems(options, tokenStatus));
@@ -61,7 +63,7 @@ function reportUnreachableServerFailure(): void {
 }
 
 async function buildConnectionItems(
-  options: AgentSetupSummaryOptions,
+  options: AgentPreflightSummaryOptions,
   tokenStatus: TokenStatus,
 ): Promise<PhaseItem[]> {
   const items: PhaseItem[] = [phaseItem('Server', 'done', options.serverUrl)];
@@ -111,7 +113,7 @@ async function organizationAccessStatus(
 }
 
 async function buildProjectItems(
-  options: AgentSetupSummaryOptions,
+  options: AgentPreflightSummaryOptions,
   tokenStatus: TokenStatus,
 ): Promise<PhaseItem[]> {
   const items: PhaseItem[] = [phaseItem('Root', 'done', options.project.rootDir)];
@@ -132,7 +134,7 @@ async function buildProjectItems(
   return items;
 }
 
-function buildConfigSourceItem(options: AgentSetupSummaryOptions): PhaseItem {
+function buildConfigSourceItem(options: AgentPreflightSummaryOptions): PhaseItem {
   if (options.cliProjectKey) {
     return phaseItem('Config source', 'info', '--project');
   }
@@ -186,7 +188,7 @@ function tokenDisplayForStatus(tokenStatus: TokenStatus): {
   }
 }
 
-export async function printGitRepositorySummary(gitRoot: string): Promise<void> {
+export async function printGitPreflightSummary(gitRoot: string): Promise<void> {
   const gitRepo = new GitRepo(gitRoot);
   const hooksDir = await gitRepo.getHooksDir();
   const framework = await resolveGitFrameworkLabel(gitRepo);
