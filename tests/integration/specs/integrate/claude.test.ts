@@ -699,56 +699,15 @@ describe('integrate claude — SQAA entitlement guard', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'sonar-sqaa agentExtension is always project-level even when -g flag is used',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('cloud-token')
-        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withSqaaEntitlement('my-org', 'test-uuid-1234')
-        .withProject('my-project')
-        .start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+  it('rejects --global combined with --project', async () => {
+    const server = await harness.newFakeServer().withAuthToken('cloud-token').start();
+    harness.withAuth(server.baseUrl(), 'cloud-token');
 
-      const result = await harness.run(
-        `integrate claude -g --project my-project --non-interactive`,
-        {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-          },
-        },
-      );
+    const result = await harness.run('integrate claude -g --project my-project');
 
-      expect(result.exitCode).toBe(0);
-
-      const state = harness.stateJsonFile.asJson();
-      const sqaaExt = (state.agentExtensions as Array<{ name: string; global: boolean }>).find(
-        (e) => e.name === 'sonar-sqaa',
-      );
-
-      expect(sqaaExt).toBeDefined();
-      expect(sqaaExt?.global).toBe(false);
-
-      const claudeIntegration = state.integrations.installed.find(
-        (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
-      );
-      const sqaaFeature = claudeIntegration?.features.find(
-        (feature: { featureId: string }) => feature.featureId === 'sonar-sqaa-hook',
-      );
-
-      expect(sqaaFeature).toBeDefined();
-      expect(sqaaFeature).toMatchObject({
-        scope: 'project',
-        attrs: {
-          projectKey: 'my-project',
-        },
-      });
-    },
-    { timeout: 30000 },
-  );
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('mutually exclusive');
+  });
 
   it(
     'removes obsolete sonar-a3s hook entry when sonar-sqaa is installed',

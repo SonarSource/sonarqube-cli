@@ -20,32 +20,13 @@
 
 // Consolidated opening sequence for integrate commands
 
-import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import type { DiscoveredProject } from '../../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import type { PhaseItem, StepStatus } from '../../../../ui';
-import { phase, phaseItem, warn, withSpinner } from '../../../../ui';
+import { info, outro, phase, phaseItem, text } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { GitRepo } from '../../_common/git-repo';
 import { checkTokenStatus, type TokenStatus } from '../../_common/token';
-
-export async function discoverProjectWithSpinner<T>(discover: () => Promise<T>): Promise<T> {
-  return withSpinner('Discovering project...', discover);
-}
-
-export function warnAuthProjectMismatches(auth: ResolvedAuth, project: DiscoveredProject): void {
-  if (auth.serverUrl && project.serverUrl && auth.serverUrl !== project.serverUrl) {
-    warn(
-      'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
-
-  if (auth.orgKey && project.organization && auth.orgKey !== project.organization) {
-    warn(
-      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
-}
 
 export interface AgentSetupSummaryOptions {
   serverUrl: string;
@@ -62,15 +43,21 @@ export async function printAgentSetupSummary(options: AgentSetupSummaryOptions):
   phase('Connection', await buildConnectionItems(options, tokenStatus));
   phase('Project', await buildProjectItems(options, tokenStatus));
 
-  if (tokenStatus !== 'valid') {
-    throw new CommandFailedError(
-      tokenStatus === 'invalid' ? 'Token is invalid.' : 'Server is unreachable.',
-      {
-        remediationHint:
-          "Run 'sonar auth logout' and then 'sonar auth login' to obtain a fresh token.",
-      },
-    );
+  if (tokenStatus === 'unreachable') {
+    reportUnreachableServerFailure();
+    throw new CommandFailedError('Server is unreachable.');
   }
+  if (tokenStatus === 'invalid') {
+    throw new CommandFailedError('Token is invalid.', {
+      remediationHint: "Run 'sonar auth login' to obtain a fresh token.",
+    });
+  }
+}
+
+function reportUnreachableServerFailure(): void {
+  outro('Setup failed', 'error');
+  info('Server could not be reached.');
+  text('   Ensure the URL is correct and check your network connection or SONAR_HOST_URL.');
 }
 
 async function buildConnectionItems(

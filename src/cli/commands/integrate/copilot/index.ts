@@ -18,69 +18,42 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { homedir } from 'node:os';
-
-import { isEnvBasedAuth, type ResolvedAuth } from '../../../../lib/auth-resolver';
-import { discoverProject } from '../../../../lib/project-workspace';
-import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { intro, warn } from '../../../../ui';
-import { InvalidOptionError } from '../../_common/error';
+import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import type { IntegrationStateAttribute } from '../../../../lib/state';
+import { resolveIntegrateInstallTarget, runAgentIntegratePrelude } from '../_common/agent-prelude';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { discoverProjectWithSpinner, printAgentSetupSummary } from '../_common/setup-summary';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
-  if (options.global && options.project) {
-    throw new InvalidOptionError(
-      '--global and --project are mutually exclusive; please specify only one scope.',
-    );
-  }
+  const ctx = await runAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
-  intro('SonarQube Integration Setup for Copilot');
+  const entitled = await resolveSqaaEntitlement(ctx.serverUrl, ctx.token, ctx.organization);
+  const sqaaProjectKey = entitled && ctx.projectKey ? ctx.projectKey : undefined;
 
-  const project = await discoverProjectWithSpinner(() => discoverProject(process.cwd()));
-  const isGlobal = options.global ?? false;
-  const projectKey = options.project || project.projectKey;
-  if (!isGlobal && !projectKey) {
-    warn(
-      'No project key provided - project related actions will be skipped. Run `sonar integrate copilot --help` for ways to define a project.',
-    );
-  }
-
-  await printAgentSetupSummary({
-    serverUrl: auth.serverUrl,
-    organization: auth.orgKey,
-    token: auth.token,
-    project,
-    projectKey,
-    cliProjectKey: options.project,
-  });
-
-  const entitled = await resolveSqaaEntitlement(auth.serverUrl, auth.token, auth.orgKey);
-  const sqaaProjectKey = entitled && projectKey ? projectKey : undefined;
-
-  const targetRoot = isGlobal ? homedir() : project.rootDir;
-  const scope: IntegrationScope = isGlobal ? 'global' : 'project';
-  const existingGlobalHookPath = isGlobal ? undefined : await detectGlobalSecretsHook();
+  const { installRoot: targetRoot, installScope: scope } = resolveIntegrateInstallTarget(
+    ctx.isGlobal,
+    ctx.project.rootDir,
+  );
+  const existingGlobalHookPath = ctx.isGlobal ? undefined : await detectGlobalSecretsHook();
   const globalSecretsHookExists = existingGlobalHookPath !== undefined;
 
   const contextAugmentation = options.skipContext
     ? null
     : await resolveContextAugmentationSetup({
         auth,
-        projectKey,
-        isGlobal,
+        projectKey: ctx.projectKey,
+        isGlobal: ctx.isGlobal,
       });
   const integrationOptions: CopilotIntegrationOptions = {
     ...options,
-    projectRoot: project.rootDir,
+    projectRoot: ctx.project.rootDir,
     globalSecretsHookExists,
     installSqaaInstructions: sqaaProjectKey !== undefined,
     sqaaEntitled: entitled,
@@ -93,11 +66,15 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     targetRoot,
     scope,
     auth,
-    nonInteractive: !!options.nonInteractive || isEnvBasedAuth(),
+    nonInteractive: options.nonInteractive,
     attrs: {
-      ...buildIntegrationAttrs(projectKey),
+      ...buildIntegrationAttrs(ctx.projectKey),
       ...(contextAugmentation
-        ? buildContextAugmentationAttrs(auth.serverUrl, auth.orgKey, contextAugmentation.scaEnabled)
+        ? buildContextAugmentationAttrs(
+            ctx.serverUrl,
+            ctx.organization,
+            contextAugmentation.scaEnabled,
+          )
         : {}),
     },
   });

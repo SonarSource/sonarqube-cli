@@ -78,16 +78,34 @@ describe('printAgentSetupSummary', () => {
     );
   });
 
-  it('throws when the token is invalid', () => {
-    checkTokenStatusSpy.mockResolvedValue('invalid');
+  it('shows setup failed guidance when the server is unreachable', async () => {
+    checkTokenStatusSpy.mockResolvedValue('unreachable');
 
-    expect(
+    const error = await captureRejection(
       printAgentSetupSummary({
         serverUrl: 'https://sonar.example.com',
-        token: 'bad',
+        token: 'token',
         project: BASE_PROJECT,
       }),
-    ).rejects.toThrow(CommandFailedError);
+    );
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    expect((error as Error).message).toBe('Server is unreachable.');
+
+    expect(getPhaseItems('Connection').find((i) => i.text === 'Token')?.detail).toBe('unreachable');
+    expect(
+      getMockUiCalls().find((c) => c.method === 'outro' && c.args[0] === 'Setup failed'),
+    ).toBeDefined();
+    expect(
+      getMockUiCalls().find(
+        (c) => c.method === 'info' && String(c.args[0]).includes('Server could not be reached'),
+      ),
+    ).toBeDefined();
+    expect(
+      getMockUiCalls().find(
+        (c) => c.method === 'text' && String(c.args[0]).includes('SONAR_HOST_URL'),
+      ),
+    ).toBeDefined();
   });
 });
 
@@ -123,4 +141,13 @@ describe('printGitRepositorySummary', () => {
 function getPhaseItems(title: string): PhaseItem[] {
   const call = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === title);
   return (call?.args[1] ?? []) as PhaseItem[];
+}
+
+async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error('expected promise to reject');
 }

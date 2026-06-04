@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, intro, selectPrompt, text, warn, withSpinner } from '../../../../ui';
+import { blank, confirmPrompt, intro, selectPrompt, text, warn } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { installIntegration } from '../_common/registry';
@@ -165,9 +165,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
     return integrateGitGlobal(options);
   }
 
-  const { gitRoot, isGit } = await withSpinner('Discovering project...', () =>
-    Promise.resolve(findGitRoot(process.cwd())),
-  );
+  const { gitRoot, isGit } = findGitRoot(process.cwd());
   if (!isGit) {
     throw new CommandFailedError('No git repository found.', {
       remediationHint:
