@@ -18,24 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, rmSync } from 'node:fs';
-
 import { version as VERSION } from '../../../../package.json';
-import { LOG_DIR } from '../../../lib/config-constants';
-import { deleteToken } from '../../../lib/keychain';
 import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { type CliState, getDefaultState, type InstalledIntegration } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
-import { phase, phaseItem, print, success, text, textPrompt, warn } from '../../../ui';
+import { info, phase, print, success, text, textPrompt, warn } from '../../../ui';
+import { purgeAuth } from './reset-auth';
+import { removeBinaries } from './reset-binaries';
+import { clearFilesystem } from './reset-filesystem';
+import { removeAllIntegrations } from './reset-integrations';
 
 export interface SystemResetOptions {
   force?: boolean;
 }
 
-/**
- * What each reset step successfully cleaned — used to surgically subtract
- * cleaned entries from state rather than wiping everything unconditionally.
- */
 interface CleanedFields {
   authConnectionIds: string[];
   dependencyIds: string[];
@@ -76,13 +72,32 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
     return;
   }
 
+  info('Cleaning up SonarQube CLI environment...');
+
   const state = loadState();
 
+  const authResult = await purgeAuth(state);
+  const binaryResult = await removeBinaries(state);
+  const integrationResult = await removeAllIntegrations(state);
+  const filesystemResult = clearFilesystem();
+
   const results: StepResult[] = [
-    await purgeAuth(state),
-    removeBinaries(),
-    removeAllIntegrations(),
-    clearFilesystem(),
+    {
+      item: authResult.item,
+      cleaned: emptyCleanedFields({ authConnectionIds: authResult.authConnectionIds }),
+    },
+    {
+      item: binaryResult.item,
+      cleaned: emptyCleanedFields({ dependencyIds: binaryResult.dependencyIds }),
+    },
+    {
+      item: integrationResult.item,
+      cleaned: emptyCleanedFields({
+        integrationFeatures: integrationResult.integrationFeatures,
+        agentExtensionIds: integrationResult.agentExtensionIds,
+      }),
+    },
+    { item: filesystemResult.item, cleaned: emptyCleanedFields() },
   ];
 
   phase(
@@ -110,7 +125,7 @@ async function confirmDestructiveAction(): Promise<boolean> {
     return false;
   }
   warn(
-    'This will remove all local credentials, uninstall Sonar binaries, and break active tools integrations.',
+    'This will remove all local credentials, uninstall Sonar binaries, and break active AI integrations.',
   );
   const answer = await textPrompt('Please type RESET to continue');
   if (answer?.trim() !== 'RESET') {
@@ -118,71 +133,6 @@ async function confirmDestructiveAction(): Promise<boolean> {
     return false;
   }
   return true;
-}
-
-async function purgeAuth(state: CliState): Promise<StepResult> {
-  const cleanedIds: string[] = [];
-  const failed: string[] = [];
-
-  for (const conn of state.auth.connections) {
-    const target = conn.orgKey ? `${conn.serverUrl} (${conn.orgKey})` : conn.serverUrl;
-    try {
-      await deleteToken(conn.serverUrl, conn.orgKey);
-      cleanedIds.push(conn.id);
-    } catch (err) {
-      failed.push(`${target}: ${(err as Error).message}`);
-    }
-  }
-
-  let item: PhaseItem;
-  if (failed.length > 0) {
-    const counts =
-      cleanedIds.length > 0
-        ? `${cleanedIds.length} removed, ${failed.length} failed`
-        : `${failed.length} failed`;
-    item = phaseItem('Authentication', 'warn', `${counts}: ${failed.join('; ')}`);
-  } else {
-    item = phaseItem(
-      'Authentication',
-      'done',
-      `${cleanedIds.length} tokens removed from keychain.`,
-    );
-  }
-
-  return { item, cleaned: emptyCleanedFields({ authConnectionIds: cleanedIds }) };
-}
-
-function removeBinaries(): StepResult {
-  // Stub: CLI-565 deletes binary files recorded in state.dependencies.installed[]
-  // via the declarative framework's WholeFileResource.remove(), returning dependencyIds
-  // for each file confirmed deleted so applyCleanedState can remove them from state.
-  return {
-    item: phaseItem('Binaries', 'pending', 'Pending CLI-565.'),
-    cleaned: emptyCleanedFields(),
-  };
-}
-
-function removeAllIntegrations(): StepResult {
-  // Stub: CLI-565 iterates ALL_INTEGRATIONS, calls IntegrationInstaller.removeFeature()
-  // per installed feature (added in CLI-562), and returns integrationFeatures + agentExtensionIds
-  // for each successfully removed feature so applyCleanedState can subtract them from state.
-  return {
-    item: phaseItem('Integrations', 'pending', 'Pending CLI-565.'),
-    cleaned: emptyCleanedFields(),
-  };
-}
-
-function clearFilesystem(): StepResult {
-  const result = tryRemoveDir(LOG_DIR);
-  let item: PhaseItem;
-  if (result.error !== undefined) {
-    item = phaseItem('Filesystem', 'warn', `Failed to remove ${LOG_DIR}: ${result.error}`);
-  } else if (result.removed) {
-    item = phaseItem('Filesystem', 'done', `Cleared ${LOG_DIR}.`);
-  } else {
-    item = phaseItem('Filesystem', 'info', 'Nothing to clear.');
-  }
-  return { item, cleaned: emptyCleanedFields() };
 }
 
 function indexCleanedFeatures(
@@ -213,21 +163,6 @@ function removeCleanedFeatures(
   };
 }
 
-function tryRemoveDir(dir: string): { removed: boolean; error?: string } {
-  try {
-    if (!existsSync(dir)) return { removed: false };
-    rmSync(dir, { recursive: true, force: true });
-    return { removed: true };
-  } catch (err) {
-    return { removed: false, error: (err as Error).message };
-  }
-}
-
-/**
- * Subtract successfully-cleaned entries from state. Only entries confirmed
- * removed are dropped — failures remain in state so the user can retry or
- * clean up manually.
- */
 function applyCleanedState(state: CliState, cleaned: CleanedFields): void {
   if (cleaned.authConnectionIds.length > 0) {
     const removedIds = new Set(cleaned.authConnectionIds);
@@ -261,10 +196,6 @@ function applyCleanedState(state: CliState, cleaned: CleanedFields): void {
   }
 }
 
-/**
- * Clear legacy state fields that carry no physical artifacts and are not
- * tracked by the declarative framework — safe to drop unconditionally.
- */
 function clearLegacyState(state: CliState): void {
   const defaults = getDefaultState(VERSION);
   state.agents = defaults.agents;
