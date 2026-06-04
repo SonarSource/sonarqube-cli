@@ -32,10 +32,16 @@ import {
   SQAA_MISSING_PROJECT_KEY_MESSAGE,
   SQAA_PROMOTION_MESSAGE,
 } from '../_common/instructions-templates';
-import { sonarSecretsBinaryDependency } from '../_common/registry/dependencies';
-import { jsonPatch, textSnippet, wholeFile } from '../_common/registry/resources';
-import { askUser, skip } from '../_common/registry/selection';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
+import { removeJsonMcpServer } from '../_common/mcp-config';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
+import {
+  askUser,
+  jsonPatch,
+  skip,
+  sonarSecretsBinaryDependency,
+  textSnippet,
+  wholeFile,
+} from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
 import {
@@ -46,6 +52,7 @@ import {
   hookScriptName,
   type HooksJson,
   PROJECT_HOOKS_REL_DIR,
+  removeCopilotHookConfig,
   SCRIPT_REL_DIR,
 } from './hooks';
 import {
@@ -97,6 +104,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           targetPath: resolveHooksJsonPath,
           defaultValue: { version: 1, hooks: {} },
           patch: (document, context) => upsertHookConfig(document, context),
+          removePatch: (document) => removeCopilotHookConfig(document),
         }),
       ],
     },
@@ -158,6 +166,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           defaultValue: {},
           patch: (document, context) =>
             upsertCopilotMcpServer(document, getDesiredCopilotMcpConfig(context)),
+          removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],
     },

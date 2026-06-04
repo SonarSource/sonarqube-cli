@@ -21,7 +21,12 @@
 import { join } from 'node:path';
 
 import type { CliState, IntegrationScope } from '../../../../../lib/state';
-import { createAgentHookEntry, resolveAgentHookScriptPath, upsertAgentHooks } from '../hooks';
+import {
+  createAgentHookEntry,
+  removeAgentHooks,
+  resolveAgentHookScriptPath,
+  upsertAgentHooks,
+} from '../hooks';
 import { sonarSecretsBinaryDependency } from '../registry/dependencies';
 import { isFeatureInstalledGloballyForProject } from '../registry/installation-recorder';
 import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
@@ -139,6 +144,11 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
                 entry.scriptPath,
               ),
             ),
+          ),
+        removePatch: (document) =>
+          removeAgentHooks(
+            document,
+            config.hookEntries.map((entry) => entry.marker),
           ),
       }),
     ],

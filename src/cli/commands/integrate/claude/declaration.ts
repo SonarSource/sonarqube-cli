@@ -27,12 +27,13 @@ import { createContextAugmentationFeature } from '../_common/features/context-au
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
   createAgentHookEntry,
+  removeAgentHooks,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import { jsonPatch, wholeFile } from '../_common/registry/resources';
-import { askUser, skip } from '../_common/registry/selection';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
+import { removeJsonMcpServer } from '../_common/mcp-config';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
+import { askUser, jsonPatch, skip, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -153,6 +154,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
                 'sonar-sqaa/build-scripts/posttool-sqaa',
               ),
             ]),
+          removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
         }),
       ],
     },
@@ -167,6 +169,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           defaultValue: {},
           patch: (document, context) =>
             upsertClaudeMcpServer(document, getDesiredClaudeMcpConfig(context)),
+          removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],
     },

@@ -80,7 +80,7 @@ export async function readTextFile(path: string): Promise<string | undefined> {
 export interface PatchResourceOptions<TDoc = unknown> extends BaseResourceOptions {
   targetPath: PathResolver;
   patch: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
-  removePatch?: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
+  removePatch: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
 }
 
 export abstract class PatchResource<
@@ -110,9 +110,6 @@ export abstract class PatchResource<
   }
 
   async remove(context: IntegrationContext): Promise<void> {
-    if (!this.options.removePatch) {
-      return;
-    }
     const path = await resolvePath(context, this.options.targetPath);
     if (!existsSync(path)) {
       return;
