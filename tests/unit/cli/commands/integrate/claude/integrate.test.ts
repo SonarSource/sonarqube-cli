@@ -523,7 +523,7 @@ describe('integrateCommand', () => {
         auth: CLOUD_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: true,
+        globalSecretsHookExists: false,
         installSqaaHook: false,
       });
       expect(runMigrationsSpy).toHaveBeenLastCalledWith(

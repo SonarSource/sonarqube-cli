@@ -890,7 +890,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
   it.each([
     ['claude', 'integrate claude -g --non-interactive'],
     ['copilot', 'integrate copilot -g --non-interactive'],
-    ['codex', 'integrate codex -g'],
+    ['codex', 'integrate codex -g --non-interactive'],
   ])(
     'skips CAG entirely on "integrate %s --global" without warning when the org is not entitled',
     async (_agent, command) => {

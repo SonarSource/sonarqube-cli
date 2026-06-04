@@ -722,7 +722,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      const result = await harness.run('integrate claude -g', {
+      const result = await harness.run('integrate claude -g --non-interactive', {
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
