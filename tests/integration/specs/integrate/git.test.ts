@@ -381,6 +381,31 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
+    'defaults to the pre-commit hook when --non-interactive is used without --hook',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      // No --hook flag: hookShouldInstall() must default to pre-commit and skip pre-push.
+      const result = await harness.run('integrate git --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(false);
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      expect(gitIntegration.features).toHaveLength(1);
+      expect(gitIntegration.features[0]).toMatchObject({
+        featureId: 'pre-commit-hook',
+        scope: 'project',
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'records project hook installation in state',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
