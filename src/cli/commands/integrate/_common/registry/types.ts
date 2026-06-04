@@ -50,7 +50,7 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   nonInteractive?: boolean;
-  state?: CliState;
+  state: CliState;
 }
 
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =

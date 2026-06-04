@@ -39,7 +39,7 @@ function globalSecretsHookAlreadyConfigured(
   integrationId: string,
   options: SonarSecretsHooksFeatureOptions,
   scope: IntegrationScope,
-  state: CliState | undefined,
+  state: CliState,
 ): boolean {
   if (options.globalSecretsHookExists !== undefined) {
     return options.globalSecretsHookExists;
