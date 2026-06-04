@@ -371,7 +371,9 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists('.github', 'hooks', 'sonar-secrets')).toBe(false);
         expect(harness.cwd.exists('.github', 'hooks', 'hooks.json')).toBe(false);
-        expect(result.stdout).toContain('A global secrets scanning hook is already configured at');
+        expect(result.stdout).toContain(
+          'Skipping the project-level pre-tool-use hook because a global secrets scanning hook is already configured.',
+        );
       },
       { timeout: 30000 },
     );

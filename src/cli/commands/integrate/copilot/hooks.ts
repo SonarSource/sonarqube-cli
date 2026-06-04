@@ -22,7 +22,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { info, warn } from '../../../../ui';
+import { warn } from '../../../../ui';
 import { readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks';
 
 export const SCRIPT_REL_DIR = join(SONAR_SECRETS_MARKER, 'build-scripts');
@@ -55,7 +55,7 @@ export interface HooksJson {
  * install is found (caller should skip project-level install to avoid
  * double-scanning), and `undefined` otherwise.
  *
- *  - Healthy global install → `info(...)` and return the script path.
+ *  - Healthy global install → return the script path.
  *  - Orphaned install (`hooks.json` references sonar-secrets but the backing
  *    script is missing) → `warn(...)` and return `undefined`.
  *  - No global install → silent, return `undefined`.
@@ -78,9 +78,6 @@ export async function detectGlobalSecretsHook(): Promise<string | undefined> {
     return undefined;
   }
 
-  info(
-    `A global secrets scanning hook is already configured at ${scriptPath}. Skipping project-level hook to avoid duplicate execution.`,
-  );
   return scriptPath;
 }
 
