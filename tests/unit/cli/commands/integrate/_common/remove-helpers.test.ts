@@ -1,0 +1,122 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { describe, expect, it } from 'bun:test';
+
+import {
+  removeAgentHooks,
+  SONAR_SECRETS_MARKER,
+  upsertAgentHooks,
+} from '../../../../../../src/cli/commands/integrate/_common/hooks';
+import {
+  removeCodexMcpServer,
+  removeJsonMcpServer,
+} from '../../../../../../src/cli/commands/integrate/_common/mcp-config';
+import { removeCopilotHookConfig } from '../../../../../../src/cli/commands/integrate/copilot/hooks';
+import {
+  normalizePreCommitConfig,
+  removeSonarHooksFromPreCommitConfig,
+  upsertSonarHook,
+} from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
+
+describe('integration remove helpers', () => {
+  it('removeAgentHooks strips entries managed by marker', () => {
+    const patched = upsertAgentHooks(
+      {
+        hooks: {
+          PostToolUse: [
+            { matcher: 'x', hooks: [{ type: 'command', command: 'other', timeout: 60 }] },
+          ],
+        },
+      },
+      [
+        {
+          eventType: 'PostToolUse',
+          marker: 'sonar-sqaa',
+          hookConfig: {
+            matcher: 'Edit',
+            hooks: [{ type: 'command', command: 'sonar-sqaa/script.sh', timeout: 60 }],
+          },
+        },
+      ],
+    );
+
+    const removed = removeAgentHooks(patched, ['sonar-sqaa']);
+
+    expect(removed.hooks?.PostToolUse).toHaveLength(1);
+    expect(removed.hooks?.PostToolUse?.[0]?.hooks[0]?.command).toBe('other');
+  });
+
+  it('removeJsonMcpServer drops sonarqube server only', () => {
+    const result = removeJsonMcpServer({
+      mcpServers: { sonarqube: { command: 'sonar' }, other: { command: 'x' } },
+    });
+
+    expect(result.mcpServers).toEqual({ other: { command: 'x' } });
+  });
+
+  it('removeCodexMcpServer drops sonarqube from mcp_servers', () => {
+    const result = removeCodexMcpServer({
+      mcp_servers: { sonarqube: { command: 'sonar' }, other: {} },
+    });
+
+    expect(result.mcp_servers).toEqual({ other: {} });
+  });
+
+  it('removeCopilotHookConfig strips sonar-secrets preToolUse entry', () => {
+    const result = removeCopilotHookConfig({
+      version: 1,
+      hooks: {
+        preToolUse: [
+          { type: 'command', bash: 'sonar-secrets/build-scripts/pretool-secrets.sh' },
+          { type: 'command', bash: '/usr/bin/other' },
+        ],
+      },
+    });
+
+    expect(result.hooks?.preToolUse).toEqual([{ type: 'command', bash: '/usr/bin/other' }]);
+  });
+
+  it('removeSonarHooksFromPreCommitConfig removes local sonar hook', () => {
+    const config = normalizePreCommitConfig({ repos: [] });
+    upsertSonarHook(config, 'pre-commit');
+
+    const removed = removeSonarHooksFromPreCommitConfig(config);
+
+    expect(removed.repos).toEqual([]);
+  });
+
+  it('removeAgentHooks is a no-op for unrelated markers', () => {
+    const doc = upsertAgentHooks({}, [
+      {
+        eventType: 'PostToolUse',
+        marker: SONAR_SECRETS_MARKER,
+        hookConfig: {
+          matcher: 'x',
+          hooks: [{ type: 'command', command: `${SONAR_SECRETS_MARKER}/hook.sh`, timeout: 60 }],
+        },
+      },
+    ]);
+
+    const removed = removeAgentHooks(doc, ['sonar-sqaa']);
+
+    expect(removed.hooks?.PostToolUse).toHaveLength(1);
+  });
+});

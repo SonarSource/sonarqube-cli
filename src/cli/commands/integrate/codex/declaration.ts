@@ -30,8 +30,9 @@ import {
   sonarBeginMarker,
   sonarEndMarker,
 } from '../_common/instructions-templates';
-import { textSnippet, tomlPatch } from '../_common/registry/resources';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
+import { removeCodexMcpServer } from '../_common/mcp-config';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
+import { textSnippet, tomlPatch } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
 import { SECRETS_ON_READ_BODY } from './instructions-templates';
@@ -126,6 +127,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           targetPath: resolveCodexMcpConfigPath,
           defaultValue: {},
           patch: (document, context) => upsertCodexMcpServer(document, context),
+          removePatch: (document) => removeCodexMcpServer(document),
         }),
       ],
     },

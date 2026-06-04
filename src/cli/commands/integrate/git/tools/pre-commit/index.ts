@@ -20,16 +20,17 @@
 
 import { join } from 'node:path';
 
-import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
-import { yamlPatch } from '../../../_common/registry/resources';
-import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
+import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry';
+import { sonarSecretsBinaryDependency, yamlPatch } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { gitHookExample } from '../shared';
 import {
   activatePreCommitFramework,
+  deactivatePreCommitFramework,
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   removeLegacyHook,
+  removeSonarHooksFromPreCommitConfig,
   upsertSonarHook,
 } from './config';
 
@@ -60,6 +61,7 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
 
           return config;
         },
+        removePatch: (document) => removeSonarHooksFromPreCommitConfig(document),
       }),
     ],
     operations: [
@@ -67,6 +69,7 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
         id: 'activate-hook',
         displayName: `${hook} hook activation`,
         apply: ({ targetRoot }) => activatePreCommitFramework(targetRoot, hook),
+        undo: ({ targetRoot }) => deactivatePreCommitFramework(targetRoot),
       },
     ],
   };
@@ -74,12 +77,14 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
 
 export {
   activatePreCommitFramework,
+  deactivatePreCommitFramework,
   hasSonarHookInPreCommitConfig,
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_LEGACY_REPO,
   type PreCommitConfig,
   removeLegacyHook,
+  removeSonarHooksFromPreCommitConfig,
   runPreCommitInstall,
   upsertSonarHook,
 } from './config';

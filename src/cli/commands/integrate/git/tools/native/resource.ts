@@ -28,7 +28,7 @@ import type {
   ResourceDeclaration,
 } from '../../../_common/registry';
 import type { GitHookType } from '../../options';
-import { writeManagedGitHook } from './hooks';
+import { removeManagedGitHook, writeManagedGitHook } from './hooks';
 import { getHookScript } from './shell-fragments';
 
 interface NativeGitHookResourceOptions {
@@ -67,6 +67,11 @@ class NativeGitHookResource implements ResourceDeclaration {
     } catch {
       return false;
     }
+  }
+
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolveNativeGitHookPath(context, this.options.hook);
+    await removeManagedGitHook(path, this.options.hook);
   }
 }
 

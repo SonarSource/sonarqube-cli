@@ -20,10 +20,15 @@
 
 import { join } from 'node:path';
 
-import { createAgentHookEntry, resolveAgentHookScriptPath, upsertAgentHooks } from '../hooks';
-import { sonarSecretsBinaryDependency } from '../registry/dependencies';
-import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
-import type { FeatureDeclaration, IntegrationContext, PostInstallExample } from '../registry/types';
+import {
+  createAgentHookEntry,
+  removeAgentHooks,
+  resolveAgentHookScriptPath,
+  upsertAgentHooks,
+} from '../hooks';
+import type { FeatureDeclaration, IntegrationContext, PostInstallExample } from '../registry';
+import { sonarSecretsBinaryDependency } from '../registry';
+import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry';
 
 export interface SonarSecretsHooksFeatureOptions {
   installSecretsHooks?: boolean;
@@ -110,6 +115,11 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
                 entry.scriptPath,
               ),
             ),
+          ),
+        removePatch: (document) =>
+          removeAgentHooks(
+            document,
+            config.hookEntries.map((entry) => entry.marker),
           ),
       }),
     ],

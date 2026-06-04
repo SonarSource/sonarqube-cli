@@ -21,8 +21,8 @@
 import { normalizePath } from '../../../../../../lib/fs-utils';
 import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
-import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
-import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
+import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry';
+import { sonarSecretsBinaryDependency } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { gitHookExample } from '../shared';
 import { nativeGitHookResource } from './resource';
@@ -57,9 +57,34 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
         displayName: 'global hooks path',
         shouldApply: ({ scope }) => scope === 'global',
         apply: ({ targetRoot }) => configureGlobalHooksPath(targetRoot),
+        undo: async ({ scope }) => {
+          if (scope === 'global') {
+            await unsetGlobalHooksPath();
+          }
+        },
       },
     ],
   };
+}
+
+async function unsetGlobalHooksPath(): Promise<void> {
+  let gitResult;
+  try {
+    gitResult = await spawnProcess('git', ['config', '--global', '--unset', 'core.hooksPath']);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CommandFailedError(`Failed to run git [${message}]`, {
+      remediationHint: GLOBAL_GIT_CONFIG_REMEDIATION_HINT,
+    });
+  }
+
+  if (gitResult.exitCode !== 0 && gitResult.exitCode !== 5) {
+    const detail = [gitResult.stderr, gitResult.stdout].filter(Boolean).join('\n');
+    throw new CommandFailedError(
+      `'git config --global --unset core.hooksPath' failed (exit code ${gitResult.exitCode}): ${detail}`,
+      { remediationHint: GLOBAL_GIT_CONFIG_REMEDIATION_HINT },
+    );
+  }
 }
 
 async function configureGlobalHooksPath(hooksDir: string): Promise<void> {

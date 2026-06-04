@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createIntegrationRegistry } from './_common/registry/core';
+import { createIntegrationRegistry } from './_common/registry';
 import { claudeIntegration } from './claude/declaration';
 import { codexIntegration } from './codex/declaration';
 import { copilotIntegration } from './copilot/declaration';

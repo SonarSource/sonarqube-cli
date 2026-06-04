@@ -58,3 +58,25 @@ export async function installViaGitHooks(
   await writeManagedGitHook(hookPath, hook, force);
   discreetSuccess(`${hook} hook installed at ${hookPath}`);
 }
+
+function normalizeLineEndings(content: string): string {
+  return content.replaceAll('\r\n', '\n');
+}
+
+/**
+ * Remove a Sonar-managed native git hook file when it matches our install marker or content.
+ */
+export async function removeManagedGitHook(hookPath: string, hook: GitHookType): Promise<void> {
+  if (!existsSync(hookPath)) {
+    return;
+  }
+
+  const existing = await fs.readFile(hookPath, 'utf-8');
+  const managedContent = normalizeLineEndings(getHookScript(hook));
+  const normalizedExisting = normalizeLineEndings(existing);
+  if (normalizedExisting !== managedContent && !existing.includes(HOOK_MARKER)) {
+    return;
+  }
+
+  await fs.rm(hookPath, { force: true });
+}

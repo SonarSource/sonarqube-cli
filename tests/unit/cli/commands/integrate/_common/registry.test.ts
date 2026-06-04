@@ -423,16 +423,19 @@ describe('declarative integration framework', () => {
           id: 'json',
           targetPath: join(tempDir, 'settings.json'),
           patch: (document) => ({ ...(document as Record<string, unknown>), enabled: true }),
+          removePatch: (document) => document,
         }),
         yamlPatch({
           id: 'yaml',
           targetPath: join(tempDir, 'config.yml'),
           patch: () => ({ repos: [{ repo: 'local' }] }),
+          removePatch: (document) => document,
         }),
         tomlPatch({
           id: 'toml',
           targetPath: join(tempDir, 'config.toml'),
           patch: (document) => ({ ...document, enabled: true }),
+          removePatch: (document) => document,
         }),
         textSnippet({
           id: 'text',

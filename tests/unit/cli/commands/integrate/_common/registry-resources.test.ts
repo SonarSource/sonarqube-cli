@@ -292,6 +292,7 @@ describe('declarative integration framework - resources and state recording', ()
           id: 'json',
           targetPath: join(tempDir, 'settings.json'),
           patch: () => ({ enabled: true }),
+          removePatch: (document) => document,
         }),
       ],
     };
