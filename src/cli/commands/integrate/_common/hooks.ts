@@ -173,6 +173,29 @@ export function upsertAgentHooks(document: unknown, entries: ManagedHookEntry[])
   return settings;
 }
 
+/**
+ * Remove hook entries whose commands contain any of the given markers.
+ * Idempotent inverse of {@link upsertAgentHooks} for the same markers.
+ */
+export function removeAgentHooks(document: unknown, markers: string[]): HooksDocument {
+  const settings = toHooksDocument(document);
+  if (!settings.hooks) {
+    return settings;
+  }
+
+  const hooks: NonNullable<HooksDocument['hooks']> = {};
+  for (const [eventType, entries] of Object.entries(settings.hooks)) {
+    const filtered = (entries ?? []).filter(
+      (hook) => !markers.some((marker) => ownsHookEntry(hook, marker)),
+    );
+    if (filtered.length > 0) {
+      hooks[eventType] = filtered;
+    }
+  }
+
+  return { ...settings, hooks };
+}
+
 function ownsHookEntry(entry: HookConfig, marker: string): boolean {
   return entry.hooks.some((hook) => hook.command.includes(marker));
 }
