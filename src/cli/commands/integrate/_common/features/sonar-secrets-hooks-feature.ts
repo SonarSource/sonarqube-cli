@@ -20,13 +20,36 @@
 
 import { join } from 'node:path';
 
+import type { CliState, IntegrationScope } from '../../../../../lib/state';
 import { createAgentHookEntry, resolveAgentHookScriptPath, upsertAgentHooks } from '../hooks';
 import { sonarSecretsBinaryDependency } from '../registry/dependencies';
+import { isFeatureInstalledGloballyForProject } from '../registry/installation-recorder';
 import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
+import { askUser, skip } from '../registry/selection';
 import type { FeatureDeclaration, IntegrationContext, PostInstallExample } from '../registry/types';
 
+const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
+
 export interface SonarSecretsHooksFeatureOptions {
-  installSecretsHooks?: boolean;
+  globalSecretsHookExists?: boolean;
+}
+
+/** True when a global secrets hook already exists, per the explicit option or, when unset, the recorded state. */
+function globalSecretsHookAlreadyConfigured(
+  integrationId: string,
+  options: SonarSecretsHooksFeatureOptions,
+  scope: IntegrationScope,
+  state: CliState | undefined,
+): boolean {
+  if (options.globalSecretsHookExists !== undefined) {
+    return options.globalSecretsHookExists;
+  }
+  return isFeatureInstalledGloballyForProject(
+    state,
+    scope,
+    integrationId,
+    SONAR_SECRETS_HOOKS_FEATURE_ID,
+  );
 }
 
 export function secretsScanningExample(agentDisplayName: string): PostInstallExample {
@@ -53,6 +76,7 @@ export interface SonarSecretsHookEntrySpec {
 
 export interface SonarSecretsHooksFeatureConfig {
   agentDisplayName: string;
+  integrationId: string;
   configDir: string;
   hooksConfigFileName: string;
   hooksPatchId: string;
@@ -76,9 +100,14 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
     resolveAgentHooksConfigPath(context, config.configDir, config.hooksConfigFileName);
 
   return {
-    id: 'sonar-secrets-hooks',
+    id: SONAR_SECRETS_HOOKS_FEATURE_ID,
     displayName: 'secret scanning hooks',
-    shouldInstall: ({ options }) => options.installSecretsHooks === true,
+    shouldInstall: ({ options, scope, state }) =>
+      globalSecretsHookAlreadyConfigured(config.integrationId, options, scope, state)
+        ? skip(
+            'Skipping the project-level secret scanning hooks because a global secrets scanning hook is already configured.',
+          )
+        : askUser(),
     postInstallExample: secretsScanningExample(config.agentDisplayName),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
