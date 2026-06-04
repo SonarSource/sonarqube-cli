@@ -96,6 +96,7 @@ function appendRecordedCagFeature(
 
 const ORG_KEY = 'expected-org';
 const PROJECT_KEY = 'expected-project';
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe('sonar context passthrough', () => {
   let harness: TestHarness;
@@ -139,6 +140,7 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
     },
     { timeout: 30000 },
   );
@@ -274,6 +276,7 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe('auth-org');
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
+      expect(invocation.env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
     },
     { timeout: 30000 },
   );
@@ -332,6 +335,7 @@ describe('sonar context passthrough', () => {
       expect(invocations[0].env.SONAR_CONTEXT_URL).toBe('https://caller.example');
       expect(invocations[0].env.SONAR_CONTEXT_ORGANIZATION).toBe('caller-org');
       expect(invocations[0].env.SONAR_CONTEXT_PROJECT).toBe('caller-project');
+      expect(invocations[0].env.SONAR_CONTEXT_INVOCATION_ID).toMatch(UUID_V4_RE);
     },
     { timeout: 30000 },
   );

@@ -52,6 +52,7 @@ if (sentinel) {
   copyEnvValue(contextEnv, 'SONAR_CONTEXT_PROJECT');
   copyEnvValue(contextEnv, 'SONAR_CONTEXT_TOKEN');
   copyEnvValue(contextEnv, 'SONAR_CONTEXT_URL');
+  copyEnvValue(contextEnv, 'SONAR_CONTEXT_INVOCATION_ID');
 
   const entry = JSON.stringify({
     argv: args,
