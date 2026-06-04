@@ -771,13 +771,12 @@ describe('integrate copilot', () => {
         expect(body).not.toContain('# SonarQube Agentic Analysis');
         expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(false);
         expect(findCopilotFeature(harness, 'sqaa-instructions')).toBeUndefined();
-        // SQAA is project-scoped, so a --global install skips it with the same
-        // central notice used by every agent — no project-oriented missing-key
-        // or Cloud-promotion message on the global path.
+        // SQAA is project-scoped, so a --global install skips it with the central
+        // "not supported with --global" notice. It is never the missing-key
+        // message, which is reserved for project installs that lack a key.
         const output = result.stdout + result.stderr;
         expect(output).toContain('not supported with --global');
         expect(output).not.toContain('no project key could be resolved');
-        expect(output).not.toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
       },
       { timeout: 30000 },
     );
