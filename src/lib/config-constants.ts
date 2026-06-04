@@ -57,6 +57,9 @@ export const STATE_FILE = join(CLI_DIR, 'state.json');
 export const LOG_DIR = join(CLI_DIR, 'logs');
 export const LOG_FILE = join(LOG_DIR, `${APP_NAME}.log`);
 
+/** SCA scanner download cache used by dependency-risk analysis. */
+export const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
+
 // ---------------------------------------------------------------------------
 // sonar-secrets binary
 // ---------------------------------------------------------------------------
