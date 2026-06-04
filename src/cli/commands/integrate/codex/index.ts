@@ -20,19 +20,18 @@
 
 // Integrate command — setup SonarQube integration for Codex.
 
-import { homedir } from 'node:os';
-
-import { isEnvBasedAuth, type ResolvedAuth } from '../../../../lib/auth-resolver';
-import { discoverProject } from '../../../../lib/project-workspace';
-import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
-import { intro, warn } from '../../../../ui';
-import { InvalidOptionError } from '../../_common/error';
+import type { ResolvedAuth } from '../../../../lib/auth-resolver';
+import type { IntegrationStateAttribute } from '../../../../lib/state';
+import {
+  resolveIntegrateInstallTarget,
+  runAgentIntegratePrelude,
+  warnGlobalSqaaRequiresProject,
+} from '../_common/agent-prelude';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
-import { discoverProjectWithSpinner, printAgentSetupSummary } from '../_common/setup-summary';
 import { resolveSqaaEntitlement } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaration';
@@ -41,31 +40,7 @@ export async function integrateCodex(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  if (options.global && options.project) {
-    throw new InvalidOptionError(
-      '--global and --project are mutually exclusive; please specify only one scope.',
-    );
-  }
-
-  intro('SonarQube Integration Setup for Codex');
-
-  const project = await discoverProjectWithSpinner(() => discoverProject(process.cwd()));
-  const isGlobal = options.global ?? false;
-  const projectKey = options.project || project.projectKey;
-  if (!isGlobal && !projectKey) {
-    warn(
-      'No project key provided - project related actions will be skipped. Run `sonar integrate codex --help` for ways to define a project.',
-    );
-  }
-
-  await printAgentSetupSummary({
-    serverUrl: auth.serverUrl,
-    organization: auth.orgKey,
-    token: auth.token,
-    project,
-    projectKey,
-    cliProjectKey: options.project,
-  });
+  const ctx = await runAgentIntegratePrelude('Codex', 'codex', options, auth);
 
   // SQAA is always project-scoped:
   //  - project install: include the SQAA section if the org is entitled AND
@@ -74,17 +49,19 @@ export async function integrateCodex(
   //    surface a hint pointing the user at the per-project command. We skip
   //    the warning for unentitled orgs to avoid noise about a feature they
   //    cannot use.
-  const sqaaEligible = await resolveSqaaEntitlement(auth.serverUrl, auth.token, auth.orgKey);
-  const includeSqaa = !isGlobal && sqaaEligible && Boolean(projectKey);
+  const sqaaEligible = await resolveSqaaEntitlement(ctx.serverUrl, ctx.token, ctx.organization);
+  const includeSqaa = !ctx.isGlobal && sqaaEligible && Boolean(ctx.projectKey);
 
-  const installRoot = isGlobal ? homedir() : project.rootDir;
-  const installScope: IntegrationScope = isGlobal ? 'global' : 'project';
+  const { installRoot, installScope } = resolveIntegrateInstallTarget(
+    ctx.isGlobal,
+    ctx.project.rootDir,
+  );
   const contextAugmentation = options.skipContext
     ? null
     : await resolveContextAugmentationSetup({
         auth,
-        projectKey,
-        isGlobal,
+        projectKey: ctx.projectKey,
+        isGlobal: ctx.isGlobal,
       });
   const integrationOptions = {
     ...options,
@@ -101,34 +78,28 @@ export async function integrateCodex(
     targetRoot: installRoot,
     scope: installScope,
     auth,
-    nonInteractive: !!options.nonInteractive || isEnvBasedAuth(),
+    nonInteractive: options.nonInteractive,
     attrs: {
-      ...buildAttrs({
-        includeSecretsSection: true,
-        projectKey,
-        includeSqaa,
-      }),
+      ...buildAttrs({ projectKey: ctx.projectKey }),
       ...(contextAugmentation
-        ? buildContextAugmentationAttrs(auth.serverUrl, auth.orgKey, contextAugmentation.scaEnabled)
+        ? buildContextAugmentationAttrs(
+            ctx.serverUrl,
+            ctx.organization,
+            contextAugmentation.scaEnabled,
+          )
         : {}),
     },
   });
 
-  if (isGlobal && sqaaEligible) {
-    warn(
-      'SonarQube Agentic Analysis is project-scoped and is not enabled by this global install. Run `sonar integrate codex --project <key>` from a project directory to enable it for that project.',
-    );
+  if (ctx.isGlobal && sqaaEligible) {
+    warnGlobalSqaaRequiresProject('codex');
   }
 }
 
 function buildAttrs(args: {
-  includeSecretsSection: boolean;
   projectKey: string | undefined;
-  includeSqaa: boolean;
 }): Record<string, IntegrationStateAttribute> {
   return {
-    includeSecretsSection: args.includeSecretsSection,
     projectKey: args.projectKey ?? null,
-    includeSqaa: args.includeSqaa,
   };
 }

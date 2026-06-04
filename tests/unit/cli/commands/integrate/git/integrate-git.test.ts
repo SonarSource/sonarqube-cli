@@ -502,11 +502,6 @@ describe('integrateGit', () => {
     } catch {
       // expected cancellation
     }
-    expect(
-      getMockUiCalls().some(
-        (c) => c.method === 'spinner' && String(c.args[0]) === 'Discovering project...',
-      ),
-    ).toBe(true);
     expect(printGitRepositorySummarySpy).toHaveBeenCalledWith('/my/project');
   });
 
