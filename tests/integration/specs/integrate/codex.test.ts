@@ -508,12 +508,11 @@ describe('integrate codex', () => {
 
   describe('interactive feature selection', () => {
     it(
-      'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
+      'prompts per feature, installs accepted features, and silently skips SQAA when not entitled',
       async () => {
         // Default beforeEach is on-premise auth with no org, so SQAA and
-        // Context Augmentation are not available: SQAA is skipped with the
-        // promotion line and CAG is skipped silently. The three remaining
-        // features (hook, secrets instructions, MCP) each ask.
+        // Context Augmentation are not available: both are skipped silently.
+        // The three remaining features (hook, secrets instructions, MCP) each ask.
         const result = await harness.run('integrate codex', {
           stdinChunks: ['\r', '\r', '\r'],
         });
@@ -524,8 +523,6 @@ describe('integrate codex', () => {
         expect(output).toContain('Install secret scanning hooks?');
         expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
-        // SQAA is skipped with the shared promotion message.
-        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
