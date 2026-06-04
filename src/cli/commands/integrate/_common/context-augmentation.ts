@@ -27,7 +27,7 @@ import logger from '../../../../lib/logger';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import { discreetSuccess, info, print, text, warn, withSpinner } from '../../../../ui';
+import { discreetSuccess, print, text, warn, withSpinner } from '../../../../ui';
 import { buildContextAugmentationEnv } from '../../_common/context-augmentation-env';
 import { CommandFailedError } from '../../_common/error';
 
@@ -144,7 +144,7 @@ export async function resolveContextAugmentationSetup(
 export async function runToolIntegrateCommand(
   p: ApplyContextAugmentationToolIntegrationParams,
 ): Promise<void> {
-  info('Setting up SonarQube Context Augmentation...');
+  text('Installing SonarQube Context Augmentation...');
 
   const initEnv = buildContextAugmentationEnv({
     organization: p.auth.orgKey,

@@ -29,7 +29,7 @@ import type {
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
 import { getDefaultState } from '../../../../../lib/state';
-import { discreetSuccess, info, text, warn } from '../../../../../ui';
+import { text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import { supportedIntegrations } from '../../index';
 import { renderCompletionSummary } from './completion-summary';
@@ -90,6 +90,7 @@ export async function installIntegration<TOptions>({
   }
 
   const applications: FeatureApplication<TOptions>[] = [];
+  text('');
   for (const feature of features) {
     const context = await resolveFeatureContext(state, invocation, feature, 'install');
     applications.push({
@@ -100,7 +101,7 @@ export async function installIntegration<TOptions>({
       force: context.force,
       attrs: context.attrs,
     });
-    text(`Installing ${integration.displayName}: ${feature.displayName}`);
+    text(`Installing ${feature.displayName}...`);
   }
 
   try {
@@ -110,20 +111,11 @@ export async function installIntegration<TOptions>({
       applications,
       {
         callbacks: {
-          onDependencyInstalled: (dependency) => {
-            discreetSuccess(`Installed ${dependency.displayName ?? dependency.id}`);
-          },
           onDependencySkipped: (dependency) => {
-            info(`${dependency.displayName ?? dependency.id} already installed`);
-          },
-          onResourceInstalled: (resource) => {
-            discreetSuccess(`Installed ${resource.displayName ?? resource.id}`);
+            text(`${dependency.displayName ?? dependency.id} already installed`);
           },
           onResourceSkipped: (resource) => {
-            info(`${resource.displayName ?? resource.id} already installed`);
-          },
-          onOperationApplied: (operation) => {
-            discreetSuccess(`Applied ${operation.displayName ?? operation.id}`);
+            text(`${resource.displayName ?? resource.id} already installed`);
           },
         },
         executionMode: 'install',

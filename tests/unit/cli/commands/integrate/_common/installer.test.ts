@@ -106,9 +106,7 @@ describe('generic integration installer', () => {
     expect(await readFile(join(tempDir, 'config.txt'), 'utf-8')).toBe('enabled=true\n');
     expect(operationCalls).toEqual(['called']);
     expect(saveStateSpy).toHaveBeenCalledWith(state);
-    expect(hasUiCall('text', 'Installing Test Integration: Feature')).toBe(true);
-    expect(hasUiCall('discreetSuccess', 'Installed Config file')).toBe(true);
-    expect(hasUiCall('discreetSuccess', 'Applied Setup operation')).toBe(true);
+    expect(hasUiCall('text', 'Installing Feature...')).toBe(true);
   });
 
   it('supports feature-specific target routing from a single installer invocation', async () => {
@@ -306,7 +304,7 @@ describe('generic integration installer', () => {
     });
 
     expect(installed[0].resources.some((resource) => resource.id === 'file')).toBe(true);
-    expect(hasUiCall('info', 'Config file already installed')).toBe(true);
+    expect(hasUiCall('text', 'Config file already installed')).toBe(true);
   });
 
   it('does not run operations when shouldApply returns false', async () => {
