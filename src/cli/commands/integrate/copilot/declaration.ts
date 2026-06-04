@@ -22,7 +22,7 @@ import { join, relative } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { CommandFailedError } from '../../_common/error';
+import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
 import {
@@ -120,7 +120,10 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           targetPath: resolveInstructionsPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) => buildSqaaSectionBody(getRequiredStringAttr(context, 'projectKey')),
+          content: (context) =>
+            buildSqaaSectionBody(
+              getRequiredStringAttr(context, 'projectKey', copilotIntegration.displayName),
+            ),
         }),
       ],
     },
@@ -237,22 +240,9 @@ function getDesiredCopilotMcpConfig(context: IntegrationContext) {
       : {
           withFsMount: true,
           projectRoot: context.targetRoot,
-          projectKey: getOptionalProjectKey(context),
+          projectKey: getOptionalStringAttr(context, 'projectKey'),
         },
   );
-}
-
-function getOptionalProjectKey(context: IntegrationContext): string | undefined {
-  const value = context.attrs?.projectKey;
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function getRequiredStringAttr(context: IntegrationContext, key: string): string {
-  const value = context.attrs?.[key];
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new CommandFailedError(`Missing required integration attribute: ${key}`);
-  }
-  return value;
 }
 
 function toJsonObject(document: unknown): Record<string, unknown> {

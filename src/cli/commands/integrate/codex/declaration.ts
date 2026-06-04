@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { CommandFailedError } from '../../_common/error';
+import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
@@ -108,7 +108,10 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           targetPath: resolveCodexAgentsMdPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) => buildSqaaSectionBody(getRequiredStringAttr(context, 'projectKey')),
+          content: (context) =>
+            buildSqaaSectionBody(
+              getRequiredStringAttr(context, 'projectKey', codexIntegration.displayName),
+            ),
         }),
       ],
     },
@@ -176,17 +179,4 @@ function toRecord(value: unknown): Record<string, unknown> {
     return {};
   }
   return { ...(value as Record<string, unknown>) };
-}
-
-function getOptionalStringAttr(context: IntegrationContext, key: string): string | undefined {
-  const value = context.attrs?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function getRequiredStringAttr(context: IntegrationContext, key: string): string {
-  const value = context.attrs?.[key];
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new CommandFailedError(`Missing required integration attribute: ${key}`);
-  }
-  return value;
 }
