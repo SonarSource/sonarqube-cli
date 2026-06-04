@@ -52,6 +52,10 @@ After the CAG entitlement check passes, the integrate flow also queries SCA avai
 
 The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) handles `.tar.gz` archives: download → verify detached `.asc` PGP signature → gunzip + USTAR-extract the inner binary into `~/.sonar/sonarqube-cli/bin/`. Tar reading is in `src/cli/commands/_common/install/tar.ts` (no external dep). The pinned CAG version is in `package.json#externalBinaries["sonar-context-augmentation"]` and `src/lib/signatures.ts`. In the declarative framework, the CAG binary is managed as a shared dependency (`sonar-context-augmentation`), while a single declarative feature owns both the skill file resource and the install-only `tool integrate` operation with the invocation prefix forced to `sonar context`.
 
+### System reset
+
+`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Implementation is split across `src/cli/commands/system/reset.ts` (orchestration), `reset-auth.ts`, `reset-binaries.ts`, `reset-integrations.ts`, `reset-filesystem.ts`, and `safe-path.ts`.
+
 ## Error handling
 
 Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
