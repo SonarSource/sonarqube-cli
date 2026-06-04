@@ -56,6 +56,7 @@ describe('declarative integration framework - remove and undo', () => {
       targetPath: jsonPath,
       defaultValue: { fallback: true },
       patch: (document) => ({ ...(document as Record<string, unknown>), enabled: true }),
+      removePatch: (document) => document,
     });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
@@ -78,6 +79,7 @@ describe('declarative integration framework - remove and undo', () => {
       targetPath: tomlPath,
       defaultValue: {},
       patch: (document) => document,
+      removePatch: (document) => document,
     });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
@@ -99,6 +101,7 @@ describe('declarative integration framework - remove and undo', () => {
       id: 'yaml-invalid',
       targetPath: yamlPath,
       patch: (document) => ({ ...(document as Record<string, unknown>), enabled: true }),
+      removePatch: (document) => document,
     });
 
     await yamlResource.apply(context);
@@ -152,7 +155,7 @@ describe('declarative integration framework - remove and undo', () => {
       expect(JSON.parse(await readFile(jsonPath, 'utf-8'))).toEqual({ existing: 1 });
     });
 
-    it('json-patch: is a no-op without removePatch', async () => {
+    it('json-patch: identity removePatch leaves file unchanged', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);
       const jsonPath = join(tempDir, 'settings.json');
@@ -161,11 +164,12 @@ describe('declarative integration framework - remove and undo', () => {
         id: 'r',
         targetPath: jsonPath,
         patch: (doc) => ({ ...(doc as object), sonar: true }),
+        removePatch: (doc) => doc,
       });
 
       await resource.remove!(context);
 
-      expect(await readFile(jsonPath, 'utf-8')).toBe('{"sonar":true}');
+      expect(JSON.parse(await readFile(jsonPath, 'utf-8'))).toEqual({ sonar: true });
     });
 
     it('json-patch: is a no-op when the file does not exist', async () => {
@@ -201,7 +205,7 @@ describe('declarative integration framework - remove and undo', () => {
       expect(await readFile(yamlPath, 'utf-8')).toBe('existing: 1\n');
     });
 
-    it('yaml-patch: is a no-op without removePatch', async () => {
+    it('yaml-patch: identity removePatch leaves file unchanged', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);
       const yamlPath = join(tempDir, 'config.yml');
@@ -211,6 +215,7 @@ describe('declarative integration framework - remove and undo', () => {
         id: 'r',
         targetPath: yamlPath,
         patch: (doc) => doc,
+        removePatch: (doc) => doc,
       });
 
       await resource.remove!(context);
@@ -238,7 +243,7 @@ describe('declarative integration framework - remove and undo', () => {
       expect(await readFile(tomlPath, 'utf-8')).toBe('existing = 1\n');
     });
 
-    it('toml-patch: is a no-op without removePatch', async () => {
+    it('toml-patch: identity removePatch leaves file unchanged', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);
       const tomlPath = join(tempDir, 'config.toml');
@@ -248,6 +253,7 @@ describe('declarative integration framework - remove and undo', () => {
         id: 'r',
         targetPath: tomlPath,
         patch: (doc) => doc,
+        removePatch: (doc) => doc,
       });
 
       await resource.remove!(context);

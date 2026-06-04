@@ -31,7 +31,6 @@ import type {
 import { getDefaultState } from '../../../../../lib/state';
 import { text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
-import { supportedIntegrations } from '../../index';
 import { renderCompletionSummary } from './completion-summary';
 import type { IntegrationRegistry } from './core';
 import type { FeatureApplication } from './installer';
@@ -57,8 +56,18 @@ export interface InstallIntegrationOptions<TOptions> {
   nonInteractive?: boolean;
 }
 
+async function resolveIntegrationRegistry(
+  registry: IntegrationRegistry | undefined,
+): Promise<IntegrationRegistry> {
+  if (registry) {
+    return registry;
+  }
+  const { supportedIntegrations } = await import('../../index.js');
+  return supportedIntegrations;
+}
+
 export async function installIntegration<TOptions>({
-  registry = supportedIntegrations,
+  registry,
   integrationId,
   options,
   targetRoot,
@@ -69,7 +78,8 @@ export async function installIntegration<TOptions>({
   featureIds,
   nonInteractive,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
-  const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
+  const resolvedRegistry = await resolveIntegrationRegistry(registry);
+  const integration = getIntegrationDeclaration<TOptions>(resolvedRegistry, integrationId);
   const state = loadStateForInstallation();
   const invocation: IntegrationInvocation<TOptions> = {
     options,

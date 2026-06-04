@@ -32,6 +32,7 @@ import {
   SQAA_MISSING_PROJECT_KEY_MESSAGE,
   SQAA_PROMOTION_MESSAGE,
 } from '../_common/instructions-templates';
+import { removeCodexMcpServer } from '../_common/mcp-config';
 import { isFeatureInstalledGloballyForProject } from '../_common/registry/installation-recorder';
 import { textSnippet, tomlPatch } from '../_common/registry/resources';
 import { askUser, skip } from '../_common/registry/selection';
@@ -145,6 +146,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           targetPath: resolveCodexMcpConfigPath,
           defaultValue: {},
           patch: (document, context) => upsertCodexMcpServer(document, context),
+          removePatch: (document) => removeCodexMcpServer(document),
         }),
       ],
     },
