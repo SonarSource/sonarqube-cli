@@ -54,12 +54,12 @@ The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) h
 
 ### System reset
 
-`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Core implementation: `reset.ts`, `reset-auth.ts`, `reset-binaries.ts`, `reset-filesystem.ts`, and `safe-path.ts`. Integration teardown ships in a follow-up PR (`reset-integrations.ts`).
+`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Implementation is split across `src/cli/commands/system/reset.ts` (orchestration), `reset-auth.ts`, `reset-binaries.ts`, `reset-integrations.ts`, `reset-filesystem.ts`, and `safe-path.ts`.
 
 - **Confirmation:** interactive runs require typing `RESET`; non-interactive runs require `--force`.
 - **Authentication:** best-effort server token revoke via shared `revoke-server-token.ts` (same hints as `auth logout`) then keychain deletion; only successfully removed connections are dropped from `state.auth`.
 - **Binaries:** deletes paths from `state.dependencies.installed` and legacy `state.tools.installed` under `BIN_DIR` (`resolveSafePath`); stops CAG daemons before removing the context-augmentation binary.
-- **Integrations:** not wired in this PR (phase reports a follow-up message).
+- **Integrations:** calls `IntegrationInstaller.removeFeature()` for each declarative install, then cleans legacy `agentExtensions` (hooks/settings) when registry entries remain.
 - **Filesystem:** removes `LOG_DIR`, `SCA_SCANNER_CACHE_DIR`, and `GLOBAL_HOOKS_DIR` under `CLI_DIR`; reports approximate bytes cleared.
 - **Telemetry:** never disabled; `installationId`, `firstUseDate`, and pending `events` are preserved.
 - **Legacy fields:** `state.agents` is reset; `state.tools` is reset only when no installed tools remain after binary cleanup.

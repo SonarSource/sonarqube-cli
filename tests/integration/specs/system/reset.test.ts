@@ -199,6 +199,52 @@ describe('system reset --force', () => {
   );
 
   it(
+    'clears legacy agentExtensions registry entries',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const settingsPath = join(harness.cwd.path, '.claude', 'settings.json');
+      mkdirSync(join(harness.cwd.path, '.claude'), { recursive: true });
+      writeFileSync(
+        settingsPath,
+        JSON.stringify(
+          {
+            hooks: {
+              PostToolUse: [
+                {
+                  matcher: 'Edit|Write',
+                  hooks: [{ type: 'command', command: 'sonar-sqaa/build-scripts/posttool-sqaa' }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+        'utf-8',
+      );
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), 'tok', 'org-key')
+        .withSqaaExtension(harness.cwd.path, 'my-project');
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+
+      const state = readState(harness.stateJsonFile.path);
+      expect(state.agentExtensions).toHaveLength(0);
+
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as {
+        hooks?: { PostToolUse?: unknown[] };
+      };
+      expect(settings.hooks?.PostToolUse ?? []).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'rejects dependency paths outside BIN_DIR',
     async () => {
       const outside = join(harness.cwd.path, 'outside-binary');

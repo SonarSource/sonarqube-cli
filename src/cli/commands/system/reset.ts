@@ -22,11 +22,12 @@ import { version as VERSION } from '../../../../package.json';
 import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { type CliState, getDefaultState, type InstalledIntegration } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
-import { info, phase, phaseItem, print, success, text, textPrompt, warn } from '../../../ui';
+import { info, phase, print, success, text, textPrompt, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { purgeAuth } from './reset-auth';
 import { removeBinaries } from './reset-binaries';
 import { clearFilesystem } from './reset-filesystem';
+import { removeAllIntegrations } from './reset-integrations';
 
 export interface SystemResetOptions {
   force?: boolean;
@@ -81,7 +82,7 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
 
   const authResult = await purgeAuth(state);
   const binaryResult = await removeBinaries(state);
-  const integrationResult = integrationsResetPending();
+  const integrationResult = await removeAllIntegrations(state);
   const filesystemResult = clearFilesystem();
 
   const results: StepResult[] = [
@@ -98,7 +99,10 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
     },
     {
       item: integrationResult.item,
-      cleaned: integrationResult.cleaned,
+      cleaned: emptyCleanedFields({
+        integrationFeatures: integrationResult.integrationFeatures,
+        agentExtensionIds: integrationResult.agentExtensionIds,
+      }),
     },
     { item: filesystemResult.item, cleaned: emptyCleanedFields() },
   ];
@@ -121,13 +125,6 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
   }
 
   success('CLI has been successfully reset to factory settings.');
-}
-
-function integrationsResetPending(): StepResult {
-  return {
-    item: phaseItem('Integrations', 'info', 'Integration cleanup is not wired yet (follow-up PR).'),
-    cleaned: emptyCleanedFields(),
-  };
 }
 
 async function confirmDestructiveAction(): Promise<boolean> {
