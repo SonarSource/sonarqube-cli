@@ -164,6 +164,7 @@ jobs:
 
           codesign \
             --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" \
+            --identifier sonarqube-cli \
             --options runtime \
             --timestamp \
             dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
