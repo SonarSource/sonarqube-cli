@@ -24,7 +24,7 @@ import { CommandFailedError } from '../../../../_common/error';
 import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { gitHookExample } from '../shared';
+import { gitHookExample, hookShouldInstall } from '../shared';
 import { nativeGitHookResource } from './resource';
 
 export const NATIVE_GIT_INTEGRATION_ID = 'native-git';
@@ -41,7 +41,7 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
   return {
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
-    shouldInstall: ({ options }) => options.hook === hook,
+    shouldInstall: ({ options }) => hookShouldInstall(hook, options),
     postInstallExample: gitHookExample(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [

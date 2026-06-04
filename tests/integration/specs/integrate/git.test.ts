@@ -242,23 +242,6 @@ describe('integrate git (native hooks)', () => {
   });
 
   it(
-    'exits with error when user cancels the hook-type selection',
-    async () => {
-      await setupAuthenticated(harness);
-
-      // Minimal git repo: findGitRoot() detects the .git directory
-      harness.cwd.writeFile('.git/.keep', '');
-
-      // Ctrl+C sent to stdin cancels the interactive confirmPrompt
-      const result = await harness.run('integrate git', { stdin: '\x03' });
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Installation cancelled');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
     'exits with error when user is not authenticated',
     async () => {
       // No keychain token, no env vars — resolveAuth() throws
@@ -376,13 +359,14 @@ describe('integrate git (native hooks)', () => {
       // and resolveGitHooksDir() resolves to .git/hooks as expected
       initGitRepo(harness);
 
-      // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: '\r' confirms 'Install here?', then '\r' selects pre-commit
-      const result = await harness.run('integrate git', { stdinChunks: ['\r', '\r'] });
+      // Per-feature confirm flow: '\r' confirms 'Install here?', '\r' accepts the
+      // 'Install pre-commit hook?' prompt, 'n' declines 'Install pre-push hook?'.
+      const result = await harness.run('integrate git', { stdinChunks: ['\r', '\r', 'n'] });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(false);
     },
     { timeout: 15000 },
   );
@@ -404,9 +388,6 @@ describe('integrate git (native hooks)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'git-hook-file');
@@ -422,14 +403,46 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // '\r' confirms 'Install here?'; '\x1b[B' moves the selection down to pre-push; '\r' submits
+      // Per-feature confirm flow: '\r' confirms 'Install here?', 'n' declines the
+      // 'Install pre-commit hook?' prompt, '\r' accepts 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
-        stdinChunks: ['\r', '\x1b[B', '\r'],
+        stdinChunks: ['\r', 'n', '\r'],
       });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'installs both native hooks when the user accepts each per-feature prompt',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      // Per-feature confirm flow: '\r' confirms 'Install here?', then '\r' accepts
+      // both the 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
+      const result = await harness.run('integrate git', { stdinChunks: ['\r', '\r', '\r'] });
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Install pre-commit hook?');
+      expect(output).toContain('Install pre-push hook?');
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const featureIds = gitIntegration.features
+        .map((feature) => feature.featureId)
+        .sort((a, b) => a.localeCompare(b));
+      expect(featureIds).toEqual(['pre-commit-hook', 'pre-push-hook']);
+      for (const feature of gitIntegration.features) {
+        expect(feature.attrs).toBeUndefined();
+      }
     },
     { timeout: 15000 },
   );
@@ -439,14 +452,17 @@ describe('integrate git (native hooks)', () => {
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
-      // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: '\r' confirms global hook warning, then '\r' selects pre-commit
-      const result = await harness.run('integrate git --global', { stdinChunks: ['\r', '\r'] });
+      // Per-feature confirm flow: '\r' confirms the global hook warning, '\r' accepts
+      // 'Install pre-commit hook?', 'n' declines 'Install pre-push hook?'.
+      const result = await harness.run('integrate git --global', {
+        stdinChunks: ['\r', '\r', 'n'],
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
       expect(result.stdout + result.stderr).toContain('Applied global hooks path');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
     },
     { timeout: 15000 },
   );
@@ -466,9 +482,6 @@ describe('integrate git (native hooks)', () => {
         featureId: 'pre-push-hook',
         scope: 'global',
         targetRoot: harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks').path,
-        attrs: {
-          hook: 'pre-push',
-        },
       });
       expectInstalledOperation(feature, 'configure-global-hooks-path');
     },
@@ -480,16 +493,17 @@ describe('integrate git (native hooks)', () => {
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
-      // Two separate stdin chunks with a delay between them so readline doesn't buffer
-      // both at once: '\r' confirms global hook warning, then '\r' selects pre-push
+      // Per-feature confirm flow: '\r' confirms the global hook warning, 'n' declines
+      // 'Install pre-commit hook?', '\r' accepts 'Install pre-push hook?'.
       const result = await harness.run('integrate git --global', {
-        stdinChunks: ['\r', '\x1b[B', '\r'],
+        stdinChunks: ['\r', 'n', '\r'],
       });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
       expect(result.stdout + result.stderr).toContain('Applied global hooks path');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(true);
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(false);
     },
     { timeout: 15000 },
   );
@@ -531,9 +545,6 @@ describe('integrate git (husky)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
@@ -599,9 +610,6 @@ describe('integrate git (husky)', () => {
         featureId: 'pre-push-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-push',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
@@ -697,9 +705,6 @@ describe('integrate git (pre-commit framework)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
@@ -747,9 +752,6 @@ describe('integrate git (pre-commit framework)', () => {
         featureId: 'pre-push-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-push',
-        },
       });
       expectFeatureDependency(feature, 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
@@ -815,9 +817,6 @@ describe('integrate git (pre-commit framework)', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: harness.cwd.path,
-        attrs: {
-          hook: 'pre-commit',
-        },
       });
     },
     { timeout: 15000 },

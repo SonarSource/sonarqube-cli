@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, intro, selectPrompt, text, warn } from '../../../../ui';
+import { blank, confirmPrompt, intro, text, warn } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { printGitPreflightSummary } from '../_common/preflight-summary';
@@ -97,35 +97,6 @@ export function validateHookOption(hook: string | undefined): void {
   }
 }
 
-/**
- * Validates and returns explicit `--hook`, or `pre-commit` when non-interactive with no hook, or prompts to select.
- */
-export async function resolveHookType(options: IntegrateGitOptions): Promise<GitHookType> {
-  if (options.hook !== undefined) {
-    return options.hook;
-  }
-  if (options.nonInteractive) {
-    return 'pre-commit';
-  }
-  const choice = await selectPrompt<GitHookType>(
-    'Would you like to install the pre-commit or pre-push hook?',
-    [
-      {
-        value: 'pre-commit' as const,
-        label: 'pre-commit (scan staged files)',
-      },
-      {
-        value: 'pre-push' as const,
-        label: 'pre-push (scan files in unpushed commits)',
-      },
-    ],
-  );
-  if (choice === null) {
-    throw new CommandFailedError('Installation cancelled');
-  }
-  return choice;
-}
-
 async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   validateHookOption(options.hook);
 
@@ -149,11 +120,7 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   }
   blank();
 
-  const hook = await resolveHookType(options);
-  text(`Hook: ${hook}`);
-  blank();
-
-  await installGitFeatures({ ...options, hook }, GLOBAL_HOOKS_DIR, 'global');
+  await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global');
 }
 
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
@@ -183,15 +150,11 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   }
   blank();
 
-  const hook = await resolveHookType(options);
-  text(`Hook: ${hook}`);
-  blank();
-
-  await installGitFeatures({ ...options, hook }, gitRoot, 'project');
+  await installGitFeatures(options, gitRoot, 'project');
 }
 
 async function installGitFeatures(
-  options: IntegrateGitOptions & { hook: GitHookType },
+  options: IntegrateGitOptions,
   targetRoot: string,
   scope: 'project' | 'global',
 ): Promise<void> {
@@ -203,9 +166,6 @@ async function installGitFeatures(
     scope,
     force: options.force,
     nonInteractive: options.nonInteractive,
-    attrs: {
-      hook: options.hook,
-    },
   });
 }
 

@@ -21,9 +21,25 @@
 import { platform } from 'node:os';
 
 import type { PostInstallExample } from '../../_common/registry';
+import type { InstallDecision } from '../../_common/registry/selection';
+import { askUser, install, skip } from '../../_common/registry/selection';
+import type { IntegrateGitOptions } from '../options';
 import type { GitHookType } from '../options';
 
 export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
+
+export function hookShouldInstall(
+  hook: GitHookType,
+  options: IntegrateGitOptions,
+): InstallDecision {
+  if (options.hook !== undefined) {
+    return options.hook === hook ? install() : skip();
+  }
+  if (options.nonInteractive) {
+    return hook === 'pre-commit' ? install() : skip();
+  }
+  return askUser();
+}
 export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping secrets scan';
 
 export function resolveSonarHookCommand(hook: GitHookType): string {
