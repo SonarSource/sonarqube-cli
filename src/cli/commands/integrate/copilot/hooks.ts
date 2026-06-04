@@ -87,6 +87,38 @@ export function entryReferencesSonarSecrets(entry: HookCommandEntry): boolean {
   );
 }
 
+function toHooksJson(document: unknown): HooksJson {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) {
+    return { version: 1, hooks: {} };
+  }
+
+  const json = document as Partial<HooksJson>;
+  return {
+    version: typeof json.version === 'number' ? json.version : 1,
+    hooks: json.hooks ? { ...json.hooks } : {},
+  };
+}
+
+/** Idempotent inverse of Copilot pre-tool-use hook upsert for sonar-secrets. */
+export function removeCopilotHookConfig(document: unknown): HooksJson {
+  const hooksJson = toHooksJson(document);
+  if (!hooksJson.hooks?.preToolUse) {
+    return hooksJson;
+  }
+
+  const preToolUse = hooksJson.hooks.preToolUse.filter(
+    (entry) => !entryReferencesSonarSecrets(entry),
+  );
+  const hooks = { ...hooksJson.hooks };
+  if (preToolUse.length > 0) {
+    hooks.preToolUse = preToolUse;
+  } else {
+    delete hooks.preToolUse;
+  }
+
+  return { ...hooksJson, hooks };
+}
+
 export function hookScriptName(): string {
   return `${SCRIPT_BASENAME}${process.platform === 'win32' ? '.ps1' : '.sh'}`;
 }

@@ -105,6 +105,28 @@ export function removeLegacyHook(config: PreCommitConfig): boolean {
   return config.repos.length < before;
 }
 
+/**
+ * Remove Sonar-managed hooks from a pre-commit config (inverse of install patch).
+ * Drops the legacy remote repo entry and local sonar-secrets hooks; removes an empty local repo.
+ */
+export function removeSonarHooksFromPreCommitConfig(document: unknown): PreCommitConfig {
+  const config = normalizePreCommitConfig(document);
+  removeLegacyHook(config);
+
+  for (const repo of config.repos) {
+    if (!Array.isArray(repo.hooks)) {
+      continue;
+    }
+    repo.hooks = repo.hooks.filter((hook) => !isSonarHookEntry(hook));
+  }
+
+  config.repos = config.repos.filter(
+    (repo) => repo.repo !== 'local' || (Array.isArray(repo.hooks) && repo.hooks.length > 0),
+  );
+
+  return config;
+}
+
 /** Upserts the sonar-secrets hook into the local repo entry of a config object. */
 export function upsertSonarHook(config: PreCommitConfig, stage: GitHookType): void {
   const sonarHook = buildSonarPreCommitHook(stage);
@@ -166,5 +188,15 @@ export async function activatePreCommitFramework(root: string, hook: GitHookType
         remediationHint: `Install the pre-commit framework (for example 'pip install pre-commit') and run: ${installCommands}`,
       },
     );
+  }
+}
+
+/** Best-effort pre-commit uninstall during factory reset; never throws. */
+export async function deactivatePreCommitFramework(root: string): Promise<void> {
+  try {
+    await runPreCommitCommand(['uninstall'], root);
+    await runPreCommitCommand(['clean'], root);
+  } catch {
+    // Missing framework or hook scripts — non-fatal for reset.
   }
 }
