@@ -29,6 +29,7 @@ import type {
   InstalledIntegrationFeature,
   InstalledIntegrationOperation,
   InstalledIntegrationResource,
+  IntegrationScope,
 } from '../../../../../lib/state';
 import type {
   AppliedFeature,
@@ -105,6 +106,23 @@ export function collectReferencedDependencyIds(state: CliState): Set<string> {
         feature.dependencies.map((dependency) => dependency.id),
       ),
     ),
+  );
+}
+
+/** True for a project install whose `featureId` already has a recorded global install. */
+export function isFeatureInstalledGloballyForProject(
+  state: CliState | undefined,
+  scope: IntegrationScope,
+  integrationId: string,
+  featureId: string,
+): boolean {
+  return (
+    scope === 'project' &&
+    state !== undefined &&
+    (state.integrations.installed
+      .find((integration) => integration.integrationId === integrationId)
+      ?.features.some((feature) => feature.featureId === featureId && feature.scope === 'global') ??
+      false)
   );
 }
 

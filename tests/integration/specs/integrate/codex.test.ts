@@ -27,6 +27,7 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { codexIntegration } from '../../../../src/cli/commands/integrate/codex/declaration';
 import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
@@ -43,6 +44,26 @@ interface CodexHooksFile {
       hooks?: Array<{ type?: string; command?: string; timeout?: number }>;
     }>;
   };
+}
+
+interface InstalledCodexFeature {
+  featureId: string;
+  scope: string;
+}
+
+function findCodexFeature(
+  harness: TestHarness,
+  featureId: string,
+  scope?: string,
+): InstalledCodexFeature | undefined {
+  const state = harness.stateJsonFile.asJson();
+  const codex = state.integrations.installed.find(
+    (entry: { integrationId: string }) => entry.integrationId === 'codex',
+  );
+  return codex?.features?.find(
+    (feature: InstalledCodexFeature) =>
+      feature.featureId === featureId && (scope === undefined || feature.scope === scope),
+  ) as InstalledCodexFeature | undefined;
 }
 
 describe('integrate codex', () => {
@@ -63,7 +84,7 @@ describe('integrate codex', () => {
     it(
       'writes an executable prompt-submit script and a hooks.json entry under .codex/',
       async () => {
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
 
@@ -91,7 +112,7 @@ describe('integrate codex', () => {
     it(
       'uses a project-relative command path so the config is portable',
       async () => {
-        await harness.run('integrate codex');
+        await harness.run('integrate codex --non-interactive');
 
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
         const command = hookScriptPath(
@@ -106,8 +127,8 @@ describe('integrate codex', () => {
     it(
       're-running does not duplicate the UserPromptSubmit entry',
       async () => {
-        await harness.run('integrate codex');
-        const result = await harness.run('integrate codex');
+        await harness.run('integrate codex --non-interactive');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
@@ -135,7 +156,7 @@ describe('integrate codex', () => {
           }),
         );
 
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
@@ -153,7 +174,7 @@ describe('integrate codex', () => {
     it(
       'writes script + hooks.json under $HOME/.codex/ with an absolute command path',
       async () => {
-        const result = await harness.run('integrate codex -g');
+        const result = await harness.run('integrate codex -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists('.codex')).toBe(false);
@@ -171,6 +192,32 @@ describe('integrate codex', () => {
       },
       { timeout: 30000 },
     );
+
+    it(
+      'skips the project-level secrets hook when a global Codex hook is already recorded',
+      async () => {
+        // Seed a previously-installed global secrets hook so the state probe
+        // (isFeatureInstalledGloballyForProject) fires for the project run.
+        harness
+          .state()
+          .withInstalledIntegrationFeature(codexIntegration, 'sonar-secrets-hooks', 'global');
+
+        const result = await harness.run('integrate codex --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain(
+          'Skipping the project-level secret scanning hooks because a global secrets scanning hook is already configured.',
+        );
+        // No project-level hook artifacts were written.
+        expect(harness.cwd.exists('.codex', 'hooks')).toBe(false);
+        expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
+        expect(findCodexFeature(harness, 'sonar-secrets-hooks', 'project')).toBeUndefined();
+        // The remaining project features still install.
+        expect(harness.cwd.file(...AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe('MCP server config', () => {
@@ -179,7 +226,7 @@ describe('integrate codex', () => {
       async () => {
         harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project\n');
 
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         // Assert on the result and the file contents
         expect(result.exitCode).toBe(0);
@@ -215,7 +262,7 @@ describe('integrate codex', () => {
     it(
       'writes the MCP config to $HOME/.codex/config.toml for global installs',
       async () => {
-        const result = await harness.run('integrate codex -g');
+        const result = await harness.run('integrate codex -g --non-interactive');
 
         // Assert on the result and the file contents
         expect(result.exitCode).toBe(0);
@@ -250,10 +297,10 @@ describe('integrate codex', () => {
     it(
       're-running does not change the config.toml or duplicate [mcp_servers.sonarqube]',
       async () => {
-        await harness.run('integrate codex');
+        await harness.run('integrate codex --non-interactive');
         const firstBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
 
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.file(...CONFIG_TOML_DIRS).asText()).toBe(firstBody);
@@ -270,7 +317,7 @@ describe('integrate codex', () => {
           '[mcp_servers.sonarqube]\ncommand = "custom-sonar"\nargs = ["custom", "args"]\n',
         );
 
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
@@ -286,7 +333,7 @@ describe('integrate codex', () => {
       async () => {
         harness.cwd.writeFile('.codex/config.toml', '= not valid toml =');
 
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(1);
         const output = `${result.stdout}\n${result.stderr}`;
@@ -299,7 +346,7 @@ describe('integrate codex', () => {
     it(
       'omits --project from the args array when no project key is known',
       async () => {
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
@@ -328,7 +375,7 @@ describe('integrate codex', () => {
           ].join('\n'),
         );
 
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const tomlBody = harness.cwd.file(...CONFIG_TOML_DIRS).asText();
@@ -344,7 +391,7 @@ describe('integrate codex', () => {
 
   describe('option validation', () => {
     it('rejects --global combined with --project', async () => {
-      const result = await harness.run('integrate codex -g -p some-project');
+      const result = await harness.run('integrate codex -g -p some-project --non-interactive');
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain('mutually exclusive');
@@ -358,7 +405,7 @@ describe('integrate codex', () => {
     it(
       'writes the secrets-on-read section to <repo>/.codex/AGENTS.md at project scope (no SQAA without entitlement)',
       async () => {
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
@@ -384,12 +431,15 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
 
-        const result = await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        const result = await harness.run(
+          `integrate codex --project ${TEST_PROJECT} --non-interactive`,
+          {
+            extraEnv: {
+              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+            },
           },
-        });
+        );
 
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
@@ -407,7 +457,7 @@ describe('integrate codex', () => {
     it(
       'writes ~/.codex/AGENTS.md (and nothing project-side) at global scope without SQAA entitlement, and does NOT warn about SQAA',
       async () => {
-        const result = await harness.run('integrate codex -g');
+        const result = await harness.run('integrate codex -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists(...AGENTS_MD_DIRS)).toBe(false);
@@ -434,7 +484,7 @@ describe('integrate codex', () => {
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
         harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
-        const result = await harness.run('integrate codex -g', {
+        const result = await harness.run('integrate codex -g --non-interactive', {
           extraEnv: {
             SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
             SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -451,6 +501,123 @@ describe('integrate codex', () => {
         const output = `${result.stdout}\n${result.stderr}`;
         expect(output).toContain('Skipping SonarQube Agentic Analysis');
         expect(output).toContain('not supported with --global');
+      },
+      { timeout: 30000 },
+    );
+  });
+
+  describe('interactive feature selection', () => {
+    it(
+      'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
+      async () => {
+        // Default beforeEach is on-premise auth with no org, so SQAA and
+        // Context Augmentation are not available: SQAA is skipped with the
+        // promotion line and CAG is skipped silently. The three remaining
+        // features (hook, secrets instructions, MCP) each ask.
+        const result = await harness.run('integrate codex', {
+          stdinChunks: ['\r', '\r', '\r'],
+        });
+
+        expect(result.exitCode).toBe(0);
+        const output = `${result.stdout}\n${result.stderr}`;
+        // Each opted feature surfaced its confirm prompt.
+        expect(output).toContain('Install secret scanning hooks?');
+        expect(output).toContain('Install secrets-on-read instructions?');
+        expect(output).toContain('Install MCP server?');
+        // SQAA is skipped with the shared promotion message.
+        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
+        // Accepted features are installed on disk.
+        expect(
+          harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
+        ).toBe(true);
+        expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(true);
+        const agentsMd = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        expect(agentsMd).toContain(SECRETS_HEADING);
+        // No SQAA marker block was written (org not entitled).
+        expect(agentsMd).not.toContain(SQAA_HEADING);
+        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
+        // Declarative state records only the accepted features.
+        expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+        expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
+        expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
+        expect(findCodexFeature(harness, 'sqaa-instructions')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips a feature when the user declines its prompt',
+      async () => {
+        // Decline the hook ('n'), accept secrets instructions and MCP ('\r').
+        const result = await harness.run('integrate codex', {
+          stdinChunks: ['n', '\r', '\r'],
+        });
+
+        expect(result.exitCode).toBe(0);
+        // Hook was declined: no hook artifacts and no state entry.
+        expect(harness.cwd.exists('.codex', 'hooks')).toBe(false);
+        expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
+        expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+        // The accepted features are still installed.
+        expect(harness.cwd.file(...AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
+        expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
+        expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'asks a custom question for secrets instructions when global instructions already exist',
+      async () => {
+        // Seed a previously-installed global secrets-instructions feature so the
+        // state probe (isFeatureInstalledGloballyForProject) fires for the project run.
+        harness
+          .state()
+          .withInstalledIntegrationFeature(codexIntegration, 'secrets-instructions', 'global');
+
+        // Project install hits the state-probe branch: the secrets-instructions
+        // feature asks a custom "project-local copy" question instead of the
+        // default one.
+        const result = await harness.run('integrate codex', {
+          stdinChunks: ['\r', '\r', '\r'],
+        });
+
+        expect(result.exitCode).toBe(0);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).toContain(
+          'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
+        );
+        // Accepting writes the project-local copy and records the project-scope feature.
+        expect(harness.cwd.file(...AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(findCodexFeature(harness, 'secrets-instructions', 'project')).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'env-based auth implies non-interactive: installs without prompting and without stdin',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken('env-tok').start();
+
+        // SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER ⇒ isEnvBasedAuth() ⇒ the
+        // ask-features auto-install.
+        const result = await harness.run('integrate codex', {
+          extraEnv: {
+            SONARQUBE_CLI_TOKEN: 'env-tok',
+            SONARQUBE_CLI_SERVER: server.baseUrl(),
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).not.toContain(
+          'Install secret scanning hooks?',
+        );
+        expect(
+          harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
+        ).toBe(true);
+        expect(harness.cwd.exists(...AGENTS_MD_DIRS)).toBe(true);
+        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
       },
       { timeout: 30000 },
     );

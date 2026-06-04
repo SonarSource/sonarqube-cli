@@ -51,7 +51,7 @@ export const CLAUDE_INTEGRATION_ID = 'claude-code';
 
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
-  installSecretsHooks?: boolean;
+  globalSecretsHookExists?: boolean;
   installSqaaHook?: boolean;
   installMcp?: boolean;
   installContextAugmentation?: boolean;
@@ -64,6 +64,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     {
       ...createSonarSecretsHooksFeature({
         agentDisplayName: 'Claude',
+        integrationId: CLAUDE_INTEGRATION_ID,
         configDir: CLAUDE_CONFIG_DIR,
         hooksConfigFileName: SETTINGS_FILE,
         hooksPatchId: 'claude-settings-secrets-hooks',
