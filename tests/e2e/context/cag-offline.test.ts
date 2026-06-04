@@ -40,13 +40,13 @@ import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bu
 
 import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/install/context-augmentation';
 import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import { detectPlatform } from '../../../src/lib/platform-detector';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../src/lib/signatures';
 import type { CliState } from '../../../src/lib/state';
 import { TestHarness } from '../../integration/harness';
 import {
   CLAUDE_SKILL_RELATIVE_PATH,
+  expectSkillRendersWithWrapperInvocation,
   findRecordedCagDependency,
   findRecordedCagFeature,
   seedState,
@@ -150,7 +150,7 @@ describe('sonar-context-augmentation offline e2e (real binary, no SonarQube)', (
     expect(existsSync(skillPath)).toBe(true);
     const content = readFileSync(skillPath, 'utf-8');
     expect(content).not.toContain(STALE_SKILL_SENTINEL);
-    expect(content).toContain(CONTEXT_AUGMENTATION_BINARY_NAME);
+    expectSkillRendersWithWrapperInvocation(content);
   });
 
   describe('a second self-update (rewound state) reinstalls the skill', () => {
