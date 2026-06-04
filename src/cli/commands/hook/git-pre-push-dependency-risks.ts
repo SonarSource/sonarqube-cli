@@ -92,7 +92,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   throw new CommandFailedError(
     `Dependency risks detected (${matchedCount} matching the configured filter).`,
     {
-      remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' to inspect, fix or accept the risks, then retry the push.`,
+      remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' to inspect & fix the risks, then retry the push.`,
     },
   );
 }
