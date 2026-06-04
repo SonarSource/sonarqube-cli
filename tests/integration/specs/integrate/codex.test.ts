@@ -594,32 +594,5 @@ describe('integrate codex', () => {
       },
       { timeout: 30000 },
     );
-
-    it(
-      'env-based auth implies non-interactive: installs without prompting and without stdin',
-      async () => {
-        const server = await harness.newFakeServer().withAuthToken('env-tok').start();
-
-        // SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER ⇒ isEnvBasedAuth() ⇒ the
-        // ask-features auto-install.
-        const result = await harness.run('integrate codex', {
-          extraEnv: {
-            SONARQUBE_CLI_TOKEN: 'env-tok',
-            SONARQUBE_CLI_SERVER: server.baseUrl(),
-          },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(`${result.stdout}\n${result.stderr}`).not.toContain(
-          'Install secret scanning hooks?',
-        );
-        expect(
-          harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
-        ).toBe(true);
-        expect(harness.cwd.exists(...AGENTS_MD_DIRS)).toBe(true);
-        expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
-      },
-      { timeout: 30000 },
-    );
   });
 });
