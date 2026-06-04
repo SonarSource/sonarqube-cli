@@ -301,6 +301,7 @@ describe('declarative integration framework', () => {
           options: {},
           targetRoot: tempDir,
           scope: 'project',
+          state: getDefaultState('test'),
         })
       ).map((feature) => feature.id),
     ).toEqual(['pre-commit', 'always']);
@@ -310,6 +311,7 @@ describe('declarative integration framework', () => {
           options: { hook: 'pre-push' },
           targetRoot: tempDir,
           scope: 'project',
+          state: getDefaultState('test'),
         })
       ).map((feature) => feature.id),
     ).toEqual(['pre-push', 'always']);
@@ -328,6 +330,7 @@ describe('declarative integration framework', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      state: getDefaultState('test'),
     });
 
     expect(selected).toEqual([]);
@@ -354,6 +357,7 @@ describe('declarative integration framework', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      state: getDefaultState('test'),
     });
 
     expect(selected.map((feature) => feature.id)).toEqual(['accepted']);
@@ -373,6 +377,7 @@ describe('declarative integration framework', () => {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
+      state: getDefaultState('test'),
     });
 
     expect(selected).toEqual([]);
@@ -393,6 +398,7 @@ describe('declarative integration framework', () => {
       targetRoot: tempDir,
       scope: 'project',
       nonInteractive: true,
+      state: getDefaultState('test'),
     });
 
     expect(selected.map((feature) => feature.id)).toEqual(['asked', 'defaulted']);

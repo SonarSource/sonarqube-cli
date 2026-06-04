@@ -33,6 +33,7 @@ export {
   type InstallIntegrationOptions,
   makeContext,
 } from './install-integration';
+export { isFeatureInstalledGloballyForProject } from './installation-recorder';
 export {
   IntegrationInstaller,
   integrationInstaller,

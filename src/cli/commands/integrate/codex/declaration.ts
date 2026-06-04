@@ -29,8 +29,12 @@ import {
   buildSqaaSectionBody,
   sonarBeginMarker,
   sonarEndMarker,
+  SQAA_MISSING_PROJECT_KEY_MESSAGE,
+  SQAA_PROMOTION_MESSAGE,
 } from '../_common/instructions-templates';
+import { isFeatureInstalledGloballyForProject } from '../_common/registry/installation-recorder';
 import { textSnippet, tomlPatch } from '../_common/registry/resources';
+import { askUser, skip } from '../_common/registry/selection';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
@@ -44,12 +48,10 @@ const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 export const CODEX_INTEGRATION_ID = 'codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
-  installSecretsHooks?: boolean;
-  /** Write the secrets-on-read marker block into `.codex/AGENTS.md`. */
-  installSecretsInstructions?: boolean;
+  globalSecretsHookExists?: boolean;
   /** Write the SQAA marker block into `.codex/AGENTS.md`. */
   installSqaaInstructions?: boolean;
-  installMcp?: boolean;
+  sqaaEntitled?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -59,6 +61,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   features: [
     createSonarSecretsHooksFeature({
       agentDisplayName: 'Codex',
+      integrationId: CODEX_INTEGRATION_ID,
       configDir: CODEX_CONFIG_DIR,
       hooksConfigFileName: HOOKS_FILE,
       hooksPatchId: 'codex-hooks-secrets-hook',
@@ -85,7 +88,17 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'secrets-instructions',
       displayName: 'secrets-on-read instructions',
-      shouldInstall: ({ options }) => options.installSecretsInstructions === true,
+      shouldInstall: ({ scope, state }) =>
+        isFeatureInstalledGloballyForProject(
+          state,
+          scope,
+          CODEX_INTEGRATION_ID,
+          'secrets-instructions',
+        )
+          ? askUser(
+              'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
+            )
+          : askUser(),
       resources: [
         textSnippet({
           id: 'codex-secrets-instructions',
@@ -100,7 +113,14 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options }) => options.installSqaaInstructions === true,
+      shouldInstall: ({ options }) => {
+        if (options.installSqaaInstructions === true) {
+          return askUser();
+        }
+        return skip(
+          options.sqaaEntitled === true ? SQAA_MISSING_PROJECT_KEY_MESSAGE : SQAA_PROMOTION_MESSAGE,
+        );
+      },
       resources: [
         textSnippet({
           id: 'codex-sqaa-instructions',
@@ -118,7 +138,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      shouldInstall: ({ options }) => options.installMcp === true,
       resources: [
         tomlPatch({
           id: 'codex-mcp-config',

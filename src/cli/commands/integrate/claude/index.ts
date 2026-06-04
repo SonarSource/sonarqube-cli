@@ -106,7 +106,7 @@ export async function integrateClaude(
   const integrationOptions = {
     ...options,
     projectRoot: ctx.project.rootDir,
-    installSecretsHooks: !skipSecretsHooks,
+    globalSecretsHookExists: skipSecretsHooks,
     installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
     installMcp: true,
     installContextAugmentation: contextAugmentation !== null,

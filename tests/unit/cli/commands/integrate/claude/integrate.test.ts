@@ -300,7 +300,7 @@ describe('integrateCommand', () => {
         auth: CLOUD_AUTH,
         options: expect.objectContaining({
           projectRoot: '/project/root',
-          installSecretsHooks: true,
+          globalSecretsHookExists: false,
           installSqaaHook: false,
           installMcp: true,
           installContextAugmentation: true,
@@ -433,7 +433,7 @@ describe('integrateCommand', () => {
         auth: SERVER_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: false,
+        globalSecretsHookExists: true,
         installSqaaHook: false,
       });
       expect(runMigrationsSpy).toHaveBeenCalledWith(
@@ -464,7 +464,7 @@ describe('integrateCommand', () => {
         auth: CLOUD_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: false,
+        globalSecretsHookExists: true,
         installSqaaHook: true,
       });
     });
@@ -486,7 +486,7 @@ describe('integrateCommand', () => {
         auth: SERVER_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: true,
+        globalSecretsHookExists: false,
         installSqaaHook: false,
       });
     });
@@ -523,7 +523,7 @@ describe('integrateCommand', () => {
         auth: CLOUD_AUTH,
         projectRoot: '/project/root',
         projectKey: 'a-project',
-        installSecretsHooks: true,
+        globalSecretsHookExists: false,
         installSqaaHook: false,
       });
       expect(runMigrationsSpy).toHaveBeenLastCalledWith(
@@ -592,7 +592,7 @@ describe('integrateCommand', () => {
       auth,
       projectRoot: projectRootDir,
       projectKey,
-      installSecretsHooks: !skipSecretsHooks,
+      globalSecretsHookExists: skipSecretsHooks,
       installSqaaHook: sqaaEnabled && projectKey !== undefined,
     });
 
@@ -612,7 +612,7 @@ describe('integrateCommand', () => {
     auth,
     projectRoot,
     projectKey,
-    installSecretsHooks,
+    globalSecretsHookExists,
     installSqaaHook,
   }: {
     targetRoot: string;
@@ -620,7 +620,7 @@ describe('integrateCommand', () => {
     auth: ResolvedAuth;
     projectRoot: string;
     projectKey?: string;
-    installSecretsHooks: boolean;
+    globalSecretsHookExists: boolean;
     installSqaaHook: boolean;
   }): void {
     const attrs = {
@@ -634,7 +634,7 @@ describe('integrateCommand', () => {
         auth,
         options: expect.objectContaining({
           projectRoot,
-          installSecretsHooks,
+          globalSecretsHookExists,
           installSqaaHook,
           installMcp: true,
         }),

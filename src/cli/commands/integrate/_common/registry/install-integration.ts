@@ -70,7 +70,17 @@ export async function installIntegration<TOptions>({
   nonInteractive,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
-  const invocation = makeInvocation(options, targetRoot, scope, auth, force, attrs, nonInteractive);
+  const state = loadStateForInstallation();
+  const invocation: IntegrationInvocation<TOptions> = {
+    options,
+    targetRoot,
+    scope,
+    auth,
+    force,
+    attrs,
+    nonInteractive,
+    state,
+  };
   const features =
     featureIds === undefined
       ? await integrationInstaller.selectFeaturesForInvocation(integration, invocation)
@@ -79,7 +89,6 @@ export async function installIntegration<TOptions>({
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
 
-  const state = loadStateForInstallation();
   const applications: FeatureApplication<TOptions>[] = [];
   for (const feature of features) {
     const context = await resolveFeatureContext(state, invocation, feature, 'install');
@@ -188,18 +197,6 @@ function loadStateForInstallation(): CliState {
     logger.warn(`Failed to read configuration state: ${msg}`);
     return getDefaultState(VERSION);
   }
-}
-
-function makeInvocation<TOptions>(
-  options: TOptions,
-  targetRoot: string,
-  scope: IntegrationScope,
-  auth: ResolvedAuth | undefined,
-  force: boolean | undefined,
-  attrs: Record<string, IntegrationStateAttribute> | undefined,
-  nonInteractive: boolean | undefined,
-): IntegrationInvocation<TOptions> {
-  return { options, targetRoot, scope, auth, force, attrs, nonInteractive };
 }
 
 async function resolveFeatureContext<TOptions>(

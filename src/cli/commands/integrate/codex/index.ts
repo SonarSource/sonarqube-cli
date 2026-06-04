@@ -65,10 +65,8 @@ export async function integrateCodex(
       });
   const integrationOptions = {
     ...options,
-    installSecretsHooks: true,
-    installSecretsInstructions: true,
     installSqaaInstructions: includeSqaa,
-    installMcp: true,
+    sqaaEntitled: sqaaEligible,
     installContextAugmentation: contextAugmentation !== null,
   } satisfies CodexIntegrationOptions;
 

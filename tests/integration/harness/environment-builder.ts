@@ -41,6 +41,8 @@ import { buildLocalCagBinaryName } from '../../../src/cli/commands/_common/insta
 import { SCA_SCANNER_SPEC } from '../../../src/cli/commands/_common/install/sca-scanner';
 import { SECRETS_SPEC } from '../../../src/cli/commands/_common/install/secrets';
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
+import { recordInstalledFeature } from '../../../src/cli/commands/integrate/_common/registry/installation-recorder';
+import type { IntegrationDeclaration } from '../../../src/cli/commands/integrate/_common/registry/types';
 import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types.js';
 import { generateKeychainAccount } from '../../../src/lib/keychain';
@@ -51,6 +53,7 @@ import type {
   CliState,
   InstalledIntegrationDependency,
   InstalledTool,
+  IntegrationScope,
 } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import { IS_WINDOWS } from './platform';
@@ -144,6 +147,7 @@ export class EnvironmentBuilder {
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
   private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
+  private readonly installedFeatureSeeds: Array<(state: CliState) => void> = [];
 
   withActiveConnection(
     url: string,
@@ -321,6 +325,33 @@ export class EnvironmentBuilder {
     return this;
   }
 
+  /**
+   * Seeds a previously-installed integration feature in the state file so
+   * `shouldInstall` state probes (e.g. `isFeatureInstalledGloballyForProject`) see it as
+   * already installed.
+   */
+  withInstalledIntegrationFeature<TOptions>(
+    integration: IntegrationDeclaration<TOptions>,
+    featureId: string,
+    scope: IntegrationScope = 'global',
+    targetRoot = '',
+  ): this {
+    this.installedFeatureSeeds.push((state) => {
+      const feature = integration.features.find((entry) => entry.id === featureId);
+      if (!feature) {
+        throw new Error(`Unknown feature ${integration.id}.${featureId}`);
+      }
+      recordInstalledFeature(
+        state,
+        { targetRoot, scope, executionMode: 'install', resolvedDependencies: new Map(), attrs: {} },
+        integration,
+        feature,
+        { dependencies: [], resources: [], operations: [] },
+      );
+    });
+    return this;
+  }
+
   build(binDir?: string): CliState {
     // Default to the current CLI version so post-update is a no-op. Tests that
     // need to exercise the upgrade migration inject a stale version via
@@ -444,6 +475,10 @@ export class EnvironmentBuilder {
         serverUrl: skill.serverUrl ?? this.activeConnectionUrl,
         scaEnabled: skill.scaEnabled ?? false,
       });
+    }
+
+    for (const seed of this.installedFeatureSeeds) {
+      seed(state);
     }
 
     return state;
