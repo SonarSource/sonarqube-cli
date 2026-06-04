@@ -23,9 +23,9 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import * as token from '../../../../../../src/cli/commands/_common/token';
 import {
-  printAgentSetupSummary,
-  printGitRepositorySummary,
-} from '../../../../../../src/cli/commands/integrate/_common/setup-summary';
+  printAgentPreflightSummary,
+  printGitPreflightSummary,
+} from '../../../../../../src/cli/commands/integrate/_common/preflight-summary';
 import * as processLib from '../../../../../../src/lib/process';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import { SonarQubeClient } from '../../../../../../src/sonarqube/client';
@@ -38,7 +38,7 @@ const BASE_PROJECT: DiscoveredProject = {
   configSources: [],
 };
 
-describe('printAgentSetupSummary', () => {
+describe('printAgentPreflightSummary', () => {
   let checkTokenStatusSpy: ReturnType<typeof spyOn>;
   let checkComponentSpy: ReturnType<typeof spyOn>;
   let checkOrganizationSpy: ReturnType<typeof spyOn>;
@@ -61,7 +61,7 @@ describe('printAgentSetupSummary', () => {
   });
 
   it('renders Connection and Project sections with config source from files', async () => {
-    await printAgentSetupSummary({
+    await printAgentPreflightSummary({
       serverUrl: 'https://sonarcloud.io',
       organization: 'my-org',
       token: 'token',
@@ -82,7 +82,7 @@ describe('printAgentSetupSummary', () => {
     checkTokenStatusSpy.mockResolvedValue('unreachable');
 
     const error = await captureRejection(
-      printAgentSetupSummary({
+      printAgentPreflightSummary({
         serverUrl: 'https://sonar.example.com',
         token: 'token',
         project: BASE_PROJECT,
@@ -109,7 +109,7 @@ describe('printAgentSetupSummary', () => {
   });
 });
 
-describe('printGitRepositorySummary', () => {
+describe('printGitPreflightSummary', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
@@ -129,7 +129,7 @@ describe('printGitRepositorySummary', () => {
   });
 
   it('renders Repository section with hooks directory and framework', async () => {
-    await printGitRepositorySummary('/repo/root');
+    await printGitPreflightSummary('/repo/root');
 
     const items = getPhaseItems('Repository');
     expect(items.find((i) => i.text === 'Root')?.detail).toBe('/repo/root');

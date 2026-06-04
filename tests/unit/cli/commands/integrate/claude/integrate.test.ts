@@ -148,7 +148,8 @@ describe('integrateCommand', () => {
     await integrateClaude({}, SERVER_AUTH);
 
     const introText = getMockUiCalls().find(
-      (c) => c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude',
+      (c) =>
+        c.method === 'intro' && String(c.args[0]) === 'SonarQube Integration Setup for Claude Code',
     );
     expect(introText).toBeDefined();
   });

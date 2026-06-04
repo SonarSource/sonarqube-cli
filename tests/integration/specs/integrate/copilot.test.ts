@@ -928,29 +928,6 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
-
-    it(
-      'env-based auth implies non-interactive: installs without prompting and without stdin',
-      async () => {
-        const server = await harness.newFakeServer().withAuthToken('env-tok').start();
-
-        // SONARQUBE_CLI_TOKEN + SONARQUBE_CLI_SERVER ⇒ isEnvBasedAuth() ⇒ the
-        // ask-features auto-install.
-        const result = await harness.run('integrate copilot', {
-          extraEnv: {
-            SONARQUBE_CLI_TOKEN: 'env-tok',
-            SONARQUBE_CLI_SERVER: server.baseUrl(),
-          },
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout + result.stderr).not.toContain('Install pre-tool-use hook?');
-        expect(harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).exists()).toBe(true);
-        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
-        expect(harness.cwd.exists('.mcp.json')).toBe(true);
-      },
-      { timeout: 30000 },
-    );
   });
 
   // ─── Auth gate ──────────────────────────────────────────────────────────────

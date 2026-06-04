@@ -30,7 +30,10 @@ import {
 } from '../../../../lib/migration';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { success } from '../../../../ui';
-import { resolveIntegrateInstallTarget, runAgentIntegratePrelude } from '../_common/agent-prelude';
+import {
+  displayAgentIntegratePrelude,
+  resolveIntegrateInstallTarget,
+} from '../_common/agent-integrate-prelude';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
@@ -56,7 +59,7 @@ export async function integrateClaude(
   options: IntegrateAgentOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  const ctx = await runAgentIntegratePrelude('Claude', 'claude', options, auth);
+  const ctx = await displayAgentIntegratePrelude('Claude Code', 'claude', options, auth);
 
   const config = toConfigurationData(ctx);
   // For project-level installs, probe the user home for a pre-existing global

@@ -20,7 +20,10 @@
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
-import { resolveIntegrateInstallTarget, runAgentIntegratePrelude } from '../_common/agent-prelude';
+import {
+  displayAgentIntegratePrelude,
+  resolveIntegrateInstallTarget,
+} from '../_common/agent-integrate-prelude';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
@@ -32,7 +35,7 @@ import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declar
 import { detectGlobalSecretsHook } from './hooks';
 
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
-  const ctx = await runAgentIntegratePrelude('Copilot', 'copilot', options, auth);
+  const ctx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
   const entitled = await resolveSqaaEntitlement(ctx.serverUrl, ctx.token, ctx.organization);
   const sqaaProjectKey = entitled && ctx.projectKey ? ctx.projectKey : undefined;

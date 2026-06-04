@@ -24,7 +24,7 @@ import {
   assertSonarCloudOrganization,
   buildAgentIntegrateContext,
   warnMissingIntegrateProjectKey,
-} from '../../../../../../src/cli/commands/integrate/_common/agent-prelude';
+} from '../../../../../../src/cli/commands/integrate/_common/agent-integrate-prelude';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
 import type { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
