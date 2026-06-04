@@ -30,7 +30,7 @@ import {
   type InstalledIntegrationFeature,
 } from './state-helpers';
 
-export type { InstalledIntegration, InstalledIntegrationFeature };
+export type { InstalledIntegration, InstalledIntegrationFeature } from './state-helpers';
 
 export const HOOK_FIELD = IS_WINDOWS ? 'powershell' : 'bash';
 

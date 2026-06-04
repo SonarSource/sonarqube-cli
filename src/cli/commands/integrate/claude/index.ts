@@ -61,9 +61,8 @@ export async function integrateClaude(
   const ctx = await displayAgentIntegratePrelude('Claude Code', 'claude', options, auth);
 
   const config = toConfigurationData(ctx);
-  // For project-level installs, probe the user home for a pre-existing global
-  // Claude hook. The detector emits info/warn for installed/orphaned and
-  // returns the hook dir when we should skip project-level secrets hooks.
+  // Probe for a global Claude hook; warns on orphaned installs and returns
+  // the hook dir when project-level secrets hooks should be skipped.
   const existingGlobalHookPath = ctx.isGlobal
     ? undefined
     : await detectGlobalSecretsHook(homedir());
