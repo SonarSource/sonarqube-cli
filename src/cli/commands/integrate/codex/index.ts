@@ -66,6 +66,7 @@ export async function integrateCodex(
   const integrationOptions = {
     ...options,
     installSqaaInstructions: includeSqaa,
+    sqaaEntitled: sqaaEligible,
     installContextAugmentation: contextAugmentation !== null,
   } satisfies CodexIntegrationOptions;
 

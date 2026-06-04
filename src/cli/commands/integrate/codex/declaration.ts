@@ -29,6 +29,8 @@ import {
   buildSqaaSectionBody,
   sonarBeginMarker,
   sonarEndMarker,
+  SQAA_MISSING_PROJECT_KEY_MESSAGE,
+  SQAA_PROMOTION_MESSAGE,
 } from '../_common/instructions-templates';
 import { isFeatureInstalledGloballyForProject } from '../_common/registry/installation-recorder';
 import { textSnippet, tomlPatch } from '../_common/registry/resources';
@@ -49,6 +51,7 @@ export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
   /** Write the SQAA marker block into `.codex/AGENTS.md`. */
   installSqaaInstructions?: boolean;
+  sqaaEntitled?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -114,7 +117,9 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         if (options.installSqaaInstructions === true) {
           return askUser();
         }
-        return skip();
+        return skip(
+          options.sqaaEntitled === true ? SQAA_MISSING_PROJECT_KEY_MESSAGE : SQAA_PROMOTION_MESSAGE,
+        );
       },
       resources: [
         textSnippet({
