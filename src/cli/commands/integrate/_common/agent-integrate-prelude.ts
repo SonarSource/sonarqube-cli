@@ -27,6 +27,7 @@ import { type DiscoveredProject, discoverProject } from '../../../../lib/project
 import type { IntegrationScope } from '../../../../lib/state';
 import { intro, warn, withSpinner } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
+import { isGlobalIntegrateScope, resolveIntegrateScope } from './integrate-scope';
 import { printAgentPreflightSummary } from './preflight-summary';
 import type { IntegrateAgentOptions } from './types';
 
@@ -112,8 +113,8 @@ export function buildAgentIntegrateContext(
 
 /**
  * Shared preflight for all agent integrate commands: scope validation, intro,
- * project discovery, mismatch warnings, missing project-key notice, cloud org
- * check, and Connection/Project preflight summary (including token validation).
+ * project discovery, mismatch warnings, cloud org check, Connection/Project
+ * preflight summary (including token validation), then install-scope selection.
  */
 export async function displayAgentIntegratePrelude(
   agentDisplayName: string,
@@ -125,18 +126,20 @@ export async function displayAgentIntegratePrelude(
   introAgentIntegration(agentDisplayName);
   const project = await discoverIntegrateProject();
   warnAuthProjectMismatches(auth, project);
-  const ctx = buildAgentIntegrateContext(options, auth, project);
-  warnMissingIntegrateProjectKey(subcommand, ctx.isGlobal, ctx.projectKey);
-  assertSonarCloudOrganization(ctx.serverUrl, ctx.organization);
+  const projectKey = options.project || project.projectKey;
+  assertSonarCloudOrganization(auth.serverUrl, auth.orgKey);
   await printAgentPreflightSummary({
-    serverUrl: ctx.serverUrl,
-    organization: ctx.organization,
-    token: ctx.token,
-    project: ctx.project,
-    projectKey: ctx.projectKey,
+    serverUrl: auth.serverUrl,
+    organization: auth.orgKey,
+    token: auth.token,
+    project,
+    projectKey,
     cliProjectKey: options.project,
   });
-  return ctx;
+  const scope = await resolveIntegrateScope({ ...options, projectRoot: project.rootDir });
+  const isGlobal = isGlobalIntegrateScope(scope);
+  warnMissingIntegrateProjectKey(subcommand, isGlobal, projectKey);
+  return buildAgentIntegrateContext({ ...options, global: isGlobal }, auth, project);
 }
 
 export function resolveIntegrateInstallTarget(

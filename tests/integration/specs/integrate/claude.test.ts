@@ -296,7 +296,7 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=browser-project'].join('\n'),
       );
 
-      const result = await harness.run('integrate claude', {
+      const result = await harness.run('integrate claude --non-interactive', {
         browserToken: 'browser-token',
       });
 
@@ -389,16 +389,13 @@ describe('integrate claude', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
       );
 
-      const result = await harness.run(
-        'integrate claude', // no --non-interactive flag
-        {
-          extraEnv: {
-            SONARQUBE_CLI_TOKEN: 'invalid-token', // rejected by server
-            SONARQUBE_CLI_SERVER: server.baseUrl(),
-            // no browserToken: if browser auth is triggered the test times out
-          },
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_TOKEN: 'invalid-token', // rejected by server
+          SONARQUBE_CLI_SERVER: server.baseUrl(),
+          // no browserToken: if browser auth is triggered the test times out
         },
-      );
+      });
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain('Token is invalid');
