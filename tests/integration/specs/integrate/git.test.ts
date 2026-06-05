@@ -386,7 +386,7 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // No --hook flag: hookShouldInstall() must default to pre-commit and skip pre-push.
+      // No --hook flag: shouldInstallHook() must default to pre-commit and skip pre-push.
       const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(0);

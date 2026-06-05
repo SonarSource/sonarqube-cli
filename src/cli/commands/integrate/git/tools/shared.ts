@@ -27,7 +27,7 @@ import type { GitHookType, IntegrateGitOptions } from '../options';
 
 export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
 
-export function hookShouldInstall(
+export function shouldInstallHook(
   hook: GitHookType,
   options: IntegrateGitOptions,
 ): InstallDecision {
