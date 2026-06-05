@@ -498,9 +498,10 @@ describe('integrate codex', () => {
         // Default beforeEach is on-premise auth with no org, so SQAA and
         // Context Augmentation are not available: SQAA is skipped with the
         // promotion line and CAG is skipped silently. The three remaining
-        // features (hook, secrets instructions, MCP) each ask.
+        // features (hook, secrets instructions, MCP) each ask. The leading
+        // '\r' selects project scope before the per-feature prompts.
         const result = await harness.run('integrate codex', {
-          stdinChunks: ['\r', '\r', '\r'],
+          stdinChunks: ['\r', '\r', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);
@@ -536,9 +537,9 @@ describe('integrate codex', () => {
     it(
       'skips a feature when the user declines its prompt',
       async () => {
-        // Decline the hook ('n'), accept secrets instructions and MCP ('\r').
+        // '\r' selects project scope; decline the hook ('n'), accept secrets instructions and MCP ('\r').
         const result = await harness.run('integrate codex', {
-          stdinChunks: ['n', '\r', '\r'],
+          stdinChunks: ['\r', 'n', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);
@@ -566,9 +567,9 @@ describe('integrate codex', () => {
 
         // Project install hits the state-probe branch: the secrets-instructions
         // feature asks a custom "project-local copy" question instead of the
-        // default one.
+        // default one. The leading '\r' selects project scope first.
         const result = await harness.run('integrate codex', {
-          stdinChunks: ['\r', '\r', '\r'],
+          stdinChunks: ['\r', '\r', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);

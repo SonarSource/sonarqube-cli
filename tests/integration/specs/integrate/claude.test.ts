@@ -2000,8 +2000,9 @@ describe('integrate claude — interactive feature selection', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
+      // '\r' selects project scope, then the hook + MCP feature prompts.
       const result = await harness.run('integrate claude', {
-        stdinChunks: ['\r', '\r'],
+        stdinChunks: ['\r', '\r', '\r'],
       });
 
       expect(result.exitCode).toBe(0);
@@ -2041,9 +2042,9 @@ describe('integrate claude — interactive feature selection', () => {
         [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
       );
 
-      // Decline the secret scanning hooks ('n'), accept MCP ('\r').
+      // '\r' selects project scope; decline the secret scanning hooks ('n'), accept MCP ('\r').
       const result = await harness.run('integrate claude', {
-        stdinChunks: ['n', '\r'],
+        stdinChunks: ['\r', 'n', '\r'],
       });
 
       expect(result.exitCode).toBe(0);
@@ -2070,8 +2071,9 @@ describe('integrate claude — interactive feature selection', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
+      // '\r' selects project scope, then the hook + MCP + SQAA feature prompts.
       const result = await harness.run('integrate claude --project my-project', {
-        stdinChunks: ['\r', '\r', '\r'],
+        stdinChunks: ['\r', '\r', '\r', '\r'],
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
