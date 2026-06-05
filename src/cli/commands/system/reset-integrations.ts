@@ -18,54 +18,31 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, rmSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import type {
-  AgentExtension,
   CliState,
-  HookExtension,
   InstalledIntegration,
   InstalledIntegrationFeature,
 } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
 import { phaseItem } from '../../../ui';
-import { readOrInitJson, removeAgentHooks, SONAR_SECRETS_MARKER } from '../integrate/_common/hooks';
 import {
   type IntegrationDeclaration,
   integrationInstaller,
   type IntegrationRegistry,
   makeContext,
 } from '../integrate/_common/registry';
-import { removeCopilotHookConfig } from '../integrate/copilot/hooks';
 
 export interface IntegrationResetResult {
   item: PhaseItem;
   integrationFeatures: Array<{ integrationStateId: string; featureId: string }>;
-  agentExtensionIds: string[];
 }
 
-/** Maps declarative integration ids to legacy `agentExtensions.agentId` values. */
-const INTEGRATION_TO_AGENT_ID: Record<string, string> = {
-  'claude-code': 'claude-code',
-  'copilot-cli': 'copilot-cli',
-  codex: 'codex',
-};
-
 type FeatureRemoveOutcome =
-  | {
-      status: 'removed';
-      integrationStateId: string;
-      featureId: string;
-      agentExtensionIds: string[];
-    }
+  | { status: 'removed'; integrationStateId: string; featureId: string }
   | { status: 'failed'; message: string };
 
 interface DeclarativeIntegrationReset {
   integrationFeatures: Array<{ integrationStateId: string; featureId: string }>;
-  agentExtensionIds: string[];
   failed: string[];
   removedFeatures: number;
 }
@@ -73,17 +50,10 @@ interface DeclarativeIntegrationReset {
 export async function removeAllIntegrations(state: CliState): Promise<IntegrationResetResult> {
   const supportedIntegrations = await loadSupportedIntegrations();
   const declarative = await removeDeclarativeIntegrations(state, supportedIntegrations);
-  const extensionsHandledDeclaratively = new Set(declarative.agentExtensionIds);
-  const legacy = await removeLegacyAgentExtensions(state, extensionsHandledDeclaratively);
-
-  const agentExtensionIds = [...new Set([...declarative.agentExtensionIds, ...legacy.cleanedIds])];
-  const failed = [...declarative.failed, ...legacy.failed];
-  const totalRemoved = declarative.removedFeatures + legacy.removedCount;
 
   return {
-    item: buildIntegrationPhaseItem(totalRemoved, failed),
+    item: buildIntegrationPhaseItem(declarative.removedFeatures, declarative.failed),
     integrationFeatures: declarative.integrationFeatures,
-    agentExtensionIds,
   };
 }
 
@@ -97,7 +67,6 @@ async function removeDeclarativeIntegrations(
   supportedIntegrations: IntegrationRegistry,
 ): Promise<DeclarativeIntegrationReset> {
   const integrationFeatures: Array<{ integrationStateId: string; featureId: string }> = [];
-  const agentExtensionIds: string[] = [];
   const failed: string[] = [];
   let removedFeatures = 0;
 
@@ -120,7 +89,6 @@ async function removeDeclarativeIntegrations(
           integrationStateId: outcome.integrationStateId,
           featureId: outcome.featureId,
         });
-        agentExtensionIds.push(...outcome.agentExtensionIds);
         removedFeatures += 1;
       } else {
         failed.push(outcome.message);
@@ -128,7 +96,7 @@ async function removeDeclarativeIntegrations(
     }
   }
 
-  return { integrationFeatures, agentExtensionIds, failed, removedFeatures };
+  return { integrationFeatures, failed, removedFeatures };
 }
 
 async function tryRemoveInstalledFeature(
@@ -167,11 +135,6 @@ async function tryRemoveInstalledFeature(
       status: 'removed',
       integrationStateId: installed.id,
       featureId: installedFeature.featureId,
-      agentExtensionIds: collectAgentExtensionIds(
-        state,
-        installed.integrationId,
-        installedFeature.targetRoot,
-      ),
     };
   } catch (err) {
     return {
@@ -179,21 +142,6 @@ async function tryRemoveInstalledFeature(
       message: `${installed.integrationId}.${installedFeature.featureId}: ${(err as Error).message}`,
     };
   }
-}
-
-function collectAgentExtensionIds(
-  state: CliState,
-  integrationId: string,
-  targetRoot: string,
-): string[] {
-  const agentId = INTEGRATION_TO_AGENT_ID[integrationId];
-  if (!agentId) {
-    return [];
-  }
-
-  return state.agentExtensions
-    .filter((ext) => ext.agentId === agentId && ext.projectRoot === targetRoot)
-    .map((ext) => ext.id);
 }
 
 function buildIntegrationPhaseItem(totalRemoved: number, failed: string[]): PhaseItem {
@@ -211,106 +159,4 @@ function buildIntegrationPhaseItem(totalRemoved: number, failed: string[]): Phas
   }
 
   return phaseItem('Integrations', 'info', 'Nothing to remove.');
-}
-
-async function removeLegacyAgentExtensions(
-  state: CliState,
-  skipExtensionIds: ReadonlySet<string> = new Set(),
-): Promise<{ cleanedIds: string[]; failed: string[]; removedCount: number }> {
-  const cleanedIds: string[] = [];
-  const failed: string[] = [];
-  let removedCount = 0;
-
-  for (const extension of state.agentExtensions) {
-    if (skipExtensionIds.has(extension.id)) {
-      continue;
-    }
-
-    try {
-      await cleanupLegacyExtension(extension);
-      cleanedIds.push(extension.id);
-      if (extension.kind !== 'instructions') {
-        removedCount += 1;
-      }
-    } catch (err) {
-      failed.push(`${extension.agentId}/${extension.name}: ${(err as Error).message}`);
-    }
-  }
-
-  return { cleanedIds, failed, removedCount };
-}
-
-async function cleanupLegacyExtension(extension: AgentExtension): Promise<void> {
-  if (extension.kind === 'hook') {
-    await cleanupLegacyHookExtension(extension);
-    return;
-  }
-
-  if (extension.kind === 'instructions') {
-    // Drop from state only; declarative remove handles on-disk snippets for current installs.
-    return;
-  }
-
-  const skillPath = join(extension.projectRoot, '.agents', 'skills', extension.name, 'SKILL.md');
-  if (existsSync(skillPath)) {
-    rmSync(skillPath, { force: true });
-  }
-}
-
-async function cleanupLegacyHookExtension(extension: HookExtension): Promise<void> {
-  if (extension.agentId === 'claude-code') {
-    await cleanupClaudeLegacyHook(extension);
-    return;
-  }
-
-  if (extension.agentId === 'copilot-cli') {
-    await cleanupCopilotLegacyHook(extension);
-    return;
-  }
-
-  throw new Error(`Unsupported legacy hook agent '${extension.agentId}'; remove it manually.`);
-}
-
-function claudeHookMarkers(extension: HookExtension): string[] {
-  if (extension.name === 'sonar-sqaa') {
-    return ['sonar-sqaa'];
-  }
-  if (extension.name === SONAR_SECRETS_MARKER) {
-    return [SONAR_SECRETS_MARKER];
-  }
-  return [extension.name];
-}
-
-async function cleanupClaudeLegacyHook(extension: HookExtension): Promise<void> {
-  const settingsPath = join(extension.projectRoot, '.claude', 'settings.json');
-  if (existsSync(settingsPath)) {
-    const document = await readOrInitJson(settingsPath, { hooks: {} });
-    const updated = removeAgentHooks(document, claudeHookMarkers(extension));
-    await writeFile(settingsPath, `${JSON.stringify(updated, null, 2)}\n`);
-  }
-
-  const hookDir = join(extension.projectRoot, '.claude', 'hooks', extension.name);
-  if (existsSync(hookDir)) {
-    rmSync(hookDir, { recursive: true, force: true });
-  }
-}
-
-async function cleanupCopilotLegacyHook(extension: HookExtension): Promise<void> {
-  const hooksJsonPath = extension.global
-    ? join(homedir(), '.copilot', 'hooks', 'hooks.json')
-    : join(extension.projectRoot, '.github', 'hooks', 'hooks.json');
-
-  if (existsSync(hooksJsonPath)) {
-    const raw = await readFile(hooksJsonPath, 'utf-8');
-    const document = JSON.parse(raw) as unknown;
-    const updated = removeCopilotHookConfig(document);
-    await writeFile(hooksJsonPath, `${JSON.stringify(updated, null, 2)}\n`);
-  }
-
-  const scriptDir = extension.global
-    ? join(homedir(), '.copilot', 'hooks', SONAR_SECRETS_MARKER)
-    : join(extension.projectRoot, '.github', 'hooks', SONAR_SECRETS_MARKER);
-  if (existsSync(scriptDir)) {
-    rmSync(scriptDir, { recursive: true, force: true });
-  }
 }

@@ -38,7 +38,6 @@ interface CleanedFields {
   dependencyIds: string[];
   toolNames: string[];
   integrationFeatures: Array<{ integrationStateId: string; featureId: string }>;
-  agentExtensionIds: string[];
 }
 
 interface StepResult {
@@ -52,7 +51,6 @@ function emptyCleanedFields(overrides: Partial<CleanedFields> = {}): CleanedFiel
     dependencyIds: [],
     toolNames: [],
     integrationFeatures: [],
-    agentExtensionIds: [],
     ...overrides,
   };
 }
@@ -63,7 +61,6 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
     dependencyIds: fields.flatMap((f) => f.dependencyIds),
     toolNames: fields.flatMap((f) => f.toolNames),
     integrationFeatures: fields.flatMap((f) => f.integrationFeatures),
-    agentExtensionIds: fields.flatMap((f) => f.agentExtensionIds),
   };
 }
 
@@ -79,42 +76,46 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
   info('Cleaning up SonarQube CLI environment...');
 
   const state = loadState();
+  const results: StepResult[] = [];
 
-  const authResult = await purgeAuth(state);
-  const binaryResult = await removeBinaries(state);
-  const integrationResult = await removeAllIntegrations(state);
-  const filesystemResult = clearFilesystem();
-
-  const results: StepResult[] = [
-    {
+  try {
+    const authResult = await purgeAuth(state);
+    results.push({
       item: authResult.item,
       cleaned: emptyCleanedFields({ authConnectionIds: authResult.authConnectionIds }),
-    },
-    {
+    });
+
+    const binaryResult = await removeBinaries(state);
+    results.push({
       item: binaryResult.item,
       cleaned: emptyCleanedFields({
         dependencyIds: binaryResult.dependencyIds,
         toolNames: binaryResult.toolNames,
       }),
-    },
-    {
+    });
+
+    const integrationResult = await removeAllIntegrations(state);
+    results.push({
       item: integrationResult.item,
       cleaned: emptyCleanedFields({
         integrationFeatures: integrationResult.integrationFeatures,
-        agentExtensionIds: integrationResult.agentExtensionIds,
       }),
-    },
-    { item: filesystemResult.item, cleaned: emptyCleanedFields() },
-  ];
+    });
 
-  phase(
-    'Reset',
-    results.map((r) => r.item),
-  );
+    const filesystemResult = clearFilesystem();
+    results.push({ item: filesystemResult.item, cleaned: emptyCleanedFields() });
+  } finally {
+    if (results.length > 0) {
+      phase(
+        'Reset',
+        results.map((r) => r.item),
+      );
 
-  applyCleanedState(state, mergeCleanedFields(results.map((r) => r.cleaned)));
-  clearLegacyState(state);
-  saveState(state);
+      applyCleanedState(state, mergeCleanedFields(results.map((r) => r.cleaned)));
+      clearLegacyState(state);
+      saveState(state);
+    }
+  }
 
   const hasIssues = results.some((r) => r.item.status === 'warn');
   if (hasIssues) {
@@ -203,16 +204,12 @@ function applyCleanedState(state: CliState, cleaned: CleanedFields): void {
       .map((i) => removeCleanedFeatures(i, cleanedFeatures))
       .filter((i) => i.features.length > 0);
   }
-
-  if (cleaned.agentExtensionIds.length > 0) {
-    const removedIds = new Set(cleaned.agentExtensionIds);
-    state.agentExtensions = state.agentExtensions.filter((e) => !removedIds.has(e.id));
-  }
 }
 
 function clearLegacyState(state: CliState): void {
   const defaults = getDefaultState(VERSION);
   state.agents = defaults.agents;
+  state.agentExtensions = defaults.agentExtensions;
   if (state.tools?.installed.length === 0) {
     state.tools = defaults.tools;
   }
