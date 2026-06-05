@@ -457,7 +457,7 @@ describe('integrate codex', () => {
     it(
       'does not install PostToolUse SQAA hook when the org has no entitlement',
       async () => {
-        const result = await harness.run('integrate codex');
+        const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
@@ -481,18 +481,21 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
 
-        await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
+        await harness.run(`integrate codex --project ${TEST_PROJECT} --non-interactive`, {
           extraEnv: {
             SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
             SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
           },
         });
-        const result = await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        const result = await harness.run(
+          `integrate codex --project ${TEST_PROJECT} --non-interactive`,
+          {
+            extraEnv: {
+              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+            },
           },
-        });
+        );
 
         expect(result.exitCode).toBe(0);
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
@@ -533,12 +536,15 @@ describe('integrate codex', () => {
           }),
         );
 
-        const result = await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
-          extraEnv: {
-            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        const result = await harness.run(
+          `integrate codex --project ${TEST_PROJECT} --non-interactive`,
+          {
+            extraEnv: {
+              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+            },
           },
-        });
+        );
 
         expect(result.exitCode).toBe(0);
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
