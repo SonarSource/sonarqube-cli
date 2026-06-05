@@ -171,7 +171,7 @@ describe('phase: non-TTY output', () => {
     }
   });
 
-  it('renders sub-items as a bullet list under the item', () => {
+  it('renders sub-items as an indented list under the item', () => {
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
       output.push(String(s));
@@ -180,8 +180,8 @@ describe('phase: non-TTY output', () => {
     try {
       phase('Installed', [phaseItem('Feature', 'done', undefined, ['~/.config/a', '~/.config/b'])]);
       const combined = output.join('');
-      expect(combined).toContain('* ~/.config/a');
-      expect(combined).toContain('* ~/.config/b');
+      expect(combined).toContain('       ~/.config/a');
+      expect(combined).toContain('       ~/.config/b');
     } finally {
       writeSpy.mockRestore();
     }

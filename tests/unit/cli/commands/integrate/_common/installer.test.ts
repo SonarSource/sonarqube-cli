@@ -106,9 +106,7 @@ describe('generic integration installer', () => {
     expect(await readFile(join(tempDir, 'config.txt'), 'utf-8')).toBe('enabled=true\n');
     expect(operationCalls).toEqual(['called']);
     expect(saveStateSpy).toHaveBeenCalledWith(state);
-    expect(hasUiCall('text', 'Installing Test Integration: Feature')).toBe(true);
-    expect(hasUiCall('discreetSuccess', 'Installed Config file')).toBe(true);
-    expect(hasUiCall('discreetSuccess', 'Applied Setup operation')).toBe(true);
+    expect(hasUiCall('text', 'Installing Feature...')).toBe(true);
   });
 
   it('supports feature-specific target routing from a single installer invocation', async () => {
@@ -306,7 +304,87 @@ describe('generic integration installer', () => {
     });
 
     expect(installed[0].resources.some((resource) => resource.id === 'file')).toBe(true);
-    expect(hasUiCall('info', 'Config file already installed')).toBe(true);
+    expect(hasUiCall('text', 'Config file already installed')).toBe(true);
+  });
+
+  it('falls back to the resource id in the skip message when no displayName is set', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const feature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      resources: [
+        wholeFile({
+          id: 'unnamed-file',
+          targetPath: join(tempDir, 'unnamed.txt'),
+          content: 'enabled=true\n',
+        }),
+      ],
+    };
+    const integration = registerIntegration(registry, 'installer-skip-unnamed-resource', [feature]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+    clearMockUiCalls();
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(hasUiCall('text', 'unnamed-file already installed')).toBe(true);
+  });
+
+  it('falls back to the dependency id in the skip message when no displayName is set', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const dependency: DependencyDeclaration = {
+      id: 'unnamed-binary',
+      dependencyType: 'binary',
+      version: '1',
+      installOrUpdate: () => ({
+        id: 'unnamed-binary',
+        dependencyType: 'binary',
+        version: '1',
+        path: '/opt/sonar/unnamed-binary',
+      }),
+      isInstalled: () => true,
+    };
+    const integration = registerIntegration(registry, 'installer-skip-unnamed-dependency', [
+      {
+        id: 'feature',
+        displayName: 'Feature',
+        dependencies: [dependency],
+        operations: [{ id: 'noop', apply: () => undefined }],
+      },
+    ]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+    clearMockUiCalls();
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(hasUiCall('text', 'unnamed-binary already installed')).toBe(true);
   });
 
   it('does not run operations when shouldApply returns false', async () => {

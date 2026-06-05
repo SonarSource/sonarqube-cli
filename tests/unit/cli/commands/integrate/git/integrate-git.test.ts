@@ -619,7 +619,7 @@ describe('integrateGitGlobal', () => {
     expect(caughtMessage).toBe('download failed');
   });
 
-  it('shows success messages when the full global installation succeeds', async () => {
+  it('shows the installed feature in the completion summary when the full global installation succeeds', async () => {
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
       stdout: '',
@@ -628,20 +628,10 @@ describe('integrateGitGlobal', () => {
     try {
       await integrateGit({ global: true, nonInteractive: true, hook: 'pre-commit' });
       const calls = getMockUiCalls();
-      expect(
-        calls.some(
-          (c) =>
-            c.method === 'discreetSuccess' &&
-            String(c.args[0]).includes('Installed pre-commit hook'),
-        ),
-      ).toBe(true);
-      expect(
-        calls.some(
-          (c) =>
-            c.method === 'discreetSuccess' &&
-            String(c.args[0]).includes('Applied global hooks path'),
-        ),
-      ).toBe(true);
+      const summaryCall = calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
+      expect(summaryCall).toBeDefined();
+      const items = (summaryCall?.args[1] ?? []) as Array<{ text: string }>;
+      expect(items.some((item) => item.text === 'pre-commit hook')).toBe(true);
       expect(state.integrations.installed[0]?.integrationId).toBe('native-git');
     } finally {
       spawnSpy.mockRestore();

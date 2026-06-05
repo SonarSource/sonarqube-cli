@@ -20,7 +20,7 @@
 
 import { normalizePath } from '../../../../lib/fs-utils';
 import type { IntegrationScope } from '../../../../lib/state';
-import { info, selectPrompt } from '../../../../ui';
+import { blank, info, selectPrompt } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 
 export interface IntegrateScopeOptions {
@@ -85,6 +85,7 @@ export async function resolveIntegrateScope(
   if (choice === null) {
     throw new CommandFailedError('Installation cancelled');
   }
+  blank();
   return choice;
 }
 

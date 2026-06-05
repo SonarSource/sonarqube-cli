@@ -404,7 +404,7 @@ describe('integrate git (native hooks)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(false);
     },
@@ -422,8 +422,8 @@ describe('integrate git (native hooks)', () => {
       const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
-      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
 
@@ -479,7 +479,7 @@ describe('integrate git (native hooks)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(false);
     },
@@ -554,8 +554,7 @@ describe('integrate git (native hooks)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
-      expect(result.stdout + result.stderr).toContain('Applied global hooks path');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
     },
@@ -595,8 +594,7 @@ describe('integrate git (native hooks)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
-      expect(result.stdout + result.stderr).toContain('Applied global hooks path');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(true);
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(false);
     },
@@ -624,10 +622,8 @@ describe('integrate git (husky)', () => {
       const result = await harness.run('integrate git --hook pre-commit --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        'Installing Husky integration: pre-commit hook',
-      );
-      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('Installing pre-commit hook...');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
       expect(harness.cwd.exists('.husky', 'pre-commit')).toBe(true);
       const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-commit'), 'utf-8');
       expect(hookContent).toContain('hook git-pre-commit');
@@ -689,10 +685,8 @@ describe('integrate git (husky)', () => {
       const result = await harness.run('integrate git --hook pre-push --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        'Installing Husky integration: pre-push hook',
-      );
-      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
+      expect(result.stdout + result.stderr).toContain('Installing pre-push hook...');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
       expect(harness.cwd.exists('.husky', 'pre-push')).toBe(true);
       const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-push'), 'utf-8');
       expect(hookContent).toContain('hook git-pre-push');
@@ -777,10 +771,8 @@ describe('integrate git (pre-commit framework)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        'Installing pre-commit integration: pre-commit hook',
-      );
-      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('Installing pre-commit hook...');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
 
       const config = readYamlFile<PreCommitYamlConfig>(
         join(harness.cwd.path, '.pre-commit-config.yaml'),
@@ -821,10 +813,8 @@ describe('integrate git (pre-commit framework)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        'Installing pre-commit integration: pre-push hook',
-      );
-      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
+      expect(result.stdout + result.stderr).toContain('Installing pre-push hook...');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
 
       const config = readYamlFile<PreCommitYamlConfig>(
         join(harness.cwd.path, '.pre-commit-config.yaml'),
