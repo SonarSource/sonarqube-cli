@@ -42,8 +42,9 @@ export interface RunOptions {
   stdinChunks?: string[];
   /**
    * Delay in milliseconds between successive `stdinChunks` writes. Defaults to
-   * 300 ms. Raise this when slow work (e.g. spawning `git` subprocesses)
-   * happens between prompts, so each chunk lands after its prompt is listening.
+   * 300 ms. The harness waits for the first stdout byte before writing any
+   * chunk, then pauses this long between chunks so readline is listening.
+   * Raise this when slow work happens between prompts (e.g. spawning `git`).
    */
   stdinChunkDelayMs?: number;
   /**

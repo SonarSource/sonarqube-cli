@@ -31,6 +31,7 @@ import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { printGitPreflightSummary } from '../_common/preflight-summary';
 import { installIntegration } from '../_common/registry';
+import { supportedIntegrations } from '../index.js';
 import type { GitHookType, IntegrateGitOptions } from './options';
 import {
   hasSonarHookInPreCommitConfig,
@@ -160,6 +161,7 @@ async function installGitFeatures(
 ): Promise<void> {
   const integrationId = await resolveGitIntegrationId(targetRoot, scope);
   await installIntegration({
+    registry: supportedIntegrations,
     integrationId,
     options,
     targetRoot,

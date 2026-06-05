@@ -22,7 +22,7 @@ import { deleteToken, getToken } from '../../../lib/keychain';
 import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { getActiveConnection, removeConnection } from '../../../lib/state-manager';
 import { print, success } from '../../../ui';
-import { revokeServerTokenIfPossible } from './revoke-server-token';
+import { reportRevokeServerTokenOutcome, revokeServerTokenIfPossible } from './revoke-server-token';
 
 /**
  * Logout command - remove token from keychain
@@ -40,7 +40,10 @@ export async function authLogout(): Promise<void> {
   const org = active.orgKey;
   const token = (await getToken(server, org)) ?? undefined;
 
-  await revokeServerTokenIfPossible(active, token);
+  const revokeOutcome = await revokeServerTokenIfPossible(active, token);
+  reportRevokeServerTokenOutcome(revokeOutcome, {
+    continuingMessage: 'Continuing with local logout.',
+  });
 
   await deleteToken(server, org);
 

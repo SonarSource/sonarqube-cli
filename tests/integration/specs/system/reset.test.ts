@@ -20,7 +20,17 @@
 
 // Integration tests for `sonar system reset`
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -29,7 +39,33 @@ import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git
 import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { TestHarness } from '../../harness';
-import { buildHomeEnv } from '../../harness/platform';
+import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
+
+/** Unix-only: verify chmod 555 actually blocks recursive removal on this host. */
+function unixChmodBlocksDirectoryRemoval(): boolean {
+  if (IS_WINDOWS || typeof process.getuid !== 'function' || process.getuid() === 0) {
+    return false;
+  }
+
+  const probeDir = mkdtempSync(join(tmpdir(), 'sonar-reset-probe-'));
+  try {
+    writeFileSync(join(probeDir, 'probe'), 'x');
+    chmodSync(probeDir, 0o555);
+    try {
+      rmSync(probeDir, { recursive: true, force: true });
+      return false;
+    } catch {
+      return true;
+    }
+  } finally {
+    if (existsSync(probeDir)) {
+      chmodSync(probeDir, 0o755);
+      rmSync(probeDir, { recursive: true, force: true });
+    }
+  }
+}
+
+const SKIP_CHMOD_REMOVAL_TEST = IS_WINDOWS || !unixChmodBlocksDirectoryRemoval();
 
 interface AuthSnapshot {
   isAuthenticated: boolean;
@@ -168,6 +204,37 @@ describe('system reset --force', () => {
   );
 
   it(
+    'warns and still removes local auth when server-side token revocation fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('reset-token')
+        .withTokenRevocationFailure(500, 'revocation boom')
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), 'reset-token')
+        .withTokenName('cli-reset-token')
+        .withKeychainToken(server.baseUrl(), 'reset-token');
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        `Failed to revoke the server-side token "cli-reset-token": SonarQube API error: 500 Internal Server Error - revocation boom for ${server.baseUrl()}. Continuing with local reset.`,
+      );
+      expect(result.stdout).toContain('Authentication: 1 token removed from keychain.');
+
+      const account = generateKeychainAccount(server.baseUrl());
+      expect(readKeychainTokens(harness.keychainJsonFile)[account]).toBeUndefined();
+      const state = readState(harness.stateJsonFile.path);
+      expect(state.auth.connections).toHaveLength(0);
+      expect(state.auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'purges every token when multiple connections are reset together',
     async () => {
       const now = new Date().toISOString();
@@ -290,6 +357,48 @@ describe('system reset --force', () => {
       expect(existsSync(logDir)).toBe(false);
       expect(existsSync(cacheDir)).toBe(false);
       expect(SCA_SCANNER_CACHE_DIR).toContain('sca-scanner-cache');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports cleared size for nested cache directories with large files',
+    async () => {
+      const logDir = join(harness.cliHome.path, 'logs');
+      const nestedDir = join(logDir, 'nested');
+      mkdirSync(nestedDir, { recursive: true });
+      writeFileSync(join(logDir, 'root.log'), 'x'.repeat(2048), 'utf-8');
+      writeFileSync(join(nestedDir, 'child.log'), 'y'.repeat(1024 * 1024), 'utf-8');
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Filesystem:.*Cleared CLI cache and logs \(1MB cleared\)/);
+      expect(existsSync(logDir)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(SKIP_CHMOD_REMOVAL_TEST)(
+    'warns and exits 1 when a cache directory cannot be removed',
+    async () => {
+      const logDir = join(harness.cliHome.path, 'logs');
+      mkdirSync(logDir, { recursive: true });
+      writeFileSync(join(logDir, 'sonarqube-cli.log'), 'fake log content', 'utf-8');
+      chmodSync(logDir, 0o555);
+
+      try {
+        const result = await harness.run('system reset --force');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toMatch(/Filesystem:.*Failed to clear some directories/);
+        expect(result.stderr).toContain('System reset completed with warnings');
+        expect(existsSync(logDir)).toBe(true);
+      } finally {
+        if (existsSync(logDir)) {
+          chmodSync(logDir, 0o755);
+        }
+      }
     },
     { timeout: 15000 },
   );

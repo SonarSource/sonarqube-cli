@@ -22,7 +22,10 @@ import { deleteToken, getToken } from '../../../lib/keychain';
 import type { CliState } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
 import { phaseItem } from '../../../ui';
-import { revokeServerTokenIfPossible } from '../auth/revoke-server-token';
+import {
+  reportRevokeServerTokenOutcome,
+  revokeServerTokenIfPossible,
+} from '../auth/revoke-server-token';
 
 export interface AuthResetResult {
   item: PhaseItem;
@@ -43,7 +46,11 @@ export async function purgeAuth(state: CliState): Promise<AuthResetResult> {
     const target = conn.orgKey ? `${conn.serverUrl} (${conn.orgKey})` : conn.serverUrl;
     try {
       const token = (await getToken(conn.serverUrl, conn.orgKey)) ?? undefined;
-      await revokeServerTokenIfPossible(conn, token, 'reset');
+      const revokeOutcome = await revokeServerTokenIfPossible(conn, token);
+      reportRevokeServerTokenOutcome(revokeOutcome, {
+        serverUrl: conn.serverUrl,
+        continuingMessage: 'Continuing with local reset.',
+      });
       await deleteToken(conn.serverUrl, conn.orgKey);
       outcomes.push({ status: 'cleaned', connectionId: conn.id });
     } catch (err) {

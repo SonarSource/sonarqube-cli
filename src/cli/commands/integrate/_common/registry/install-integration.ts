@@ -44,7 +44,7 @@ import type {
 } from './types';
 
 export interface InstallIntegrationOptions<TOptions> {
-  registry?: IntegrationRegistry;
+  registry: IntegrationRegistry;
   integrationId: string;
   options: TOptions;
   targetRoot: string;
@@ -54,16 +54,6 @@ export interface InstallIntegrationOptions<TOptions> {
   attrs?: Record<string, IntegrationStateAttribute>;
   featureIds?: string[];
   nonInteractive?: boolean;
-}
-
-async function resolveIntegrationRegistry(
-  registry: IntegrationRegistry | undefined,
-): Promise<IntegrationRegistry> {
-  if (registry) {
-    return registry;
-  }
-  const { supportedIntegrations } = await import('../../index.js');
-  return supportedIntegrations;
 }
 
 export async function installIntegration<TOptions>({
@@ -78,8 +68,7 @@ export async function installIntegration<TOptions>({
   featureIds,
   nonInteractive,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
-  const resolvedRegistry = await resolveIntegrationRegistry(registry);
-  const integration = getIntegrationDeclaration<TOptions>(resolvedRegistry, integrationId);
+  const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
   const state = loadStateForInstallation();
   const invocation: IntegrationInvocation<TOptions> = {
     options,

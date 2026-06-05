@@ -33,6 +33,7 @@ import {
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
+import { supportedIntegrations } from '../index.js';
 import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaration';
 
 export async function integrateCodex(
@@ -71,6 +72,7 @@ export async function integrateCodex(
   } satisfies CodexIntegrationOptions;
 
   await installIntegration({
+    registry: supportedIntegrations,
     integrationId: CODEX_INTEGRATION_ID,
     options: integrationOptions,
     targetRoot: installRoot,

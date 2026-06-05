@@ -47,19 +47,16 @@ interface DeclarativeIntegrationReset {
   removedFeatures: number;
 }
 
-export async function removeAllIntegrations(state: CliState): Promise<IntegrationResetResult> {
-  const supportedIntegrations = await loadSupportedIntegrations();
+export async function removeAllIntegrations(
+  state: CliState,
+  supportedIntegrations: IntegrationRegistry,
+): Promise<IntegrationResetResult> {
   const declarative = await removeDeclarativeIntegrations(state, supportedIntegrations);
 
   return {
     item: buildIntegrationPhaseItem(declarative.removedFeatures, declarative.failed),
     integrationFeatures: declarative.integrationFeatures,
   };
-}
-
-async function loadSupportedIntegrations(): Promise<IntegrationRegistry> {
-  const { supportedIntegrations } = await import('../integrate/index.js');
-  return supportedIntegrations;
 }
 
 async function removeDeclarativeIntegrations(
