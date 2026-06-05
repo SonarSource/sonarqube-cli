@@ -136,7 +136,11 @@ export async function displayAgentIntegratePrelude(
     projectKey,
     cliProjectKey: options.project,
   });
-  const scope = await resolveIntegrateScope({ ...options, projectRoot: project.rootDir });
+  const scope = await resolveIntegrateScope({
+    ...options,
+    projectRoot: project.rootDir,
+    projectKey: options.project,
+  });
   const isGlobal = isGlobalIntegrateScope(scope);
   warnMissingIntegrateProjectKey(subcommand, isGlobal, projectKey);
   return buildAgentIntegrateContext({ ...options, global: isGlobal }, auth, project);

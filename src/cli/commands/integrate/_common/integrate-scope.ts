@@ -28,6 +28,8 @@ export interface IntegrateScopeOptions {
   nonInteractive?: boolean;
   /** Project install root shown in the interactive scope prompt and non-interactive default line. */
   projectRoot?: string;
+  /** Explicit project key (e.g. `--project`); implies project scope and skips the prompt. */
+  projectKey?: string;
 }
 
 function formatNonInteractiveDefaultInfo(projectRoot: string | undefined): string {
@@ -44,15 +46,20 @@ export function buildProjectScopeLabel(projectRoot: string): string {
 /**
  * Resolve whether an integrate command should install at project or global scope.
  *
- * When `--global` is set, scope is global. When `--non-interactive` is set without
- * `--global`, scope defaults to project with an info line. Otherwise the user is
- * prompted to choose.
+ * When `--global` is set, scope is global. When an explicit project key was
+ * supplied, scope is project (the prompt is skipped). When `--non-interactive`
+ * is set without `--global`, scope defaults to project with an info line.
+ * Otherwise the user is prompted to choose.
  */
 export async function resolveIntegrateScope(
   options: IntegrateScopeOptions,
 ): Promise<IntegrationScope> {
   if (options.global === true) {
     return 'global';
+  }
+
+  if (options.projectKey) {
+    return 'project';
   }
 
   if (options.nonInteractive) {

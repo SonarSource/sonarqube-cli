@@ -58,6 +58,11 @@ describe('resolveIntegrateScope', () => {
     expect(findMockUiCall('info', 'defaulting to this project (/workspace/my-repo)')).toBeDefined();
   });
 
+  it('returns project without prompting when a project key was provided', async () => {
+    expect(await resolveIntegrateScope({ projectKey: 'my-project' })).toBe('project');
+    expect(getMockUiCalls().some((c) => c.method === 'selectPrompt')).toBe(false);
+  });
+
   it('prompts interactively when a project root is provided', async () => {
     queueMockResponse('project');
     expect(await resolveIntegrateScope({ projectRoot: '/workspace/my-repo' })).toBe('project');

@@ -40,7 +40,7 @@ By default, new commands should register a `authenticatedAction()`, only technic
 
 Declarative integration registry helpers live in `src/cli/commands/integrate/_common/registry/index.ts`. New integration descriptors should use that public entrypoint for dependency/resource factories, operations, and registry validation. Command handlers should keep command-specific validation, prompts, and target resolution thin, then delegate feature selection, generic install messages, dependency/resource application, and state recording to `src/cli/commands/integrate/_common/installer.ts`.
 
-All `sonar integrate` subcommands share install-scope resolution via `resolveIntegrateScope()` (exported from the registry). When `--global` is omitted, interactive sessions prompt for project vs global scope after the connection/project preflight summary; `--non-interactive` defaults to project and logs an info line after that summary. Agent handlers resolve scope at the end of `displayAgentIntegratePrelude()`; `integrate git` resolves scope after `printGitPreflightSummary()` when a repository is detected.
+All `sonar integrate` subcommands share install-scope resolution via `resolveIntegrateScope()` (exported from the registry). When `--global` is omitted, interactive sessions prompt for project vs global scope after the connection/project preflight summary; `--non-interactive` defaults to project and logs an info line after that summary. An explicit project key (e.g. `--project`) implies project scope and skips the prompt. Agent handlers resolve scope at the end of `displayAgentIntegratePrelude()`; `integrate git` resolves scope after `printGitPreflightSummary()` when a repository is detected.
 
 ### Context Augmentation
 
