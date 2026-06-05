@@ -381,26 +381,29 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'defaults to the pre-commit hook when --non-interactive is used without --hook',
+    'installs all hooks when --non-interactive is used without --hook',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // No --hook flag: shouldInstallHook() must default to pre-commit and skip pre-push.
+      // No --hook flag: shouldInstallHook() defaults to ask, which the installer
+      // resolves to install for every hook in --non-interactive mode.
       const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
-      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(false);
+      expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
 
       const state = harness.stateJsonFile.asJson() as InstalledStateJson;
       const gitIntegration = getInstalledIntegration(state, 'native-git');
-      expect(gitIntegration.features).toHaveLength(1);
-      expect(gitIntegration.features[0]).toMatchObject({
-        featureId: 'pre-commit-hook',
-        scope: 'project',
-      });
+      expect(gitIntegration.features).toHaveLength(2);
+      expect(
+        gitIntegration.features
+          .map((feature) => feature.featureId)
+          .sort((a, b) => a.localeCompare(b)),
+      ).toEqual(['pre-commit-hook', 'pre-push-hook']);
     },
     { timeout: 15000 },
   );

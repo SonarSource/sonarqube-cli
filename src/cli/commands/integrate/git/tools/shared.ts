@@ -34,9 +34,6 @@ export function shouldInstallHook(
   if (options.hook !== undefined) {
     return options.hook === hook ? install() : skip();
   }
-  if (options.nonInteractive) {
-    return hook === 'pre-commit' ? install() : skip();
-  }
   return askUser();
 }
 export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping secrets scan';
