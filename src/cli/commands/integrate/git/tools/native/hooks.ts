@@ -25,7 +25,7 @@ import { dirname, join } from 'node:path';
 import { discreetSuccess, text, warn } from '../../../../../../ui';
 import { CommandFailedError } from '../../../../_common/error';
 import type { GitHookType } from '../../options';
-import { HOOK_MARKER } from '../shared';
+import { HOOK_MARKER, normalizeLineEndings } from '../shared';
 import { getHookScript } from './shell-fragments';
 
 const OVERWRITE_HOOK_REMEDIATION_HINT = 'Use --force to replace the existing hook.';
@@ -57,4 +57,22 @@ export async function installViaGitHooks(
   const hookPath = join(hooksDir, hook);
   await writeManagedGitHook(hookPath, hook, force);
   discreetSuccess(`${hook} hook installed at ${hookPath}`);
+}
+
+/**
+ * Remove a Sonar-managed native git hook file when it matches our install marker or content.
+ */
+export async function removeManagedGitHook(hookPath: string, hook: GitHookType): Promise<void> {
+  if (!existsSync(hookPath)) {
+    return;
+  }
+
+  const existing = await fs.readFile(hookPath, 'utf-8');
+  const managedContent = normalizeLineEndings(getHookScript(hook));
+  const normalizedExisting = normalizeLineEndings(existing);
+  if (normalizedExisting !== managedContent && !existing.includes(HOOK_MARKER)) {
+    return;
+  }
+
+  await fs.rm(hookPath, { force: true });
 }

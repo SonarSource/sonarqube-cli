@@ -42,6 +42,11 @@ export function resolveSonarHookCommand(hook: GitHookType): string {
   return hook === 'pre-commit' ? 'git-pre-commit' : 'git-pre-push';
 }
 
+/** Normalize CRLF to LF so hook content comparisons are platform-independent. */
+export function normalizeLineEndings(content: string): string {
+  return content.replaceAll('\r\n', '\n');
+}
+
 const VERIFY_FILE_NAME = 'sonar-hook-verify.js';
 const VERIFY_SECRET_CONTENT = 'const API_KEY = "sqp_b4556a16fa2d28519d2451a911d2e073024010bc";';
 

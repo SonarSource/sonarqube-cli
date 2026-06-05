@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -59,5 +59,45 @@ describe('nativeGitHookResource', () => {
     });
 
     expect(isApplied).toBe(true);
+  });
+
+  it('remove deletes a Sonar-managed hook file', async () => {
+    const hookPath = join(TEMP_DIR, 'pre-commit');
+    const resource = nativeGitHookResource({
+      id: 'hook-file',
+      displayName: 'pre-commit hook',
+      hook: 'pre-commit',
+    });
+    writeFileSync(hookPath, getPreCommitHookScript(), { mode: 0o755 });
+
+    await resource.remove!({
+      state: getDefaultState('test'),
+      targetRoot: TEMP_DIR,
+      scope: 'global',
+      executionMode: 'install',
+      resolvedDependencies: new Map(),
+    });
+
+    expect(existsSync(hookPath)).toBe(false);
+  });
+
+  it('remove leaves a third-party hook file without the Sonar marker', async () => {
+    const hookPath = join(TEMP_DIR, 'pre-commit');
+    const resource = nativeGitHookResource({
+      id: 'hook-file',
+      displayName: 'pre-commit hook',
+      hook: 'pre-commit',
+    });
+    writeFileSync(hookPath, '#!/bin/sh\necho custom\n', { mode: 0o755 });
+
+    await resource.remove!({
+      state: getDefaultState('test'),
+      targetRoot: TEMP_DIR,
+      scope: 'global',
+      executionMode: 'install',
+      resolvedDependencies: new Map(),
+    });
+
+    expect(existsSync(hookPath)).toBe(true);
   });
 });

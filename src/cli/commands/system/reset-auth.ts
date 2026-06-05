@@ -19,52 +19,40 @@
  */
 
 import { deleteToken, getToken } from '../../../lib/keychain';
-import type { AuthConnection, CliState } from '../../../lib/state';
-import { SonarQubeClient } from '../../../sonarqube/client';
+import type { CliState } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
-import { phaseItem, warn } from '../../../ui';
+import { phaseItem } from '../../../ui';
+import { revokeServerTokenIfPossible } from '../auth/revoke-server-token';
 
 export interface AuthResetResult {
   item: PhaseItem;
   authConnectionIds: string[];
 }
 
-async function revokeServerTokenIfPossible(
-  connection: AuthConnection,
-  token: string | undefined,
-): Promise<void> {
-  if (!connection.tokenName) {
-    return;
-  }
-
-  if (!token) {
-    return;
-  }
-
-  try {
-    await new SonarQubeClient(connection.serverUrl, token).revokeUserToken(connection.tokenName);
-  } catch (error) {
-    warn(
-      `Failed to revoke server-side token "${connection.tokenName}" for ${connection.serverUrl}: ${(error as Error).message}`,
-    );
-  }
-}
+type ConnectionOutcome =
+  | { status: 'cleaned'; connectionId: string }
+  | { status: 'failed'; message: string };
 
 export async function purgeAuth(state: CliState): Promise<AuthResetResult> {
-  const cleanedIds: string[] = [];
-  const failed: string[] = [];
-
+  // Delete tokens sequentially: the file-backed keychain (CI/tests) does an
+  // unsynchronized read-modify-write of a single JSON store, so concurrent
+  // deletions race and can clobber each other. Server-side revocation still
+  // fails fast via its own 10s timeout.
+  const outcomes: ConnectionOutcome[] = [];
   for (const conn of state.auth.connections) {
     const target = conn.orgKey ? `${conn.serverUrl} (${conn.orgKey})` : conn.serverUrl;
     try {
       const token = (await getToken(conn.serverUrl, conn.orgKey)) ?? undefined;
-      await revokeServerTokenIfPossible(conn, token);
+      await revokeServerTokenIfPossible(conn, token, 'reset');
       await deleteToken(conn.serverUrl, conn.orgKey);
-      cleanedIds.push(conn.id);
+      outcomes.push({ status: 'cleaned', connectionId: conn.id });
     } catch (err) {
-      failed.push(`${target}: ${(err as Error).message}`);
+      outcomes.push({ status: 'failed', message: `${target}: ${(err as Error).message}` });
     }
   }
+
+  const cleanedIds = outcomes.flatMap((o) => (o.status === 'cleaned' ? [o.connectionId] : []));
+  const failed = outcomes.flatMap((o) => (o.status === 'failed' ? [o.message] : []));
 
   let item: PhaseItem;
   if (failed.length > 0) {
@@ -77,7 +65,7 @@ export async function purgeAuth(state: CliState): Promise<AuthResetResult> {
     item = phaseItem(
       'Authentication',
       'done',
-      `${cleanedIds.length} tokens removed from keychain.`,
+      `${cleanedIds.length} token${cleanedIds.length === 1 ? '' : 's'} removed from keychain.`,
     );
   }
 

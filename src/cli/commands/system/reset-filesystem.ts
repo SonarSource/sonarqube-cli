@@ -20,7 +20,12 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
-import { CLI_DIR, LOG_DIR, SCA_SCANNER_CACHE_DIR } from '../../../lib/config-constants';
+import {
+  CLI_DIR,
+  GLOBAL_HOOKS_DIR,
+  LOG_DIR,
+  SCA_SCANNER_CACHE_DIR,
+} from '../../../lib/config-constants';
 import type { PhaseItem } from '../../../ui';
 import { phaseItem } from '../../../ui';
 import { directorySizeBytes, formatByteSize } from './dir-size';
@@ -30,7 +35,7 @@ export interface FilesystemResetResult {
   item: PhaseItem;
 }
 
-const CACHE_DIRS = [LOG_DIR, SCA_SCANNER_CACHE_DIR];
+const CACHE_DIRS = [LOG_DIR, SCA_SCANNER_CACHE_DIR, GLOBAL_HOOKS_DIR];
 
 export function clearFilesystem(): FilesystemResetResult {
   const failed: string[] = [];
@@ -45,9 +50,10 @@ export function clearFilesystem(): FilesystemResetResult {
     }
 
     try {
-      bytesFreed += directorySizeBytes(safeDir);
       if (existsSync(safeDir)) {
+        const dirBytes = directorySizeBytes(safeDir);
         rmSync(safeDir, { recursive: true, force: true });
+        bytesFreed += dirBytes;
         removedCount += 1;
       }
     } catch (err) {

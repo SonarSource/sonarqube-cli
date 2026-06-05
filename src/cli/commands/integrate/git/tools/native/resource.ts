@@ -28,7 +28,8 @@ import type {
   ResourceDeclaration,
 } from '../../../_common/registry';
 import type { GitHookType } from '../../options';
-import { writeManagedGitHook } from './hooks';
+import { normalizeLineEndings } from '../shared';
+import { removeManagedGitHook, writeManagedGitHook } from './hooks';
 import { getHookScript } from './shell-fragments';
 
 interface NativeGitHookResourceOptions {
@@ -68,10 +69,11 @@ class NativeGitHookResource implements ResourceDeclaration {
       return false;
     }
   }
-}
 
-function normalizeLineEndings(content: string): string {
-  return content.replaceAll('\r\n', '\n');
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolveNativeGitHookPath(context, this.options.hook);
+    await removeManagedGitHook(path, this.options.hook);
+  }
 }
 
 async function resolveNativeGitHookPath(

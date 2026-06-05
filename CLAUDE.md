@@ -56,7 +56,7 @@ The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) h
 
 ### System reset
 
-`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Implementation is split across `src/cli/commands/system/reset.ts` (orchestration), `reset-auth.ts`, `reset-binaries.ts`, `reset-integrations.ts`, `reset-filesystem.ts`, and `safe-path.ts`.
+`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Implementation is split across `src/cli/commands/system/reset.ts` (orchestration), `reset-auth.ts`, `reset-binaries.ts`, `reset-integrations.ts`, `reset-filesystem.ts`, and `safe-path.ts`. Binary cleanup removes paths from both `dependencies.installed` and legacy `tools.installed` under `BIN_DIR`. Exits with code `1` when any reset step reports warnings (partial reset).
 
 ## Error handling
 
