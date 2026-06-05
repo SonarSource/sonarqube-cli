@@ -69,8 +69,7 @@ function readKeychainTokens(keychainFile: string): Record<string, string> {
 
 /**
  * Builds a complete state.json string with the given agent extensions and/or
- * installed integrations, so tests can exercise the legacy and declarative
- * cleanup paths of `system reset` without going through a full integrate flow.
+ * installed integrations for declarative reset tests.
  */
 function buildRawState(overrides: {
   agentExtensions?: unknown[];
@@ -120,16 +119,6 @@ function getGlobalHooksPath(userHome: string): string | undefined {
     return undefined;
   }
   return result.stdout.toString().trim();
-}
-
-function legacyExtension(extra: Record<string, unknown>): Record<string, unknown> {
-  return {
-    id: `ext-${Math.random().toString(36).slice(2)}`,
-    global: false,
-    updatedByCliVersion: '0.0.0',
-    updatedAt: new Date().toISOString(),
-    ...extra,
-  };
 }
 
 describe('system reset --force', () => {
@@ -306,7 +295,7 @@ describe('system reset --force', () => {
   );
 
   it(
-    'clears legacy agentExtensions registry entries',
+    'clears agentExtensions registry entries without legacy disk cleanup',
     async () => {
       const server = await harness.newFakeServer().start();
       const settingsPath = join(harness.cwd.path, '.claude', 'settings.json');
@@ -338,7 +327,7 @@ describe('system reset --force', () => {
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+      expect(result.stdout).toMatch(/Integrations:.*Nothing to remove/);
 
       const state = readState(harness.stateJsonFile.path);
       expect(state.agentExtensions).toHaveLength(0);
@@ -346,7 +335,7 @@ describe('system reset --force', () => {
       const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as {
         hooks?: { PostToolUse?: unknown[] };
       };
-      expect(settings.hooks?.PostToolUse ?? []).toHaveLength(0);
+      expect(settings.hooks?.PostToolUse ?? []).toHaveLength(1);
     },
     { timeout: 15000 },
   );
@@ -479,133 +468,6 @@ describe('system reset --force', () => {
   );
 
   it(
-    'cleans up a legacy project-scoped Copilot secrets hook',
-    async () => {
-      const hooksDir = join(harness.cwd.path, '.github', 'hooks');
-      const scriptDir = join(hooksDir, 'sonar-secrets');
-      mkdirSync(scriptDir, { recursive: true });
-      writeFileSync(
-        join(hooksDir, 'hooks.json'),
-        JSON.stringify({
-          version: 1,
-          hooks: {
-            preToolUse: [
-              { type: 'command', bash: 'sonar-secrets/build-scripts/pretool-secrets.sh' },
-              { type: 'command', bash: '/usr/bin/keep-me' },
-            ],
-          },
-        }),
-        'utf-8',
-      );
-      writeFileSync(join(scriptDir, 'pretool-secrets.sh'), '#!/bin/sh\n', 'utf-8');
-
-      harness.state().withRawState(
-        buildRawState({
-          agentExtensions: [
-            legacyExtension({
-              agentId: 'copilot-cli',
-              projectRoot: harness.cwd.path,
-              kind: 'hook',
-              name: 'sonar-secrets',
-              hookType: 'PreToolUse',
-            }),
-          ],
-        }),
-      );
-
-      const result = await harness.run('system reset --force');
-
-      expect(result.exitCode).toBe(0);
-      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(0);
-      expect(existsSync(scriptDir)).toBe(false);
-      const hooksJson = JSON.parse(readFileSync(join(hooksDir, 'hooks.json'), 'utf-8')) as {
-        hooks?: { preToolUse?: Array<{ type?: string; bash?: string }> };
-      };
-      expect(hooksJson.hooks?.preToolUse).toEqual([{ type: 'command', bash: '/usr/bin/keep-me' }]);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'cleans up a legacy global Copilot secrets hook from the home directory',
-    async () => {
-      const hooksDir = join(harness.userHome.path, '.copilot', 'hooks');
-      const scriptDir = join(hooksDir, 'sonar-secrets');
-      mkdirSync(scriptDir, { recursive: true });
-      writeFileSync(
-        join(hooksDir, 'hooks.json'),
-        JSON.stringify({
-          version: 1,
-          hooks: {
-            preToolUse: [
-              { type: 'command', bash: 'sonar-secrets/build-scripts/pretool-secrets.sh' },
-            ],
-          },
-        }),
-        'utf-8',
-      );
-      writeFileSync(join(scriptDir, 'pretool-secrets.sh'), '#!/bin/sh\n', 'utf-8');
-
-      harness.state().withRawState(
-        buildRawState({
-          agentExtensions: [
-            legacyExtension({
-              agentId: 'copilot-cli',
-              projectRoot: harness.cwd.path,
-              global: true,
-              kind: 'hook',
-              name: 'sonar-secrets',
-              hookType: 'PreToolUse',
-            }),
-          ],
-        }),
-      );
-
-      const result = await harness.run('system reset --force');
-
-      expect(result.exitCode).toBe(0);
-      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(0);
-      expect(existsSync(scriptDir)).toBe(false);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'removes a legacy skill file and drops a legacy instructions entry',
-    async () => {
-      const skillPath = join(harness.cwd.path, '.agents', 'skills', 'sonar-skill', 'SKILL.md');
-      mkdirSync(join(harness.cwd.path, '.agents', 'skills', 'sonar-skill'), { recursive: true });
-      writeFileSync(skillPath, '# skill', 'utf-8');
-
-      harness.state().withRawState(
-        buildRawState({
-          agentExtensions: [
-            legacyExtension({
-              agentId: 'codex',
-              projectRoot: harness.cwd.path,
-              kind: 'skill',
-              name: 'sonar-skill',
-            }),
-            legacyExtension({
-              agentId: 'codex',
-              projectRoot: harness.cwd.path,
-              kind: 'instructions',
-              name: 'sonar-prompt',
-            }),
-          ],
-        }),
-      );
-
-      const result = await harness.run('system reset --force');
-
-      expect(result.exitCode).toBe(0);
-      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(0);
-      expect(existsSync(skillPath)).toBe(false);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
     'warns and exits 1 when state references an unknown integration',
     async () => {
       harness.state().withRawState(
@@ -646,32 +508,6 @@ describe('system reset --force', () => {
 
       // The unknown integration could not be removed, so it stays in state.
       expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(1);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'warns when a legacy hook agent has no supported on-disk cleanup',
-    async () => {
-      harness.state().withRawState(
-        buildRawState({
-          agentExtensions: [
-            legacyExtension({
-              agentId: 'codex',
-              projectRoot: harness.cwd.path,
-              kind: 'hook',
-              name: 'sonar-secrets',
-              hookType: 'PreToolUse',
-            }),
-          ],
-        }),
-      );
-
-      const result = await harness.run('system reset --force');
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout).toMatch(/Integrations:.*Unsupported legacy hook agent 'codex'/);
-      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(1);
     },
     { timeout: 15000 },
   );
