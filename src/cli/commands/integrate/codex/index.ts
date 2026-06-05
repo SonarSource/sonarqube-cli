@@ -44,7 +44,7 @@ export async function integrateCodex(
 
   // SQAA is always project-scoped. resolveSqaaSetup returns false (and surfaces
   // the consistent skip notice when the org is entitled) on a global install, so
-  // here we only include the SQAA section for a project install with a known key.
+  // here we only install the PostToolUse hook for a project install with a known key.
   const sqaaEligible = await resolveSqaaSetup({
     serverURL: ctx.serverUrl,
     token: ctx.token,
@@ -66,8 +66,7 @@ export async function integrateCodex(
       });
   const integrationOptions = {
     ...options,
-    installSqaaInstructions: includeSqaa,
-    sqaaEntitled: sqaaEligible,
+    installSqaaHook: includeSqaa,
     installContextAugmentation: contextAugmentation !== null,
   } satisfies CodexIntegrationOptions;
 

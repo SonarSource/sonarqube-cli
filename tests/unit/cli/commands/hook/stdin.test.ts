@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { readGitPushRefs, readStdinJson } from '../../src/cli/commands/hook/stdin';
+import { readGitPushRefs, readStdinJson } from '../../../../../src/cli/commands/hook/stdin';
 
 describe('readStdinJson', () => {
   type StdinListener = (...args: any[]) => void;

@@ -26,33 +26,44 @@ import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
-  buildSqaaSectionBody,
-  sonarBeginMarker,
-  sonarEndMarker,
-  SQAA_MISSING_PROJECT_KEY_MESSAGE,
-  SQAA_PROMOTION_MESSAGE,
-} from '../_common/instructions-templates';
+  createAgentHookEntry,
+  removeAgentHooks,
+  resolveAgentHookScriptPath,
+  upsertAgentHooks,
+} from '../_common/hooks';
+import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates';
 import { removeCodexMcpServer } from '../_common/mcp-config';
-import { isFeatureInstalledGloballyForProject } from '../_common/registry/installation-recorder';
-import { textSnippet, tomlPatch } from '../_common/registry/resources';
-import { askUser, skip } from '../_common/registry/selection';
-import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry/types';
+import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
+import {
+  askUser,
+  isFeatureInstalledGloballyForProject,
+  jsonPatch,
+  skip,
+  textSnippet,
+  tomlPatch,
+  wholeFile,
+} from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
+import {
+  getSecretPromptTemplateUnix,
+  getSecretPromptTemplateWindows,
+  getSqaaPostToolTemplateUnix,
+  getSqaaPostToolTemplateWindows,
+} from './hook-templates';
 import { SECRETS_ON_READ_BODY } from './instructions-templates';
 
 const CODEX_CONFIG_DIR = '.codex';
 const HOOKS_FILE = 'hooks.json';
 const AGENTS_MD_FILE = 'AGENTS.md';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
+const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
 
 export const CODEX_INTEGRATION_ID = 'codex';
 
 export interface CodexIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
-  /** Write the SQAA marker block into `.codex/AGENTS.md`. */
-  installSqaaInstructions?: boolean;
-  sqaaEntitled?: boolean;
+  /** Install PostToolUse SQAA hook on apply_patch (project scope). */
+  installSqaaHook?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -87,6 +98,54 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       ],
     }),
     {
+      id: 'sonar-sqaa-hook',
+      displayName: 'SonarQube Agentic Analysis hook',
+      shouldInstall: ({ options }) => {
+        if (options.installSqaaHook === true) {
+          return askUser();
+        }
+        return skip();
+      },
+      scope: 'project',
+      resources: [
+        wholeFile({
+          id: 'posttool-sqaa-script',
+          displayName: 'Codex PostToolUse hook script',
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, POSTTOOL_SQAA_SCRIPT_REL),
+          content: (context) => {
+            const projectKey = getRequiredStringAttr(
+              context,
+              'projectKey',
+              codexIntegration.displayName,
+            );
+            return process.platform === 'win32'
+              ? getSqaaPostToolTemplateWindows(projectKey)
+              : getSqaaPostToolTemplateUnix(projectKey);
+          },
+          executable: true,
+        }),
+        jsonPatch({
+          id: 'codex-hooks-sqaa-hook',
+          displayName: 'Codex SQAA hook configuration',
+          targetPath: resolveCodexHooksPath,
+          defaultValue: { hooks: {} },
+          patch: (document, context) =>
+            upsertAgentHooks(document, [
+              createAgentHookEntry(
+                context,
+                CODEX_CONFIG_DIR,
+                'PostToolUse',
+                'apply_patch',
+                'sonar-sqaa',
+                POSTTOOL_SQAA_SCRIPT_REL,
+              ),
+            ]),
+          removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
+        }),
+      ],
+    },
+    {
       id: 'secrets-instructions',
       displayName: 'secrets-on-read instructions',
       shouldInstall: ({ scope, state }) =>
@@ -108,31 +167,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           startMarker: sonarBeginMarker('codex-secrets-on-read'),
           endMarker: sonarEndMarker('codex-secrets-on-read'),
           content: SECRETS_ON_READ_BODY,
-        }),
-      ],
-    },
-    {
-      id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options }) => {
-        if (options.installSqaaInstructions === true) {
-          return askUser();
-        }
-        return skip(
-          options.sqaaEntitled === true ? SQAA_MISSING_PROJECT_KEY_MESSAGE : SQAA_PROMOTION_MESSAGE,
-        );
-      },
-      resources: [
-        textSnippet({
-          id: 'codex-sqaa-instructions',
-          displayName: 'Codex AGENTS.md SQAA instructions',
-          targetPath: resolveCodexAgentsMdPath,
-          startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
-          endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) =>
-            buildSqaaSectionBody(
-              getRequiredStringAttr(context, 'projectKey', codexIntegration.displayName),
-            ),
         }),
       ],
     },
@@ -159,6 +193,10 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
 
 function resolveCodexAgentsMdPath(context: IntegrationContext): string {
   return join(context.targetRoot, CODEX_CONFIG_DIR, AGENTS_MD_FILE);
+}
+
+function resolveCodexHooksPath(context: IntegrationContext): string {
+  return join(context.targetRoot, CODEX_CONFIG_DIR, HOOKS_FILE);
 }
 
 function resolveCodexMcpConfigPath(context: IntegrationContext): string {

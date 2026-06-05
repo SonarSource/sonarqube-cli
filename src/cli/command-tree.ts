@@ -58,6 +58,10 @@ import {
 } from './commands/hook/agent-post-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
+import {
+  codexPostToolUse,
+  type CodexPostToolUseOptions,
+} from './commands/hook/codex-post-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit } from './commands/hook/git-pre-commit';
@@ -479,6 +483,14 @@ hookCommand
   .description('PostToolUse handler: run Agentic Analysis after agent edits or writes a file')
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
+
+hookCommand
+  .command('codex-post-tool-use')
+  .description(
+    'PostToolUse handler for Codex: run Agentic Analysis on the git change set after apply_patch',
+  )
+  .requiredOption('--project <key>', 'SonarQube Cloud project key')
+  .anonymousAction((options: CodexPostToolUseOptions) => codexPostToolUse(options));
 
 hookCommand
   .command('git-pre-commit')

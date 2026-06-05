@@ -20,7 +20,12 @@
 
 // Hook script templates for Claude Code integration
 
-import { unixTemplate, windowsTemplate } from '../_common/hooks';
+import {
+  formatSqaaPostToolHookCommandUnix,
+  formatSqaaPostToolHookCommandWindows,
+  unixTemplate,
+  windowsTemplate,
+} from '../_common/hooks';
 
 export function getSecretPreToolTemplateUnix(): string {
   return unixTemplate('sonar hook claude-pre-tool-use');
@@ -39,9 +44,9 @@ export function getSecretPromptTemplateWindows(): string {
 }
 
 export function getSqaaPostToolTemplateUnix(projectKey: string): string {
-  return unixTemplate(`sonar hook claude-post-tool-use --project ${projectKey}`);
+  return unixTemplate(formatSqaaPostToolHookCommandUnix('claude-post-tool-use', projectKey));
 }
 
 export function getSqaaPostToolTemplateWindows(projectKey: string): string {
-  return windowsTemplate(`sonar hook claude-post-tool-use --project ${projectKey}`);
+  return windowsTemplate(formatSqaaPostToolHookCommandWindows('claude-post-tool-use', projectKey));
 }

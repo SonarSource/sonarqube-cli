@@ -20,14 +20,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { CommandFailedError } from '../../src/cli/commands/_common/error';
-import * as installSecrets from '../../src/cli/commands/_common/install/secrets';
-import * as analyzeSecrets from '../../src/cli/commands/analyze/secrets';
-import { gitPreCommit } from '../../src/cli/commands/hook/git-pre-commit';
-import { gitPrePush } from '../../src/cli/commands/hook/git-pre-push';
-import * as stdinModule from '../../src/cli/commands/hook/stdin';
-import * as authResolver from '../../src/lib/auth-resolver';
-import * as processLib from '../../src/lib/process';
+import { CommandFailedError } from '../../../../../src/cli/commands/_common/error';
+import * as installSecrets from '../../../../../src/cli/commands/_common/install/secrets';
+import * as analyzeSecrets from '../../../../../src/cli/commands/analyze/secrets';
+import { gitPreCommit } from '../../../../../src/cli/commands/hook/git-pre-commit';
+import { gitPrePush } from '../../../../../src/cli/commands/hook/git-pre-push';
+import * as stdinModule from '../../../../../src/cli/commands/hook/stdin';
+import * as authResolver from '../../../../../src/lib/auth-resolver';
+import * as processLib from '../../../../../src/lib/process';
 
 const { EXIT_CODE_SECRETS_FOUND } = analyzeSecrets;
 

@@ -26,8 +26,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { toRelativePosixPath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
-import type { SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
+import { formatSqaaIssuesForHook, writePostToolUseHookOutput } from './format-sqaa-hook-context';
 import { readStdinJson } from './stdin';
 
 interface PostToolUsePayload {
@@ -76,37 +76,9 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
       fileContent,
     });
 
-    const text = formatSqaaResult(response.issues, response.errors);
-    process.stdout.write(
-      JSON.stringify({
-        hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text },
-      }) + '\n',
-    );
+    const text = formatSqaaIssuesForHook(response.issues, response.errors);
+    writePostToolUseHookOutput(text);
   } catch (err) {
     logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
   }
-}
-
-function formatSqaaResult(
-  issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
-): string {
-  const lines: string[] = [];
-
-  if (issues.length === 0) {
-    lines.push('Agentic Analysis completed — no issues found.');
-  } else {
-    lines.push(`Agentic Analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
-    issues.forEach((issue, idx) => {
-      const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
-      lines.push(`  [${idx + 1}] ${issue.message}${location} [${issue.rule}]`);
-    });
-  }
-
-  if (errors && errors.length > 0) {
-    lines.push('Agentic Analysis errors:');
-    errors.forEach((e) => lines.push(`  [${e.code}] ${e.message}`));
-  }
-
-  return lines.join('\n');
 }
