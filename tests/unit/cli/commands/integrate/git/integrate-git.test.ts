@@ -444,9 +444,10 @@ describe('integrateGit', () => {
     expect(integrateGit({ nonInteractive: true })).rejects.toThrow('No git repository found');
   });
 
-  it('shows repository summary then asks for confirmation when a git repo is found', async () => {
+  it('shows repository summary before the scope prompt when in a git repository', async () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/my/project', isGit: true });
-    queueMockResponse(null); // user cancels at the confirm prompt
+    queueMockResponse('project');
+    queueMockResponse(null); // user cancels at the hook-type prompt
     try {
       await integrateGit({});
     } catch {

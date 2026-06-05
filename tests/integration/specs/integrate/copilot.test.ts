@@ -676,7 +676,7 @@ describe('integrate copilot', () => {
         // Interactive (no --non-interactive): the entitled org makes SQAA an ask.
         const result = await harness.run(`integrate copilot --project ${TEST_PROJECT}`, {
           extraEnv,
-          stdinChunks: ['\r', '\r', '\r', '\r'],
+          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);
@@ -846,7 +846,7 @@ describe('integrate copilot', () => {
         // promotion line and CAG is skipped silently. The three remaining
         // features (hook, prompt-secrets, MCP) each ask.
         const result = await harness.run('integrate copilot', {
-          stdinChunks: ['\r', '\r', '\r'],
+          stdinChunks: ['\r', '\r', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);
@@ -880,9 +880,9 @@ describe('integrate copilot', () => {
     it(
       'skips a feature when the user declines its prompt',
       async () => {
-        // Decline the hook ('n'), accept prompt-secrets and MCP ('\r').
+        // '\r' selects project scope; 'n' + '\r' declines the hook; '\r' accepts the rest.
         const result = await harness.run('integrate copilot', {
-          stdinChunks: ['n', '\r', '\r'],
+          stdinChunks: ['\r', 'n', '\r', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);
@@ -905,7 +905,7 @@ describe('integrate copilot', () => {
         writeExistingGlobalInstructions(harness);
 
         const result = await harness.run('integrate copilot', {
-          stdinChunks: ['\r', '\r'],
+          stdinChunks: ['\r', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);

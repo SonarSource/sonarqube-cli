@@ -248,6 +248,23 @@ describe('integrate git (native hooks)', () => {
   });
 
   it(
+    'exits with error when user cancels the scope selection',
+    async () => {
+      await setupAuthenticated(harness);
+
+      // Minimal git repo: findGitRoot() detects the .git directory
+      harness.cwd.writeFile('.git/.keep', '');
+
+      // Ctrl+C sent to stdin cancels the scope prompt after the repository summary
+      const result = await harness.run('integrate git', { stdin: '\x03' });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Installation cancelled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with error when user is not authenticated',
     async () => {
       // No keychain token, no env vars — resolveAuth() throws
@@ -255,6 +272,20 @@ describe('integrate git (native hooks)', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Not authenticated');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'defaults to project scope in non-interactive mode and logs an info line',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run('integrate git --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('defaulting to this project');
     },
     { timeout: 15000 },
   );
@@ -365,8 +396,8 @@ describe('integrate git (native hooks)', () => {
       // and resolveGitHooksDir() resolves to .git/hooks as expected
       initGitRepo(harness);
 
-      // Per-feature confirm flow: '\r' confirms 'Install here?', '\r' accepts the
-      // 'Install pre-commit hook?' prompt, 'n' declines 'Install pre-push hook?'.
+      // '\r' selects project scope, '\r' accepts the 'Install pre-commit hook?'
+      // prompt, 'n' declines 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', '\r', 'n'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
@@ -440,8 +471,8 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // Per-feature confirm flow: '\r' confirms 'Install here?', 'n' declines the
-      // 'Install pre-commit hook?' prompt, '\r' accepts 'Install pre-push hook?'.
+      // '\r' selects project scope, 'n' declines the 'Install pre-commit hook?'
+      // prompt, '\r' accepts 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', 'n', '\r'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
@@ -461,8 +492,8 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // Per-feature confirm flow: '\r' confirms 'Install here?', then '\r' accepts
-      // both the 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
+      // '\r' selects project scope, then '\r' accepts both the
+      // 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', '\r', '\r'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
@@ -494,8 +525,8 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // Per-feature confirm flow: '\r' confirms 'Install here?', then 'n' declines
-      // both the 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
+      // '\r' selects project scope, then 'n' declines both the
+      // 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', 'n', 'n'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,

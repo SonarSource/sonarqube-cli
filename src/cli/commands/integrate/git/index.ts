@@ -29,6 +29,7 @@ import { findGitRoot } from '../../../../lib/project-workspace';
 import { blank, confirmPrompt, intro, text, warn } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
+import { resolveIntegrateScope } from '../_common/integrate-scope';
 import { printGitPreflightSummary } from '../_common/preflight-summary';
 import { installIntegration } from '../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from './options';
@@ -133,22 +134,25 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   }
 
   const { gitRoot, isGit } = findGitRoot(process.cwd());
+  if (isGit) {
+    await printGitPreflightSummary(gitRoot);
+    blank();
+  }
+
+  const scope = await resolveIntegrateScope({
+    ...options,
+    projectRoot: isGit ? gitRoot : process.cwd(),
+  });
+  if (scope === 'global') {
+    return integrateGitGlobal(options);
+  }
+
   if (!isGit) {
     throw new CommandFailedError('No git repository found.', {
       remediationHint:
         'Run this command from inside a git repository, or use --global to install a global hook.',
     });
   }
-
-  await printGitPreflightSummary(gitRoot);
-
-  if (!options.nonInteractive) {
-    const confirmed = await confirmPrompt('Install here?', true);
-    if (confirmed === false || confirmed === null) {
-      throw new CommandFailedError('Installation cancelled');
-    }
-  }
-  blank();
 
   await installGitFeatures(options, gitRoot, 'project');
 }
