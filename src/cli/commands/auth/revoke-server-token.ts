@@ -22,43 +22,69 @@ import type { AuthConnection } from '../../../lib/state';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { warn } from '../../../ui';
 
-export type RevokeServerTokenContext = 'logout' | 'reset';
+export type RevokeServerTokenResult =
+  | { status: 'success' }
+  | { status: 'skipped'; message: string }
+  | { status: 'failed'; message: string };
+
+export interface ReportRevokeServerTokenOutcomeOptions {
+  continuingMessage: string;
+  serverUrl?: string;
+}
+
+/**
+ * Surface a best-effort revoke outcome to the user. Skipped/failed paths warn;
+ * callers supply the continuation line shown after a failed server revoke.
+ */
+export function reportRevokeServerTokenOutcome(
+  outcome: RevokeServerTokenResult,
+  options: ReportRevokeServerTokenOutcomeOptions,
+): void {
+  switch (outcome.status) {
+    case 'success':
+      return;
+    case 'skipped':
+      warn(outcome.message);
+      return;
+    case 'failed': {
+      const message = options.serverUrl
+        ? `${outcome.message} for ${options.serverUrl}. ${options.continuingMessage}`
+        : `${outcome.message}. ${options.continuingMessage}`;
+      warn(message);
+    }
+  }
+}
 
 /**
  * Attempt to revoke the server-side token before local cleanup.
- * Best-effort: warns and returns on failure so that local cleanup always proceeds.
+ * Best-effort: callers decide how to surface skipped/failed outcomes.
  */
 export async function revokeServerTokenIfPossible(
   connection: AuthConnection,
   token: string | undefined,
-  context: RevokeServerTokenContext = 'logout',
-): Promise<void> {
+): Promise<RevokeServerTokenResult> {
   if (!connection.tokenName) {
-    warn(
-      'The server-side token name is unknown for this connection, so the token could not be revoked automatically. Revoke it manually on the server if needed.',
-    );
-    return;
+    return {
+      status: 'skipped',
+      message:
+        'The server-side token name is unknown for this connection, so the token could not be revoked automatically. Revoke it manually on the server if needed.',
+    };
   }
 
   if (!token) {
-    warn(
-      `Could not retrieve the local token from the keychain, so the server-side token "${connection.tokenName}" could not be revoked automatically. Revoke it manually on the server if needed.`,
-    );
-    return;
+    return {
+      status: 'skipped',
+      message: `Could not retrieve the local token from the keychain, so the server-side token "${connection.tokenName}" could not be revoked automatically. Revoke it manually on the server if needed.`,
+    };
   }
 
   try {
     await new SonarQubeClient(connection.serverUrl, token).revokeUserToken(connection.tokenName);
+    return { status: 'success' };
   } catch (error) {
-    const detail = (error as Error).message;
-    if (context === 'logout') {
-      warn(
-        `Failed to revoke the server-side token "${connection.tokenName}": ${detail}. Continuing with local logout.`,
-      );
-      return;
-    }
-    warn(
-      `Failed to revoke the server-side token "${connection.tokenName}" for ${connection.serverUrl}: ${detail}`,
-    );
+    return {
+      status: 'failed',
+      message: `Failed to revoke the server-side token "${connection.tokenName}": ${(error as Error).message}`,
+    };
   }
 }

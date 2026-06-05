@@ -31,6 +31,7 @@ import {
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
+import { supportedIntegrations } from '../index.js';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 
@@ -74,6 +75,7 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   };
 
   await installIntegration({
+    registry: supportedIntegrations,
     integrationId: COPILOT_INTEGRATION_ID,
     options: integrationOptions,
     targetRoot,

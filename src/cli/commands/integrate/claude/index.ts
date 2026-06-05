@@ -40,6 +40,7 @@ import {
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
+import { supportedIntegrations } from '../index.js';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 import { updateStateAfterConfiguration } from './state';
@@ -111,6 +112,7 @@ export async function integrateClaude(
   let installError: Error | undefined;
   try {
     await installIntegration({
+      registry: supportedIntegrations,
       integrationId: CLAUDE_INTEGRATION_ID,
       options: integrationOptions,
       targetRoot: installRoot,

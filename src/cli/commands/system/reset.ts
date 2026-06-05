@@ -24,6 +24,7 @@ import { type CliState, getDefaultState, type InstalledIntegration } from '../..
 import type { PhaseItem } from '../../../ui';
 import { info, phase, print, success, text, textPrompt, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
+import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth';
 import { removeBinaries } from './reset-binaries';
 import { clearFilesystem } from './reset-filesystem';
@@ -94,7 +95,7 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
       }),
     });
 
-    const integrationResult = await removeAllIntegrations(state);
+    const integrationResult = await removeAllIntegrations(state, supportedIntegrations);
     results.push({
       item: integrationResult.item,
       cleaned: emptyCleanedFields({
@@ -134,7 +135,7 @@ async function confirmDestructiveAction(): Promise<boolean> {
     return false;
   }
   warn(
-    'This will remove all local credentials, uninstall Sonar binaries, and break active AI integrations.',
+    'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
   );
   const answer = await textPrompt('Please type RESET to continue');
   if (answer?.trim() !== 'RESET') {
