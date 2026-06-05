@@ -24,6 +24,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
+
+const UPDATE_CHECK_TIMEOUT_MS = 5000;
 import { UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
 import { isWindows } from '../../../lib/platform-detector';
 import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
@@ -60,11 +62,11 @@ export interface UpdateCheckResult {
  * Fetches the install script from GitHub and returns version comparison data.
  * Throws on network failure or when the version cannot be extracted from the script.
  */
-export async function checkForUpdate(): Promise<UpdateCheckResult> {
+export async function checkForUpdate(baseUrl?: string): Promise<UpdateCheckResult> {
   const scriptName = isWindows() ? 'install.ps1' : 'install.sh';
-  const scriptUrl = `${UPDATE_SCRIPT_BASE_URL}/${scriptName}`;
+  const scriptUrl = `${baseUrl ?? UPDATE_SCRIPT_BASE_URL}/${scriptName}`;
 
-  const response = await fetch(scriptUrl);
+  const response = await fetch(scriptUrl, { signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS) });
   if (!response.ok) {
     throw new CommandFailedError(`Failed to fetch update script: HTTP ${response.status}`, {
       remediationHint: 'Check network access and retry.',

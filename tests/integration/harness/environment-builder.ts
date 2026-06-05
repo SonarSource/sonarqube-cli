@@ -144,6 +144,8 @@ export class EnvironmentBuilder {
   private _cagStderrLine?: string;
   private _installScaScannerBinary = false;
   private _rawStateJson?: string;
+  private _dockerMockRunning?: boolean;
+  private _dockerMockBinDir?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaExtensions: SqaaExtensionConfig[] = [];
   private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
@@ -258,19 +260,26 @@ export class EnvironmentBuilder {
    * sentinel path depends on the harness's cliHome.
    */
   getExtraEnv(): Record<string, string> {
-    if (!this._installCagBinary || !this._cagSentinelPath) {
-      return {};
+    const env: Record<string, string> = {};
+
+    if (this._installCagBinary && this._cagSentinelPath) {
+      env.CAG_STUB_SENTINEL = this._cagSentinelPath;
+      env.CAG_STUB_INIT_EXIT = String(this._cagInitExitCode);
+      env.CAG_STUB_SKILL_EXIT = String(this._cagSkillExitCode);
+      env.CAG_STUB_PRINT_SKILL_EXIT = String(this._cagPrintSkillExitCode);
+      env.CAG_STUB_STOP_ALL_EXIT = String(this._cagStopAllExitCode);
+      if (this._cagStdoutLine !== undefined) env.CAG_STUB_STDOUT_LINE = this._cagStdoutLine;
+      if (this._cagStderrLine !== undefined) env.CAG_STUB_STDERR_LINE = this._cagStderrLine;
     }
-    return {
-      CAG_STUB_SENTINEL: this._cagSentinelPath,
-      CAG_STUB_INIT_EXIT: String(this._cagInitExitCode),
-      CAG_STUB_SKILL_EXIT: String(this._cagSkillExitCode),
-      CAG_STUB_PRINT_SKILL_EXIT: String(this._cagPrintSkillExitCode),
-      ...(this._cagPrintSkillEmpty && { CAG_STUB_PRINT_SKILL_EMPTY: '1' }),
-      CAG_STUB_STOP_ALL_EXIT: String(this._cagStopAllExitCode),
-      ...(this._cagStdoutLine !== undefined && { CAG_STUB_STDOUT_LINE: this._cagStdoutLine }),
-      ...(this._cagStderrLine !== undefined && { CAG_STUB_STDERR_LINE: this._cagStderrLine }),
-    };
+
+    if (this._cagPrintSkillEmpty) env.CAG_STUB_PRINT_SKILL_EMPTY = '1';
+
+    return env;
+  }
+
+  /** Docker mock bin dir to prepend to PATH; set after writeTo() runs. */
+  get dockerMockBinDir(): string | undefined {
+    return this._dockerMockBinDir;
   }
 
   /**
@@ -287,6 +296,17 @@ export class EnvironmentBuilder {
    */
   withRawState(json: string): this {
     this._rawStateJson = json;
+    return this;
+  }
+
+  /**
+   * Installs a fake `docker` binary in the isolated test environment.
+   * When called, `detectContainerRuntime()` will find it and MCP running-status
+   * checks will work without a real Docker daemon.
+   * `mcpRunning` controls whether `docker ps` reports the MCP container as active.
+   */
+  withDockerMock(mcpRunning = false): this {
+    this._dockerMockRunning = mcpRunning;
     return this;
   }
 
@@ -520,6 +540,22 @@ export class EnvironmentBuilder {
     if (this._installCagBinary) {
       this.copyCagStub(cliHome);
       this._cagSentinelPath = join(cliHome, 'cag-invocations.jsonl');
+    }
+
+    if (this._dockerMockRunning !== undefined && !IS_WINDOWS) {
+      const mockBinDir = join(cliHome, 'mock-bin');
+      mkdirSync(mockBinDir, { recursive: true });
+      const psOutput = this._dockerMockRunning ? 'abc123' : '';
+      const script = [
+        '#!/bin/bash',
+        'case "$1" in',
+        '  info) exit 0 ;;',
+        `  ps) echo "${psOutput}" ;;`,
+        '  *) exit 0 ;;',
+        'esac',
+      ].join('\n');
+      writeFileSync(join(mockBinDir, 'docker'), script, { mode: EXECUTABLE_PERMS });
+      this._dockerMockBinDir = mockBinDir;
     }
   }
 

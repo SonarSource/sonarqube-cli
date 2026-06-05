@@ -1,0 +1,507 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+import { parse as parseToml } from 'smol-toml';
+
+import { version as VERSION } from '../../../../package.json';
+import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { resolveAuth } from '../../../lib/auth-resolver';
+import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../../lib/config-constants';
+import {
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  SCA_SCANNER_BINARY_NAME,
+} from '../../../lib/install-types';
+import { getMcpConfigFilePath } from '../../../lib/mcp/mcp-helper';
+import { spawnProcess } from '../../../lib/process';
+import { loadState } from '../../../lib/repository/state-repository';
+import {
+  SCA_SCANNER_CLI_VERSION,
+  SONAR_CONTEXT_AUGMENTATION_VERSION,
+} from '../../../lib/signatures';
+import type { CliState } from '../../../lib/state';
+import { detectContainerRuntime } from '../../../lib/tool-detector';
+import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
+import { blank, print, success, text, warn } from '../../../ui';
+import { getBanner } from '../../root-help';
+import { SECRETS_SPEC } from '../_common/install/secrets';
+import type { TokenStatus } from '../_common/token';
+import { checkTokenStatus } from '../_common/token';
+import { supportedIntegrations } from '../integrate';
+import { checkForUpdate } from '../self-update/self-update';
+
+const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
+
+const PINNED_VERSIONS: Partial<Record<string, string>> = {
+  [SECRETS_SPEC.name]: SECRETS_SPEC.version,
+  [CONTEXT_AUGMENTATION_BINARY_NAME]: SONAR_CONTEXT_AUGMENTATION_VERSION,
+  [SCA_SCANNER_BINARY_NAME]: SCA_SCANNER_CLI_VERSION,
+};
+
+export interface SystemStatusOptions {
+  json?: boolean;
+}
+
+type McpConfigStatus = 'configured' | 'invalid' | 'not_configured';
+type McpRunningStatus = 'running' | 'not_running' | 'unknown';
+
+interface McpStatus {
+  config: McpConfigStatus;
+  running: McpRunningStatus;
+  /** Set when config is 'invalid' — identifies which integration to reinstall. */
+  invalidIntegrationId?: string;
+}
+
+interface IntegrationInfo {
+  id: string;
+  name: string;
+  path?: string;
+}
+
+function abbreviatePath(p: string): string {
+  return p.replace(homedir(), '~');
+}
+
+// integrationId → agent string for getMcpConfigFilePath
+const INTEGRATION_TO_MCP_AGENT: Record<string, string> = {
+  'claude-code': 'claude',
+  'copilot-cli': 'copilot',
+  codex: 'codex',
+};
+
+// integrationId → sonar integrate subcommand
+const INTEGRATION_TO_COMMAND: Record<string, string> = {
+  'claude-code': 'sonar integrate claude',
+  'copilot-cli': 'sonar integrate copilot',
+  codex: 'sonar integrate codex',
+};
+
+function findMcpFeatures(
+  state: CliState,
+): Array<{ integrationId: string; scope: 'project' | 'global'; targetRoot: string }> {
+  const features: Array<{
+    integrationId: string;
+    scope: 'project' | 'global';
+    targetRoot: string;
+  }> = [];
+  for (const integration of state.integrations.installed) {
+    for (const feature of integration.features) {
+      if (feature.featureId === 'mcp-server') {
+        features.push({
+          integrationId: integration.integrationId,
+          scope: feature.scope,
+          targetRoot: feature.targetRoot,
+        });
+      }
+    }
+  }
+  return features;
+}
+
+function checkMcpConfigFile(configPath: string): McpConfigStatus {
+  if (!existsSync(configPath)) return 'not_configured';
+  try {
+    const raw = readFileSync(configPath, 'utf-8');
+    if (configPath.endsWith('.toml')) {
+      const parsed = parseToml(raw) as Record<string, unknown>;
+      const mcpServers = parsed.mcp_servers as Record<string, unknown> | undefined;
+      if (!mcpServers || !('sonarqube' in mcpServers)) return 'not_configured';
+      const entry = mcpServers.sonarqube;
+      if (!entry || typeof entry !== 'object') return 'invalid';
+      const { command, args } = entry as Record<string, unknown>;
+      if (typeof command !== 'string' || command.length === 0 || !Array.isArray(args)) {
+        return 'invalid';
+      }
+      return 'configured';
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const mcpServers = parsed.mcpServers as Record<string, unknown> | undefined;
+    if (!mcpServers || !('sonarqube' in mcpServers)) return 'not_configured';
+    const entry = mcpServers.sonarqube;
+    if (!entry || typeof entry !== 'object') return 'invalid';
+    const { command, args } = entry as Record<string, unknown>;
+    if (typeof command !== 'string' || command.length === 0 || !Array.isArray(args)) {
+      return 'invalid';
+    }
+    return 'configured';
+  } catch {
+    return 'invalid';
+  }
+}
+
+async function checkMcpRunning(): Promise<McpRunningStatus> {
+  const runtime = await detectContainerRuntime().catch(() => null);
+  if (!runtime) return 'unknown';
+  try {
+    const result = await spawnProcess(runtime, [
+      'ps',
+      '--filter',
+      'ancestor=mcp/sonarqube',
+      '--format',
+      '{{.ID}}',
+    ]);
+    return result.stdout.trim().length > 0 ? 'running' : 'not_running';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function getMcpStatus(state: CliState): Promise<McpStatus> {
+  const mcpFeatures = findMcpFeatures(state);
+  if (mcpFeatures.length === 0) {
+    return { config: 'not_configured', running: 'unknown' };
+  }
+
+  // Scan all features: prefer 'configured' over 'invalid' regardless of iteration order
+  let firstInvalid: string | undefined;
+  for (const feature of mcpFeatures) {
+    const agentStr = INTEGRATION_TO_MCP_AGENT[feature.integrationId];
+    if (!agentStr) continue;
+    const configPath = getMcpConfigFilePath(
+      agentStr,
+      feature.scope === 'global',
+      feature.targetRoot,
+    );
+    const configStatus = checkMcpConfigFile(configPath);
+    if (configStatus === 'configured') {
+      const running = await checkMcpRunning();
+      return { config: 'configured', running };
+    }
+    if (configStatus === 'invalid' && firstInvalid === undefined) {
+      firstInvalid = feature.integrationId;
+    }
+  }
+  if (firstInvalid !== undefined) {
+    return { config: 'invalid', running: 'unknown', invalidIntegrationId: firstInvalid };
+  }
+  return { config: 'not_configured', running: 'unknown' };
+}
+
+function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
+  const result: IntegrationInfo[] = [];
+
+  // The framework stores one InstalledIntegration per integrationId; multiple
+  // project installs accumulate as separate features with distinct targetRoots.
+  // Emit one IntegrationInfo per unique project so each installation is visible.
+  for (const i of state.integrations.installed) {
+    const name = supportedIntegrations.get(i.integrationId)?.displayName ?? i.integrationId;
+
+    const localRoots = [
+      ...new Set(i.features.filter((f) => f.scope !== 'global').map((f) => f.targetRoot)),
+    ];
+
+    if (localRoots.length > 0) {
+      for (const root of localRoots) {
+        const features = i.features.filter((f) => f.targetRoot === root);
+        result.push({ id: i.integrationId, name, path: pathFromFeatures(features) });
+      }
+    } else {
+      result.push({ id: i.integrationId, name, path: pathFromFeatures(i.features) });
+    }
+  }
+
+  // Legacy agents not already covered by declarative state.
+  const declarativeIds = new Set(state.integrations.installed.map((i) => i.integrationId));
+  for (const [agentId, config] of Object.entries(state.agents)) {
+    if (config.configured && !declarativeIds.has(agentId)) {
+      const name = supportedIntegrations.get(agentId)?.displayName ?? agentId;
+      result.push({ id: agentId, name, path: getLegacyAgentPath(agentId, state) });
+    }
+  }
+
+  return result;
+}
+
+function pathFromFeatures(
+  features: CliState['integrations']['installed'][number]['features'],
+): string | undefined {
+  for (const feature of features) {
+    for (const resource of feature.resources) {
+      if (resource.path && !resource.path.endsWith('.sh') && !resource.path.endsWith('.ps1')) {
+        return abbreviatePath(resource.path);
+      }
+    }
+  }
+  return undefined;
+}
+
+function getLegacyAgentPath(agentId: string, state: CliState): string | undefined {
+  if (agentId === 'claude-code') {
+    const ext = state.agentExtensions.find((e) => e.agentId === 'claude-code' && e.kind === 'hook');
+    if (ext) {
+      const base = ext.global ? homedir() : ext.projectRoot;
+      return abbreviatePath(join(base, '.claude', 'settings.json'));
+    }
+  }
+  return undefined;
+}
+
+function mcpStatusLine(mcp: McpStatus): string {
+  if (mcp.config === 'not_configured') return 'NOT CONFIGURED';
+  if (mcp.config === 'invalid') return 'CONFIGURED / INVALID CONFIG';
+  if (mcp.running === 'running') return 'CONFIGURED / SESSION ACTIVE';
+  return 'CONFIGURED / NO ACTIVE SESSION';
+}
+
+export async function systemStatus(options: SystemStatusOptions): Promise<void> {
+  const state = loadState();
+
+  const [auth, updateResult, mcp] = await Promise.all([
+    resolveAuth().catch(() => null),
+    checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL).catch(() => null),
+    getMcpStatus(state),
+  ]);
+
+  const tokenStatus: TokenStatus | null = auth
+    ? await checkTokenStatus(auth.serverUrl, auth.token).catch(() => 'unreachable' as const)
+    : null;
+
+  const legacyBinaries = (state.tools?.installed ?? []).map((t) => {
+    const pinned = PINNED_VERSIONS[t.name];
+    return {
+      name: t.name,
+      version: t.version,
+      path: abbreviatePath(t.path),
+      updateAvailable: pinned !== undefined && isNewerVersion(t.version, pinned),
+      latestVersion: pinned ?? t.version,
+    };
+  });
+
+  const depBinaries = state.dependencies.installed
+    .filter((d): d is typeof d & { path: string; version: string } => !!(d.path && d.version))
+    .map((d) => {
+      const pinned = PINNED_VERSIONS[d.id];
+      return {
+        name: d.id,
+        version: d.version,
+        path: abbreviatePath(d.path),
+        updateAvailable: pinned !== undefined && isNewerVersion(d.version, pinned),
+        latestVersion: pinned ?? d.version,
+      };
+    });
+
+  const seen = new Set(legacyBinaries.map((b) => b.name));
+  const binaries = [...legacyBinaries, ...depBinaries.filter((b) => !seen.has(b.name))];
+
+  const cacheDirs = [
+    { name: 'logs', path: LOG_DIR },
+    { name: 'sca-scanner-cache', path: SCA_SCANNER_CACHE_DIR },
+    { name: 'global-hooks', path: GLOBAL_HOOKS_DIR },
+  ];
+  const cache: CacheInfo[] = cacheDirs.map(({ name, path }) => ({
+    name,
+    path: abbreviatePath(path),
+    present: existsSync(path) && statSync(path).isDirectory(),
+  }));
+
+  const integrations = getInstalledIntegrations(state);
+
+  const hasIssues = tokenStatus === null || tokenStatus === 'invalid' || mcp.config === 'invalid';
+  const recommendations = buildRecommendations(tokenStatus, updateResult, mcp);
+
+  const data: StatusData = {
+    auth,
+    tokenStatus,
+    binaries,
+    cache,
+    integrations,
+    mcp,
+    hasIssues,
+    recommendations,
+  };
+
+  if (options.json) {
+    printJsonStatus(VERSION, data);
+    return;
+  }
+
+  renderTextStatus(VERSION, data);
+}
+
+type BinaryInfo = {
+  name: string;
+  version: string;
+  path: string;
+  updateAvailable: boolean;
+  latestVersion: string;
+};
+type CacheInfo = { name: string; path: string; present: boolean };
+
+interface StatusData {
+  auth: ResolvedAuth | null;
+  tokenStatus: TokenStatus | null;
+  binaries: BinaryInfo[];
+  cache: CacheInfo[];
+  integrations: IntegrationInfo[];
+  mcp: McpStatus;
+  hasIssues: boolean;
+  recommendations: string[];
+}
+
+function buildRecommendations(
+  tokenStatus: TokenStatus | null,
+  updateResult: { latestVersion: string; updateAvailable: boolean } | null,
+  mcp: McpStatus,
+): string[] {
+  const recommendations: string[] = [];
+  if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
+  if (tokenStatus === 'invalid') recommendations.push("Run 'sonar auth login' to reauthenticate");
+  if (updateResult?.updateAvailable) {
+    recommendations.push(
+      `Run 'sonar self-update' to update to v${stripBuildNumber(updateResult.latestVersion)}`,
+    );
+  }
+  if (mcp.config === 'invalid') {
+    const integrateCmd =
+      INTEGRATION_TO_COMMAND[mcp.invalidIntegrationId ?? 'claude-code'] ?? 'sonar integrate claude';
+    recommendations.push(`Run '${integrateCmd}' to reinstall MCP configuration`);
+  }
+  return recommendations;
+}
+
+function tokenStatusLabel(tokenStatus: TokenStatus | null): string {
+  if (tokenStatus === null) return 'not_set';
+  if (tokenStatus === 'valid') return 'active';
+  if (tokenStatus === 'invalid') return 'invalid';
+  return 'set_unverified';
+}
+
+function printJsonStatus(version: string, data: StatusData): void {
+  const { auth, tokenStatus, binaries, cache, integrations, mcp, hasIssues, recommendations } =
+    data;
+  print(
+    JSON.stringify(
+      {
+        version,
+        auth: auth
+          ? {
+              status: 'authenticated',
+              server: auth.serverUrl,
+              ...(auth.orgKey ? { org: auth.orgKey } : {}),
+              token: tokenStatusLabel(tokenStatus),
+            }
+          : { status: 'unauthenticated', token: 'not_set' },
+        binaries: binaries.map(({ name, version, path, updateAvailable, latestVersion }) => ({
+          name,
+          version,
+          path,
+          updateAvailable,
+          ...(updateAvailable ? { latestVersion: stripBuildNumber(latestVersion) } : {}),
+        })),
+        cache,
+        integrations: integrations.map(({ id, name, path }) => ({
+          id,
+          name,
+          ...(path ? { path } : {}),
+        })),
+        healthy: !hasIssues,
+        mcp: {
+          configured: mcp.config !== 'not_configured',
+          valid: mcp.config === 'configured',
+          session_active: mcp.running === 'running',
+        },
+        recommendations,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+function renderTokenLine(tokenStatus: TokenStatus | null, serverUrl?: string): void {
+  if (tokenStatus === null) text('  • Token:   Not Set');
+  else if (tokenStatus === 'valid') text('  • Token:   Active');
+  else if (tokenStatus === 'invalid') text('  • Token:   Invalid');
+  else text(`  • Token:   Set, Unverified (${serverUrl} is unreachable)`);
+}
+
+function renderAuthSection(auth: ResolvedAuth | null, tokenStatus: TokenStatus | null): void {
+  text('AUTHENTICATION');
+  if (auth) {
+    text(`  • Server:  ${auth.serverUrl}`);
+    if (auth.orgKey) text(`  • Org:     ${auth.orgKey}`);
+  }
+  renderTokenLine(tokenStatus, auth?.serverUrl);
+}
+
+function renderBinariesSection(binaries: BinaryInfo[]): void {
+  if (binaries.length === 0) return;
+  blank();
+  text('BINARIES');
+  for (const b of binaries) {
+    text(`  • ${b.name}: Installed (${b.path})`);
+    const versionSuffix = b.updateAvailable
+      ? ` (Update available: v${stripBuildNumber(b.latestVersion)})`
+      : '';
+    text(`      Version:  v${b.version}${versionSuffix}`);
+  }
+}
+
+function renderCacheSection(cache: CacheInfo[]): void {
+  blank();
+  text('CACHE');
+  for (const c of cache) {
+    const status = c.present ? c.path : 'empty';
+    text(`  • ${c.name}: ${status}`);
+  }
+}
+
+function renderIntegrationsSection(integrations: IntegrationInfo[], mcp: McpStatus): void {
+  if (integrations.length === 0 && mcp.config === 'not_configured') return;
+  blank();
+  text('INTEGRATIONS');
+  for (const i of integrations) {
+    const line = i.path ? `${i.name}: CONFIGURED (${i.path})` : `${i.name}: CONFIGURED`;
+    text(`  • ${line}`);
+  }
+  text(`  • MCP Server: ${mcpStatusLine(mcp)}`);
+}
+
+function renderRecommendationsSection(recommendations: string[]): void {
+  if (recommendations.length === 0) return;
+  blank();
+  text('RECOMMENDATIONS');
+  for (const r of recommendations) {
+    text(`  • ${r}`);
+  }
+}
+
+function renderTextStatus(version: string, data: StatusData): void {
+  const { auth, tokenStatus, binaries, cache, integrations, mcp, hasIssues, recommendations } =
+    data;
+  print(getBanner(version));
+  blank();
+
+  if (hasIssues) {
+    warn('SYSTEM CHECK: Issues found');
+  } else {
+    success('SYSTEM CHECK: Healthy');
+  }
+  blank();
+
+  renderAuthSection(auth, tokenStatus);
+  renderBinariesSection(binaries);
+  renderCacheSection(cache);
+  renderIntegrationsSection(integrations, mcp);
+  renderRecommendationsSection(recommendations);
+}
