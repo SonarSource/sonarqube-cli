@@ -1,4 +1,4 @@
-# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"e2cedb21c66ecda26b22275f82334a7ec3a98d38b20a3d8b6a337f27291f64c3","compiler_version":"v0.76.1","strict":true,"agent_id":"copilot"}
+# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"3be3df495eb6ebe57f2d7f9b964fd2a68cdedecc083976f7b5a86bdf65e79c8d","compiler_version":"v0.76.1","strict":true,"agent_id":"copilot"}
 # gh-aw-manifest: {"version":1,"secrets":["COPILOT_GITHUB_TOKEN","GH_AW_CI_TRIGGER_TOKEN","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"SonarSource/vault-action-wrapper","sha":"c154b4a417b51cb98dd71137f49bf20e77c56820","version":"c154b4a417b51cb98dd71137f49bf20e77c56820"},{"repo":"actions/checkout","sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd","version":"v6.0.2"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/setup-node","sha":"48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e","version":"v6.4.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"github/gh-aw-actions/setup","sha":"46d564922b082d0db93244972e8005ea6904ee5f","version":"v0.76.1"},{"repo":"slackapi/slack-github-action","sha":"70cd7be8e40a46e8b0eced40b0de447bdb42f68e","version":"70cd7be8e40a46e8b0eced40b0de447bdb42f68e"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.25.55"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.25.55"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.25.55"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.3.19"},{"image":"ghcr.io/github/github-mcp-server:v1.0.4","digest":"sha256:e3816a476a977cfb836e7d221510011436c654d11861db66ecfd826601aba6a4","pinned_image":"ghcr.io/github/github-mcp-server:v1.0.4@sha256:e3816a476a977cfb836e7d221510011436c654d11861db66ecfd826601aba6a4"},{"image":"node:lts-alpine","digest":"sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14","pinned_image":"node:lts-alpine@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14"}]}
 #    ___                   _   _      
 #   / _ \                 | | (_)     
@@ -23,9 +23,14 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
+# Resolved workflow manifest:
+#   Imports:
+#     - SonarSource/awesome-ai/workflows/ci-failure-triage-agent.md@ci-failure-triage-agent-1.0.1
+#
 # Frontmatter env variables:
-#   - HEAD_BRANCH: (main workflow)
-#   - WORKFLOW_CONCLUSION: (main workflow)
+#   - HEAD_BRANCH: SonarSource/awesome-ai/workflows/ci-failure-triage-agent.md@ci-failure-triage-agent-1.0.1
+#   - SLACK_CHANNEL: SonarSource/awesome-ai/workflows/ci-failure-triage-agent.md@ci-failure-triage-agent-1.0.1
+#   - WORKFLOW_CONCLUSION: SonarSource/awesome-ai/workflows/ci-failure-triage-agent.md@ci-failure-triage-agent-1.0.1
 #
 # Secrets used:
 #   - COPILOT_GITHUB_TOKEN
@@ -53,7 +58,7 @@
 #   - ghcr.io/github/github-mcp-server:v1.0.4@sha256:e3816a476a977cfb836e7d221510011436c654d11861db66ecfd826601aba6a4
 #   - node:lts-alpine@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
 
-name: "CI Failure Triage Agent"
+name: "Ci Failure Triage Agent"
 on:
   workflow_dispatch:
     inputs:
@@ -70,7 +75,7 @@ on:
   workflow_run:
     # zizmor: ignore[dangerous-triggers] - workflow_run trigger is secured with role and fork validation
     branches:
-    - task/dam/enable-ci-failure-triager
+    - ci-triage-test/**
     - master
     types:
     - completed
@@ -81,10 +86,11 @@ permissions: {}
 
 concurrency: ci-triage-${{ github.run_id }}
 
-run-name: "CI Failure Triage Agent"
+run-name: "Ci Failure Triage Agent"
 
 env:
   HEAD_BRANCH: ${{ inputs.head_branch || github.event.workflow_run.head_branch }}
+  SLACK_CHANNEL: squad-devex-flow-interrupts
   WORKFLOW_CONCLUSION: ${{ inputs.workflow_conclusion || github.event.workflow_run.conclusion }}
 
 jobs:
@@ -92,7 +98,8 @@ jobs:
     needs: pre_activation
     # zizmor: ignore[dangerous-triggers] - workflow_run trigger is secured with role and fork validation
     if: >
-      (needs.pre_activation.outputs.activated == 'true') && (github.event_name != 'workflow_run' || github.event.workflow_run.repository.id == github.repository_id &&
+      (needs.pre_activation.outputs.activated == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure')) &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.repository.id == github.repository_id &&
       (!(github.event.workflow_run.repository.fork)))
     runs-on: ubuntu-slim
     permissions:
@@ -119,7 +126,7 @@ jobs:
           trace-id: ${{ needs.pre_activation.outputs.setup-trace-id }}
           parent-span-id: ${{ needs.pre_activation.outputs.setup-parent-span-id || needs.pre_activation.outputs.setup-span-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_SETUP_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/ci-failure-triage-agent.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.52"
           GH_AW_INFO_AWF_VERSION: "v0.25.55"
@@ -133,7 +140,7 @@ jobs:
           GH_AW_INFO_VERSION: "1.0.52"
           GH_AW_INFO_AGENT_VERSION: "1.0.52"
           GH_AW_INFO_CLI_VERSION: "v0.76.1"
-          GH_AW_INFO_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_INFO_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_INFO_EXPERIMENTAL: "false"
           GH_AW_INFO_SUPPORTS_TOOLS_ALLOWLIST: "true"
           GH_AW_INFO_STAGED: "false"
@@ -215,23 +222,23 @@ jobs:
         run: |
           bash "${RUNNER_TEMP}/gh-aw/actions/create_prompt_first.sh"
           {
-          cat << 'GH_AW_PROMPT_71205a221871e33c_EOF'
+          cat << 'GH_AW_PROMPT_501ba99ee596fc9a_EOF'
           <system>
-          GH_AW_PROMPT_71205a221871e33c_EOF
+          GH_AW_PROMPT_501ba99ee596fc9a_EOF
           cat "${RUNNER_TEMP}/gh-aw/prompts/xpia.md"
           cat "${RUNNER_TEMP}/gh-aw/prompts/temp_folder_prompt.md"
           cat "${RUNNER_TEMP}/gh-aw/prompts/markdown.md"
           cat "${RUNNER_TEMP}/gh-aw/prompts/safe_outputs_prompt.md"
-          cat << 'GH_AW_PROMPT_71205a221871e33c_EOF'
+          cat << 'GH_AW_PROMPT_501ba99ee596fc9a_EOF'
           <safe-output-tools>
-          Tools: create_pull_request, missing_tool, missing_data, slack_notify
-          GH_AW_PROMPT_71205a221871e33c_EOF
+          Tools: create_pull_request, missing_tool, missing_data, noop, slack_notify
+          GH_AW_PROMPT_501ba99ee596fc9a_EOF
           cat "${RUNNER_TEMP}/gh-aw/prompts/safe_outputs_create_pull_request.md"
-          cat << 'GH_AW_PROMPT_71205a221871e33c_EOF'
+          cat << 'GH_AW_PROMPT_501ba99ee596fc9a_EOF'
           </safe-output-tools>
-          GH_AW_PROMPT_71205a221871e33c_EOF
+          GH_AW_PROMPT_501ba99ee596fc9a_EOF
           cat "${RUNNER_TEMP}/gh-aw/prompts/mcp_cli_tools_prompt.md"
-          cat << 'GH_AW_PROMPT_71205a221871e33c_EOF'
+          cat << 'GH_AW_PROMPT_501ba99ee596fc9a_EOF'
           <github-context>
           The following GitHub context information is available for this workflow:
           {{#if github.actor}}
@@ -263,12 +270,156 @@ jobs:
             - **Note**: If a branch you need is not in the list above and is not listed as an additional fetched ref, it has NOT been checked out. For private repositories you cannot fetch it without proper authentication. If the branch is required and not available, exit with an error and ask the user to add it to the `fetch:` option of the `checkout:` configuration (e.g., `fetch: ["refs/pulls/open/*"]` for all open PR refs, or `fetch: ["main", "feature/my-branch"]` for specific branches).
           </github-context>
           
-          GH_AW_PROMPT_71205a221871e33c_EOF
+          GH_AW_PROMPT_501ba99ee596fc9a_EOF
           cat "${RUNNER_TEMP}/gh-aw/prompts/github_mcp_tools_with_safeoutputs_prompt.md"
-          cat << 'GH_AW_PROMPT_71205a221871e33c_EOF'
+          cat << 'GH_AW_PROMPT_501ba99ee596fc9a_EOF'
           </system>
+          # CI Failure Triage Agent
+          
+          You are a CI failure triage agent. When a workflow run fails,
+          you diagnose the failure, post a proposed remediation to Slack, and — when
+          you have high confidence in a mechanical fix — open a PR with the fix automatically.
+          
+          ---
+          
+          ## 1. Extract context
+          
+          Use the GitHub MCP to read the workflow run that triggered this agent. Extract:
+          
+          - **Run ID**
+          - **Workflow name** and a direct URL to the run
+          - **Branch** (head branch)
+          - **Commit SHA** (head SHA)
+          - **Commit author** and **short commit message** (first line)
+          
+          ---
+          
+          ## 2. Loop guard
+          
+          The same workflow run can trigger this agent more than once (e.g. re-runs,
+          event re-deliveries). Guard against sending duplicate Slack notifications for
+          the same triggering workflow run.
+          
+          Use the GitHub MCP to list previous runs of the `ci-failure-triage-agent`
+          workflow. Check whether any previous run was triggered by the **same triggering
+          workflow run ID** (the run ID extracted in §1) and has a successfully completed
+          `slack-notify` job.
+          
+          - If such a run exists, a Slack notification has already been sent for this
+            workflow run. Terminate immediately: **do NOT call `slack_notify`, do NOT post
+            anything to Slack, produce no output at all.**
+          - Otherwise, continue.
+          
+          ---
+          
+          ## 3. Fetch failure logs
+          
+          Use the GitHub MCP to get the failed jobs for the run and their log output.
+          
+          Parse the output to identify:
+          - Which job(s) failed
+          - Which step(s) failed
+          - The exact error messages and stack traces
+          
+          ---
+          
+          ## 4. Diagnose the failure
+          
+          Categorise the root cause:
+          
+          | Category | Signals |
+          |----------|---------|
+          | **Flaky / transient** | "connection refused", "timeout", "rate limit", "502", intermittent network errors, `SIGKILL` with no code context |
+          | **Build error** | Compilation errors, missing imports, type errors |
+          | **Test failure** | Assertion errors, test assertion mismatches |
+          | **Lint / format** | Style violations, formatter diffs |
+          | **Code quality** | SonarCloud issues on changed files |
+          | **Dependency** | Lock file out of sync, missing package, version conflict |
+          | **Infrastructure** | Runner OOM, disk full, missing secret/env var |
+          
+          Use the GitHub MCP to read the relevant source files referenced in the error
+          output to confirm the root cause before formulating a remediation.
+          
+          ---
+          
+          ## 5. Formulate a proposed remediation
+          
+          Write a concrete next step — what a human (or a future write-enabled agent)
+          should do. Tailor it to the category:
+          
+          | Category | Proposed remediation |
+          |----------|----------------------|
+          | Flaky / transient | Re-run the failed jobs |
+          | Build / test / lint | "Investigate `<file:line>` — the error suggests `<hypothesis>`" |
+          | Code quality | "Submit `sonar remediate --project <project-key> --issues <key1>,<key2>`" |
+          | Dependency | "Regenerate the lockfile via `<command>`" |
+          | Infrastructure | "Check runner capacity / verify secret `<name>` is set" |
+          | Uncertain | "Manual investigation needed — error at `<file:line>` does not match a known pattern" |
+          
+          ---
+          
+          ## 5b. Auto-fix (conditional)
+          
+          After diagnosing and formulating a remediation, assess your confidence in the fix:
+          
+          - **High confidence**: the fix is mechanical or deterministic — formatting, missing import,
+            lockfile regeneration, simple typo, straightforward test assertion update.
+          - **Low confidence**: the fix requires design decisions, affects multiple systems, the root
+            cause is uncertain, or the change is non-trivial.
+          
+          **If confidence is high:**
+          
+          1. Use the GitHub MCP to search for open PRs with `[ci-fix]` in the title that touch the
+             same file(s). If one already exists, skip PR creation.
+          2. Apply the fix. You **must** create a branch before committing — the framework
+             bundles your changes by branch ref, and without a `refs/heads/*` entry the
+             bundle will fail to apply.
+             ```bash
+             # 1. Create a branch (any ci-fix/ name works)
+             git checkout -b ci-fix/<descriptive-name>
+             # 2. Make the code changes to the file(s)
+             # 3. Stage ALL changed files explicitly
+             git add <file1> <file2> ...
+             # 4. Verify there are staged changes
+             git status
+             # 5. Commit
+             git commit -m "<category>: <short description of the fix>"
+             ```
+          3. Open a PR via the `create-pull-request` safe output. In the PR description include:
+             - The diagnosis category and root cause summary
+             - A link to the failed workflow run
+             - The exact error that was fixed
+          4. Note the PR URL for inclusion in the Slack message.
+          
+          **If confidence is low:** skip PR creation entirely and proceed to Slack notification.
+          
+          ---
+          
+          ## 6. Notify Slack
+          
+          Emit a `slack_notify` safe output with:
+          
+          - `message`: a structured message containing:
+            - **Workflow**: `{workflow-name}` — link to the run
+            - **Branch**: `{head-branch}`
+            - **Commit**: `{short-sha}` by `{author}` — `{commit-subject}`
+            - **Diagnosis**: `{category}` — 1–2 sentences explaining the root cause
+            - **Proposed remediation**: the concrete next step from §5
+            - **Fix PR**: if a PR was created in §5b, include the PR URL
+          
+          ---
+          
+          ## Rules
+          
+          - Post **at most one** Slack message per failed commit (loop guard in §2).
+          - Only create a PR when confidence in the fix is high and no existing `[ci-fix]` PR addresses the same issue.
+          - Only modify files when creating a high-confidence fix PR. Never open issues.
+          - If the failure category is uncertain, still post to Slack — include the raw error
+            excerpt and flag the diagnosis as "uncertain".
+          
+          
           {{#runtime-import .github/workflows/ci-failure-triage-agent.md}}
-          GH_AW_PROMPT_71205a221871e33c_EOF
+          GH_AW_PROMPT_501ba99ee596fc9a_EOF
           } > "$GH_AW_PROMPT"
       - name: Interpolate variables and render templates
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -388,7 +539,7 @@ jobs:
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
           parent-span-id: ${{ needs.activation.outputs.setup-parent-span-id || needs.activation.outputs.setup-span-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_SETUP_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/ci-failure-triage-agent.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.52"
           GH_AW_INFO_AWF_VERSION: "v0.25.55"
@@ -482,9 +633,9 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/gh-aw/safeoutputs"
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
-          cat > "${RUNNER_TEMP}/gh-aw/safeoutputs/config.json" << 'GH_AW_SAFE_OUTPUTS_CONFIG_6c0d4912a9f47461_EOF'
-          {"create_pull_request":{"base_branch":"${{ env.HEAD_BRANCH }}","draft":true,"labels":["ci-fix","automated"],"max":1,"max_patch_files":100,"max_patch_size":1024,"protect_top_level_dot_folders":true,"protected_files":["package.json","bun.lockb","bunfig.toml","deno.json","deno.jsonc","deno.lock","global.json","NuGet.Config","Directory.Packages.props","mix.exs","mix.lock","go.mod","go.sum","stack.yaml","stack.yaml.lock","pom.xml","build.gradle","build.gradle.kts","settings.gradle","settings.gradle.kts","gradle.properties","package-lock.json","yarn.lock","pnpm-lock.yaml","npm-shrinkwrap.json","requirements.txt","Pipfile","Pipfile.lock","pyproject.toml","setup.py","setup.cfg","Gemfile","Gemfile.lock","uv.lock","CODEOWNERS","DESIGN.md","README.md","CONTRIBUTING.md","CHANGELOG.md","SECURITY.md","CODE_OF_CONDUCT.md","AGENTS.md","CLAUDE.md","GEMINI.md"],"protected_files_policy":"allowed","title_prefix":"[ci-fix] "},"create_report_incomplete_issue":{},"missing_data":{},"missing_tool":{},"report_incomplete":{},"slack-notify":{"description":"Send a CI failure triage message to Slack","inputs":{"message":{"default":null,"description":"The triage message to send","required":true,"type":"string"}}}}
-          GH_AW_SAFE_OUTPUTS_CONFIG_6c0d4912a9f47461_EOF
+          cat > "${RUNNER_TEMP}/gh-aw/safeoutputs/config.json" << 'GH_AW_SAFE_OUTPUTS_CONFIG_902a36d80841a707_EOF'
+          {"create_pull_request":{"base_branch":"${{ env.HEAD_BRANCH }}","draft":true,"labels":["ci-fix","automated"],"max":1,"max_patch_files":100,"max_patch_size":1024,"protect_top_level_dot_folders":true,"protected_files":["package.json","bun.lockb","bunfig.toml","deno.json","deno.jsonc","deno.lock","global.json","NuGet.Config","Directory.Packages.props","mix.exs","mix.lock","go.mod","go.sum","stack.yaml","stack.yaml.lock","pom.xml","build.gradle","build.gradle.kts","settings.gradle","settings.gradle.kts","gradle.properties","package-lock.json","yarn.lock","pnpm-lock.yaml","npm-shrinkwrap.json","requirements.txt","Pipfile","Pipfile.lock","pyproject.toml","setup.py","setup.cfg","Gemfile","Gemfile.lock","uv.lock","CODEOWNERS","DESIGN.md","README.md","CONTRIBUTING.md","CHANGELOG.md","SECURITY.md","CODE_OF_CONDUCT.md","AGENTS.md","CLAUDE.md","GEMINI.md"],"protected_files_policy":"allowed","title_prefix":"[ci-fix] "},"create_report_incomplete_issue":{},"missing_data":{},"missing_tool":{},"noop":{"max":1,"report-as-issue":"true"},"report_incomplete":{},"slack-notify":{"description":"Send a CI failure triage message to Slack","inputs":{"message":{"default":null,"description":"The triage message to send","required":true,"type":"string"}}}}
+          GH_AW_SAFE_OUTPUTS_CONFIG_902a36d80841a707_EOF
       - name: Generate Safe Outputs Tools
         env:
           GH_AW_TOOLS_META_JSON: |
@@ -602,6 +753,17 @@ jobs:
                   }
                 }
               },
+              "noop": {
+                "defaultMax": 1,
+                "fields": {
+                  "message": {
+                    "required": true,
+                    "type": "string",
+                    "sanitize": true,
+                    "maxLength": 65000
+                  }
+                }
+              },
               "report_incomplete": {
                 "defaultMax": 5,
                 "fields": {
@@ -704,7 +866,7 @@ jobs:
           
           mkdir -p /home/runner/.copilot
           GH_AW_NODE=$(which node 2>/dev/null || command -v node 2>/dev/null || echo node)
-          cat << GH_AW_MCP_CONFIG_f5c54b8c57ac837c_EOF | "$GH_AW_NODE" "${RUNNER_TEMP}/gh-aw/actions/start_mcp_gateway.cjs"
+          cat << GH_AW_MCP_CONFIG_29332a1b416f14a5_EOF | "$GH_AW_NODE" "${RUNNER_TEMP}/gh-aw/actions/start_mcp_gateway.cjs"
           {
             "mcpServers": {
               "github": {
@@ -745,7 +907,7 @@ jobs:
               "payloadDir": "${MCP_GATEWAY_PAYLOAD_DIR}"
             }
           }
-          GH_AW_MCP_CONFIG_f5c54b8c57ac837c_EOF
+          GH_AW_MCP_CONFIG_29332a1b416f14a5_EOF
       - name: Mount MCP servers as CLIs
         id: mount-mcp-clis
         continue-on-error: true
@@ -993,6 +1155,7 @@ jobs:
       queue: max
     outputs:
       incomplete_count: ${{ steps.report_incomplete.outputs.incomplete_count }}
+      noop_message: ${{ steps.noop.outputs.noop_message }}
       tools_reported: ${{ steps.missing_tool.outputs.tools_reported }}
       total_count: ${{ steps.missing_tool.outputs.total_count }}
     steps:
@@ -1005,7 +1168,7 @@ jobs:
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
           parent-span-id: ${{ needs.activation.outputs.setup-parent-span-id || needs.activation.outputs.setup-span-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_SETUP_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/ci-failure-triage-agent.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.52"
           GH_AW_INFO_AWF_VERSION: "v0.25.55"
@@ -1024,12 +1187,30 @@ jobs:
           mkdir -p /tmp/gh-aw/
           find "/tmp/gh-aw/" -type f -print
           echo "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/agent_output.json" >> "$GITHUB_OUTPUT"
+      - name: Process no-op messages
+        id: noop
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
+          GH_AW_NOOP_MAX: "1"
+          GH_AW_WORKFLOW_NAME: "Ci Failure Triage Agent"
+          GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/ci-failure-triage-agent.md"
+          GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
+          GH_AW_NOOP_REPORT_AS_ISSUE: "true"
+        with:
+          github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io, getOctokit);
+            const { main } = require('${{ runner.temp }}/gh-aw/actions/handle_noop_message.cjs');
+            await main();
       - name: Log detection run
         id: detection_runs
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/ci-failure-triage-agent.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.outputs.detection_conclusion }}
@@ -1047,7 +1228,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_MISSING_TOOL_CREATE_ISSUE: "true"
-          GH_AW_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/ci-failure-triage-agent.md"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1062,7 +1243,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_REPORT_INCOMPLETE_CREATE_ISSUE: "true"
-          GH_AW_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/ci-failure-triage-agent.md"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1077,7 +1258,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/ci-failure-triage-agent.md"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
@@ -1134,7 +1315,7 @@ jobs:
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
           parent-span-id: ${{ needs.activation.outputs.setup-parent-span-id || needs.activation.outputs.setup-span-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_SETUP_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/ci-failure-triage-agent.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.52"
           GH_AW_INFO_AWF_VERSION: "v0.25.55"
@@ -1203,7 +1384,7 @@ jobs:
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          WORKFLOW_NAME: "CI Failure Triage Agent"
+          WORKFLOW_NAME: "Ci Failure Triage Agent"
           WORKFLOW_DESCRIPTION: "No description provided"
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1314,6 +1495,7 @@ jobs:
             }
 
   pre_activation:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-slim
     outputs:
       activated: ${{ steps.check_membership.outputs.is_team_member == 'true' }}
@@ -1329,7 +1511,7 @@ jobs:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_SETUP_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/ci-failure-triage-agent.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.52"
           GH_AW_INFO_AWF_VERSION: "v0.25.55"
@@ -1368,7 +1550,7 @@ jobs:
       GH_AW_ENGINE_MODEL: ${{ needs.agent.outputs.model }}
       GH_AW_ENGINE_VERSION: "1.0.52"
       GH_AW_WORKFLOW_ID: "ci-failure-triage-agent"
-      GH_AW_WORKFLOW_NAME: "CI Failure Triage Agent"
+      GH_AW_WORKFLOW_NAME: "Ci Failure Triage Agent"
       GH_AW_WORKFLOW_SOURCE_URL: "${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.github/workflows/ci-failure-triage-agent.md"
     outputs:
       code_push_failure_count: ${{ steps.process_safe_outputs.outputs.code_push_failure_count }}
@@ -1389,7 +1571,7 @@ jobs:
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
           parent-span-id: ${{ needs.activation.outputs.setup-parent-span-id || needs.activation.outputs.setup-span-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "CI Failure Triage Agent"
+          GH_AW_SETUP_WORKFLOW_NAME: "Ci Failure Triage Agent"
           GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/ci-failure-triage-agent.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.52"
           GH_AW_INFO_AWF_VERSION: "v0.25.55"
@@ -1486,7 +1668,7 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_API_URL: ${{ github.api_url }}
           GH_AW_SAFE_OUTPUT_JOBS: "{\"slack_notify\":\"\"}"
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request\":{\"base_branch\":\"${{ env.HEAD_BRANCH }}\",\"draft\":true,\"labels\":[\"ci-fix\",\"automated\"],\"max\":1,\"max_patch_files\":100,\"max_patch_size\":1024,\"protect_top_level_dot_folders\":true,\"protected_files\":[\"package.json\",\"bun.lockb\",\"bunfig.toml\",\"deno.json\",\"deno.jsonc\",\"deno.lock\",\"global.json\",\"NuGet.Config\",\"Directory.Packages.props\",\"mix.exs\",\"mix.lock\",\"go.mod\",\"go.sum\",\"stack.yaml\",\"stack.yaml.lock\",\"pom.xml\",\"build.gradle\",\"build.gradle.kts\",\"settings.gradle\",\"settings.gradle.kts\",\"gradle.properties\",\"package-lock.json\",\"yarn.lock\",\"pnpm-lock.yaml\",\"npm-shrinkwrap.json\",\"requirements.txt\",\"Pipfile\",\"Pipfile.lock\",\"pyproject.toml\",\"setup.py\",\"setup.cfg\",\"Gemfile\",\"Gemfile.lock\",\"uv.lock\",\"CODEOWNERS\",\"DESIGN.md\",\"README.md\",\"CONTRIBUTING.md\",\"CHANGELOG.md\",\"SECURITY.md\",\"CODE_OF_CONDUCT.md\",\"AGENTS.md\",\"CLAUDE.md\",\"GEMINI.md\"],\"protected_files_policy\":\"allowed\",\"title_prefix\":\"[ci-fix] \"},\"create_report_incomplete_issue\":{},\"missing_data\":{},\"missing_tool\":{},\"report_incomplete\":{}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"create_pull_request\":{\"base_branch\":\"${{ env.HEAD_BRANCH }}\",\"draft\":true,\"labels\":[\"ci-fix\",\"automated\"],\"max\":1,\"max_patch_files\":100,\"max_patch_size\":1024,\"protect_top_level_dot_folders\":true,\"protected_files\":[\"package.json\",\"bun.lockb\",\"bunfig.toml\",\"deno.json\",\"deno.jsonc\",\"deno.lock\",\"global.json\",\"NuGet.Config\",\"Directory.Packages.props\",\"mix.exs\",\"mix.lock\",\"go.mod\",\"go.sum\",\"stack.yaml\",\"stack.yaml.lock\",\"pom.xml\",\"build.gradle\",\"build.gradle.kts\",\"settings.gradle\",\"settings.gradle.kts\",\"gradle.properties\",\"package-lock.json\",\"yarn.lock\",\"pnpm-lock.yaml\",\"npm-shrinkwrap.json\",\"requirements.txt\",\"Pipfile\",\"Pipfile.lock\",\"pyproject.toml\",\"setup.py\",\"setup.cfg\",\"Gemfile\",\"Gemfile.lock\",\"uv.lock\",\"CODEOWNERS\",\"DESIGN.md\",\"README.md\",\"CONTRIBUTING.md\",\"CHANGELOG.md\",\"SECURITY.md\",\"CODE_OF_CONDUCT.md\",\"AGENTS.md\",\"CLAUDE.md\",\"GEMINI.md\"],\"protected_files_policy\":\"allowed\",\"title_prefix\":\"[ci-fix] \"},\"create_report_incomplete_issue\":{},\"missing_data\":{},\"missing_tool\":{},\"noop\":{\"max\":1,\"report-as-issue\":\"true\"},\"report_incomplete\":{}}"
           GH_AW_CI_TRIGGER_TOKEN: ${{ secrets.GH_AW_CI_TRIGGER_TOKEN }}
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1521,8 +1703,21 @@ jobs:
         with:
           name: agent
           path: ${{ runner.temp }}/gh-aw/safe-jobs/
+      - name: Guard against non-failure conclusions
+        id: guard
+        run: |
+          if [ "$WORKFLOW_CONCLUSION" != "failure" ]; then
+            echo "::notice::Skipping Slack notification: WORKFLOW_CONCLUSION is '$WORKFLOW_CONCLUSION', not 'failure'"
+            echo "should_post=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_post=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json
+          WORKFLOW_CONCLUSION: ${{ env.WORKFLOW_CONCLUSION }}
       - name: Extract message from agent output
         id: extract
+        if: steps.guard.outputs.should_post == 'true'
         run: |
           if [ -f "$GH_AW_AGENT_OUTPUT" ]; then
             MESSAGE=$(cat "$GH_AW_AGENT_OUTPUT" | jq -r '.items[] | select(.type == "slack_notify") | .message')
@@ -1538,6 +1733,7 @@ jobs:
           GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json
       - name: Get Slack token from Vault
         id: secrets
+        if: steps.guard.outputs.should_post == 'true'
         uses: SonarSource/vault-action-wrapper@c154b4a417b51cb98dd71137f49bf20e77c56820 # c154b4a417b51cb98dd71137f49bf20e77c56820
         env:
           GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json
@@ -1545,11 +1741,12 @@ jobs:
           secrets: |
             development/kv/data/slack token | SLACK_BOT_TOKEN;
       - name: Post to Slack
+        if: steps.guard.outputs.should_post == 'true'
         uses: slackapi/slack-github-action@70cd7be8e40a46e8b0eced40b0de447bdb42f68e # 70cd7be8e40a46e8b0eced40b0de447bdb42f68e
         env:
           GH_AW_AGENT_OUTPUT: ${{ runner.temp }}/gh-aw/safe-jobs/agent_output.json
           SLACK_BOT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SLACK_BOT_TOKEN }}
         with:
-          channel-id: squad-integration-on-call
+          channel-id: ${{ env.SLACK_CHANNEL }}
           slack-message: ${{ steps.extract.outputs.message }}
 
