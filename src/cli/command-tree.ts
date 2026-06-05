@@ -83,6 +83,7 @@ import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
 import { systemReset, type SystemResetOptions } from './commands/system/reset';
+import { systemStatus, type SystemStatusOptions } from './commands/system/status';
 import { getBanner, getCustomRootHelp } from './root-help.js';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
@@ -408,16 +409,16 @@ configure
   .option('--disabled', 'Disable collection of anonymous usage statistics')
   .anonymousAction((options: ConfigureTelemetryOptions) => configureTelemetry(options));
 
-// Update the CLI to the latest version
-COMMAND_TREE.command('self-update')
-  .description('Update sonar CLI to the latest version')
-  .option('--status', 'Check for a newer version without installing')
-  .option('--force', 'Install the latest version even if already up to date')
-  .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
-
+// System diagnostics and maintenance
 const system = COMMAND_TREE.command('system').description(
-  'System maintenance commands for the SonarQube CLI installation.',
+  'System diagnostics and maintenance commands for the SonarQube CLI installation.',
 );
+
+system
+  .command('status')
+  .description('Show overall system status: authentication, installed binaries, and integrations')
+  .option('--json', 'Output as JSON for machine consumption')
+  .anonymousAction((options: SystemStatusOptions) => systemStatus(options));
 
 system
   .command('reset')
@@ -427,6 +428,13 @@ system
   )
   .option('--force', 'Skip the interactive confirmation prompt (required for non-interactive use)')
   .anonymousAction((options: SystemResetOptions) => systemReset(options));
+
+// Update the CLI to the latest version
+COMMAND_TREE.command('self-update')
+  .description('Update sonar CLI to the latest version')
+  .option('--status', 'Check for a newer version without installing')
+  .option('--force', 'Install the latest version even if already up to date')
+  .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
 
 const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
   'Run SonarQube services',

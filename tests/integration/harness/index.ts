@@ -31,6 +31,7 @@ import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
+import { FakeUpdateScriptServer } from './fake-update-script-server.js';
 import { File } from './file';
 import { buildHomeEnv, IS_WINDOWS } from './platform';
 import type { CliResult, RunOptions } from './types.js';
@@ -42,6 +43,7 @@ export {
   FakeSonarQubeServerBuilder,
   ProjectBuilder,
 } from './fake-sonarqube-server.js';
+export { FakeUpdateScriptServer } from './fake-update-script-server.js';
 export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath, SCRIPT_EXT } from './platform';
 export type { CliResult, RecordedRequest, RunOptions } from './types.js';
 
@@ -54,6 +56,7 @@ export class TestHarness {
   private readonly tempDir: Dir;
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
+  private readonly updateScriptServers: FakeUpdateScriptServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private systemEnvVars: Record<string, string> = {};
 
@@ -180,6 +183,17 @@ export class TestHarness {
   }
 
   /**
+   * Creates a fake update script server that returns an install script pinned to `version`.
+   * Use this to exercise the CLI update check without hitting GitHub.
+   * The server is stopped automatically when dispose() is called.
+   */
+  newFakeUpdateScriptServer(version: string): FakeUpdateScriptServer {
+    const server = new FakeUpdateScriptServer(version).start();
+    this.updateScriptServers.push(server);
+    return server;
+  }
+
+  /**
    * Runs the CLI binary with the given command string.
    *
    * Before spawning, applies the configured environment (writes state.json + seeds tokens).
@@ -217,17 +231,32 @@ export class TestHarness {
       ? { SONARQUBE_CLI_SONARCLOUD_API_URL: activeFakeServer.baseUrl() }
       : {};
 
-    return {
+    const activeUpdateServer = this.updateScriptServers.at(-1);
+    const fakeUpdateScriptEnv: Record<string, string> = activeUpdateServer
+      ? { SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL: activeUpdateServer.baseUrl() }
+      : {};
+
+    const composed: Record<string, string> = {
       ...this.systemEnvVars,
       ...builderExtraEnv,
       ...fakeBinariesEnv,
       ...fakeSonarcloudApiEnv,
+      ...fakeUpdateScriptEnv,
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
       [ENV_SQAA_RETRY_BASE_DELAY_MS]: '0',
       ...options?.extraEnv,
       ...buildHomeEnv(this.userHome.path),
     };
+
+    // Prepend docker mock bin dir to the fully-composed PATH so it doesn't
+    // clobber any PATH already set by withCliInPath().
+    const dockerBin = this._envBuilder?.dockerMockBinDir;
+    if (dockerBin) {
+      composed.PATH = `${dockerBin}:${composed.PATH ?? process.env.PATH ?? ''}`;
+    }
+
+    return composed;
   }
 
   /**
@@ -241,6 +270,7 @@ export class TestHarness {
         }),
       ),
     );
+    await Promise.all(this.updateScriptServers.map((s) => s.stop().catch(() => {})));
 
     await rm(this.tempDir.path, {
       recursive: true,
