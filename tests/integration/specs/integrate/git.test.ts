@@ -422,8 +422,8 @@ describe('integrate git (native hooks)', () => {
       const result = await harness.run('integrate git --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installed pre-commit hook');
-      expect(result.stdout + result.stderr).toContain('Installed pre-push hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
 
