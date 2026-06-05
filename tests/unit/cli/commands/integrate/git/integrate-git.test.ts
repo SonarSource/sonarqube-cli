@@ -37,7 +37,6 @@ import {
   type IntegrateGitOptions,
   isGitHookType,
   resolveGitHooksDir,
-  resolveHookType,
 } from '../../../../../../src/cli/commands/integrate/git';
 import { PRE_COMMIT_CONFIG_FILE } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
 import { HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
@@ -323,55 +322,6 @@ describe('detectHookInstallation', () => {
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
-    }
-  });
-});
-
-describe('resolveHookType', () => {
-  it('returns pre-commit when --hook pre-commit is passed', async () => {
-    const result = await resolveHookType({ hook: 'pre-commit' });
-    expect(result).toBe('pre-commit');
-  });
-
-  it('returns pre-push when --hook pre-push is passed', async () => {
-    const result = await resolveHookType({ hook: 'pre-push' });
-    expect(result).toBe('pre-push');
-  });
-
-  it('defaults to pre-commit when non-interactive and hook is omitted', async () => {
-    const result = await resolveHookType({ nonInteractive: true });
-    expect(result).toBe('pre-commit');
-  });
-
-  it('returns pre-commit when the user selects it from the prompt', async () => {
-    setMockUi(true);
-    queueMockResponse('pre-commit');
-    try {
-      const result = await resolveHookType({});
-      expect(result).toBe('pre-commit');
-    } finally {
-      setMockUi(false);
-    }
-  });
-
-  it('returns pre-push when the user selects it from the prompt', async () => {
-    setMockUi(true);
-    queueMockResponse('pre-push');
-    try {
-      const result = await resolveHookType({});
-      expect(result).toBe('pre-push');
-    } finally {
-      setMockUi(false);
-    }
-  });
-
-  it('throws CommandFailedError when the user cancels the prompt', () => {
-    setMockUi(true);
-    queueMockResponse(null);
-    try {
-      expect(resolveHookType({})).rejects.toThrow('Installation cancelled');
-    } finally {
-      setMockUi(false);
     }
   });
 });
