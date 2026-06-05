@@ -41,7 +41,7 @@ function renderItem(item: PhaseItem, iconColors: Partial<Record<StepStatus, Colo
   const detail = item.detail ? dim(`: ${item.detail}`) : '';
   const lines = [`    ${icon}  ${item.text}${detail}`];
   for (const subItem of item.subItems ?? []) {
-    lines.push(dim(`       * ${subItem}`));
+    lines.push(dim(`       ${subItem}`));
   }
   return lines.join('\n');
 }
@@ -68,7 +68,7 @@ export function phase(title: string, items: PhaseItem[], opts: PhaseOptions = {}
       const detail = item.detail ? `: ${item.detail}` : '';
       process.stdout.write(`  ${icon}  ${item.text}${detail}\n`);
       for (const subItem of item.subItems ?? []) {
-        process.stdout.write(`       * ${subItem}\n`);
+        process.stdout.write(`       ${subItem}\n`);
       }
     }
     process.stdout.write('\n');

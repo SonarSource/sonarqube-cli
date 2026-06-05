@@ -106,7 +106,7 @@ describe('phase: TTY rendering', () => {
     }
   });
 
-  it('renderItem: writes sub-items as a bullet list in TTY mode', () => {
+  it('renderItem: writes sub-items as an indented list in TTY mode', () => {
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
       output.push(String(s));
@@ -114,7 +114,7 @@ describe('phase: TTY rendering', () => {
     });
     try {
       phase('Installed', [phaseItem('Feature', 'done', undefined, ['~/.config/a'])]);
-      expect(output.join('')).toContain('* ~/.config/a');
+      expect(output.join('')).toContain('       ~/.config/a');
     } finally {
       writeSpy.mockRestore();
     }
