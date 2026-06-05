@@ -139,7 +139,7 @@ describe('detectGlobalSecretsHook', () => {
     expect(warnCall).toBeDefined();
   });
 
-  it('returns the hook dir and emits info(...) when both settings entry and sonar-secrets script directory are present (installed)', async () => {
+  it('returns the hook dir silently when both settings entry and sonar-secrets script directory are present (installed)', async () => {
     readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
     existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
       const path = normPath(String(p));
@@ -150,15 +150,8 @@ describe('detectGlobalSecretsHook', () => {
 
     expect(result).toBeDefined();
     expect(normPath(result ?? '')).toEndWith('.claude/hooks/sonar-secrets');
-    const infoCall = getMockUiCalls().find(
-      (c) =>
-        c.method === 'info' &&
-        String(c.args[0]).includes(
-          'A global secrets scanning hook is already configured for SonarQube',
-        ) &&
-        String(c.args[0]).includes('project-level secrets hooks were skipped'),
-    );
-    expect(infoCall).toBeDefined();
+    const infoCall = getMockUiCalls().find((c) => c.method === 'info');
+    expect(infoCall).toBeUndefined();
   });
 });
 

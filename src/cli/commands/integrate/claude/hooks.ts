@@ -25,7 +25,7 @@ import * as fsPromises from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 import logger from '../../../../lib/logger';
-import { info, warn } from '../../../../ui';
+import { warn } from '../../../../ui';
 import { readOrInitJson, SONAR_SECRETS_MARKER, writeHookScript } from '../_common/hooks';
 import {
   getSecretPreToolTemplateUnix,
@@ -192,16 +192,10 @@ async function probeSecretsHook(hooksRoot: string): Promise<SecretsHookState> {
  *  - Healthy global install → silent, returns the hook dir.
  *  - Orphaned install → `warn(...)` and returns `undefined`.
  *  - No global install → silent, returns `undefined`.
- *
- * The "global hook already configured, skipping project-level" info is
- * announced later by the caller alongside the rest of the install scope.
  */
 export async function detectGlobalSecretsHook(hooksRoot: string): Promise<string | undefined> {
   const state = await probeSecretsHook(hooksRoot);
   if (state.kind === 'installed') {
-    info(
-      `A global secrets scanning hook is already configured for SonarQube at ${state.hookDir}. To avoid duplicate execution, project-level secrets hooks were skipped.`,
-    );
     return state.hookDir;
   }
   if (state.kind === 'orphaned') {
