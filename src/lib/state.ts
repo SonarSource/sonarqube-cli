@@ -450,6 +450,16 @@ export interface TelemetryState {
 /**
  * Complete state structure for ~/.sonar/sonarqube-cli/state.json
  */
+/**
+ * GitHub authentication state — stored separately from SonarQube auth
+ */
+export interface GitHubAuthState {
+  /** ISO timestamp when the token was last saved */
+  authenticatedAt: string;
+  /** GitHub login (username) of the authenticated user */
+  login?: string;
+}
+
 export interface CliState {
   /** State format version */
   version: string;
@@ -457,6 +467,8 @@ export interface CliState {
   lastUpdated: string;
   /** Authentication state */
   auth: AuthState;
+  /** GitHub authentication state (token stored separately in keychain) */
+  githubAuth?: GitHubAuthState;
   /** Agent configurations */
   agents: AgentsState;
   /** CLI configuration */

@@ -218,3 +218,27 @@ export async function deleteToken(serverURL: string, org?: string): Promise<void
   await backend.deletePassword(getServiceName(), account);
   tokenCache.delete(account);
 }
+
+const GITHUB_KEYCHAIN_ACCOUNT = 'github.com';
+
+export async function getGitHubToken(): Promise<string | null> {
+  if (tokenCache.has(GITHUB_KEYCHAIN_ACCOUNT)) {
+    return tokenCache.get(GITHUB_KEYCHAIN_ACCOUNT) ?? null;
+  }
+  const backend = getBackend();
+  const token = await backend.getPassword(getServiceName(), GITHUB_KEYCHAIN_ACCOUNT);
+  tokenCache.set(GITHUB_KEYCHAIN_ACCOUNT, token);
+  return token;
+}
+
+export async function saveGitHubToken(token: string): Promise<void> {
+  const backend = getBackend();
+  await backend.setPassword(getServiceName(), GITHUB_KEYCHAIN_ACCOUNT, token);
+  tokenCache.set(GITHUB_KEYCHAIN_ACCOUNT, token);
+}
+
+export async function deleteGitHubToken(): Promise<void> {
+  const backend = getBackend();
+  await backend.deletePassword(getServiceName(), GITHUB_KEYCHAIN_ACCOUNT);
+  tokenCache.delete(GITHUB_KEYCHAIN_ACCOUNT);
+}

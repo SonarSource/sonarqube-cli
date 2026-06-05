@@ -75,6 +75,7 @@ import {
   VALID_STATUSES,
 } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
+import { onboard } from './commands/onboard/onboard';
 import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
 import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
@@ -277,6 +278,67 @@ list
   .addOption(pageOption)
   .addOption(pageSizeOption)
   .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
+
+COMMAND_TREE.command('onboard')
+  .description('Interactive wizard to onboard GitHub organizations to SonarQube')
+  .addHelpText(
+    'after',
+    `
+Description:
+  Onboards one or more GitHub organizations to SonarQube by scanning their
+  repositories, checking license capacity, and ingesting the required
+  configuration files into each selected repository.
+
+  The wizard runs interactively and consists of up to four steps:
+
+    1. Install mode   — Choose Recommended (fully automatic) or Manual
+                        (you select which organizations and repositories to include).
+    2. Analysis       — Fetches license and repository data from SonarQube for
+                        each organization. Results are appended as they arrive;
+                        you only press Enter once at the end.
+    3. Repository     — (Manual mode only) Select which repositories to onboard
+                        per organization. Supports search (/) and Select all.
+    4. Installation   — Ingests sonar-project.properties and
+                        .github/workflows/sonarqube.yml into each repository.
+                        Press p to pause, r to resume, s to stop gracefully.
+
+Prerequisites:
+  • Authenticated with SonarQube:
+      sonar auth login
+  • A GitHub token with read:org scope, in any of:
+      - GITHUB_TOKEN environment variable
+      - GitHub CLI (gh auth login)
+      - Prompted via browser OAuth if neither is available
+
+Install modes:
+  Recommended   Fetches all GitHub organizations the authenticated user belongs
+                to, runs analysis for each, pre-selects all eligible repositories
+                for review, then installs. Best for first-time bulk onboarding.
+
+  Manual        You explicitly choose which organizations (multi-select with
+                Select all) and which repositories per organization before
+                installation runs.
+
+License impact:
+  The analysis step shows your current SonarQube license capacity and the
+  estimated lines of code to be added. When multiple organizations are
+  analyzed, the running total accounts for all prior organizations so you
+  can see cumulative impact before committing.
+
+Installation:
+  Each repository receives two files:
+    • sonar-project.properties   — Project key and analysis settings
+    • .github/workflows/sonarqube.yml — CI workflow to trigger SonarQube analysis
+
+  Repositories already connected to SonarQube, archived, or forks are skipped
+  automatically. Failed repositories are logged and reported in the summary but
+  do not abort the run.
+
+Example:
+  $ sonar onboard
+`,
+  )
+  .authenticatedAction((auth) => onboard(auth));
 
 // Trigger AI remediation for eligible issues (SonarQube Cloud only)
 COMMAND_TREE.command('remediate')

@@ -79,19 +79,21 @@ export class SonarQubeClient {
       throw new ServiceUnavailableError();
     }
 
+    const errorText = await response.text();
+    const errorDetail = errorText ? ` - ${errorText}` : '';
+
     if (method === 'GET') {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
         throw new Error(
           `Access denied (HTTP ${response.status}). Check that the supplied token and organization are valid.`,
         );
       }
-      throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `SonarQube API error: ${response.status} ${response.statusText}${errorDetail}`,
+      );
     }
 
-    const errorText = await response.text();
-    throw new Error(
-      `SonarQube API error: ${response.status} ${response.statusText} - ${errorText}`,
-    );
+    throw new Error(`SonarQube API error: ${response.status} ${response.statusText}${errorDetail}`);
   }
 
   /**
@@ -157,8 +159,9 @@ export class SonarQubeClient {
     endpoint: string,
     params?: Record<string, string | number | boolean>,
     baseUrl?: string,
+    timeoutMs?: number,
   ): Promise<T> {
-    const result = await this.getSafe<T>(endpoint, params, baseUrl);
+    const result = await this.getSafe<T>(endpoint, params, baseUrl, timeoutMs);
 
     await this.raiseForStatus(result.response, 'GET');
 
@@ -171,6 +174,7 @@ export class SonarQubeClient {
     endpoint: string,
     params?: Record<string, string | number | boolean>,
     baseUrl?: string,
+    timeoutMs?: number,
   ): Promise<{ response: Response; value: TValue | undefined }> {
     const url = new URL(`${baseUrl ?? this.serverURL}${endpoint}`);
 
@@ -183,7 +187,7 @@ export class SonarQubeClient {
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: this.commonHeaders(),
-      signal: AbortSignal.timeout(GET_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs ?? GET_REQUEST_TIMEOUT_MS),
     });
 
     const value = response.ok ? ((await response.json()) as TValue) : undefined;
@@ -194,14 +198,14 @@ export class SonarQubeClient {
   /**
    * Make POST request to SonarQube API using Bearer token
    */
-  async post<T>(endpoint: string, body: unknown, baseUrl?: string): Promise<T> {
+  async post<T>(endpoint: string, body: unknown, baseUrl?: string, timeoutMs?: number): Promise<T> {
     const url = `${baseUrl ?? this.serverURL}${endpoint}`;
 
     const response = await fetch(url, {
       method: 'POST',
       headers: this.commonHeaders('json'),
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs ?? POST_REQUEST_TIMEOUT_MS),
     });
 
     await this.raiseForStatus(response, 'POST');
@@ -529,6 +533,28 @@ export class SonarQubeClient {
       resolveFromEndpoint(this.serverURL, endpoint),
     );
   }
+
+  async getOnboardingDiff(organization: string): Promise<DiffResult> {
+    return await this.get<DiffResult>(
+      '/api/v2/onboarding/diff',
+      { organization },
+      undefined,
+      600000,
+    );
+  }
+
+  async getLocAnalysis(organization: string, repositories: string[] = []): Promise<unknown> {
+    return await this.post(
+      '/api/v2/onboarding/loc-analysis',
+      { organization, repositories },
+      undefined,
+      600000,
+    );
+  }
+
+  async getLicense(): Promise<LicenseInfo> {
+    return await this.get<LicenseInfo>('/api/v2/entitlements/license');
+  }
 }
 
 function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {
@@ -536,6 +562,57 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
     return { ...headers, Authorization: 'REDACTED' };
   }
   return headers;
+}
+
+export interface LicenseInfo {
+  expirationDate: string;
+  lastRefreshDate: string;
+  edition: string;
+  features: { name: string; parent: string; startDate: string; endDate: string }[];
+  maxLoc: number;
+  loc: number;
+  serverId: string;
+  type: string;
+  contactEmail: string;
+  remainingLocThreshold: number;
+  canActivateGracePeriod: boolean;
+  gracePeriodEndDate: string;
+  gracePeriodExpired: boolean;
+  extraDays: number;
+  startDate: string;
+  activatedOnline: boolean;
+  licenseKey: string;
+  supported: boolean;
+  validEdition: boolean;
+  validServerId: boolean;
+  officialDistribution: boolean;
+  expired: boolean;
+  legacy: boolean;
+  disabled: boolean;
+}
+
+export type RepoState =
+  | 'NOT_IMPORTED'
+  | 'IMPORTED_NEVER_ANALYSED'
+  | 'ANALYSED_LOCALLY'
+  | 'ACTIVE_CI';
+
+export interface DiffRepository {
+  fullName: string;
+  state: RepoState;
+  archived: boolean;
+  fork: boolean;
+  lastPushedAt: string;
+  sonarProjectKey: string;
+  lastAnalysisAt: string;
+  ciVendor: string;
+}
+
+export interface DiffResult {
+  organization: string;
+  totalRepositories: number;
+  counts: Record<string, number>;
+  repositories: DiffRepository[];
 }
 
 export interface AgentJobRequest {

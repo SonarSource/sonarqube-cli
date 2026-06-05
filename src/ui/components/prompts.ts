@@ -22,7 +22,7 @@
 
 import { ConfirmPrompt, isCancel, Prompt, SelectPrompt, TextPrompt } from '@clack/core';
 
-import { cyan, dim, green, red } from '../colors.js';
+import { cyan, dim, gray, green, red } from '../colors.js';
 import { print } from '../messages.js';
 import { dequeueMockResponse, isMockActive, recordCall } from '../mock.js';
 
@@ -93,10 +93,12 @@ export interface SelectOption<T> {
 
 /**
  * Selection prompt. Returns null if cancelled (Ctrl+C).
+ * Pass `hint` to render a muted line below the options (e.g. keyboard controls).
  */
 export async function selectPrompt<T>(
   message: string,
   options: SelectOption<T>[],
+  { hint }: { hint?: string } = {},
 ): Promise<T | null> {
   if (isMockActive()) {
     const value = dequeueMockResponse<T | null>(options.length ? options[0].value : null);
@@ -118,6 +120,7 @@ export async function selectPrompt<T>(
         const selected = i === this.cursor;
         lines.push(`    ${selected ? cyan('›') : ' '} ${selected ? opt.label : dim(opt.label)}`);
       }
+      if (hint) lines.push(`\n  ${gray(hint)}`);
       return lines.join('\n');
     },
   });
@@ -157,14 +160,19 @@ export function toggleSelected<T>(selected: T[], val: T, max: number): void {
   }
 }
 
+const SELECT_ALL_SENTINEL = '__select_all__' as const;
+
 /**
  * Multi-select prompt. Space to toggle, Enter to confirm. Max 20 selections.
  * Returns the selected values array (may be empty) or null if cancelled (Ctrl+C or q).
  * Renders a scrolling viewport when the option list exceeds MULTISELECT_VIEWPORT_SIZE.
+ * When selectAll is true, a "Select all" option is prepended; toggling it selects or
+ * clears all items. Toggling any individual item automatically deselects "Select all".
  */
 export async function multiSelectPrompt<T>(
   message: string,
   options: MultiSelectOption<T>[],
+  { selectAll = false, preSelectAll = false }: { selectAll?: boolean; preSelectAll?: boolean } = {},
 ): Promise<T[] | null> {
   if (isMockActive()) {
     const value = dequeueMockResponse<T[] | null>([]);
@@ -172,50 +180,104 @@ export async function multiSelectPrompt<T>(
     return value;
   }
 
-  const selected: T[] = [];
+  type AugmentedValue = T | typeof SELECT_ALL_SENTINEL;
+
+  // When selectAll is enabled there is no cap — the sentinel selects everything.
+  const cap = selectAll ? Infinity : MULTISELECT_MAX_SELECTED;
+  const allValues = options.map((o) => o.value);
+
+  const baseOptions: MultiSelectOption<AugmentedValue>[] = selectAll
+    ? [{ value: SELECT_ALL_SENTINEL, label: 'Select all' }, ...options]
+    : [...options];
+
+  // Pre-populate selection when requested (e.g. recommended mode)
+  const selected: AugmentedValue[] =
+    selectAll && preSelectAll ? [SELECT_ALL_SENTINEL, ...allValues] : [];
   let cursor = 0;
+  let query = '';
+  let searching = false;
+
+  function getVisible(): MultiSelectOption<AugmentedValue>[] {
+    if (!searching || query === '') return baseOptions;
+    const q = query.toLowerCase();
+    // Hide sentinel while searching — user is narrowing down specific items
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }
+
+  function clampCursor(visible: MultiSelectOption<AugmentedValue>[]): void {
+    cursor = Math.max(0, Math.min(cursor, visible.length - 1));
+  }
+
+  function isSentinelSelected(): boolean {
+    return selected.includes(SELECT_ALL_SENTINEL);
+  }
+
+  function toggleSentinel(): void {
+    if (isSentinelSelected()) {
+      selected.splice(0, selected.length);
+    } else {
+      selected.splice(0, selected.length, SELECT_ALL_SENTINEL, ...allValues);
+    }
+  }
+
+  function toggleReal(val: AugmentedValue): void {
+    // Remove sentinel when user picks an individual item
+    const sentinelIdx = selected.indexOf(SELECT_ALL_SENTINEL);
+    if (sentinelIdx >= 0) selected.splice(sentinelIdx, 1);
+    toggleSelected(selected, val, cap);
+  }
 
   const prompt = new Prompt<T[]>(
     {
       render() {
         if (this.state === 'submit') {
-          const selectedLabel = `${selected.length} selected`;
-          return `  ${green('✓')}  ${message} ${dim(selectedLabel)}`;
+          const count = selected.filter((v) => v !== SELECT_ALL_SENTINEL).length;
+          return `  ${green('✓')}  ${message} ${dim(String(count) + ' selected')}`;
         }
         if (this.state === 'cancel') {
           return `  ${red('✗')}  ${message}`;
         }
 
-        const atCap = selected.length >= MULTISELECT_MAX_SELECTED;
+        const visible = getVisible();
+        clampCursor(visible);
+
+        const realSelected = selected.filter((v) => v !== SELECT_ALL_SENTINEL);
+        const atCap = !selectAll && realSelected.length >= MULTISELECT_MAX_SELECTED;
+
+        const searchBar = searching
+          ? `  ${cyan('/')}  ${query || dim('type to filter…')}`
+          : dim('(Space to toggle, Enter to confirm, / to search, q to quit)');
         const hint = atCap
           ? dim(
               `(${MULTISELECT_MAX_SELECTED}/${MULTISELECT_MAX_SELECTED} - deselect to choose others)`,
             )
-          : dim('(Space to toggle, Enter to confirm, q to quit)');
+          : searchBar;
 
-        const total = options.length;
+        const total = visible.length;
         const { start, end } = calculateViewport(cursor, total, MULTISELECT_VIEWPORT_SIZE);
 
         const lines = [`  ${cyan('?')}  ${message}  ${hint}`];
 
-        if (start > 0) {
-          const more = `↑ ${start} more`;
-          lines.push(`      ${dim(more)}`);
+        if (total === 0) {
+          lines.push(`      ${dim('No results for "' + query + '"')}`);
+          return lines.join('\n');
         }
 
+        if (start > 0) lines.push(`      ${dim('↑ ' + String(start) + ' more')}`);
+
         for (let i = start; i < end; i++) {
-          const opt = options[i];
+          const opt = visible[i];
           const isCursor = i === cursor;
           const isSelected = selected.includes(opt.value);
-          const unavailable = atCap && !isSelected;
+          const isSentinel = opt.value === SELECT_ALL_SENTINEL;
+          const unavailable = !isSentinel && atCap && !isSelected;
           const checkbox = checkboxComponent(isSelected, unavailable);
           const arrow = isCursor ? cyan('❯') : ' ';
           const label = isCursor && !unavailable ? opt.label : dim(opt.label);
           lines.push(`    ${arrow} ${checkbox}  ${label}`);
         }
 
-        const more = `↓ ${total - end} more`;
-        if (end < total) lines.push(`      ${dim(more)}`);
+        if (end < total) lines.push(`      ${dim('↓ ' + String(total - end) + ' more')}`);
 
         return lines.join('\n');
       },
@@ -224,20 +286,53 @@ export async function multiSelectPrompt<T>(
   );
 
   prompt.on('cursor', (dir) => {
+    const visible = getVisible();
     if (dir === 'up') cursor = Math.max(0, cursor - 1);
-    else if (dir === 'down') cursor = Math.min(options.length - 1, cursor + 1);
+    else if (dir === 'down') cursor = Math.min(visible.length - 1, cursor + 1);
     else if (dir === 'space') {
-      const val = options[cursor]?.value;
-      if (val !== undefined) {
-        toggleSelected(selected, val, MULTISELECT_MAX_SELECTED);
-      }
+      const val = visible[cursor]?.value;
+      if (val === undefined) return;
+      if (val === SELECT_ALL_SENTINEL) toggleSentinel();
+      else toggleReal(val);
     }
   });
 
-  prompt.on('key', (_key, s) => {
+  prompt.on('key', (char, s) => {
     if (s.name === 'return') {
-      prompt.value = [...selected];
-    } else if (s.name === 'q') {
+      prompt.value = selected.filter((v) => v !== SELECT_ALL_SENTINEL) as T[];
+      return;
+    }
+
+    if (s.name === 'escape') {
+      // Escape clears search and exits search mode
+      query = '';
+      searching = false;
+      cursor = 0;
+      return;
+    }
+
+    if (s.name === 'backspace') {
+      if (searching) {
+        query = query.slice(0, -1);
+        cursor = 0;
+      }
+      return;
+    }
+
+    if (!searching && char === '/') {
+      searching = true;
+      query = '';
+      cursor = 0;
+      return;
+    }
+
+    if (searching && char?.length === 1 && s.name !== 'space') {
+      query += char;
+      cursor = 0;
+      return;
+    }
+
+    if (!searching && s.name === 'q') {
       prompt.state = 'cancel';
     }
   });
