@@ -389,7 +389,7 @@ applySqaaOptions(
 
 // `verify` is deprecated in favour of `sonar analyze`.
 const verifyCmd = applySqaaOptions(
-  COMMAND_TREE.command('verify').description(
+  COMMAND_TREE.command('verify', { hidden: true }).description(
     "Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)",
   ),
 );
