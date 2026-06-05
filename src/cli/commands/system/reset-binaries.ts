@@ -22,7 +22,7 @@ import { existsSync, rmSync } from 'node:fs';
 
 import { BIN_DIR } from '../../../lib/config-constants';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../lib/install-types';
-import type { CliState, InstalledIntegrationDependency } from '../../../lib/state';
+import type { CliState } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
 import { phaseItem } from '../../../ui';
 import { stopAllContextAugmentationTools } from '../integrate/_common/context-augmentation';
@@ -31,70 +31,165 @@ import { resolveSafePath } from './safe-path';
 export interface BinaryResetResult {
   item: PhaseItem;
   dependencyIds: string[];
+  toolNames: string[];
 }
 
-type DependencyRemoveOutcome =
-  | { status: 'skipped' }
-  | { status: 'cleaned'; id: string }
+interface PathRemovalPlan {
+  path: string;
+  dependencyIds: Set<string>;
+  toolNames: Set<string>;
+}
+
+type BinaryRemoveOutcome =
+  | { status: 'cleaned'; fileRemoved: boolean; dependencyIds: string[]; toolNames: string[] }
   | { status: 'failed'; message: string };
 
 export async function removeBinaries(state: CliState): Promise<BinaryResetResult> {
-  const cleanedIds: string[] = [];
-  const failed: string[] = [];
+  const { plans, failed: planFailures } = buildRemovalPlans(state);
+  const cleanedDependencyIds = new Set<string>();
+  const cleanedToolNames = new Set<string>();
+  const failed = [...planFailures];
+  let removedFileCount = 0;
+  let purgedStaleCount = 0;
 
-  for (const dep of state.dependencies.installed) {
-    const outcome = await tryRemoveDependency(dep);
+  for (const plan of plans) {
+    const outcome = await tryRemoveBinaryAtPath(plan);
     if (outcome.status === 'cleaned') {
-      cleanedIds.push(outcome.id);
-    } else if (outcome.status === 'failed') {
+      if (outcome.fileRemoved) {
+        removedFileCount += 1;
+      } else {
+        purgedStaleCount += 1;
+      }
+      for (const id of outcome.dependencyIds) {
+        cleanedDependencyIds.add(id);
+      }
+      for (const name of outcome.toolNames) {
+        cleanedToolNames.add(name);
+      }
+    } else {
       failed.push(outcome.message);
     }
   }
 
   return {
-    item: buildBinaryPhaseItem(cleanedIds, failed),
-    dependencyIds: cleanedIds,
+    item: buildBinaryPhaseItem(removedFileCount, purgedStaleCount, failed),
+    dependencyIds: [...cleanedDependencyIds],
+    toolNames: [...cleanedToolNames],
   };
 }
 
-async function tryRemoveDependency(
-  dep: InstalledIntegrationDependency,
-): Promise<DependencyRemoveOutcome> {
-  if (!dep.path) {
-    return { status: 'skipped' };
+function buildRemovalPlans(state: CliState): {
+  plans: PathRemovalPlan[];
+  failed: string[];
+} {
+  const byPath = new Map<string, PathRemovalPlan>();
+  const failed: string[] = [];
+
+  for (const dep of state.dependencies.installed) {
+    if (!dep.path) {
+      failed.push(`${dep.id}: missing install path`);
+      continue;
+    }
+    addPathTarget(byPath, dep.path, dep.id, undefined);
   }
 
-  const safePath = resolveSafePath(dep.path, [BIN_DIR]);
+  for (const tool of state.tools?.installed ?? []) {
+    if (!tool.path) {
+      failed.push(`${tool.name}: missing install path`);
+      continue;
+    }
+    addPathTarget(byPath, tool.path, undefined, tool.name);
+  }
+
+  return { plans: [...byPath.values()], failed };
+}
+
+function addPathTarget(
+  byPath: Map<string, PathRemovalPlan>,
+  path: string,
+  dependencyId: string | undefined,
+  toolName: string | undefined,
+): void {
+  let plan = byPath.get(path);
+  if (!plan) {
+    plan = { path, dependencyIds: new Set(), toolNames: new Set() };
+    byPath.set(path, plan);
+  }
+  if (dependencyId) {
+    plan.dependencyIds.add(dependencyId);
+  }
+  if (toolName) {
+    plan.toolNames.add(toolName);
+  }
+}
+
+async function tryRemoveBinaryAtPath(plan: PathRemovalPlan): Promise<BinaryRemoveOutcome> {
+  const label = [...plan.dependencyIds, ...plan.toolNames].join(', ') || plan.path;
+  const safePath = resolveSafePath(plan.path, [BIN_DIR]);
   if (!safePath) {
-    return { status: 'failed', message: `${dep.id}: path rejected` };
+    return { status: 'failed', message: `${label}: path rejected` };
   }
 
-  if (dep.id === CONTEXT_AUGMENTATION_BINARY_NAME && existsSync(safePath)) {
+  const needsCagStop =
+    plan.dependencyIds.has(CONTEXT_AUGMENTATION_BINARY_NAME) ||
+    plan.toolNames.has(CONTEXT_AUGMENTATION_BINARY_NAME);
+  if (needsCagStop && existsSync(safePath)) {
     await stopAllContextAugmentationTools(safePath);
   }
 
   try {
-    if (existsSync(safePath)) {
+    const fileRemoved = existsSync(safePath);
+    if (fileRemoved) {
       rmSync(safePath, { force: true });
     }
-    return { status: 'cleaned', id: dep.id };
+    return {
+      status: 'cleaned',
+      fileRemoved,
+      dependencyIds: [...plan.dependencyIds],
+      toolNames: [...plan.toolNames],
+    };
   } catch (err) {
-    return { status: 'failed', message: `${dep.id}: ${(err as Error).message}` };
+    return { status: 'failed', message: `${label}: ${(err as Error).message}` };
   }
 }
 
-function buildBinaryPhaseItem(cleanedIds: string[], failed: string[]): PhaseItem {
+function buildBinaryPhaseItem(
+  removedFileCount: number,
+  purgedStaleCount: number,
+  failed: string[],
+): PhaseItem {
+  const totalCleaned = removedFileCount + purgedStaleCount;
+
   if (failed.length > 0) {
     const counts =
-      cleanedIds.length > 0
-        ? `${cleanedIds.length} removed, ${failed.length} failed`
+      totalCleaned > 0
+        ? `${totalCleaned} removed, ${failed.length} failed`
         : `${failed.length} failed`;
     return phaseItem('Binaries', 'warn', `${counts}: ${failed.join('; ')}`);
   }
 
-  if (cleanedIds.length > 0) {
-    const label = cleanedIds.length === 1 ? 'binary' : 'binaries';
-    return phaseItem('Binaries', 'done', `Removed ${cleanedIds.length} ${label} from ${BIN_DIR}.`);
+  if (removedFileCount > 0 && purgedStaleCount > 0) {
+    const fileLabel = removedFileCount === 1 ? 'binary' : 'binaries';
+    const staleLabel = purgedStaleCount === 1 ? 'entry' : 'entries';
+    return phaseItem(
+      'Binaries',
+      'done',
+      `Removed ${removedFileCount} ${fileLabel} from ${BIN_DIR} and cleared ${purgedStaleCount} stale ${staleLabel} from state.`,
+    );
+  }
+
+  if (removedFileCount > 0) {
+    const label = removedFileCount === 1 ? 'binary' : 'binaries';
+    return phaseItem('Binaries', 'done', `Removed ${removedFileCount} ${label} from ${BIN_DIR}.`);
+  }
+
+  if (purgedStaleCount > 0) {
+    const label = purgedStaleCount === 1 ? 'entry' : 'entries';
+    return phaseItem(
+      'Binaries',
+      'done',
+      `Cleared ${purgedStaleCount} stale binary ${label} from state.`,
+    );
   }
 
   return phaseItem('Binaries', 'info', 'Nothing to remove.');

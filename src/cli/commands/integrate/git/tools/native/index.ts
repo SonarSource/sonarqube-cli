@@ -57,9 +57,9 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
         displayName: 'global hooks path',
         shouldApply: ({ scope }) => scope === 'global',
         apply: ({ targetRoot }) => configureGlobalHooksPath(targetRoot),
-        undo: async ({ scope }) => {
+        undo: async ({ scope, targetRoot }) => {
           if (scope === 'global') {
-            await unsetGlobalHooksPath();
+            await unsetGlobalHooksPath(targetRoot);
           }
         },
       },
@@ -67,7 +67,19 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
   };
 }
 
-async function unsetGlobalHooksPath(): Promise<void> {
+async function unsetGlobalHooksPath(expectedHooksDir: string): Promise<void> {
+  // Only unset core.hooksPath when it still points at the directory we configured.
+  // A user or another tool may have repointed it after the Sonar install; we must
+  // not clobber a value we no longer own.
+  const current = await spawnProcess('git', ['config', '--global', '--get', 'core.hooksPath']);
+  if (current.exitCode !== 0) {
+    // Exit code 1: the key is unset. Anything else: cannot read it — leave it alone.
+    return;
+  }
+  if (normalizePath(current.stdout) !== normalizePath(expectedHooksDir)) {
+    return;
+  }
+
   let gitResult;
   try {
     gitResult = await spawnProcess('git', ['config', '--global', '--unset', 'core.hooksPath']);

@@ -29,6 +29,8 @@ import type { SettingsValue } from './settings-value';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
+/** Best-effort token revocation should fail fast when the server is unreachable. */
+const REVOKE_USER_TOKEN_TIMEOUT_MS = 10_000;
 const HTTP_STATUS_FORBIDDEN = 403;
 const HTTP_STATUS_NOT_FOUND = 404;
 const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
@@ -214,12 +216,16 @@ export class SonarQubeClient {
    * the configured Bearer token. Throws on non-2xx responses so callers can
    * handle failures (e.g. best-effort logout).
    */
-  async postForm(endpoint: string, params: Record<string, string>): Promise<void> {
+  async postForm(
+    endpoint: string,
+    params: Record<string, string>,
+    timeoutMs: number = POST_REQUEST_TIMEOUT_MS,
+  ): Promise<void> {
     const response = await fetch(`${this.serverURL}${endpoint}`, {
       method: 'POST',
       headers: this.commonHeaders('form'),
       body: new URLSearchParams(params).toString(),
-      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     await this.raiseForStatus(response, 'POST');
@@ -234,7 +240,11 @@ export class SonarQubeClient {
    * org name, etc.). The translation happens here at the wire boundary.
    */
   async revokeUserToken(tokenName: string): Promise<void> {
-    await this.postForm('/api/user_tokens/revoke', { name: tokenName });
+    await this.postForm(
+      '/api/user_tokens/revoke',
+      { name: tokenName },
+      REVOKE_USER_TOKEN_TIMEOUT_MS,
+    );
   }
 
   async checkTokenValidity(): Promise<'valid' | 'invalid'> {

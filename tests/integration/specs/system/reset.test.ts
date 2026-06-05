@@ -25,9 +25,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git/tools/native';
 import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { TestHarness } from '../../harness';
+import { buildHomeEnv } from '../../harness/platform';
 
 interface AuthSnapshot {
   isAuthenticated: boolean;
@@ -65,6 +67,71 @@ function readKeychainTokens(keychainFile: string): Record<string, string> {
   }
 }
 
+/**
+ * Builds a complete state.json string with the given agent extensions and/or
+ * installed integrations, so tests can exercise the legacy and declarative
+ * cleanup paths of `system reset` without going through a full integrate flow.
+ */
+function buildRawState(overrides: {
+  agentExtensions?: unknown[];
+  integrations?: unknown[];
+}): string {
+  return JSON.stringify({
+    version: '1.0',
+    lastUpdated: new Date().toISOString(),
+    auth: { isAuthenticated: false, connections: [] },
+    agents: {
+      'claude-code': { configured: false, hooks: { installed: [] }, skills: { installed: [] } },
+    },
+    config: { cliVersion: '0.0.0' },
+    tools: { installed: [] },
+    dependencies: { installed: [] },
+    telemetry: {
+      enabled: false,
+      installationId: '00000000-0000-0000-0000-000000000000',
+      firstUseDate: new Date().toISOString(),
+      events: [],
+    },
+    agentExtensions: overrides.agentExtensions ?? [],
+    integrations: { installed: overrides.integrations ?? [] },
+  });
+}
+
+function gitEnv(userHome: string): NodeJS.ProcessEnv {
+  return { ...process.env, ...buildHomeEnv(userHome) };
+}
+
+/** Sets global `core.hooksPath` via git so reads/writes match production behavior. */
+function setGlobalHooksPath(userHome: string, hooksDir: string): void {
+  mkdirSync(userHome, { recursive: true });
+  const result = Bun.spawnSync(['git', 'config', '--global', 'core.hooksPath', hooksDir], {
+    env: gitEnv(userHome),
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(`git config failed: ${result.stderr.toString()}`);
+  }
+}
+
+function getGlobalHooksPath(userHome: string): string | undefined {
+  const result = Bun.spawnSync(['git', 'config', '--global', '--get', 'core.hooksPath'], {
+    env: gitEnv(userHome),
+  });
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
+  return result.stdout.toString().trim();
+}
+
+function legacyExtension(extra: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: `ext-${Math.random().toString(36).slice(2)}`,
+    global: false,
+    updatedByCliVersion: '0.0.0',
+    updatedAt: new Date().toISOString(),
+    ...extra,
+  };
+}
+
 describe('system reset --force', () => {
   let harness: TestHarness;
 
@@ -98,7 +165,7 @@ describe('system reset --force', () => {
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Authentication: 1 tokens removed from keychain.');
+      expect(result.stdout).toContain('Authentication: 1 token removed from keychain.');
 
       const account = generateKeychainAccount(server.baseUrl());
       expect(readKeychainTokens(harness.keychainJsonFile)[account]).toBeUndefined();
@@ -106,6 +173,47 @@ describe('system reset --force', () => {
       const state = readState(harness.stateJsonFile.path);
       expect(state.auth.connections).toHaveLength(0);
       expect(state.auth.activeConnectionId).toBeUndefined();
+      expect(state.auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'purges every token when multiple connections are reset together',
+    async () => {
+      const now = new Date().toISOString();
+      const connection = (id: string, serverUrl: string, orgKey?: string) => ({
+        id,
+        type: orgKey ? 'cloud' : 'on-premise',
+        serverUrl,
+        orgKey,
+        authenticatedAt: now,
+      });
+      const raw = JSON.parse(buildRawState({})) as Record<string, unknown>;
+      raw.auth = {
+        isAuthenticated: true,
+        activeConnectionId: 'conn-a',
+        connections: [
+          connection('conn-a', 'https://sonar-a.example'),
+          connection('conn-b', 'https://sonar-b.example', 'org-b'),
+          connection('conn-c', 'https://sonar-c.example'),
+        ],
+      };
+      harness
+        .state()
+        .withRawState(JSON.stringify(raw))
+        .withKeychainToken('https://sonar-a.example', 'tok-a')
+        .withKeychainToken('https://sonar-b.example', 'tok-b', 'org-b')
+        .withKeychainToken('https://sonar-c.example', 'tok-c');
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication: 3 tokens removed from keychain.');
+      expect(Object.keys(readKeychainTokens(harness.keychainJsonFile))).toHaveLength(0);
+
+      const state = readState(harness.stateJsonFile.path);
+      expect(state.auth.connections).toHaveLength(0);
       expect(state.auth.isAuthenticated).toBe(false);
     },
     { timeout: 15000 },
@@ -287,13 +395,329 @@ describe('system reset --force', () => {
 
       const result = await harness.run('system reset --force');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('Binaries:');
       expect(result.stdout).toContain('failed');
+      expect(result.stderr).toContain('System reset completed with warnings');
 
       const state = readState(harness.stateJsonFile.path);
       expect(state.dependencies.installed).toHaveLength(1);
       expect(existsSync(outside)).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports stale binary state entries without claiming a file was removed',
+    async () => {
+      const stalePath = join(harness.cliHome.path, 'bin', 'missing-sonar-secrets');
+      harness.state().withRawState(
+        JSON.stringify({
+          version: '1.0',
+          lastUpdated: new Date().toISOString(),
+          auth: { isAuthenticated: false, connections: [] },
+          agents: {
+            'claude-code': {
+              configured: false,
+              hooks: { installed: [] },
+              skills: { installed: [] },
+            },
+          },
+          config: { cliVersion: '0.0.0' },
+          tools: { installed: [] },
+          dependencies: {
+            installed: [
+              {
+                id: 'sonar-secrets',
+                dependencyType: 'binary',
+                path: stalePath,
+                updatedByCliVersion: '0.0.0',
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          },
+          telemetry: {
+            enabled: false,
+            installationId: '00000000-0000-0000-0000-000000000000',
+            firstUseDate: new Date().toISOString(),
+            events: [],
+          },
+          agentExtensions: [],
+          integrations: { installed: [] },
+        }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Binaries:.*Cleared 1 stale binary entry from state/);
+      expect(result.stdout).not.toMatch(/Removed 1 binary/);
+      expect(readState(harness.stateJsonFile.path).dependencies.installed).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes sca-scanner-cli recorded only in tools.installed',
+    async () => {
+      harness.state().withScaScannerBinaryInstalled();
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Binaries:.*Removed 1 binary/);
+
+      const state = readState(harness.stateJsonFile.path);
+      expect(state.tools?.installed ?? []).toHaveLength(0);
+      const binDir = join(harness.cliHome.path, 'bin');
+      if (existsSync(binDir)) {
+        const remaining = readdirSync(binDir).filter((name) => name.includes('sca-scanner'));
+        expect(remaining.length).toBe(0);
+      }
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'cleans up a legacy project-scoped Copilot secrets hook',
+    async () => {
+      const hooksDir = join(harness.cwd.path, '.github', 'hooks');
+      const scriptDir = join(hooksDir, 'sonar-secrets');
+      mkdirSync(scriptDir, { recursive: true });
+      writeFileSync(
+        join(hooksDir, 'hooks.json'),
+        JSON.stringify({
+          version: 1,
+          hooks: {
+            preToolUse: [
+              { type: 'command', bash: 'sonar-secrets/build-scripts/pretool-secrets.sh' },
+              { type: 'command', bash: '/usr/bin/keep-me' },
+            ],
+          },
+        }),
+        'utf-8',
+      );
+      writeFileSync(join(scriptDir, 'pretool-secrets.sh'), '#!/bin/sh\n', 'utf-8');
+
+      harness.state().withRawState(
+        buildRawState({
+          agentExtensions: [
+            legacyExtension({
+              agentId: 'copilot-cli',
+              projectRoot: harness.cwd.path,
+              kind: 'hook',
+              name: 'sonar-secrets',
+              hookType: 'PreToolUse',
+            }),
+          ],
+        }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(0);
+      expect(existsSync(scriptDir)).toBe(false);
+      const hooksJson = JSON.parse(readFileSync(join(hooksDir, 'hooks.json'), 'utf-8')) as {
+        hooks?: { preToolUse?: Array<{ type?: string; bash?: string }> };
+      };
+      expect(hooksJson.hooks?.preToolUse).toEqual([{ type: 'command', bash: '/usr/bin/keep-me' }]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'cleans up a legacy global Copilot secrets hook from the home directory',
+    async () => {
+      const hooksDir = join(harness.userHome.path, '.copilot', 'hooks');
+      const scriptDir = join(hooksDir, 'sonar-secrets');
+      mkdirSync(scriptDir, { recursive: true });
+      writeFileSync(
+        join(hooksDir, 'hooks.json'),
+        JSON.stringify({
+          version: 1,
+          hooks: {
+            preToolUse: [
+              { type: 'command', bash: 'sonar-secrets/build-scripts/pretool-secrets.sh' },
+            ],
+          },
+        }),
+        'utf-8',
+      );
+      writeFileSync(join(scriptDir, 'pretool-secrets.sh'), '#!/bin/sh\n', 'utf-8');
+
+      harness.state().withRawState(
+        buildRawState({
+          agentExtensions: [
+            legacyExtension({
+              agentId: 'copilot-cli',
+              projectRoot: harness.cwd.path,
+              global: true,
+              kind: 'hook',
+              name: 'sonar-secrets',
+              hookType: 'PreToolUse',
+            }),
+          ],
+        }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(0);
+      expect(existsSync(scriptDir)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes a legacy skill file and drops a legacy instructions entry',
+    async () => {
+      const skillPath = join(harness.cwd.path, '.agents', 'skills', 'sonar-skill', 'SKILL.md');
+      mkdirSync(join(harness.cwd.path, '.agents', 'skills', 'sonar-skill'), { recursive: true });
+      writeFileSync(skillPath, '# skill', 'utf-8');
+
+      harness.state().withRawState(
+        buildRawState({
+          agentExtensions: [
+            legacyExtension({
+              agentId: 'codex',
+              projectRoot: harness.cwd.path,
+              kind: 'skill',
+              name: 'sonar-skill',
+            }),
+            legacyExtension({
+              agentId: 'codex',
+              projectRoot: harness.cwd.path,
+              kind: 'instructions',
+              name: 'sonar-prompt',
+            }),
+          ],
+        }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(0);
+      expect(existsSync(skillPath)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns and exits 1 when state references an unknown integration',
+    async () => {
+      harness.state().withRawState(
+        buildRawState({
+          integrations: [
+            {
+              id: 'integration-1',
+              integrationId: 'made-up-agent',
+              installedByCliVersion: '0.0.0',
+              installedAt: new Date().toISOString(),
+              updatedByCliVersion: '0.0.0',
+              updatedAt: new Date().toISOString(),
+              features: [
+                {
+                  featureId: 'some-feature',
+                  scope: 'project',
+                  targetRoot: harness.cwd.path,
+                  installedByCliVersion: '0.0.0',
+                  installedAt: new Date().toISOString(),
+                  updatedByCliVersion: '0.0.0',
+                  updatedAt: new Date().toISOString(),
+                  dependencies: [],
+                  resources: [],
+                  operations: [],
+                  attrs: {},
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toMatch(/Integrations:.*unknown integration/);
+      expect(result.stderr).toContain('System reset completed with warnings');
+
+      // The unknown integration could not be removed, so it stays in state.
+      expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns when a legacy hook agent has no supported on-disk cleanup',
+    async () => {
+      harness.state().withRawState(
+        buildRawState({
+          agentExtensions: [
+            legacyExtension({
+              agentId: 'codex',
+              projectRoot: harness.cwd.path,
+              kind: 'hook',
+              name: 'sonar-secrets',
+              hookType: 'PreToolUse',
+            }),
+          ],
+        }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toMatch(/Integrations:.*Unsupported legacy hook agent 'codex'/);
+      expect(readState(harness.stateJsonFile.path).agentExtensions).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'undoes a global native git hook integration and unsets the Sonar hooks path',
+    async () => {
+      const hooksDir = join(harness.cliHome.path, 'hooks');
+      setGlobalHooksPath(harness.userHome.path, hooksDir);
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          nativeGitIntegration,
+          'pre-commit-hook',
+          'global',
+          hooksDir,
+        );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+      expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
+      expect(getGlobalHooksPath(harness.userHome.path)).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'leaves a user-managed global hooks path untouched on undo',
+    async () => {
+      const userHooksDir = join(harness.cwd.path, 'my-own-hooks');
+      setGlobalHooksPath(harness.userHome.path, userHooksDir);
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          nativeGitIntegration,
+          'pre-commit-hook',
+          'global',
+          join(harness.cliHome.path, 'hooks'),
+        );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(getGlobalHooksPath(harness.userHome.path)).toBe(userHooksDir);
     },
     { timeout: 15000 },
   );

@@ -73,11 +73,12 @@ interface DeclarativeIntegrationReset {
 export async function removeAllIntegrations(state: CliState): Promise<IntegrationResetResult> {
   const supportedIntegrations = await loadSupportedIntegrations();
   const declarative = await removeDeclarativeIntegrations(state, supportedIntegrations);
-  const legacy = await removeLegacyAgentExtensions(state);
+  const extensionsHandledDeclaratively = new Set(declarative.agentExtensionIds);
+  const legacy = await removeLegacyAgentExtensions(state, extensionsHandledDeclaratively);
 
   const agentExtensionIds = [...new Set([...declarative.agentExtensionIds, ...legacy.cleanedIds])];
   const failed = [...declarative.failed, ...legacy.failed];
-  const totalRemoved = declarative.removedFeatures + legacy.cleanedIds.length;
+  const totalRemoved = declarative.removedFeatures + legacy.removedCount;
 
   return {
     item: buildIntegrationPhaseItem(totalRemoved, failed),
@@ -146,11 +147,15 @@ async function tryRemoveInstalledFeature(
     };
   }
 
+  // There is no dedicated "remove" execution mode: removeFeature only invokes
+  // resource.remove / operation.undo, none of which branch on executionMode.
+  // 'install' is passed to satisfy makeContext; revisit if any undo path ever
+  // needs to distinguish a reset from an install.
   const context = makeContext(
     state,
     installedFeature.targetRoot,
     installedFeature.scope,
-    'update',
+    'install',
     undefined,
     true,
     installedFeature.attrs,
@@ -210,20 +215,29 @@ function buildIntegrationPhaseItem(totalRemoved: number, failed: string[]): Phas
 
 async function removeLegacyAgentExtensions(
   state: CliState,
-): Promise<{ cleanedIds: string[]; failed: string[] }> {
+  skipExtensionIds: ReadonlySet<string> = new Set(),
+): Promise<{ cleanedIds: string[]; failed: string[]; removedCount: number }> {
   const cleanedIds: string[] = [];
   const failed: string[] = [];
+  let removedCount = 0;
 
   for (const extension of state.agentExtensions) {
+    if (skipExtensionIds.has(extension.id)) {
+      continue;
+    }
+
     try {
       await cleanupLegacyExtension(extension);
       cleanedIds.push(extension.id);
+      if (extension.kind !== 'instructions') {
+        removedCount += 1;
+      }
     } catch (err) {
       failed.push(`${extension.agentId}/${extension.name}: ${(err as Error).message}`);
     }
   }
 
-  return { cleanedIds, failed };
+  return { cleanedIds, failed, removedCount };
 }
 
 async function cleanupLegacyExtension(extension: AgentExtension): Promise<void> {
@@ -233,8 +247,7 @@ async function cleanupLegacyExtension(extension: AgentExtension): Promise<void> 
   }
 
   if (extension.kind === 'instructions') {
-    // Instructions are marker-based snippets; declarative remove handles new installs.
-    // Legacy-only instructions have no stable on-disk path beyond agent-specific files.
+    // Drop from state only; declarative remove handles on-disk snippets for current installs.
     return;
   }
 
@@ -252,7 +265,10 @@ async function cleanupLegacyHookExtension(extension: HookExtension): Promise<voi
 
   if (extension.agentId === 'copilot-cli') {
     await cleanupCopilotLegacyHook(extension);
+    return;
   }
+
+  throw new Error(`Unsupported legacy hook agent '${extension.agentId}'; remove it manually.`);
 }
 
 function claudeHookMarkers(extension: HookExtension): string[] {

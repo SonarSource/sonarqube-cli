@@ -23,6 +23,7 @@ import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { type CliState, getDefaultState, type InstalledIntegration } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
 import { info, phase, print, success, text, textPrompt, warn } from '../../../ui';
+import { CommandFailedError } from '../_common/error';
 import { purgeAuth } from './reset-auth';
 import { removeBinaries } from './reset-binaries';
 import { clearFilesystem } from './reset-filesystem';
@@ -35,6 +36,7 @@ export interface SystemResetOptions {
 interface CleanedFields {
   authConnectionIds: string[];
   dependencyIds: string[];
+  toolNames: string[];
   integrationFeatures: Array<{ integrationStateId: string; featureId: string }>;
   agentExtensionIds: string[];
 }
@@ -48,6 +50,7 @@ function emptyCleanedFields(overrides: Partial<CleanedFields> = {}): CleanedFiel
   return {
     authConnectionIds: [],
     dependencyIds: [],
+    toolNames: [],
     integrationFeatures: [],
     agentExtensionIds: [],
     ...overrides,
@@ -58,6 +61,7 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
   return {
     authConnectionIds: fields.flatMap((f) => f.authConnectionIds),
     dependencyIds: fields.flatMap((f) => f.dependencyIds),
+    toolNames: fields.flatMap((f) => f.toolNames),
     integrationFeatures: fields.flatMap((f) => f.integrationFeatures),
     agentExtensionIds: fields.flatMap((f) => f.agentExtensionIds),
   };
@@ -88,7 +92,10 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
     },
     {
       item: binaryResult.item,
-      cleaned: emptyCleanedFields({ dependencyIds: binaryResult.dependencyIds }),
+      cleaned: emptyCleanedFields({
+        dependencyIds: binaryResult.dependencyIds,
+        toolNames: binaryResult.toolNames,
+      }),
     },
     {
       item: integrationResult.item,
@@ -109,14 +116,15 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
   clearLegacyState(state);
   saveState(state);
 
-  const hasIssues = results.some((r) => r.item.status === 'warn' || r.item.status === 'pending');
+  const hasIssues = results.some((r) => r.item.status === 'warn');
   if (hasIssues) {
     text(
       'CLI has been partially reset. Review the details above and clean up remaining items manually.',
     );
-  } else {
-    success('CLI has been successfully reset to factory settings.');
+    throw new CommandFailedError('System reset completed with warnings.');
   }
+
+  success('CLI has been successfully reset to factory settings.');
 }
 
 async function confirmDestructiveAction(): Promise<boolean> {
@@ -183,6 +191,12 @@ function applyCleanedState(state: CliState, cleaned: CleanedFields): void {
     );
   }
 
+  if (cleaned.toolNames.length > 0) {
+    const removedNames = new Set(cleaned.toolNames);
+    state.tools ??= { installed: [] };
+    state.tools.installed = state.tools.installed.filter((t) => !removedNames.has(t.name));
+  }
+
   if (cleaned.integrationFeatures.length > 0) {
     const cleanedFeatures = indexCleanedFeatures(cleaned.integrationFeatures);
     state.integrations.installed = state.integrations.installed
@@ -199,6 +213,8 @@ function applyCleanedState(state: CliState, cleaned: CleanedFields): void {
 function clearLegacyState(state: CliState): void {
   const defaults = getDefaultState(VERSION);
   state.agents = defaults.agents;
-  state.tools = defaults.tools;
+  if (state.tools?.installed.length === 0) {
+    state.tools = defaults.tools;
+  }
   state.lastUpdated = new Date().toISOString();
 }

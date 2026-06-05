@@ -59,6 +59,24 @@ describe('resolveSafePath', () => {
     expect(resolveSafePath('relative/path', [tempDir])).toBeUndefined();
   });
 
+  it('accepts non-existent paths under an allowed root', () => {
+    const root = join(tempDir, 'bin');
+    mkdirSync(root, { recursive: true });
+    const missing = join(root, 'stale-binary');
+
+    expect(resolveSafePath(missing, [root])).toBe(missing);
+  });
+
+  it('accepts non-existent paths under a symlinked allowed root', () => {
+    const realRoot = join(tempDir, 'real-bin');
+    const linkRoot = join(tempDir, 'bin-link');
+    mkdirSync(realRoot, { recursive: true });
+    symlinkSync(realRoot, linkRoot);
+    const missing = join(linkRoot, 'stale-binary');
+
+    expect(resolveSafePath(missing, [linkRoot])).toBe(join(realRoot, 'stale-binary'));
+  });
+
   it('rejects symlink escapes', () => {
     const root = join(tempDir, 'bin');
     const outside = join(tempDir, 'outside');

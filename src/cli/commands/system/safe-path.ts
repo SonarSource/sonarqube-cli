@@ -19,9 +19,44 @@
  */
 
 import { existsSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import logger from '../../../lib/logger';
+
+/**
+ * Resolve symlinks on the deepest existing prefix, then re-append any missing
+ * trailing segments so non-existent paths under a symlinked root compare correctly.
+ *
+ * Example: the allowed root is a symlink, and the binary was already deleted.
+ *
+ *   BIN_DIR     → /Users/me/.sonar/bin          (symlink)
+ *   real BIN    → /private/var/.../sonar/bin    (realpathSync of the link)
+ *   stale entry → /Users/me/.sonar/bin/sonar-secrets   (file no longer on disk)
+ */
+function resolvePathPreservingSuffix(absolutePath: string): string {
+  const normalized = resolve(absolutePath);
+  if (existsSync(normalized)) {
+    return realpathSync(normalized);
+  }
+
+  const trailingSegments: string[] = [];
+  let current = normalized;
+  for (;;) {
+    const parent = dirname(current);
+    if (parent === current) {
+      return normalized;
+    }
+    trailingSegments.unshift(basename(current));
+    current = parent;
+    if (existsSync(current)) {
+      try {
+        return join(realpathSync(current), ...trailingSegments);
+      } catch {
+        return join(resolve(current), ...trailingSegments);
+      }
+    }
+  }
+}
 
 /**
  * Resolve `candidatePath` and verify it lies under at least one allowed root.
@@ -35,9 +70,7 @@ export function resolveSafePath(candidatePath: string, allowedRoots: string[]): 
 
   let resolvedCandidate: string;
   try {
-    resolvedCandidate = existsSync(candidatePath)
-      ? realpathSync(candidatePath)
-      : resolve(candidatePath);
+    resolvedCandidate = resolvePathPreservingSuffix(candidatePath);
   } catch (err) {
     logger.debug(`Rejected path (realpath failed): ${candidatePath}: ${(err as Error).message}`);
     return undefined;
@@ -46,7 +79,7 @@ export function resolveSafePath(candidatePath: string, allowedRoots: string[]): 
   for (const root of allowedRoots) {
     let resolvedRoot: string;
     try {
-      resolvedRoot = existsSync(root) ? realpathSync(root) : resolve(root);
+      resolvedRoot = resolvePathPreservingSuffix(root);
     } catch {
       resolvedRoot = resolve(root);
     }
