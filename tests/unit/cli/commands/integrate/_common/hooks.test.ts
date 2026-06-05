@@ -25,7 +25,10 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
+  assertSafeSonarProjectKeyForHookScript,
+  formatSqaaPostToolHookCommandUnix,
   readOrInitJson,
+  shellQuoteBash,
   UNIX_SONAR_COMMAND_GUARD,
   unixTemplate,
   WINDOWS_SONAR_COMMAND_GUARD,
@@ -93,6 +96,34 @@ describe('writeHookScript', () => {
     // Mask out file-type bits; only the permission bits matter.
     const mode = statSync(written).mode & 0o777;
     expect(mode).toBe(0o755);
+  });
+});
+
+describe('assertSafeSonarProjectKeyForHookScript', () => {
+  it('accepts typical SonarQube project keys', () => {
+    expect(() => assertSafeSonarProjectKeyForHookScript('SonarSource_sonarqube-cli')).not.toThrow();
+  });
+
+  it('rejects keys with shell metacharacters', () => {
+    expect(() => assertSafeSonarProjectKeyForHookScript('$(id)')).toThrow();
+    expect(() => assertSafeSonarProjectKeyForHookScript('my project')).toThrow();
+  });
+});
+
+describe('formatSqaaPostToolHookCommandUnix', () => {
+  it('single-quotes the project key so Bash does not expand metacharacters', () => {
+    const command = formatSqaaPostToolHookCommandUnix('codex-post-tool-use', 'my-org_my-project');
+    expect(command).toBe("sonar hook codex-post-tool-use --project 'my-org_my-project'");
+  });
+
+  it('escapes embedded single quotes in the project key', () => {
+    expect(() => formatSqaaPostToolHookCommandUnix('codex-post-tool-use', "bad'key")).toThrow();
+  });
+});
+
+describe('shellQuoteBash', () => {
+  it('wraps values in single quotes', () => {
+    expect(shellQuoteBash('a:b')).toBe("'a:b'");
   });
 });
 

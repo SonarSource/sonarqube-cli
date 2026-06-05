@@ -32,6 +32,7 @@ import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../.
 import { findInstalledFeature } from './state-helpers';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
+const SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
 const AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
 const CONFIG_TOML_DIRS = ['.codex', 'config.toml'];
@@ -41,6 +42,10 @@ const SQAA_HEADING = '# SonarQube Agentic Analysis protocol';
 interface CodexHooksFile {
   hooks?: {
     UserPromptSubmit?: Array<{
+      matcher?: string;
+      hooks?: Array<{ type?: string; command?: string; timeout?: number }>;
+    }>;
+    PostToolUse?: Array<{
       matcher?: string;
       hooks?: Array<{ type?: string; command?: string; timeout?: number }>;
     }>;
@@ -404,7 +409,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'appends the SQAA section with the project key baked in when the org is entitled',
+      'installs PostToolUse SQAA hook on apply_patch and omits AGENTS.md SQAA protocol when entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -429,12 +434,119 @@ describe('integrate codex', () => {
         expect(result.exitCode).toBe(0);
         const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
-        expect(body).toContain('<!-- sonar:end:codex-secrets-on-read -->');
-        expect(body).toContain(SECRETS_HEADING);
-        expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
-        expect(body).toContain('<!-- sonar:end:sonarqube-agentic-analysis-protocol -->');
-        expect(body).toContain(SQAA_HEADING);
-        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+        expect(body).not.toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
+        expect(body).not.toContain(SQAA_HEADING);
+        expect(body).not.toContain('sonar analyze agentic');
+
+        const sqaaScript = harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa'));
+        expect(sqaaScript.exists()).toBe(true);
+        expect(sqaaScript.isExecutable).toBe(true);
+        expect(sqaaScript.asText()).toContain('codex-post-tool-use');
+        expect(sqaaScript.asText()).toContain(`--project '${TEST_PROJECT}'`);
+
+        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const postTool = hooks.hooks?.PostToolUse?.find((e) =>
+          e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
+        );
+        expect(postTool?.matcher).toBe('apply_patch');
+        expect(postTool?.hooks?.[0]?.command).toContain('sonar-sqaa');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'does not install PostToolUse SQAA hook when the org has no entitlement',
+      async () => {
+        const result = await harness.run('integrate codex');
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        expect(hooks.hooks?.PostToolUse).toBeUndefined();
+        const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        expect(body).not.toContain('sonarqube-agentic-analysis-protocol');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      're-running does not duplicate the PostToolUse SQAA entry when entitled',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+        const result = await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const sqaaEntries = hooks.hooks?.PostToolUse?.filter((e) =>
+          e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
+        );
+        expect(sqaaEntries).toHaveLength(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'preserves pre-existing non-Sonar PostToolUse entries when adding SQAA hook',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        harness.cwd.writeFile(
+          '.codex/hooks.json',
+          JSON.stringify({
+            hooks: {
+              PostToolUse: [
+                {
+                  matcher: 'other_tool',
+                  hooks: [
+                    { type: 'command', command: '.codex/hooks/other-tool/run.sh', timeout: 30 },
+                  ],
+                },
+              ],
+            },
+          }),
+        );
+
+        const result = await harness.run(`integrate codex --project ${TEST_PROJECT}`, {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const commands = hooks.hooks?.PostToolUse?.flatMap(
+          (entry) => entry.hooks?.map((hook) => hook.command) ?? [],
+        );
+        expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
+        expect(commands?.some((command) => command?.includes('sonar-sqaa'))).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -496,10 +608,9 @@ describe('integrate codex', () => {
       'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
       async () => {
         // Default beforeEach is on-premise auth with no org, so SQAA and
-        // Context Augmentation are not available: SQAA is skipped with the
-        // promotion line and CAG is skipped silently. The three remaining
-        // features (hook, secrets instructions, MCP) each ask. The leading
-        // '\r' selects project scope before the per-feature prompts.
+        // Context Augmentation are not available. The three remaining features
+        // (secrets hook, secrets instructions, MCP) each ask. The leading '\r'
+        // selects project scope before the per-feature prompts.
         const result = await harness.run('integrate codex', {
           stdinChunks: ['\r', '\r', '\r', '\r'],
         });
@@ -510,11 +621,8 @@ describe('integrate codex', () => {
         expect(output).toContain('Install secret scanning hooks?');
         expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
-        // SQAA is skipped with the shared promotion message + docs link.
-        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
-        expect(output).toContain(
-          'docs.sonarsource.com/agent-centric-development-cycle/features/agentic-analysis',
-        );
+        // SQAA is not eligible, so it is skipped silently without a prompt.
+        expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
@@ -529,7 +637,7 @@ describe('integrate codex', () => {
         expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
         expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
-        expect(findCodexFeature(harness, 'sqaa-instructions')).toBeUndefined();
+        expect(findCodexFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -580,6 +688,40 @@ describe('integrate codex', () => {
         // Accepting writes the project-local copy and records the project-scope feature.
         expect(harness.cwd.file(...AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
         expect(findCodexFeature(harness, 'secrets-instructions', 'project')).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'asks before installing the SQAA hook when the org is entitled and a project key is known',
+      async () => {
+        const testOrg = 'my-org';
+        const testProject = 'my-project';
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: testOrg, name: 'My Org' }])
+          .withSqaaEntitlement(testOrg, 'test-uuid-1234')
+          .withProject(testProject)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', testOrg);
+
+        const result = await harness.run(`integrate codex --project ${testProject}`, {
+          stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(output).toContain('Install SonarQube Agentic Analysis hook?');
+        expect(
+          harness.cwd.file(...SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
+        ).toBe(true);
+        expect(findCodexFeature(harness, 'sonar-sqaa-hook')).toBeDefined();
       },
       { timeout: 30000 },
     );

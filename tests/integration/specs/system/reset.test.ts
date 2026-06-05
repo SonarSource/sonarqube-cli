@@ -38,8 +38,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git/tools/native';
 import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
-import { TestHarness } from '../../harness';
+import { hookScriptName, TestHarness } from '../../harness';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
+
+const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
 
 /** Unix-only: verify chmod 555 actually blocks recursive removal on this host. */
 function unixChmodBlocksDirectoryRemoval(): boolean {
@@ -619,6 +621,84 @@ describe('system reset --force', () => {
       expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(1);
     },
     { timeout: 15000 },
+  );
+
+  it(
+    'undoes a Codex sonar-sqaa-hook integration and preserves unrelated PostToolUse entries',
+    async () => {
+      const testOrg = 'my-org';
+      const testProject = 'my-project';
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: testOrg, name: 'My Org' }])
+        .withSqaaEntitlement(testOrg, 'test-uuid-1234')
+        .withProject(testProject)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(serverUrl, 'cloud-token', testOrg);
+
+      harness.cwd.writeFile(
+        '.codex/hooks.json',
+        JSON.stringify({
+          hooks: {
+            PostToolUse: [
+              {
+                matcher: 'other_tool',
+                hooks: [
+                  { type: 'command', command: '.codex/hooks/other-tool/run.sh', timeout: 30 },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+
+      const integrateResult = await harness.run(
+        `integrate codex --project ${testProject} --non-interactive`,
+        {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        },
+      );
+
+      expect(integrateResult.exitCode).toBe(0);
+      expect(
+        harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
+      ).toBe(true);
+      expect(readState(harness.stateJsonFile.path).integrations.installed.length).toBeGreaterThan(
+        0,
+      );
+
+      // harness.run() re-seeds state.json from the env builder before each subprocess;
+      // preserve the post-integrate snapshot so reset sees the installed features.
+      const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
+      harness.state().withRawState(stateAfterIntegrate);
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+      expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
+      expect(
+        harness.cwd.file(...CODEX_SQAA_SCRIPT_DIRS, hookScriptName('posttool-sqaa')).exists(),
+      ).toBe(false);
+
+      const hooks = harness.cwd.file('.codex', 'hooks.json').asJson() as {
+        hooks?: {
+          PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
+        };
+      };
+      const commands = hooks.hooks?.PostToolUse?.flatMap(
+        (entry) => entry.hooks?.map((hook) => hook.command) ?? [],
+      );
+      expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
+      expect(commands?.some((command) => command?.includes('sonar-sqaa'))).toBe(false);
+    },
+    { timeout: 30000 },
   );
 
   it(

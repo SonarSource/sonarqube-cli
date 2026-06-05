@@ -98,6 +98,53 @@ export async function readOrInitJson<T>(path: string, defaultValue: T): Promise<
 export const HOOK_TIMEOUT_SEC = 60;
 export const HOOKS_DIR = 'hooks';
 
+/** SonarQube project keys allowed when using a key into a generated hook shell script. */
+export const SONAR_PROJECT_KEY_SAFE_PATTERN = /^[A-Za-z0-9_.:-]+$/;
+
+/**
+ * Reject project keys that cannot be safely embedded in hook scripts (command
+ * substitution, quotes, spaces, etc.).
+ */
+export function assertSafeSonarProjectKeyForHookScript(projectKey: string): void {
+  if (!SONAR_PROJECT_KEY_SAFE_PATTERN.test(projectKey)) {
+    throw new Error(
+      `SonarQube project key "${projectKey}" cannot be embedded in a hook script. Use only letters, digits, and _ . : -`,
+    );
+  }
+}
+
+/** Bash idiom to embed `'` inside a single-quoted string: close `'`, add `'`, reopen `'`. */
+const BASH_EMBEDDED_SINGLE_QUOTE = String.raw`'\''`;
+
+/** PowerShell escapes `'` inside a single-quoted string by doubling it. */
+const POWERSHELL_EMBEDDED_SINGLE_QUOTE = "''";
+
+/** Single-quoted Bash literal: no expansion of $, `, or command substitution. */
+export function shellQuoteBash(value: string): string {
+  return "'" + value.replaceAll("'", BASH_EMBEDDED_SINGLE_QUOTE) + "'";
+}
+
+/** Single-quoted PowerShell literal (double single-quotes escape embedded quotes). */
+export function shellQuotePowerShell(value: string): string {
+  return "'" + value.replaceAll("'", POWERSHELL_EMBEDDED_SINGLE_QUOTE) + "'";
+}
+
+export function formatSqaaPostToolHookCommandUnix(
+  hookSubcommand: 'claude-post-tool-use' | 'codex-post-tool-use',
+  projectKey: string,
+): string {
+  assertSafeSonarProjectKeyForHookScript(projectKey);
+  return `sonar hook ${hookSubcommand} --project ${shellQuoteBash(projectKey)}`;
+}
+
+export function formatSqaaPostToolHookCommandWindows(
+  hookSubcommand: 'claude-post-tool-use' | 'codex-post-tool-use',
+  projectKey: string,
+): string {
+  assertSafeSonarProjectKeyForHookScript(projectKey);
+  return `sonar hook ${hookSubcommand} --project ${shellQuotePowerShell(projectKey)}`;
+}
+
 /** Absolute path to the platform-specific hook script under `<targetRoot>/<configDir>/hooks/`. */
 export function resolveAgentHookScriptPath(
   context: IntegrationContext,

@@ -88,7 +88,7 @@ describe('SQAA PostToolUse Hook Templates', () => {
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
     expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
-    expect(template.includes('--project my-project')).toBe(true);
+    expect(template.includes("--project 'my-project'")).toBe(true);
     expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
@@ -104,7 +104,7 @@ describe('SQAA PostToolUse Hook Templates', () => {
     const template = getSqaaPostToolTemplateWindows('my-project');
 
     expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
-    expect(template.includes('--project my-project')).toBe(true);
+    expect(template.includes("--project 'my-project'")).toBe(true);
     expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
   });
 
