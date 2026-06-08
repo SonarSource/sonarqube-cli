@@ -22,7 +22,11 @@ import type { Help, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
 import { softBlue, underline } from '../ui/colors.js';
-import type { RootHelpMetadata, SonarCommand } from './commands/_common/sonar-command.js';
+import {
+  COMMAND_CATEGORIES,
+  type CommandCategory,
+  type SonarCommand,
+} from './commands/_common/sonar-command.js';
 
 const BANNER_ART = [
   '  █▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',
@@ -38,14 +42,7 @@ const ROOT_OPTION_SUMMARIES = new Map<string, string>([
   [ROOT_HELP_OPTION, 'Display help for a specific command'],
   [ROOT_VERSION_OPTION, 'Show current version'],
 ]);
-const DEFAULT_ROOT_COMMAND_CATEGORY: NonNullable<RootHelpMetadata['category']> = 'core';
-type RootHelpCategory = NonNullable<RootHelpMetadata['category']>;
-const ROOT_COMMAND_CATEGORIES: readonly RootHelpCategory[] = [
-  'core',
-  'data',
-  'integrate',
-  'cli-management',
-];
+const DEFAULT_ROOT_COMMAND_CATEGORY: CommandCategory = 'core';
 
 interface HelpMenuEntry {
   label: string;
@@ -99,7 +96,7 @@ function getRootCommandLabel(command: SonarCommand, helper: Help): string {
   return `${command.name()} <${visibleChildren.map((child) => child.name()).join('|')}>`;
 }
 
-function getRootCommandCategory(command: SonarCommand): RootHelpCategory {
+function getRootCommandCategory(command: SonarCommand): CommandCategory {
   return command.rootHelpMetadata.category ?? DEFAULT_ROOT_COMMAND_CATEGORY;
 }
 
@@ -115,8 +112,8 @@ function getRootCommandSubcommandEntries(command: SonarCommand, helper: Help): H
 }
 
 function getRootCommandEntries(rootCommand: SonarCommand, helper: Help): HelpMenuEntry[][] {
-  const groupedEntries = new Map<RootHelpCategory, HelpMenuEntry[]>(
-    ROOT_COMMAND_CATEGORIES.map((category) => [category, []]),
+  const groupedEntries = new Map<CommandCategory, HelpMenuEntry[]>(
+    COMMAND_CATEGORIES.map((category) => [category, []]),
   );
 
   for (const command of getVisibleChildCommands(rootCommand, helper)) {
@@ -135,7 +132,7 @@ function getRootCommandEntries(rootCommand: SonarCommand, helper: Help): HelpMen
     );
   }
 
-  return ROOT_COMMAND_CATEGORIES.map((category) => groupedEntries.get(category) ?? []).filter(
+  return COMMAND_CATEGORIES.map((category) => groupedEntries.get(category) ?? []).filter(
     (entries) => entries.length > 0,
   );
 }

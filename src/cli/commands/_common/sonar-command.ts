@@ -28,8 +28,11 @@ import logger from '../../../lib/logger.js';
 import { blank, error, print } from '../../../ui';
 import { CliError, CommandFailedError } from './error.js';
 
+export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
+export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
+
 export interface RootHelpMetadata {
-  category?: 'core' | 'data' | 'integrate' | 'cli-management';
+  category?: CommandCategory;
   expandSubcommands?: boolean;
   label?: string;
 }
