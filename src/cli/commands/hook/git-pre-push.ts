@@ -49,8 +49,8 @@ export async function gitPrePush(
   const auth = await resolveAuth().catch(() => null);
   if (!auth) return;
 
-  const changedFiles = await getFilesToScan(files);
-  if (changedFiles === null) return;
+  const fileGroups = await getFileGroupsToScan(files);
+  if (fileGroups === null) return;
 
   if (await hasUncommittedChanges()) {
     warn(
@@ -58,25 +58,35 @@ export async function gitPrePush(
     );
   }
 
-  await runSecretsStage(changedFiles, auth);
+  for (const group of fileGroups) {
+    await runSecretsStage(group, auth);
+  }
 
   if (options.dependencyRisks && options.project) {
+    const changedFiles = [...new Set(fileGroups.flat())];
     await runDepRisksStage({ project: options.project, changedFiles, auth });
   }
 }
 
-async function getFilesToScan(files: string[]) {
+async function getFileGroupsToScan(files: string[]): Promise<string[][] | null> {
   if (files.length > 0) {
-    return files;
-  } else {
-    const refs = await readGitPushRefs();
-    if (refs.length === 0) return null;
-
-    const emptyTree = await getEmptyTree();
-    const nonDeletionRefs = refs.filter((ref) => ref.localSha !== GIT_NULL_OID);
-    const filesByRef = await collectFilesForRefs(nonDeletionRefs, emptyTree);
-    return [...new Set(Array.from(filesByRef.values()).flat())];
+    /*
+     * pre-commit framework pre-chunks files before calling our tool in parallel.
+     * This is suboptimal for SCA analysis, as it may be triggered multiple times for the same changes.
+     * However, there's no easy solution, as the pre-commit framework can't pass all files at once due to ARG_MAX limits
+     * and there's no support for stdin.
+     */
+    return [files];
   }
+
+  const refs = await readGitPushRefs();
+  if (refs.length === 0) return null;
+
+  const emptyTree = await getEmptyTree();
+  const nonDeletionRefs = refs.filter((ref) => ref.localSha !== GIT_NULL_OID);
+  const filesByRef = await collectFilesForRefs(nonDeletionRefs, emptyTree);
+  const groups = Array.from(filesByRef.values()).filter((g) => g.length > 0);
+  return groups.length > 0 ? groups : null;
 }
 
 async function getEmptyTree(): Promise<string> {

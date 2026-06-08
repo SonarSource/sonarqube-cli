@@ -277,15 +277,17 @@ describe('gitPrePush', () => {
     await gitPrePush(); // must not throw
   });
 
-  it('merges files from multiple refs into a single secrets binary invocation', async () => {
+  it('calls the secrets binary once per ref group', async () => {
     const secondRef = { ...FAKE_REF, localSha: 'def456' };
     readGitPushRefsSpy.mockResolvedValue([FAKE_REF, secondRef]);
 
     await gitPrePush();
 
-    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
-    const [, files] = runSecretsBinarySpy.mock.calls[0] as [string, string[], unknown];
-    expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(2);
+    for (const call of runSecretsBinarySpy.mock.calls) {
+      const [, files] = call as [string, string[], unknown];
+      expect(files).toEqual(['src/foo.ts', 'src/bar.ts']);
+    }
   });
 
   it('proceeds normally when git mktree throws (falls back to null OID as empty tree)', async () => {
