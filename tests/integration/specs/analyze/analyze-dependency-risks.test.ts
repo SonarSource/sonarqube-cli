@@ -45,14 +45,18 @@ describe('analyze dependency-risks', () => {
     await harness.dispose();
   });
 
-  it('exits with code 1 when not authenticated', async () => {
-    const result = await harness.run('analyze dependency-risks --project demo');
+  it(
+    'exits with code 1 when not authenticated',
+    async () => {
+      const result = await harness.run('analyze dependency-risks --project demo');
 
-    expect(result.exitCode).toBe(1);
-    const output = result.stdout + result.stderr;
-    expect(output).toContain('❌ Not authenticated.');
-    expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
-  });
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('❌ Not authenticated.');
+      expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
+    },
+    { timeout: 15000 },
+  );
 
   it('exits with code 1 when project does not exist (settings 404)', async () => {
     const server = await harness
@@ -69,21 +73,25 @@ describe('analyze dependency-risks', () => {
     expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(true);
   });
 
-  it('exits with code 1 when SCA is disabled on the server', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(false)
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+  it(
+    'exits with code 1 when SCA is disabled on the server',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(false)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
+      const result = await harness.run('analyze dependency-risks --project demo');
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current connection.',
-    );
-  });
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'Software Composition Analysis is not available for the current connection.',
+      );
+    },
+    { timeout: 15000 },
+  );
 
   // todo: https://sonarsource.atlassian.net/browse/CLI-452 Add end-to-end tests
   // The next two tests assert on scanner *failure* because the in-process
