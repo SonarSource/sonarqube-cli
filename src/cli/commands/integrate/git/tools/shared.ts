@@ -71,3 +71,29 @@ export function gitHookExample(hook: GitHookType): PostInstallExample {
     ],
   };
 }
+
+// Temporary hard-coded merged example shown when both git hooks are installed
+export function gitBothHooksExample(): PostInstallExample {
+  const deleteCommand = platform() === 'win32' ? 'del' : 'rm';
+  return {
+    title: 'Verify the hooks work',
+    lines: [
+      `1. Create a file named ${VERIFY_FILE_NAME} containing:`,
+      `     ${VERIFY_SECRET_CONTENT}`,
+      '',
+      '2. Pre-commit — stage and commit:',
+      `     git add ${VERIFY_FILE_NAME}`,
+      '     git commit -m "verify"',
+      '   → the pre-commit hook should block and report the secret.',
+      '',
+      '3. Pre-push — bypass pre-commit, then push:',
+      '     git commit -m "verify" --no-verify',
+      '     git push',
+      '   → the pre-push hook should block and report the secret.',
+      '',
+      `4. Clean up: ${deleteCommand} ${VERIFY_FILE_NAME}`,
+      '',
+      'To skip a hook: git commit --no-verify  /  git push --no-verify',
+    ],
+  };
+}
