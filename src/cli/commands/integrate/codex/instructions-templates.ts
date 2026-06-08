@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Markdown sections rendered into `.codex/AGENTS.md`. Each section is written
+// Markdown sections rendered into the Codex `AGENTS.md` (repository root for
+// project scope, `~/.codex/AGENTS.md` for global scope). Each section is written
 // into its own marker block by an independent `textSnippet` feature, so the
 // secrets and SQAA sections can be toggled independently while sharing the
 // file. The SQAA section is shared with the Copilot integration so the
