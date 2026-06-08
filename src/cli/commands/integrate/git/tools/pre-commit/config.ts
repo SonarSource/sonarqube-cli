@@ -30,7 +30,13 @@ import { CommandFailedError } from '../../../../_common/error';
 import type { GitHookType } from '../../options';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
-const PRE_COMMIT_SONAR_HOOK_ID = 'sonar-secrets';
+// Legacy id shared by both stages before per-stage ids existed. Retained only so existing installs
+// are recognized and migrated; never written for new installs.
+const PRE_COMMIT_LEGACY_HOOK_ID = 'sonar-secrets';
+const PRE_COMMIT_HOOK_IDS: Record<GitHookType, string> = {
+  'pre-commit': 'sonar-pre-commit',
+  'pre-push': 'sonar-pre-push',
+};
 export const PRE_COMMIT_LEGACY_REPO = 'https://github.com/SonarSource/sonar-secrets-pre-commit';
 const PRE_COMMIT_REMEDIATION_HINT =
   "Install the pre-commit framework (for example 'pip install pre-commit') and ensure 'pre-commit' is on PATH, then retry.";
@@ -57,9 +63,9 @@ export interface PreCommitConfig {
 
 function buildSonarHook(stage: GitHookType): PreCommitHookEntry {
   return {
-    id: PRE_COMMIT_SONAR_HOOK_ID,
+    id: PRE_COMMIT_HOOK_IDS[stage],
     name: `Sonar ${stage} scan`,
-    entry: `sonar hook git-${stage}`,
+    entry: `sonar hook git-${stage} --`,
     language: 'system',
     pass_filenames: true,
     stages: [stage],
@@ -76,12 +82,32 @@ export function normalizePreCommitConfig(raw: unknown): PreCommitConfig {
 }
 
 function isSonarHookEntry(hookEntry: unknown): hookEntry is PreCommitHookEntry {
+  if (typeof hookEntry !== 'object' || hookEntry === null || !('id' in hookEntry)) {
+    return false;
+  }
+  const id = (hookEntry as PreCommitHookEntry).id;
   return (
-    typeof hookEntry === 'object' &&
-    hookEntry !== null &&
-    'id' in hookEntry &&
-    (hookEntry as PreCommitHookEntry).id === PRE_COMMIT_SONAR_HOOK_ID
+    id === PRE_COMMIT_LEGACY_HOOK_ID ||
+    id === PRE_COMMIT_HOOK_IDS['pre-commit'] ||
+    id === PRE_COMMIT_HOOK_IDS['pre-push']
   );
+}
+
+/** Maps a (possibly legacy/ambiguous) sonar hook entry to its stage; undefined when undeterminable. */
+function inferStage(entry: PreCommitHookEntry): GitHookType | undefined {
+  if (entry.stages?.includes('pre-push')) {
+    return 'pre-push';
+  }
+  if (entry.stages?.includes('pre-commit')) {
+    return 'pre-commit';
+  }
+  if (entry.entry.includes('git-pre-push')) {
+    return 'pre-push';
+  }
+  if (entry.entry.includes('git-pre-commit')) {
+    return 'pre-commit';
+  }
+  return undefined;
 }
 
 function readPreCommitConfig(root: string): PreCommitConfig {
@@ -127,17 +153,41 @@ export function removeSonarHooksFromPreCommitConfig(document: unknown): PreCommi
   return config;
 }
 
-/** Upserts the sonar hook for the given stage into the local repo entry of a config object. */
+/**
+ * Upserts the sonar hook for the given stage into the local repo entry. Targets only this stage:
+ * replaces the current per-stage entry, else the same-stage legacy `sonar-secrets` entry (migrating
+ * it in place), else appends. A legacy entry for the other stage is left untouched.
+ */
 export function upsertSonarHook(config: PreCommitConfig, stage: GitHookType): void {
   const hook = buildSonarHook(stage);
   const localRepo = findLocalRepo(config);
-  if (localRepo) {
-    const index = localRepo.hooks.findIndex(isSonarHookEntry);
-    const idx = index >= 0 ? index : localRepo.hooks.length;
-    localRepo.hooks[idx] = hook;
-  } else {
+  if (!localRepo) {
     config.repos.push({ repo: 'local', hooks: [hook] });
+    return;
   }
+  let idx = localRepo.hooks.findIndex((h) => h.id === PRE_COMMIT_HOOK_IDS[stage]);
+  if (idx < 0) {
+    idx = localRepo.hooks.findIndex(
+      (h) => h.id === PRE_COMMIT_LEGACY_HOOK_ID && inferStage(h) === stage,
+    );
+  }
+  if (idx < 0) {
+    idx = localRepo.hooks.length;
+  }
+  localRepo.hooks[idx] = hook;
+}
+
+/** Removes the sonar hook for the given stage (current per-stage id or same-stage legacy id). */
+export function removeSonarHook(config: PreCommitConfig, stage: GitHookType): void {
+  const localRepo = findLocalRepo(config);
+  if (!localRepo) {
+    return;
+  }
+  localRepo.hooks = localRepo.hooks.filter(
+    (h) =>
+      h.id !== PRE_COMMIT_HOOK_IDS[stage] &&
+      !(h.id === PRE_COMMIT_LEGACY_HOOK_ID && inferStage(h) === stage),
+  );
 }
 
 /** Return true if .pre-commit-config.yaml already contains the sonar-secrets local hook. */

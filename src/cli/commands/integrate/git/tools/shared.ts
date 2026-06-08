@@ -25,7 +25,7 @@ import type { InstallDecision } from '../../_common/registry/selection';
 import { askUser, install, skip } from '../../_common/registry/selection';
 import type { GitHookType, IntegrateGitOptions } from '../options';
 
-export const HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
+export const LEGACY_HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
 
 export function shouldInstallHook(
   hook: GitHookType,

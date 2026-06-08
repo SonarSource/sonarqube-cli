@@ -29,10 +29,17 @@ export const GIT_INTEGRATIONS = [
 ] as const;
 
 export { HUSKY_INTEGRATION_ID } from './husky';
-export { installViaGitHooks, NATIVE_GIT_INTEGRATION_ID } from './native';
+export {
+  getHuskyBeginMarker,
+  getHuskyEndMarker,
+  getNativeHookMarker,
+  getRecognizedHuskyMarkers,
+  getRecognizedNativeMarkers,
+} from './markers';
+export { NATIVE_GIT_INTEGRATION_ID } from './native';
 export {
   hasSonarHookInPreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_INTEGRATION_ID,
 } from './pre-commit';
-export { HOOK_MARKER } from './shared';
+export { LEGACY_HOOK_MARKER } from './shared';

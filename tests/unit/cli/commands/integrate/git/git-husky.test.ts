@@ -28,12 +28,13 @@ import {
   getHuskyPrePushSnippet,
   installViaHusky,
 } from '../../../../../../src/cli/commands/integrate/git/tools/husky';
+import { getHuskyBeginMarker } from '../../../../../../src/cli/commands/integrate/git/tools/markers';
 import {
   getPreCommitHookScript,
   getPrePushHookScript,
 } from '../../../../../../src/cli/commands/integrate/git/tools/native';
 import {
-  HOOK_MARKER,
+  LEGACY_HOOK_MARKER,
   SONAR_HOOK_SKIP_SECRETS_MESSAGE,
 } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
@@ -83,7 +84,7 @@ describe('installViaHusky', () => {
     await installViaHusky(HOOK_PATH, 'pre-commit');
 
     const content = readFileSync(HOOK_PATH, 'utf-8');
-    expect(content).toContain(HOOK_MARKER);
+    expect(content).toContain(getHuskyBeginMarker('pre-commit'));
   });
 
   it('appends the pre-commit snippet to an existing hook file that has no marker', async () => {
@@ -93,7 +94,7 @@ describe('installViaHusky', () => {
 
     const content = readFileSync(HOOK_PATH, 'utf-8');
     expect(content).toContain('existing hook');
-    expect(content).toContain(HOOK_MARKER);
+    expect(content).toContain(getHuskyBeginMarker('pre-commit'));
     expect(content).toContain(getHuskyPreCommitSnippet());
     expect(
       getMockUiCalls().some(
@@ -118,7 +119,7 @@ describe('installViaHusky', () => {
   });
 
   it('does not write the file when the marker is already present', async () => {
-    writeFileSync(HOOK_PATH, `#!/bin/sh\n# ${HOOK_MARKER}\necho "already installed"\n`);
+    writeFileSync(HOOK_PATH, `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\necho "already installed"\n`);
     const before = readFileSync(HOOK_PATH, 'utf-8');
 
     await installViaHusky(HOOK_PATH, 'pre-commit');

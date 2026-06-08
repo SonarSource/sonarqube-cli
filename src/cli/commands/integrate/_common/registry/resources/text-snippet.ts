@@ -37,6 +37,12 @@ export interface TextSnippetResourceOptions extends BaseResourceOptions {
   executable?: boolean;
   startMarker: string;
   endMarker?: string;
+  /**
+   * Managed blocks written by older versions, stripped before (re)writing or removing the current
+   * block so re-running migrates an old install without leaving a duplicate. `endMarker` defaults to
+   * this resource's end marker (handy when only the start marker changed across versions).
+   */
+  legacyBlocks?: Array<{ startMarker: string; endMarker?: string }>;
 }
 
 export function textSnippet(options: TextSnippetResourceOptions): ResourceDeclaration {
@@ -80,15 +86,15 @@ export class TextSnippet implements ResourceDeclaration {
   async remove(context: IntegrationContext): Promise<void> {
     const path = await resolvePath(context, this.options.targetPath);
     const existing = await readTextFile(path);
-    if (!existing?.includes(this.startMarker) || !existing.includes(this.endMarker)) {
+    if (existing === undefined) {
       return;
     }
-
-    const pattern = new RegExp(
-      String.raw`(?:\r?\n)?${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}(?:\r?\n)?`,
-      'g',
-    );
-    await writeFileIfChanged(path, existing.replaceAll(pattern, ''));
+    const eol = detectEol(existing);
+    let updated = this.stripLegacyBlocks(existing, eol);
+    updated = removeManagedBlocks(updated, this.startMarker, this.endMarker, eol);
+    if (updated !== existing) {
+      await writeFileIfChanged(path, updated);
+    }
   }
 
   private async resolveContent(context: IntegrationContext): Promise<string> {
@@ -97,22 +103,41 @@ export class TextSnippet implements ResourceDeclaration {
   }
 
   private async renderContent(path: string, content: string): Promise<string> {
-    const existing = (await readTextFile(path)) ?? '';
-    const eol = detectEol(existing);
+    const raw = (await readTextFile(path)) ?? '';
+    const eol = detectEol(raw);
+    const existing = this.stripLegacyBlocks(raw, eol);
     const managedBlock = this.renderManagedBlock(content, eol);
-    const pattern = new RegExp(
-      String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
-    );
-    if (pattern.test(existing)) {
-      return existing.replace(pattern, managedBlock);
+
+    const startIndex = existing.indexOf(this.startMarker);
+    if (startIndex < 0) {
+      return appendBlock(existing, managedBlock, eol);
     }
 
-    const startMarkerIndex = existing.indexOf(this.startMarker);
-    if (startMarkerIndex >= 0) {
-      return `${existing.slice(0, startMarkerIndex)}${managedBlock}${eol}`;
+    // Replace the current block in place: from the start marker to the end marker, or to the end of
+    // the file when the end marker is absent (older fragments were appended without one).
+    const endIndex = existing.indexOf(this.endMarker, startIndex + this.startMarker.length);
+    if (endIndex < 0) {
+      return `${existing.slice(0, startIndex)}${managedBlock}${eol}`;
     }
+    const blockEnd = endIndex + this.endMarker.length;
+    return `${existing.slice(0, startIndex)}${managedBlock}${existing.slice(blockEnd)}`;
+  }
 
-    return appendBlock(existing, managedBlock, eol);
+  /** Removes any legacy managed blocks so a re-install/remove migrates old installs without duplicating. */
+  private stripLegacyBlocks(existing: string, eol: string): string {
+    let result = existing;
+    for (const block of this.options.legacyBlocks ?? []) {
+      if (block.startMarker === this.startMarker) {
+        continue;
+      }
+      result = removeManagedBlocks(
+        result,
+        block.startMarker,
+        block.endMarker ?? this.endMarker,
+        eol,
+      );
+    }
+    return result;
   }
 
   private renderManagedBlock(content: string, eol: string): string {
@@ -129,13 +154,45 @@ export class TextSnippet implements ResourceDeclaration {
   }
 }
 
+/**
+ * Removes every managed block delimited by `startMarker`..`endMarker`, dropping the one adjacent line
+ * ending on each side that was inserted with the block. A block whose start marker is present but
+ * whose end marker is missing — older fragments were appended without one — is removed from the start
+ * marker to the end of the content. Returns the content unchanged when the start marker is absent.
+ */
+function removeManagedBlocks(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+  eol: string,
+): string {
+  let result = content;
+  let startIndex = result.indexOf(startMarker);
+  while (startIndex >= 0) {
+    const endIndex = result.indexOf(endMarker, startIndex + startMarker.length);
+    const blockEnd = endIndex >= 0 ? endIndex + endMarker.length : result.length;
+
+    const before = sliceBefore(result, startIndex, eol);
+    const after = sliceAfter(result, blockEnd, eol);
+    result = before + after;
+    startIndex = result.indexOf(startMarker);
+  }
+  return result;
+}
+
+/** Slices `[0, index)`, dropping one trailing `eol` if present immediately before `index`. */
+function sliceBefore(content: string, index: number, eol: string): string {
+  return content.slice(0, index - (content.endsWith(eol, index) ? eol.length : 0));
+}
+
+/** Slices `[index, end)`, skipping one leading `eol` if present at `index`. */
+function sliceAfter(content: string, index: number, eol: string): string {
+  return content.slice(index + (content.startsWith(eol, index) ? eol.length : 0));
+}
+
 function appendBlock(existing: string, block: string, eol: string): string {
   if (existing.length === 0) {
     return `${block}${eol}`;
   }
   return `${existing.trimEnd()}${eol}${eol}${block}${eol}`;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

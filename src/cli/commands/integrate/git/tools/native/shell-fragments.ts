@@ -19,7 +19,8 @@
  */
 
 import type { GitHookType } from '../../options';
-import { HOOK_MARKER, resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
+import { getNativeHookMarker } from '../markers';
+import { resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
 
 function nativeBinBlock(): string {
   return [
@@ -32,7 +33,7 @@ function nativeBinBlock(): string {
 export function getHookScript(hook: GitHookType): string {
   return [
     '#!/bin/sh',
-    `# ${HOOK_MARKER}`,
+    `# ${getNativeHookMarker(hook)}`,
     nativeBinBlock(),
     `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}`,
     '',

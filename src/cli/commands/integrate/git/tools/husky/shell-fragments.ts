@@ -19,7 +19,8 @@
  */
 
 import type { GitHookType } from '../../options';
-import { HOOK_MARKER, resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
+import { getHuskyBeginMarker } from '../markers';
+import { resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
 
 function huskyBinBlock(): string {
   return [
@@ -34,7 +35,7 @@ export function getHuskySnippetContent(hook: GitHookType): string {
 }
 
 export function getHuskySnippet(hook: GitHookType): string {
-  return ['', `# ${HOOK_MARKER}`, getHuskySnippetContent(hook)].join('\n');
+  return ['', getHuskyBeginMarker(hook), getHuskySnippetContent(hook)].join('\n');
 }
 
 export function getHuskyPreCommitSnippet(): string {

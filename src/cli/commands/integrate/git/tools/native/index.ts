@@ -18,18 +18,29 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { normalizePath } from '../../../../../../lib/fs-utils';
 import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
-import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry';
-import { sonarSecretsBinaryDependency } from '../../../_common/registry';
+import { resolveGitHooksDir } from '../../../../_common/git-repo';
+import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
+import { wholeFile } from '../../../_common/registry/resources';
+import type {
+  FeatureDeclaration,
+  IntegrationContext,
+  IntegrationDeclaration,
+} from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
+import { getRecognizedNativeMarkers } from '../markers';
 import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
-import { nativeGitHookResource } from './resource';
+import { getHookScript } from './shell-fragments';
 
 export const NATIVE_GIT_INTEGRATION_ID = 'native-git';
 const GLOBAL_GIT_CONFIG_REMEDIATION_HINT =
   'Ensure git is installed and your global git configuration is writable, then retry.';
+const OVERWRITE_REMEDIATION_HINT =
+  'Re-run sonar integrate git with --force to replace the existing hook.';
 
 export const nativeGitIntegration: IntegrationDeclaration<IntegrateGitOptions> = {
   id: NATIVE_GIT_INTEGRATION_ID,
@@ -46,10 +57,15 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     postInstallExample: gitHookExample(hook),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
-      nativeGitHookResource({
+      wholeFile({
         id: 'hook-file',
         displayName: `${hook} hook`,
-        hook,
+        targetPath: (context) => resolveNativeGitHookPath(context, hook),
+        content: getHookScript(hook),
+        executable: true,
+        requiresForce: true,
+        managedMarker: getRecognizedNativeMarkers(hook),
+        overwriteRemediationHint: OVERWRITE_REMEDIATION_HINT,
       }),
     ],
     operations: [
@@ -125,5 +141,14 @@ async function configureGlobalHooksPath(hooksDir: string): Promise<void> {
   }
 }
 
-export { installViaGitHooks } from './hooks';
+async function resolveNativeGitHookPath(
+  context: IntegrationContext,
+  hook: GitHookType,
+): Promise<string> {
+  if (context.scope === 'global') {
+    return join(context.targetRoot, hook);
+  }
+  return join(await resolveGitHooksDir(context.targetRoot), hook);
+}
+
 export { getHookScript, getPreCommitHookScript, getPrePushHookScript } from './shell-fragments';

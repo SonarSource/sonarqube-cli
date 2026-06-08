@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 
 import { CommandFailedError } from '../../../../_common/error';
@@ -48,7 +47,13 @@ export interface WholeFileResourceOptions extends BaseResourceOptions {
   content: WholeFileContent;
   executable?: boolean;
   requiresForce?: boolean;
-  managedMarker?: string;
+  /**
+   * Marker(s) identifying the file as Sonar-managed (safe to overwrite). Accepts the current marker
+   * plus any legacy markers, so installs written by older versions are still recognized.
+   */
+  managedMarker?: string | string[];
+  /** Hint rendered (on a separate line) when refusing to overwrite an unmanaged file. */
+  overwriteRemediationHint?: string;
 }
 
 export function wholeFile(options: WholeFileResourceOptions): ResourceDeclaration {
@@ -85,9 +90,14 @@ export class WholeFileResource implements ResourceDeclaration {
 
   async remove(context: IntegrationContext): Promise<void> {
     const path = await resolvePath(context, this.options.targetPath);
-    if (existsSync(path)) {
-      await rm(path);
+    const existing = await readTextFile(path);
+    if (existing === undefined) {
+      return;
     }
+    if (this.options.managedMarker !== undefined && !this.isManaged(existing)) {
+      return;
+    }
+    await rm(path);
   }
 
   private async resolveContent(context: IntegrationContext): Promise<string> {
@@ -118,14 +128,17 @@ export class WholeFileResource implements ResourceDeclaration {
     }
 
     const label = this.displayName ?? this.id;
-    throw new CommandFailedError(
-      `Refusing to overwrite existing ${label} at ${path}. Use --force to replace.`,
-    );
+    throw new CommandFailedError(`A different ${label} already exists at ${path}.`, {
+      remediationHint: this.options.overwriteRemediationHint,
+    });
   }
 
   private isManaged(existing: string): boolean {
-    return (
-      this.options.managedMarker !== undefined && existing.includes(this.options.managedMarker)
-    );
+    const { managedMarker } = this.options;
+    if (managedMarker === undefined) {
+      return false;
+    }
+    const markers = Array.isArray(managedMarker) ? managedMarker : [managedMarker];
+    return markers.some((marker) => existing.includes(marker));
   }
 }

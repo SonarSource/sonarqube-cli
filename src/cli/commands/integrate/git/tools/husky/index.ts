@@ -24,7 +24,8 @@ import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependen
 import { textSnippet } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { gitCombinedHookExample, gitHookExample, HOOK_MARKER, shouldInstallHook } from '../shared';
+import { getHuskyBeginMarker, getHuskyEndMarker, legacyHuskyBlock } from '../markers';
+import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
 import { getHuskySnippetContent } from './shell-fragments';
 
 export const HUSKY_INTEGRATION_ID = 'husky';
@@ -50,8 +51,9 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
         // Husky hook files live under <gitRoot>/.husky even when Git routes hooks there via core.hooksPath.
         targetPath: (context) => join(context.targetRoot, '.husky', hook),
         executable: true,
-        startMarker: `# ${HOOK_MARKER}`,
-        endMarker: `# sonar:end husky-${hook}`,
+        startMarker: getHuskyBeginMarker(hook),
+        endMarker: getHuskyEndMarker(hook),
+        legacyBlocks: [legacyHuskyBlock(hook)],
         content: getHuskySnippetContent(hook).trimEnd(),
       }),
     ],

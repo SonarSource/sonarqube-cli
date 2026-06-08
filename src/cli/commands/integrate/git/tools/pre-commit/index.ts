@@ -30,7 +30,7 @@ import {
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   removeLegacyHook,
-  removeSonarHooksFromPreCommitConfig,
+  removeSonarHook,
   upsertSonarHook,
 } from './config';
 
@@ -62,7 +62,12 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
 
           return config;
         },
-        removePatch: (document) => removeSonarHooksFromPreCommitConfig(document),
+        removePatch: (document) => {
+          const config = normalizePreCommitConfig(document);
+          removeSonarHook(config, hook);
+
+          return config;
+        },
       }),
     ],
     operations: [
@@ -85,6 +90,7 @@ export {
   PRE_COMMIT_LEGACY_REPO,
   type PreCommitConfig,
   removeLegacyHook,
+  removeSonarHook,
   removeSonarHooksFromPreCommitConfig,
   runPreCommitInstall,
   upsertSonarHook,
