@@ -22,6 +22,9 @@ export type {
   DiffRepository,
   DiffResult,
   LicenseInfo,
+  OnboardingJob,
+  OnboardingRepoProgress,
+  OnboardingStage,
   RepoState,
 } from '../../../sonarqube/client.js';
 
@@ -53,6 +56,15 @@ export interface OrgOnboardingResult {
   org: string;
   locAnalysis: LocAnalysisResult;
   selectedRepositories: OnboardRepository[];
+}
+
+// Options chosen on the step before installation.
+export interface InstallOptions {
+  // Commit the workflow files directly to each repo's main branch instead of
+  // opening a pull request.
+  injectIntoMainBranch: boolean;
+  // Configure repo-level SonarQube settings for IDE (SonarLint) connected mode.
+  configureForIde: boolean;
 }
 
 export type RepoInstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';

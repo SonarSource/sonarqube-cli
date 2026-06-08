@@ -154,6 +154,29 @@ describe('note(): TTY box rendering (renderTTY)', () => {
     }
   });
 
+  it('word-wraps long content instead of truncating it', () => {
+    const output: string[] = [];
+    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      const longLine =
+        'Selected 5 out of 6 repositories prioritizing freshest activity while staying within the budget and excluding the largest repository to maximize coverage.';
+      note([longLine]);
+      const rendered = output.join('');
+      // No truncation marker, and the tail of the sentence is still present.
+      expect(rendered).not.toContain('...');
+      expect(rendered).toContain('maximize coverage.');
+      // Every rendered word survives the wrap.
+      for (const word of longLine.split(' ')) {
+        expect(rendered).toContain(word);
+      }
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
   it('appends newline at the end', () => {
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {

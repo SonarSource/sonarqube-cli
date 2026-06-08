@@ -23,9 +23,11 @@
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../../sonarqube/client';
 import { blank, info, note, pressEnterKeyPrompt, text, withSpinner } from '../../../../ui';
-import { bold, dim, green, red, yellow } from '../../../../ui/colors.js';
+import { bold, green, red, yellow } from '../../../../ui/colors.js';
 import type { DiffResult, LicenseInfo, LocAnalysisResult, OnboardRepository } from '../types.js';
-import { formatNumber, stepHeader } from './ui.js';
+import type { StepperState } from './stepper.js';
+import { renderStepper } from './stepper.js';
+import { formatNumber, locBar } from './ui.js';
 
 // loc-analysis returns per-repo estimated lines plus org-level aggregates. Its
 // `repositories` only covers the repos we sent (the NOT_IMPORTED subset).
@@ -41,13 +43,7 @@ interface LocAnalysisResponse {
 }
 
 function printLocBar(used: number, total: number): void {
-  const BAR_WIDTH = 36;
-  const pct = Math.min(used / total, 1);
-  const filled = Math.round(pct * BAR_WIDTH);
-  const bar = '█'.repeat(filled) + dim('░'.repeat(BAR_WIDTH - filled));
-  const pctLabel = `${Math.round(pct * 100)}%`;
-  const locLabel = dim(formatNumber(used) + ' / ' + formatNumber(total) + ' lines');
-  text(`  ${bar}  ${pctLabel}  ${locLabel}`);
+  text(locBar(used, total));
 }
 
 function printLicenseBlock(license: LicenseInfo, serverUrl: string): void {
@@ -152,13 +148,37 @@ async function analyzeOrg(client: SonarQubeClient, org: string): Promise<LocAnal
  * license block once then appending each org's impact as results arrive.
  * Returns null if any fetch fails.
  */
+export interface Step1Result {
+  license: LicenseInfo;
+  results: LocAnalysisResult[];
+}
+
+/**
+ * Headless variant of the analysis: fetch the license and analyze every org
+ * without printing any UI. Used by the recommended fast-path, which skips the
+ * interactive analysis step but still needs the data to build a review and
+ * auto-select repositories. The caller is responsible for any spinner.
+ */
+export async function analyzeOrgsHeadless(
+  auth: ResolvedAuth,
+  orgs: string[],
+): Promise<Step1Result> {
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  const license = await client.getLicense();
+  const results: LocAnalysisResult[] = [];
+  for (const org of orgs) {
+    results.push(await analyzeOrg(client, org));
+  }
+  return { license, results };
+}
+
 export async function runStep1(
   orgs: string[],
   auth: ResolvedAuth,
-  stepNumber: number,
-  totalSteps: number,
-): Promise<LocAnalysisResult[] | null> {
-  stepHeader(stepNumber, totalSteps, 'Repository analysis');
+  stepper: StepperState,
+  stepIndex: number,
+): Promise<Step1Result> {
+  renderStepper(stepper, stepIndex);
 
   blank();
 
@@ -173,7 +193,9 @@ export async function runStep1(
   let runningNewLoc = 0;
 
   for (const org of orgs) {
-    const result = await withSpinner(`Analyzing ${org}…`, () => analyzeOrg(client, org));
+    const result = await withSpinner(`Analyzing ${org} against your license LOC limit…`, () =>
+      analyzeOrg(client, org),
+    );
 
     runningNewLoc += result.netNewEstimatedLines;
     printOrgImpact(result, license, license.loc + runningNewLoc);
@@ -186,5 +208,5 @@ export async function runStep1(
 
   // pressEnterKeyPrompt always resolves (no cancel path); it's used purely for pacing
   await pressEnterKeyPrompt('Press Enter to continue to repository selection…');
-  return results;
+  return { license, results };
 }

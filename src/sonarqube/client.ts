@@ -33,6 +33,9 @@ const HTTP_STATUS_FORBIDDEN = 403;
 const HTTP_STATUS_NOT_FOUND = 404;
 const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
 const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
+// Simulated latency for the mocked LLM recommendation endpoint (GROW-126).
+// Remove once the real request replaces the mock.
+const MOCK_RECOMMENDATION_LATENCY_MS = 1200;
 
 export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const;
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
@@ -552,9 +555,105 @@ export class SonarQubeClient {
     );
   }
 
+  /**
+   * Start an onboarding job for a single organization. The server imports,
+   * configures, and analyzes the given repositories, progressing each through the
+   * stages reported by `getOnboardingProgress`. Returns the initial job snapshot,
+   * whose `jobId` identifies this run when polling progress.
+   */
+  async startOnboarding(request: StartOnboardingRequest): Promise<OnboardingJob> {
+    return await this.post<OnboardingJob>('/api/v2/onboarding/run', request, undefined, 600000);
+  }
+
+  /**
+   * Fetch progress for all onboarding jobs visible to the current user. Callers
+   * filter the returned `jobs` to the `jobId`s they started.
+   */
+  async getOnboardingProgress(): Promise<{ jobs: OnboardingJob[] }> {
+    return await this.get<{ jobs: OnboardingJob[] }>(
+      '/api/v2/onboarding/progress',
+      undefined,
+      undefined,
+      600000,
+    );
+  }
+
   async getLicense(): Promise<LicenseInfo> {
     return await this.get<LicenseInfo>('/api/v2/entitlements/license');
   }
+
+  /**
+   * MOCK — LLM-assisted onboarding recommendations.
+   *
+   * The server exposes an endpoint that uses an LLM to pick the best
+   * repositories to onboard, given the candidate repositories for an
+   * organization and the remaining license capacity. The model does the ranking
+   * and budget reasoning server-side and returns the chosen repositories (full
+   * objects), the total estimated lines, and a natural-language explanation of
+   * its choices. Until the endpoint is wired up here, this method returns a
+   * deterministic local mock matching that shape so the wizard can run the UX.
+   *
+   * Wire contract:
+   *   POST /api/v2/onboarding/recommendations
+   *   body: { organization, remainingLoc, repositories: [{ fullName, estimatedLines, lastPushedAt }] }
+   *   resp: { repos: RecommendedRepo[], totalEstimatedLines: number, explanation: string }
+   */
+  async getOnboardingRecommendations(
+    request: RecommendationRequest,
+  ): Promise<RecommendationResult> {
+    // Replace the mock with a real POST to `/api/v2/onboarding/recommendations`
+    // once the endpoint is reachable (tracked in GROW-126). The await keeps the
+    // signature identical to the eventual `this.post(...)`.
+    // The mock resolves instantly; sleep briefly so the spinner reads like a
+    // real LLM call. Remove this line when the real request is wired in.
+    await new Promise((resolve) => setTimeout(resolve, MOCK_RECOMMENDATION_LATENCY_MS));
+    return mockOnboardingRecommendations(request);
+  }
+}
+
+/**
+ * Deterministic local stand-in for the LLM recommendation endpoint.
+ *
+ * The real endpoint has an LLM choose the repositories; this mock approximates
+ * that with a simple heuristic — greedily pick the most recently pushed
+ * repositories whose estimated lines still fit within the remaining license
+ * capacity — and returns the same shape the endpoint does: the chosen repo
+ * objects, their total estimated lines, and an explanation string. Pure and
+ * synchronous — no network.
+ */
+export function mockOnboardingRecommendations(
+  request: RecommendationRequest,
+): RecommendationResult {
+  const byRecency = [...request.repositories].sort((a, b) =>
+    (b.lastPushedAt ?? '').localeCompare(a.lastPushedAt ?? ''),
+  );
+
+  let budget = Math.max(request.remainingLoc, 0);
+  const repos: RecommendedRepo[] = [];
+
+  for (const repo of byRecency) {
+    if (repo.estimatedLines <= budget) {
+      budget -= repo.estimatedLines;
+      repos.push({
+        fullName: repo.fullName,
+        estimatedLines: repo.estimatedLines,
+        lastPushedAt: repo.lastPushedAt ?? '',
+        fork: false,
+        archived: false,
+        alreadyInSonarQube: false,
+      });
+    }
+  }
+
+  const totalEstimatedLines = repos.reduce((sum, r) => sum + r.estimatedLines, 0);
+  const remaining = Math.max(request.remainingLoc, 0) - totalEstimatedLines;
+  const noun = repos.length === 1 ? 'repository' : 'repositories';
+  const explanation =
+    repos.length === 0
+      ? `No repositories fit within the remaining ${request.remainingLoc.toLocaleString('en-US')} LOC budget.`
+      : `Selected ${String(repos.length)} ${noun} out of ${String(request.repositories.length)}, prioritizing the most recent activity while staying within the ${request.remainingLoc.toLocaleString('en-US')} LOC budget. Total: ${totalEstimatedLines.toLocaleString('en-US')} LOC with ${remaining.toLocaleString('en-US')} LOC remaining capacity.`;
+
+  return { repos, totalEstimatedLines, explanation };
 }
 
 function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {
@@ -613,6 +712,90 @@ export interface DiffResult {
   totalRepositories: number;
   counts: Record<string, number>;
   repositories: DiffRepository[];
+}
+
+/** Lifecycle stage of a single repository within an onboarding job. */
+export type OnboardingStage =
+  | 'IMPORTING'
+  | 'CONFIGURING'
+  | 'AWAITING_MERGE'
+  | 'ANALYZING'
+  | 'COMPLETED'
+  | 'FAILED';
+
+/** Per-repository progress as reported by the onboarding run/progress endpoints. */
+export interface OnboardingRepoProgress {
+  repo: string;
+  stage: OnboardingStage;
+  engineStatus?: string;
+  sonarProjectKey?: string;
+  prUrl?: string;
+  prId?: string;
+  sourceBranch?: string;
+  ciFilePath?: string;
+  scannerType?: string;
+  agentAttempt?: number;
+  errorMessage?: string;
+  notes?: string;
+  updatedAt?: string;
+}
+
+/** A single onboarding job (one per organization) and its per-repo progress. */
+export interface OnboardingJob {
+  jobId: string;
+  organization: string;
+  status: string;
+  totalRepositories: number;
+  completed: number;
+  failed: number;
+  countsByStage: Record<string, number>;
+  createdAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  repositories: OnboardingRepoProgress[];
+}
+
+/** Request payload for `POST /api/v2/onboarding/run`. */
+export interface StartOnboardingRequest {
+  organization: string;
+  repositories: string[];
+  defaultBranch: string;
+}
+
+/** Single repository the recommendation engine evaluates. */
+export interface RecommendationCandidate {
+  fullName: string;
+  estimatedLines: number;
+  lastPushedAt?: string;
+}
+
+/** Request payload for the LLM-assisted recommendation endpoint. */
+export interface RecommendationRequest {
+  organization: string;
+  remainingLoc: number;
+  repositories: RecommendationCandidate[];
+}
+
+/** A repository the LLM recommends onboarding, as returned by the endpoint. */
+export interface RecommendedRepo {
+  fullName: string;
+  estimatedLines: number;
+  bytes?: number;
+  lastPushedAt: string;
+  fork: boolean;
+  archived: boolean;
+  alreadyInSonarQube: boolean;
+}
+
+/**
+ * Response from the LLM-assisted recommendation endpoint: the recommended
+ * repositories, their combined estimated lines, and the model's natural-language
+ * explanation of why it chose them.
+ */
+export interface RecommendationResult {
+  repos: RecommendedRepo[];
+  totalEstimatedLines: number;
+  explanation: string;
 }
 
 export interface AgentJobRequest {

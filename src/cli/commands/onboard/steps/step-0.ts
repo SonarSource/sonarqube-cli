@@ -24,14 +24,15 @@ import { resolveGitHubToken } from '../../../../lib/github-auth.js';
 import { GitHubClient } from '../../../../sonarqube/github-client.js';
 import { blank, multiSelectPrompt, withSpinner } from '../../../../ui';
 import type { WizardContext } from '../types.js';
-import { stepHeader } from './ui.js';
+import type { StepperState } from './stepper.js';
+import { renderStepper } from './stepper.js';
 
 export async function runStep0(
   ctx: WizardContext,
-  stepNumber: number,
-  totalSteps: number,
+  stepper: StepperState,
+  stepIndex: number,
 ): Promise<boolean> {
-  stepHeader(stepNumber, totalSteps, 'Select organizations');
+  renderStepper(stepper, stepIndex);
 
   const token = await resolveGitHubToken();
   const client = new GitHubClient(token);

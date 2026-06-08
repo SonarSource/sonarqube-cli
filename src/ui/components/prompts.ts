@@ -160,6 +160,11 @@ export function toggleSelected<T>(selected: T[], val: T, max: number): void {
   }
 }
 
+// Push footer text onto the render lines when present and non-empty.
+function appendFooter(lines: string[], footerText: string | null | undefined): void {
+  if (footerText) lines.push(footerText);
+}
+
 const SELECT_ALL_SENTINEL = '__select_all__' as const;
 
 /**
@@ -168,11 +173,29 @@ const SELECT_ALL_SENTINEL = '__select_all__' as const;
  * Renders a scrolling viewport when the option list exceeds MULTISELECT_VIEWPORT_SIZE.
  * When selectAll is true, a "Select all" option is prepended; toggling it selects or
  * clears all items. Toggling any individual item automatically deselects "Select all".
+ *
+ * `preSelectAll` checks every item up front. `preSelected` instead pre-checks only the
+ * items it returns true for (e.g. AI-recommended repositories); it takes precedence over
+ * `preSelectAll` when provided.
+ *
+ * `footer` renders extra lines below the list on every redraw, given the currently
+ * selected values (e.g. a live capacity bar). It may return a multi-line string or null
+ * for nothing. It is not shown in the submit/cancel states.
  */
 export async function multiSelectPrompt<T>(
   message: string,
   options: MultiSelectOption<T>[],
-  { selectAll = false, preSelectAll = false }: { selectAll?: boolean; preSelectAll?: boolean } = {},
+  {
+    selectAll = false,
+    preSelectAll = false,
+    preSelected,
+    footer,
+  }: {
+    selectAll?: boolean;
+    preSelectAll?: boolean;
+    preSelected?: (value: T) => boolean;
+    footer?: (selected: T[]) => string | null;
+  } = {},
 ): Promise<T[] | null> {
   if (isMockActive()) {
     const value = dequeueMockResponse<T[] | null>([]);
@@ -190,9 +213,19 @@ export async function multiSelectPrompt<T>(
     ? [{ value: SELECT_ALL_SENTINEL, label: 'Select all' }, ...options]
     : [...options];
 
-  // Pre-populate selection when requested (e.g. recommended mode)
-  const selected: AugmentedValue[] =
-    selectAll && preSelectAll ? [SELECT_ALL_SENTINEL, ...allValues] : [];
+  // Pre-populate selection when requested (e.g. recommended mode). `preSelected`
+  // checks a subset; `preSelectAll` checks everything. The sentinel is only added
+  // when every item ends up selected so "Select all" stays accurate.
+  function initialSelection(): AugmentedValue[] {
+    if (preSelected) {
+      const picked = allValues.filter((v) => preSelected(v));
+      const all = selectAll && picked.length === allValues.length && allValues.length > 0;
+      return all ? [SELECT_ALL_SENTINEL, ...picked] : [...picked];
+    }
+    if (selectAll && preSelectAll) return [SELECT_ALL_SENTINEL, ...allValues];
+    return [];
+  }
+  const selected: AugmentedValue[] = initialSelection();
   let cursor = 0;
   let query = '';
   let searching = false;
@@ -278,6 +311,8 @@ export async function multiSelectPrompt<T>(
         }
 
         if (end < total) lines.push(`      ${dim('↓ ' + String(total - end) + ' more')}`);
+
+        appendFooter(lines, footer?.(realSelected as T[]));
 
         return lines.join('\n');
       },

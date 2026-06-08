@@ -35,6 +35,48 @@ function getWidth(): number {
   return Math.min(Math.max(cols - 4, MIN_WIDTH), MAX_WIDTH);
 }
 
+/**
+ * Hard-split a word longer than `max` into chunks. Full-width chunks are pushed
+ * to `out`; the trailing remainder (if any) is returned to seed the next line.
+ */
+function splitLongWord(word: string, max: number, out: string[]): string {
+  let remainder = '';
+  for (let i = 0; i < word.length; i += max) {
+    const chunk = word.slice(i, i + max);
+    if (chunk.length === max) out.push(chunk);
+    else remainder = chunk;
+  }
+  return remainder;
+}
+
+/**
+ * Word-wrap a single line to at most `max` characters, breaking on spaces.
+ * A word longer than `max` is hard-split so nothing is lost. Returns at least
+ * one line (possibly empty) so blank lines are preserved.
+ */
+function wrapLine(line: string, max: number): string[] {
+  if (line.length <= max) return [line];
+
+  const out: string[] = [];
+  let current = '';
+  for (const word of line.split(' ')) {
+    if (word.length > max) {
+      if (current) out.push(current);
+      current = splitLongWord(word, max, out);
+      continue;
+    }
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > max) {
+      out.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  out.push(current);
+  return out;
+}
+
 function renderTTY(lines: string[], title: string | undefined, opts: NoteOptions): string {
   const borderColor: ColorFn = opts.borderColor ?? dim;
   const titleColor: ColorFn = opts.titleColor ?? bold;
@@ -52,9 +94,11 @@ function renderTTY(lines: string[], title: string | undefined, opts: NoteOptions
   const empty = borderColor('│') + ' '.repeat(width) + borderColor('│');
   const bottom = borderColor('└' + '─'.repeat(width) + '┘');
 
-  const contentLines = lines.map((line) => {
-    const truncated = line.length > width - 1 ? line.slice(0, width - 4) + '...' : line;
-    const padded = truncated + ' '.repeat(Math.max(0, width - 1 - truncated.length));
+  // Wrap each input line to the inner width so long content flows onto multiple
+  // lines instead of being truncated.
+  const wrapped = lines.flatMap((line) => wrapLine(line, width - 1));
+  const contentLines = wrapped.map((line) => {
+    const padded = line + ' '.repeat(Math.max(0, width - 1 - line.length));
     return borderColor('│') + ' ' + contentColor(padded) + borderColor('│');
   });
 

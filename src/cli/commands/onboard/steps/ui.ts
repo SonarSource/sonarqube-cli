@@ -20,14 +20,28 @@
 
 // Shared UI helpers for onboarding wizard steps
 
-import { text } from '../../../../ui';
-import { bold, dim } from '../../../../ui/colors.js';
-
-export function stepHeader(step: number, total: number, title: string): void {
-  const stepLabel = dim(`Step ${step} of ${total}`);
-  text(`\n  ${bold(title)}  ${stepLabel}\n`);
-}
+import { dim, green, red } from '../../../../ui/colors.js';
 
 export function formatNumber(n: number): string {
   return n.toLocaleString('en-US');
+}
+
+const LOC_BAR_WIDTH = 36;
+
+/**
+ * Build a single-line license-usage bar string (no printing). The filled
+ * portion is green when `used` is within `total` and red when it exceeds it,
+ * followed by the percentage and a `used / total lines` label. Used both for
+ * the static post-analysis bar and the live selection bar.
+ */
+export function locBar(used: number, total: number): string {
+  const safeTotal = Math.max(total, 1);
+  const pct = Math.min(used / safeTotal, 1);
+  const filledCount = Math.round(pct * LOC_BAR_WIDTH);
+  const overCapacity = used > total;
+  const fillColor = overCapacity ? red : green;
+  const bar = fillColor('█'.repeat(filledCount)) + dim('░'.repeat(LOC_BAR_WIDTH - filledCount));
+  const pctLabel = `${Math.round((used / safeTotal) * 100)}%`;
+  const locLabel = dim(`${formatNumber(used)} / ${formatNumber(total)} lines`);
+  return `  ${bar}  ${pctLabel}  ${locLabel}`;
 }

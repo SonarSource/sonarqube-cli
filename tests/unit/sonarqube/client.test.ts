@@ -27,7 +27,7 @@ import {
   SONARCLOUD_US_API_URL,
   SONARCLOUD_US_URL,
 } from '../../../src/lib/config-constants.js';
-import { SonarQubeClient } from '../../../src/sonarqube/client.js';
+import { mockOnboardingRecommendations, SonarQubeClient } from '../../../src/sonarqube/client.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ---------------------------------------------------------------------------
@@ -1107,5 +1107,69 @@ describe('SonarQubeClient', () => {
         }),
       ).rejects.toThrow('403');
     });
+  });
+});
+
+// mockOnboardingRecommendations is the deterministic stand-in for the
+// LLM-assisted recommendation endpoint. It returns the chosen repo objects,
+// their total estimated lines, and an explanation. These tests pin its
+// heuristic so the onboarding wizard's behavior stays stable.
+function recommendedNames(result: { repos: { fullName: string }[] }): string[] {
+  return result.repos.map((r) => r.fullName);
+}
+
+describe('mockOnboardingRecommendations', () => {
+  it('recommends repositories that fit within the remaining capacity', () => {
+    const result = mockOnboardingRecommendations({
+      organization: 'acme',
+      remainingLoc: 1000,
+      repositories: [
+        { fullName: 'acme/api', estimatedLines: 400, lastPushedAt: '2026-06-01' },
+        { fullName: 'acme/web', estimatedLines: 300, lastPushedAt: '2026-05-01' },
+      ],
+    });
+
+    expect(recommendedNames(result)).toEqual(['acme/api', 'acme/web']);
+    expect(result.totalEstimatedLines).toBe(700);
+    expect(result.explanation).toContain('Selected 2 repositories');
+  });
+
+  it('does not recommend repositories that exceed the remaining capacity', () => {
+    const result = mockOnboardingRecommendations({
+      organization: 'acme',
+      remainingLoc: 500,
+      repositories: [
+        { fullName: 'acme/big', estimatedLines: 800, lastPushedAt: '2026-06-01' },
+        { fullName: 'acme/small', estimatedLines: 200, lastPushedAt: '2026-05-01' },
+      ],
+    });
+
+    expect(recommendedNames(result)).toEqual(['acme/small']);
+    expect(result.totalEstimatedLines).toBe(200);
+  });
+
+  it('prioritizes more recently pushed repositories when budget is tight', () => {
+    const result = mockOnboardingRecommendations({
+      organization: 'acme',
+      remainingLoc: 300,
+      repositories: [
+        { fullName: 'acme/stale', estimatedLines: 300, lastPushedAt: '2025-01-01' },
+        { fullName: 'acme/fresh', estimatedLines: 300, lastPushedAt: '2026-06-01' },
+      ],
+    });
+
+    expect(recommendedNames(result)).toEqual(['acme/fresh']);
+  });
+
+  it('recommends nothing when there is no remaining capacity', () => {
+    const result = mockOnboardingRecommendations({
+      organization: 'acme',
+      remainingLoc: 0,
+      repositories: [{ fullName: 'acme/api', estimatedLines: 100, lastPushedAt: '2026-06-01' }],
+    });
+
+    expect(result.repos).toEqual([]);
+    expect(result.totalEstimatedLines).toBe(0);
+    expect(result.explanation).toContain('No repositories fit');
   });
 });
