@@ -24,7 +24,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import yaml from 'js-yaml';
 
+import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import {
+  activatePreCommitFramework,
   hasSonarHookInPreCommitConfig,
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
@@ -92,29 +94,39 @@ describe('removeLegacyHook', () => {
 });
 
 describe('upsertSonarHook', () => {
+  it('writes the correct hook shape for pre-commit stage', () => {
+    const config: PreCommitConfig = { repos: [] };
+    upsertSonarHook(config, 'pre-commit');
+    const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
+    expect(hook).toEqual({
+      id: 'sonar-secrets',
+      name: 'Sonar pre-commit scan',
+      entry: 'sonar hook git-pre-commit',
+      language: 'system',
+      pass_filenames: true,
+      stages: ['pre-commit'],
+    });
+  });
+
+  it('writes the correct hook shape for pre-push stage', () => {
+    const config: PreCommitConfig = { repos: [] };
+    upsertSonarHook(config, 'pre-push');
+    const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
+    expect(hook).toEqual({
+      id: 'sonar-secrets',
+      name: 'Sonar pre-push scan',
+      entry: 'sonar hook git-pre-push',
+      language: 'system',
+      pass_filenames: true,
+      stages: ['pre-push'],
+    });
+  });
+
   it('creates a local repo with the sonar-secrets hook when no repos exist', () => {
     const config: PreCommitConfig = { repos: [] };
     upsertSonarHook(config, 'pre-commit');
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
-  });
-
-  it('sets stage to pre-commit', () => {
-    const config: PreCommitConfig = { repos: [] };
-    upsertSonarHook(config, 'pre-commit');
-    const hook = config.repos
-      .find((r) => r.repo === 'local')
-      ?.hooks.find((h) => h.id === 'sonar-secrets');
-    expect(hook?.stages).toEqual(['pre-commit']);
-  });
-
-  it('sets stage to pre-push', () => {
-    const config: PreCommitConfig = { repos: [] };
-    upsertSonarHook(config, 'pre-push');
-    const hook = config.repos
-      .find((r) => r.repo === 'local')
-      ?.hooks.find((h) => h.id === 'sonar-secrets');
-    expect(hook?.stages).toEqual(['pre-push']);
   });
 
   it('appends a local repo when only unrelated repos exist', () => {
@@ -163,6 +175,30 @@ describe('upsertSonarHook', () => {
     const sonarHooks = localRepo?.hooks.filter((h) => h.id === 'sonar-secrets');
     expect(sonarHooks).toHaveLength(1);
     expect(sonarHooks?.[0].stages).toEqual(['pre-commit']);
+  });
+
+  it('replaces the existing sonar-secrets hook in place for pre-push stage', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-secrets',
+              name: 'old',
+              entry: 'old-entry',
+              language: 'system',
+              stages: ['pre-commit'],
+            },
+          ],
+        },
+      ],
+    };
+    upsertSonarHook(config, 'pre-push');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    const hooks = localRepo?.hooks.filter((h) => h.id === 'sonar-secrets');
+    expect(hooks).toHaveLength(1);
+    expect(hooks?.[0].entry).toBe('sonar hook git-pre-push');
   });
 
   it('preserves top-level keys that are not repos', () => {
@@ -271,6 +307,62 @@ describe('runPreCommitInstall', () => {
       expect(runPreCommitInstall(TEMP_DIR, 'pre-commit')).rejects.toThrow(
         'pre-commit uninstall failed',
       );
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('throws CommandFailedError when spawnProcess rejects', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockRejectedValue(new Error('not found'));
+
+    try {
+      const err = await runPreCommitInstall(TEMP_DIR, 'pre-commit').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CommandFailedError);
+      expect((err as CommandFailedError).message).toContain('Failed to run pre-commit [not found]');
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+});
+
+describe('activatePreCommitFramework', () => {
+  it('succeeds when all pre-commit commands pass', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await activatePreCommitFramework(TEMP_DIR, 'pre-commit');
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('throws CommandFailedError with remediation hint when commands fail (pre-commit stage)', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+
+    try {
+      const err: unknown = await activatePreCommitFramework(TEMP_DIR, 'pre-commit').catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(CommandFailedError);
+      expect((err as CommandFailedError).message).toContain(
+        'Updated .pre-commit-config.yaml but pre-commit commands failed.',
+      );
+      expect((err as CommandFailedError).remediationHint).toContain('pre-commit install');
+      expect((err as CommandFailedError).remediationHint).not.toContain('--hook-type pre-push');
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('includes --hook-type pre-push in remediation hint for pre-push stage', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+
+    try {
+      const err: unknown = await activatePreCommitFramework(TEMP_DIR, 'pre-push').catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(CommandFailedError);
+      expect((err as CommandFailedError).remediationHint).toContain('--hook-type pre-push');
     } finally {
       spawnSpy.mockRestore();
     }

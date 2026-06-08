@@ -38,7 +38,10 @@ export interface GitPrePushOptions {
   dependencyRisks?: boolean;
 }
 
-export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void> {
+export async function gitPrePush(
+  options: GitPrePushOptions = {},
+  files: string[] = [],
+): Promise<void> {
   if (options.dependencyRisks && !options.project) {
     throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
   }
@@ -46,11 +49,8 @@ export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void>
   const auth = await resolveAuth().catch(() => null);
   if (!auth) return;
 
-  const refs = await readGitPushRefs();
-  if (refs.length === 0) return;
-
-  const emptyTree = await getEmptyTree();
-  const filesByRef = await collectFilesForRefs(refs, emptyTree);
+  const fileGroups = await getFileGroupsToScan(files);
+  if (fileGroups === null) return;
 
   if (await hasUncommittedChanges()) {
     warn(
@@ -58,12 +58,35 @@ export async function gitPrePush(options: GitPrePushOptions = {}): Promise<void>
     );
   }
 
-  await runSecretsStage(filesByRef, auth);
+  for (const group of fileGroups) {
+    await runSecretsStage(group, auth);
+  }
 
   if (options.dependencyRisks && options.project) {
-    const changedFiles = Array.from(filesByRef.values()).flat();
+    const changedFiles = [...new Set(fileGroups.flat())];
     await runDepRisksStage({ project: options.project, changedFiles, auth });
   }
+}
+
+async function getFileGroupsToScan(files: string[]): Promise<string[][] | null> {
+  if (files.length > 0) {
+    /*
+     * pre-commit framework pre-chunks files before calling our tool in parallel.
+     * This is suboptimal for SCA analysis, as it may be triggered multiple times for the same changes.
+     * However, there's no easy solution, as the pre-commit framework can't pass all files at once due to ARG_MAX limits
+     * and there's no support for stdin.
+     */
+    return [files];
+  }
+
+  const refs = await readGitPushRefs();
+  if (refs.length === 0) return null;
+
+  const emptyTree = await getEmptyTree();
+  const nonDeletionRefs = refs.filter((ref) => ref.localSha !== GIT_NULL_OID);
+  const filesByRef = await collectFilesForRefs(nonDeletionRefs, emptyTree);
+  const groups = Array.from(filesByRef.values()).filter((g) => g.length > 0);
+  return groups.length > 0 ? groups : null;
 }
 
 async function getEmptyTree(): Promise<string> {
@@ -81,10 +104,6 @@ async function collectFilesForRefs(
 ): Promise<Map<PushRef, string[]>> {
   const out = new Map<PushRef, string[]>();
   for (const ref of refs) {
-    if (ref.localSha === GIT_NULL_OID) {
-      out.set(ref, []);
-      continue;
-    }
     out.set(ref, await getFilesForRef(ref, emptyTree));
   }
   return out;
@@ -149,8 +168,8 @@ async function getFilesForNewBranch(localSha: string, emptyTree: string): Promis
 
 export async function hasUncommittedChanges(): Promise<boolean> {
   try {
-    const result = await spawnProcess('git', ['status', '--porcelain', '-uno']);
-    return result.stdout.trim().length > 0;
+    const result = await spawnProcess('git', ['diff', '--quiet', 'HEAD']);
+    return result.exitCode !== 0;
   } catch {
     return false;
   }

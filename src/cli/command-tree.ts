@@ -503,7 +503,8 @@ hookCommand
 hookCommand
   .command('git-pre-commit')
   .description('git pre-commit handler: scan staged files for secrets')
-  .anonymousAction(() => gitPreCommit());
+  .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
+  .anonymousAction((files: string[]) => gitPreCommit(files));
 
 hookCommand
   .command('git-pre-push')
@@ -515,7 +516,8 @@ hookCommand
     '--dependency-risks',
     'Also run a dependency-risks scan after the secrets scan (requires -p)',
   )
-  .anonymousAction((options: GitPrePushOptions) => gitPrePush(options));
+  .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
+  .anonymousAction((files: string[], options: GitPrePushOptions) => gitPrePush(options, files));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {
