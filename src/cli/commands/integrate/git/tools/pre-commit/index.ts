@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry';
 import { sonarSecretsBinaryDependency, yamlPatch } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { gitHookExample, shouldInstallHook } from '../shared';
+import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
 import {
   activatePreCommitFramework,
   deactivatePreCommitFramework,
@@ -40,6 +40,7 @@ export const preCommitIntegration: IntegrationDeclaration<IntegrateGitOptions> =
   id: PRE_COMMIT_INTEGRATION_ID,
   displayName: 'pre-commit integration',
   features: [createPreCommitFeature('pre-commit'), createPreCommitFeature('pre-push')],
+  combinedPostInstallExample: gitCombinedHookExample,
 };
 
 function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitOptions> {

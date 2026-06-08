@@ -192,4 +192,45 @@ describe('renderCompletionSummary', () => {
     expect(String(exampleNote?.args[0])).toContain('do the thing');
     expect(calls.some((c) => c.method === 'text' && c.args[0] === 'it should work')).toBe(true);
   });
+
+  it('renders the combined example (and skips per-feature ones) when the integration provides one', () => {
+    const integration: IntegrationDeclaration = {
+      id: 'test',
+      displayName: 'Test',
+      features: [
+        { id: 'a', displayName: 'Feature A', postInstallExample: { lines: ['example a'] } },
+        { id: 'b', displayName: 'Feature B', postInstallExample: { lines: ['example b'] } },
+      ],
+      combinedPostInstallExample: (ids) =>
+        ids.includes('a') && ids.includes('b')
+          ? { title: 'Combined', lines: ['combined example'] }
+          : undefined,
+    };
+
+    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')]);
+
+    const notes = getMockUiCalls().filter((c) => c.method === 'note');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.args[1]).toBe('Combined');
+    expect(String(notes[0]?.args[0])).toContain('combined example');
+  });
+
+  it('falls back to per-feature examples when the combiner returns undefined', () => {
+    const integration: IntegrationDeclaration = {
+      id: 'test',
+      displayName: 'Test',
+      features: [
+        { id: 'a', displayName: 'Feature A', postInstallExample: { lines: ['example a'] } },
+        { id: 'b', displayName: 'Feature B', postInstallExample: { lines: ['example b'] } },
+      ],
+      combinedPostInstallExample: () => undefined,
+    };
+
+    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')]);
+
+    const noteBodies = getMockUiCalls()
+      .filter((c) => c.method === 'note')
+      .map((c) => String(c.args[0]));
+    expect(noteBodies).toEqual(['example a', 'example b']);
+  });
 });

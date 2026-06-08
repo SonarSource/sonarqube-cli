@@ -72,8 +72,18 @@ export function gitHookExample(hook: GitHookType): PostInstallExample {
   };
 }
 
-// Temporary hard-coded merged example shown when both git hooks are installed
-export function gitBothHooksExample(): PostInstallExample {
+/**
+ * Combined example shown when both git hooks are installed. Returns `undefined`
+ * so the framework falls back to per-feature examples when only one is present.
+ */
+export function gitCombinedHookExample(
+  installedFeatureIds: string[],
+): PostInstallExample | undefined {
+  const ids = new Set(installedFeatureIds);
+  return ids.has('pre-commit-hook') && ids.has('pre-push-hook') ? gitBothHooksExample() : undefined;
+}
+
+function gitBothHooksExample(): PostInstallExample {
   const deleteCommand = platform() === 'win32' ? 'del' : 'rm';
   return {
     title: 'Verify the hooks work',

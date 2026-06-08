@@ -29,7 +29,6 @@ import { sep } from 'node:path';
 
 import type { InstalledIntegrationFeature } from '../../../../../lib/state';
 import { info, note, outro, phase, phaseItem, text } from '../../../../../ui';
-import { gitBothHooksExample } from '../../git/tools/shared';
 import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } from './types';
 
 export function renderCompletionSummary<TOptions>(
@@ -70,12 +69,14 @@ function renderPostInstallExamples<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
 ): void {
-  // Temporary hard-coded special case when both git hooks are installed
-  // TODO: replace with a proper post-install example merging system.
-  // https://sonarsource.atlassian.net/browse/CLI-617
-  const ids = new Set(installedFeatures.map((f) => f.featureId));
-  if (ids.has('pre-commit-hook') && ids.has('pre-push-hook')) {
-    renderPostInstallExample(gitBothHooksExample());
+  // An integration may collapse its per-feature examples into a single combined
+  // one when a specific set of features is installed together (e.g. both git
+  // hooks). When it declines (returns undefined), fall back to per-feature.
+  const combined = integration.combinedPostInstallExample?.(
+    installedFeatures.map((f) => f.featureId),
+  );
+  if (combined) {
+    renderPostInstallExample(combined);
     return;
   }
   for (const installed of installedFeatures) {

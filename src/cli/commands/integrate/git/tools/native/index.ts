@@ -24,7 +24,7 @@ import { CommandFailedError } from '../../../../_common/error';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry';
 import { sonarSecretsBinaryDependency } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { gitHookExample, shouldInstallHook } from '../shared';
+import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
 import { nativeGitHookResource } from './resource';
 
 export const NATIVE_GIT_INTEGRATION_ID = 'native-git';
@@ -35,6 +35,7 @@ export const nativeGitIntegration: IntegrationDeclaration<IntegrateGitOptions> =
   id: NATIVE_GIT_INTEGRATION_ID,
   displayName: 'Native Git integration',
   features: [createNativeGitFeature('pre-commit'), createNativeGitFeature('pre-push')],
+  combinedPostInstallExample: gitCombinedHookExample,
 };
 
 function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitOptions> {
