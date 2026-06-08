@@ -19,36 +19,40 @@
  */
 
 /**
- * Stable anonymous user identifier stored in ~/.sonarqube-cli/user.
+ * Stable anonymous user identifier stored in ~/.sonar/user.
  *
  * The file is created atomically on first use (O_CREAT | O_EXCL) so that
- * concurrent processes always converge on the same UUID.
+ * concurrent processes always converge on the same UUID. Existing
+ * ~/.sonar/sonarqube-cli/user files are promoted on first use and then removed.
  */
 
 import { randomUUID } from 'node:crypto';
-import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CLI_DIR } from '../lib/config-constants.js';
+import { getCliDir, getSonarUserHome } from '../lib/config-constants.js';
 
-const USER_FILE = join(CLI_DIR, 'user');
+function getSharedUserFile(): string {
+  return join(getSonarUserHome(), 'user');
+}
 
-/**
- * Return the persisted user ID, creating it atomically if it does not exist yet.
- */
-export function getOrCreateUserId(): string {
-  // Fast path — file already exists.
+function getLegacyUserFile(): string {
+  return join(getCliDir(), 'user');
+}
+
+function tryReadUserId(filePath: string): string | undefined {
   try {
-    return readFileSync(USER_FILE, 'utf-8').trim();
+    return readFileSync(filePath, 'utf-8').trim();
   } catch {
-    // Fall through to create.
+    return undefined;
   }
+}
 
-  mkdirSync(CLI_DIR, { recursive: true });
+function createUserIdIfMissing(filePath: string, dirPath: string, id: string): string {
+  mkdirSync(dirPath, { recursive: true });
 
-  const id = randomUUID();
   try {
-    const fd = openSync(USER_FILE, 'wx');
+    const fd = openSync(filePath, 'wx');
     try {
       writeFileSync(fd, id, 'utf-8');
     } finally {
@@ -56,7 +60,36 @@ export function getOrCreateUserId(): string {
     }
     return id;
   } catch {
-    // Another process won the race — read the ID they wrote.
-    return readFileSync(USER_FILE, 'utf-8').trim();
+    return readFileSync(filePath, 'utf-8').trim();
   }
+}
+
+function removeLegacyUserFile(): void {
+  try {
+    unlinkSync(getLegacyUserFile());
+  } catch {
+    // Best effort cleanup only.
+  }
+}
+
+/**
+ * Return the persisted user ID, creating it atomically if it does not exist yet.
+ */
+export function getOrCreateUserId(): string {
+  const sharedUserFile = getSharedUserFile();
+  const sharedUserId = tryReadUserId(sharedUserFile);
+  if (sharedUserId !== undefined) {
+    removeLegacyUserFile();
+    return sharedUserId;
+  }
+
+  const legacyUserFile = getLegacyUserFile();
+  const legacyUserId = tryReadUserId(legacyUserFile);
+  if (legacyUserId !== undefined) {
+    const userId = createUserIdIfMissing(sharedUserFile, getSonarUserHome(), legacyUserId);
+    removeLegacyUserFile();
+    return userId;
+  }
+
+  return createUserIdIfMissing(sharedUserFile, getSonarUserHome(), randomUUID());
 }

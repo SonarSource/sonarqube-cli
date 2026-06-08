@@ -21,8 +21,8 @@
 /**
  * Central configuration constants for the SonarQube CLI.
  *
- * Paths are computed once at module load time.
- * All files that need these values should import from here.
+ * Path defaults are computed once at module load time. Helper functions read
+ * env overrides at call time so tests can redirect paths after import.
  */
 
 import { homedir } from 'node:os';
@@ -41,8 +41,20 @@ export const CLI_COMMAND = process.platform === 'win32' ? 'sonar.exe' : 'sonar';
 // CLI data directory
 // ---------------------------------------------------------------------------
 
+export const ENV_SONAR_USER_HOME = 'SONAR_USER_HOME';
+
+/** Shared root directory for Sonar product data: ~/.sonar */
+export function getSonarUserHome(): string {
+  return process.env[ENV_SONAR_USER_HOME] ?? join(homedir(), '.sonar');
+}
+
 /** Root directory for all CLI data: ~/.sonar/sonarqube-cli */
-export const CLI_DIR = join(homedir(), '.sonar', APP_NAME);
+export function getCliDir(): string {
+  return join(getSonarUserHome(), 'sonarqube-cli');
+}
+
+export const SONAR_USER_HOME = getSonarUserHome();
+export const CLI_DIR = getCliDir();
 
 // ---------------------------------------------------------------------------
 // State

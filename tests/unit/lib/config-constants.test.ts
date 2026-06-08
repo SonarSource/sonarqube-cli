@@ -18,25 +18,57 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
   APP_NAME,
+  ENV_SONAR_USER_HOME,
   ENV_SQAA_RETRY_BASE_DELAY_MS,
+  getCliDir,
+  getSonarUserHome,
   getSqaaRetry503BaseDelayMs,
   LOG_DIR,
   LOG_FILE,
 } from '../../../src/lib/config-constants';
 
 describe('config-constants', () => {
+  const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+
+  afterEach(() => {
+    if (previousSonarUserHome === undefined) {
+      delete process.env[ENV_SONAR_USER_HOME];
+    } else {
+      process.env[ENV_SONAR_USER_HOME] = previousSonarUserHome;
+    }
+  });
+
   it('LOG_FILE should be inside LOG_DIR', () => {
     expect(LOG_FILE.startsWith(LOG_DIR)).toBe(true);
   });
 
   it('LOG_FILE should have the correct filename', () => {
     expect(LOG_FILE).toBe(join(LOG_DIR, `${APP_NAME}.log`));
+  });
+
+  describe('path resolution', () => {
+    it('defaults SONAR_USER_HOME to ~/.sonar when unset', () => {
+      delete process.env[ENV_SONAR_USER_HOME];
+
+      expect(getSonarUserHome()).toBe(join(homedir(), '.sonar'));
+    });
+
+    it('derives the CLI dir from SONAR_USER_HOME', () => {
+      process.env[ENV_SONAR_USER_HOME] = '/tmp/sonar-home';
+
+      expect(getCliDir()).toBe(join('/tmp/sonar-home', 'sonarqube-cli'));
+    });
+
+    it('keeps the CLI storage dir stable', () => {
+      expect(basename(getCliDir())).toBe('sonarqube-cli');
+    });
   });
 
   describe('getSqaaRetry503BaseDelayMs', () => {
