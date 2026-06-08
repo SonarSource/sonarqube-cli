@@ -55,8 +55,10 @@ export function introAgentIntegration(agentDisplayName: string): void {
   intro(`SonarQube Integration Setup for ${agentDisplayName}`);
 }
 
-export async function discoverIntegrateProject(): Promise<DiscoveredProject> {
-  return withSpinner('Discovering project...', () => discoverProject(process.cwd(), true));
+export async function discoverIntegrateProject(auth: ResolvedAuth): Promise<DiscoveredProject> {
+  return withSpinner('Discovering project...', () =>
+    discoverProject(process.cwd(), true, { auth }),
+  );
 }
 
 export function warnAuthProjectMismatches(auth: ResolvedAuth, project: DiscoveredProject): void {
@@ -124,7 +126,7 @@ export async function displayAgentIntegratePrelude(
 ): Promise<AgentIntegrateContext> {
   assertIntegrateScopeOptions(options);
   introAgentIntegration(agentDisplayName);
-  const project = await discoverIntegrateProject();
+  const project = await discoverIntegrateProject(auth);
   warnAuthProjectMismatches(auth, project);
   const projectKey = options.project || project.projectKey;
   assertSonarCloudOrganization(auth.serverUrl, auth.orgKey);

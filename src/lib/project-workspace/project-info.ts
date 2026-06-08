@@ -24,9 +24,15 @@ import { existsSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 import { print } from '../../ui';
+import type { ResolvedAuth } from '../auth-resolver';
+import { resolveAuth } from '../auth-resolver';
 import { canonicalizePath } from '../fs-utils';
 import logger from '../logger';
 import { spawnProcess } from '../process';
+import {
+  discoverProjectKeyByGitRemote,
+  GIT_REMOTE_BINDING_SOURCE,
+} from './discover-project-by-remote';
 import { loadSonarLintConfig, type SonarLintConfig } from './sonarlint-connected-mode';
 
 export interface ProjectInfo {
@@ -50,6 +56,13 @@ export interface DiscoveredProject {
   projectKey?: string;
   /** Config files that contributed to the discovered project, in order found. */
   configSources: string[];
+}
+
+export interface DiscoverProjectOptions {
+  /** When set, used for git-remote binding lookup instead of resolving auth again. */
+  auth?: ResolvedAuth | null;
+  /** When false, skips server lookup even if a git remote is present. Defaults to true. */
+  tryGitRemoteBinding?: boolean;
 }
 
 export interface SonarProperties {
@@ -140,6 +153,7 @@ export async function discoverProjectInfo(startDir: string): Promise<ProjectInfo
 export async function discoverProject(
   startDir: string,
   silent = false,
+  options: DiscoverProjectOptions = {},
 ): Promise<DiscoveredProject> {
   const projectInfo = await discoverProjectInfo(startDir);
   const config: DiscoveredProject = {
@@ -182,7 +196,45 @@ export async function discoverProject(
     }
   }
 
+  await applyGitRemoteBindingFromRemote(config, projectInfo, options, silent);
+
   return config;
+}
+
+async function applyGitRemoteBindingFromRemote(
+  config: DiscoveredProject,
+  projectInfo: ProjectInfo,
+  options: DiscoverProjectOptions,
+  silent: boolean,
+): Promise<void> {
+  const tryGitRemoteBinding = options.tryGitRemoteBinding !== false;
+  if (!tryGitRemoteBinding || config.projectKey || !projectInfo.gitRemote) {
+    return;
+  }
+
+  const auth = options.auth === undefined ? await resolveAuth() : options.auth;
+  if (!auth) {
+    return;
+  }
+
+  const remoteBinding = await discoverProjectKeyByGitRemote(auth, projectInfo.gitRemote);
+  if (!remoteBinding) {
+    return;
+  }
+
+  config.configSources.push(GIT_REMOTE_BINDING_SOURCE);
+  config.serverUrl = config.serverUrl || remoteBinding.serverUrl;
+  config.projectKey = remoteBinding.projectKey;
+  config.organization = config.organization || remoteBinding.organization;
+
+  if (silent) {
+    return;
+  }
+
+  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+  if (fields) {
+    print(`Found ${GIT_REMOTE_BINDING_SOURCE}: ${fields}`);
+  }
 }
 
 function formatConfigFields(

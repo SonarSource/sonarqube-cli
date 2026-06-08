@@ -27,7 +27,7 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import { canonicalizePath } from '../../../lib/fs-utils.js';
 import logger from '../../../lib/logger';
 import { getMcpContainerCommand, type McpServerContext } from '../../../lib/mcp/mcp-helper.js';
-import { discoverProject } from '../../../lib/project-workspace/project-info.js';
+import { discoverProject } from '../../../lib/project-workspace';
 import { detectContainerRuntime } from '../../../lib/tool-detector.js';
 import { warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error.js';
@@ -54,7 +54,7 @@ export async function runMcp(auth: ResolvedAuth, options: McpRunOptions = {}): P
 
   const cwd = process.cwd();
   const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
-  const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd, true);
+  const discovered = cwdIsHomeDir ? undefined : await discoverProject(cwd, true, { auth });
   const projectKey = options.project || discovered?.projectKey;
   if (!projectKey) {
     warn(
