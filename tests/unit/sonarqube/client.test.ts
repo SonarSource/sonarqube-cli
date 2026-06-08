@@ -1189,6 +1189,7 @@ describe('SonarQubeClient', () => {
         '/api/components/search_projects?',
       );
       expect((fetchSpy.mock.calls[1][0] as URL).toString()).toContain('organization=my-org');
+      expect((fetchSpy.mock.calls[1][0] as URL).toString()).toContain('projectIds=proj%3Aabc');
     });
 
     it('returns null on SonarCloud when organization is missing', async () => {
@@ -1254,6 +1255,26 @@ describe('SonarQubeClient', () => {
           status: 403,
           statusText: 'Forbidden',
           json: () => Promise.resolve({ message: 'Insufficient privileges' }),
+        } as Response);
+
+      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns null when SonarCloud search_projects omits components', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ bindings: [{ projectId: 'proj:abc' }] }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({}),
         } as Response);
 
       expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org')).toBeNull();

@@ -518,7 +518,12 @@ export class SonarQubeClient {
     if (!result.response.ok) {
       return null;
     }
-    return result.value?.components[0]?.key ?? null;
+    const components = result.value?.components;
+    if (!Array.isArray(components) || components.length === 0) {
+      return null;
+    }
+    const projectKey = components[0].key;
+    return projectKey || null;
   }
 
   /**
