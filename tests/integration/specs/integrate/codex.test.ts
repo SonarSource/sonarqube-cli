@@ -34,7 +34,10 @@ import { findInstalledFeature } from './state-helpers';
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
 const SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
-const AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
+// Codex reads project guidance from `AGENTS.md` at the repository root, and
+// global guidance from `~/.codex/AGENTS.md`.
+const PROJECT_AGENTS_MD_DIRS = ['AGENTS.md'];
+const GLOBAL_AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
 const CONFIG_TOML_DIRS = ['.codex', 'config.toml'];
 const SECRETS_HEADING = '# SonarQube secrets scanning for files protocol';
 const SQAA_HEADING = '# SonarQube Agentic Analysis protocol';
@@ -203,7 +206,7 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
         expect(findCodexFeature(harness, 'sonar-secrets-hooks', 'project')).toBeUndefined();
         // The remaining project features still install.
-        expect(harness.cwd.file(...AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
         expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
       },
       { timeout: 30000 },
@@ -393,12 +396,12 @@ describe('integrate codex', () => {
     const TEST_PROJECT = 'my-project';
 
     it(
-      'writes the secrets-on-read section to <repo>/.codex/AGENTS.md at project scope (no SQAA without entitlement)',
+      'writes the secrets-on-read section to <repo>/AGENTS.md at project scope (no SQAA without entitlement)',
       async () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
 
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:end:codex-secrets-on-read -->');
@@ -432,7 +435,7 @@ describe('integrate codex', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).not.toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
         expect(body).not.toContain(SQAA_HEADING);
@@ -462,7 +465,7 @@ describe('integrate codex', () => {
         expect(result.exitCode).toBe(0);
         const hooks: CodexHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
         expect(hooks.hooks?.PostToolUse).toBeUndefined();
-        const body = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        const body = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(body).not.toContain('sonarqube-agentic-analysis-protocol');
       },
       { timeout: 30000 },
@@ -563,8 +566,8 @@ describe('integrate codex', () => {
         const result = await harness.run('integrate codex -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...AGENTS_MD_DIRS)).toBe(false);
-        const body = harness.userHome.file(...AGENTS_MD_DIRS).asText();
+        expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
+        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
@@ -595,9 +598,9 @@ describe('integrate codex', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...AGENTS_MD_DIRS)).toBe(false);
+        expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
 
-        const globalBody = harness.userHome.file(...AGENTS_MD_DIRS).asText();
+        const globalBody = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
         expect(globalBody).toContain(SECRETS_HEADING);
         expect(globalBody).not.toContain(SQAA_HEADING);
 
@@ -634,7 +637,7 @@ describe('integrate codex', () => {
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
         ).toBe(true);
         expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(true);
-        const agentsMd = harness.cwd.file(...AGENTS_MD_DIRS).asText();
+        const agentsMd = harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText();
         expect(agentsMd).toContain(SECRETS_HEADING);
         // No SQAA marker block was written (org not entitled).
         expect(agentsMd).not.toContain(SQAA_HEADING);
@@ -662,7 +665,7 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
         expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
         // The accepted features are still installed.
-        expect(harness.cwd.file(...AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
         expect(harness.cwd.exists(...CONFIG_TOML_DIRS)).toBe(true);
         expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
@@ -692,7 +695,7 @@ describe('integrate codex', () => {
           'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
         );
         // Accepting writes the project-local copy and records the project-scope feature.
-        expect(harness.cwd.file(...AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(harness.cwd.file(...PROJECT_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
         expect(findCodexFeature(harness, 'secrets-instructions', 'project')).toBeDefined();
       },
       { timeout: 30000 },

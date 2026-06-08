@@ -192,7 +192,11 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
 };
 
 function resolveCodexAgentsMdPath(context: IntegrationContext): string {
-  return join(context.targetRoot, CODEX_CONFIG_DIR, AGENTS_MD_FILE);
+  // Codex reads project guidance from `AGENTS.md` at the repository root, and
+  // global guidance from `~/.codex/AGENTS.md`.
+  return context.scope === 'global'
+    ? join(context.targetRoot, CODEX_CONFIG_DIR, AGENTS_MD_FILE)
+    : join(context.targetRoot, AGENTS_MD_FILE);
 }
 
 function resolveCodexHooksPath(context: IntegrationContext): string {
