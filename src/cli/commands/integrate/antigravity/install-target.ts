@@ -18,21 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createIntegrationRegistry } from './_common/registry';
-import { antigravityIntegration } from './antigravity/declaration';
-import { claudeIntegration } from './claude/declaration';
-import { codexIntegration } from './codex/declaration';
-import { copilotIntegration } from './copilot/declaration';
-import { cursorIntegration } from './cursor/declaration';
-import { GIT_INTEGRATIONS } from './git/tools';
+import { ANTIGRAVITY_GLOBAL_CONFIG_DIR } from '../../../../lib/config-constants';
+import type { IntegrationScope } from '../../../../lib/state';
 
-export const ALL_INTEGRATIONS = [
-  claudeIntegration,
-  copilotIntegration,
-  codexIntegration,
-  cursorIntegration,
-  antigravityIntegration,
-  ...GIT_INTEGRATIONS,
-] as const;
-
-export const supportedIntegrations = createIntegrationRegistry(ALL_INTEGRATIONS);
+export function resolveAntigravityInstallTarget(
+  isGlobal: boolean,
+  projectRoot: string,
+): { installRoot: string; installScope: IntegrationScope } {
+  return {
+    installRoot: isGlobal ? ANTIGRAVITY_GLOBAL_CONFIG_DIR : projectRoot,
+    installScope: isGlobal ? 'global' : 'project',
+  };
+}

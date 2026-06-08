@@ -67,6 +67,7 @@ import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { gitPreCommit, type GitPreCommitOptions } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
+import { integrateAntigravity } from './commands/integrate/antigravity';
 import { integrateClaude } from './commands/integrate/claude';
 import { integrateCodex } from './commands/integrate/codex';
 import { integrateCopilot } from './commands/integrate/copilot';
@@ -300,6 +301,23 @@ integrateCommand
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
+
+integrateCommand
+  .command('antigravity')
+  .description(
+    'Setup SonarQube integration for Antigravity. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
+  )
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '-g, --global',
+    'Install hooks and config globally to ~/.gemini/config/plugins/sonarqube instead of project directory',
+  )
+  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
+  .addHelpText('after', projectKeyExtraHelp)
+  .authenticatedAction((auth, options: IntegrateAgentOptions) =>
+    integrateAntigravity(options, auth),
+  );
 
 // hidden until stable — remove { hidden: true } when sonar integrate cursor goes GA (CLI-221)
 integrateCommand

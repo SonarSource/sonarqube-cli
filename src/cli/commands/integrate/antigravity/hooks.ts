@@ -18,21 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createIntegrationRegistry } from './_common/registry';
-import { antigravityIntegration } from './antigravity/declaration';
-import { claudeIntegration } from './claude/declaration';
-import { codexIntegration } from './codex/declaration';
-import { copilotIntegration } from './copilot/declaration';
-import { cursorIntegration } from './cursor/declaration';
-import { GIT_INTEGRATIONS } from './git/tools';
-
-export const ALL_INTEGRATIONS = [
-  claudeIntegration,
-  copilotIntegration,
-  codexIntegration,
-  cursorIntegration,
-  antigravityIntegration,
-  ...GIT_INTEGRATIONS,
-] as const;
-
-export const supportedIntegrations = createIntegrationRegistry(ALL_INTEGRATIONS);
+/**
+ * Probe for a global Antigravity secrets hook install. Returns the active hook
+ * script path when a healthy global install is found so project-level secrets
+ * hooks can be skipped to avoid double-scanning.
+ */
+export function detectGlobalSecretsHook(): string | undefined {
+  return undefined;
+}

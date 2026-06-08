@@ -18,21 +18,23 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createIntegrationRegistry } from './_common/registry';
-import { antigravityIntegration } from './antigravity/declaration';
-import { claudeIntegration } from './claude/declaration';
-import { codexIntegration } from './codex/declaration';
-import { copilotIntegration } from './copilot/declaration';
-import { cursorIntegration } from './cursor/declaration';
-import { GIT_INTEGRATIONS } from './git/tools';
+import { describe, expect, it } from 'bun:test';
 
-export const ALL_INTEGRATIONS = [
-  claudeIntegration,
-  copilotIntegration,
-  codexIntegration,
-  cursorIntegration,
-  antigravityIntegration,
-  ...GIT_INTEGRATIONS,
-] as const;
+import { resolveAntigravityInstallTarget } from '../../../../../../src/cli/commands/integrate/antigravity/install-target';
+import { ANTIGRAVITY_GLOBAL_CONFIG_DIR } from '../../../../../../src/lib/config-constants';
 
-export const supportedIntegrations = createIntegrationRegistry(ALL_INTEGRATIONS);
+describe('resolveAntigravityInstallTarget', () => {
+  it('uses the project root for project-scoped installs', () => {
+    expect(resolveAntigravityInstallTarget(false, '/repo')).toEqual({
+      installRoot: '/repo',
+      installScope: 'project',
+    });
+  });
+
+  it('uses the global Antigravity config directory for --global installs', () => {
+    expect(resolveAntigravityInstallTarget(true, '/repo')).toEqual({
+      installRoot: ANTIGRAVITY_GLOBAL_CONFIG_DIR,
+      installScope: 'global',
+    });
+  });
+});
