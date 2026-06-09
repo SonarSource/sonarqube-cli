@@ -19,7 +19,7 @@
  */
 
 import { deleteToken, getToken } from '../../../lib/keychain';
-import type { CliState } from '../../../lib/state';
+import type { AuthConnection, CliState } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
 import { phaseItem } from '../../../ui';
 import {
@@ -32,9 +32,76 @@ export interface AuthResetResult {
   authConnectionIds: string[];
 }
 
-type ConnectionOutcome =
-  | { status: 'cleaned'; connectionId: string }
-  | { status: 'failed'; message: string };
+interface ConnectionOutcome {
+  connectionId: string;
+  keychainWarnings: string[];
+}
+
+function formatConnectionTarget(conn: AuthConnection): string {
+  return conn.orgKey ? `${conn.serverUrl} (${conn.orgKey})` : conn.serverUrl;
+}
+
+function formatKeychainWarning(target: string, operation: 'read' | 'delete', err: unknown): string {
+  const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
+  return `${target}: could not ${operation} keychain entry (${detail})`;
+}
+
+async function purgeConnectionAuth(conn: AuthConnection): Promise<ConnectionOutcome> {
+  const target = formatConnectionTarget(conn);
+  const keychainWarnings: string[] = [];
+
+  let token: string | undefined;
+  try {
+    token = (await getToken(conn.serverUrl, conn.orgKey)) ?? undefined;
+  } catch (err) {
+    keychainWarnings.push(formatKeychainWarning(target, 'read', err));
+  }
+
+  const revokeOutcome = await revokeServerTokenIfPossible(conn, token);
+  reportRevokeServerTokenOutcome(revokeOutcome, {
+    serverUrl: conn.serverUrl,
+    continuingMessage: 'Continuing with local reset.',
+  });
+
+  try {
+    await deleteToken(conn.serverUrl, conn.orgKey);
+  } catch (err) {
+    keychainWarnings.push(formatKeychainWarning(target, 'delete', err));
+  }
+
+  return { connectionId: conn.id, keychainWarnings };
+}
+
+function buildKeychainWarningDetail(
+  authConnectionIds: string[],
+  keychainOperationFailureCount: number,
+): string {
+  const operationLabel = keychainOperationFailureCount === 1 ? 'operation' : 'operations';
+
+  if (authConnectionIds.length === 0) {
+    return `${keychainOperationFailureCount} keychain ${operationLabel} failed`;
+  }
+
+  const connectionLabel = authConnectionIds.length === 1 ? 'connection' : 'connections';
+  return `${authConnectionIds.length} ${connectionLabel} cleared from state; ${keychainOperationFailureCount} keychain ${operationLabel} failed`;
+}
+
+function buildAuthResetPhaseItem(
+  authConnectionIds: string[],
+  keychainWarnings: string[],
+): PhaseItem {
+  if (keychainWarnings.length > 0) {
+    const counts = buildKeychainWarningDetail(authConnectionIds, keychainWarnings.length);
+    return phaseItem('Authentication', 'warn', `${counts}: ${keychainWarnings.join('; ')}`);
+  }
+
+  const tokenLabel = authConnectionIds.length === 1 ? 'token' : 'tokens';
+  return phaseItem(
+    'Authentication',
+    'done',
+    `${authConnectionIds.length} ${tokenLabel} removed from keychain.`,
+  );
+}
 
 export async function purgeAuth(state: CliState): Promise<AuthResetResult> {
   // Delete tokens sequentially: the file-backed keychain (CI/tests) does an
@@ -43,38 +110,14 @@ export async function purgeAuth(state: CliState): Promise<AuthResetResult> {
   // fails fast via its own 10s timeout.
   const outcomes: ConnectionOutcome[] = [];
   for (const conn of state.auth.connections) {
-    const target = conn.orgKey ? `${conn.serverUrl} (${conn.orgKey})` : conn.serverUrl;
-    try {
-      const token = (await getToken(conn.serverUrl, conn.orgKey)) ?? undefined;
-      const revokeOutcome = await revokeServerTokenIfPossible(conn, token);
-      reportRevokeServerTokenOutcome(revokeOutcome, {
-        serverUrl: conn.serverUrl,
-        continuingMessage: 'Continuing with local reset.',
-      });
-      await deleteToken(conn.serverUrl, conn.orgKey);
-      outcomes.push({ status: 'cleaned', connectionId: conn.id });
-    } catch (err) {
-      outcomes.push({ status: 'failed', message: `${target}: ${(err as Error).message}` });
-    }
+    outcomes.push(await purgeConnectionAuth(conn));
   }
 
-  const cleanedIds = outcomes.flatMap((o) => (o.status === 'cleaned' ? [o.connectionId] : []));
-  const failed = outcomes.flatMap((o) => (o.status === 'failed' ? [o.message] : []));
+  const authConnectionIds = outcomes.map((outcome) => outcome.connectionId);
+  const keychainWarnings = outcomes.flatMap((outcome) => outcome.keychainWarnings);
 
-  let item: PhaseItem;
-  if (failed.length > 0) {
-    const counts =
-      cleanedIds.length > 0
-        ? `${cleanedIds.length} removed, ${failed.length} failed`
-        : `${failed.length} failed`;
-    item = phaseItem('Authentication', 'warn', `${counts}: ${failed.join('; ')}`);
-  } else {
-    item = phaseItem(
-      'Authentication',
-      'done',
-      `${cleanedIds.length} token${cleanedIds.length === 1 ? '' : 's'} removed from keychain.`,
-    );
-  }
-
-  return { item, authConnectionIds: cleanedIds };
+  return {
+    item: buildAuthResetPhaseItem(authConnectionIds, keychainWarnings),
+    authConnectionIds,
+  };
 }

@@ -39,6 +39,7 @@ import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git
 import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { hookScriptName, TestHarness } from '../../harness';
+import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
@@ -232,6 +233,39 @@ describe('system reset --force', () => {
       const state = readState(harness.stateJsonFile.path);
       expect(state.auth.connections).toHaveLength(0);
       expect(state.auth.isAuthenticated).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'warns and still clears auth state when keychain delete fails',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('reset-token').start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), 'reset-token')
+        .withKeychainToken(server.baseUrl(), 'reset-token');
+
+      const account = generateKeychainAccount(server.baseUrl());
+      const env = harness.env();
+      try {
+        chmodSync(harness.keychainJsonFile, 0o444);
+        const result = await runCli('system reset --force', env, { cwd: harness.cwd.path });
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toMatch(/Authentication:.*could not delete keychain entry/);
+        expect(result.stdout).toContain('keychain operation failed');
+        expect(result.stderr).toContain('System reset completed with warnings');
+
+        const state = readState(harness.stateJsonFile.path);
+        expect(state.auth.connections).toHaveLength(0);
+        expect(state.auth.isAuthenticated).toBe(false);
+        expect(readKeychainTokens(harness.keychainJsonFile)[account]).toBe('reset-token');
+      } finally {
+        if (existsSync(harness.keychainJsonFile)) {
+          chmodSync(harness.keychainJsonFile, 0o644);
+        }
+      }
     },
     { timeout: 15000 },
   );
