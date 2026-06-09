@@ -38,8 +38,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git/tools/native';
 import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
-import { runCli } from '../../harness/cli-runner.js';
 import { hookScriptName, TestHarness } from '../../harness';
+import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
