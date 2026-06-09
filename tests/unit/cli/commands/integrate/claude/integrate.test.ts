@@ -99,7 +99,7 @@ describe('integrateCommand', () => {
     setMockUi(true);
 
     hasSqaaEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasSqaaEntitlement');
-    hasSqaaEntitlementSpy.mockResolvedValue(false);
+    hasSqaaEntitlementSpy.mockResolvedValue('not_enabled');
     hasCagEntitlementSpy = spyOn(SonarQubeClient.prototype, 'hasCagEntitlement');
     hasCagEntitlementSpy.mockResolvedValue('enabled');
     resolveContextAugmentationSetupSpy = spyOn(
@@ -280,7 +280,7 @@ describe('integrateCommand', () => {
   });
 
   it('checks SQAA entitlement', async () => {
-    hasSqaaEntitlementSpy.mockResolvedValue(true);
+    hasSqaaEntitlementSpy.mockResolvedValue('enabled');
 
     await integrateClaude({}, CLOUD_AUTH);
 
@@ -561,7 +561,7 @@ describe('integrateCommand', () => {
   }
 
   function mockSqaaEntitlement(hasEntitlement: boolean) {
-    hasSqaaEntitlementSpy.mockResolvedValue(hasEntitlement);
+    hasSqaaEntitlementSpy.mockResolvedValue(hasEntitlement ? 'enabled' : 'not_enabled');
   }
 
   function assertMigrationHookInstallationAndStateUpdateRan(

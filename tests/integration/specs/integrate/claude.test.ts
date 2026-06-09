@@ -2101,4 +2101,39 @@ describe('integrate claude — interactive feature selection', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'warns and skips SQAA when the entitlement check fails',
+    async () => {
+      // Cloud connection whose org/entitlement lookup errors out: resolveSqaaSetup
+      // hits the 'check_failed' branch, which warns and skips silently rather than
+      // surfacing the promotion.
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withOrgsLookupError(503)
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+
+      // '\r' selects project scope, then the secret scanning hooks + MCP prompts.
+      // SQAA is skipped without a prompt because entitlement could not be resolved.
+      const result = await harness.run('integrate claude --project my-project', {
+        stdinChunks: ['\r', '\r', '\r'],
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain('Could not determine SonarQube Agentic Analysis entitlement');
+      expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
 });

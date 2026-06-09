@@ -19,31 +19,8 @@
  */
 
 import { AGENTIC_ANALYSIS_DOCS_URL } from '../../../../lib/config-constants';
-import { SonarQubeClient } from '../../../../sonarqube/client';
+import { SonarQubeClient, type SqaaEntitlementStatus } from '../../../../sonarqube/client';
 import { info, warn } from '../../../../ui';
-
-/**
- * Check if the organization has SonarQube Agentic Analysis (SQAA) entitlement.
- *
- * Returns false for on-premise, missing org, or failed API call. The underlying
- * `hasSqaaEntitlement` already swallows network/API errors, so the try/catch
- * here is defence-in-depth for unexpected throws (e.g. malformed URLs from the
- * client constructor).
- */
-export async function resolveSqaaEntitlement(
-  serverURL: string,
-  token: string,
-  organization: string | undefined,
-): Promise<boolean> {
-  try {
-    const client = new SonarQubeClient(serverURL, token);
-    return await client.hasSqaaEntitlement(organization);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    warn(`Could not determine SonarQube Agentic Analysis entitlement — skipping: ${detail}`);
-    return false;
-  }
-}
 
 /**
  * Consistent notice shown across all agent integrations when SonarQube Agentic
@@ -66,19 +43,22 @@ export interface ResolveSqaaSetupParams {
 
 /**
  * Resolve whether SonarQube Agentic Analysis (SQAA) can be installed.
- *
- * Entitlement is checked first: an unentitled connection surfaces the
- * promotion message. SQAA is always project-scoped, so an entitled `--global`
- * integration can never install it and instead surfaces the global skip notice.
- * For entitled project installs this returns `true`.
  */
 export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<boolean> {
-  const entitled = await resolveSqaaEntitlement(
-    params.serverURL,
-    params.token,
-    params.organization,
-  );
-  if (!entitled) {
+  let status: SqaaEntitlementStatus;
+  try {
+    status = await new SonarQubeClient(params.serverURL, params.token).hasSqaaEntitlement(
+      params.organization,
+    );
+  } catch {
+    status = 'check_failed';
+  }
+
+  if (status === 'check_failed') {
+    warn('Could not determine SonarQube Agentic Analysis entitlement — skipping.');
+    return false;
+  }
+  if (status === 'not_enabled') {
     info(SQAA_PROMOTION_MESSAGE);
     return false;
   }
