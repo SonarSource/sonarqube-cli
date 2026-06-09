@@ -246,7 +246,7 @@ describe('system status', () => {
       const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('sonar-secrets');
+      expect(result.stdout).toContain('Secrets Detection');
       expect(result.stdout).toContain('BINARIES');
     },
     { timeout: 15000 },
@@ -331,7 +331,7 @@ describe('system status', () => {
         binaries: Array<{ name: string; version: string; path: string; updateAvailable: boolean }>;
       };
       expect(json.binaries.length).toBe(1);
-      expect(json.binaries[0].name).toBe('sonar-secrets');
+      expect(json.binaries[0].name).toBe('Secrets Detection');
       expect(json.binaries[0].version).toBeTruthy();
       expect(json.binaries[0].path).toBeTruthy();
       expect(json.binaries[0].path).toContain('~');
@@ -751,8 +751,8 @@ describe('system status', () => {
       expect(result.exitCode).toBe(0);
       const json = JSON.parse(result.stdout) as { binaries: Array<{ name: string }> };
       const names = json.binaries.map((b) => b.name);
-      expect(names).toContain('sonar-context-augmentation');
-      expect(names).toContain('sca-scanner-cli');
+      expect(names).toContain('Sonar Context Augmentation');
+      expect(names).toContain('Dependency Risks Scanner');
     },
     { timeout: 15000 },
   );
@@ -907,5 +907,170 @@ describe('system status', () => {
       expect(json.integrations.filter((i) => i.id === 'claude-code')).toHaveLength(2);
     },
     { timeout: 60000 },
+  );
+
+  it(
+    'shows MCP status nested under Claude integration in text output',
+    async () => {
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      harness
+        .state()
+        .withRawState(JSON.stringify(mcpClaudeIntegrationState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      const lines = result.stdout.split('\n');
+      // Find "Claude Code" line
+      const claudeLineIdx = lines.findIndex((l) => l.includes('Claude Code'));
+      expect(claudeLineIdx).toBeGreaterThanOrEqual(0);
+      // MCP Server should appear indented after Claude Code, not as a separate top-level entry
+      const nextLine = lines[claudeLineIdx + 1];
+      expect(nextLine).toContain('MCP Server');
+      expect(nextLine).toMatch(/^\s{4}•/); // indented with 4 spaces + bullet
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'includes MCP status per integration in JSON output',
+    async () => {
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      harness
+        .state()
+        .withRawState(JSON.stringify(mcpClaudeIntegrationState(harness.userHome.path)));
+
+      const result = await harness.run('system status --json');
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as {
+        integrations: Array<{ id: string; mcp?: { configured: boolean } }>;
+      };
+      const claudeIntegration = json.integrations.find((i) => i.id === 'claude-code');
+      expect(claudeIntegration).toBeDefined();
+      expect(claudeIntegration?.mcp).toBeDefined();
+      expect(claudeIntegration?.mcp?.configured).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows invalid MCP config under specific agent, not globally',
+    async () => {
+      const invalidConfig = JSON.stringify({ mcpServers: { sonarqube: null } });
+      harness.userHome.writeFile('.claude.json', invalidConfig);
+      harness
+        .state()
+        .withRawState(JSON.stringify(mcpClaudeIntegrationState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Claude Code');
+      expect(result.stdout).toContain('INVALID CONFIG');
+      expect(result.stdout).toContain('RECOMMENDATIONS');
+      expect(result.stdout).toContain('sonar integrate claude');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not show MCP status when no agents have MCP configured',
+    async () => {
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      // Should not contain any "MCP Server" line when no MCP is configured
+      const lines = result.stdout.split('\n');
+      const mcpLines = lines.filter((l) => l.includes('MCP Server'));
+      expect(mcpLines).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows separate MCP status for each integration when multiple have MCP configured',
+    async () => {
+      // Create state with multiple integrations, each with MCP
+      const claudeGlobalRoot = harness.userHome.path;
+      const copilotGlobalRoot = join(harness.userHome.path, '.copilot');
+      mkdirSync(copilotGlobalRoot, { recursive: true });
+
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      harness.userHome.writeFile('.copilot/mcp-config.json', VALID_MCP_CONFIG);
+
+      const multiMcpState = baseState({
+        integrations: {
+          installed: [
+            makeInstallEntry('claude-id', 'claude-code', 'mcp-server', claudeGlobalRoot),
+            makeInstallEntry('copilot-id', 'copilot-cli', 'mcp-server', copilotGlobalRoot),
+          ],
+        },
+      });
+
+      harness.state().withRawState(JSON.stringify(multiMcpState));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      const stdout = result.stdout;
+
+      // Both Claude Code and Copilot should appear
+      expect(stdout).toContain('Claude Code');
+      expect(stdout).toContain('Copilot');
+
+      // Count MCP Server lines — should be 2 (one for each integration)
+      const lines = stdout.split('\n');
+      const mcpLines = lines.filter((l) => l.includes('MCP Server'));
+      expect(mcpLines).toHaveLength(2);
+
+      // Both should show CONFIGURED status
+      mcpLines.forEach((line) => {
+        expect(line).toContain('CONFIGURED');
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows correct MCP status per integration in JSON when multiple agents have MCP',
+    async () => {
+      const claudeGlobalRoot = harness.userHome.path;
+      const copilotGlobalRoot = join(harness.userHome.path, '.copilot');
+      mkdirSync(copilotGlobalRoot, { recursive: true });
+
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      harness.userHome.writeFile('.copilot/mcp-config.json', VALID_MCP_CONFIG);
+
+      const multiMcpState = baseState({
+        integrations: {
+          installed: [
+            makeInstallEntry('claude-id', 'claude-code', 'mcp-server', claudeGlobalRoot),
+            makeInstallEntry('copilot-id', 'copilot-cli', 'mcp-server', copilotGlobalRoot),
+          ],
+        },
+      });
+
+      harness.state().withRawState(JSON.stringify(multiMcpState));
+
+      const result = await harness.run('system status --json');
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as {
+        integrations: Array<{ id: string; mcp?: { configured: boolean } }>;
+      };
+
+      // Find both integrations
+      const claude = json.integrations.find((i) => i.id === 'claude-code');
+      const copilot = json.integrations.find((i) => i.id === 'copilot-cli');
+
+      expect(claude).toBeDefined();
+      expect(copilot).toBeDefined();
+
+      // Both should have MCP configured
+      expect(claude?.mcp?.configured).toBe(true);
+      expect(copilot?.mcp?.configured).toBe(true);
+    },
+    { timeout: 15000 },
   );
 });

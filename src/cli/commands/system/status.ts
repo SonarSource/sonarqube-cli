@@ -58,6 +58,12 @@ const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SCA_SCANNER_BINARY_NAME]: SCA_SCANNER_CLI_VERSION,
 };
 
+const BINARY_DISPLAY_NAMES: Record<string, string> = {
+  'sonar-secrets': 'Secrets Detection',
+  'sonar-context-augmentation': 'Sonar Context Augmentation',
+  'sca-scanner-cli': 'Dependency Risks Scanner',
+};
+
 export interface SystemStatusOptions {
   json?: boolean;
 }
@@ -68,18 +74,21 @@ type McpRunningStatus = 'running' | 'not_running' | 'unknown';
 interface McpStatus {
   config: McpConfigStatus;
   running: McpRunningStatus;
-  /** Set when config is 'invalid' — identifies which integration to reinstall. */
-  invalidIntegrationId?: string;
 }
 
 interface IntegrationInfo {
   id: string;
   name: string;
   path?: string;
+  mcp?: McpStatus;
 }
 
 function abbreviatePath(p: string): string {
   return p.replace(homedir(), '~');
+}
+
+function getBinaryDisplayName(binaryId: string): string {
+  return BINARY_DISPLAY_NAMES[binaryId] ?? binaryId;
 }
 
 // integrationId → agent string for getMcpConfigFilePath
@@ -166,17 +175,22 @@ async function checkMcpRunning(): Promise<McpRunningStatus> {
   }
 }
 
-async function getMcpStatus(state: CliState): Promise<McpStatus> {
-  const mcpFeatures = findMcpFeatures(state);
-  if (mcpFeatures.length === 0) {
-    return { config: 'not_configured', running: 'unknown' };
-  }
+function getMcpStatusForIntegration(
+  integrationId: string,
+  targetRoot: string,
+  cachedRunning: McpRunningStatus,
+  allMcpFeatures: Array<{ integrationId: string; scope: 'project' | 'global'; targetRoot: string }>,
+): McpStatus | null {
+  const agentStr = INTEGRATION_TO_MCP_AGENT[integrationId];
+  if (!agentStr) return null;
 
-  // Scan all features: prefer 'configured' over 'invalid' regardless of iteration order
-  let firstInvalid: string | undefined;
+  const mcpFeatures = allMcpFeatures.filter(
+    (f) => f.integrationId === integrationId && f.targetRoot === targetRoot,
+  );
+  if (mcpFeatures.length === 0) return null;
+
+  let hasInvalid = false;
   for (const feature of mcpFeatures) {
-    const agentStr = INTEGRATION_TO_MCP_AGENT[feature.integrationId];
-    if (!agentStr) continue;
     const configPath = getMcpConfigFilePath(
       agentStr,
       feature.scope === 'global',
@@ -184,21 +198,52 @@ async function getMcpStatus(state: CliState): Promise<McpStatus> {
     );
     const configStatus = checkMcpConfigFile(configPath);
     if (configStatus === 'configured') {
-      const running = await checkMcpRunning();
-      return { config: 'configured', running };
+      return { config: 'configured', running: cachedRunning };
     }
-    if (configStatus === 'invalid' && firstInvalid === undefined) {
-      firstInvalid = feature.integrationId;
+    if (configStatus === 'invalid') {
+      hasInvalid = true;
     }
   }
-  if (firstInvalid !== undefined) {
-    return { config: 'invalid', running: 'unknown', invalidIntegrationId: firstInvalid };
+  if (hasInvalid) {
+    return { config: 'invalid', running: 'unknown' };
   }
   return { config: 'not_configured', running: 'unknown' };
 }
 
-function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
+async function getMcpStatusMap(state: CliState): Promise<Map<string, McpStatus>> {
+  const allMcpFeatures = findMcpFeatures(state);
+
+  if (allMcpFeatures.length === 0) return new Map();
+
+  // Build a Map of unique (integrationId, targetRoot) pairs
+  const uniquePairs = new Map<string, { integrationId: string; targetRoot: string }>();
+  for (const f of allMcpFeatures) {
+    const key = `${f.integrationId}:${f.targetRoot}`;
+    if (!uniquePairs.has(key)) {
+      uniquePairs.set(key, { integrationId: f.integrationId, targetRoot: f.targetRoot });
+    }
+  }
+
+  const cachedRunning = await checkMcpRunning();
+  const statusMap = new Map<string, McpStatus>();
+
+  for (const [key, { integrationId, targetRoot }] of uniquePairs) {
+    const status = getMcpStatusForIntegration(
+      integrationId,
+      targetRoot,
+      cachedRunning,
+      allMcpFeatures,
+    );
+    if (status) {
+      statusMap.set(key, status);
+    }
+  }
+  return statusMap;
+}
+
+async function getInstalledIntegrations(state: CliState): Promise<IntegrationInfo[]> {
   const result: IntegrationInfo[] = [];
+  const mcpStatusMap = await getMcpStatusMap(state);
 
   // The framework stores one InstalledIntegration per integrationId; multiple
   // project installs accumulate as separate features with distinct targetRoots.
@@ -206,17 +251,17 @@ function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
   for (const i of state.integrations.installed) {
     const name = supportedIntegrations.get(i.integrationId)?.displayName ?? i.integrationId;
 
-    const localRoots = [
-      ...new Set(i.features.filter((f) => f.scope !== 'global').map((f) => f.targetRoot)),
-    ];
+    // Collect all unique targetRoots across all features (project and global)
+    const allRoots = [...new Set(i.features.map((f) => f.targetRoot))];
 
-    if (localRoots.length > 0) {
-      for (const root of localRoots) {
-        const features = i.features.filter((f) => f.targetRoot === root);
-        result.push({ id: i.integrationId, name, path: pathFromFeatures(features) });
-      }
-    } else {
-      result.push({ id: i.integrationId, name, path: pathFromFeatures(i.features) });
+    for (const root of allRoots) {
+      const features = i.features.filter((f) => f.targetRoot === root);
+      result.push({
+        id: i.integrationId,
+        name,
+        path: pathFromFeatures(features),
+        mcp: mcpStatusMap.get(`${i.integrationId}:${root}`),
+      });
     }
   }
 
@@ -225,7 +270,13 @@ function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
   for (const [agentId, config] of Object.entries(state.agents)) {
     if (config.configured && !declarativeIds.has(agentId)) {
       const name = supportedIntegrations.get(agentId)?.displayName ?? agentId;
-      result.push({ id: agentId, name, path: getLegacyAgentPath(agentId, state) });
+      // Legacy agents don't have MCP info, so leave mcp undefined
+      result.push({
+        id: agentId,
+        name,
+        path: getLegacyAgentPath(agentId, state),
+        mcp: undefined,
+      });
     }
   }
 
@@ -266,10 +317,10 @@ function mcpStatusLine(mcp: McpStatus): string {
 export async function systemStatus(options: SystemStatusOptions): Promise<void> {
   const state = loadState();
 
-  const [auth, updateResult, mcp] = await Promise.all([
+  const [auth, updateResult, integrations] = await Promise.all([
     resolveAuth().catch(() => null),
     checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL).catch(() => null),
-    getMcpStatus(state),
+    getInstalledIntegrations(state),
   ]);
 
   const tokenStatus: TokenStatus | null = auth
@@ -304,9 +355,9 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
   const binaries = [...legacyBinaries, ...depBinaries.filter((b) => !seen.has(b.name))];
 
   const cacheDirs = [
-    { name: 'logs', path: LOG_DIR },
-    { name: 'sca-scanner-cache', path: SCA_SCANNER_CACHE_DIR },
-    { name: 'global-hooks', path: GLOBAL_HOOKS_DIR },
+    { name: 'Logs', path: LOG_DIR },
+    { name: 'Dependency Risks Scanner Cache', path: SCA_SCANNER_CACHE_DIR },
+    { name: 'Global Git Hooks', path: GLOBAL_HOOKS_DIR },
   ];
   const cache: CacheInfo[] = cacheDirs.map(({ name, path }) => ({
     name,
@@ -314,10 +365,11 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     present: existsSync(path) && statSync(path).isDirectory(),
   }));
 
-  const integrations = getInstalledIntegrations(state);
-
-  const hasIssues = tokenStatus === null || tokenStatus === 'invalid' || mcp.config === 'invalid';
-  const recommendations = buildRecommendations(tokenStatus, updateResult, mcp);
+  const hasMcpIssues = integrations.some(
+    (i) => i.mcp && (i.mcp.config === 'invalid' || i.mcp.config === 'not_configured'),
+  );
+  const hasIssues = tokenStatus === null || tokenStatus === 'invalid' || hasMcpIssues;
+  const recommendations = buildRecommendations(tokenStatus, updateResult, integrations);
 
   const data: StatusData = {
     auth,
@@ -325,7 +377,6 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     binaries,
     cache,
     integrations,
-    mcp,
     hasIssues,
     recommendations,
   };
@@ -353,7 +404,6 @@ interface StatusData {
   binaries: BinaryInfo[];
   cache: CacheInfo[];
   integrations: IntegrationInfo[];
-  mcp: McpStatus;
   hasIssues: boolean;
   recommendations: string[];
 }
@@ -361,7 +411,7 @@ interface StatusData {
 function buildRecommendations(
   tokenStatus: TokenStatus | null,
   updateResult: { latestVersion: string; updateAvailable: boolean } | null,
-  mcp: McpStatus,
+  integrations: IntegrationInfo[],
 ): string[] {
   const recommendations: string[] = [];
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
@@ -371,11 +421,17 @@ function buildRecommendations(
       `Run 'sonar self-update' to update to v${stripBuildNumber(updateResult.latestVersion)}`,
     );
   }
-  if (mcp.config === 'invalid') {
-    const integrateCmd =
-      INTEGRATION_TO_COMMAND[mcp.invalidIntegrationId ?? 'claude-code'] ?? 'sonar integrate claude';
+
+  const seenMcpIntegrations = new Set<string>();
+  for (const integration of integrations) {
+    if (seenMcpIntegrations.has(integration.id) || integration.mcp?.config !== 'invalid') {
+      continue;
+    }
+    seenMcpIntegrations.add(integration.id);
+    const integrateCmd = INTEGRATION_TO_COMMAND[integration.id] ?? 'sonar integrate claude';
     recommendations.push(`Run '${integrateCmd}' to reinstall MCP configuration`);
   }
+
   return recommendations;
 }
 
@@ -387,8 +443,7 @@ function tokenStatusLabel(tokenStatus: TokenStatus | null): string {
 }
 
 function printJsonStatus(version: string, data: StatusData): void {
-  const { auth, tokenStatus, binaries, cache, integrations, mcp, hasIssues, recommendations } =
-    data;
+  const { auth, tokenStatus, binaries, cache, integrations, hasIssues, recommendations } = data;
   print(
     JSON.stringify(
       {
@@ -402,24 +457,28 @@ function printJsonStatus(version: string, data: StatusData): void {
             }
           : { status: 'unauthenticated', token: 'not_set' },
         binaries: binaries.map(({ name, version, path, updateAvailable, latestVersion }) => ({
-          name,
+          name: getBinaryDisplayName(name),
           version,
           path,
           updateAvailable,
           ...(updateAvailable ? { latestVersion: stripBuildNumber(latestVersion) } : {}),
         })),
         cache,
-        integrations: integrations.map(({ id, name, path }) => ({
+        integrations: integrations.map(({ id, name, path, mcp }) => ({
           id,
           name,
           ...(path ? { path } : {}),
+          ...(mcp
+            ? {
+                mcp: {
+                  configured: mcp.config !== 'not_configured',
+                  valid: mcp.config === 'configured',
+                  session_active: mcp.running === 'running',
+                },
+              }
+            : {}),
         })),
         healthy: !hasIssues,
-        mcp: {
-          configured: mcp.config !== 'not_configured',
-          valid: mcp.config === 'configured',
-          session_active: mcp.running === 'running',
-        },
         recommendations,
       },
       null,
@@ -449,7 +508,8 @@ function renderBinariesSection(binaries: BinaryInfo[]): void {
   blank();
   text('BINARIES');
   for (const b of binaries) {
-    text(`  • ${b.name}: Installed (${b.path})`);
+    const displayName = getBinaryDisplayName(b.name);
+    text(`  • ${displayName}: Installed (${b.path})`);
     const versionSuffix = b.updateAvailable
       ? ` (Update available: v${stripBuildNumber(b.latestVersion)})`
       : '';
@@ -466,15 +526,17 @@ function renderCacheSection(cache: CacheInfo[]): void {
   }
 }
 
-function renderIntegrationsSection(integrations: IntegrationInfo[], mcp: McpStatus): void {
-  if (integrations.length === 0 && mcp.config === 'not_configured') return;
+function renderIntegrationsSection(integrations: IntegrationInfo[]): void {
+  if (integrations.length === 0) return;
   blank();
   text('INTEGRATIONS');
   for (const i of integrations) {
     const line = i.path ? `${i.name}: CONFIGURED (${i.path})` : `${i.name}: CONFIGURED`;
     text(`  • ${line}`);
+    if (i.mcp) {
+      text(`    • MCP Server: ${mcpStatusLine(i.mcp)}`);
+    }
   }
-  text(`  • MCP Server: ${mcpStatusLine(mcp)}`);
 }
 
 function renderRecommendationsSection(recommendations: string[]): void {
@@ -487,8 +549,7 @@ function renderRecommendationsSection(recommendations: string[]): void {
 }
 
 function renderTextStatus(version: string, data: StatusData): void {
-  const { auth, tokenStatus, binaries, cache, integrations, mcp, hasIssues, recommendations } =
-    data;
+  const { auth, tokenStatus, binaries, cache, integrations, hasIssues, recommendations } = data;
   print(getBanner(version));
   blank();
 
@@ -502,6 +563,6 @@ function renderTextStatus(version: string, data: StatusData): void {
   renderAuthSection(auth, tokenStatus);
   renderBinariesSection(binaries);
   renderCacheSection(cache);
-  renderIntegrationsSection(integrations, mcp);
+  renderIntegrationsSection(integrations);
   renderRecommendationsSection(recommendations);
 }
