@@ -66,5 +66,5 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
     warn(SQAA_GLOBAL_SKIP_MESSAGE);
     return false;
   }
-  return true;
+  return status === 'enabled';
 }

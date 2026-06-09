@@ -1976,6 +1976,7 @@ describe('integrate claude — hook migration scenarios', () => {
 // ─── Interactive feature selection ────────────────────────────────────────────
 
 describe('integrate claude — interactive feature selection', () => {
+  const HTTP_SERVICE_UNAVAILABLE = 503;
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -2112,7 +2113,7 @@ describe('integrate claude — interactive feature selection', () => {
         .newFakeServer()
         .withAuthToken('cloud-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withOrgsLookupError(503)
+        .withOrgsLookupError(HTTP_SERVICE_UNAVAILABLE)
         .withProject('my-project')
         .start();
       const serverUrl = server.baseUrl();
