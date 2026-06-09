@@ -101,12 +101,6 @@ function inferStage(entry: PreCommitHookEntry): GitHookType | undefined {
   if (entry.stages?.includes('pre-commit')) {
     return 'pre-commit';
   }
-  if (entry.entry.includes('git-pre-push')) {
-    return 'pre-push';
-  }
-  if (entry.entry.includes('git-pre-commit')) {
-    return 'pre-commit';
-  }
   return undefined;
 }
 
