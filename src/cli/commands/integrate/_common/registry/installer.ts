@@ -50,7 +50,8 @@ function resolveVersion(version: string | undefined): string {
   return version ?? '0';
 }
 
-interface ApplyFeatureCallbacks {
+interface ApplyFeatureCallbacks<TOptions = Record<string, unknown>> {
+  onFeatureApplyStart?: (feature: FeatureDeclaration<TOptions>) => void;
   onDependencyInstalled?: (dependency: DependencyDeclaration) => void;
   onDependencySkipped?: (dependency: DependencyDeclaration) => void;
   onResourceInstalled?: (resource: ResourceDeclaration) => void;
@@ -68,7 +69,7 @@ export interface FeatureApplication<TOptions = Record<string, unknown>> {
 }
 
 interface ApplyAndRecordFeaturesOptions<TOptions = Record<string, unknown>> {
-  callbacks?: ApplyFeatureCallbacks;
+  callbacks?: ApplyFeatureCallbacks<TOptions>;
   continueOnFeatureError?: boolean;
   executionMode?: IntegrationExecutionMode;
   onFeatureError?: (application: FeatureApplication<TOptions>, error: Error) => void;
@@ -261,6 +262,7 @@ export class IntegrationInstaller {
 
     for (const execution of executions) {
       try {
+        options.callbacks?.onFeatureApplyStart?.(execution.application.feature);
         const applied = await this.applyFeatureWithUniqueDependencies(
           execution.context,
           execution.installedFeature,
@@ -292,7 +294,7 @@ export class IntegrationInstaller {
     context: IntegrationContext,
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
-    callbacks: ApplyFeatureCallbacks = {},
+    callbacks: ApplyFeatureCallbacks<TOptions> = {},
   ): Promise<AppliedFeature> {
     const preparedDependencies = await this.prepareUniqueDependencies(
       [
@@ -344,7 +346,7 @@ export class IntegrationInstaller {
 
   private async prepareUniqueDependencies<TOptions>(
     executions: PreparedFeatureExecution<TOptions>[],
-    callbacks: ApplyFeatureCallbacks = {},
+    callbacks: ApplyFeatureCallbacks<TOptions> = {},
   ): Promise<PreparedDependencies> {
     const resolvedDependencies = new Map<string, InstalledDependency>();
     const installedDependencies = new Map<string, InstalledDependency>();
@@ -393,7 +395,7 @@ export class IntegrationInstaller {
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
     preparedDependencies: PreparedDependencies,
-    callbacks: ApplyFeatureCallbacks = {},
+    callbacks: ApplyFeatureCallbacks<TOptions> = {},
   ): Promise<AppliedFeature> {
     const dependencyIds = new Set<string>();
     const dependencies: InstalledDependency[] = [];
