@@ -375,7 +375,9 @@ const dependencyRisksStatusFilterOption = new Option(
 
 analyze
   .command('dependency-risks')
-  .description('Analyze project dependencies for security and license risks')
+  .description(
+    'Analyze project dependencies for security and license risks (beta: subject to change)',
+  )
   .requiredOption('-p, --project <project>', 'Project key')
   .addOption(dependencyRisksFormatOption)
   .addOption(dependencyRisksStatusFilterOption)
