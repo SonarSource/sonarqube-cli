@@ -22,12 +22,14 @@ import { createIntegrationRegistry } from './_common/registry';
 import { claudeIntegration } from './claude/declaration';
 import { codexIntegration } from './codex/declaration';
 import { copilotIntegration } from './copilot/declaration';
+import { cursorIntegration } from './cursor/declaration';
 import { GIT_INTEGRATIONS } from './git/tools';
 
 export const ALL_INTEGRATIONS = [
   claudeIntegration,
   copilotIntegration,
   codexIntegration,
+  cursorIntegration,
   ...GIT_INTEGRATIONS,
 ] as const;
 

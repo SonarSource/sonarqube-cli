@@ -70,6 +70,7 @@ import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateClaude } from './commands/integrate/claude';
 import { integrateCodex } from './commands/integrate/codex';
 import { integrateCopilot } from './commands/integrate/copilot';
+import { integrateCursor } from './commands/integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
 import {
   listIssues,
@@ -299,6 +300,22 @@ integrateCommand
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
+
+// hidden until stable — remove { hidden: true } when sonar integrate cursor goes GA (CLI-221)
+integrateCommand
+  .command('cursor', { hidden: true })
+  .description(
+    'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.',
+  )
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('--non-interactive', 'Non-interactive mode (no prompts)')
+  .option(
+    '-g, --global',
+    "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
+  )
+  .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
+  .addHelpText('after', projectKeyExtraHelp)
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCursor(options, auth));
 
 // Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')
