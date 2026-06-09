@@ -20,6 +20,7 @@
 
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { EOL } from 'node:os';
 import { dirname } from 'node:path';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
@@ -75,6 +76,32 @@ export async function readTextFile(path: string): Promise<string | undefined> {
     return undefined;
   }
   return readFile(path, 'utf-8');
+}
+
+/** Returns true when `a` and `b` have the same content, ignoring differences in line endings. */
+export function equalsIgnoringEol(a: string, b: string): boolean {
+  return toEol(a, '\n') === toEol(b, '\n');
+}
+
+/** Rewrites every line ending in `value` to `eol`. */
+export function toEol(value: string, eol: string): string {
+  return value.replaceAll('\r\n', '\n').replaceAll('\n', eol);
+}
+
+/**
+ * Returns the newline sequence the content already uses (`\r\n` or `\n`), so generated text
+ * can match the file's existing convention. Falls back to the OS default when both are present.
+ */
+export function detectEol(content: string): string {
+  const containsCrlf = content.includes('\r\n');
+  const containsLf = /(?<!\r)\n/.test(content);
+  if (containsCrlf && containsLf) {
+    return EOL;
+  }
+  if (containsCrlf) {
+    return '\r\n';
+  }
+  return '\n';
 }
 
 export interface PatchResourceOptions<TDoc = unknown> extends BaseResourceOptions {
