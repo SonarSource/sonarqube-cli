@@ -575,24 +575,26 @@
   }
 
   function copyStepCmd(btn, cmd) {
-    const done = () => { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); };
-    const fallback = () => { const ta = document.createElement('textarea'); ta.value = cmd; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done(); };
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(cmd).then(done).catch(fallback);
-    } else {
-      fallback();
-    }
-  }
-
-  function copyStepCmd(btn, cmd) {
-    const done = () => { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); };
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(cmd).then(done);
-    } else {
-      const ta = document.createElement('textarea');
-      ta.value = cmd; document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); document.body.removeChild(ta); done();
-    }
+      const displayConfirmation = () => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => {
+              btn.textContent = 'Copy';
+          }, 1500);
+      };
+      const fallbackCopy = () => {
+          const ta = document.createElement('textarea');
+          ta.value = cmd;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          displayConfirmation();
+      };
+      if (navigator.clipboard) {
+          navigator.clipboard.writeText(cmd).then(displayConfirmation).catch(fallbackCopy);
+      } else {
+          fallbackCopy();
+      }
   }
 
   let activeJtbd = null;
