@@ -159,7 +159,7 @@ function reportScanResult(result: SpawnResult, scanStartTime: number): void {
 
 function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): void {
   blank();
-  success('Scan completed successfully');
+  success('Secrets scan completed successfully');
   try {
     const scanResult = JSON.parse(result.stdout);
     text(`  Duration: ${scanDurationMs}ms`);
@@ -169,7 +169,6 @@ function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): 
     blank();
     print(result.stdout);
   }
-  blank();
 }
 
 function displayScanResults(scanResult: {

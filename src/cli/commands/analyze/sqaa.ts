@@ -99,7 +99,6 @@ function resolveSqaaContext(
       warn(
         'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
       );
-      if (process.stdin.isTTY) policy.command?.outputHelp();
       return null;
   }
 }
