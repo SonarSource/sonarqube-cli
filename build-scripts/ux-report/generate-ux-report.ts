@@ -40,7 +40,6 @@ import { afterAll, afterEach, beforeEach, describe, it } from 'bun:test';
 import type { CliResult } from '../../tests/integration/harness';
 import { TestHarness } from '../../tests/integration/harness';
 import { commitFile, initGitRepo } from '../../tests/integration/specs/hook/git-test-helpers.ts';
-import { GITHUB_TEST_TOKEN } from './ux-report-fixtures.ts';
 
 const OUTPUT_PATH = join(import.meta.dir, '../../ux-report/cli-output-report.md');
 const DEFAULT_TIMEOUT = 30000;
@@ -340,9 +339,6 @@ uxDescribe('SonarQube Server (On-Premise) — Happy Path', () => {
     harness.run('api GET /api/authentication/validate'),
   );
   uxIt('api GET /api/system/status', () => harness.run('api GET /api/system/status'));
-  uxIt('api GET /api/system/status --verbose (request + response details)', () =>
-    harness.run('api GET /api/system/status --verbose'),
-  );
   uxIt('list projects', () => harness.run('list projects'));
   uxIt('list issues (JSON output)', () => harness.run(`list issues -p ${PROJECT}`));
   uxIt('list issues --format table', () => harness.run(`list issues -p ${PROJECT} --format table`));
@@ -594,12 +590,6 @@ uxDescribe('SonarQube Cloud — Error Paths', () => {
     }),
   );
 
-  uxIt('analyze dependency-risks — not authenticated', () =>
-    withHarness(async (h) => {
-      return h.run('analyze dependency-risks -p some-project');
-    }),
-  );
-
   uxIt('analyze dependency-risks — SCA disabled', () =>
     withHarness(async (h) => {
       const server = await h
@@ -796,22 +786,6 @@ uxDescribe('Analyze Secrets', () => {
       return h.run('analyze secrets clean.ts');
     }),
   );
-
-  uxIt('analyze secrets — not authenticated (exit 1)', () =>
-    withHarness(async (h) => {
-      h.state().withSecretsBinaryInstalled();
-      h.cwd.writeFile('src/index.ts', 'const x = 1;');
-      return h.run('analyze secrets src/index.ts');
-    }),
-  );
-
-  uxIt('analyze secrets — secrets found in file (exit 51)', () =>
-    withHarness(async (h) => {
-      h.state().withAuth('http://127.0.0.1:1', 'fake-token').withSecretsBinaryInstalled();
-      h.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-      return h.run('analyze secrets secrets.js');
-    }),
-  );
 });
 
 // ── 10. Interactive auth login ─────────────────────────────────────────────
@@ -917,35 +891,6 @@ uxDescribe('Interactive auth login', () => {
         browserToken: TOKEN,
         stdinChunks: ['\r', '\r'], // Enter (Cloud), Enter (EU)
       });
-    }),
-  );
-});
-
-// ── 11. sonar context Command ──────────────────────────────────────────────
-
-uxDescribe('sonar context Command', () => {
-  uxIt('context status — binary not installed', () =>
-    withHarness(async (h) => {
-      const server = await h.newFakeServer().withAuthToken(TOKEN).start();
-      h.state().withAuth(server.baseUrl(), TOKEN);
-      return h.run('context status');
-    }),
-  );
-
-  uxIt('context status — not authenticated', () =>
-    withHarness(async (h) => {
-      h.state().withContextAugmentationBinaryInstalled();
-      return h.run('context status');
-    }),
-  );
-
-  uxIt('context get-source — CAG installed, args forwarded (exit 0)', () =>
-    withHarness(async (h) => {
-      const server = await h.newFakeServer().withAuthToken(TOKEN).start();
-      h.state()
-        .withAuth(server.baseUrl(), TOKEN)
-        .withContextAugmentationBinaryInstalled({ stdoutLine: 'context retrieved successfully' });
-      return h.run('context get-source --file src/index.ts --line 42');
     }),
   );
 });
