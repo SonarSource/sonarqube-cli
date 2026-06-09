@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-/** Shared MCP config remove helpers for declarative integration patch resources. */
+/** Shared MCP config helpers for declarative integration patch resources. */
 
 export const SONARQUBE_MCP_SERVER_ID = 'sonarqube';
 
@@ -50,7 +50,25 @@ function toMcpSettings(document: unknown): {
 }
 
 /**
- * Remove a server entry from JSON MCP config (`mcpServers` object), e.g. Claude/Copilot.
+ * Upsert a server entry into a JSON MCP config (`mcpServers` object), e.g. Claude/Copilot/Cursor.
+ */
+export function upsertJsonMcpServer(
+  document: unknown,
+  serverConfig: object,
+  serverId: string = SONARQUBE_MCP_SERVER_ID,
+): Record<string, unknown> {
+  const settings = toMcpSettings(document);
+  return {
+    ...settings,
+    mcpServers: {
+      ...settings.mcpServers,
+      [serverId]: serverConfig,
+    },
+  };
+}
+
+/**
+ * Remove a server entry from JSON MCP config (`mcpServers` object), e.g. Claude/Copilot/Cursor.
  */
 export function removeJsonMcpServer(
   document: unknown,

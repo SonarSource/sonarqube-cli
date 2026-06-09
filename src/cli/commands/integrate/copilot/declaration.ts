@@ -30,7 +30,7 @@ import {
   sonarBeginMarker,
   sonarEndMarker,
 } from '../_common/instructions-templates';
-import { removeJsonMcpServer } from '../_common/mcp-config';
+import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
 import {
   askUser,
@@ -156,7 +156,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           targetPath: resolveCopilotMcpConfigPath,
           defaultValue: {},
           patch: (document, context) =>
-            upsertCopilotMcpServer(document, getDesiredCopilotMcpConfig(context)),
+            upsertJsonMcpServer(document, getDesiredCopilotMcpConfig(context)),
           removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],
@@ -239,18 +239,6 @@ function createHookCommandEntry(context: IntegrationContext): HookCommandEntry {
       };
 }
 
-function upsertCopilotMcpServer(document: unknown, serverConfig: object): Record<string, unknown> {
-  const existing = toJsonObject(document);
-  const mcpServers = toJsonObject(existing.mcpServers);
-  return {
-    ...existing,
-    mcpServers: {
-      ...mcpServers,
-      sonarqube: serverConfig,
-    },
-  };
-}
-
 function getDesiredCopilotMcpConfig(context: IntegrationContext) {
   return getMcpConfig(
     CLI_COMMAND,
@@ -262,11 +250,4 @@ function getDesiredCopilotMcpConfig(context: IntegrationContext) {
           projectKey: getOptionalStringAttr(context, 'projectKey'),
         },
   );
-}
-
-function toJsonObject(document: unknown): Record<string, unknown> {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return {};
-  }
-  return { ...(document as Record<string, unknown>) };
 }

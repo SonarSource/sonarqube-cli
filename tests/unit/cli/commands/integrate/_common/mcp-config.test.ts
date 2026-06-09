@@ -28,6 +28,7 @@ import {
 import {
   removeCodexMcpServer,
   removeJsonMcpServer,
+  upsertJsonMcpServer,
 } from '../../../../../../src/cli/commands/integrate/_common/mcp-config';
 import { removeCopilotHookConfig } from '../../../../../../src/cli/commands/integrate/copilot/hooks';
 import {
@@ -62,6 +63,55 @@ describe('integration remove helpers', () => {
 
     expect(removed.hooks?.PostToolUse).toHaveLength(1);
     expect(removed.hooks?.PostToolUse?.[0]?.hooks[0]?.command).toBe('other');
+  });
+
+  it('upsertJsonMcpServer inserts sonarqube entry into an empty document', () => {
+    const result = upsertJsonMcpServer({}, { command: 'sonar', args: ['run', 'mcp'] });
+
+    expect(result.mcpServers).toEqual({ sonarqube: { command: 'sonar', args: ['run', 'mcp'] } });
+  });
+
+  it('upsertJsonMcpServer preserves existing mcpServers entries', () => {
+    const result = upsertJsonMcpServer(
+      { mcpServers: { other: { command: 'x' } } },
+      { command: 'sonar', args: ['run', 'mcp'] },
+    );
+
+    expect(result.mcpServers).toEqual({
+      other: { command: 'x' },
+      sonarqube: { command: 'sonar', args: ['run', 'mcp'] },
+    });
+  });
+
+  it('upsertJsonMcpServer overwrites an existing sonarqube entry', () => {
+    const result = upsertJsonMcpServer(
+      { mcpServers: { sonarqube: { command: 'old' } } },
+      { command: 'sonar', args: ['run', 'mcp'] },
+    );
+
+    expect(result.mcpServers).toEqual({ sonarqube: { command: 'sonar', args: ['run', 'mcp'] } });
+  });
+
+  it('upsertJsonMcpServer preserves other top-level keys', () => {
+    const result = upsertJsonMcpServer({ inputs: [{ type: 'promptString', id: 'token' }] }, {});
+
+    expect(result.inputs).toEqual([{ type: 'promptString', id: 'token' }]);
+  });
+
+  it('upsertJsonMcpServer handles a non-object document gracefully', () => {
+    expect(upsertJsonMcpServer(null, { command: 'sonar' }).mcpServers).toEqual({
+      sonarqube: { command: 'sonar' },
+    });
+    expect(upsertJsonMcpServer(['unexpected'], { command: 'sonar' }).mcpServers).toEqual({
+      sonarqube: { command: 'sonar' },
+    });
+  });
+
+  it('upsertJsonMcpServer uses a custom serverId when provided', () => {
+    const result = upsertJsonMcpServer({}, { command: 'sonar' }, 'my-server');
+
+    expect(result.mcpServers).toEqual({ 'my-server': { command: 'sonar' } });
+    expect(result.mcpServers).not.toHaveProperty('sonarqube');
   });
 
   it('removeJsonMcpServer drops sonarqube server only', () => {
