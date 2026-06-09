@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { AGENTIC_ANALYSIS_DOCS_URL } from '../../../../lib/config-constants';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import { warn } from '../../../../ui';
+import { info, warn } from '../../../../ui';
 
 /**
  * Check if the organization has SonarQube Agentic Analysis (SQAA) entitlement.
@@ -51,6 +52,11 @@ export async function resolveSqaaEntitlement(
 export const SQAA_GLOBAL_SKIP_MESSAGE =
   'Skipping SonarQube Agentic Analysis: not supported with --global. Re-run without --global from a project directory to install it there.';
 
+/**
+ * Shown when SonarQube Agentic Analysis is not available for the current connection.
+ */
+export const SQAA_PROMOTION_MESSAGE = `SonarQube Agentic Analysis is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
+
 export interface ResolveSqaaSetupParams {
   serverURL: string;
   token: string;
@@ -59,12 +65,12 @@ export interface ResolveSqaaSetupParams {
 }
 
 /**
- * Resolve whether SonarQube Agentic Analysis (SQAA) should be installed.
+ * Resolve whether SonarQube Agentic Analysis (SQAA) can be installed.
  *
- * SQAA is always project-scoped, so a `--global` integration can never install
- * it. We still resolve org entitlement first so that, on a global install, the
- * skip notice is only shown to orgs that could actually use SQAA (avoiding noise
- * for unentitled orgs). For project installs this returns the raw entitlement.
+ * Entitlement is checked first: an unentitled connection surfaces the
+ * promotion message. SQAA is always project-scoped, so an entitled `--global`
+ * integration can never install it and instead surfaces the global skip notice.
+ * For entitled project installs this returns `true`.
  */
 export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<boolean> {
   const entitled = await resolveSqaaEntitlement(
@@ -72,11 +78,13 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
     params.token,
     params.organization,
   );
-  if (params.isGlobal) {
-    if (entitled) {
-      warn(SQAA_GLOBAL_SKIP_MESSAGE);
-    }
+  if (!entitled) {
+    info(SQAA_PROMOTION_MESSAGE);
     return false;
   }
-  return entitled;
+  if (params.isGlobal) {
+    warn(SQAA_GLOBAL_SKIP_MESSAGE);
+    return false;
+  }
+  return true;
 }

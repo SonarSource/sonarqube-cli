@@ -561,7 +561,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'writes ~/.codex/AGENTS.md (and nothing project-side) at global scope without SQAA entitlement, and does NOT warn about SQAA',
+      'writes ~/.codex/AGENTS.md (and nothing project-side) at global scope without SQAA entitlement, showing the promotion',
       async () => {
         const result = await harness.run('integrate codex -g --non-interactive');
 
@@ -571,7 +571,7 @@ describe('integrate codex', () => {
         expect(body).toContain(SECRETS_HEADING);
         expect(body).not.toContain(SQAA_HEADING);
         const output = `${result.stdout}\n${result.stderr}`;
-        expect(output).not.toContain('Skipping SonarQube Agentic Analysis');
+        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
       },
       { timeout: 30000 },
     );
@@ -630,8 +630,10 @@ describe('integrate codex', () => {
         expect(output).toContain('Install secret scanning hooks?');
         expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
-        // SQAA is not eligible, so it is skipped silently without a prompt.
+        // SQAA is not eligible, so it is skipped without a prompt but the shared
+        // promotion message is surfaced.
         expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+        expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
         // Accepted features are installed on disk.
         expect(
           harness.cwd.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),

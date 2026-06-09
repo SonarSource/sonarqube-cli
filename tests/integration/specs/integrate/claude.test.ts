@@ -1988,11 +1988,12 @@ describe('integrate claude — interactive feature selection', () => {
   });
 
   it(
-    'prompts per feature, installs accepted features, and silently skips SQAA when not entitled',
+    'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
     async () => {
-      // On-premise auth with no org: SQAA and Context Augmentation are not
-      // available, so both are skipped silently. The secret scanning hooks and
-      // MCP server features each ask.
+      // On-premise auth with no org: SQAA is not available, so it is skipped
+      // without a prompt but surfaces the shared promotion message. Context
+      // Augmentation is skipped silently. The secret scanning hooks and MCP
+      // server features each ask.
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
       harness.cwd.writeFile(
@@ -2009,8 +2010,10 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install secret scanning hooks?');
       expect(output).toContain('Install MCP server?');
-      // SQAA is not eligible, so it is skipped silently without a prompt.
+      // SQAA is not eligible, so it is skipped without a prompt but the shared
+      // promotion message is surfaced.
       expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+      expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
 
       // Accepted features are installed on disk.
       expect(
