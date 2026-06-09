@@ -18,15 +18,48 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type { BaseResourceOptions, PathResolver, ResourceDeclaration } from './common';
-export { jsonPatch, type JsonPatchOptions } from './json-patch';
-export { TextSnippet, textSnippet, type TextSnippetResourceOptions } from './text-snippet';
-export { TomlPatch, tomlPatch, type TomlPatchOptions } from './toml-patch';
+export type {
+  BaseResourceOptions,
+  PathResolver,
+  RemovableResource,
+  RemoveablePatchResourceOptions,
+  ResourceDeclaration,
+  ResourceIdentity,
+} from './common';
+export { RemoveablePatchResource } from './common';
+export {
+  jsonPatch,
+  type JsonPatchOptions,
+  jsonPatchRemover,
+  type JsonPatchRemoverOptions,
+} from './json-patch';
+export {
+  TextSnippet,
+  textSnippet,
+  textSnippetRemover,
+  type TextSnippetRemoverOptions,
+  type TextSnippetResourceOptions,
+} from './text-snippet';
+export {
+  TomlPatch,
+  tomlPatch,
+  type TomlPatchOptions,
+  tomlPatchRemover,
+  type TomlPatchRemoverOptions,
+} from './toml-patch';
 export {
   type PlatformSpecificContent,
   wholeFile,
   type WholeFileContent,
+  wholeFileRemover,
+  type WholeFileRemoverOptions,
   WholeFileResource,
   type WholeFileResourceOptions,
 } from './whole-file';
-export { YamlPatch, yamlPatch, type YamlPatchOptions } from './yaml-patch';
+export {
+  YamlPatch,
+  yamlPatch,
+  type YamlPatchOptions,
+  yamlPatchRemover,
+  type YamlPatchRemoverOptions,
+} from './yaml-patch';

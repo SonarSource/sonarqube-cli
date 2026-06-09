@@ -48,17 +48,28 @@ export {
 export {
   jsonPatch,
   type JsonPatchOptions,
+  jsonPatchRemover,
+  type JsonPatchRemoverOptions,
   type PlatformSpecificContent,
+  type RemovableResource,
   type ResourceDeclaration,
   textSnippet,
+  textSnippetRemover,
+  type TextSnippetRemoverOptions,
   type TextSnippetResourceOptions,
   tomlPatch,
   type TomlPatchOptions,
+  tomlPatchRemover,
+  type TomlPatchRemoverOptions,
   wholeFile,
   type WholeFileContent,
+  wholeFileRemover,
+  type WholeFileRemoverOptions,
   type WholeFileResourceOptions,
   yamlPatch,
   type YamlPatchOptions,
+  yamlPatchRemover,
+  type YamlPatchRemoverOptions,
 } from './resources';
 export { askUser, install, type InstallDecision, skip } from './selection';
 export type {

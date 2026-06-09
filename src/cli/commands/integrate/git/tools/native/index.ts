@@ -25,15 +25,20 @@ import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
 import { resolveGitHooksDir } from '../../../../_common/git-repo';
 import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
-import { wholeFile } from '../../../_common/registry/resources';
+import { wholeFile, wholeFileRemover } from '../../../_common/registry/resources';
 import type {
   FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
 } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { getRecognizedNativeMarkers } from '../markers';
-import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
+import { getNativeHookMarker } from '../markers';
+import {
+  gitCombinedHookExample,
+  gitHookExample,
+  LEGACY_HOOK_MARKER,
+  shouldInstallHook,
+} from '../shared';
 import { getHookScript } from './shell-fragments';
 
 export const NATIVE_GIT_INTEGRATION_ID = 'native-git';
@@ -59,18 +64,20 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     resources: [
       wholeFile({
         id: 'hook-file',
+        version: '1',
         displayName: `${hook} hook`,
         targetPath: (context) => resolveNativeGitHookPath(context, hook),
         content: getHookScript(hook),
         executable: true,
         requiresForce: true,
-        managedMarker: getRecognizedNativeMarkers(hook),
+        managedMarker: getNativeHookMarker(hook),
         overwriteRemediationHint: OVERWRITE_REMEDIATION_HINT,
       }),
     ],
     operations: [
       {
         id: 'configure-global-hooks-path',
+        version: '1',
         displayName: 'global hooks path',
         shouldApply: ({ scope }) => scope === 'global',
         apply: ({ targetRoot }) => configureGlobalHooksPath(targetRoot),
@@ -80,6 +87,14 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
           }
         },
       },
+    ],
+    legacyCleanups: [
+      wholeFileRemover({
+        id: 'hook-file',
+        version: '0',
+        targetPath: (context) => resolveNativeGitHookPath(context, hook),
+        managedMarker: LEGACY_HOOK_MARKER,
+      }),
     ],
   };
 }

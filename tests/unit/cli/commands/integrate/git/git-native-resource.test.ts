@@ -28,6 +28,7 @@ import type {
   IntegrationContext,
   ResourceDeclaration,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
+import { wholeFileRemover } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import {
   getPreCommitHookScript,
   nativeGitIntegration,
@@ -77,16 +78,23 @@ describe('native git hook resource (wholeFile)', () => {
     expect(await nativeHookResource('pre-commit').isApplied(context())).toBe(true);
   });
 
-  it('overwrites a legacy-marked hook without --force', async () => {
-    writeFileSync(
-      join(TEMP_DIR, 'pre-commit'),
-      `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\nold\n`,
-      'utf-8',
-    );
+  it('cleanup removes a legacy-marked hook; resource then writes fresh content', async () => {
+    const hookPath = join(TEMP_DIR, 'pre-commit');
+    writeFileSync(hookPath, `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\nold\n`, 'utf-8');
 
+    // Simulate the cleanup step: wholeFileRemover removes the legacy file.
+    const cleanup = wholeFileRemover({
+      id: 'hook-file',
+      version: '0',
+      targetPath: hookPath,
+      managedMarker: LEGACY_HOOK_MARKER,
+    });
+    await cleanup.remove(context());
+    expect(existsSync(hookPath)).toBe(false);
+
+    // Resource writes fresh content since the file is now gone.
     await nativeHookResource('pre-commit').apply(context());
-
-    expect(readFileSync(join(TEMP_DIR, 'pre-commit'), 'utf-8')).toBe(getPreCommitHookScript());
+    expect(readFileSync(hookPath, 'utf-8')).toBe(getPreCommitHookScript());
   });
 
   it('refuses to overwrite a foreign hook without --force', async () => {
@@ -115,7 +123,7 @@ describe('native git hook resource (wholeFile)', () => {
     const hookPath = join(TEMP_DIR, 'pre-commit');
     writeFileSync(hookPath, getPreCommitHookScript(), { mode: 0o755 });
 
-    await nativeHookResource('pre-commit').remove!(context());
+    await nativeHookResource('pre-commit').remove(context());
 
     expect(existsSync(hookPath)).toBe(false);
   });
@@ -124,7 +132,7 @@ describe('native git hook resource (wholeFile)', () => {
     const hookPath = join(TEMP_DIR, 'pre-commit');
     writeFileSync(hookPath, '#!/bin/sh\necho custom\n', { mode: 0o755 });
 
-    await nativeHookResource('pre-commit').remove!(context());
+    await nativeHookResource('pre-commit').remove(context());
 
     expect(existsSync(hookPath)).toBe(true);
   });

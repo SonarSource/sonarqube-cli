@@ -21,7 +21,7 @@
 import { join } from 'node:path';
 
 import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
-import { textSnippet } from '../../../_common/registry/resources';
+import { textSnippet, textSnippetRemover } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { getHuskyBeginMarker, getHuskyEndMarker, legacyHuskyBlock } from '../markers';
@@ -47,14 +47,23 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
     resources: [
       textSnippet({
         id: 'hook-file',
+        version: '1',
         displayName: `${hook} hook`,
         // Husky hook files live under <gitRoot>/.husky even when Git routes hooks there via core.hooksPath.
         targetPath: (context) => join(context.targetRoot, '.husky', hook),
         executable: true,
         startMarker: getHuskyBeginMarker(hook),
         endMarker: getHuskyEndMarker(hook),
-        legacyBlocks: [legacyHuskyBlock(hook)],
         content: getHuskySnippetContent(hook).trimEnd(),
+      }),
+    ],
+    legacyCleanups: [
+      textSnippetRemover({
+        id: 'hook-file',
+        version: '0',
+        targetPath: (context) => join(context.targetRoot, '.husky', hook),
+        startMarker: legacyHuskyBlock(hook).startMarker,
+        endMarker: legacyHuskyBlock(hook).endMarker,
       }),
     ],
   };

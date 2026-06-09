@@ -25,8 +25,10 @@ import {
   includesIgnoringEol,
   type PathResolver,
   readTextFile,
+  type RemovableResource,
   resolvePath,
   type ResourceDeclaration,
+  type ResourceIdentity,
   toEol,
   writeFileIfChanged,
 } from './common';
@@ -37,12 +39,6 @@ export interface TextSnippetResourceOptions extends BaseResourceOptions {
   executable?: boolean;
   startMarker: string;
   endMarker?: string;
-  /**
-   * Managed blocks written by older versions, stripped before (re)writing or removing the current
-   * block so re-running migrates an old install without leaving a duplicate. `endMarker` defaults to
-   * this resource's end marker (handy when only the start marker changed across versions).
-   */
-  legacyBlocks?: Array<{ startMarker: string; endMarker?: string }>;
 }
 
 export function textSnippet(options: TextSnippetResourceOptions): ResourceDeclaration {
@@ -55,10 +51,19 @@ export class TextSnippet implements ResourceDeclaration {
   readonly resourceType = 'text-snippet';
   readonly version?: string;
 
+  private readonly remover: RemovableResource;
+
   constructor(private readonly options: TextSnippetResourceOptions) {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
+    this.remover = new TextSnippetRemover({
+      id: options.id,
+      version: options.version,
+      targetPath: options.targetPath,
+      startMarker: options.startMarker,
+      endMarker: this.endMarker,
+    });
   }
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
@@ -84,17 +89,7 @@ export class TextSnippet implements ResourceDeclaration {
   }
 
   async remove(context: IntegrationContext): Promise<void> {
-    const path = await resolvePath(context, this.options.targetPath);
-    const existing = await readTextFile(path);
-    if (existing === undefined) {
-      return;
-    }
-    const eol = detectEol(existing);
-    let updated = this.stripLegacyBlocks(existing, eol);
-    updated = removeManagedBlocks(updated, this.startMarker, this.endMarker, eol);
-    if (updated !== existing) {
-      await writeFileIfChanged(path, updated);
-    }
+    await this.remover.remove(context);
   }
 
   private async resolveContent(context: IntegrationContext): Promise<string> {
@@ -105,7 +100,7 @@ export class TextSnippet implements ResourceDeclaration {
   private async renderContent(path: string, content: string): Promise<string> {
     const raw = (await readTextFile(path)) ?? '';
     const eol = detectEol(raw);
-    const existing = this.stripLegacyBlocks(raw, eol);
+    const existing = raw;
     const managedBlock = this.renderManagedBlock(content, eol);
 
     const startIndex = existing.indexOf(this.startMarker);
@@ -121,23 +116,6 @@ export class TextSnippet implements ResourceDeclaration {
     }
     const blockEnd = endIndex + this.endMarker.length;
     return `${existing.slice(0, startIndex)}${managedBlock}${existing.slice(blockEnd)}`;
-  }
-
-  /** Removes any legacy managed blocks so a re-install/remove migrates old installs without duplicating. */
-  private stripLegacyBlocks(existing: string, eol: string): string {
-    let result = existing;
-    for (const block of this.options.legacyBlocks ?? []) {
-      if (block.startMarker === this.startMarker) {
-        continue;
-      }
-      result = removeManagedBlocks(
-        result,
-        block.startMarker,
-        block.endMarker ?? this.endMarker,
-        eol,
-      );
-    }
-    return result;
   }
 
   private renderManagedBlock(content: string, eol: string): string {
@@ -195,4 +173,47 @@ function appendBlock(existing: string, block: string, eol: string): string {
     return `${block}${eol}`;
   }
   return `${existing.trimEnd()}${eol}${eol}${block}${eol}`;
+}
+
+export interface TextSnippetRemoverOptions {
+  id: string;
+  version?: string;
+  targetPath: PathResolver;
+  startMarker: string;
+  endMarker: string;
+}
+
+export function textSnippetRemover(
+  options: TextSnippetRemoverOptions,
+): ResourceIdentity & RemovableResource {
+  return new TextSnippetRemover(options);
+}
+
+class TextSnippetRemover implements RemovableResource {
+  readonly id: string;
+  readonly version?: string;
+  readonly resourceType = 'text-snippet';
+
+  constructor(private readonly options: TextSnippetRemoverOptions) {
+    this.id = options.id;
+    this.version = options.version;
+  }
+
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolvePath(context, this.options.targetPath);
+    const existing = await readTextFile(path);
+    if (existing === undefined) {
+      return;
+    }
+    const eol = detectEol(existing);
+    const updated = removeManagedBlocks(
+      existing,
+      this.options.startMarker,
+      this.options.endMarker,
+      eol,
+    );
+    if (updated !== existing) {
+      await writeFileIfChanged(path, updated);
+    }
+  }
 }

@@ -27,8 +27,10 @@ import {
   equalsIgnoringEol,
   type PathResolver,
   readTextFile,
+  type RemovableResource,
   resolvePath,
   type ResourceDeclaration,
+  type ResourceIdentity,
   writeFileIfChanged,
 } from './common';
 
@@ -47,11 +49,8 @@ export interface WholeFileResourceOptions extends BaseResourceOptions {
   content: WholeFileContent;
   executable?: boolean;
   requiresForce?: boolean;
-  /**
-   * Marker(s) identifying the file as Sonar-managed (safe to overwrite). Accepts the current marker
-   * plus any legacy markers, so installs written by older versions are still recognized.
-   */
-  managedMarker?: string | string[];
+  /** Marker identifying the file as Sonar-managed (safe to overwrite without --force). */
+  managedMarker?: string;
   /** Hint rendered (on a separate line) when refusing to overwrite an unmanaged file. */
   overwriteRemediationHint?: string;
 }
@@ -66,10 +65,18 @@ export class WholeFileResource implements ResourceDeclaration {
   readonly resourceType = 'whole-file';
   readonly version?: string;
 
+  private readonly remover: RemovableResource;
+
   constructor(private readonly options: WholeFileResourceOptions) {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
+    this.remover = new WholeFileRemover({
+      id: options.id,
+      version: options.version,
+      targetPath: options.targetPath,
+      managedMarker: options.managedMarker,
+    });
   }
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
@@ -89,15 +96,7 @@ export class WholeFileResource implements ResourceDeclaration {
   }
 
   async remove(context: IntegrationContext): Promise<void> {
-    const path = await resolvePath(context, this.options.targetPath);
-    const existing = await readTextFile(path);
-    if (existing === undefined) {
-      return;
-    }
-    if (this.options.managedMarker !== undefined && !this.isManaged(existing)) {
-      return;
-    }
-    await rm(path);
+    await this.remover.remove(context);
   }
 
   private async resolveContent(context: IntegrationContext): Promise<string> {
@@ -135,10 +134,46 @@ export class WholeFileResource implements ResourceDeclaration {
 
   private isManaged(existing: string): boolean {
     const { managedMarker } = this.options;
-    if (managedMarker === undefined) {
-      return false;
+    return managedMarker !== undefined && existing.includes(managedMarker);
+  }
+}
+
+export interface WholeFileRemoverOptions {
+  id: string;
+  version?: string;
+  targetPath: PathResolver;
+  /** Marker identifying the file as Sonar-managed. Only removes the file when the marker is found. */
+  managedMarker?: string;
+}
+
+export function wholeFileRemover(
+  options: WholeFileRemoverOptions,
+): ResourceIdentity & RemovableResource {
+  return new WholeFileRemover(options);
+}
+
+class WholeFileRemover implements RemovableResource {
+  readonly id: string;
+  readonly version?: string;
+  readonly resourceType = 'whole-file';
+
+  constructor(private readonly options: WholeFileRemoverOptions) {
+    this.id = options.id;
+    this.version = options.version;
+  }
+
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolvePath(context, this.options.targetPath);
+    const existing = await readTextFile(path);
+    if (existing === undefined) {
+      return;
     }
-    const markers = Array.isArray(managedMarker) ? managedMarker : [managedMarker];
-    return markers.some((marker) => existing.includes(marker));
+    if (
+      this.options.managedMarker !== undefined &&
+      !existing.includes(this.options.managedMarker)
+    ) {
+      return;
+    }
+    await rm(path);
   }
 }

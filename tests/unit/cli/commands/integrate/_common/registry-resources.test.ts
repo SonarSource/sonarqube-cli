@@ -40,6 +40,7 @@ await mock.module('../../../../../../src/cli/commands/_common/install/binary', (
 const {
   IntegrationInstaller,
   jsonPatch,
+  textSnippetRemover,
   SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
@@ -163,7 +164,7 @@ describe('declarative integration framework - resources and state recording', ()
     );
   });
 
-  it('strips a legacy managed block before writing the current block, then removes both', async () => {
+  it('textSnippetRemover removes an old block; current textSnippet then writes the new block', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
     const targetPath = join(tempDir, 'legacy-block.txt');
@@ -171,31 +172,41 @@ describe('declarative integration framework - resources and state recording', ()
       targetPath,
       ['#!/bin/sh', '# legacy marker', 'old managed content', '# sonar:end block', ''].join('\n'),
     );
+    const legacy = textSnippetRemover({
+      id: 'block',
+      version: '0',
+      targetPath,
+      startMarker: '# legacy marker',
+      endMarker: '# sonar:end block',
+    });
     const resource = textSnippet({
       id: 'block',
       targetPath,
       content: 'managed content',
       startMarker: '# sonar:begin block',
       endMarker: '# sonar:end block',
-      legacyBlocks: [{ startMarker: '# legacy marker', endMarker: '# sonar:end block' }],
     });
 
-    // isApplied is false while only the legacy block is present, so apply runs and migrates it.
+    // isApplied is false while only the legacy block is present.
     expect(await resource.isApplied(context)).toBe(false);
 
-    await resource.apply(context);
+    // Cleanup step: remove the legacy block first.
+    await legacy.remove(context);
+    const afterCleanup = await readFile(targetPath, 'utf-8');
+    expect(afterCleanup).not.toContain('# legacy marker');
+    expect(afterCleanup).not.toContain('old managed content');
 
+    // Apply step: write the current block.
+    await resource.apply(context);
     const migrated = await readFile(targetPath, 'utf-8');
     expect(migrated.split('# sonar:begin block').length - 1).toBe(1);
-    expect(migrated).not.toContain('# legacy marker');
-    expect(migrated).not.toContain('old managed content');
     expect(migrated).toContain('managed content');
     expect(await resource.isApplied(context)).toBe(true);
 
+    // Remove step: current resource cleans up its own block.
     await resource.remove?.(context);
     const removed = await readFile(targetPath, 'utf-8');
     expect(removed).not.toContain('# sonar:begin block');
-    expect(removed).not.toContain('# legacy marker');
   });
 
   it('skips operations when shouldApply returns false', async () => {

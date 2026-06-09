@@ -24,7 +24,15 @@ import { readFile } from 'node:fs/promises';
 import { parse, stringify } from 'smol-toml';
 
 import { CommandFailedError } from '../../../../_common/error';
-import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
+import {
+  PatchResource,
+  type PatchResourceOptions,
+  type RemovableResource,
+  RemoveablePatchResource,
+  type RemoveablePatchResourceOptions,
+  type ResourceDeclaration,
+  type ResourceIdentity,
+} from './common';
 
 export interface TomlPatchOptions extends PatchResourceOptions<Record<string, unknown>> {
   defaultValue?: Record<string, unknown>;
@@ -36,6 +44,18 @@ export function tomlPatch(options: TomlPatchOptions): ResourceDeclaration {
 
 export class TomlPatch extends PatchResource<TomlPatchOptions, Record<string, unknown>> {
   readonly resourceType = 'toml-patch';
+
+  constructor(options: TomlPatchOptions) {
+    super(
+      options,
+      new TomlRemoveablePatchResource({
+        id: options.id,
+        version: options.version,
+        targetPath: options.targetPath,
+        removePatch: options.removePatch,
+      }),
+    );
+  }
 
   protected readDocument(path: string): Promise<Record<string, unknown>> {
     return readToml(path, this.options.defaultValue ?? {});
@@ -59,5 +79,25 @@ async function readToml(
     throw new CommandFailedError(
       `${path} contains invalid TOML. Please fix or delete it and re-run.`,
     );
+  }
+}
+
+export type TomlPatchRemoverOptions = RemoveablePatchResourceOptions<Record<string, unknown>>;
+
+export function tomlPatchRemover(
+  options: TomlPatchRemoverOptions,
+): ResourceIdentity & RemovableResource {
+  return new TomlRemoveablePatchResource(options);
+}
+
+class TomlRemoveablePatchResource extends RemoveablePatchResource<Record<string, unknown>> {
+  readonly resourceType = 'toml-patch';
+
+  protected async readDocument(path: string): Promise<Record<string, unknown>> {
+    return readToml(path, {});
+  }
+
+  protected serializeDocument(document: unknown): string {
+    return stringify(document);
   }
 }

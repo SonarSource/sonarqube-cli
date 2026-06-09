@@ -32,6 +32,7 @@ import { CommandFailedError } from '../../../_common/error';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
 import type { ResourceDeclaration } from './resources';
+import type { RemovableResource, ResourceIdentity } from './resources';
 import { normalizeDecision } from './selection';
 import type {
   AppliedFeature,
@@ -46,8 +47,11 @@ import type {
   IntegrationInvocation,
 } from './types';
 
-interface ApplyFeatureCallbacks<TOptions = Record<string, unknown>> {
-  onFeatureApplyStart?: (feature: FeatureDeclaration<TOptions>) => void;
+function resolveVersion(version: string | undefined): string {
+  return version ?? '0';
+}
+
+interface ApplyFeatureCallbacks {
   onDependencyInstalled?: (dependency: DependencyDeclaration) => void;
   onDependencySkipped?: (dependency: DependencyDeclaration) => void;
   onResourceInstalled?: (resource: ResourceDeclaration) => void;
@@ -65,7 +69,7 @@ export interface FeatureApplication<TOptions = Record<string, unknown>> {
 }
 
 interface ApplyAndRecordFeaturesOptions<TOptions = Record<string, unknown>> {
-  callbacks?: ApplyFeatureCallbacks<TOptions>;
+  callbacks?: ApplyFeatureCallbacks;
   continueOnFeatureError?: boolean;
   executionMode?: IntegrationExecutionMode;
   onFeatureError?: (application: FeatureApplication<TOptions>, error: Error) => void;
@@ -187,7 +191,7 @@ export class IntegrationInstaller {
     if (!installedDependency) {
       return true;
     }
-    if (installedDependency.version !== dependency.version) {
+    if (resolveVersion(installedDependency.version) !== resolveVersion(dependency.version)) {
       return true;
     }
     return !(await dependency.isInstalled(context));
@@ -202,7 +206,7 @@ export class IntegrationInstaller {
     if (!installedResource) {
       return true;
     }
-    if (installedResource.version !== resource.version) {
+    if (resolveVersion(installedResource.version) !== resolveVersion(resource.version)) {
       return true;
     }
     return !(await resource.isApplied(context));
@@ -215,7 +219,23 @@ export class IntegrationInstaller {
     const installedOperation = installedFeature?.operations.find(
       (entry) => entry.id === operation.id,
     );
-    return !installedOperation || installedOperation.version !== operation.version;
+    return (
+      !installedOperation ||
+      resolveVersion(installedOperation.version) !== resolveVersion(operation.version)
+    );
+  }
+
+  legacyCleanupNeedsApply(
+    installedFeature: InstalledIntegrationFeature | undefined,
+    cleanup: ResourceIdentity & RemovableResource,
+  ): boolean {
+    if (installedFeature === undefined) {
+      // Integration not yet recorded in state: only run version-0 cleanups to remove
+      // artifacts that predate declarative state tracking.
+      return resolveVersion(cleanup.version) === '0';
+    }
+    const installedResource = installedFeature.resources.find((r) => r.id === cleanup.id);
+    return resolveVersion(installedResource?.version) === resolveVersion(cleanup.version);
   }
 
   async applyAndRecordFeatures<TOptions>(
@@ -242,7 +262,6 @@ export class IntegrationInstaller {
 
     for (const execution of executions) {
       try {
-        options.callbacks?.onFeatureApplyStart?.(execution.application.feature);
         const applied = await this.applyFeatureWithUniqueDependencies(
           execution.context,
           execution.installedFeature,
@@ -274,7 +293,7 @@ export class IntegrationInstaller {
     context: IntegrationContext,
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
-    callbacks: ApplyFeatureCallbacks<TOptions>,
+    callbacks: ApplyFeatureCallbacks = {},
   ): Promise<AppliedFeature> {
     const preparedDependencies = await this.prepareUniqueDependencies(
       [
@@ -308,12 +327,12 @@ export class IntegrationInstaller {
     callbacks: RemoveFeatureCallbacks = {},
   ): Promise<void> {
     for (const resource of feature.resources ?? []) {
-      if (resource.remove) {
-        await resource.remove(context);
-        callbacks.onResourceRemoved?.(resource);
-      } else {
-        callbacks.onResourceSkipped?.(resource);
-      }
+      await resource.remove(context);
+      callbacks.onResourceRemoved?.(resource);
+    }
+
+    for (const cleanup of feature.legacyCleanups ?? []) {
+      await cleanup.remove(context);
     }
 
     for (const operation of [...(feature.operations ?? [])].reverse()) {
@@ -326,7 +345,7 @@ export class IntegrationInstaller {
 
   private async prepareUniqueDependencies<TOptions>(
     executions: PreparedFeatureExecution<TOptions>[],
-    callbacks: ApplyFeatureCallbacks<TOptions>,
+    callbacks: ApplyFeatureCallbacks = {},
   ): Promise<PreparedDependencies> {
     const resolvedDependencies = new Map<string, InstalledDependency>();
     const installedDependencies = new Map<string, InstalledDependency>();
@@ -375,7 +394,7 @@ export class IntegrationInstaller {
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
     preparedDependencies: PreparedDependencies,
-    callbacks: ApplyFeatureCallbacks<TOptions>,
+    callbacks: ApplyFeatureCallbacks = {},
   ): Promise<AppliedFeature> {
     const dependencyIds = new Set<string>();
     const dependencies: InstalledDependency[] = [];
@@ -401,6 +420,11 @@ export class IntegrationInstaller {
       preparedDependencies.resolvedDependencies,
     );
     const featureContext = { ...context, resolvedDependencies };
+
+    for (const cleanup of feature.legacyCleanups ?? []) {
+      if (!this.legacyCleanupNeedsApply(installedFeature, cleanup)) continue;
+      await cleanup.remove(featureContext);
+    }
 
     for (const resource of feature.resources ?? []) {
       if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
