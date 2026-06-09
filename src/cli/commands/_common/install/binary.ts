@@ -98,7 +98,7 @@ async function downloadAndInstall(
     return { skipped: true, binaryPath };
   }
 
-  text(`Installing ${spec.name} ${spec.version}`);
+  text(`     Installing ${spec.name} ${spec.version}`);
 
   const downloadUrl = buildDownloadUrl(spec.name, spec.version, spec.distPrefix, platform);
   await withSpinner(`Downloading ${spec.name} ${spec.version}`, () =>
@@ -121,7 +121,7 @@ async function downloadAndInstall(
   const installedVersion = await withSpinner('Verifying installation', () =>
     verifyInstallation(binaryPath),
   );
-  print(`  ${spec.name} ${installedVersion}`);
+  print(`     ${spec.name} ${installedVersion}`);
 
   recordInstallationInState(spec.name, installedVersion, binaryPath);
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);

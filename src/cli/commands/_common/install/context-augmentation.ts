@@ -104,8 +104,8 @@ export async function resolveContextAugmentationBinary(
     return { binaryPath, freshlyInstalled: false };
   }
 
-  text(`Installing sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`);
-  text(`  Platform: ${platform.os}-${platform.arch}`);
+  text(`     Installing sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`);
+  text(`     Platform: ${platform.os}-${platform.arch}`);
 
   const archivePath = `${binaryPath}.tar.gz`;
   const ascPath = `${archivePath}.asc`;
