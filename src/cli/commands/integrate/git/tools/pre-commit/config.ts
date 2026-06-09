@@ -190,13 +190,3 @@ export async function activatePreCommitFramework(root: string, hook: GitHookType
     );
   }
 }
-
-/** Best-effort pre-commit uninstall during factory reset; never throws. */
-export async function deactivatePreCommitFramework(root: string): Promise<void> {
-  try {
-    await runPreCommitCommand(['uninstall'], root);
-    await runPreCommitCommand(['clean'], root);
-  } catch {
-    // Missing framework or hook scripts — non-fatal for reset.
-  }
-}
