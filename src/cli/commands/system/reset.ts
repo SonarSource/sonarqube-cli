@@ -23,7 +23,6 @@ import { loadState, saveState } from '../../../lib/repository/state-repository';
 import { type CliState, getDefaultState, type InstalledIntegration } from '../../../lib/state';
 import type { PhaseItem } from '../../../ui';
 import { info, phase, print, success, text, textPrompt, warn } from '../../../ui';
-import { CommandFailedError } from '../_common/error';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth';
 import { removeBinaries } from './reset-binaries';
@@ -123,7 +122,9 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
     text(
       'CLI has been partially reset. Review the details above and clean up remaining items manually.',
     );
-    throw new CommandFailedError('System reset completed with warnings.');
+    warn('System reset completed with warnings.');
+    process.exitCode = 1;
+    return;
   }
 
   success('CLI has been successfully reset to factory settings.');
