@@ -66,5 +66,7 @@ export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<
     warn(SQAA_GLOBAL_SKIP_MESSAGE);
     return false;
   }
+  // Explicit check so future statuses don't fall through to true.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   return status === 'enabled';
 }
