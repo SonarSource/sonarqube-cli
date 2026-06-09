@@ -1976,6 +1976,7 @@ describe('integrate claude — hook migration scenarios', () => {
 // ─── Interactive feature selection ────────────────────────────────────────────
 
 describe('integrate claude — interactive feature selection', () => {
+  const HTTP_SERVICE_UNAVAILABLE = 503;
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -1988,11 +1989,12 @@ describe('integrate claude — interactive feature selection', () => {
   });
 
   it(
-    'prompts per feature, installs accepted features, and silently skips SQAA when not entitled',
+    'prompts per feature, installs accepted features, and shows the SQAA promotion when not entitled',
     async () => {
-      // On-premise auth with no org: SQAA and Context Augmentation are not
-      // available, so both are skipped silently. The secret scanning hooks and
-      // MCP server features each ask.
+      // On-premise auth with no org: SQAA is not available, so it is skipped
+      // without a prompt but surfaces the shared promotion message. Context
+      // Augmentation is skipped silently. The secret scanning hooks and MCP
+      // server features each ask.
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
       harness.cwd.writeFile(
@@ -2009,8 +2011,10 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install secret scanning hooks?');
       expect(output).toContain('Install MCP server?');
-      // SQAA is not eligible, so it is skipped silently without a prompt.
+      // SQAA is not eligible, so it is skipped without a prompt but the shared
+      // promotion message is surfaced.
       expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+      expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
 
       // Accepted features are installed on disk.
       expect(
@@ -2095,6 +2099,41 @@ describe('integrate claude — interactive feature selection', () => {
         ),
       ).toBe(true);
       expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'warns and skips SQAA when the entitlement check fails',
+    async () => {
+      // Cloud connection whose org/entitlement lookup errors out: resolveSqaaSetup
+      // hits the 'check_failed' branch, which warns and skips silently rather than
+      // surfacing the promotion.
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withOrgsLookupError(HTTP_SERVICE_UNAVAILABLE)
+        .withProject('my-project')
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
+
+      // '\r' selects project scope, then the secret scanning hooks + MCP prompts.
+      // SQAA is skipped without a prompt because entitlement could not be resolved.
+      const result = await harness.run('integrate claude --project my-project', {
+        stdinChunks: ['\r', '\r', '\r'],
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain('Could not determine SonarQube Agentic Analysis entitlement');
+      expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
     },
     { timeout: 30000 },
   );

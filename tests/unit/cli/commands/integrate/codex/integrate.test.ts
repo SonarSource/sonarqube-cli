@@ -74,7 +74,7 @@ describe('integrateCodex', () => {
     hasSqaaEntitlementSpy = spyOn(
       SonarQubeClient.prototype,
       'hasSqaaEntitlement',
-    ).mockResolvedValue(false);
+    ).mockResolvedValue('not_enabled');
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     resolveContextAugmentationSetupSpy = spyOn(
       contextAugmentation,

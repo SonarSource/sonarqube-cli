@@ -29,8 +29,6 @@ import {
   buildSqaaSectionBody,
   sonarBeginMarker,
   sonarEndMarker,
-  SQAA_MISSING_PROJECT_KEY_MESSAGE,
-  SQAA_PROMOTION_MESSAGE,
 } from '../_common/instructions-templates';
 import { removeJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
@@ -68,7 +66,6 @@ export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   globalSecretsHookExists?: boolean;
   installSqaaInstructions?: boolean;
-  sqaaEntitled?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -131,14 +128,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options }) => {
-        if (options.installSqaaInstructions === true) {
-          return askUser();
-        }
-        return skip(
-          options.sqaaEntitled === true ? SQAA_MISSING_PROJECT_KEY_MESSAGE : SQAA_PROMOTION_MESSAGE,
-        );
-      },
+      shouldInstall: ({ options }) =>
+        options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [

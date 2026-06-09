@@ -18,31 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { SonarQubeClient } from '../../../../sonarqube/client';
-import { warn } from '../../../../ui';
-
-/**
- * Check if the organization has SonarQube Agentic Analysis (SQAA) entitlement.
- *
- * Returns false for on-premise, missing org, or failed API call. The underlying
- * `hasSqaaEntitlement` already swallows network/API errors, so the try/catch
- * here is defence-in-depth for unexpected throws (e.g. malformed URLs from the
- * client constructor).
- */
-export async function resolveSqaaEntitlement(
-  serverURL: string,
-  token: string,
-  organization: string | undefined,
-): Promise<boolean> {
-  try {
-    const client = new SonarQubeClient(serverURL, token);
-    return await client.hasSqaaEntitlement(organization);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    warn(`Could not determine SonarQube Agentic Analysis entitlement — skipping: ${detail}`);
-    return false;
-  }
-}
+import { AGENTIC_ANALYSIS_DOCS_URL } from '../../../../lib/config-constants';
+import { SonarQubeClient, type SqaaEntitlementStatus } from '../../../../sonarqube/client';
+import { info, warn } from '../../../../ui';
 
 /**
  * Consistent notice shown across all agent integrations when SonarQube Agentic
@@ -50,6 +28,11 @@ export async function resolveSqaaEntitlement(
  */
 export const SQAA_GLOBAL_SKIP_MESSAGE =
   'Skipping SonarQube Agentic Analysis: not supported with --global. Re-run without --global from a project directory to install it there.';
+
+/**
+ * Shown when SonarQube Agentic Analysis is not available for the current connection.
+ */
+export const SQAA_PROMOTION_MESSAGE = `SonarQube Agentic Analysis is available on SonarQube Cloud. Learn more: ${AGENTIC_ANALYSIS_DOCS_URL}`;
 
 export interface ResolveSqaaSetupParams {
   serverURL: string;
@@ -59,24 +42,31 @@ export interface ResolveSqaaSetupParams {
 }
 
 /**
- * Resolve whether SonarQube Agentic Analysis (SQAA) should be installed.
- *
- * SQAA is always project-scoped, so a `--global` integration can never install
- * it. We still resolve org entitlement first so that, on a global install, the
- * skip notice is only shown to orgs that could actually use SQAA (avoiding noise
- * for unentitled orgs). For project installs this returns the raw entitlement.
+ * Resolve whether SonarQube Agentic Analysis (SQAA) can be installed.
  */
 export async function resolveSqaaSetup(params: ResolveSqaaSetupParams): Promise<boolean> {
-  const entitled = await resolveSqaaEntitlement(
-    params.serverURL,
-    params.token,
-    params.organization,
-  );
-  if (params.isGlobal) {
-    if (entitled) {
-      warn(SQAA_GLOBAL_SKIP_MESSAGE);
-    }
+  let status: SqaaEntitlementStatus;
+  try {
+    status = await new SonarQubeClient(params.serverURL, params.token).hasSqaaEntitlement(
+      params.organization,
+    );
+  } catch {
+    status = 'check_failed';
+  }
+
+  if (status === 'check_failed') {
+    warn('Could not determine SonarQube Agentic Analysis entitlement — skipping.');
     return false;
   }
-  return entitled;
+  if (status === 'not_enabled') {
+    info(SQAA_PROMOTION_MESSAGE);
+    return false;
+  }
+  if (params.isGlobal) {
+    warn(SQAA_GLOBAL_SKIP_MESSAGE);
+    return false;
+  }
+  // Explicit check so future statuses don't fall through to true.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  return status === 'enabled';
 }

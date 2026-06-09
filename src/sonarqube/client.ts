@@ -43,6 +43,8 @@ export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 
 export type CagEntitlementStatus = 'enabled' | 'not_enabled' | 'check_failed';
 
+export type SqaaEntitlementStatus = 'enabled' | 'not_enabled' | 'check_failed';
+
 export class SonarQubeClient {
   private readonly serverURL: string;
   private readonly token: string;
@@ -300,9 +302,10 @@ export class SonarQubeClient {
 
   /**
    * Check if an organization has SQAA entitlement.
-   * Returns true only when both eligible and enabled are true.
+   * Returns `'enabled'` only when both eligible and enabled are true, `'not_enabled'`
+   * for a definitive negative answer, and `'check_failed'` when the API call errors out.
    */
-  async checkSqaaEntitlement(organizationUuid: string): Promise<boolean> {
+  async checkSqaaEntitlement(organizationUuid: string): Promise<SqaaEntitlementStatus> {
     try {
       const endpoint = `/a3s-analysis/org-config/${organizationUuid}`;
       const result = await this.get<{ id: string; enabled: boolean; eligible: boolean }>(
@@ -310,9 +313,9 @@ export class SonarQubeClient {
         undefined,
         resolveFromEndpoint(this.serverURL, endpoint),
       );
-      return result.eligible && result.enabled;
+      return result.eligible && result.enabled ? 'enabled' : 'not_enabled';
     } catch {
-      return false;
+      return 'check_failed';
     }
   }
 
@@ -354,14 +357,14 @@ export class SonarQubeClient {
   /**
    * Convenience: resolve org UUID then check SQAA entitlement in one call.
    */
-  async hasSqaaEntitlement(organizationKey?: string): Promise<boolean> {
+  async hasSqaaEntitlement(organizationKey?: string): Promise<SqaaEntitlementStatus> {
     if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
-      return false;
+      return 'not_enabled';
     }
 
     const uuid = await this.getOrganizationId(organizationKey);
     if (!uuid) {
-      return false;
+      return 'check_failed';
     }
 
     return this.checkSqaaEntitlement(uuid);

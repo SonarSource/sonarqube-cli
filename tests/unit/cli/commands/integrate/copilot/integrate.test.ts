@@ -78,7 +78,7 @@ describe('integrateCopilot', () => {
     hasSqaaEntitlementSpy = spyOn(
       SonarQubeClient.prototype,
       'hasSqaaEntitlement',
-    ).mockResolvedValue(false);
+    ).mockResolvedValue('not_enabled');
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
       undefined,

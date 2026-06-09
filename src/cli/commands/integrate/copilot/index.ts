@@ -38,11 +38,10 @@ import { detectGlobalSecretsHook } from './hooks';
 export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
   const ctx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
-  // SQAA is always project-scoped. resolveSqaaSetup returns false (and surfaces
-  // the consistent "not supported with --global" notice when the org is
-  // entitled) on a global install; on a project install it returns the raw
-  // entitlement, which drives the declarative skip messaging (missing-key vs
-  // promotion).
+  // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing
+  // messaging: it surfaces the promotion message when the org is not entitled
+  // and the "not supported with --global" notice on an entitled global install.
+  // We use the result to decide whether to bake in a project key.
   const entitled = await resolveSqaaSetup({
     serverURL: ctx.serverUrl,
     token: ctx.token,
@@ -70,7 +69,6 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists,
     installSqaaInstructions: sqaaProjectKey !== undefined,
-    sqaaEntitled: entitled,
     installContextAugmentation: contextAugmentation !== null,
   };
 
