@@ -29,6 +29,7 @@ import type { IntegrationContext } from '../../../../../../src/cli/commands/inte
 import { IntegrationInstaller } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import {
   activatePreCommitFramework,
+  garbageCollectPreCommitFramework,
   hasSonarHookInPreCommitConfig,
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
@@ -373,6 +374,31 @@ describe('activatePreCommitFramework', () => {
   });
 });
 
+describe('garbageCollectPreCommitFramework', () => {
+  it('calls pre-commit gc', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await garbageCollectPreCommitFramework(TEMP_DIR);
+
+      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      expect(calls).toEqual([['gc']]);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('does not throw when pre-commit gc fails', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+
+    try {
+      await garbageCollectPreCommitFramework(TEMP_DIR);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+});
+
 describe('pre-commit integration remove', () => {
   const installer = new IntegrationInstaller();
   const preCommitFeature = preCommitIntegration.features.find((f) => f.id === 'pre-commit-hook');
@@ -383,7 +409,7 @@ describe('pre-commit integration remove', () => {
   beforeEach(() => mkdirSync(TEMP_DIR, { recursive: true }));
   afterEach(() => rmSync(TEMP_DIR, { recursive: true, force: true }));
 
-  it('removes only Sonar hooks from the config without invoking the pre-commit framework CLI', async () => {
+  it('removes only Sonar hooks from the config and runs pre-commit gc', async () => {
     writeFileSync(
       join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
       yaml.dump({
@@ -426,7 +452,9 @@ describe('pre-commit integration remove', () => {
 
     try {
       await installer.removeFeature(context, preCommitFeature);
-      expect(spawnSpy).not.toHaveBeenCalled();
+
+      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      expect(calls).toEqual([['gc']]);
 
       const config = yaml.load(
         readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8'),

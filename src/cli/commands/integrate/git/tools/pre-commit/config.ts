@@ -190,3 +190,12 @@ export async function activatePreCommitFramework(root: string, hook: GitHookType
     );
   }
 }
+
+/** Best-effort pre-commit gc on Sonar hook removal; never throws. */
+export async function garbageCollectPreCommitFramework(root: string): Promise<void> {
+  try {
+    await runPreCommitCommand(['gc'], root);
+  } catch {
+    // Missing framework or gc failure — non-fatal for reset.
+  }
+}
