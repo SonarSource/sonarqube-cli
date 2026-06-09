@@ -274,7 +274,7 @@ export class IntegrationInstaller {
     context: IntegrationContext,
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
-    callbacks: ApplyFeatureCallbacks<TOptions> = {},
+    callbacks: ApplyFeatureCallbacks<TOptions>,
   ): Promise<AppliedFeature> {
     const preparedDependencies = await this.prepareUniqueDependencies(
       [
@@ -326,7 +326,7 @@ export class IntegrationInstaller {
 
   private async prepareUniqueDependencies<TOptions>(
     executions: PreparedFeatureExecution<TOptions>[],
-    callbacks: ApplyFeatureCallbacks<TOptions> = {},
+    callbacks: ApplyFeatureCallbacks<TOptions>,
   ): Promise<PreparedDependencies> {
     const resolvedDependencies = new Map<string, InstalledDependency>();
     const installedDependencies = new Map<string, InstalledDependency>();
@@ -375,7 +375,7 @@ export class IntegrationInstaller {
     installedFeature: InstalledIntegrationFeature | undefined,
     feature: FeatureDeclaration<TOptions>,
     preparedDependencies: PreparedDependencies,
-    callbacks: ApplyFeatureCallbacks<TOptions> = {},
+    callbacks: ApplyFeatureCallbacks<TOptions>,
   ): Promise<AppliedFeature> {
     const dependencyIds = new Set<string>();
     const dependencies: InstalledDependency[] = [];
