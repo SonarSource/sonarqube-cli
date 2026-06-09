@@ -31,8 +31,7 @@ import { confirmPrompt, info } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
-import type { ResourceDeclaration } from './resources';
-import type { RemovableResource, ResourceIdentity } from './resources';
+import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from './resources';
 import { normalizeDecision } from './selection';
 import type {
   AppliedFeature,
@@ -421,10 +420,7 @@ export class IntegrationInstaller {
     );
     const featureContext = { ...context, resolvedDependencies };
 
-    for (const cleanup of feature.legacyCleanups ?? []) {
-      if (!this.legacyCleanupNeedsApply(installedFeature, cleanup)) continue;
-      await cleanup.remove(featureContext);
-    }
+    await this.cleanupRecordedLegacyInstallations(feature, installedFeature, featureContext);
 
     for (const resource of feature.resources ?? []) {
       if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
@@ -445,6 +441,17 @@ export class IntegrationInstaller {
     }
 
     return { dependencies, resources, operations };
+  }
+
+  private async cleanupRecordedLegacyInstallations<TOptions>(
+    feature: FeatureDeclaration<TOptions>,
+    installedFeature: InstalledIntegrationFeature | undefined,
+    featureContext: IntegrationContext,
+  ) {
+    for (const cleanup of feature.legacyCleanups ?? []) {
+      if (!this.legacyCleanupNeedsApply(installedFeature, cleanup)) continue;
+      await cleanup.remove(featureContext);
+    }
   }
 
   private prepareFeatureExecutions<TOptions>(
