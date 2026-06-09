@@ -18,25 +18,30 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import yaml from 'js-yaml';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
+import type { IntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry';
+import { IntegrationInstaller } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import {
   activatePreCommitFramework,
+  garbageCollectPreCommitFramework,
   hasSonarHookInPreCommitConfig,
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   PRE_COMMIT_LEGACY_REPO,
   type PreCommitConfig,
+  preCommitIntegration,
   removeLegacyHook,
   runPreCommitInstall,
   upsertSonarHook,
 } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
 import * as processLib from '../../../../../../src/lib/process.js';
+import { getDefaultState } from '../../../../../../src/lib/state';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-tmp');
 
@@ -363,6 +368,105 @@ describe('activatePreCommitFramework', () => {
       );
       expect(err).toBeInstanceOf(CommandFailedError);
       expect((err as CommandFailedError).remediationHint).toContain('--hook-type pre-push');
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+});
+
+describe('garbageCollectPreCommitFramework', () => {
+  it('calls pre-commit gc', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+
+    try {
+      await garbageCollectPreCommitFramework(TEMP_DIR);
+
+      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      expect(calls).toEqual([['gc']]);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
+  it('does not throw when pre-commit gc fails', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+
+    try {
+      await garbageCollectPreCommitFramework(TEMP_DIR);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+});
+
+describe('pre-commit integration remove', () => {
+  const installer = new IntegrationInstaller();
+  const preCommitFeature = preCommitIntegration.features.find((f) => f.id === 'pre-commit-hook');
+  if (!preCommitFeature) {
+    throw new Error('pre-commit-hook feature not found');
+  }
+
+  beforeEach(() => mkdirSync(TEMP_DIR, { recursive: true }));
+  afterEach(() => rmSync(TEMP_DIR, { recursive: true, force: true }));
+
+  it('removes only Sonar hooks from the config and runs pre-commit gc', async () => {
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      yaml.dump({
+        repos: [
+          {
+            repo: PRE_COMMIT_LEGACY_REPO,
+            rev: 'v2.41.0.10709',
+            hooks: [{ id: 'sonar-secrets', stages: ['pre-commit'] }],
+          },
+          {
+            repo: 'https://github.com/pre-commit/pre-commit-hooks',
+            rev: 'v4.6.0',
+            hooks: [{ id: 'trailing-whitespace' }],
+          },
+          {
+            repo: 'local',
+            hooks: [
+              { id: 'other-local-hook', name: 'x', entry: 'echo', language: 'system' },
+              {
+                id: 'sonar-secrets',
+                name: 'Sonar pre-commit scan',
+                entry: 'sonar hook git-pre-commit',
+                language: 'system',
+                stages: ['pre-commit'],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+    const context: IntegrationContext = {
+      state: getDefaultState('test'),
+      targetRoot: TEMP_DIR,
+      scope: 'project',
+      executionMode: 'install',
+      resolvedDependencies: new Map(),
+    };
+
+    try {
+      await installer.removeFeature(context, preCommitFeature);
+
+      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      expect(calls).toEqual([['gc']]);
+
+      const config = yaml.load(
+        readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8'),
+      ) as PreCommitConfig;
+      expect(config.repos.some((r) => r.repo === PRE_COMMIT_LEGACY_REPO)).toBe(false);
+      const thirdPartyRepo = config.repos.find(
+        (r) => r.repo === 'https://github.com/pre-commit/pre-commit-hooks',
+      );
+      expect(thirdPartyRepo?.hooks.map((hook) => hook.id)).toEqual(['trailing-whitespace']);
+      const localRepo = config.repos.find((r) => r.repo === 'local');
+      expect(localRepo?.hooks.map((hook) => hook.id)).toEqual(['other-local-hook']);
+      expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(false);
     } finally {
       spawnSpy.mockRestore();
     }

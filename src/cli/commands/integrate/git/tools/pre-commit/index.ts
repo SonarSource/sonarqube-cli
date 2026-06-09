@@ -26,7 +26,7 @@ import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
 import {
   activatePreCommitFramework,
-  deactivatePreCommitFramework,
+  garbageCollectPreCommitFramework,
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   removeLegacyHook,
@@ -70,7 +70,7 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
         id: 'activate-hook',
         displayName: `${hook} hook activation`,
         apply: ({ targetRoot }) => activatePreCommitFramework(targetRoot, hook),
-        undo: ({ targetRoot }) => deactivatePreCommitFramework(targetRoot),
+        undo: ({ targetRoot }) => garbageCollectPreCommitFramework(targetRoot),
       },
     ],
   };
@@ -78,7 +78,7 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
 
 export {
   activatePreCommitFramework,
-  deactivatePreCommitFramework,
+  garbageCollectPreCommitFramework,
   hasSonarHookInPreCommitConfig,
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,

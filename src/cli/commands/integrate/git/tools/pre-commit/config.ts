@@ -191,12 +191,11 @@ export async function activatePreCommitFramework(root: string, hook: GitHookType
   }
 }
 
-/** Best-effort pre-commit uninstall during factory reset; never throws. */
-export async function deactivatePreCommitFramework(root: string): Promise<void> {
+/** Best-effort pre-commit gc on Sonar hook removal; never throws. */
+export async function garbageCollectPreCommitFramework(root: string): Promise<void> {
   try {
-    await runPreCommitCommand(['uninstall'], root);
-    await runPreCommitCommand(['clean'], root);
+    await runPreCommitCommand(['gc'], root);
   } catch {
-    // Missing framework or hook scripts — non-fatal for reset.
+    // Missing framework or gc failure — non-fatal for reset.
   }
 }
