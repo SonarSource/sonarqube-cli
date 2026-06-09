@@ -171,16 +171,23 @@ export function upsertSonarHook(config: PreCommitConfig, stage: GitHookType): vo
   localRepo.hooks[idx] = hook;
 }
 
-/** Removes the sonar hook for the given stage (current per-stage id or same-stage legacy id). */
+/** Removes the sonar hook for the given stage (current per-stage id). */
 export function removeSonarHook(config: PreCommitConfig, stage: GitHookType): void {
   const localRepo = findLocalRepo(config);
   if (!localRepo) {
     return;
   }
+  localRepo.hooks = localRepo.hooks.filter((h) => h.id !== PRE_COMMIT_HOOK_IDS[stage]);
+}
+
+/** Removes the legacy sonar-secrets local hook for the given stage. */
+export function removeLegacySonarHook(config: PreCommitConfig, stage: GitHookType): void {
+  const localRepo = findLocalRepo(config);
+  if (!localRepo) {
+    return;
+  }
   localRepo.hooks = localRepo.hooks.filter(
-    (h) =>
-      h.id !== PRE_COMMIT_HOOK_IDS[stage] &&
-      !(h.id === PRE_COMMIT_LEGACY_HOOK_ID && inferStage(h) === stage),
+    (h) => !(h.id === PRE_COMMIT_LEGACY_HOOK_ID && inferStage(h) === stage),
   );
 }
 
