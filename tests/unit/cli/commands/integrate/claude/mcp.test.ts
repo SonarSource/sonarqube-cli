@@ -299,8 +299,8 @@ describe('getMcpConfigFilePath', () => {
   });
 
   it('throws for an unsupported agent', () => {
-    expect(() => getMcpConfigFilePath('cursor', false, '/fake/project')).toThrow(
-      'Unsupported agent: cursor',
+    expect(() => getMcpConfigFilePath('unknown-agent', false, '/fake/project')).toThrow(
+      'Unsupported agent: unknown-agent',
     );
   });
 });

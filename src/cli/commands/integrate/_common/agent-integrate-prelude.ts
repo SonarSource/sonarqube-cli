@@ -31,7 +31,7 @@ import { isGlobalIntegrateScope, resolveIntegrateScope } from './integrate-scope
 import { printAgentPreflightSummary } from './preflight-summary';
 import type { IntegrateAgentOptions } from './types';
 
-export type AgentIntegrateSubcommand = 'claude' | 'codex' | 'copilot';
+export type AgentIntegrateSubcommand = 'claude' | 'codex' | 'copilot' | 'cursor';
 
 export interface AgentIntegrateContext {
   project: DiscoveredProject;
