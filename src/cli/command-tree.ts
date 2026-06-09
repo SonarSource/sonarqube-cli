@@ -341,14 +341,12 @@ function applySqaaOptions(cmd: SonarCommand): SonarCommand {
       '-p, --project <project>',
       'SonarQube Cloud project key (overrides auto-detected project)',
     )
-    .authenticatedAction((auth, options: AnalyzeSqaaOptions, innerCmd: Command) =>
-      analyzeSqaa(options, auth, innerCmd),
-    );
+    .authenticatedAction((auth, options: AnalyzeSqaaOptions) => analyzeSqaa(options, auth));
 }
 
 // Default action for `sonar analyze` (no subcommand): run all analyses (secrets + agentic).
-applyBaseAgenticOptions(analyze).authenticatedAction(
-  (auth, options: AnalyzeAllOptions, innerCmd: Command) => analyzeAll(options, auth, innerCmd),
+applyBaseAgenticOptions(analyze).authenticatedAction((auth, options: AnalyzeAllOptions) =>
+  analyzeAll(options, auth),
 );
 
 const dependencyRisksFormatOption = new Option('--format <format>', 'Output format')

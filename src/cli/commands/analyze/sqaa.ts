@@ -19,8 +19,6 @@
  */
 import { existsSync } from 'node:fs';
 
-import type { Command } from 'commander';
-
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { blank, print, text, warn } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
@@ -79,7 +77,7 @@ export interface AnalyzeSqaaOptions {
  */
 function resolveSqaaContext(
   resolution: SqaaAuthResolution,
-  policy: { requireProject: boolean; command?: Command },
+  policy: { requireProject: boolean },
 ): { cloudAuth: CloudAuth; projectKey: string } | null {
   switch (resolution.kind) {
     case 'resolved':
@@ -106,7 +104,6 @@ function resolveSqaaContext(
 export async function analyzeSqaa(
   options: AnalyzeSqaaOptions,
   auth: ResolvedAuth,
-  command?: Command,
   runOptions: { requireProject?: boolean } = {},
 ): Promise<void> {
   // Explicit `analyze agentic` / `verify` require a project (exit 1 when missing);
@@ -122,7 +119,7 @@ export async function analyzeSqaa(
     if (!existsSync(file)) {
       throw new InvalidOptionError(`File not found: ${file}`);
     }
-    await runSqaaAnalysis(file, auth, branch, project, command, format, requireProject);
+    await runSqaaAnalysis(file, auth, branch, project, format, requireProject);
     return;
   }
 
@@ -146,7 +143,7 @@ export async function analyzeSqaa(
   // Resolve cloud auth + project key BEFORE prompting.
   // Pass repoRoot so we reuse the already-resolved root instead of spawning git again.
   const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
-  const resolved = resolveSqaaContext(resolution, { requireProject, command });
+  const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
   // JSON mode is consumed by scripts/CI: never block on an interactive prompt
@@ -163,12 +160,11 @@ async function runSqaaAnalysis(
   auth: ResolvedAuth,
   branch?: string,
   explicitProject?: string,
-  command?: Command,
   format: OutputFormat = 'text',
   requireProject = true,
 ): Promise<void> {
   const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
-  const resolved = resolveSqaaContext(resolution, { requireProject, command });
+  const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
   const { cloudAuth, projectKey } = resolved;
@@ -258,13 +254,12 @@ async function fetchSingleFileReport(
 export async function buildSqaaJsonReport(
   options: AnalyzeSqaaOptions,
   auth: ResolvedAuth,
-  command?: Command,
 ): Promise<SqaaJsonReport | null> {
   const { file, staged, base, branch, project, force } = options;
 
   if (file !== undefined) {
     const resolution = await resolveCloudAuthAndProject(auth, project);
-    const resolved = resolveSqaaContext(resolution, { requireProject: false, command });
+    const resolved = resolveSqaaContext(resolution, { requireProject: false });
     if (!resolved) return null;
 
     const { cloudAuth, projectKey } = resolved;
@@ -283,7 +278,7 @@ export async function buildSqaaJsonReport(
   }
 
   const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
-  const resolved = resolveSqaaContext(resolution, { requireProject: false, command });
+  const resolved = resolveSqaaContext(resolution, { requireProject: false });
   if (!resolved) return null;
 
   // JSON mode is consumed by scripts/CI: never block on an interactive prompt
