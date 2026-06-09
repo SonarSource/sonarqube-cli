@@ -31,7 +31,7 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
-import { removeJsonMcpServer } from '../_common/mcp-config';
+import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
 import { askUser, jsonPatch, skip, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -168,7 +168,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           targetPath: resolveClaudeMcpConfigPath,
           defaultValue: {},
           patch: (document, context) =>
-            upsertClaudeMcpServer(document, getDesiredClaudeMcpConfig(context)),
+            upsertJsonMcpServer(document, getDesiredClaudeMcpConfig(context)),
           removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],
@@ -198,17 +198,6 @@ function resolveClaudeSkillPath(context: IntegrationContext): string {
   );
 }
 
-function upsertClaudeMcpServer(document: unknown, serverConfig: object): Record<string, unknown> {
-  const settings = toMcpSettings(document);
-  return {
-    ...settings,
-    mcpServers: {
-      ...settings.mcpServers,
-      sonarqube: serverConfig,
-    },
-  };
-}
-
 function getDesiredClaudeMcpConfig(context: IntegrationContext) {
   return getMcpConfig(
     CLI_COMMAND,
@@ -220,24 +209,4 @@ function getDesiredClaudeMcpConfig(context: IntegrationContext) {
           projectKey: getOptionalStringAttr(context, 'projectKey'),
         },
   );
-}
-
-function toMcpSettings(document: unknown): {
-  mcpServers: Record<string, unknown>;
-  [key: string]: unknown;
-} {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return { mcpServers: {} };
-  }
-
-  const settings = document as { mcpServers?: unknown; [key: string]: unknown };
-  return {
-    ...settings,
-    mcpServers:
-      settings.mcpServers &&
-      typeof settings.mcpServers === 'object' &&
-      !Array.isArray(settings.mcpServers)
-        ? { ...(settings.mcpServers as Record<string, unknown>) }
-        : {},
-  };
 }

@@ -21,7 +21,7 @@
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr } from '../_common/attrs';
-import { removeJsonMcpServer } from '../_common/mcp-config';
+import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
 import { jsonPatch } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -34,37 +34,6 @@ export type CursorIntegrationOptions = IntegrateAgentOptions;
 
 function resolveCursorMcpConfigPath(context: IntegrationContext): string {
   return getMcpConfigFilePath('cursor', context.scope === 'global', context.targetRoot);
-}
-
-function toMcpSettings(document: unknown): {
-  mcpServers: Record<string, unknown>;
-  [key: string]: unknown;
-} {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return { mcpServers: {} };
-  }
-
-  const settings = document as { mcpServers?: unknown; [key: string]: unknown };
-  return {
-    ...settings,
-    mcpServers:
-      settings.mcpServers &&
-      typeof settings.mcpServers === 'object' &&
-      !Array.isArray(settings.mcpServers)
-        ? { ...(settings.mcpServers as Record<string, unknown>) }
-        : {},
-  };
-}
-
-function upsertCursorMcpServer(document: unknown, serverConfig: object): Record<string, unknown> {
-  const settings = toMcpSettings(document);
-  return {
-    ...settings,
-    mcpServers: {
-      ...settings.mcpServers,
-      sonarqube: serverConfig,
-    },
-  };
 }
 
 function getDesiredCursorMcpConfig(context: IntegrationContext) {
@@ -94,7 +63,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
           targetPath: resolveCursorMcpConfigPath,
           defaultValue: {},
           patch: (document, context) =>
-            upsertCursorMcpServer(document, getDesiredCursorMcpConfig(context)),
+            upsertJsonMcpServer(document, getDesiredCursorMcpConfig(context)),
           removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],
