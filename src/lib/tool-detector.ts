@@ -20,14 +20,22 @@
 
 // Tool detector - checks presence and availability of system tools
 
-import { spawnProcess } from './process';
+import { spawnProcessWithTimeout } from './process';
 
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 
+const RUNTIME_DETECTION_TIMEOUT_MS = 3000;
+
 async function isRuntimeAvailable(runtime: ContainerRuntime): Promise<boolean> {
   try {
-    const result = await spawnProcess(runtime, ['info']);
+    const result = await spawnProcessWithTimeout(
+      runtime,
+      ['info'],
+      {},
+      RUNTIME_DETECTION_TIMEOUT_MS,
+      `${runtime} info timed out`,
+    );
     return result.exitCode === 0;
   } catch {
     return false;
