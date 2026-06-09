@@ -28,12 +28,12 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 
 import { version as VERSION } from '../../../package.json';
-import { CLI_DIR } from '../config-constants.js';
+import { getCliDir as resolveCliDir } from '../config-constants.js';
 import logger from '../logger.js';
 import { type CliState, getDefaultState } from '../state.js';
 
 function getCliDir(): string {
-  return process.env.SONARQUBE_CLI_DIR ?? CLI_DIR;
+  return resolveCliDir();
 }
 
 function getStateFile(): string {
@@ -115,7 +115,7 @@ export function saveState(state: CliState): void {
 
 /**
  * Returns true when the state file exists on disk.
- * Respects the SONARQUBE_CLI_DIR override used in tests.
+ * Respects the SONAR_USER_HOME override used in tests.
  */
 export function stateFileExists(): boolean {
   return fs.existsSync(getStateFile());

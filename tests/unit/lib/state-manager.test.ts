@@ -20,7 +20,7 @@
 
 /**
  * Tests for state manager (business logic) and state repository (filesystem I/O).
- * SONARQUBE_CLI_DIR env var redirects state paths to a temporary directory.
+ * SONAR_USER_HOME env var redirects state paths to a temporary directory.
  */
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -46,13 +46,14 @@ import {
   upsertAgentExtension,
 } from '../../../src/lib/state-manager.js';
 
-const testCliDir = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
+const testSonarUserHome = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
+const testCliDir = join(testSonarUserHome, 'sonarqube-cli');
 const testStateFile = join(testCliDir, 'state.json');
 
-process.env.SONARQUBE_CLI_DIR = testCliDir;
+process.env.SONAR_USER_HOME = testSonarUserHome;
 
 afterAll(() => {
-  delete process.env.SONARQUBE_CLI_DIR;
+  delete process.env.SONAR_USER_HOME;
 });
 
 function cleanup(): void {
