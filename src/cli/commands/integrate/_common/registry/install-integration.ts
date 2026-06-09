@@ -100,7 +100,6 @@ export async function installIntegration<TOptions>({
       force: context.force,
       attrs: context.attrs,
     });
-    text(`Installing ${feature.displayName}...`);
   }
 
   try {
@@ -110,11 +109,14 @@ export async function installIntegration<TOptions>({
       applications,
       {
         callbacks: {
+          onFeatureApplyStart: (feature) => {
+            text(`     Installing ${feature.displayName}...`);
+          },
           onDependencySkipped: (dependency) => {
-            text(`${dependency.displayName ?? dependency.id} already installed`);
+            text(`     ${dependency.displayName ?? dependency.id} already installed`);
           },
           onResourceSkipped: (resource) => {
-            text(`${resource.displayName ?? resource.id} already installed`);
+            text(`     ${resource.displayName ?? resource.id} already installed`);
           },
         },
         executionMode: 'install',

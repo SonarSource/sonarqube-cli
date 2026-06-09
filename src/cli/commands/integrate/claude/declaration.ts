@@ -140,7 +140,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         }),
         jsonPatch({
           id: 'claude-settings-sqaa-hook',
-          displayName: 'Claude SQAA hook configuration',
+          displayName: 'Claude SonarQube Agentic Analysis hook configuration',
           targetPath: resolveClaudeSettingsPath,
           defaultValue: { hooks: {} },
           patch: (document, context) =>
