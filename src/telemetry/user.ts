@@ -42,25 +42,51 @@ function getLegacyUserFile(): string {
 
 function tryReadUserId(filePath: string): string | undefined {
   try {
-    return readFileSync(filePath, 'utf-8').trim();
+    const userId = readFileSync(filePath, 'utf-8').trim();
+    return userId === '' ? undefined : userId;
   } catch {
     return undefined;
   }
+}
+
+function writeUserIdExclusively(filePath: string, id: string): string {
+  const fd = openSync(filePath, 'wx');
+  try {
+    writeFileSync(fd, id, 'utf-8');
+  } finally {
+    closeSync(fd);
+  }
+  return id;
 }
 
 function createUserIdIfMissing(filePath: string, dirPath: string, id: string): string {
   mkdirSync(dirPath, { recursive: true });
 
   try {
-    const fd = openSync(filePath, 'wx');
-    try {
-      writeFileSync(fd, id, 'utf-8');
-    } finally {
-      closeSync(fd);
+    return writeUserIdExclusively(filePath, id);
+  } catch (error) {
+    const existingUserId = tryReadUserId(filePath);
+    if (existingUserId !== undefined) {
+      return existingUserId;
     }
-    return id;
-  } catch {
-    return readFileSync(filePath, 'utf-8').trim();
+
+    // Empty-file recovery is best-effort rather than atomic across processes:
+    // another process can recreate the file between this unlink and the retry.
+    try {
+      unlinkSync(filePath);
+    } catch {
+      // Best effort recovery only.
+    }
+
+    try {
+      return writeUserIdExclusively(filePath, id);
+    } catch {
+      const recoveredUserId = tryReadUserId(filePath);
+      if (recoveredUserId !== undefined) {
+        return recoveredUserId;
+      }
+      throw error;
+    }
   }
 }
 
@@ -91,5 +117,7 @@ export function getOrCreateUserId(): string {
     return userId;
   }
 
-  return createUserIdIfMissing(sharedUserFile, getSonarUserHome(), randomUUID());
+  const userId = createUserIdIfMissing(sharedUserFile, getSonarUserHome(), randomUUID());
+  removeLegacyUserFile();
+  return userId;
 }

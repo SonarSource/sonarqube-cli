@@ -67,6 +67,15 @@ describe('getOrCreateUserId', () => {
     expect(getOrCreateUserId()).toBe('shared-user-id');
   });
 
+  it('replaces an empty shared user file with a new shared user id', () => {
+    writeUserFile(sharedUserFile(), '   \n');
+
+    const userId = getOrCreateUserId();
+
+    expect(userId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(readFileSync(sharedUserFile(), 'utf-8')).toBe(userId);
+  });
+
   it('removes a matching legacy file when the shared user id exists', () => {
     writeUserFile(sharedUserFile(), 'shared-user-id');
     writeUserFile(legacyUserFile(), 'shared-user-id');
@@ -88,6 +97,16 @@ describe('getOrCreateUserId', () => {
 
     expect(getOrCreateUserId()).toBe('legacy-user-id');
     expect(readFileSync(sharedUserFile(), 'utf-8')).toBe('legacy-user-id');
+    expect(fs.existsSync(legacyUserFile())).toBe(false);
+  });
+
+  it('ignores an empty legacy user file and creates a new shared user id', () => {
+    writeUserFile(legacyUserFile(), ' \n\t ');
+
+    const userId = getOrCreateUserId();
+
+    expect(userId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(readFileSync(sharedUserFile(), 'utf-8')).toBe(userId);
     expect(fs.existsSync(legacyUserFile())).toBe(false);
   });
 
@@ -119,6 +138,35 @@ describe('getOrCreateUserId', () => {
     } finally {
       openSyncSpy.mockRestore();
       unlinkSync(sharedFile);
+    }
+  });
+
+  it('self-heals an empty user file created during the atomic create race', () => {
+    const sharedFile = sharedUserFile();
+    const originalOpenSync = fs.openSync;
+    const originalWriteFileSync = fs.writeFileSync;
+    let injectedCorruptFile = false;
+    const openSyncSpy = spyOn(fs, 'openSync').mockImplementation(
+      (...args: Parameters<typeof fs.openSync>) => {
+        const [filePath, flags] = args;
+        if (filePath === sharedFile && flags === 'wx' && !injectedCorruptFile) {
+          injectedCorruptFile = true;
+          originalWriteFileSync(sharedFile, '   \n', 'utf-8');
+          throw new Error('EEXIST');
+        }
+        return originalOpenSync(...args);
+      },
+    );
+
+    try {
+      const userId = getOrCreateUserId();
+      expect(userId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(readFileSync(sharedFile, 'utf-8')).toBe(userId);
+    } finally {
+      openSyncSpy.mockRestore();
+      if (fs.existsSync(sharedFile)) {
+        unlinkSync(sharedFile);
+      }
     }
   });
 });

@@ -21,8 +21,10 @@
 /**
  * Central configuration constants for the SonarQube CLI.
  *
- * Path defaults are computed once at module load time. Helper functions read
- * env overrides at call time so tests can redirect paths after import.
+ * Path defaults are computed once at module load time. `SONAR_USER_HOME` is
+ * only intended as a late-bound override for codepaths that explicitly call
+ * the getter functions (currently state persistence and telemetry user-id
+ * resolution); other exported path constants remain fixed after import.
  */
 
 import { homedir } from 'node:os';
