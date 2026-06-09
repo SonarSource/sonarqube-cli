@@ -67,7 +67,7 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
       {
         id: 'activate-hook',
         displayName: `${hook} hook activation`,
-        apply: ({ targetRoot }) => activatePreCommitFramework(targetRoot, hook)
+        apply: ({ targetRoot }) => activatePreCommitFramework(targetRoot, hook),
       },
     ],
   };
