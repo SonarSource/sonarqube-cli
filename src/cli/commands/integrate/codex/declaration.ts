@@ -127,7 +127,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         }),
         jsonPatch({
           id: 'codex-hooks-sqaa-hook',
-          displayName: 'Codex SQAA hook configuration',
+          displayName: 'Codex SonarQube Agentic Analysis hook configuration',
           targetPath: resolveCodexHooksPath,
           defaultValue: { hooks: {} },
           patch: (document, context) =>

@@ -135,7 +135,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       resources: [
         textSnippet({
           id: 'sqaa-instructions-file',
-          displayName: 'Copilot SQAA instructions',
+          displayName: 'Copilot SonarQube Agentic Analysis instructions',
           targetPath: resolveInstructionsPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),

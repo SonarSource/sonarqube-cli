@@ -144,7 +144,7 @@ export async function resolveContextAugmentationSetup(
 export async function runToolIntegrateCommand(
   p: ApplyContextAugmentationToolIntegrationParams,
 ): Promise<void> {
-  text('Installing SonarQube Context Augmentation...');
+  text('     Installing SonarQube Context Augmentation...');
 
   const initEnv = buildContextAugmentationEnv({
     organization: p.auth.orgKey,
