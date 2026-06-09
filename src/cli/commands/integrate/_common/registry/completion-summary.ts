@@ -69,6 +69,16 @@ function renderPostInstallExamples<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
 ): void {
+  // An integration may collapse its per-feature examples into a single combined
+  // one when a specific set of features is installed together (e.g. both git
+  // hooks). When it declines (returns undefined), fall back to per-feature.
+  const combined = integration.combinedPostInstallExample?.(
+    installedFeatures.map((f) => f.featureId),
+  );
+  if (combined) {
+    renderPostInstallExample(combined);
+    return;
+  }
   for (const installed of installedFeatures) {
     const { postInstallExample } = featureDeclaration(integration, installed.featureId);
     if (postInstallExample) {

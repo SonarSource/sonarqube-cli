@@ -66,6 +66,7 @@ export interface IntegrationDeclaration<TOptions = Record<string, unknown>> {
   displayName: string;
   features: FeatureDeclaration<TOptions>[];
   legacyFeatures?: LegacyFeatureDeclaration[];
+  combinedPostInstallExample?: (installedFeatureIds: string[]) => PostInstallExample | undefined;
 }
 
 export interface PostInstallExample {
