@@ -169,7 +169,7 @@ describe('analyzeSqaa: auth resolution', () => {
   it('skips SQAA and warns when extension has no projectKey and requireProject is false (bare analyze)', async () => {
     loadStateSpy.mockReturnValue(stateWithExtensionMissingProjectKey());
 
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH, undefined, { requireProject: false });
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH, { requireProject: false });
 
     expect(analyzeFileSpy).not.toHaveBeenCalled();
     const output = getMockUiCalls()

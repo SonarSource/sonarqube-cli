@@ -258,6 +258,39 @@ describe('analyze (no subcommand)', () => {
   );
 
   it(
+    'does not print help when --file is used without a configured project',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      harness.cwd.writeFile('target.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze --file target.ts', {
+        extraEnv: { SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true' },
+      });
+
+      const output = result.stdout + result.stderr;
+      expect(result.exitCode).toBe(0);
+      expect(output).toContain('Secrets scan completed successfully');
+      expect(output).toContain('SonarQube Agentic Analysis skipped: no project configured');
+      expect(output).not.toContain('Usage: sonar analyze');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 0 and reports no files when change set is empty (text mode)',
     async () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();

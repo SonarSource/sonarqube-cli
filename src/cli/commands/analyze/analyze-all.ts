@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { Command } from 'commander';
-
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import {
   blank,
@@ -68,13 +66,9 @@ function printCombinedReport(secrets: SecretsReport | null, agentic: SqaaJsonRep
  * In json mode, outputs a single combined JSON report including any informational messages.
  * In text mode, each analysis prints its own output sequentially.
  */
-export async function analyzeAll(
-  options: AnalyzeAllOptions,
-  auth: ResolvedAuth,
-  command?: Command,
-): Promise<void> {
+export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
   if (options.format === 'json') {
-    return analyzeAllJson(options, auth, command);
+    return analyzeAllJson(options, auth);
   }
 
   const { file, staged, base, force, format } = options;
@@ -83,7 +77,7 @@ export async function analyzeAll(
     await analyzeSecrets({ paths: [file] }, auth);
     // Bare `analyze` is a best-effort catch-all: skip agentic gracefully when no
     // project is configured rather than failing the whole command.
-    await analyzeSqaa({ file, format }, auth, command, { requireProject: false });
+    await analyzeSqaa({ file, format }, auth, { requireProject: false });
     return;
   }
 
@@ -103,20 +97,16 @@ export async function analyzeAll(
   // cover slightly different sets if the working tree changes between calls — this
   // is acceptable since the analyses are independent and best-effort.
   // requireProject: false → bare `analyze` skips agentic gracefully when unconfigured.
-  await analyzeSqaa({ staged, base, force, format }, auth, command, { requireProject: false });
+  await analyzeSqaa({ staged, base, force, format }, auth, { requireProject: false });
 }
 
-async function analyzeAllJson(
-  options: AnalyzeAllOptions,
-  auth: ResolvedAuth,
-  command?: Command,
-): Promise<void> {
+async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
   setFormattedOutputMode(true);
   try {
     const { file, staged, base } = options;
 
     if (file !== undefined) {
-      await runSecretsAndAgentic([file], options, auth, command);
+      await runSecretsAndAgentic([file], options, auth);
       return;
     }
 
@@ -127,7 +117,7 @@ async function analyzeAllJson(
       return;
     }
 
-    await runSecretsAndAgentic(changeSet.files, options, auth, command);
+    await runSecretsAndAgentic(changeSet.files, options, auth);
   } finally {
     setFormattedOutputMode(false);
   }
@@ -137,11 +127,10 @@ async function runSecretsAndAgentic(
   files: string[],
   options: AnalyzeAllOptions,
   auth: ResolvedAuth,
-  command?: Command,
 ): Promise<void> {
   const secrets = await runSecretsScan(files, auth);
   const secretsFailed = secrets !== null && secrets.exitCode !== 0;
-  const agentic = secretsFailed ? null : await buildSqaaJsonReport(options, auth, command);
+  const agentic = secretsFailed ? null : await buildSqaaJsonReport(options, auth);
 
   printCombinedReport(secrets?.report ?? null, agentic);
 
