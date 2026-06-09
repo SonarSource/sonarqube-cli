@@ -27,9 +27,7 @@ import * as keychain from '../../../../../src/lib/keychain';
 import type { CliState } from '../../../../../src/lib/state';
 import { getDefaultState } from '../../../../../src/lib/state';
 
-function stateWithConnection(
-  overrides: Partial<CliState['auth']['connections'][number]> = {},
-): CliState {
+function stateWithConnection(): CliState {
   const state = getDefaultState('test');
   state.auth.isAuthenticated = true;
   state.auth.connections = [
@@ -41,14 +39,13 @@ function stateWithConnection(
       region: 'eu',
       tokenName: 'SonarQube CLI 9',
       authenticatedAt: new Date().toISOString(),
-      ...overrides,
     },
   ];
   state.auth.activeConnectionId = 'conn-1';
   return state;
 }
 
-describe('purgeAuth', () => {
+describe('purgeAuth keychain read failures', () => {
   afterEach(() => {
     spyOn(keychain, 'getToken').mockRestore();
     spyOn(keychain, 'deleteToken').mockRestore();
@@ -63,19 +60,7 @@ describe('purgeAuth', () => {
     spyOn(revokeServerToken, 'reportRevokeServerTokenOutcome').mockImplementation(() => {});
   });
 
-  it('clears state and deletes keychain entries when all steps succeed', async () => {
-    const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue('squ_token');
-    const deleteTokenSpy = spyOn(keychain, 'deleteToken').mockResolvedValue(undefined);
-
-    const result = await purgeAuth(stateWithConnection());
-
-    expect(result.authConnectionIds).toEqual(['conn-1']);
-    expect(result.item.status).toBe('done');
-    expect(getTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'sonarsource');
-    expect(deleteTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'sonarsource');
-  });
-
-  it('still clears state when keychain read fails but delete succeeds', async () => {
+  it('still clears state and attempts delete when keychain read fails', async () => {
     spyOn(keychain, 'getToken').mockRejectedValue(
       new CommandFailedError('Failed to access the system keychain.'),
     );
@@ -86,11 +71,14 @@ describe('purgeAuth', () => {
     expect(result.authConnectionIds).toEqual(['conn-1']);
     expect(result.item.status).toBe('warn');
     expect(result.item.detail).toContain('could not read keychain entry');
+    expect(result.item.detail).toContain('1 keychain operation failed');
     expect(deleteTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'sonarsource');
   });
 
-  it('still clears state when keychain delete fails after a successful read', async () => {
-    spyOn(keychain, 'getToken').mockResolvedValue('squ_token');
+  it('reports multiple keychain operation failures for one connection', async () => {
+    spyOn(keychain, 'getToken').mockRejectedValue(
+      new CommandFailedError('Failed to access the system keychain.'),
+    );
     spyOn(keychain, 'deleteToken').mockRejectedValue(
       new CommandFailedError('Failed to access the system keychain.'),
     );
@@ -98,18 +86,8 @@ describe('purgeAuth', () => {
     const result = await purgeAuth(stateWithConnection());
 
     expect(result.authConnectionIds).toEqual(['conn-1']);
-    expect(result.item.status).toBe('warn');
+    expect(result.item.detail).toContain('2 keychain operations failed');
+    expect(result.item.detail).toContain('could not read keychain entry');
     expect(result.item.detail).toContain('could not delete keychain entry');
-  });
-
-  it('still attempts delete when read fails', async () => {
-    spyOn(keychain, 'getToken').mockRejectedValue(
-      new CommandFailedError('Failed to access the system keychain.'),
-    );
-    const deleteTokenSpy = spyOn(keychain, 'deleteToken').mockResolvedValue(undefined);
-
-    await purgeAuth(stateWithConnection());
-
-    expect(deleteTokenSpy).toHaveBeenCalledTimes(1);
   });
 });

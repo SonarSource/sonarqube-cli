@@ -74,14 +74,16 @@ async function purgeConnectionAuth(conn: AuthConnection): Promise<ConnectionOutc
 
 function buildKeychainWarningDetail(
   authConnectionIds: string[],
-  keychainWarningCount: number,
+  keychainOperationFailureCount: number,
 ): string {
+  const operationLabel = keychainOperationFailureCount === 1 ? 'operation' : 'operations';
+
   if (authConnectionIds.length === 0) {
-    return `${keychainWarningCount} keychain failures`;
+    return `${keychainOperationFailureCount} keychain ${operationLabel} failed`;
   }
 
   const connectionLabel = authConnectionIds.length === 1 ? 'connection' : 'connections';
-  return `${authConnectionIds.length} ${connectionLabel} cleared from state; keychain cleanup failed for ${keychainWarningCount}`;
+  return `${authConnectionIds.length} ${connectionLabel} cleared from state; ${keychainOperationFailureCount} keychain ${operationLabel} failed`;
 }
 
 function buildAuthResetPhaseItem(
