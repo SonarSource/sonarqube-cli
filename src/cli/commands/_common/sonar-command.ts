@@ -28,6 +28,18 @@ import logger from '../../../lib/logger.js';
 import { blank, error, print } from '../../../ui';
 import { CliError, CommandFailedError } from './error.js';
 
+export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
+export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
+
+export interface RootHelpMetadata {
+  category?: CommandCategory;
+  expandSubcommands?: boolean;
+  label?: string;
+}
+
+type CommandArgs = unknown[];
+type CommandResult = void | Promise<void>;
+
 /**
  * Commander Command subclass for the Sonar CLI.
  *
@@ -42,10 +54,21 @@ import { CliError, CommandFailedError } from './error.js';
  */
 export class SonarCommand extends Command {
   private _requiresAuth = false;
+  private _rootHelp: RootHelpMetadata = {};
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
     return new SonarCommand(name);
+  }
+
+  /**
+   * Configure how this command appears in the custom root help menu.
+   * Top-level commands can control category, labels, and whether
+   * visible subcommands are also rendered individually.
+   */
+  rootHelp(metadata: RootHelpMetadata): this {
+    this._rootHelp = { ...this._rootHelp, ...metadata };
+    return this;
   }
 
   /**
@@ -57,8 +80,11 @@ export class SonarCommand extends Command {
    * The `this` context set by Commander is forwarded to the handler, so
    * `function(this: Command) { this.outputHelp(); }` works as expected.
    */
-  anonymousAction(fn: (...args: any[]) => void | Promise<void>): this {
-    super.action(function (this: SonarCommand, ...args: any[]) {
+  anonymousAction<TArgs extends CommandArgs>(
+    this: this & { __commandArgs?: TArgs },
+    fn: (...args: TArgs) => CommandResult,
+  ): this {
+    super.action(function (this: SonarCommand, ...args: TArgs) {
       return this.runCommand(() => Promise.resolve(fn.apply(this, args)));
     });
     return this;
@@ -72,9 +98,12 @@ export class SonarCommand extends Command {
    *
    * Sets requiresAuth = true on this command for documentation purposes.
    */
-  authenticatedAction(fn: (auth: ResolvedAuth, ...args: any[]) => Promise<void>): this {
+  authenticatedAction<TArgs extends CommandArgs>(
+    this: this & { __commandArgs?: TArgs },
+    fn: (auth: ResolvedAuth, ...args: TArgs) => Promise<void>,
+  ): this {
     this._requiresAuth = true;
-    super.action((...args: any[]) =>
+    super.action((...args: TArgs) =>
       this.runCommand(async () => {
         const auth = await resolveAuth();
         if (!auth) {
@@ -88,7 +117,7 @@ export class SonarCommand extends Command {
     return this;
   }
 
-  action(_: (...args: any[]) => void | Promise<void>): this {
+  action(_: (...args: CommandArgs) => CommandResult): this {
     throw new Error(
       'action() should not be called direclty, use anonymousAction() or authenticatedAction() instead',
     );
@@ -97,6 +126,11 @@ export class SonarCommand extends Command {
   /** True when this command was registered with authenticatedAction(). */
   get requiresAuth(): boolean {
     return this._requiresAuth;
+  }
+
+  /** Metadata used by the custom root help menu. */
+  get rootHelpMetadata(): RootHelpMetadata {
+    return this._rootHelp;
   }
 
   async runCommand(fn: () => Promise<void>): Promise<void> {

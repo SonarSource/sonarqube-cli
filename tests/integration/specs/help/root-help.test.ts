@@ -20,19 +20,57 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { version as VERSION } from '../../../../package.json';
 import { TestHarness } from '../../harness';
 
-function assertRootHelpOutput(stdout: string): void {
-  expect(stdout).toContain('SonarQube CLI');
-  expect(stdout).toMatch(/v\d+\.\d+\.\d+/);
-  expect(stdout).toContain('QUICKSTART');
-  expect(stdout).toContain('sonar auth login');
-  expect(stdout).toContain('sonar verify --file <file>');
-  expect(stdout).toContain('COMMANDS');
-  expect(stdout).toContain('verify --file <file>');
-  expect(stdout).toContain('auth');
-  expect(stdout).toContain('https://docs.sonarsource.com/sonarqube-cli');
-  expect(stdout).not.toContain('Usage: sonar [options] [command]');
+const ANSI_ESCAPE_CODES = /\x1b\[[0-9;]*m/g;
+const BANNER_ART = [
+  '  █▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',
+  '  ▄█ █▄█ █ ▀█ █▀█ █▀▄ ▀▀█ █▄█ █▄█ ██▄   ▀█▄ ██▄ █',
+] as const;
+
+function stripAnsi(stdout: string): string {
+  return stdout.replaceAll(ANSI_ESCAPE_CODES, '');
+}
+
+function getExpectedRootHelp(): string {
+  return [
+    ...BANNER_ART,
+    `  v${VERSION}`,
+    '',
+    '  SonarQube CLI helps you detect security vulnerabilities',
+    '  and code quality issues directly from your terminal.',
+    '',
+    '  QUICKSTART',
+    '    1. Run sonar auth login to authenticate with SonarQube',
+    '    2. Run sonar analyze --file <file> to scan your code for issues',
+    '',
+    '  COMMANDS',
+    '    analyze                               Analyze code for quality and security issues',
+    '    analyze secrets                       Scan files or stdin for hardcoded secrets',
+    '    analyze dependency-risks              Analyze project dependencies for security and license risks',
+    '    analyze agentic                       Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.',
+    '    remediate                             Trigger AI agent remediation for eligible issues (SonarQube Cloud only)',
+    '',
+    '    list <issues|projects>                List issues and projects from SonarQube Cloud or Server',
+    '    api <method> <endpoint>               Make authenticated API requests to SonarQube',
+    '    context [action] [args...]            Augment AI agents with context from your codebase (beta: subject to change)',
+    '',
+    '    integrate <git|claude|copilot|codex>  Setup SonarQube integration for AI coding agents, git and others.',
+    '',
+    '    auth <login|logout|status>            Manage authentication tokens and credentials',
+    '    config <telemetry>                    Configure CLI settings',
+    '    system <status|reset>                 System diagnostics and maintenance commands for the SonarQube CLI installation.',
+    '    self-update                           Update SonarQube CLI to the latest version',
+    '',
+    '  OPTIONS',
+    '    -h, --help     Display help for a specific command',
+    '    -v, --version  Show current version',
+    '',
+    '  Read documentation: https://cli.sonarqube.com',
+    '  Share feedback:     https://forms.gle/jrGic3awT5t5vf7V9',
+    '',
+  ].join('\n');
 }
 
 describe('root help', () => {
@@ -47,21 +85,23 @@ describe('root help', () => {
   });
 
   it(
-    'sonar shows the custom help screen',
+    'sonar shows the exact custom help screen',
     async () => {
       const result = await harness.run('');
       expect(result.exitCode).toBe(0);
-      assertRootHelpOutput(result.stdout);
+      expect(stripAnsi(result.stdout)).toBe(getExpectedRootHelp());
     },
     { timeout: 15000 },
   );
 
   it(
-    'sonar -h shows the custom help screen',
+    'sonar and sonar -h render the same root help output',
     async () => {
-      const result = await harness.run('-h');
-      expect(result.exitCode).toBe(0);
-      assertRootHelpOutput(result.stdout);
+      const [bareResult, helpResult] = await Promise.all([harness.run(''), harness.run('-h')]);
+      expect(bareResult.exitCode).toBe(0);
+      expect(helpResult.exitCode).toBe(0);
+      expect(stripAnsi(bareResult.stdout)).toBe(getExpectedRootHelp());
+      expect(stripAnsi(helpResult.stdout)).toBe(getExpectedRootHelp());
     },
     { timeout: 15000 },
   );

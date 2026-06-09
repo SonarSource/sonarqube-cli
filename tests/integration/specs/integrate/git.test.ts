@@ -146,7 +146,7 @@ type InstalledFeatureJson = InstalledIntegrationJson['features'][number];
 type PreCommitYamlConfig = {
   repos: Array<{
     repo: string;
-    hooks: Array<{ id: string; stages?: string[] }>;
+    hooks: Array<{ id: string; stages?: string[]; entry?: string; pass_filenames?: boolean }>;
   }>;
 };
 
@@ -822,6 +822,8 @@ describe('integrate git (pre-commit framework)', () => {
       const localRepo = config.repos.find((repo) => repo.repo === 'local');
       const sonarHook = localRepo?.hooks.find((hook) => hook.id === 'sonar-secrets');
       expect(sonarHook?.stages).toEqual(['pre-push']);
+      expect(sonarHook?.entry).toBe('sonar hook git-pre-push');
+      expect(sonarHook?.pass_filenames).toBe(true);
       expect(readCommandLog(preCommitLog)).toEqual([
         'uninstall',
         'clean',

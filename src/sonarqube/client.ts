@@ -25,6 +25,7 @@ import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
 import logger from '../lib/logger';
 import { print } from '../ui';
 import { RateLimitError, ServiceUnavailableError } from './errors';
+import { stripGitRemoteUrlUserinfo } from './git-remote-url';
 import type { SettingsValue } from './settings-value';
 
 const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
@@ -454,6 +455,78 @@ export class SonarQubeClient {
   }
 
   /**
+   * Resolve a project key from a git repository remote URL using server-side bindings.
+   * SonarQube Server: GET /api/v2/dop-translation/project-bindings
+   * SonarQube Cloud: GET /dop-translation/project-bindings, then search_projects by project id.
+   */
+  async getProjectKeyByGitRemote(remoteUrl: string, orgKey?: string): Promise<string | null> {
+    const sanitizedRemoteUrl = stripGitRemoteUrlUserinfo(remoteUrl);
+    if (this.isCloud) {
+      if (!orgKey) {
+        return null;
+      }
+      const projectId = await this.getSqcProjectIdByRemoteUrl(sanitizedRemoteUrl);
+      if (!projectId) {
+        return null;
+      }
+      return this.getSonarCloudProjectKeyById(projectId, orgKey);
+    }
+    const binding = await this.getSqsProjectBindingByRemoteUrl(sanitizedRemoteUrl);
+    return binding?.projectKey ?? null;
+  }
+
+  private async getSqsProjectBindingByRemoteUrl(
+    remoteUrl: string,
+  ): Promise<{ projectKey: string } | null> {
+    const endpoint = `/api/v2/dop-translation/project-bindings?repositoryUrl=${encodeURIComponent(remoteUrl)}`;
+    const result = await this.getSafe<{
+      projectBindings: Array<{ projectId: string; projectKey: string }>;
+    }>(endpoint);
+    if (!result.response.ok) {
+      return null;
+    }
+    const binding = requireSingleBinding(
+      result.value?.projectBindings,
+      'git remote on SonarQube Server',
+    );
+    return binding?.projectKey ? { projectKey: binding.projectKey } : null;
+  }
+
+  private async getSqcProjectIdByRemoteUrl(remoteUrl: string): Promise<string | null> {
+    const endpoint = `/dop-translation/project-bindings?url=${encodeURIComponent(remoteUrl)}`;
+    const apiHost = resolveFromEndpoint(this.serverURL, endpoint);
+    const result = await this.getSafe<{ bindings: Array<{ projectId: string }> }>(
+      endpoint,
+      undefined,
+      apiHost,
+    );
+    if (!result.response.ok) {
+      return null;
+    }
+    const binding = requireSingleBinding(result.value?.bindings, 'git remote on SonarQube Cloud');
+    return binding?.projectId ?? null;
+  }
+
+  private async getSonarCloudProjectKeyById(
+    projectId: string,
+    orgKey: string,
+  ): Promise<string | null> {
+    const result = await this.getSafe<{ components: Array<{ key: string }> }>(
+      '/api/components/search_projects',
+      { projectIds: projectId, organization: orgKey },
+    );
+    if (!result.response.ok) {
+      return null;
+    }
+    const components = result.value?.components;
+    if (!Array.isArray(components) || components.length === 0) {
+      return null;
+    }
+    const projectKey = components[0].key;
+    return projectKey || null;
+  }
+
+  /**
    * Check if component (project) exists
    */
   async checkComponent(projectKey: string): Promise<boolean> {
@@ -539,6 +612,20 @@ export class SonarQubeClient {
       resolveFromEndpoint(this.serverURL, endpoint),
     );
   }
+}
+
+/** Returns the sole binding, or null when there are none or more than one (ambiguous). */
+function requireSingleBinding<T>(bindings: T[] | undefined, context: string): T | null {
+  if (!bindings?.length) {
+    return null;
+  }
+  if (bindings.length > 1) {
+    logger.debug(
+      `Multiple project bindings (${bindings.length}) for ${context}; skipping ambiguous git remote auto-discovery`,
+    );
+    return null;
+  }
+  return bindings[0];
 }
 
 function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {

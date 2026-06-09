@@ -103,7 +103,7 @@ COMMAND_TREE.name('sonar')
   .configureHelp({
     formatHelp: (cmd, helper) => {
       if (!cmd.parent) {
-        return getCustomRootHelp();
+        return getCustomRootHelp(cmd as SonarCommand, helper);
       }
       return getBanner(VERSION) + '\n' + Help.prototype.formatHelp.call(helper, cmd, helper);
     },
@@ -113,9 +113,11 @@ COMMAND_TREE.name('sonar')
   });
 
 // Manage authentication tokens and credentials
-const auth = COMMAND_TREE.command('auth').description(
-  'Manage authentication tokens and credentials',
-);
+const auth = COMMAND_TREE.command('auth')
+  .description('Manage authentication tokens and credentials')
+  .rootHelp({
+    category: 'cli-management',
+  });
 
 auth
   .command('login')
@@ -141,7 +143,52 @@ auth
   .description('Show active authentication connection with token verification')
   .anonymousAction(() => authStatus());
 
+// List Sonar resources
+const list = COMMAND_TREE.command('list')
+  .description('List issues and projects from SonarQube Cloud or Server')
+  .rootHelp({
+    category: 'data',
+  });
+
+const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
+const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
+  .default(DEFAULT_PAGE_SIZE)
+  .argParser(parseInteger);
+const listIssuesFormatOption = new Option('--format <format>', 'Output format')
+  .choices(VALID_FORMATS)
+  .default('json');
+list
+  .command('issues')
+  .description('Search for issues in SonarQube')
+  .requiredOption('-p, --project <project>', 'Project key')
+  .option(
+    '--statuses <statuses>',
+    `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')})`,
+  )
+  .option(
+    '--severities <severities>',
+    `Filter by severity (comma-separated list of: ${VALID_SEVERITIES.join(', ')})`,
+  )
+  .addOption(listIssuesFormatOption)
+  .option('--branch <branch>', 'Branch name')
+  .option('--pull-request <pull-request>', 'Pull request ID')
+  .addOption(pageSizeOption)
+  .addOption(pageOption)
+  .authenticatedAction((auth, options: ListIssuesOptions) => listIssues(options, auth));
+
+list
+  .command('projects')
+  .description('Search for projects in SonarQube')
+  .option('-q, --query <query>', 'Search query to filter projects by name or key')
+  .addOption(pageOption)
+  .addOption(pageSizeOption)
+  .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
+
 COMMAND_TREE.command('api')
+  .rootHelp({
+    category: 'data',
+    label: 'api <method> <endpoint>',
+  })
   .argument(
     '<method>',
     `HTTP method (${GENERIC_HTTP_METHODS.map((m) => m.toLowerCase()).join(', ')})`,
@@ -162,9 +209,11 @@ COMMAND_TREE.command('api')
   );
 
 // Setup SonarQube integration for AI coding agent
-const integrateCommand = COMMAND_TREE.command('integrate').description(
-  'Setup SonarQube integration for AI coding agents, git and others.',
-);
+const integrateCommand = COMMAND_TREE.command('integrate')
+  .description('Setup SonarQube integration for AI coding agents, git and others.')
+  .rootHelp({
+    category: 'integrate',
+  });
 
 integrateCommand
   .command('git')
@@ -221,7 +270,11 @@ integrateCommand
 // Forwards arguments verbatim to the locally-installed CAG binary; install via
 // `sonar integrate claude` or `sonar integrate copilot`.
 COMMAND_TREE.command('context')
-  .description('Run Context Augmentation actions (analysis context for AI agents)')
+  .description('Augment AI agents with context from your codebase (beta: subject to change)')
+  .rootHelp({
+    category: 'data',
+    label: 'context [action] [args...]',
+  })
   .argument('[action]', 'Action forwarded to sonar-context-augmentation')
   .argument('[args...]', 'Additional arguments forwarded to sonar-context-augmentation')
   .helpOption(false)
@@ -247,61 +300,13 @@ integrateCommand
   .addHelpText('after', projectKeyExtraHelp)
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
-// List Sonar resources
-const list = COMMAND_TREE.command('list').description(
-  'List issues and projects from SonarQube Cloud or Server',
-);
-
-const pageOption = new Option('--page <page>', 'Page number').default(1).argParser(parseInteger);
-const pageSizeOption = new Option('--page-size <page-size>', 'Page size (1-500)')
-  .default(DEFAULT_PAGE_SIZE)
-  .argParser(parseInteger);
-const listIssuesFormatOption = new Option('--format <format>', 'Output format')
-  .choices(VALID_FORMATS)
-  .default('json');
-list
-  .command('issues')
-  .description('Search for issues in SonarQube')
-  .requiredOption('-p, --project <project>', 'Project key')
-  .option(
-    '--statuses <statuses>',
-    `Filter by status (comma-separated list of: ${VALID_STATUSES.join(', ')})`,
-  )
-  .option(
-    '--severities <severities>',
-    `Filter by severity (comma-separated list of: ${VALID_SEVERITIES.join(', ')})`,
-  )
-  .addOption(listIssuesFormatOption)
-  .option('--branch <branch>', 'Branch name')
-  .option('--pull-request <pull-request>', 'Pull request ID')
-  .addOption(pageSizeOption)
-  .addOption(pageOption)
-  .authenticatedAction((auth, options: ListIssuesOptions) => listIssues(options, auth));
-
-list
-  .command('projects')
-  .description('Search for projects in SonarQube')
-  .option('-q, --query <query>', 'Search query to filter projects by name or key')
-  .addOption(pageOption)
-  .addOption(pageSizeOption)
-  .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
-
-// Trigger AI remediation for eligible issues (SonarQube Cloud only)
-COMMAND_TREE.command('remediate')
-  .description('Trigger AI agent remediation for eligible issues (SonarQube Cloud only)')
-  .option(
-    '-p, --project <project>',
-    'SonarQube Cloud project key (overrides auto-detected project)',
-  )
-  .option(
-    '--issues <issueIds>',
-    'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
-  )
-  .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
-
 // Analyze code for quality and security issues
 const analyze = COMMAND_TREE.command('analyze')
   .description('Analyze code for quality and security issues')
+  .rootHelp({
+    category: 'core',
+    expandSubcommands: true,
+  })
   .enablePositionalOptions();
 
 analyze
@@ -381,15 +386,12 @@ analyze
 applySqaaOptions(
   analyze
     .command('agentic')
-    .description(
-      'Run server-side Agentic Analysis (SonarQube Cloud only). ' +
-        'Limitations apply, see https://www.sonarsource.com/products/sonarqube/agentic-analysis/',
-    ),
+    .description('Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.'),
 );
 
 // `verify` is deprecated in favour of `sonar analyze`.
 const verifyCmd = applySqaaOptions(
-  COMMAND_TREE.command('verify').description(
+  COMMAND_TREE.command('verify', { hidden: true }).description(
     "Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)",
   ),
 );
@@ -399,8 +401,27 @@ verifyCmd.hook('preAction', () => {
   );
 });
 
+// Trigger AI remediation for eligible issues (SonarQube Cloud only)
+COMMAND_TREE.command('remediate')
+  .description('Trigger AI agent remediation for eligible issues (SonarQube Cloud only)')
+  .rootHelp({
+    category: 'core',
+  })
+  .option(
+    '-p, --project <project>',
+    'SonarQube Cloud project key (overrides auto-detected project)',
+  )
+  .option(
+    '--issues <issueIds>',
+    'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
+  )
+  .authenticatedAction((auth, options: RemediateOptions) => remediate(options, auth));
+
 // Configure things related to the CLI
 const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
+configure.rootHelp({
+  category: 'cli-management',
+});
 
 configure
   .command('telemetry')
@@ -410,9 +431,11 @@ configure
   .anonymousAction((options: ConfigureTelemetryOptions) => configureTelemetry(options));
 
 // System diagnostics and maintenance
-const system = COMMAND_TREE.command('system').description(
-  'System diagnostics and maintenance commands for the SonarQube CLI installation.',
-);
+const system = COMMAND_TREE.command('system')
+  .description('System diagnostics and maintenance commands for the SonarQube CLI installation.')
+  .rootHelp({
+    category: 'cli-management',
+  });
 
 system
   .command('status')
@@ -431,7 +454,10 @@ system
 
 // Update the CLI to the latest version
 COMMAND_TREE.command('self-update')
-  .description('Update sonar CLI to the latest version')
+  .description('Update SonarQube CLI to the latest version')
+  .rootHelp({
+    category: 'cli-management',
+  })
   .option('--status', 'Check for a newer version without installing')
   .option('--force', 'Install the latest version even if already up to date')
   .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
@@ -503,7 +529,8 @@ hookCommand
 hookCommand
   .command('git-pre-commit')
   .description('git pre-commit handler: scan staged files for secrets')
-  .anonymousAction(() => gitPreCommit());
+  .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
+  .anonymousAction((files: string[]) => gitPreCommit(files));
 
 hookCommand
   .command('git-pre-push')
@@ -515,7 +542,8 @@ hookCommand
     '--dependency-risks',
     'Also run a dependency-risks scan after the secrets scan (requires -p)',
   )
-  .anonymousAction((options: GitPrePushOptions) => gitPrePush(options));
+  .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
+  .anonymousAction((files: string[], options: GitPrePushOptions) => gitPrePush(options, files));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {

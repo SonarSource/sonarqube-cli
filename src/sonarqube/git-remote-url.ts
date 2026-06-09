@@ -18,21 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export {
-  discoverProjectKeyByGitRemote,
-  GIT_REMOTE_BINDING_SOURCE,
-  type GitRemoteBindingDiscovery,
-} from './discover-project-by-remote';
-export {
-  type DiscoveredProject,
-  discoverOrganization,
-  discoverProject,
-  discoverProjectInfo,
-  type DiscoverProjectOptions,
-  discoverServer,
-  findGitRoot,
-  type ProjectInfo,
-  type SonarLintConfig,
-  type SonarProperties,
-} from './project-info';
-export { loadSonarLintConfig, type ResolvedSonarLintConfig } from './sonarlint-connected-mode';
+/**
+ * Strip embedded credentials from a git remote URL before sending it to SonarQube.
+ * HTTPS remotes may include userinfo (e.g. https://user:token@host/...); those must not
+ * appear in server request logs.
+ */
+export function stripGitRemoteUrlUserinfo(remoteUrl: string): string {
+  try {
+    const parsed = new URL(remoteUrl);
+    if (!parsed.username && !parsed.password) {
+      return remoteUrl;
+    }
+    parsed.username = '';
+    parsed.password = '';
+    return parsed.toString();
+  } catch {
+    // SCP-style remotes (git@host:path) and other non-URL forms are returned unchanged.
+    return remoteUrl;
+  }
+}

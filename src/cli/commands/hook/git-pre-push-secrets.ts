@@ -22,29 +22,14 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
-import { GIT_NULL_OID } from './git-pre-push';
-import type { HookDependencies } from './hook-dependencies';
 import { handleScanError } from './hook-dependencies';
-import type { PushRef } from './stdin';
 
-export async function runSecretsStage(
-  filesByRef: Map<PushRef, string[]>,
-  auth: ResolvedAuth,
-): Promise<void> {
+export async function runSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) return;
-  const deps: HookDependencies = { auth, binaryPath };
-
-  for (const [ref, files] of filesByRef) {
-    if (ref.localSha === GIT_NULL_OID) continue;
-    if (files.length === 0) continue;
-    await scanRef(files, deps);
-  }
-}
-
-async function scanRef(files: string[], deps: HookDependencies): Promise<void> {
+  if (files.length === 0) return;
   try {
-    const result = await runSecretsBinary(deps.binaryPath, files, deps.auth);
+    const result = await runSecretsBinary(binaryPath, files, auth);
     if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
       throw new CommandFailedError('Secrets detected in pushed commits.', {
         remediationHint:

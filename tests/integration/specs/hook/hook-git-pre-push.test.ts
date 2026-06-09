@@ -290,6 +290,110 @@ describe('sonar hook git-pre-push', () => {
     { timeout: 30000 },
   );
 
+  describe('files mode (pre-commit framework)', () => {
+    it(
+      'exits 0 when no files are passed',
+      async () => {
+        const result = await harness.run('hook git-pre-push');
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits 0 when not authenticated (graceful skip)',
+      async () => {
+        harness.state().withSecretsBinaryInstalled();
+        harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
+        const result = await harness.run('hook git-pre-push clean.js');
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits 0 when binary is not installed (graceful skip)',
+      async () => {
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+        harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
+        const result = await harness.run('hook git-pre-push clean.js');
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits 0 when file is clean',
+      async () => {
+        harness.state().withSecretsBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+        harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
+
+        const result = await harness.run('hook git-pre-push clean.js');
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 1 when a passed file contains a secret',
+      async () => {
+        harness.state().withSecretsBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+        harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        const result = await harness.run('hook git-pre-push secret.js');
+        expect(result.exitCode).toBe(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 1 when binary spawn fails with env-based auth (CI mode, fail hard)',
+      async () => {
+        const binaryName = buildLocalBinaryName(detectPlatform());
+        harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
+        chmodSync(harness.cliHome.file('bin', binaryName).path, NON_EXECUTABLE_MODE);
+
+        harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
+
+        const result = await harness.run('hook git-pre-push clean.js', {
+          extraEnv: { SONARQUBE_CLI_TOKEN: VALID_TOKEN, SONARQUBE_CLI_SERVER: FAKE_SERVER },
+        });
+
+        expect(result.exitCode).toBe(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 0 when binary spawn fails with keychain auth (local mode, fail soft)',
+      async () => {
+        const binaryName = buildLocalBinaryName(detectPlatform());
+        harness.cliHome.writeFile(`bin/${binaryName}`, 'not-a-binary');
+        chmodSync(harness.cliHome.file('bin', binaryName).path, NON_EXECUTABLE_MODE);
+
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+        harness.cwd.writeFile('clean.js', CLEAN_CONTENT);
+
+        const result = await harness.run('hook git-pre-push clean.js');
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 2 when --dependency-risks is set without -p',
+      async () => {
+        harness.cwd.writeFile('package.json', PACKAGE_JSON_CONTENT);
+        const result = await harness.run('hook git-pre-push --dependency-risks package.json');
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('-p');
+      },
+      { timeout: 15000 },
+    );
+  });
+
   describe('with --dependency-risks', () => {
     it(
       'exits 0 when stdin is empty (no refs)',

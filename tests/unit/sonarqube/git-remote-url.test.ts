@@ -20,25 +20,28 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { getBanner } from '../../../src/cli/root-help';
+import { stripGitRemoteUrlUserinfo } from '../../../src/sonarqube/git-remote-url.js';
 
-// Strip ANSI escape codes to get the visible character width of a string
-function visibleLength(s: string): number {
-  return s.replaceAll(/\x1b\[[0-9;]*m/g, '').length;
-}
+describe('stripGitRemoteUrlUserinfo', () => {
+  it('removes username and password from https remotes', () => {
+    expect(stripGitRemoteUrlUserinfo('https://user:token@github.com/foo/bar.git')).toBe(
+      'https://github.com/foo/bar.git',
+    );
+  });
 
-describe('getBanner', () => {
-  it.each([
-    ['1.0.0'], // short
-    ['0.8.0'], // current
-    ['0.10.0'], // minor double-digit
-    ['1.10.0'],
-    ['10.0.0'], // major double-digit
-    ['10.10.10'], // all double-digit
-  ])('all three lines have equal visible width for version %s', (version) => {
-    const lines = getBanner(version).split('\n');
-    const [top, middle, bottom] = lines.map(visibleLength);
-    expect(top).toBe(middle);
-    expect(top).toBe(bottom);
+  it('removes username-only userinfo from https remotes', () => {
+    expect(stripGitRemoteUrlUserinfo('https://user@github.com/foo/bar.git')).toBe(
+      'https://github.com/foo/bar.git',
+    );
+  });
+
+  it('returns the original string when there is no userinfo', () => {
+    const remote = 'https://github.com/foo/bar.git';
+    expect(stripGitRemoteUrlUserinfo(remote)).toBe(remote);
+  });
+
+  it('returns scp-style remotes unchanged', () => {
+    const remote = 'git@github.com:foo/bar.git';
+    expect(stripGitRemoteUrlUserinfo(remote)).toBe(remote);
   });
 });
