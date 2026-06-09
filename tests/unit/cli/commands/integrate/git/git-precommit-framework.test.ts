@@ -383,7 +383,7 @@ describe('pre-commit integration remove', () => {
   beforeEach(() => mkdirSync(TEMP_DIR, { recursive: true }));
   afterEach(() => rmSync(TEMP_DIR, { recursive: true, force: true }));
 
-  it('removes only Sonar hooks from the config', async () => {
+  it('removes only Sonar hooks from the config without invoking the pre-commit framework CLI', async () => {
     writeFileSync(
       join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
       yaml.dump({
@@ -426,6 +426,7 @@ describe('pre-commit integration remove', () => {
 
     try {
       await installer.removeFeature(context, preCommitFeature);
+      expect(spawnSpy).not.toHaveBeenCalled();
 
       const config = yaml.load(
         readFileSync(join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE), 'utf-8'),
