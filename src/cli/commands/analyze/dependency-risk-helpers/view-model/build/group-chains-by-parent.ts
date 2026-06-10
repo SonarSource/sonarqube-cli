@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
@@ -18,31 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ChainGroupVM } from './chain-group.ts';
-import type { RiskGroupVM, RiskVM } from './risk.ts';
+import type { ChainGroupVM } from '../chain-group.ts';
+import type { PackageIdentity } from '../package.ts';
 
-export class PackageIdentity {
-  constructor(
-    readonly purl: string,
-    readonly name: string,
-    readonly version: string,
-    readonly packageManager: string,
-  ) {}
-
-  label(): string {
-    return this.version ? `${this.name}@${this.version}` : this.name;
+export function groupChainsByParent(chains: PackageIdentity[][]): ChainGroupVM[] {
+  const groups = new Map<string, PackageIdentity[][]>();
+  for (const chain of chains) {
+    const parent = chain.length >= 2 ? chain.at(-2)!.purl : '';
+    const group = groups.get(parent) ?? [];
+    group.push(chain);
+    groups.set(parent, group);
   }
-
-  compareTo(other: PackageIdentity): number {
-    return this.purl.localeCompare(other.purl);
-  }
-}
-
-export interface PackageVM {
-  package: PackageIdentity;
-  newlyIntroduced: boolean;
-  riskCount: number;
-  filePaths: string[];
-  chains: ChainGroupVM[];
-  groups: RiskGroupVM<RiskVM>[];
+  return [...groups.values()]
+    .map((group) => ({
+      parentPackage: group[0].length >= 2 ? (group[0].at(-2) ?? null) : null,
+      chains: group.slice().sort((a, b) => a.length - b.length),
+    }))
+    .sort((a, b) => a.chains[0].length - b.chains[0].length);
 }

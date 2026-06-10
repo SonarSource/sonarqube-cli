@@ -23,6 +23,7 @@ import type { RiskFilterPredicate } from '../../risk-filter.ts';
 import type { AnalyzeProjectRelease } from '../../sca-scanner.ts';
 import { PackageIdentity, type PackageVM } from '../package.ts';
 import { buildGroups } from './group-builder.ts';
+import { groupChainsByParent } from './group-chains-by-parent.ts';
 
 export function buildPackageIdentityMap(
   releases: AnalyzeProjectRelease[],
@@ -55,7 +56,7 @@ export function buildPackageVM(
     newlyIntroduced: release.newlyIntroduced,
     riskCount,
     filePaths: release.dependencyFilePaths,
-    chains: resolveChains(release, identityByPurl),
+    chains: groupChainsByParent(resolveChains(release, identityByPurl)),
     groups,
   };
 }

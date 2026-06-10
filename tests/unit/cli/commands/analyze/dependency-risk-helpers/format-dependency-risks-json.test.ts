@@ -81,14 +81,16 @@ describe('formatDependencyRisksJson', () => {
     ) as {
       packages: {
         package: string;
-        chains: string[][];
+        chains: { parentPackage: string | null; chains: string[][] }[];
         groups: { type: string; risks: unknown[] }[];
       }[];
     };
 
     expect(parsed.packages).toHaveLength(1);
     expect(parsed.packages[0].package).toBe('pkg:npm/lodash@1.0.0');
-    expect(parsed.packages[0].chains).toEqual([['pkg:npm/lodash@1.0.0']]);
+    expect(parsed.packages[0].chains).toEqual([
+      { parentPackage: null, chains: [['pkg:npm/lodash@1.0.0']] },
+    ]);
     expect(parsed.packages[0].groups).toHaveLength(1);
     expect(parsed.packages[0].groups[0]).toMatchObject({ type: 'VULNERABILITY' });
   });

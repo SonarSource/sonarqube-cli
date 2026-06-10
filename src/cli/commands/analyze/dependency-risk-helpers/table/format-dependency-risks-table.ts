@@ -21,11 +21,11 @@
 import { dim, green, red, STATUS_ICONS } from '../../../../../ui/colors.js';
 import type { RiskFilterDescription } from '../risk-filter.ts';
 import type {
+  ChainGroupVM,
   DependencyRisksViewModel,
   ErrorVM,
   LicenseGroupVM,
   MalwareGroupVM,
-  PackageIdentity,
   PackageSummaryVM,
   PackageVM,
   RiskGroupVM,
@@ -169,40 +169,57 @@ function summarySeverityCell(label: string, count: number): string {
   return `${label} ${icon} ${String(count).padStart(SEVERITY_COUNT_WIDTH)}`;
 }
 
-function transitiveChainLines(chains: PackageIdentity[][]): string[] {
+function transitiveChainLines(chains: ChainGroupVM[]): string[] {
   if (chains.length === 0) {
     return [];
   }
   const displayed = chains.slice(0, MAX_CHAINS_DISPLAYED);
   const lines: string[] = [];
-  for (const chain of displayed) {
-    const labels = chain.map((id) => id.label());
-    for (const line of wrapChain(labels, MAX_LINE_WIDTH)) {
-      lines.push(line);
+  for (const group of displayed) {
+    const labels = group.chains[0]
+      .slice(0, -1)
+      .map((id) => id.label())
+      .reverse();
+    const otherRoutes = group.chains.length - 1;
+    const chainLines = wrapChain(labels, MAX_LINE_WIDTH);
+    if (otherRoutes > 0) {
+      const suffix = ` and ${otherRoutes} other route${otherRoutes === 1 ? '' : 's'}`;
+      const last = chainLines[chainLines.length - 1];
+      chainLines[chainLines.length - 1] = last.endsWith(')')
+        ? `${last.slice(0, -1)}${suffix})`
+        : `${last}${suffix}`;
     }
+    for (const line of chainLines) lines.push(line);
   }
   const remaining = chains.length - displayed.length;
   if (remaining > 0) {
-    lines.push(`${LINE_INDENT}and via ${remaining} others`);
+    lines.push(`${LINE_INDENT}via ${remaining} other package${remaining === 1 ? '' : 's'}`);
   }
   return lines;
 }
 
 function wrapChain(labels: string[], maxWidth: number): string[] {
   if (labels.length === 0) {
-    return [`${LINE_INDENT}via `];
+    return [`${LINE_INDENT}direct`];
+  }
+  if (labels.length === 1) {
+    return [`${LINE_INDENT}via ${labels[0]}`];
   }
   const lines: string[] = [];
-  let current = `${LINE_INDENT}via ${labels[0]}`;
-  for (let i = 1; i < labels.length; i++) {
-    const candidate = `${current} → ${labels[i]}`;
-    if (candidate.length <= maxWidth) {
+  let current = `${LINE_INDENT}via ${labels[0]} (← ${labels[1]}`;
+  if (`${current})`.length > maxWidth) {
+    lines.push(`${LINE_INDENT}via ${labels[0]}`);
+    current = `${CHAIN_CONTINUATION_INDENT}(← ${labels[1]}`;
+  }
+  for (let i = 2; i < labels.length; i++) {
+    const candidate = `${current} ← ${labels[i]}`;
+    if (`${candidate})`.length <= maxWidth) {
       current = candidate;
     } else {
       lines.push(current);
-      current = `${CHAIN_CONTINUATION_INDENT}→ ${labels[i]}`;
+      current = `${CHAIN_CONTINUATION_INDENT}← ${labels[i]}`;
     }
   }
-  lines.push(current);
+  lines.push(`${current})`);
   return lines;
 }

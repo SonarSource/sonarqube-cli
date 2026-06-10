@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
@@ -18,31 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ChainGroupVM } from './chain-group.ts';
-import type { RiskGroupVM, RiskVM } from './risk.ts';
+import type { PackageIdentity } from './package.ts';
 
-export class PackageIdentity {
-  constructor(
-    readonly purl: string,
-    readonly name: string,
-    readonly version: string,
-    readonly packageManager: string,
-  ) {}
-
-  label(): string {
-    return this.version ? `${this.name}@${this.version}` : this.name;
-  }
-
-  compareTo(other: PackageIdentity): number {
-    return this.purl.localeCompare(other.purl);
-  }
-}
-
-export interface PackageVM {
-  package: PackageIdentity;
-  newlyIntroduced: boolean;
-  riskCount: number;
-  filePaths: string[];
-  chains: ChainGroupVM[];
-  groups: RiskGroupVM<RiskVM>[];
+export interface ChainGroupVM {
+  parentPackage: PackageIdentity | null;
+  chains: PackageIdentity[][];
 }
