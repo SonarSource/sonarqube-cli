@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 0.14.1
+- Version: 1.0.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://cli.sonarqube.com/data/commands.json
@@ -48,6 +48,41 @@ Usage: sonar auth status
 
 Examples:
   sonar auth status
+
+### sonar list
+List issues and projects from SonarQube Cloud or Server
+
+### sonar list issues *
+Search for issues in SonarQube
+Usage: sonar list issues [-p <value>] [--statuses <value>] [--severities <value>] [--format <value>] [--branch <value>] [--pull-request <value>] [--page-size <value>] [--page <value>]
+
+Options:
+  --project, -p  <string>   Project key
+  --statuses  <string>   Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED)
+  --severities  <string>   Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)
+  --format  <string>   Output format
+  --branch  <string>   Branch name
+  --pull-request  <string>   Pull request ID
+  --page-size  <number>   Page size (1-500)
+  --page  <number>   Page number
+
+Examples:
+  sonar list issues -p my-project
+  sonar list issues -p my-project --format toon
+
+### sonar list projects *
+Search for projects in SonarQube
+Usage: sonar list projects [-q <value>] [--page <value>] [--page-size <value>]
+
+Options:
+  --query, -q  <string>   Search query to filter projects by name or key
+  --page  <number>   Page number
+  --page-size  <number>   Page size (1-500)
+
+Examples:
+  sonar list projects
+  sonar list projects -q my-project
+  sonar list projects --page 2 --page-size 50
 
 ### sonar api *
 Make authenticated API requests to SonarQube
@@ -101,68 +136,27 @@ Options:
 
 ### sonar integrate copilot *
 Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.
-Usage: sonar integrate copilot [--global] [-p <value>] [--skip-context]
+Usage: sonar integrate copilot [--global] [-p <value>] [--non-interactive] [--skip-context]
 
 Options:
   --global, -g   Install hooks and config globally to ~/.copilot instead of project directory
   --project, -p  <string>   Project key. Mutually exclusive with --global.
+  --non-interactive   Non-interactive mode (no prompts)
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
 ### sonar integrate codex *
 Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.
-Usage: sonar integrate codex [--global] [-p <value>] [--skip-context]
+Usage: sonar integrate codex [--global] [-p <value>] [--non-interactive] [--skip-context]
 
 Options:
   --global, -g   Install hook and config globally to ~/.codex instead of project directory
   --project, -p  <string>   Project key. Mutually exclusive with --global.
+  --non-interactive   Non-interactive mode (no prompts)
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
 ### sonar context
-Run Context Augmentation actions (analysis context for AI agents)
+Augment AI agents with context from your codebase (beta: subject to change)
 Usage: sonar context [action] [args]
-
-### sonar list
-List issues and projects from SonarQube Cloud or Server
-
-### sonar list issues *
-Search for issues in SonarQube
-Usage: sonar list issues [-p <value>] [--statuses <value>] [--severities <value>] [--format <value>] [--branch <value>] [--pull-request <value>] [--page-size <value>] [--page <value>]
-
-Options:
-  --project, -p  <string>   Project key
-  --statuses  <string>   Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED)
-  --severities  <string>   Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)
-  --format  <string>   Output format
-  --branch  <string>   Branch name
-  --pull-request  <string>   Pull request ID
-  --page-size  <number>   Page size (1-500)
-  --page  <number>   Page number
-
-Examples:
-  sonar list issues -p my-project
-  sonar list issues -p my-project --format toon
-
-### sonar list projects *
-Search for projects in SonarQube
-Usage: sonar list projects [-q <value>] [--page <value>] [--page-size <value>]
-
-Options:
-  --query, -q  <string>   Search query to filter projects by name or key
-  --page  <number>   Page number
-  --page-size  <number>   Page size (1-500)
-
-Examples:
-  sonar list projects
-  sonar list projects -q my-project
-  sonar list projects --page 2 --page-size 50
-
-### sonar remediate *
-Trigger AI agent remediation for eligible issues (SonarQube Cloud only)
-Usage: sonar remediate [-p <value>] [--issues <value>]
-
-Options:
-  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
-  --issues  <string>   Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.
 
 ### sonar analyze *
 Analyze code for quality and security issues
@@ -180,7 +174,7 @@ Examples:
   cat .env | sonar analyze secrets --stdin
 
 ### sonar analyze dependency-risks *
-Analyze project dependencies for security and license risks
+Analyze project dependencies for security and license risks (beta: subject to change)
 Usage: sonar analyze dependency-risks [-p <value>] [--format <value>] [--statuses <value>]
 
 Options:
@@ -203,30 +197,25 @@ Examples:
 
 
 ### sonar analyze agentic *
-Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply, see https://www.sonarsource.com/products/sonarqube/agentic-analysis/
-Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [--force] [--format <value>] [--branch <value>] [-p <value>]
+Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.
+Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [-p <value>] [--force] [--format <value>] [--branch <value>]
 
 Options:
   --file  <string>   Analyze a single file (skips change set detection)
   --staged   Analyze staged files only (git diff --cached)
   --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
+  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
   --force   Skip the large change set confirmation prompt
   --format  <string>   Output format
   --branch  <string>   Branch name for analysis context
-  --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
 
-### sonar verify *
-Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)
-Usage: sonar verify [--file <value>] [--staged] [--base <value>] [--force] [--format <value>] [--branch <value>] [-p <value>]
+### sonar remediate *
+Trigger AI agent remediation for eligible issues (SonarQube Cloud only)
+Usage: sonar remediate [-p <value>] [--issues <value>]
 
 Options:
-  --file  <string>   Analyze a single file (skips change set detection)
-  --staged   Analyze staged files only (git diff --cached)
-  --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
-  --force   Skip the large change set confirmation prompt
-  --format  <string>   Output format
-  --branch  <string>   Branch name for analysis context
   --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
+  --issues  <string>   Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.
 
 ### sonar config
 Configure CLI settings
@@ -243,8 +232,25 @@ Examples:
   sonar config telemetry --enabled
   sonar config telemetry --disabled
 
+### sonar system
+System diagnostics and maintenance commands for the SonarQube CLI installation.
+
+### sonar system status
+Show overall system status: authentication, installed binaries, and integrations
+Usage: sonar system status [--json]
+
+Options:
+  --json   Output as JSON for machine consumption
+
+### sonar system reset
+Reset the CLI to factory defaults: remove tokens, binaries, integrations, and cached files. Telemetry settings are preserved.
+Usage: sonar system reset [--force]
+
+Options:
+  --force   Skip the interactive confirmation prompt (required for non-interactive use)
+
 ### sonar self-update
-Update sonar CLI to the latest version
+Update SonarQube CLI to the latest version
 Usage: sonar self-update [--status] [--force]
 
 Options:

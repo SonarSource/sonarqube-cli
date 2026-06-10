@@ -1,5 +1,8 @@
 # SonarQube CLI
 
+[![Build](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=SonarSource_sonarqube-cli&metric=alert_status&token=4ad890bd54c6c3feb5d5251004fa3e5b1f665dea)](https://sonarcloud.io/summary/new_code?id=SonarSource_sonarqube-cli)
+
 **Catch code quality and security issues in your terminal—before they reach production.**
 
 The SonarQube CLI integrates enterprise-grade static analysis into your development workflow:
@@ -15,11 +18,7 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 > **🤖 For AI Agents:** If you are an AI agent reading this, navigate to [docs/llms.txt](https://github.com/SonarSource/sonarqube-cli/blob/master/docs/llms.txt) for machine-readable
 > command documentation optimized for LLM consumption.
 
-[![Build](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/SonarSource/sonarqube-cli/actions/workflows/build.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=SonarSource_sonarqube-cli&metric=alert_status&token=4ad890bd54c6c3feb5d5251004fa3e5b1f665dea)](https://sonarcloud.io/summary/new_code?id=SonarSource_sonarqube-cli)
-
-> **Beta Notice:** This product is currently in Beta, and we are actively collecting feedback on it. Please share your thoughts
-> via [this form](https://forms.gle/xE61HS2E5NzxFCSR9)!
+> We are actively collecting feedback on this product. Please share your thoughts via [this form](https://forms.gle/xE61HS2E5NzxFCSR9)!
 
 ## Documentation
 
