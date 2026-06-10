@@ -32,7 +32,10 @@ import { setFormattedOutputMode } from './ui';
 // Handles both `--format json` (space-separated) and `--format=json` (equals form).
 if (
   process.argv.some(
-    (a, i) => (a === '--format' && process.argv[i + 1] === 'json') || a === '--format=json',
+    (a, i) =>
+      (a === '--format' && (process.argv[i + 1] === 'json' || process.argv[i + 1] === 'toon')) ||
+      a === '--format=json' ||
+      a === '--format=toon',
   )
 ) {
   setFormattedOutputMode(true);

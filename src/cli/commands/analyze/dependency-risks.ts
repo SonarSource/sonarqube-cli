@@ -26,6 +26,7 @@ import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
+import { formatDependencyRisksToon } from './dependency-risk-helpers/format-dependency-risks-toon.ts';
 import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
 import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
@@ -33,7 +34,7 @@ import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
 import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build';
 
-export const VALID_FORMATS = ['json', 'table'];
+export const VALID_FORMATS = ['json', 'toon', 'table'];
 
 export const EXIT_CODE_UNRESOLVED_RISKS = 51;
 
@@ -69,10 +70,15 @@ export async function analyzeDependencyRisks(
   ).run(auth, options.project);
 
   const viewModel = buildDependencyRisksViewModel(result, filter);
-  if (options.format === 'json') {
-    print(formatDependencyRisksJson(options.project, viewModel));
-  } else {
-    print(formatDependencyRisksTable(viewModel));
+  switch (options.format) {
+    case 'json':
+      print(formatDependencyRisksJson(options.project, viewModel));
+      break;
+    case 'toon':
+      print(formatDependencyRisksToon(options.project, viewModel));
+      break;
+    default:
+      print(formatDependencyRisksTable(viewModel));
   }
 
   handleResult(countUnresolvedIssues(viewModel), result.errors.length);
