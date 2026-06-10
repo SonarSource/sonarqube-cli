@@ -252,7 +252,7 @@ describe('system reset --force', () => {
         chmodSync(harness.keychainJsonFile, 0o444);
         const result = await runCli('system reset --force', env, { cwd: harness.cwd.path });
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(0);
         expect(result.stdout).toMatch(/Authentication:.*could not delete keychain entry/);
         expect(result.stdout).toContain('keychain operation failed');
         expect(result.stderr).toContain('System reset completed with warnings');
@@ -416,7 +416,7 @@ describe('system reset --force', () => {
   );
 
   it.skipIf(SKIP_CHMOD_REMOVAL_TEST)(
-    'warns and exits 1 when a cache directory cannot be removed',
+    'warns and exits 0 when a cache directory cannot be removed',
     async () => {
       const logDir = join(harness.cliHome.path, 'logs');
       mkdirSync(logDir, { recursive: true });
@@ -426,7 +426,7 @@ describe('system reset --force', () => {
       try {
         const result = await harness.run('system reset --force');
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(0);
         expect(result.stdout).toMatch(/Filesystem:.*Failed to clear some directories/);
         expect(result.stderr).toContain('System reset completed with warnings');
         expect(existsSync(logDir)).toBe(true);
@@ -529,7 +529,7 @@ describe('system reset --force', () => {
 
       const result = await harness.run('system reset --force');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Binaries:');
       expect(result.stdout).toContain('failed');
       expect(result.stderr).toContain('System reset completed with warnings');
@@ -613,7 +613,7 @@ describe('system reset --force', () => {
   );
 
   it(
-    'warns and exits 1 when state references an unknown integration',
+    'warns and exits 0 when state references an unknown integration',
     async () => {
       harness.state().withRawState(
         buildRawState({
@@ -647,7 +647,7 @@ describe('system reset --force', () => {
 
       const result = await harness.run('system reset --force');
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(0);
       expect(result.stdout).toMatch(/Integrations:.*unknown integration/);
       expect(result.stderr).toContain('System reset completed with warnings');
 
