@@ -85,7 +85,6 @@ export interface SeedStateOptions {
 export function seedState(harness: TestHarness, options: SeedStateOptions = {}): void {
   mkdirSync(harness.cliHome.path, { recursive: true });
   const state = getDefaultState(options.cliVersion ?? STALE_CLI_VERSION);
-  state.telemetry.enabled = false;
   for (const skill of options.skills ?? []) {
     seedDeclarativeContextAugmentationFeature(state, skill);
   }

@@ -26,6 +26,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import { ISOLATED_CLI_SPAWN_ENV } from '../_common/isolated-cli-env.js';
+
 // PowerShell cold-start in afterEach needs more than the default 5s hook timeout
 setDefaultTimeout(30_000);
 
@@ -59,7 +61,7 @@ describe.if(!isWindows)('install.sh (network)', () => {
       expect(existsSync(binaryPath)).toBe(true);
 
       const helpProc = Bun.spawnSync([binaryPath, '--help'], {
-        env: { HOME: tempHome, PATH: process.env.PATH! },
+        env: { HOME: tempHome, PATH: process.env.PATH!, ...ISOLATED_CLI_SPAWN_ENV },
       });
       const helpOutput = new TextDecoder().decode(helpProc.stdout);
       expect(helpProc.exitCode).toBe(0);
@@ -112,7 +114,7 @@ describe.if(isWindows)('install.ps1 (network)', () => {
       expect(existsSync(binaryPath)).toBe(true);
 
       const helpProc = Bun.spawnSync([binaryPath, '--help'], {
-        env: { ...process.env, LOCALAPPDATA: tempLocalAppData },
+        env: { ...process.env, LOCALAPPDATA: tempLocalAppData, ...ISOLATED_CLI_SPAWN_ENV },
       });
       const helpOutput = new TextDecoder().decode(helpProc.stdout);
       expect(helpProc.exitCode).toBe(0);

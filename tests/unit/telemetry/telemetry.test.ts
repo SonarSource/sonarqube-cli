@@ -28,7 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
 import * as agentDetector from '../../../src/lib/agent-detector.js';
-import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
+import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
 import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
@@ -362,12 +362,23 @@ describe('storeEvent', () => {
       expect(spawnSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('passes TELEMETRY_FLUSH_MODE_ENV to the worker environment', async () => {
-      await storeEvent(makeCommand('auth login'), true);
+    it('inherits the parent environment and sets the flush worker flag', async () => {
+      const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+      process.env[ENV_SONAR_USER_HOME] = '/custom/sonar-home';
 
-      const spawnCall = spawnSpy.mock.calls[0];
-      const spawnOptions = spawnCall[1] as { env: Record<string, string> };
-      expect(spawnOptions.env[TELEMETRY_FLUSH_MODE_ENV]).toBe('1');
+      try {
+        await storeEvent(makeCommand('auth login'), true);
+
+        const spawnOptions = spawnSpy.mock.calls[0][1] as { env: Record<string, string> };
+        expect(spawnOptions.env[TELEMETRY_FLUSH_MODE_ENV]).toBe('1');
+        expect(spawnOptions.env[ENV_SONAR_USER_HOME]).toBe('/custom/sonar-home');
+      } finally {
+        if (previousSonarUserHome === undefined) {
+          delete process.env[ENV_SONAR_USER_HOME];
+        } else {
+          process.env[ENV_SONAR_USER_HOME] = previousSonarUserHome;
+        }
+      }
     });
   });
 });

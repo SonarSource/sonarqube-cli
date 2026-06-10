@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `config telemetry`
+// Integration tests for `config telemetry` — CLI wiring and state persistence.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -49,46 +49,36 @@ describe('config telemetry', () => {
   );
 
   it(
-    'exits with code 0 and reports current status when no flags are provided',
+    'exits with code 0 and reports DO_NOT_TRACK status when no flags are provided',
     async () => {
       const result = await harness.run('config telemetry');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Telemetry is currently');
+      expect(result.stdout + result.stderr).toContain('DO_NOT_TRACK');
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with code 0 and enables telemetry when --enabled is provided',
-    async () => {
-      const result = await harness.run('config telemetry --enabled');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Telemetry enabled');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 0 and disables telemetry when --disabled is provided',
+    'exits with code 0, disables telemetry in state, and reports success when --disabled is provided',
     async () => {
       const result = await harness.run('config telemetry --disabled');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Telemetry disabled');
+      expect((await harness.stateJsonFile.asJson()).telemetry.enabled).toBe(false);
     },
     { timeout: 15000 },
   );
 
   it(
-    'reports telemetry disabled when DO_NOT_TRACK is set',
+    'reports telemetry disabled when DO_NOT_TRACK is set and persisted preference is enabled',
     async () => {
       const state = getDefaultState(CURRENT_CLI_VERSION);
       state.telemetry.enabled = true;
       harness.state().withRawState(JSON.stringify(state));
 
-      const result = await harness.run('config telemetry', { extraEnv: { DO_NOT_TRACK: '1' } });
+      const result = await harness.run('config telemetry');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('DO_NOT_TRACK');
@@ -98,18 +88,16 @@ describe('config telemetry', () => {
   );
 
   it(
-    'reports effective disabled state when --enabled is run with DO_NOT_TRACK set',
+    'persists enabled preference while reporting DO_NOT_TRACK override when --enabled is provided',
     async () => {
-      const result = await harness.run('config telemetry --enabled', {
-        extraEnv: { DO_NOT_TRACK: '1' },
-      });
+      const result = await harness.run('config telemetry --enabled');
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
       expect(output).toContain('preference saved as enabled');
       expect(output).toContain('DO_NOT_TRACK');
-      expect(output).toContain('disabled');
       expect(output).not.toContain('Telemetry enabled.');
+      expect((await harness.stateJsonFile.asJson()).telemetry.enabled).toBe(true);
     },
     { timeout: 15000 },
   );

@@ -116,7 +116,7 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
  * proc.unref() lets the parent exit without waiting for the worker.
  */
 function spawnFlushWorker() {
-  const env = { [TELEMETRY_FLUSH_MODE_ENV]: '1' };
+  const env = { ...process.env, [TELEMETRY_FLUSH_MODE_ENV]: '1' };
 
   // In dev mode we run bun directly
   // in compiled-binary mode the entry point is 'sonar'.

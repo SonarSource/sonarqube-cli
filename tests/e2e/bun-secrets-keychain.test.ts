@@ -82,7 +82,6 @@ function buildEnv(ctx: E2eContext): Record<string, string> {
 function writeState(cliHome: string): void {
   mkdirSync(cliHome, { recursive: true });
   const state = getDefaultState('e2e-test');
-  state.telemetry.enabled = false;
   writeFileSync(join(cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
 }
 
@@ -95,7 +94,6 @@ async function setupAuth(ctx: E2eContext): Promise<string> {
   await Bun.secrets.set({ service: ctx.serviceName, name: account, value: token });
 
   const state = getDefaultState('e2e-test');
-  state.telemetry.enabled = false;
   addOrUpdateConnection(state, serverUrl, 'on-premise');
   writeFileSync(join(ctx.cliHome, 'state.json'), JSON.stringify(state, null, 2), 'utf-8');
 

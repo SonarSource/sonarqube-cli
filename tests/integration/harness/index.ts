@@ -20,12 +20,13 @@
 
 // TestHarness — main entry point for integration tests
 
-import { chmodSync, copyFileSync, mkdirSync, realpathSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { ENV_SQAA_RETRY_BASE_DELAY_MS } from '../../../src/lib/config-constants.js';
+import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCli } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
@@ -218,6 +219,8 @@ export class TestHarness {
   env(options?: Pick<RunOptions, 'extraEnv'>): Record<string, string> {
     if (this._envBuilder) {
       this._envBuilder.writeTo(this.cliHome.path, this.keychainJsonFile);
+    } else if (!existsSync(this.stateJsonFile.path)) {
+      new EnvironmentBuilder().writeTo(this.cliHome.path, this.keychainJsonFile);
     }
     const builderExtraEnv = this._envBuilder?.getExtraEnv() ?? {};
 
@@ -256,7 +259,7 @@ export class TestHarness {
       composed.PATH = `${dockerBin}:${composed.PATH ?? process.env.PATH ?? ''}`;
     }
 
-    return composed;
+    return { ...composed, ...ISOLATED_CLI_SPAWN_ENV };
   }
 
   /**

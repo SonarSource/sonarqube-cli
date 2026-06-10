@@ -56,7 +56,6 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
       installHome = mkdtempSync(join(tmpdir(), 'sonar-e2e-claude-install-'));
       const extraEnv = {
         DISABLE_AUTOUPDATER: '1',
-        SONARQUBE_CLI_DISABLE_SENTRY: '1',
       };
       claude = setupClaude({
         env: claudeInstallEnv(installHome, extraEnv),
@@ -88,7 +87,6 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
           await harness.withCliInPath().newFakeBinariesServer().start();
           extraEnv = {
             DISABLE_AUTOUPDATER: '1',
-            SONARQUBE_CLI_DISABLE_SENTRY: '1',
           };
           await sonarLoginAndIntegrateClaude(harness, extraEnv, server.baseUrl(), integrateOptions);
         });
