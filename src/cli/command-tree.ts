@@ -324,12 +324,16 @@ const sqaaFormatOption = new Option('--format <format>', 'Output format')
   .default('text');
 
 // Options shared between the bare `analyze` command and its `agentic` subcommand.
-// `--branch` and `--project` are intentionally excluded from the bare command.
+// `--branch` is intentionally excluded from the bare command.
 function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
   return cmd
     .option('--file <file>', 'Analyze a single file (skips change set detection)')
     .option('--staged', 'Analyze staged files only (git diff --cached)')
     .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
+    .option(
+      '-p, --project <project>',
+      'SonarQube Cloud project key (overrides auto-detected project)',
+    )
     .option('--force', 'Skip the large change set confirmation prompt')
     .addOption(sqaaFormatOption);
 }
@@ -337,10 +341,6 @@ function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
 function applySqaaOptions(cmd: SonarCommand): SonarCommand {
   return applyBaseAgenticOptions(cmd)
     .option('--branch <branch>', 'Branch name for analysis context')
-    .option(
-      '-p, --project <project>',
-      'SonarQube Cloud project key (overrides auto-detected project)',
-    )
     .authenticatedAction((auth, options: AnalyzeSqaaOptions) => analyzeSqaa(options, auth));
 }
 

@@ -291,6 +291,86 @@ describe('analyze (no subcommand)', () => {
   );
 
   it(
+    'uses an explicit --project for the bare analyze command in change-set mode',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      harness.cwd.writeFile('new.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze --project explicit-project', {
+        extraEnv: { SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).not.toContain('no project configured');
+      expect(output).toContain('change set is clean');
+
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      const request = JSON.parse(sqaaCalls[0].body ?? '{}') as {
+        filePath?: string;
+        projectKey?: string;
+      };
+      expect(request.filePath).toBe('new.ts');
+      expect(request.projectKey).toBe('explicit-project');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses an explicit --project for the bare analyze command in JSON mode',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      harness.cwd.writeFile('new.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze --project explicit-project --format json', {
+        extraEnv: { SONAR_SECRETS_ALLOW_UNSECURE_HTTP: 'true' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout) as {
+        agentic: { summary: { totalIssues: number } } | null;
+        secrets: { issues: unknown[]; summary: { totalIssues: number } };
+      };
+      expect(report.secrets.issues).toHaveLength(0);
+      expect(report.agentic).not.toBeNull();
+      expect(report.agentic?.summary.totalIssues).toBe(0);
+
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      const request = JSON.parse(sqaaCalls[0].body ?? '{}') as { projectKey?: string };
+      expect(request.projectKey).toBe('explicit-project');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 0 and reports no files when change set is empty (text mode)',
     async () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();

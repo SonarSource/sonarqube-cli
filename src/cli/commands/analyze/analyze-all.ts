@@ -39,6 +39,7 @@ export interface AnalyzeAllOptions {
   file?: string;
   staged?: boolean;
   base?: string;
+  project?: string;
   force?: boolean;
   format?: OutputFormat;
 }
@@ -71,13 +72,13 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
     return analyzeAllJson(options, auth);
   }
 
-  const { file, staged, base, force, format } = options;
+  const { file, staged, base, project, force, format } = options;
 
   if (file !== undefined) {
     await analyzeSecrets({ paths: [file] }, auth);
     // Bare `analyze` is a best-effort catch-all: skip agentic gracefully when no
     // project is configured rather than failing the whole command.
-    await analyzeSqaa({ file, format }, auth, { requireProject: false });
+    await analyzeSqaa({ file, project, format }, auth, { requireProject: false });
     return;
   }
 
@@ -97,7 +98,7 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
   // cover slightly different sets if the working tree changes between calls — this
   // is acceptable since the analyses are independent and best-effort.
   // requireProject: false → bare `analyze` skips agentic gracefully when unconfigured.
-  await analyzeSqaa({ staged, base, force, format }, auth, { requireProject: false });
+  await analyzeSqaa({ staged, base, project, force, format }, auth, { requireProject: false });
 }
 
 async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
