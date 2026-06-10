@@ -44,6 +44,7 @@ import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
+const CURSOR_PROMPT_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
 
 /** Unix-only: verify chmod 555 actually blocks recursive removal on this host. */
 function unixChmodBlocksDirectoryRemoval(): boolean {
@@ -779,6 +780,55 @@ describe('system reset --force', () => {
       expect(configContent).toContain('other-hook');
     },
     { timeout: 15000 },
+  );
+
+  it(
+    'undoes a Cursor sonar-secrets prompt hook and preserves unrelated beforeSubmitPrompt entries',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('cloud-token').start();
+      const serverUrl = server.baseUrl();
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(serverUrl, 'cloud-token');
+
+      harness.cwd.writeFile(
+        '.cursor/hooks.json',
+        JSON.stringify({
+          version: 1,
+          hooks: {
+            beforeSubmitPrompt: [{ command: '.cursor/hooks/other-tool/run.sh' }],
+          },
+        }),
+      );
+
+      const integrateResult = await harness.run('integrate cursor --non-interactive');
+
+      expect(integrateResult.exitCode).toBe(0);
+      expect(
+        harness.cwd.file(...CURSOR_PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
+      ).toBe(true);
+
+      // harness.run() re-seeds state.json from the env builder before each subprocess;
+      // preserve the post-integrate snapshot so reset sees the installed features.
+      const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
+      harness.state().withRawState(stateAfterIntegrate);
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+      expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
+      expect(
+        harness.cwd.file(...CURSOR_PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
+      ).toBe(false);
+
+      const hooks = harness.cwd.file('.cursor', 'hooks.json').asJson() as {
+        hooks?: { beforeSubmitPrompt?: Array<{ command?: string }> };
+      };
+      const commands = hooks.hooks?.beforeSubmitPrompt?.map((entry) => entry.command);
+      expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
+      expect(commands?.some((command) => command?.includes('sonar-secrets'))).toBe(false);
+    },
+    { timeout: 30000 },
   );
 
   it(

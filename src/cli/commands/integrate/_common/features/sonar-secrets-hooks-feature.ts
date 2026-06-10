@@ -42,6 +42,7 @@ export interface SonarSecretsHooksFeatureOptions {
 /** True when a global secrets hook already exists, per the explicit option or, when unset, the recorded state. */
 function globalSecretsHookAlreadyConfigured(
   integrationId: string,
+  featureId: string,
   options: SonarSecretsHooksFeatureOptions,
   scope: IntegrationScope,
   state: CliState,
@@ -49,12 +50,7 @@ function globalSecretsHookAlreadyConfigured(
   if (options.globalSecretsHookExists !== undefined) {
     return options.globalSecretsHookExists;
   }
-  return isFeatureInstalledGloballyForProject(
-    state,
-    scope,
-    integrationId,
-    SONAR_SECRETS_HOOKS_FEATURE_ID,
-  );
+  return isFeatureInstalledGloballyForProject(state, scope, integrationId, featureId);
 }
 
 export function secretsScanningExample(agentDisplayName: string): PostInstallExample {
@@ -74,10 +70,47 @@ export interface SonarSecretsHookScriptSpec {
 
 export interface SonarSecretsHookEntrySpec {
   eventType: string;
-  matcher: string;
+  /** Event matcher (e.g. tool name or `*`). Used by the default Claude/Codex writer; ignored by writers whose schema has no matcher (e.g. Cursor). */
+  matcher?: string;
   marker: string;
   scriptPath: string;
 }
+
+/**
+ * Serializes hook entries into an agent's hook-config document. Claude and Codex share the default
+ * writer (`{ hooks: { <event>: [{ matcher, hooks: [...] }] } }`); agents whose config uses a
+ * different schema (e.g. Cursor's flat `{ command }` entries) inject their own.
+ */
+export interface SonarSecretsHooksWriter {
+  defaultValue: unknown;
+  patch: (
+    document: unknown,
+    context: IntegrationContext,
+    entries: SonarSecretsHookEntrySpec[],
+    configDir: string,
+  ) => unknown;
+  removePatch: (document: unknown, markers: string[]) => unknown;
+}
+
+/** Default writer: the nested `{ matcher, hooks: [{ type, command, timeout }] }` schema used by Claude and Codex. */
+const agentHooksWriter: SonarSecretsHooksWriter = {
+  defaultValue: { hooks: {} },
+  patch: (document, context, entries, configDir) =>
+    upsertAgentHooks(
+      document,
+      entries.map((entry) =>
+        createAgentHookEntry(
+          context,
+          configDir,
+          entry.eventType,
+          entry.matcher ?? '*',
+          entry.marker,
+          entry.scriptPath,
+        ),
+      ),
+    ),
+  removePatch: (document, markers) => removeAgentHooks(document, markers),
+};
 
 export interface SonarSecretsHooksFeatureConfig {
   agentDisplayName: string;
@@ -88,6 +121,12 @@ export interface SonarSecretsHooksFeatureConfig {
   /** Hook scripts to install. Codex supplies only UserPromptSubmit; Claude adds PreToolUse. */
   scripts: SonarSecretsHookScriptSpec[];
   hookEntries: SonarSecretsHookEntrySpec[];
+  /** Feature id recorded in state. Defaults to the shared `sonar-secrets-hooks`. */
+  featureId?: string;
+  /** Feature display name shown during install. Defaults to `secret scanning hooks`. */
+  displayName?: string;
+  /** Hook-config serializer. Defaults to the Claude/Codex schema; agents like Cursor inject their own. */
+  hookWriter?: SonarSecretsHooksWriter;
 }
 
 export function resolveAgentHooksConfigPath(
@@ -101,14 +140,16 @@ export function resolveAgentHooksConfigPath(
 export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHooksFeatureOptions>(
   config: SonarSecretsHooksFeatureConfig,
 ): FeatureDeclaration<TOptions> {
+  const featureId = config.featureId ?? SONAR_SECRETS_HOOKS_FEATURE_ID;
+  const writer = config.hookWriter ?? agentHooksWriter;
   const resolveHooksConfigPath = (context: IntegrationContext) =>
     resolveAgentHooksConfigPath(context, config.configDir, config.hooksConfigFileName);
 
   return {
-    id: SONAR_SECRETS_HOOKS_FEATURE_ID,
-    displayName: 'secret scanning hooks',
+    id: featureId,
+    displayName: config.displayName ?? 'secret scanning hooks',
     shouldInstall: ({ options, scope, state }) =>
-      globalSecretsHookAlreadyConfigured(config.integrationId, options, scope, state)
+      globalSecretsHookAlreadyConfigured(config.integrationId, featureId, options, scope, state)
         ? skip(
             'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
           )
@@ -130,23 +171,11 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
         id: config.hooksPatchId,
         displayName: `${config.agentDisplayName} hooks configuration`,
         targetPath: resolveHooksConfigPath,
-        defaultValue: { hooks: {} },
+        defaultValue: writer.defaultValue,
         patch: (document, context) =>
-          upsertAgentHooks(
-            document,
-            config.hookEntries.map((entry) =>
-              createAgentHookEntry(
-                context,
-                config.configDir,
-                entry.eventType,
-                entry.matcher,
-                entry.marker,
-                entry.scriptPath,
-              ),
-            ),
-          ),
+          writer.patch(document, context, config.hookEntries, config.configDir),
         removePatch: (document) =>
-          removeAgentHooks(
+          writer.removePatch(
             document,
             config.hookEntries.map((entry) => entry.marker),
           ),
