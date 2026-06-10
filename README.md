@@ -61,7 +61,7 @@ The SonarQube CLI is designed for three distinct use cases:
 2. **🖥️ Interactive CLI** — Run commands directly in your terminal to scan code, check issues, and manage SonarQube projects manually
    ```bash
    sonar list issues --project my-app
-   sonar verify --staged
+   sonar analyze --file file.ext
    ```
 
 3. **⚙️ Scripting & Automation** — Integrate into scripts for reporting, dashboards, or automated quality gates
@@ -222,7 +222,7 @@ Supported formats: `json` (default), `table`, `toon`, `csv`.
 
 ```bash
 cd your-project-directory
-sonar verify --staged
+sonar analyze --file file.ext
 # Analyzes uncommitted changes for new issues
 # Only shows issues YOU introduced in your changes
 ```
@@ -230,9 +230,9 @@ sonar verify --staged
 **Common options:**
 
 ```bash
-sonar verify --file src/myfile.ts          # Analyze a specific file
-sonar verify --base main                   # Analyze changes vs main branch
-sonar verify --branch feature-xyz          # Set branch context
+sonar analyze --file src/myfile.ts          # Analyze a specific file
+sonar analyze --base main                   # Analyze changes vs main branch
+sonar analyze --branch feature-xyz          # Set branch context
 ```
 
 ---
@@ -350,7 +350,7 @@ CRITICAL | typescript:S3776 | Refactor this function to reduce its Cognitive Com
 ### Analyzing Local Changes
 
 ```bash
-$ sonar verify --staged
+$ sonar analyze
 SonarQube Agentic Analysis: no files in the change set to analyze.
 ```
 
@@ -448,20 +448,20 @@ For SonarQube Cloud, ensure you're using the correct region:
 
 ---
 
-### `sonar verify` says "Not a git repository"
+### `sonar analyze` says "Not a git repository"
 
-**Cause:** `sonar verify` requires git to detect changes.
+**Cause:** `sonar analyze` requires git to detect changes.
 
 **Solution:**
 
 - Run from inside a git repository:
   ```bash
   cd your-project
-  sonar verify
+  sonar analyze
   ```
 - Or analyze a specific file instead:
   ```bash
-  sonar verify --file src/myfile.ts
+  sonar analyze --file src/myfile.ts
   ```
 
 ---

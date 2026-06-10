@@ -351,8 +351,8 @@
         { t: 'Installing claude code hooks...',       c: C.muted, d: 600 },
         { t: '✅ Setup complete!',                   c: C.success },
       ],
-      [ // sonar verify --file
-        { t: '$ sonar verify --file src/auth.ts', cmd: true },
+      [ // sonar analyze --file
+        { t: '$ sonar analyze --file src/auth.ts', cmd: true },
         { t: '' },
         { t: 'Running SonarQube Agentic Analysis analysis...',              c: C.muted, d: 1200 },
         { t: '' },
@@ -536,7 +536,7 @@
     ],
     analyze: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                              desc: 'Connect to SonarQube.' },
-      { title: 'Analyze',             cmd: 'sonar verify --file &lt;file&gt; --project &lt;key&gt;',       desc: 'Runs server-side static analysis on a file (SonarQube Cloud only).' },
+      { title: 'Analyze',             cmd: 'sonar analyze --file &lt;file&gt; --project &lt;key&gt;',       desc: 'Runs server-side static analysis on a file (SonarQube Cloud only).' },
     ],
     hooks: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                           desc: 'Connect to SonarQube.' },
