@@ -1,5 +1,5 @@
 {
-  "version": "0.14.1",
+  "version": "1.0.0",
   "commands": [
     {
       "id": "sonar",
@@ -16,14 +16,14 @@
       "examples": [],
       "children": [
         "sonar-auth",
+        "sonar-list",
         "sonar-api",
         "sonar-integrate",
         "sonar-context",
-        "sonar-list",
-        "sonar-remediate",
         "sonar-analyze",
-        "sonar-verify",
+        "sonar-remediate",
         "sonar-config",
+        "sonar-system",
         "sonar-self-update"
       ]
     },
@@ -123,6 +123,168 @@
         {
           "command": "sonar auth status",
           "description": "Show current server connection and token status"
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "sonar-list",
+      "name": "list",
+      "fullName": "sonar list",
+      "description": "List issues and projects from SonarQube Cloud or Server",
+      "isGroup": true,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-list-issues",
+        "sonar-list-projects"
+      ]
+    },
+    {
+      "id": "sonar-list-issues",
+      "name": "issues",
+      "fullName": "sonar list issues",
+      "description": "Search for issues in SonarQube",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-list",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": true
+        },
+        {
+          "flags": "--statuses <statuses>",
+          "long": "--statuses",
+          "description": "Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--severities <severities>",
+          "long": "--severities",
+          "description": "Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "json",
+          "allowedValues": [
+            "json",
+            "toon",
+            "table",
+            "csv"
+          ]
+        },
+        {
+          "flags": "--branch <branch>",
+          "long": "--branch",
+          "description": "Branch name",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--pull-request <pull-request>",
+          "long": "--pull-request",
+          "description": "Pull request ID",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--page-size <page-size>",
+          "long": "--page-size",
+          "description": "Page size (1-500)",
+          "type": "number",
+          "required": false,
+          "defaultValue": 500
+        },
+        {
+          "flags": "--page <page>",
+          "long": "--page",
+          "description": "Page number",
+          "type": "number",
+          "required": false,
+          "defaultValue": 1
+        }
+      ],
+      "examples": [
+        {
+          "command": "sonar list issues -p my-project",
+          "description": "List issues in a project"
+        },
+        {
+          "command": "sonar list issues -p my-project --format toon",
+          "description": "Output issues in TOON format for AI agents"
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "sonar-list-projects",
+      "name": "projects",
+      "fullName": "sonar list projects",
+      "description": "Search for projects in SonarQube",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-list",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-q, --query <query>",
+          "long": "--query",
+          "short": "-q",
+          "description": "Search query to filter projects by name or key",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--page <page>",
+          "long": "--page",
+          "description": "Page number",
+          "type": "number",
+          "required": false,
+          "defaultValue": 1
+        },
+        {
+          "flags": "--page-size <page-size>",
+          "long": "--page-size",
+          "description": "Page size (1-500)",
+          "type": "number",
+          "required": false,
+          "defaultValue": 500
+        }
+      ],
+      "examples": [
+        {
+          "command": "sonar list projects",
+          "description": "List first 500 accessible projects"
+        },
+        {
+          "command": "sonar list projects -q my-project",
+          "description": "Search projects by name or key"
+        },
+        {
+          "command": "sonar list projects --page 2 --page-size 50",
+          "description": "Paginate through projects"
         }
       ],
       "children": []
@@ -366,6 +528,13 @@
           "required": false
         },
         {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "flags": "--skip-context",
           "long": "--skip-context",
           "description": "Skip the sonar-context-augmentation install/init/skill step",
@@ -405,6 +574,13 @@
           "required": false
         },
         {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
           "flags": "--skip-context",
           "long": "--skip-context",
           "description": "Skip the sonar-context-augmentation install/init/skill step",
@@ -419,7 +595,7 @@
       "id": "sonar-context",
       "name": "context",
       "fullName": "sonar context",
-      "description": "Run Context Augmentation actions (analysis context for AI agents)",
+      "description": "Augment AI agents with context from your codebase (beta: subject to change)",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": false,
@@ -440,199 +616,6 @@
         }
       ],
       "options": [],
-      "examples": [],
-      "children": []
-    },
-    {
-      "id": "sonar-list",
-      "name": "list",
-      "fullName": "sonar list",
-      "description": "List issues and projects from SonarQube Cloud or Server",
-      "isGroup": true,
-      "isRoot": false,
-      "requiresAuth": false,
-      "depth": 1,
-      "parentId": "sonar",
-      "arguments": [],
-      "options": [],
-      "examples": [],
-      "children": [
-        "sonar-list-issues",
-        "sonar-list-projects"
-      ]
-    },
-    {
-      "id": "sonar-list-issues",
-      "name": "issues",
-      "fullName": "sonar list issues",
-      "description": "Search for issues in SonarQube",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": true,
-      "depth": 2,
-      "parentId": "sonar-list",
-      "arguments": [],
-      "options": [
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key",
-          "type": "string",
-          "required": true
-        },
-        {
-          "flags": "--statuses <statuses>",
-          "long": "--statuses",
-          "description": "Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED)",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--severities <severities>",
-          "long": "--severities",
-          "description": "Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--format <format>",
-          "long": "--format",
-          "description": "Output format",
-          "type": "string",
-          "required": false,
-          "defaultValue": "json",
-          "allowedValues": [
-            "json",
-            "toon",
-            "table",
-            "csv"
-          ]
-        },
-        {
-          "flags": "--branch <branch>",
-          "long": "--branch",
-          "description": "Branch name",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--pull-request <pull-request>",
-          "long": "--pull-request",
-          "description": "Pull request ID",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--page-size <page-size>",
-          "long": "--page-size",
-          "description": "Page size (1-500)",
-          "type": "number",
-          "required": false,
-          "defaultValue": 500
-        },
-        {
-          "flags": "--page <page>",
-          "long": "--page",
-          "description": "Page number",
-          "type": "number",
-          "required": false,
-          "defaultValue": 1
-        }
-      ],
-      "examples": [
-        {
-          "command": "sonar list issues -p my-project",
-          "description": "List issues in a project"
-        },
-        {
-          "command": "sonar list issues -p my-project --format toon",
-          "description": "Output issues in TOON format for AI agents"
-        }
-      ],
-      "children": []
-    },
-    {
-      "id": "sonar-list-projects",
-      "name": "projects",
-      "fullName": "sonar list projects",
-      "description": "Search for projects in SonarQube",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": true,
-      "depth": 2,
-      "parentId": "sonar-list",
-      "arguments": [],
-      "options": [
-        {
-          "flags": "-q, --query <query>",
-          "long": "--query",
-          "short": "-q",
-          "description": "Search query to filter projects by name or key",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--page <page>",
-          "long": "--page",
-          "description": "Page number",
-          "type": "number",
-          "required": false,
-          "defaultValue": 1
-        },
-        {
-          "flags": "--page-size <page-size>",
-          "long": "--page-size",
-          "description": "Page size (1-500)",
-          "type": "number",
-          "required": false,
-          "defaultValue": 500
-        }
-      ],
-      "examples": [
-        {
-          "command": "sonar list projects",
-          "description": "List first 500 accessible projects"
-        },
-        {
-          "command": "sonar list projects -q my-project",
-          "description": "Search projects by name or key"
-        },
-        {
-          "command": "sonar list projects --page 2 --page-size 50",
-          "description": "Paginate through projects"
-        }
-      ],
-      "children": []
-    },
-    {
-      "id": "sonar-remediate",
-      "name": "remediate",
-      "fullName": "sonar remediate",
-      "description": "Trigger AI agent remediation for eligible issues (SonarQube Cloud only)",
-      "isGroup": false,
-      "isRoot": false,
-      "requiresAuth": true,
-      "depth": 1,
-      "parentId": "sonar",
-      "arguments": [],
-      "options": [
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "SonarQube Cloud project key (overrides auto-detected project)",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--issues <issueIds>",
-          "long": "--issues",
-          "description": "Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.",
-          "type": "string",
-          "required": false
-        }
-      ],
       "examples": [],
       "children": []
     },
@@ -666,6 +649,14 @@
           "flags": "--base <ref>",
           "long": "--base",
           "description": "Analyze files changed vs a branch or ref (e.g. main)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "SonarQube Cloud project key (overrides auto-detected project)",
           "type": "string",
           "required": false
         },
@@ -743,7 +734,7 @@
       "id": "sonar-analyze-dependency-risks",
       "name": "dependency-risks",
       "fullName": "sonar analyze dependency-risks",
-      "description": "Analyze project dependencies for security and license risks",
+      "description": "Analyze project dependencies for security and license risks (beta: subject to change)",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -787,7 +778,7 @@
       "id": "sonar-analyze-agentic",
       "name": "agentic",
       "fullName": "sonar analyze agentic",
-      "description": "Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply, see https://www.sonarsource.com/products/sonarqube/agentic-analysis/",
+      "description": "Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -817,6 +808,14 @@
           "required": false
         },
         {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "SonarQube Cloud project key (overrides auto-detected project)",
+          "type": "string",
+          "required": false
+        },
+        {
           "flags": "--force",
           "long": "--force",
           "description": "Skip the large change set confirmation prompt",
@@ -839,14 +838,6 @@
           "flags": "--branch <branch>",
           "long": "--branch",
           "description": "Branch name for analysis context",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "SonarQube Cloud project key (overrides auto-detected project)",
           "type": "string",
           "required": false
         }
@@ -855,10 +846,10 @@
       "children": []
     },
     {
-      "id": "sonar-verify",
-      "name": "verify",
-      "fullName": "sonar verify",
-      "description": "Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)",
+      "id": "sonar-remediate",
+      "name": "remediate",
+      "fullName": "sonar remediate",
+      "description": "Trigger AI agent remediation for eligible issues (SonarQube Cloud only)",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -867,57 +858,17 @@
       "arguments": [],
       "options": [
         {
-          "flags": "--file <file>",
-          "long": "--file",
-          "description": "Analyze a single file (skips change set detection)",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--staged",
-          "long": "--staged",
-          "description": "Analyze staged files only (git diff --cached)",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "--base <ref>",
-          "long": "--base",
-          "description": "Analyze files changed vs a branch or ref (e.g. main)",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "--force",
-          "long": "--force",
-          "description": "Skip the large change set confirmation prompt",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "--format <format>",
-          "long": "--format",
-          "description": "Output format",
-          "type": "string",
-          "required": false,
-          "defaultValue": "text",
-          "allowedValues": [
-            "text",
-            "json"
-          ]
-        },
-        {
-          "flags": "--branch <branch>",
-          "long": "--branch",
-          "description": "Branch name for analysis context",
-          "type": "string",
-          "required": false
-        },
-        {
           "flags": "-p, --project <project>",
           "long": "--project",
           "short": "-p",
           "description": "SonarQube Cloud project key (overrides auto-detected project)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--issues <issueIds>",
+          "long": "--issues",
+          "description": "Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.",
           "type": "string",
           "required": false
         }
@@ -982,10 +933,74 @@
       "children": []
     },
     {
+      "id": "sonar-system",
+      "name": "system",
+      "fullName": "sonar system",
+      "description": "System diagnostics and maintenance commands for the SonarQube CLI installation.",
+      "isGroup": true,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-system-status",
+        "sonar-system-reset"
+      ]
+    },
+    {
+      "id": "sonar-system-status",
+      "name": "status",
+      "fullName": "sonar system status",
+      "description": "Show overall system status: authentication, installed binaries, and integrations",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-system",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--json",
+          "long": "--json",
+          "description": "Output as JSON for machine consumption",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-system-reset",
+      "name": "reset",
+      "fullName": "sonar system reset",
+      "description": "Reset the CLI to factory defaults: remove tokens, binaries, integrations, and cached files. Telemetry settings are preserved.",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-system",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--force",
+          "long": "--force",
+          "description": "Skip the interactive confirmation prompt (required for non-interactive use)",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
       "id": "sonar-self-update",
       "name": "self-update",
       "fullName": "sonar self-update",
-      "description": "Update sonar CLI to the latest version",
+      "description": "Update SonarQube CLI to the latest version",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": false,
