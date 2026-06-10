@@ -24,5 +24,4 @@ import { ENV_DO_NOT_TRACK } from '../../src/lib/config-constants.js';
 
 export const ISOLATED_CLI_SPAWN_ENV: Record<string, string> = {
   [ENV_DO_NOT_TRACK]: '1',
-  SONARQUBE_CLI_DISABLE_SENTRY: '1',
 };
