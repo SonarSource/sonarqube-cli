@@ -22,15 +22,27 @@
 // PR 1 (CLI-619): covers MCP server setup, scope semantics, idempotency, and
 // state recording. Hook and CAG tests are added in subsequent PRs.
 
+import { isAbsolute } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { TestHarness } from '../../harness';
+import { cursorIntegration } from '../../../../src/cli/commands/integrate/cursor/declaration';
+import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
+const PROMPT_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
+const HOOKS_JSON_DIRS = ['.cursor', 'hooks.json'];
 
 interface CursorMcpFile {
   mcpServers?: Record<string, { command?: string; args?: string[] }>;
+}
+
+interface CursorHooksFile {
+  version?: number;
+  hooks?: {
+    beforeSubmitPrompt?: Array<{ command?: string }>;
+  };
 }
 
 describe('integrate cursor', () => {
@@ -38,6 +50,7 @@ describe('integrate cursor', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
     const server = await harness.newFakeServer().withAuthToken('tok').start();
     harness.withAuth(server.baseUrl(), 'tok');
   });
@@ -99,7 +112,10 @@ describe('integrate cursor', () => {
 
         const integration = getInstalledIntegration(harness, 'cursor');
         expect(integration).toBeDefined();
-        expect(integration!.features.map((f) => f.featureId).sort()).toEqual(['mcp-server']);
+        expect(integration!.features.map((f) => f.featureId).sort()).toEqual([
+          'mcp-server',
+          'sonar-secrets-prompt-hook',
+        ]);
 
         const mcpFeature = findInstalledFeature(harness, 'cursor', 'mcp-server');
         expect(mcpFeature).toMatchObject({
@@ -217,6 +233,201 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stderr).toContain('cloud');
+      },
+      { timeout: 30000 },
+    );
+  });
+
+  describe('secrets scanning hooks', () => {
+    it(
+      'writes an executable beforeSubmitPrompt script and a hooks.json entry under .cursor/',
+      async () => {
+        const result = await harness.run('integrate cursor --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+
+        const scriptFile = harness.cwd.file(
+          ...PROMPT_SCRIPT_DIRS,
+          hookScriptName('prompt-secrets'),
+        );
+        expect(scriptFile.exists()).toBe(true);
+        expect(scriptFile.isExecutable).toBe(true);
+
+        const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        expect(hooks.version).toBe(1);
+        const entry = hooks.hooks?.beforeSubmitPrompt?.[0];
+        expect(entry?.command).toContain('sonar-secrets');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'uses a project-relative command path so the config is portable',
+      async () => {
+        await harness.run('integrate cursor --non-interactive');
+
+        const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const command = hookScriptPath(String(hooks.hooks?.beforeSubmitPrompt?.[0]?.command));
+        expect(isAbsolute(command)).toBe(false);
+        expect(command.startsWith('.cursor/')).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'records the sonar-secrets-prompt-hook feature and the sonar-secrets dependency in state',
+      async () => {
+        await harness.run('integrate cursor --non-interactive');
+
+        const feature = findInstalledFeature(
+          harness,
+          'cursor',
+          'sonar-secrets-prompt-hook',
+          'project',
+        );
+        expect(feature).toBeDefined();
+        expect(feature?.dependencies?.some((d) => d.id === 'sonar-secrets')).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      're-running does not duplicate the beforeSubmitPrompt entry',
+      async () => {
+        await harness.run('integrate cursor --non-interactive');
+        const result = await harness.run('integrate cursor --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        expect(hooks.hooks?.beforeSubmitPrompt).toHaveLength(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'preserves pre-existing non-Sonar entries in hooks.json across re-install',
+      async () => {
+        harness.cwd.writeFile(
+          '.cursor/hooks.json',
+          JSON.stringify({
+            version: 1,
+            hooks: {
+              beforeSubmitPrompt: [{ command: '.cursor/hooks/other-tool/run.sh' }],
+            },
+          }),
+        );
+
+        const result = await harness.run('integrate cursor --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const commands = hooks.hooks?.beforeSubmitPrompt?.map((entry) => entry.command);
+        expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
+        expect(commands?.some((command) => command?.includes('sonar-secrets'))).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'tolerates hand-edited entries whose command is missing or non-string',
+      async () => {
+        harness.cwd.writeFile(
+          '.cursor/hooks.json',
+          JSON.stringify({
+            version: 1,
+            hooks: {
+              beforeSubmitPrompt: [{}, { command: 123 }, { command: '.cursor/other/run.sh' }],
+            },
+          }),
+        );
+
+        // The malformed entries must not crash the install (the guard skips them); the sonar
+        // hook is still appended alongside the preserved (untouched) entries.
+        const result = await harness.run('integrate cursor --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const commands = hooks.hooks?.beforeSubmitPrompt?.map((entry) => entry.command);
+        expect(
+          commands?.some(
+            (command) => typeof command === 'string' && command.includes('sonar-secrets'),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'tolerates a hand-edited event value that is not an array',
+      async () => {
+        harness.cwd.writeFile(
+          '.cursor/hooks.json',
+          JSON.stringify({
+            version: 1,
+            // A user hand-edited the event to an object instead of an array.
+            hooks: { beforeSubmitPrompt: {} },
+          }),
+        );
+
+        // A non-array event value must not crash the install; it is treated as empty and the
+        // sonar hook is appended as a well-formed array.
+        const result = await harness.run('integrate cursor --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        expect(Array.isArray(hooks.hooks?.beforeSubmitPrompt)).toBe(true);
+        const commands = hooks.hooks?.beforeSubmitPrompt?.map((entry) => entry.command);
+        expect(
+          commands?.some(
+            (command) => typeof command === 'string' && command.includes('sonar-secrets'),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes script + hooks.json under $HOME/.cursor/ with an absolute command path (global)',
+      async () => {
+        const result = await harness.run('integrate cursor -g --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(
+          harness.userHome.exists(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')),
+        ).toBe(true);
+
+        const hooks: CursorHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
+        const command = hookScriptPath(String(hooks.hooks?.beforeSubmitPrompt?.[0]?.command));
+        expect(isAbsolute(command)).toBe(true);
+        expect(command.startsWith(normalizePath(harness.userHome.path))).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips the project-level secrets hook when a global Cursor hook is already recorded',
+      async () => {
+        harness
+          .state()
+          .withInstalledIntegrationFeature(
+            cursorIntegration,
+            'sonar-secrets-prompt-hook',
+            'global',
+          );
+
+        const result = await harness.run('integrate cursor --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain(
+          'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
+        );
+        expect(harness.cwd.exists('.cursor', 'hooks')).toBe(false);
+        expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
+        expect(
+          findInstalledFeature(harness, 'cursor', 'sonar-secrets-prompt-hook', 'project'),
+        ).toBeUndefined();
+        // The MCP server feature still installs.
+        expect(harness.cwd.exists(...MCP_JSON_DIRS)).toBe(true);
       },
       { timeout: 30000 },
     );

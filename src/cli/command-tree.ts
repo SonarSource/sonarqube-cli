@@ -64,6 +64,7 @@ import {
 } from './commands/hook/codex-post-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
+import { cursorPromptSubmit } from './commands/hook/cursor-prompt-submit';
 import { gitPreCommit, type GitPreCommitOptions } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
@@ -552,6 +553,11 @@ hookCommand
   .command('codex-prompt-submit')
   .description('UserPromptSubmit handler for Codex: scan prompts for secrets before sending')
   .anonymousAction(() => codexPromptSubmit());
+
+hookCommand
+  .command('cursor-prompt-submit')
+  .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
+  .anonymousAction(() => cursorPromptSubmit());
 
 hookCommand
   .command('claude-post-tool-use')
