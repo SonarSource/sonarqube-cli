@@ -118,13 +118,6 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
   }
 
   const hasWarnings = results.some((r) => r.item.status === 'warn');
-  const hasFailures = results.some((r) => r.item.status === 'failed');
-  if (hasFailures) {
-    text('CLI reset could not be completed. Review the details above and try again.');
-    warn('System reset failed.');
-    process.exitCode = 1;
-    return;
-  }
 
   if (hasWarnings) {
     text(
