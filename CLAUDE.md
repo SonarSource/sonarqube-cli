@@ -58,7 +58,7 @@ The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) h
 
 ### System reset
 
-`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Implementation is split across `src/cli/commands/system/reset.ts` (orchestration), `reset-auth.ts`, `reset-binaries.ts`, `reset-integrations.ts`, `reset-filesystem.ts`, and `safe-path.ts`. Integration teardown is declarative-only: `integrations.installed` features are removed via `removeFeature()`; legacy `agentExtensions` entries are cleared from state in `clearLegacyState()` but are not used for on-disk cleanup (1.0 does not guarantee removal of pre-declarative artifacts). Binary cleanup removes paths from both `dependencies.installed` and legacy `tools.installed` under `BIN_DIR`. Exits with code `1` when any reset step reports warnings (partial reset).
+`sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Implementation is split across `src/cli/commands/system/reset.ts` (orchestration), `reset-auth.ts`, `reset-binaries.ts`, `reset-integrations.ts`, `reset-filesystem.ts`, and `safe-path.ts`. Integration teardown is declarative-only: `integrations.installed` features are removed via `removeFeature()`; legacy `agentExtensions` entries are cleared from state in `clearLegacyState()` but are not used for on-disk cleanup (1.0 does not guarantee removal of pre-declarative artifacts). Binary cleanup removes paths from both `dependencies.installed` and legacy `tools.installed` under `BIN_DIR`. Partial reset (step warnings) exits `0`.
 
 ## Error handling
 

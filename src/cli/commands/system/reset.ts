@@ -117,13 +117,13 @@ export async function systemReset(options: SystemResetOptions): Promise<void> {
     }
   }
 
-  const hasIssues = results.some((r) => r.item.status === 'warn');
-  if (hasIssues) {
+  const hasWarnings = results.some((r) => r.item.status === 'warn');
+
+  if (hasWarnings) {
     text(
       'CLI has been partially reset. Review the details above and clean up remaining items manually.',
     );
     warn('System reset completed with warnings.');
-    process.exitCode = 1;
     return;
   }
 
