@@ -21,10 +21,13 @@
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
+  detectEol,
+  includesIgnoringEol,
   type PathResolver,
   readTextFile,
   resolvePath,
   type ResourceDeclaration,
+  toEol,
   writeFileIfChanged,
 } from './common';
 
@@ -69,7 +72,9 @@ export class TextSnippet implements ResourceDeclaration {
     if (existing === undefined) {
       return false;
     }
-    return existing.includes(this.renderManagedBlock(await this.resolveContent(context)));
+    const content = await this.resolveContent(context);
+    const renderedContent = this.renderManagedBlock(content, detectEol(existing));
+    return includesIgnoringEol(existing, renderedContent);
   }
 
   async remove(context: IntegrationContext): Promise<void> {
@@ -93,7 +98,8 @@ export class TextSnippet implements ResourceDeclaration {
 
   private async renderContent(path: string, content: string): Promise<string> {
     const existing = (await readTextFile(path)) ?? '';
-    const managedBlock = this.renderManagedBlock(content);
+    const eol = detectEol(existing);
+    const managedBlock = this.renderManagedBlock(content, eol);
     const pattern = new RegExp(
       String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
     );
@@ -103,14 +109,15 @@ export class TextSnippet implements ResourceDeclaration {
 
     const startMarkerIndex = existing.indexOf(this.startMarker);
     if (startMarkerIndex >= 0) {
-      return `${existing.slice(0, startMarkerIndex)}${managedBlock}\n`;
+      return `${existing.slice(0, startMarkerIndex)}${managedBlock}${eol}`;
     }
 
-    return appendBlock(existing, managedBlock);
+    return appendBlock(existing, managedBlock, eol);
   }
 
-  private renderManagedBlock(content: string): string {
-    return `${this.startMarker}\n${content.trimEnd()}\n${this.endMarker}`;
+  private renderManagedBlock(content: string, eol: string): string {
+    const body = toEol(content.trimEnd(), eol);
+    return [this.startMarker, body, this.endMarker].join(eol);
   }
 
   private get startMarker(): string {
@@ -122,11 +129,11 @@ export class TextSnippet implements ResourceDeclaration {
   }
 }
 
-function appendBlock(existing: string, block: string): string {
+function appendBlock(existing: string, block: string, eol: string): string {
   if (existing.length === 0) {
-    return `${block}\n`;
+    return `${block}${eol}`;
   }
-  return `${existing.trimEnd()}\n\n${block}\n`;
+  return `${existing.trimEnd()}${eol}${eol}${block}${eol}`;
 }
 
 function escapeRegExp(value: string): string {

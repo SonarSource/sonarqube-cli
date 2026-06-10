@@ -25,6 +25,7 @@ import { CommandFailedError } from '../../../../_common/error';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
+  equalsIgnoringEol,
   type PathResolver,
   readTextFile,
   resolvePath,
@@ -77,7 +78,9 @@ export class WholeFileResource implements ResourceDeclaration {
   async isApplied(context: IntegrationContext): Promise<boolean> {
     const path = await resolvePath(context, this.options.targetPath);
     const existing = await readTextFile(path);
-    return existing === (await this.resolveContent(context));
+    return (
+      existing !== undefined && equalsIgnoringEol(existing, await this.resolveContent(context))
+    );
   }
 
   async remove(context: IntegrationContext): Promise<void> {
@@ -106,7 +109,7 @@ export class WholeFileResource implements ResourceDeclaration {
     const existing = await readTextFile(path);
     if (
       existing === undefined ||
-      existing === content ||
+      equalsIgnoringEol(existing, content) ||
       this.options.requiresForce !== true ||
       context.force === true ||
       this.isManaged(existing)
