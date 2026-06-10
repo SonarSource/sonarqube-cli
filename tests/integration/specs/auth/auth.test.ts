@@ -237,7 +237,7 @@ describe('auth login', () => {
   );
 
   it(
-    'shows trust warning when --server is a self-hosted SonarQube Server',
+    'shows the server-specific trust confirmation when --server is a self-hosted SonarQube Server',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
@@ -248,12 +248,13 @@ describe('auth login', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with error when user declines trust for --server',
+    'exits with error when user declines the server-specific trust confirmation for --server',
     async () => {
       const server = await harness.newFakeServer().start();
 
@@ -263,6 +264,7 @@ describe('auth login', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
       expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
@@ -671,7 +673,7 @@ describe('auth login — server selection', () => {
   );
 
   it(
-    'shows trust warning for interactive SonarQube Server path',
+    'shows the server-specific trust confirmation for interactive SonarQube Server entry',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
 
@@ -682,12 +684,13 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
     },
     { timeout: 15000 },
   );
 
   it(
-    'exits with error when user declines trust for interactive SonarQube Server path',
+    'exits with error when user declines the server-specific trust confirmation for interactive SonarQube Server entry',
     async () => {
       const server = await harness.newFakeServer().start();
 
@@ -697,6 +700,7 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
       expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
@@ -715,6 +719,7 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
     },
     { timeout: 15000 },
   );
@@ -731,6 +736,7 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
       expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
@@ -752,6 +758,7 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
     },
     { timeout: 15000 },
   );
