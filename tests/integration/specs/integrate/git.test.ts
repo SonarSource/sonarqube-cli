@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import yaml from 'js-yaml';
 
+import { ISOLATED_CLI_SPAWN_ENV } from '../../../_common/isolated-cli-env.js';
 import { TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
@@ -54,7 +55,7 @@ function buildHookEnv(sonarBinDir: string, harness: TestHarness): Record<string,
   if (IS_WINDOWS) {
     delete env.Path;
   }
-  return env;
+  return { ...env, ...ISOLATED_CLI_SPAWN_ENV };
 }
 
 function setupSonarBinDir(harness: TestHarness): {

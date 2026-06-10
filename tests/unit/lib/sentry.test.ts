@@ -71,7 +71,6 @@ beforeEach(() => {
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
   flushSpy = spyOn(Sentry, 'flush').mockResolvedValue(true);
   getClientSpy = spyOn(Sentry, 'getClient').mockReturnValue(undefined);
-  delete process.env['SONARQUBE_CLI_DISABLE_SENTRY'];
   delete process.env[ENV_DO_NOT_TRACK];
 });
 
@@ -82,8 +81,7 @@ afterEach(() => {
   flushSpy.mockRestore();
   getClientSpy.mockRestore();
   delete process.env['SONARSOURCE_DOGFOODING'];
-  process.env['SONARQUBE_CLI_DISABLE_SENTRY'] = '1';
-  delete process.env[ENV_DO_NOT_TRACK];
+  process.env[ENV_DO_NOT_TRACK] = '1';
 });
 
 describe('initSentry', () => {

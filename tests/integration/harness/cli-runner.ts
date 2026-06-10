@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import { IS_WINDOWS } from './platform';
 import type { CliResult } from './types.js';
@@ -71,7 +72,7 @@ export async function runCli(
   const startTime = Date.now();
   mkdirSync(options.cwd, { recursive: true });
 
-  const spawnEnv: Record<string, string> = { ...env, SONARQUBE_CLI_DISABLE_SENTRY: '1' };
+  const spawnEnv: Record<string, string> = { ...env, ...ISOLATED_CLI_SPAWN_ENV };
   if (coverageMode) {
     mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
     const unique = `${Date.now()}-${crypto.randomUUID()}`;
