@@ -22,6 +22,7 @@ import type { AppliedResource, IntegrationContext, MaybePromise } from '../types
 import {
   type BaseResourceOptions,
   detectEol,
+  includesIgnoringEol,
   type PathResolver,
   readTextFile,
   resolvePath,
@@ -72,7 +73,8 @@ export class TextSnippet implements ResourceDeclaration {
       return false;
     }
     const content = await this.resolveContent(context);
-    return existing.includes(this.renderManagedBlock(content, detectEol(existing)));
+    const renderedContent = this.renderManagedBlock(content, detectEol(existing));
+    return includesIgnoringEol(existing, renderedContent);
   }
 
   async remove(context: IntegrationContext): Promise<void> {

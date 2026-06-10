@@ -80,7 +80,11 @@ export async function readTextFile(path: string): Promise<string | undefined> {
 
 /** Returns true when `a` and `b` have the same content, ignoring differences in line endings. */
 export function equalsIgnoringEol(a: string, b: string): boolean {
-  return toEol(a, '\n') === toEol(b, '\n');
+  return toEol(a, EOL) === toEol(b, EOL);
+}
+
+export function includesIgnoringEol(content: string, substring: string): boolean {
+  return toEol(content, EOL).includes(toEol(substring, EOL));
 }
 
 /** Rewrites every line ending in `value` to `eol`. */

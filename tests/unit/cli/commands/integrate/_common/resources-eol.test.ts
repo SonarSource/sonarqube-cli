@@ -20,7 +20,7 @@
 
 import { mkdtempSync, rmSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { EOL, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -29,6 +29,12 @@ import {
   textSnippet,
   wholeFile,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
+import {
+  detectEol,
+  equalsIgnoringEol,
+  includesIgnoringEol,
+  toEol,
+} from '../../../../../../src/cli/commands/integrate/_common/registry/resources/common';
 import type { IntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry/types';
 import { getDefaultState } from '../../../../../../src/lib/state';
 
@@ -166,5 +172,108 @@ describe('EOL-preserving resource writes', () => {
       const resource = makeResource('sonar analyze\n');
       expect(await resource.isApplied(context())).toBe(false);
     });
+
+    it('isApplied returns true when surrounding content uses CRLF but the managed block uses LF', async () => {
+      const path = join(tempDir, 'config');
+      // Mixed: rest of file is CRLF, block itself is LF — e.g. written by a different tool.
+      // detectEol returns the platform EOL for mixed content, so renderManagedBlock may produce
+      // a block with different endings than the one already in the file.
+      await writeFile(path, `before\r\n${START}\nsonar analyze\n${END}\r\nafter\r\n`, 'utf-8');
+
+      const resource = makeResource('sonar analyze\n');
+      expect(await resource.isApplied(context())).toBe(true);
+    });
+
+    it('isApplied returns true when surrounding content uses LF but the managed block uses CRLF', async () => {
+      const path = join(tempDir, 'config');
+      await writeFile(path, `before\n${START}\r\nsonar analyze\r\n${END}\nafter\n`, 'utf-8');
+
+      const resource = makeResource('sonar analyze\n');
+      expect(await resource.isApplied(context())).toBe(true);
+    });
+  });
+});
+
+describe('includesIgnoringEol', () => {
+  it('returns true when content includes substring with the same line endings', () => {
+    expect(includesIgnoringEol('a\nb\nc', 'a\nb')).toBe(true);
+  });
+
+  it('returns true when content uses CRLF but substring uses LF', () => {
+    expect(includesIgnoringEol('a\r\nb\r\nc', 'a\nb')).toBe(true);
+  });
+
+  it('returns true when content uses LF but substring uses CRLF', () => {
+    expect(includesIgnoringEol('a\nb\nc', 'a\r\nb')).toBe(true);
+  });
+
+  it('returns false when content does not contain the substring', () => {
+    expect(includesIgnoringEol('a\nb\nc', 'x\ny')).toBe(false);
+  });
+
+  it('returns false when substring is absent regardless of line endings', () => {
+    expect(includesIgnoringEol('a\r\nb\r\nc', 'x\r\ny')).toBe(false);
+  });
+});
+
+describe('toEol', () => {
+  it('converts LF to CRLF', () => {
+    expect(toEol('a\nb\n', '\r\n')).toBe('a\r\nb\r\n');
+  });
+
+  it('converts CRLF to LF', () => {
+    expect(toEol('a\r\nb\r\n', '\n')).toBe('a\nb\n');
+  });
+
+  it('normalises mixed line endings to the target EOL', () => {
+    expect(toEol('a\r\nb\nc\r\n', '\n')).toBe('a\nb\nc\n');
+  });
+
+  it('is a no-op when the value already uses the target EOL', () => {
+    expect(toEol('a\nb', '\n')).toBe('a\nb');
+  });
+
+  it('does not alter a string that contains no line endings', () => {
+    expect(toEol('abc', '\r\n')).toBe('abc');
+  });
+});
+
+describe('detectEol', () => {
+  it('returns LF for a string that contains only LF line endings', () => {
+    expect(detectEol('a\nb\nc\n')).toBe('\n');
+  });
+
+  it('returns CRLF for a string that contains only CRLF line endings', () => {
+    expect(detectEol('a\r\nb\r\nc\r\n')).toBe('\r\n');
+  });
+
+  it('returns the platform EOL for a string with mixed line endings', () => {
+    expect(detectEol('a\r\nb\nc\r\n')).toBe(EOL);
+  });
+
+  it('returns LF for a string with no line endings', () => {
+    expect(detectEol('abc')).toBe('\n');
+  });
+});
+
+describe('equalsIgnoringEol', () => {
+  it('returns true for identical strings', () => {
+    expect(equalsIgnoringEol('a\nb\n', 'a\nb\n')).toBe(true);
+  });
+
+  it('returns true when one string uses CRLF and the other uses LF', () => {
+    expect(equalsIgnoringEol('a\r\nb\r\n', 'a\nb\n')).toBe(true);
+  });
+
+  it('returns true when one string uses LF and the other uses CRLF', () => {
+    expect(equalsIgnoringEol('a\nb\n', 'a\r\nb\r\n')).toBe(true);
+  });
+
+  it('returns false when the strings differ beyond line endings', () => {
+    expect(equalsIgnoringEol('a\nb\n', 'a\nc\n')).toBe(false);
+  });
+
+  it('returns true for two empty strings', () => {
+    expect(equalsIgnoringEol('', '')).toBe(true);
   });
 });
