@@ -94,17 +94,6 @@ a:hover { text-decoration: underline; }
 .logo:hover { text-decoration: none; opacity: 0.85; }
 
 /* ─── Version Badge ──────────────────────────────────────────── */
-.beta-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  letter-spacing: 0.3px;
-}
 
 .version {
   font-size: 11px;
@@ -374,7 +363,6 @@ pre code {
   margin-bottom: 16px;
 }
 .hero h1 span { color: var(--accent); }
-.hero h1 .beta-badge { font-size: 14px; vertical-align: middle; }
 .hero .tagline {
   font-size: 20px;
   color: var(--text-muted);
