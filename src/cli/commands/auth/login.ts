@@ -233,7 +233,7 @@ export async function confirmServerTrust(server: string): Promise<void> {
     return;
   }
   warn('Only connect to servers you trust.');
-  const confirmed = await confirmPrompt('Connect anyway?', true);
+  const confirmed = await confirmPrompt(`Connect to: ${server}?`, true);
   if (!confirmed) {
     throw new CommandFailedError('Login cancelled');
   }
