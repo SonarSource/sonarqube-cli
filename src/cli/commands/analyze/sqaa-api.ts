@@ -87,12 +87,11 @@ export async function fetchSqaaResponse(
   const filePath = toRelativePosixPath(file, pathBase);
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   try {
-    return await client.analyzeFile({
+    return await client.createAnalysis({
       organizationKey: auth.orgKey,
       projectKey,
       ...(branch ? { branchName: branch } : {}),
-      filePath,
-      fileContent,
+      files: [{ path: filePath, content: fileContent }],
     });
   } catch (err) {
     if (err instanceof ServiceUnavailableError) {

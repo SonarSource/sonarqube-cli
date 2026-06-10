@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
+import { parseSqaaRequestBody, sqaaRequestSingleFilePath } from './sqaa-request-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -320,12 +321,11 @@ describe('analyze (no subcommand)', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
-      const request = JSON.parse(sqaaCalls[0].body ?? '{}') as {
-        filePath?: string;
-        projectKey?: string;
-      };
-      expect(request.filePath).toBe('new.ts');
+      const request = parseSqaaRequestBody(sqaaCalls[0].body);
+      expect(sqaaRequestSingleFilePath(sqaaCalls[0].body)).toBe('new.ts');
       expect(request.projectKey).toBe('explicit-project');
+      expect(request.files).toHaveLength(1);
+      expect(request.analysisDepth).toBeUndefined();
     },
     { timeout: 15000 },
   );
@@ -1778,9 +1778,7 @@ describe('analyze agentic — running from a subdirectory', () => {
       expect(sqaaCalls).toHaveLength(2);
 
       // Paths sent to SQAA are relative to the repo root regardless of cwd.
-      const filePaths = sqaaCalls
-        .map((c) => (JSON.parse(c.body ?? '{}') as { filePath?: string }).filePath)
-        .sort();
+      const filePaths = sqaaCalls.map((c) => sqaaRequestSingleFilePath(c.body)).sort();
       expect(filePaths).toEqual(['src/ui/inside.ts', 'top-level.ts']);
     },
     { timeout: 15000 },
@@ -1811,8 +1809,7 @@ describe('analyze agentic — running from a subdirectory', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
-      const sentPath = (JSON.parse(sqaaCalls[0].body ?? '{}') as { filePath?: string }).filePath;
-      expect(sentPath).toBe('with space.ts');
+      expect(sqaaRequestSingleFilePath(sqaaCalls[0].body)).toBe('with space.ts');
     },
     { timeout: 15000 },
   );

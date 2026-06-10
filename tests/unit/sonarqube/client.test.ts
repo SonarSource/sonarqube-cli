@@ -882,20 +882,21 @@ describe('SonarQubeClient', () => {
   });
 
   // -------------------------------------------------------------------------
-  // analyzeFile
+  // createAnalysis
   // -------------------------------------------------------------------------
 
-  describe('analyzeFile', () => {
+  describe('createAnalysis', () => {
+    const singleFileRequest = {
+      organizationKey: 'my-org',
+      projectKey: 'my-project',
+      files: [{ path: 'src/index.ts', content: 'const x = 1;' }],
+    };
+
     it('sends POST to SONARCLOUD_API_URL for EU Cloud', async () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
-      await cloudClient.analyzeFile({
-        organizationKey: 'my-org',
-        projectKey: 'my-project',
-        filePath: 'src/index.ts',
-        fileContent: 'const x = 1;',
-      });
+      await cloudClient.createAnalysis(singleFileRequest);
 
       const url = lastFetchUrl(fetchSpy);
       expect(url).toBe(`${SONARCLOUD_API_URL}/a3s-analysis/analyses`);
@@ -905,12 +906,7 @@ describe('SonarQubeClient', () => {
       const usClient = new SonarQubeClient(SONARCLOUD_US_URL, TOKEN);
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
-      await usClient.analyzeFile({
-        organizationKey: 'my-org',
-        projectKey: 'my-project',
-        filePath: 'src/index.ts',
-        fileContent: 'const x = 1;',
-      });
+      await usClient.createAnalysis(singleFileRequest);
 
       const url = lastFetchUrl(fetchSpy);
       expect(url).toBe(`${SONARCLOUD_US_API_URL}/a3s-analysis/analyses`);
@@ -919,44 +915,29 @@ describe('SonarQubeClient', () => {
     it('sends Bearer token in Authorization header', async () => {
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
-      await client.analyzeFile({
-        organizationKey: 'my-org',
-        projectKey: 'my-project',
-        filePath: 'src/index.ts',
-        fileContent: 'const x = 1;',
-      });
+      await client.createAnalysis(singleFileRequest);
 
       const init = lastFetchInit(fetchSpy);
       expect((init.headers as Record<string, string>)['Authorization']).toBe(`Bearer ${TOKEN}`);
     });
 
-    it('sends request body as JSON', async () => {
+    it('sends request body as JSON with files[]', async () => {
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
-      await client.analyzeFile({
-        organizationKey: 'my-org',
-        projectKey: 'my-project',
-        filePath: 'src/index.ts',
-        fileContent: 'const x = 1;',
-      });
+      await client.createAnalysis(singleFileRequest);
 
       const init = lastFetchInit(fetchSpy);
       const body = JSON.parse(init.body as string) as Record<string, unknown>;
       expect(body.organizationKey).toBe('my-org');
       expect(body.projectKey).toBe('my-project');
-      expect(body.filePath).toBe('src/index.ts');
-      expect(body.fileContent).toBe('const x = 1;');
+      expect(body.files).toEqual([{ path: 'src/index.ts', content: 'const x = 1;' }]);
+      expect(body.analysisDepth).toBeUndefined();
     });
 
     it('does not include branchName in body when not provided', async () => {
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
-      await client.analyzeFile({
-        organizationKey: 'my-org',
-        projectKey: 'my-project',
-        filePath: 'src/index.ts',
-        fileContent: 'const x = 1;',
-      });
+      await client.createAnalysis(singleFileRequest);
 
       const init = lastFetchInit(fetchSpy);
       const body = JSON.parse(init.body as string) as Record<string, unknown>;
@@ -966,17 +947,27 @@ describe('SonarQubeClient', () => {
     it('includes branchName in body when provided', async () => {
       fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
 
-      await client.analyzeFile({
-        organizationKey: 'my-org',
-        projectKey: 'my-project',
-        filePath: 'src/index.ts',
-        fileContent: 'const x = 1;',
+      await client.createAnalysis({
+        ...singleFileRequest,
         branchName: 'feature/my-branch',
       });
 
       const init = lastFetchInit(fetchSpy);
       const body = JSON.parse(init.body as string) as Record<string, unknown>;
       expect(body.branchName).toBe('feature/my-branch');
+    });
+
+    it('includes analysisDepth when provided', async () => {
+      fetchSpy = mockFetch({ id: 'a1', issues: [], errors: null });
+
+      await client.createAnalysis({
+        ...singleFileRequest,
+        analysisDepth: 'DEEP',
+      });
+
+      const init = lastFetchInit(fetchSpy);
+      const body = JSON.parse(init.body as string) as Record<string, unknown>;
+      expect(body.analysisDepth).toBe('DEEP');
     });
 
     it('returns parsed response', async () => {
@@ -987,12 +978,7 @@ describe('SonarQubeClient', () => {
       };
       fetchSpy = mockFetch(mockResponse);
 
-      const result = await client.analyzeFile({
-        organizationKey: 'my-org',
-        projectKey: 'my-project',
-        filePath: 'src/index.ts',
-        fileContent: 'const x = 1;',
-      });
+      const result = await client.createAnalysis(singleFileRequest);
 
       expect(result.id).toBe('analysis-123');
       expect(result.issues).toHaveLength(1);
@@ -1001,14 +987,7 @@ describe('SonarQubeClient', () => {
     it('throws on non-OK response', () => {
       fetchSpy = mockFetch({ message: 'Invalid request body' }, false, 400);
 
-      expect(
-        client.analyzeFile({
-          organizationKey: 'my-org',
-          projectKey: 'my-project',
-          filePath: 'src/index.ts',
-          fileContent: 'const x = 1;',
-        }),
-      ).rejects.toThrow('400');
+      expect(client.createAnalysis(singleFileRequest)).rejects.toThrow('400');
     });
   });
 

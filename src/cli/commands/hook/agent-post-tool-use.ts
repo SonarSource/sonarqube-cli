@@ -69,11 +69,10 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
     const fileContent = readFileSync(filePath, 'utf-8');
     const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
-    const response = await client.analyzeFile({
+    const response = await client.createAnalysis({
       organizationKey: auth.orgKey,
       projectKey,
-      filePath: normalizedPath,
-      fileContent,
+      files: [{ path: normalizedPath, content: fileContent }],
     });
 
     const text = formatSqaaIssuesForHook(response.issues, response.errors);
