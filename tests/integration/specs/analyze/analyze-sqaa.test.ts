@@ -1128,7 +1128,12 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       // Cloud auth but no extension registered. The bare `analyze` catch-all must
       // still skip agentic gracefully (Option A) rather than failing the command.
-      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      // withSecretsBinaryInstalled() avoids a real network download on Windows,
+      // which can cause the afterEach cleanup hook to time out.
+      harness
+        .state()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
       harness.cwd.writeFile('app.ts', 'const a = 1;');
