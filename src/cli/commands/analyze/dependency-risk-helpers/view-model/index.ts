@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+export { type ChainGroupVM, MINIMUM_TRANSITIVE_CHAIN_LENGTH } from './chain-group.ts';
 export type { DependencyRisksViewModel } from './dependency-risks-view-model.ts';
 export type { ErrorVM } from './error.ts';
 export type { FixVersionVM } from './fix-version.ts';
