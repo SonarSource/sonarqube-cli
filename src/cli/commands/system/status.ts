@@ -33,14 +33,12 @@ import {
   SCA_SCANNER_BINARY_NAME,
 } from '../../../lib/install-types';
 import { getMcpConfigFilePath } from '../../../lib/mcp/mcp-helper';
-import { spawnProcess } from '../../../lib/process';
 import { loadState } from '../../../lib/repository/state-repository';
 import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '../../../lib/signatures';
 import type { CliState } from '../../../lib/state';
-import { detectContainerRuntime } from '../../../lib/tool-detector';
 import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
 import { blank, print, success, text, warn } from '../../../ui';
 import { getBanner } from '../../root-help';
@@ -69,11 +67,9 @@ export interface SystemStatusOptions {
 }
 
 type McpConfigStatus = 'configured' | 'invalid' | 'not_configured';
-type McpRunningStatus = 'running' | 'not_running' | 'unknown';
 
 interface McpStatus {
   config: McpConfigStatus;
-  running: McpRunningStatus;
 }
 
 interface IntegrationInfo {
@@ -158,27 +154,9 @@ function checkMcpConfigFile(configPath: string): McpConfigStatus {
   }
 }
 
-async function checkMcpRunning(): Promise<McpRunningStatus> {
-  const runtime = await detectContainerRuntime().catch(() => null);
-  if (!runtime) return 'unknown';
-  try {
-    const result = await spawnProcess(runtime, [
-      'ps',
-      '--filter',
-      'ancestor=mcp/sonarqube',
-      '--format',
-      '{{.ID}}',
-    ]);
-    return result.stdout.trim().length > 0 ? 'running' : 'not_running';
-  } catch {
-    return 'unknown';
-  }
-}
-
 function getMcpStatusForIntegration(
   integrationId: string,
   targetRoot: string,
-  cachedRunning: McpRunningStatus,
   allMcpFeatures: Array<{ integrationId: string; scope: 'project' | 'global'; targetRoot: string }>,
 ): McpStatus | null {
   const agentStr = INTEGRATION_TO_MCP_AGENT[integrationId];
@@ -198,19 +176,19 @@ function getMcpStatusForIntegration(
     );
     const configStatus = checkMcpConfigFile(configPath);
     if (configStatus === 'configured') {
-      return { config: 'configured', running: cachedRunning };
+      return { config: 'configured' };
     }
     if (configStatus === 'invalid') {
       hasInvalid = true;
     }
   }
   if (hasInvalid) {
-    return { config: 'invalid', running: 'unknown' };
+    return { config: 'invalid' };
   }
-  return { config: 'not_configured', running: 'unknown' };
+  return { config: 'not_configured' };
 }
 
-async function getMcpStatusMap(state: CliState): Promise<Map<string, McpStatus>> {
+function getMcpStatusMap(state: CliState): Map<string, McpStatus> {
   const allMcpFeatures = findMcpFeatures(state);
 
   if (allMcpFeatures.length === 0) return new Map();
@@ -224,16 +202,10 @@ async function getMcpStatusMap(state: CliState): Promise<Map<string, McpStatus>>
     }
   }
 
-  const cachedRunning = await checkMcpRunning();
   const statusMap = new Map<string, McpStatus>();
 
   for (const [key, { integrationId, targetRoot }] of uniquePairs) {
-    const status = getMcpStatusForIntegration(
-      integrationId,
-      targetRoot,
-      cachedRunning,
-      allMcpFeatures,
-    );
+    const status = getMcpStatusForIntegration(integrationId, targetRoot, allMcpFeatures);
     if (status) {
       statusMap.set(key, status);
     }
@@ -241,9 +213,9 @@ async function getMcpStatusMap(state: CliState): Promise<Map<string, McpStatus>>
   return statusMap;
 }
 
-async function getInstalledIntegrations(state: CliState): Promise<IntegrationInfo[]> {
+function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
   const result: IntegrationInfo[] = [];
-  const mcpStatusMap = await getMcpStatusMap(state);
+  const mcpStatusMap = getMcpStatusMap(state);
 
   // The framework stores one InstalledIntegration per integrationId; multiple
   // project installs accumulate as separate features with distinct targetRoots.
@@ -310,17 +282,16 @@ function getLegacyAgentPath(agentId: string, state: CliState): string | undefine
 function mcpStatusLine(mcp: McpStatus): string {
   if (mcp.config === 'not_configured') return 'NOT CONFIGURED';
   if (mcp.config === 'invalid') return 'CONFIGURED / INVALID CONFIG';
-  if (mcp.running === 'running') return 'CONFIGURED / SESSION ACTIVE';
-  return 'CONFIGURED / NO ACTIVE SESSION';
+  return 'CONFIGURED';
 }
 
 export async function systemStatus(options: SystemStatusOptions): Promise<void> {
   const state = loadState();
+  const integrations = getInstalledIntegrations(state);
 
-  const [auth, updateResult, integrations] = await Promise.all([
+  const [auth, updateResult] = await Promise.all([
     resolveAuth().catch(() => null),
     checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL).catch(() => null),
-    getInstalledIntegrations(state),
   ]);
 
   const tokenStatus: TokenStatus | null = auth
@@ -355,19 +326,22 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
   const binaries = [...legacyBinaries, ...depBinaries.filter((b) => !seen.has(b.name))];
 
   const cacheDirs = [
-    { name: 'Logs', path: LOG_DIR },
-    { name: 'Dependency Risks Scanner Cache', path: SCA_SCANNER_CACHE_DIR },
-    { name: 'Global Git Hooks', path: GLOBAL_HOOKS_DIR },
+    { id: 'logs', name: 'Logs', path: LOG_DIR },
+    {
+      id: 'sca-scanner-cache',
+      name: 'Dependency Risks Scanner Cache',
+      path: SCA_SCANNER_CACHE_DIR,
+    },
+    { id: 'global-git-hooks', name: 'Global Git Hooks', path: GLOBAL_HOOKS_DIR },
   ];
-  const cache: CacheInfo[] = cacheDirs.map(({ name, path }) => ({
+  const cache: CacheInfo[] = cacheDirs.map(({ id, name, path }) => ({
+    id,
     name,
     path: abbreviatePath(path),
     present: existsSync(path) && statSync(path).isDirectory(),
   }));
 
-  const hasMcpIssues = integrations.some(
-    (i) => i.mcp && (i.mcp.config === 'invalid' || i.mcp.config === 'not_configured'),
-  );
+  const hasMcpIssues = integrations.some((i) => i.mcp?.config === 'invalid');
   const hasIssues = tokenStatus === null || tokenStatus === 'invalid' || hasMcpIssues;
   const recommendations = buildRecommendations(tokenStatus, updateResult, integrations);
 
@@ -396,7 +370,7 @@ type BinaryInfo = {
   updateAvailable: boolean;
   latestVersion: string;
 };
-type CacheInfo = { name: string; path: string; present: boolean };
+type CacheInfo = { id: string; name: string; path: string; present: boolean };
 
 interface StatusData {
   auth: ResolvedAuth | null;
@@ -457,6 +431,7 @@ function printJsonStatus(version: string, data: StatusData): void {
             }
           : { status: 'unauthenticated', token: 'not_set' },
         binaries: binaries.map(({ name, version, path, updateAvailable, latestVersion }) => ({
+          id: name,
           name: getBinaryDisplayName(name),
           version,
           path,
@@ -473,7 +448,6 @@ function printJsonStatus(version: string, data: StatusData): void {
                 mcp: {
                   configured: mcp.config !== 'not_configured',
                   valid: mcp.config === 'configured',
-                  session_active: mcp.running === 'running',
                 },
               }
             : {}),

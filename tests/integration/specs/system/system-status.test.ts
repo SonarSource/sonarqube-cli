@@ -503,16 +503,15 @@ describe('system status', () => {
       const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('CONFIGURED / NO ACTIVE SESSION');
+      expect(result.stdout).toContain('CONFIGURED');
     },
     { timeout: 15000 },
   );
 
   it.skipIf(IS_WINDOWS)(
-    'shows MCP running when docker reports active container',
+    'shows MCP configured status without checking docker',
     async () => {
       const mcpConfigPath = join(harness.userHome.path, '.claude.json');
-      harness.state().withDockerMock(true);
       harness
         .state()
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
@@ -521,7 +520,7 @@ describe('system status', () => {
       const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('CONFIGURED / SESSION ACTIVE');
+      expect(result.stdout).toContain('CONFIGURED');
     },
     { timeout: 15000 },
   );
