@@ -18,53 +18,26 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// git pre-push callback handler — scans files in new commits for secrets and,
-// when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
+// git pre-push callback handler — scans files in new commits for secrets.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { spawnProcess } from '../../../lib/process';
-import { warn } from '../../../ui';
-import { InvalidOptionError } from '../_common/error';
-import { runDepRisksStage } from './git-pre-push-dependency-risks.ts';
 import { runSecretsStage } from './git-pre-push-secrets.ts';
 import type { PushRef } from './stdin';
 import { readGitPushRefs } from './stdin';
 
 export const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 
-export interface GitPrePushOptions {
-  project?: string;
-  dependencyRisks?: boolean;
-}
-
-export async function gitPrePush(
-  options: GitPrePushOptions = {},
-  files: string[] = [],
-): Promise<void> {
-  if (options.dependencyRisks && !options.project) {
-    throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
-  }
-
+export async function gitPrePush(files: string[] = []): Promise<void> {
   const auth = await resolveAuth().catch(() => null);
   if (!auth) return;
 
   const fileGroups = await getFileGroupsToScan(files);
   if (fileGroups === null) return;
 
-  if (await hasUncommittedChanges()) {
-    warn(
-      'Uncommitted changes detected — they are not part of this push but will be included in the scan.',
-    );
-  }
-
   for (const group of fileGroups) {
     await runSecretsStage(group, auth);
-  }
-
-  if (options.dependencyRisks && options.project) {
-    const changedFiles = [...new Set(fileGroups.flat())];
-    await runDepRisksStage({ project: options.project, changedFiles, auth });
   }
 }
 
@@ -163,14 +136,5 @@ async function getFilesForNewBranch(localSha: string, emptyTree: string): Promis
     return result.stdout.trim().split('\n').filter(Boolean);
   } catch {
     return [];
-  }
-}
-
-export async function hasUncommittedChanges(): Promise<boolean> {
-  try {
-    const result = await spawnProcess('git', ['diff', '--quiet', 'HEAD']);
-    return result.exitCode !== 0;
-  } catch {
-    return false;
   }
 }

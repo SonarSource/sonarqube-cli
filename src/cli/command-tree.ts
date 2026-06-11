@@ -64,8 +64,8 @@ import {
 } from './commands/hook/codex-post-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
-import { gitPreCommit } from './commands/hook/git-pre-commit';
-import { gitPrePush, type GitPrePushOptions } from './commands/hook/git-pre-push';
+import { gitPreCommit, type GitPreCommitOptions } from './commands/hook/git-pre-commit';
+import { gitPrePush } from './commands/hook/git-pre-push';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateClaude } from './commands/integrate/claude';
 import { integrateCodex } from './commands/integrate/codex';
@@ -551,14 +551,8 @@ hookCommand
 
 hookCommand
   .command('git-pre-commit')
-  .description('git pre-commit handler: scan staged files for secrets')
-  .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-  .anonymousAction((files: string[]) => gitPreCommit(files));
-
-hookCommand
-  .command('git-pre-push')
   .description(
-    'git pre-push handler: scan files in new commits for secrets, optionally scan dependency manifests for risks',
+    'git pre-commit handler: scan staged files for secrets, optionally scan dependency manifests for risks',
   )
   .option('-p, --project <project>', 'Project key (required when --dependency-risks is set)')
   .option(
@@ -566,7 +560,13 @@ hookCommand
     'Also run a dependency-risks scan after the secrets scan (requires -p)',
   )
   .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
-  .anonymousAction((files: string[], options: GitPrePushOptions) => gitPrePush(options, files));
+  .anonymousAction((files: string[], options: GitPreCommitOptions) => gitPreCommit(options, files));
+
+hookCommand
+  .command('git-pre-push')
+  .description('git pre-push handler: scan files in new commits for secrets')
+  .argument('[files...]', 'Changed files passed by pre-commit (pass_filenames: true)')
+  .anonymousAction((files: string[]) => gitPrePush(files));
 
 // Hidden flush command — only registered when running as a telemetry worker.
 if (process.env[TELEMETRY_FLUSH_MODE_ENV]) {

@@ -38,6 +38,8 @@ const CLEAN_CONTENT = 'const greeting = "hello world";';
 // Unreachable but well-formed server URL: binary handles connection-refused gracefully.
 const FAKE_SERVER = 'http://localhost:19999';
 const VALID_TOKEN = 'integration-test-token';
+const TEST_ORG = 'my-org';
+const PACKAGE_JSON_CONTENT = '{"name":"demo","version":"1.0.0"}';
 const NON_EXECUTABLE_MODE = 0o644;
 
 describe('sonar hook git-pre-commit', () => {
@@ -179,4 +181,87 @@ describe('sonar hook git-pre-commit', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'exits 2 when --dependency-risks is set without -p',
+    async () => {
+      const result = await harness.run('hook git-pre-commit --dependency-risks');
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('-p');
+    },
+    { timeout: 15000 },
+  );
+
+  describe('with --dependency-risks', () => {
+    it(
+      'exits 0 when not authenticated (graceful skip)',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.state().withScaScannerBinaryInstalled();
+        stageFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
+
+        const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits 0 when sca-scanner binary is not installed (graceful skip)',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
+        stageFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
+
+        const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits 0 when staged files contain no dependency manifests',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
+        stageFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
+
+        const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain(
+          'No dependency manifests changed in this commit',
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 0 (fail-open) when a manifest is staged but the SCA backend is unavailable',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        stageFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
+
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withScaEnabled(true)
+          .withProject('demo')
+          .withProjectSettings('demo', [])
+          .start();
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+        const result = await harness.run('hook git-pre-commit -p demo --dependency-risks', {
+          timeoutMs: 45_000,
+        });
+
+        // Hook is fail-open on scanner failure: warn on stderr, commit not blocked.
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('commit not blocked');
+      },
+      { timeout: 60000 },
+    );
+  });
 });

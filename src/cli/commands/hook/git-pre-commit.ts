@@ -18,36 +18,39 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// git pre-commit callback handler — scans staged files for secrets before commit.
+// git pre-commit callback handler — scans staged files for secrets and,
+// when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
+import { resolveAuth } from '../../../lib/auth-resolver';
 import { spawnProcess } from '../../../lib/process';
-import { print } from '../../../ui';
-import { CommandFailedError } from '../_common/error';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
-import { handleScanError, resolveAuthAndSecrets } from './hook-dependencies';
+import { InvalidOptionError } from '../_common/error';
+import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
+import { runCommitSecretsStage } from './git-pre-commit-secrets.ts';
 
-export async function gitPreCommit(files: string[] = []): Promise<void> {
+export interface GitPreCommitOptions {
+  project?: string;
+  dependencyRisks?: boolean;
+}
+
+export async function gitPreCommit(
+  options: GitPreCommitOptions = {},
+  files: string[] = [],
+): Promise<void> {
+  if (options.dependencyRisks && !options.project) {
+    throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
+  }
+
   const stagedFiles = files.length > 0 ? files : await getStagedFiles();
   if (stagedFiles.length === 0) return;
 
-  const deps = await resolveAuthAndSecrets();
-  if (!deps) return;
+  const auth = await resolveAuth().catch(() => null);
+  if (!auth) return;
 
-  let result;
-  try {
-    result = await runSecretsBinary(deps.binaryPath, stagedFiles, deps.auth);
-  } catch (err) {
-    handleScanError('Commit', err as Error);
-    return;
-  }
+  await runCommitSecretsStage(stagedFiles, auth);
 
-  if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
-    const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
-    if (output) print(output);
-    throw new CommandFailedError('Secrets detected in staged files.', {
-      remediationHint: 'Remove the reported secret, then retry the commit.',
-    });
+  if (options.dependencyRisks && options.project) {
+    await runDepRisksStage({ project: options.project, changedFiles: stagedFiles, auth });
   }
 }
 
