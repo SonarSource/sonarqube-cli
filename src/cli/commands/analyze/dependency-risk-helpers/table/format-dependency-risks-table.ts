@@ -19,19 +19,21 @@
  */
 
 import { dim, green, red, STATUS_ICONS } from '../../../../../ui/colors.js';
+import { pluralize } from '../pluralize.ts';
 import type { RiskFilterDescription } from '../risk-filter.ts';
-import type {
-  DependencyRisksViewModel,
-  ErrorVM,
-  LicenseGroupVM,
-  MalwareGroupVM,
-  PackageIdentity,
-  PackageSummaryVM,
-  PackageVM,
-  RiskGroupVM,
-  RiskVM,
-  SummaryVM,
-  VulnerabilityGroupVM,
+import {
+  type ChainGroupVM,
+  type DependencyRisksViewModel,
+  type ErrorVM,
+  type LicenseGroupVM,
+  type MalwareGroupVM,
+  MINIMUM_TRANSITIVE_CHAIN_LENGTH,
+  type PackageSummaryVM,
+  type PackageVM,
+  type RiskGroupVM,
+  type RiskVM,
+  type SummaryVM,
+  type VulnerabilityGroupVM,
 } from '../view-model';
 import { appendLicenseGroup } from './format-table-license-group.ts';
 import { appendMalwareGroup } from './format-table-malware-group.ts';
@@ -169,38 +171,49 @@ function summarySeverityCell(label: string, count: number): string {
   return `${label} ${icon} ${String(count).padStart(SEVERITY_COUNT_WIDTH)}`;
 }
 
-function transitiveChainLines(chains: PackageIdentity[][]): string[] {
+function transitiveChainLines(chains: ChainGroupVM[]): string[] {
   if (chains.length === 0) {
     return [];
   }
   const displayed = chains.slice(0, MAX_CHAINS_DISPLAYED);
   const lines: string[] = [];
-  for (const chain of displayed) {
-    const labels = chain.map((id) => id.label());
-    for (const line of wrapChain(labels, MAX_LINE_WIDTH)) {
-      lines.push(line);
-    }
+  for (const group of displayed) {
+    for (const line of wrapChain(group, MAX_LINE_WIDTH)) lines.push(line);
   }
   const remaining = chains.length - displayed.length;
   if (remaining > 0) {
-    lines.push(`${LINE_INDENT}and via ${remaining} others`);
+    lines.push(`${LINE_INDENT}via ${remaining} other ${pluralize(remaining, 'package')}`);
   }
   return lines;
 }
 
-function wrapChain(labels: string[], maxWidth: number): string[] {
-  if (labels.length === 0) {
-    return [`${LINE_INDENT}via `];
+function wrapChain(group: ChainGroupVM, maxWidth: number): string[] {
+  const mainLabel = group.parentPackage
+    ? `${LINE_INDENT}via ${group.parentPackage.label()}`
+    : `${LINE_INDENT}direct`;
+
+  const otherRoutes = group.chains.length - 1;
+  const suffix =
+    otherRoutes > 0 ? ` and ${otherRoutes} other ${pluralize(otherRoutes, 'route')}` : '';
+
+  const ancestors = group.chains[0].slice(0, -MINIMUM_TRANSITIVE_CHAIN_LENGTH).reverse();
+
+  const segments = ancestors.map((a, i) => (i === 0 ? ` (← ${a.label()}` : ` ← ${a.label()}`));
+  if (suffix) {
+    segments.push(suffix);
   }
+  if (ancestors.length > 0) {
+    segments[segments.length - 1] += ')';
+  }
+
   const lines: string[] = [];
-  let current = `${LINE_INDENT}via ${labels[0]}`;
-  for (let i = 1; i < labels.length; i++) {
-    const candidate = `${current} → ${labels[i]}`;
-    if (candidate.length <= maxWidth) {
-      current = candidate;
+  let current = mainLabel;
+  for (const segment of segments) {
+    if ((current + segment).length <= maxWidth) {
+      current += segment;
     } else {
       lines.push(current);
-      current = `${CHAIN_CONTINUATION_INDENT}→ ${labels[i]}`;
+      current = `${CHAIN_CONTINUATION_INDENT}${segment.trimStart()}`;
     }
   }
   lines.push(current);

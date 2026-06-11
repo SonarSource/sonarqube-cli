@@ -132,7 +132,7 @@ describe('buildPackageVM — chain resolution', () => {
     const pkg = buildPackageVM(foo, ALLOW_ALL, identityByPurl)!;
 
     expect(pkg.chains).toHaveLength(1);
-    expect(pkg.chains[0].map((id) => id.label())).toEqual(['transit@1.0.0', 'foo@2.0.0']);
+    expect(pkg.chains[0].chains[0].map((id) => id.label())).toEqual(['transit@1.0.0', 'foo@2.0.0']);
   });
 
   it('drops a chain entirely when any purl in it is unknown', () => {
@@ -150,10 +150,10 @@ describe('buildPackageVM — chain resolution', () => {
     const pkg = buildPackageVM(foo, ALLOW_ALL, identityByPurl)!;
 
     expect(pkg.chains).toHaveLength(1);
-    expect(pkg.chains[0].map((id) => id.label())).toEqual(['known@1.0.0', 'foo@4.17.21']);
+    expect(pkg.chains[0].chains[0].map((id) => id.label())).toEqual(['known@1.0.0', 'foo@4.17.21']);
   });
 
-  it('orders resolved chains shortest-first', () => {
+  it('orders groups shortest-first by their shortest chain', () => {
     const foo = mockScaRelease({
       packageName: 'foo',
       dependencyChains: [
@@ -172,7 +172,7 @@ describe('buildPackageVM — chain resolution', () => {
 
     const pkg = buildPackageVM(foo, ALLOW_ALL, identityByPurl)!;
 
-    expect(pkg.chains.map((c) => c.length)).toEqual([1, 2, 3]);
+    expect(pkg.chains.map((g) => g.chains[0].length)).toEqual([1, 2, 3]);
   });
 
   it('preserves all chains — no cap at the builder layer', () => {

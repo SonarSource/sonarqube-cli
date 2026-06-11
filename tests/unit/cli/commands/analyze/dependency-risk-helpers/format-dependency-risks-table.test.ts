@@ -172,40 +172,84 @@ describe('file path line', () => {
 });
 
 describe('dependency chain rendering', () => {
-  it('keeps only the three shortest chains and appends "and via N others" for the rest', () => {
+  it('caps at three unique-parent chains and shows "via N other packages" for the rest', () => {
+    const foo = pkgId('pkg:npm/foo@1.0.0');
+    const p1 = pkgId('pkg:npm/p1@1');
+    const p2 = pkgId('pkg:npm/p2@1');
+    const p3 = pkgId('pkg:npm/p3@1');
+    const p4 = pkgId('pkg:npm/p4@1');
+    const pkg = mockPackageVM({
+      package: foo,
+      chains: [
+        [pkgId('pkg:npm/a@1'), p1, foo],
+        [pkgId('pkg:npm/b@1'), p2, foo],
+        [pkgId('pkg:npm/c@1'), p3, foo],
+        [pkgId('pkg:npm/d@1'), p4, foo],
+      ],
+    });
+    const out = formatDependencyRisksTable(mockDependencyRisksViewModel({ packages: [pkg] }));
+    const chainLines = out
+      .split('\n')
+      .filter((l) => l.trimStart().startsWith('via ') && !l.includes('other package'));
+    expect(chainLines).toHaveLength(3);
+    expect(out).toContain('via 1 other package');
+  });
+
+  it('deduplicates chains sharing the same direct parent and shows "via N longer routes"', () => {
+    const sameParent = pkgId('pkg:npm/same-parent@1');
     const foo = pkgId('pkg:npm/foo@1.0.0');
     const pkg = mockPackageVM({
       package: foo,
-      // pre-sorted shortest first, as the builder would produce
+      // all three arrive via `sameParent` as the direct parent of `foo`
       chains: [
-        [pkgId('pkg:npm/b1@1'), foo],
-        [pkgId('pkg:npm/c1@1'), pkgId('pkg:npm/c2@1'), foo],
-        [pkgId('pkg:npm/a1@1'), pkgId('pkg:npm/a2@1'), pkgId('pkg:npm/a3@1'), foo],
-        [pkgId('pkg:npm/d1@1'), pkgId('pkg:npm/d2@1'), pkgId('pkg:npm/d3@1'), foo],
+        [pkgId('pkg:npm/root@1'), sameParent, foo],
+        [pkgId('pkg:npm/a@1'), pkgId('pkg:npm/a2@1'), sameParent, foo],
+        [pkgId('pkg:npm/b@1'), pkgId('pkg:npm/b2@1'), pkgId('pkg:npm/b3@1'), sameParent, foo],
       ],
     });
     const out = formatDependencyRisksTable(mockDependencyRisksViewModel({ packages: [pkg] }));
     const viaLines = out.split('\n').filter((l) => l.trimStart().startsWith('via '));
-    expect(viaLines).toHaveLength(3);
-    expect(out).toContain('and via 1 others');
-    expect(out).not.toContain('d1@1');
+    expect(viaLines).toHaveLength(1);
+    expect(out).toContain('root@1');
+    expect(out).toContain('and 2 other routes)');
+    expect(out).not.toContain('other package');
   });
 
-  it('omits the "and via N others" tail when there are at most three chains', () => {
-    const foo = pkgId('pkg:npm/foo@4.17.21');
+  it('omits the "and via N others" tail when unique-end chains fit within the display limit', () => {
     const pkg = mockPackageVM({
-      package: foo,
       chains: [
-        [pkgId('pkg:npm/a@1'), foo],
-        [pkgId('pkg:npm/b@1'), foo],
-        [pkgId('pkg:npm/c@1'), foo],
+        [pkgId('pkg:npm/a@1'), pkgId('pkg:npm/end1@1')],
+        [pkgId('pkg:npm/b@1'), pkgId('pkg:npm/end2@1')],
+        [pkgId('pkg:npm/c@1'), pkgId('pkg:npm/end3@1')],
       ],
     });
     const out = formatDependencyRisksTable(mockDependencyRisksViewModel({ packages: [pkg] }));
     expect(out).not.toContain('and via');
   });
 
-  it('wraps a chain that exceeds 80 chars onto a continuation line beginning with →', () => {
+  it('keeps every rendered line within 80 columns even when the "other routes" suffix is appended', () => {
+    // Each label is long enough that appending " and 2 other routes" would push
+    // the last wrapped line past 80 chars if the suffix were not pre-accounted.
+    const longLabel = 'some-very-long-package-name-here@10.20.30';
+    const sameParent = pkgId(`pkg:npm/${longLabel}`);
+    const foo = pkgId('pkg:npm/foo@1.0.0');
+    const pkg = mockPackageVM({
+      package: foo,
+      chains: [
+        [pkgId('pkg:npm/root@1'), sameParent, foo],
+        [pkgId('pkg:npm/a@1'), pkgId('pkg:npm/a2@1'), sameParent, foo],
+        [pkgId('pkg:npm/b@1'), pkgId('pkg:npm/b2@1'), sameParent, foo],
+      ],
+    });
+    const out = formatDependencyRisksTable(mockDependencyRisksViewModel({ packages: [pkg] }));
+    const overlongChainLines = out
+      .split('\n')
+      .filter((l) => l.trimStart().startsWith('via ') || l.trimStart().startsWith('(←'))
+      .filter((l) => l.length > 80);
+    expect(overlongChainLines).toEqual([]);
+  });
+
+  it('wraps a chain that exceeds 80 chars onto a continuation line beginning with ←', () => {
     const base = '@scope-with-a-really-long-name/sub-package';
     const a = `${base}-aaaa`;
     const b = `${base}-bbbb`;
@@ -217,10 +261,10 @@ describe('dependency chain rendering', () => {
     const lines = out.split('\n');
     const viaIdx = lines.findIndex((l) => l.trimStart().startsWith('via '));
     expect(viaIdx).toBeGreaterThan(-1);
-    expect(lines[viaIdx]).toContain(a);
-    expect(lines[viaIdx]).not.toContain(b);
-    expect(lines[viaIdx + 1].trimStart().startsWith('→')).toBe(true);
-    expect(lines[viaIdx + 1]).toContain(b);
+    expect(lines[viaIdx]).toContain(b);
+    expect(lines[viaIdx]).not.toContain(a);
+    expect(lines[viaIdx + 1].trimStart().startsWith('(←')).toBe(true);
+    expect(lines[viaIdx + 1]).toContain(a);
   });
 });
 

@@ -81,14 +81,16 @@ describe('formatDependencyRisksJson', () => {
     ) as {
       packages: {
         package: string;
-        chains: string[][];
+        chains: { parentPackage: string | null; chains: string[][] }[];
         groups: { type: string; risks: unknown[] }[];
       }[];
     };
 
     expect(parsed.packages).toHaveLength(1);
     expect(parsed.packages[0].package).toBe('pkg:npm/lodash@1.0.0');
-    expect(parsed.packages[0].chains).toEqual([['pkg:npm/lodash@1.0.0']]);
+    expect(parsed.packages[0].chains).toEqual([
+      { parentPackage: null, chains: [['pkg:npm/lodash@1.0.0']] },
+    ]);
     expect(parsed.packages[0].groups).toHaveLength(1);
     expect(parsed.packages[0].groups[0]).toMatchObject({ type: 'VULNERABILITY' });
   });
@@ -126,6 +128,67 @@ describe('formatDependencyRisksJson', () => {
     expect(byType.VULNERABILITY.action).toBe('UPGRADE_PACKAGE');
     expect(byType.VULNERABILITY.fixVersions).toEqual([
       { version: '2.0.0', descriptionCode: 'LATEST_STABLE', vulnerabilityIds: [] },
+    ]);
+  });
+
+  it('serializes a transitive chain with the direct parent purl as parentPackage', () => {
+    const parent = pkgId('pkg:npm/parent@1.0.0');
+    const target = pkgId('pkg:npm/foo@1.0.0');
+    const pkg = mockPackageVM({
+      package: target,
+      chains: [[parent, target]],
+    });
+    const parsed = JSON.parse(
+      formatDependencyRisksJson('demo', mockDependencyRisksViewModel({ packages: [pkg] })),
+    ) as { packages: { chains: { parentPackage: string | null; chains: string[][] }[] }[] };
+
+    expect(parsed.packages[0].chains).toEqual([
+      {
+        parentPackage: 'pkg:npm/parent@1.0.0',
+        chains: [['pkg:npm/parent@1.0.0', 'pkg:npm/foo@1.0.0']],
+      },
+    ]);
+  });
+
+  it('groups chains sharing the same direct parent into a single entry', () => {
+    const shared = pkgId('pkg:npm/shared@1.0.0');
+    const a = pkgId('pkg:npm/a@1.0.0');
+    const target = pkgId('pkg:npm/foo@1.0.0');
+    const pkg = mockPackageVM({
+      package: target,
+      chains: [
+        [shared, target],
+        [a, shared, target],
+      ],
+    });
+    const parsed = JSON.parse(
+      formatDependencyRisksJson('demo', mockDependencyRisksViewModel({ packages: [pkg] })),
+    ) as { packages: { chains: { parentPackage: string | null; chains: string[][] }[] }[] };
+
+    expect(parsed.packages[0].chains).toHaveLength(1);
+    expect(parsed.packages[0].chains[0].parentPackage).toBe('pkg:npm/shared@1.0.0');
+    expect(parsed.packages[0].chains[0].chains).toHaveLength(2);
+  });
+
+  it('emits one group entry per unique direct parent', () => {
+    const p1 = pkgId('pkg:npm/p1@1.0.0');
+    const p2 = pkgId('pkg:npm/p2@1.0.0');
+    const target = pkgId('pkg:npm/foo@1.0.0');
+    const pkg = mockPackageVM({
+      package: target,
+      chains: [
+        [p1, target],
+        [p2, target],
+      ],
+    });
+    const parsed = JSON.parse(
+      formatDependencyRisksJson('demo', mockDependencyRisksViewModel({ packages: [pkg] })),
+    ) as { packages: { chains: { parentPackage: string | null; chains: string[][] }[] }[] };
+
+    expect(parsed.packages[0].chains).toHaveLength(2);
+    expect(parsed.packages[0].chains.map((g) => g.parentPackage)).toEqual([
+      'pkg:npm/p1@1.0.0',
+      'pkg:npm/p2@1.0.0',
     ]);
   });
 

@@ -26,6 +26,7 @@ import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
+import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
 import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
@@ -96,10 +97,6 @@ function handleResult(unresolvedRisksCount: number, errorCount: number) {
   } else {
     process.exitCode = EXIT_CODE_OK;
   }
-}
-
-function pluralize(count: number, singular: string): string {
-  return `${singular}${count === 1 ? '' : 's'}`;
 }
 
 export function countUnresolvedIssues(vm: DependencyRisksViewModel): number {

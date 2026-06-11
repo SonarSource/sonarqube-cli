@@ -37,6 +37,7 @@ import {
   type VulnerabilityRiskVM,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 import { buildSummaryVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
+import { groupChainsByParent } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/group-chains-by-parent.ts';
 
 export function pkgId(purl: string): PackageIdentity {
   const atIdx = purl.lastIndexOf('@');
@@ -123,18 +124,23 @@ export function mockVulnerabilityGroupVM(
   };
 }
 
-export function mockPackageVM(overrides: Partial<PackageVM> = {}): PackageVM {
+type MockPackageVMOverrides = Omit<Partial<PackageVM>, 'chains'> & {
+  chains?: PackageIdentity[][];
+};
+
+export function mockPackageVM(overrides: MockPackageVMOverrides = {}): PackageVM {
+  const { chains: rawChains, ...rest } = overrides;
   const identity =
-    overrides.package ?? new PackageIdentity('pkg:npm/lodash@4.17.21', 'lodash', '4.17.21', 'npm');
-  const groups = overrides.groups ?? [mockVulnerabilityGroupVM()];
+    rest.package ?? new PackageIdentity('pkg:npm/lodash@4.17.21', 'lodash', '4.17.21', 'npm');
+  const groups = rest.groups ?? [mockVulnerabilityGroupVM()];
   return {
     package: identity,
     newlyIntroduced: false,
     riskCount: groups.reduce((n, g) => n + g.selectedRisks.length, 0),
     filePaths: ['package-lock.json'],
-    chains: [[identity]],
+    chains: groupChainsByParent(rawChains ?? [[identity]]),
     groups,
-    ...overrides,
+    ...rest,
   };
 }
 
