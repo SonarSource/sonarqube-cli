@@ -22,8 +22,8 @@ import { describe, expect, it, mock } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error.ts';
 import type { ScaScannerInstaller } from '../../../../../../src/cli/commands/_common/install/sca-scanner.ts';
+import type { SecretsInstaller } from '../../../../../../src/cli/commands/_common/install/secrets.ts';
 import { ScaScanOrchestrator } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
-import type { ScaScannerSpawner } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver.ts';
 import type { SonarQubeClient } from '../../../../../../src/sonarqube/client.ts';
 import type { SettingsValue } from '../../../../../../src/sonarqube/settings-value.ts';
@@ -51,18 +51,27 @@ function makeClient(
 
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
 
-function spawnerReturning(payload: unknown): ScaScannerSpawner {
-  return {
-    spawn: () => Promise.resolve({ exitCode: 0, stdout: JSON.stringify(payload), stderr: '' }),
-  };
+// The orchestrator runs `discover-manifests` (pre-scan) before `analyze-project`.
+// Discovery reports no manifests so the secrets pre-scan is a no-op, then the
+// scan call returns the supplied analyze-project payload.
+function mockSpawner(payload: unknown) {
+  return mock((_binaryPath: string, args: string[]) => {
+    const stdout =
+      args[0] === 'discover-manifests' ? JSON.stringify({ files: [] }) : JSON.stringify(payload);
+    return Promise.resolve({ exitCode: 0, stdout, stderr: '' });
+  });
 }
+
+// sonar-secrets is never resolved because discovery returns no manifests.
+const noopSecretsInstaller: SecretsInstaller = { install: () => Promise.resolve(null) };
 
 describe('ScaScanOrchestrator', () => {
   it('returns the scanner response on a successful scan', async () => {
     const orchestrator = new ScaScanOrchestrator(
       makeClient(),
       okInstaller,
-      spawnerReturning(EMPTY_RESPONSE),
+      { spawn: mockSpawner(EMPTY_RESPONSE) },
+      noopSecretsInstaller,
     );
 
     const result = await orchestrator.run(CLOUD_AUTH, 'my-project');
@@ -74,22 +83,43 @@ describe('ScaScanOrchestrator', () => {
     const orchestrator = new ScaScanOrchestrator(
       makeClient({ checkScaEnabled: () => Promise.resolve(false) }),
       okInstaller,
-      spawnerReturning(EMPTY_RESPONSE),
+      { spawn: mockSpawner(EMPTY_RESPONSE) },
+      noopSecretsInstaller,
     );
 
     expect(orchestrator.run(CLOUD_AUTH, 'my-project')).rejects.toBeInstanceOf(CommandFailedError);
   });
 
   it('passes projectKey and token from auth into the scanner invocation', async () => {
-    const spawn = mock((_binaryPath: string, _args: string[]) =>
-      Promise.resolve({ exitCode: 0, stdout: JSON.stringify(EMPTY_RESPONSE), stderr: '' }),
+    const spawn = mockSpawner(EMPTY_RESPONSE);
+    const orchestrator = new ScaScanOrchestrator(
+      makeClient(),
+      okInstaller,
+      { spawn },
+      noopSecretsInstaller,
     );
-    const orchestrator = new ScaScanOrchestrator(makeClient(), okInstaller, { spawn });
 
     await orchestrator.run(CLOUD_AUTH, 'my-project');
 
-    const [, args] = spawn.mock.calls[0];
+    const analyzeCall = spawn.mock.calls.find(([, args]) => args[0] === 'analyze-project');
+    expect(analyzeCall).toBeDefined();
+    const [, args] = analyzeCall!;
     expect(args).toContain('--project-key=my-project');
     expect(args).toContain('--sonar-token=test-token');
+  });
+
+  it('runs manifest discovery before the analyze-project scan', async () => {
+    const spawn = mockSpawner(EMPTY_RESPONSE);
+    const orchestrator = new ScaScanOrchestrator(
+      makeClient(),
+      okInstaller,
+      { spawn },
+      noopSecretsInstaller,
+    );
+
+    await orchestrator.run(CLOUD_AUTH, 'my-project');
+
+    const subcommands = spawn.mock.calls.map(([, args]) => args[0]);
+    expect(subcommands).toEqual(['discover-manifests', 'analyze-project']);
   });
 });
