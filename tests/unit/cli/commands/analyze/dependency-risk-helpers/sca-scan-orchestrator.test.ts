@@ -21,12 +21,12 @@
 import { describe, expect, it, mock } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error.ts';
-import type { ScaScannerInstaller } from '../../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import type { SecretsInstaller } from '../../../../../../src/cli/commands/_common/install/secrets.ts';
 import { ScaScanOrchestrator } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver.ts';
 import type { SonarQubeClient } from '../../../../../../src/sonarqube/client.ts';
 import type { SettingsValue } from '../../../../../../src/sonarqube/settings-value.ts';
+import { okScaInstaller as okInstaller } from './_helpers.ts';
 
 const CLOUD_AUTH: ResolvedAuth = {
   connectionType: 'cloud',
@@ -48,8 +48,6 @@ function makeClient(
     getProjectSettings: overrides.getProjectSettings ?? (() => Promise.resolve([])),
   } as unknown as SonarQubeClient;
 }
-
-const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
 
 // The orchestrator runs `discover-manifests` (pre-scan) before `analyze-project`.
 // Discovery reports no manifests so the secrets pre-scan is a no-op, then the

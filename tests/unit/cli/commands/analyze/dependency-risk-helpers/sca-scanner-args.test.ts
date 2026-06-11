@@ -20,28 +20,11 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { ScaScannerInvocation } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import {
   buildAnalyzeProjectArgs,
   buildDiscoverManifestsArgs,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-args.ts';
-
-function makeInvocation(overrides: Partial<ScaScannerInvocation> = {}): ScaScannerInvocation {
-  return {
-    baseDir: '/repo',
-    apiBaseUrl: 'https://api.sonarcloud.io',
-    downloadBaseUrl: 'https://download.sonarcloud.io/tidelift-cli',
-    sonarToken: 'tok',
-    projectKey: 'my-project',
-    cacheDir: '/cache',
-    workDir: '/work',
-    scannerProperties: {},
-    excludedPaths: [],
-    includeGitIgnoredPaths: false,
-    debug: false,
-    ...overrides,
-  };
-}
+import { makeScaInvocation as makeInvocation } from './_helpers.ts';
 
 describe('buildAnalyzeProjectArgs', () => {
   it('emits the fixed args in declared order', () => {

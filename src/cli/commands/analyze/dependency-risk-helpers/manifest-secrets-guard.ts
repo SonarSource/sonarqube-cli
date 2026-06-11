@@ -82,11 +82,7 @@ async function scanManifestsForSecrets(
   const exitCode = result.exitCode ?? 1;
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-    const issues = parseSecretsOutput(result.stdout);
-    const findings =
-      issues.length > 0
-        ? formatSecretFindings(issues)
-        : [...new Set(files)].map((file) => `  • ${file}`).join('\n');
+    const findings = formatSecretFindings(parseSecretsOutput(result.stdout));
     throw new CommandFailedError(
       `Secrets detected in dependency manifest files. Dependency risks analysis aborted.\n\n${findings}`,
       {
