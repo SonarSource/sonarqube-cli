@@ -24,7 +24,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import { resolveAuth } from '../../../lib/auth-resolver';
-import { toRelativePosixPath } from '../../../lib/fs-utils';
+import { canonicalizePath, toRelativePosixPath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { formatSqaaIssuesForHook, writePostToolUseHookOutput } from './format-sqaa-hook-context';
@@ -59,14 +59,15 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
   const projectKey = options.project;
   if (!projectKey) return;
 
-  const normalizedPath = toRelativePosixPath(filePath);
+  const canonicalPath = canonicalizePath(filePath);
+  const normalizedPath = toRelativePosixPath(canonicalPath);
   if (normalizedPath == null) {
     logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${filePath}`);
     return;
   }
 
   try {
-    const fileContent = readFileSync(filePath, 'utf-8');
+    const fileContent = readFileSync(canonicalPath, 'utf-8');
     const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
     const response = await client.createAnalysis({
