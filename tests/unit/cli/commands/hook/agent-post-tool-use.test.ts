@@ -37,7 +37,7 @@ describe('agentPostToolUse', () => {
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSyncSpy: ReturnType<typeof spyOn>;
-  let analyzeFileSpy: ReturnType<typeof spyOn>;
+  let createAnalysisSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -53,9 +53,10 @@ describe('agentPostToolUse', () => {
     });
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
-    analyzeFileSpy = spyOn(clientModule.SonarQubeClient.prototype, 'analyzeFile').mockResolvedValue(
-      { id: 'analysis-id', issues: [], errors: null },
-    );
+    createAnalysisSpy = spyOn(
+      clientModule.SonarQubeClient.prototype,
+      'createAnalysis',
+    ).mockResolvedValue({ id: 'analysis-id', issues: [], errors: null });
   });
 
   afterEach(() => {
@@ -64,7 +65,7 @@ describe('agentPostToolUse', () => {
     readStdinJsonSpy.mockRestore();
     existsSyncSpy.mockRestore();
     readFileSyncSpy.mockRestore();
-    analyzeFileSpy.mockRestore();
+    createAnalysisSpy.mockRestore();
   });
 
   it('writes additionalContext JSON when analysis returns no issues', async () => {
@@ -84,11 +85,21 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls createAnalysis with files[] and no analysisDepth', async () => {
+    await agentPostToolUse({ project: 'my-project' });
+
+    expect(createAnalysisSpy).toHaveBeenCalledWith({
+      organizationKey: 'myorg',
+      projectKey: 'my-project',
+      files: [{ path: 'src/index.ts', content: 'const x = 1;' }],
+    });
   });
 
   it('includes issue details in additionalContext when issues are found', async () => {
-    analyzeFileSpy.mockResolvedValue({
+    createAnalysisSpy.mockResolvedValue({
       id: 'analysis-id',
       issues: [
         {
@@ -112,7 +123,7 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
@@ -125,14 +136,14 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
   it('returns without output when project key is not provided', async () => {
     await agentPostToolUse({});
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
@@ -141,7 +152,7 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
   it('returns without output when auth rejects', async () => {
@@ -149,7 +160,7 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
   it('returns without output when file does not exist', async () => {
@@ -157,7 +168,7 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
@@ -166,12 +177,12 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
   it('returns without output when analysis throws', async () => {
-    analyzeFileSpy.mockRejectedValue(new Error('Network error'));
+    createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
     await agentPostToolUse({ project: 'my-project' });
 
@@ -179,7 +190,7 @@ describe('agentPostToolUse', () => {
   });
 
   it('includes errors in additionalContext when analysis returns errors', async () => {
-    analyzeFileSpy.mockResolvedValue({
+    createAnalysisSpy.mockResolvedValue({
       id: 'analysis-id',
       issues: [],
       errors: [{ code: 'FILE_NOT_FOUND', message: 'File not indexed' }],
@@ -197,7 +208,7 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
@@ -211,12 +222,12 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse({ project: 'my-project' });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
   it('uses plural "issues" when analysis returns more than one issue', async () => {
-    analyzeFileSpy.mockResolvedValue({
+    createAnalysisSpy.mockResolvedValue({
       id: 'analysis-id',
       issues: [
         { rule: 'java:S1', message: 'First', textRange: null },
@@ -232,7 +243,7 @@ describe('agentPostToolUse', () => {
   });
 
   it('omits line location when issue has no textRange', async () => {
-    analyzeFileSpy.mockResolvedValue({
+    createAnalysisSpy.mockResolvedValue({
       id: 'analysis-id',
       issues: [{ rule: 'java:S1', message: 'No location', textRange: null }],
       errors: null,
@@ -245,7 +256,7 @@ describe('agentPostToolUse', () => {
   });
 
   it('does not append errors section when errors array is empty', async () => {
-    analyzeFileSpy.mockResolvedValue({ id: 'analysis-id', issues: [], errors: [] });
+    createAnalysisSpy.mockResolvedValue({ id: 'analysis-id', issues: [], errors: [] });
 
     await agentPostToolUse({ project: 'my-project' });
 

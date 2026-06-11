@@ -54,7 +54,7 @@ let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
-let analyzeFileSpy: ReturnType<typeof spyOn>;
+let createAnalysisSpy: ReturnType<typeof spyOn>;
 let spawnProcessSpy: ReturnType<typeof spyOn>;
 
 /** Cloud state WITH a sonar-sqaa extension entry for the current project root */
@@ -90,7 +90,7 @@ beforeEach(() => {
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
 
-  analyzeFileSpy = spyOn(SonarQubeClient.prototype, 'analyzeFile').mockResolvedValue({
+  createAnalysisSpy = spyOn(SonarQubeClient.prototype, 'createAnalysis').mockResolvedValue({
     id: 'analysis-1',
     issues: [],
     errors: null,
@@ -113,7 +113,7 @@ afterEach(() => {
   saveStateSpy.mockRestore();
   existsSpy.mockRestore();
   readFileSpy.mockRestore();
-  analyzeFileSpy.mockRestore();
+  createAnalysisSpy.mockRestore();
   spawnProcessSpy.mockRestore();
 });
 
@@ -163,7 +163,7 @@ describe('analyzeSqaa: auth resolution', () => {
     expect((thrown as Error).message).toContain(
       'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
     );
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
   it('skips SQAA and warns when extension has no projectKey and requireProject is false (bare analyze)', async () => {
@@ -171,7 +171,7 @@ describe('analyzeSqaa: auth resolution', () => {
 
     await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH, { requireProject: false });
 
-    expect(analyzeFileSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
     const output = getMockUiCalls()
       .map((c) => String(c.args[0]))
       .join('\n');
@@ -182,21 +182,21 @@ describe('analyzeSqaa: auth resolution', () => {
 });
 
 describe('analyzeSqaa: API call and result display', () => {
-  it('calls client.analyzeFile with correct parameters', async () => {
+  it('calls client.createAnalysis with correct parameters', async () => {
     await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
-    expect(analyzeFileSpy).toHaveBeenCalledTimes(1);
-    const request = analyzeFileSpy.mock.calls[0][0];
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.organizationKey).toBe(TEST_ORG);
     expect(request.projectKey).toBe(TEST_PROJECT);
-    expect(request.fileContent).toBe(FILE_CONTENT);
-    expect(typeof request.filePath).toBe('string');
+    expect(request.files).toEqual([{ path: expect.any(String) as string, content: FILE_CONTENT }]);
+    expect(request.analysisDepth).toBeUndefined();
   });
 
   it('does not send branchName in request when no branch is provided', async () => {
     await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
 
-    const request = analyzeFileSpy.mock.calls[0][0];
+    const request = createAnalysisSpy.mock.calls[0][0];
     // branchName: null causes a 400 from the real API — must be omitted entirely
     expect(request.branchName).toBeUndefined();
   });
@@ -204,12 +204,12 @@ describe('analyzeSqaa: API call and result display', () => {
   it('passes branch to client when --branch option is provided', async () => {
     await analyzeSqaa({ file: 'src/index.ts', branch: 'feature/my-branch' }, FAKE_AUTH);
 
-    const request = analyzeFileSpy.mock.calls[0][0];
+    const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.branchName).toBe('feature/my-branch');
   });
 
   it('throws CommandFailedError when SQAA API call fails', () => {
-    analyzeFileSpy.mockRejectedValue(new Error('Network error'));
+    createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
     expect(analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH)).rejects.toThrow(
       'SonarQube Agentic Analysis failed',
@@ -221,8 +221,8 @@ describe('analyzeSqaa: path normalization', () => {
   it('normalizes Windows-style backslash paths to forward slashes in the API request', async () => {
     await analyzeSqaa({ file: String.raw`python\scripts\check_md_code_blocks.py` }, FAKE_AUTH);
 
-    const request = analyzeFileSpy.mock.calls[0][0];
-    expect(request.filePath).toBe('python/scripts/check_md_code_blocks.py');
+    const request = createAnalysisSpy.mock.calls[0][0];
+    expect(request.files[0].path).toBe('python/scripts/check_md_code_blocks.py');
   });
   it('throws InvalidOptionError when file is outside the current working directory', () => {
     const differentDrive =

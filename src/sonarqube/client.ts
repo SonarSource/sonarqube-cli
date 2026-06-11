@@ -604,10 +604,10 @@ export class SonarQubeClient {
   }
 
   /**
-   * Run server-side SonarQube Agentic Analysis on a single file.
-   * SonarQube Cloud only - endpoint lives on the region-specific API host.
+   * Create a SonarQube Agentic Analysis (single- or multi-file).
+   * SonarQube Cloud only — endpoint lives on the region-specific API host.
    */
-  async analyzeFile(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
+  async createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
     const endpoint = '/a3s-analysis/analyses';
     return await this.post<SqaaAnalysisResponse>(
       endpoint,
@@ -648,13 +648,22 @@ export interface AgentJobResponse {
   taskId: string;
 }
 
+export type SqaaAnalysisDepth = 'STANDARD' | 'DEEP';
+
+export type SqaaFileScope = 'MAIN' | 'TEST';
+
+export interface SqaaAnalysisFile {
+  path: string;
+  content: string;
+  scope?: SqaaFileScope;
+}
+
 export interface SqaaAnalysisRequest {
   organizationKey: string;
   projectKey: string;
   branchName?: string;
-  filePath: string;
-  fileContent: string;
-  fileScope?: 'MAIN' | 'TEST';
+  files: SqaaAnalysisFile[];
+  analysisDepth?: SqaaAnalysisDepth;
 }
 
 export interface SqaaAnalysisResponse {

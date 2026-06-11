@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+import { parseSqaaRequestBody, sqaaRequestFirstFilePath } from '../analyze/sqaa-request-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -143,8 +144,11 @@ describe('sonar hook claude-post-tool-use', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
-      const body = JSON.parse(sqaaCalls[0].body ?? '{}') as { filePath?: string };
-      expect(body.filePath).toBe('src/main.ts');
+      const body = parseSqaaRequestBody(sqaaCalls[0].body);
+      expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('src/main.ts');
+      expect(body.files).toHaveLength(1);
+      expect(body.files?.[0]?.content).toContain('const x');
+      expect(body.analysisDepth).toBeUndefined();
     },
     { timeout: 15000 },
   );

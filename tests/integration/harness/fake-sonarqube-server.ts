@@ -696,6 +696,23 @@ export class FakeSonarQubeServerBuilder {
             );
           }
 
+          let requestBody: { files?: unknown } = {};
+          try {
+            requestBody = JSON.parse(body ?? '{}') as { files?: unknown };
+          } catch {
+            return new Response(JSON.stringify({ message: 'Invalid JSON body' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          if (!Array.isArray(requestBody.files) || requestBody.files.length === 0) {
+            return new Response(JSON.stringify({ message: 'files[] is required' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
           const issues = (sqaaResponse.issues ?? []).map((i) => ({
             rule: i.rule,
             message: i.message,
