@@ -263,4 +263,43 @@ describe('agentPostToolUse', () => {
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.additionalContext).not.toContain('Agentic Analysis errors');
   });
+
+  it('canonicalizes path once so symlink swap after validation cannot exfiltrate files', async () => {
+    // Vulnerability (double canonicalization): toRelativePosixPath(filePath) resolves the
+    // symlink at t0, then canonicalizePath(filePath) resolves it again at t1. An attacker
+    // can swap the symlink between t0 and t1 so validation passes but readFileSync reads
+    // the attacker-controlled file.
+    // Fix: canonicalize exactly once up front, pass the resolved real path to both
+    // toRelativePosixPath and readFileSync so no further symlink resolution occurs.
+    const symlinkPath = join(process.cwd(), 'src/link.ts');
+    const safeTarget = TEST_FILE;
+    const attackerTarget = join(process.cwd(), 'src/other.ts');
+
+    readStdinJsonSpy.mockResolvedValue({
+      tool_name: 'Edit',
+      tool_input: { file_path: symlinkPath },
+    });
+    existsSyncSpy.mockReturnValue(true);
+
+    // Simulate symlink swap: first realpathSync call sees the safe file,
+    // second call (if it happens) sees the attacker file.
+    let resolveCount = 0;
+    const realpathSyncSpy = spyOn(fs, 'realpathSync').mockImplementation(((p: fs.PathLike) => {
+      if (p === symlinkPath) {
+        return ++resolveCount === 1 ? safeTarget : attackerTarget;
+      }
+      return String(p);
+    }) as typeof fs.realpathSync);
+
+    await agentPostToolUse({ project: 'my-project' });
+
+    // Without fix (double canonicalization): resolveCount reaches 2 so readFileSync
+    // is called with attackerTarget — exfiltration succeeds.
+    // With fix (single canonicalization): resolveCount stays at 1 so readFileSync
+    // is called with safeTarget.
+    expect(readFileSyncSpy).toHaveBeenCalledWith(safeTarget, 'utf-8');
+    expect(readFileSyncSpy).not.toHaveBeenCalledWith(attackerTarget, expect.anything());
+
+    realpathSyncSpy.mockRestore();
+  });
 });
