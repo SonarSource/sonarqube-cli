@@ -26,6 +26,7 @@ import type { SpawnResult } from '../../../../lib/process.ts';
 import { warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error.ts';
 import { type ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
+import { buildAnalyzeProjectArgs } from './sca-scanner-args.ts';
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
 const REDACTED_TOKEN = '***';
@@ -133,7 +134,7 @@ export class ScaScannerRunner {
   ) {}
 
   async run(invocation: ScaScannerInvocation): Promise<AnalyzeProjectResponse> {
-    const args = this.buildArgs(invocation);
+    const args = buildAnalyzeProjectArgs(invocation);
     logger.debug(`sca-scanner args: ${JSON.stringify(this.redactedArgs(args))}`);
 
     const binaryPath = await this.installer.install();
@@ -152,32 +153,6 @@ export class ScaScannerRunner {
     logger.info(`SCA Scanner stdout\n${result.stdout}`);
     logger.warn(`SCA Scanner stderr\n${result.stderr}`);
     return this.reportScanResult(result);
-  }
-
-  buildArgs(invocation: ScaScannerInvocation): string[] {
-    const args: string[] = [
-      'analyze-project',
-      `--base-dir=${invocation.baseDir}`,
-      `--api-base-url=${invocation.apiBaseUrl}`,
-      `--download-base-url=${invocation.downloadBaseUrl}`,
-      `--sonar-token=${invocation.sonarToken}`,
-      `--project-key=${invocation.projectKey}`,
-      `--cache-dir=${invocation.cacheDir}`,
-      `--work-dir=${invocation.workDir}`,
-    ];
-    for (const [name, value] of Object.entries(invocation.scannerProperties)) {
-      args.push(`--scanner-property=${name}=${value}`);
-    }
-    for (const path of invocation.excludedPaths) {
-      args.push(`--excluded-path=${path}`);
-    }
-    if (invocation.includeGitIgnoredPaths) {
-      args.push('--include-gitignored-paths');
-    }
-    if (invocation.debug) {
-      args.push('--debug');
-    }
-    return args;
   }
 
   private redactedArgs(args: string[]): string[] {

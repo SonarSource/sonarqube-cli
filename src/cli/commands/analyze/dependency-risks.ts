@@ -23,6 +23,7 @@ import { SonarQubeClient } from '../../../sonarqube/client';
 import { error, print, warn } from '../../../ui';
 import { InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
+import { DefaultSecretsInstaller } from '../_common/install/secrets.ts';
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
@@ -66,6 +67,7 @@ export async function analyzeDependencyRisks(
     client,
     new DefaultScaScannerInstaller(),
     new DefaultScaScannerSpawner(),
+    new DefaultSecretsInstaller(),
   ).run(auth, options.project);
 
   const viewModel = buildDependencyRisksViewModel(result, filter);

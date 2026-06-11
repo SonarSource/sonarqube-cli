@@ -65,7 +65,7 @@ export async function verifyInstallation(path: string): Promise<string> {
   return match[1];
 }
 
-function formatSpawnOutput(stdout: string, stderr: string): string {
+export function formatSpawnOutput(stdout: string, stderr: string): string {
   const parts: string[] = [];
   if (stdout.trim()) parts.push(`stdout:\n${stdout.trimEnd()}`);
   if (stderr.trim()) parts.push(`stderr:\n${stderr.trimEnd()}`);

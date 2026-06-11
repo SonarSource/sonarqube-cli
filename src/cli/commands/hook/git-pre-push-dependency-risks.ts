@@ -33,6 +33,7 @@ import {
   resolveScaScannerBinaryPath,
   ScaScannerNoopInstaller,
 } from '../_common/install/sca-scanner';
+import { ResolveOnlySecretsInstaller } from '../_common/install/secrets';
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks';
 import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/default-sca-scanner-spawner';
 import { buildRiskFilter } from '../analyze/dependency-risk-helpers/risk-filter';
@@ -78,6 +79,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
       client,
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
+      new ResolveOnlySecretsInstaller(),
     ).run(options.auth, options.project);
     viewModel = buildDependencyRisksViewModel(result, filter);
   } catch (err) {

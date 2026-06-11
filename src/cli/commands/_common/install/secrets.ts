@@ -79,3 +79,33 @@ export function resolveSecretsBinaryPath(): string | null {
 export function buildLocalBinaryName(platformInfo: PlatformInfo): string {
   return buildBinaryName(SECRETS_SPEC, platformInfo);
 }
+
+/**
+ * Resolves the sonar-secrets binary, returning its path or null.
+ */
+export interface SecretsInstaller {
+  install(): Promise<string | null>;
+}
+
+/**
+ * Downloads sonar-secrets on demand and throws if it
+ * cannot be installed, aborting the caller.
+ */
+export class DefaultSecretsInstaller implements SecretsInstaller {
+  install(): Promise<string> {
+    return installSecretsBinary();
+  }
+}
+
+/**
+ * Returns the already-installed path or null when sonar-secrets is not present.
+ */
+export class ResolveOnlySecretsInstaller implements SecretsInstaller {
+  install(): Promise<string | null> {
+    try {
+      return Promise.resolve(resolveSecretsBinaryPath());
+    } catch {
+      return Promise.resolve(null);
+    }
+  }
+}
