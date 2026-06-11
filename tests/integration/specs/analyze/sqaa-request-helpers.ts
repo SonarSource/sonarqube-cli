@@ -30,7 +30,7 @@ export function parseSqaaRequestBody(body: string | undefined): ParsedSqaaReques
   return JSON.parse(body ?? '{}') as ParsedSqaaRequestBody;
 }
 
-/** First file path when the CLI sends a single-file request (`files: [1]`). */
-export function sqaaRequestSingleFilePath(body: string | undefined): string | undefined {
+/** Path of the first entry in `files[]`. */
+export function sqaaRequestFirstFilePath(body: string | undefined): string | undefined {
   return parseSqaaRequestBody(body).files?.[0]?.path;
 }
