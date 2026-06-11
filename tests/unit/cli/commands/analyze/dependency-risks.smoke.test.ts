@@ -234,12 +234,15 @@ Recommendations:
     No recommended version without known vulnerabilities`;
 
 describe('analyzeDependencyRisks - output format', () => {
+  let runSpy: ReturnType<typeof spyOn>;
+
   beforeEach(() => {
     setMockUi(true);
-    spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue(SCAN_RESULT_STUB);
+    runSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue(SCAN_RESULT_STUB);
   });
 
   afterEach(() => {
+    runSpy.mockRestore();
     setMockUi(false);
     clearMockUiCalls();
   });
