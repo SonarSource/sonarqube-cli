@@ -152,7 +152,11 @@ function removeManagedBlocks(
 
     const before = sliceBefore(result, startIndex, eol);
     const after = sliceAfter(result, blockEnd, eol);
-    result = before + after;
+    const separator =
+      before.length > 0 && after.length > 0 && !before.endsWith(eol) && !after.startsWith(eol)
+        ? eol
+        : '';
+    result = before + separator + after;
     startIndex = result.indexOf(startMarker);
   }
   return result;

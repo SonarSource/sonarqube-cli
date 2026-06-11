@@ -300,6 +300,43 @@ describe('declarative integration framework - remove and undo', () => {
       expect(await readFile(filePath, 'utf-8')).toBe('before: 1\n\nafter: 2\n');
     });
 
+    it('text-snippet: keeps one blank line when block has a blank line on each side', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const filePath = join(tempDir, 'hook');
+      const resource = textSnippet({
+        id: 's',
+        targetPath: filePath,
+        content: 'body',
+        startMarker: '# sonar:begin s',
+      });
+      await writeFile(
+        filePath,
+        'echo before\n\n# sonar:begin s\nbody\n# sonar:end s\n\necho after\n',
+      );
+
+      await resource.remove(context);
+
+      expect(await readFile(filePath, 'utf-8')).toBe('echo before\n\necho after\n');
+    });
+
+    it('text-snippet: keeps adjacent lines separated when block sits between single newlines', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const filePath = join(tempDir, 'hook');
+      const resource = textSnippet({
+        id: 's',
+        targetPath: filePath,
+        content: 'body',
+        startMarker: '# sonar:begin s',
+      });
+      await writeFile(filePath, 'echo before\n# sonar:begin s\nbody\n# sonar:end s\necho after\n');
+
+      await resource.remove(context);
+
+      expect(await readFile(filePath, 'utf-8')).toBe('echo before\necho after\n');
+    });
+
     it('text-snippet: is a no-op when the file does not exist', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);
