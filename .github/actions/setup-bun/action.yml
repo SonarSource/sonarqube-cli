@@ -29,4 +29,6 @@ runs:
       env:
         ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ inputs.artifactory-username }}
         ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ inputs.artifactory-password }}
+        BUN_CONFIG_REGISTRY: https://repox.jfrog.io/artifactory/api/npm/npm/
+        NPM_CONFIG_REGISTRY: https://repox.jfrog.io/artifactory/api/npm/npm/
       run: bun ci
