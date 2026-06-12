@@ -22,11 +22,11 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../src/cli/commands/_common/error.ts';
 import * as scaInstall from '../../../../../src/cli/commands/_common/install/sca-scanner.ts';
-import { DefaultScaScannerSpawner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/default-sca-scanner-spawner.ts';
+import { ScaScanOrchestrator } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { AnalyzeProjectResponse } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { ScaWatchPatternsRunner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../../src/cli/commands/hook/git-pre-commit-dependency-risks.ts';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
-import { SonarQubeClient } from '../../../../../src/sonarqube/client.ts';
 import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 const FAKE_AUTH: ResolvedAuth = {
@@ -78,30 +78,10 @@ const SCAN_RESULT_EMPTY: AnalyzeProjectResponse = {
   errors: [],
 };
 
-// Returns a spawner implementation that dispatches on the subcommand (args[0]).
-// discover-manifests returns no files so the manifest secrets pre-scan is a no-op.
-function makeSpawner(scanResult: AnalyzeProjectResponse) {
-  return (_binaryPath: string, args: string[]) => {
-    if (args[0] === 'watch-patterns') {
-      return Promise.resolve({
-        exitCode: 0,
-        stdout: JSON.stringify({ patterns: ['package.json'] }),
-        stderr: '',
-      });
-    }
-    if (args[0] === 'discover-manifests') {
-      return Promise.resolve({ exitCode: 0, stdout: JSON.stringify({ files: [] }), stderr: '' });
-    }
-    // analyze-project
-    return Promise.resolve({ exitCode: 0, stdout: JSON.stringify(scanResult), stderr: '' });
-  };
-}
-
 describe('runDepRisksStage', () => {
   let resolveScaScannerBinaryPathSpy: ReturnType<typeof spyOn>;
-  let checkScaEnabledSpy: ReturnType<typeof spyOn>;
-  let getProjectSettingsSpy: ReturnType<typeof spyOn>;
-  let spawnerSpy: ReturnType<typeof spyOn>;
+  let watchPatternsSpy: ReturnType<typeof spyOn>;
+  let orchestratorRunSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     setMockUi(true);
@@ -109,23 +89,18 @@ describe('runDepRisksStage', () => {
       scaInstall,
       'resolveScaScannerBinaryPath',
     ).mockReturnValue('/usr/bin/sca-scanner');
-    checkScaEnabledSpy = spyOn(SonarQubeClient.prototype, 'checkScaEnabled').mockResolvedValue(
-      true,
-    );
-    getProjectSettingsSpy = spyOn(
-      SonarQubeClient.prototype,
-      'getProjectSettings',
-    ).mockResolvedValue([]);
-    spawnerSpy = spyOn(DefaultScaScannerSpawner.prototype, 'spawn').mockImplementation(
-      makeSpawner(SCAN_RESULT_WITH_RISK),
+    watchPatternsSpy = spyOn(ScaWatchPatternsRunner.prototype, 'run').mockResolvedValue([
+      'package.json',
+    ]);
+    orchestratorRunSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue(
+      SCAN_RESULT_WITH_RISK,
     );
   });
 
   afterEach(() => {
     resolveScaScannerBinaryPathSpy.mockRestore();
-    checkScaEnabledSpy.mockRestore();
-    getProjectSettingsSpy.mockRestore();
-    spawnerSpy.mockRestore();
+    watchPatternsSpy.mockRestore();
+    orchestratorRunSpy.mockRestore();
     setMockUi(false);
     clearMockUiCalls();
   });
@@ -150,7 +125,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('resolves without throwing when the scan finds no risks', async () => {
-    spawnerSpy.mockImplementation(makeSpawner(SCAN_RESULT_EMPTY));
+    orchestratorRunSpy.mockResolvedValue(SCAN_RESULT_EMPTY);
 
     await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
 
@@ -160,12 +135,7 @@ describe('runDepRisksStage', () => {
   it('skips when no dependency manifests changed in the commit', async () => {
     await runDepRisksStage({ project: 'demo', changedFiles: ['index.ts'], auth: FAKE_AUTH });
 
-    // watch-patterns fired, but analyze-project was never reached
-    expect(
-      (spawnerSpy.mock.calls as [string, string[]][]).some(
-        ([, args]) => args[0] === 'analyze-project',
-      ),
-    ).toBe(false);
+    expect(orchestratorRunSpy).not.toHaveBeenCalled();
     const skipCall = findMockUiCall('success', 'No dependency manifests changed in this commit');
     expect(skipCall).toBeDefined();
   });
