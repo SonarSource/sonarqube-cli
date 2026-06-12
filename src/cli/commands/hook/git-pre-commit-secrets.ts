@@ -28,18 +28,20 @@ import { handleScanError } from './hook-dependencies';
 export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) return;
-  if (files.length === 0) return;
+
+  let result;
   try {
-    const result = await runSecretsBinary(binaryPath, files, auth);
-    if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
-      const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
-      if (output) print(output);
-      throw new CommandFailedError('Secrets detected in staged files.', {
-        remediationHint: 'Remove the reported secret, then retry the commit.',
-      });
-    }
+    result = await runSecretsBinary(binaryPath, files, auth);
   } catch (err) {
-    if (err instanceof CommandFailedError) throw err;
     handleScanError('Commit', err as Error);
+    return;
+  }
+
+  if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
+    const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
+    if (output) print(output);
+    throw new CommandFailedError('Secrets detected in staged files.', {
+      remediationHint: 'Remove the reported secret, then retry the commit.',
+    });
   }
 }
