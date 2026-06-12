@@ -170,6 +170,24 @@ describe('preScanManifestsForSecrets', () => {
     expect(commandError.remediationHint).toContain('Remove the reported secret');
   });
 
+  it('omits the location and secret details when the finding has none', async () => {
+    const stdout = ['Hardcoded password', 'File: package.json'].join('\n');
+    stubRunSecretsBinary({ exitCode: EXIT_CODE_SECRETS_FOUND, stdout, stderr: '' });
+
+    const error = await captureError(
+      runGuard({
+        files: ['package.json'],
+        secretsInstaller: secretsInstallerReturning('/bin/secrets'),
+      }),
+    );
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    const message = (error as CommandFailedError).message;
+    expect(message).toContain('• package.json — Hardcoded password');
+    expect(message).not.toMatch(/package\.json:\d/);
+    expect(message).not.toContain('(secret:');
+  });
+
   it('throws a CommandFailedError for any other non-zero exit code', async () => {
     stubRunSecretsBinary({ exitCode: 2, stdout: 'out', stderr: 'error' });
 

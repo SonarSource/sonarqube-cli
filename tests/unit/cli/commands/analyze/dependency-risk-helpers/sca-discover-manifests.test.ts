@@ -18,11 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import * as fs from 'node:fs';
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error.ts';
 import type { ScaScannerInstaller } from '../../../../../../src/cli/commands/_common/install/sca-scanner.ts';
@@ -30,6 +31,7 @@ import { ScaDiscoverManifestsRunner } from '../../../../../../src/cli/commands/a
 import { buildDiscoverManifestsArgs } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-args.ts';
 import type { ScaScannerSpawner } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import type { SpawnResult } from '../../../../../../src/lib/process.ts';
+import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 import { makeScaInvocation as makeInvocation, okScaInstaller as okInstaller } from './_helpers.ts';
 
 function spawnerReturning(result: SpawnResult): ScaScannerSpawner {
@@ -178,5 +180,32 @@ describe('ScaDiscoverManifestsRunner.run', () => {
 
     expect(caught).toBeInstanceOf(CommandFailedError);
     expect(existsSync(workDir)).toBe(false);
+  });
+
+  it('warns but does not fail the run when work dir cleanup throws', async () => {
+    const rmSpy = spyOn(fs, 'rmSync').mockImplementation(() => {
+      throw new Error('EBUSY: resource busy or locked');
+    });
+    setMockUi(true);
+    clearMockUiCalls();
+    const runner = new ScaDiscoverManifestsRunner(
+      okInstaller,
+      spawnerReturning({ exitCode: 0, stdout: JSON.stringify({ files: [] }), stderr: '' }),
+    );
+
+    try {
+      const files = await runner.run(makeInvocation({ workDir: '/work' }));
+
+      expect(files).toEqual([]);
+      const warned = getMockUiCalls().some(
+        (call) =>
+          call.method === 'warn' &&
+          String(call.args[0]).includes('Failed to clean up SCA scanner working directory'),
+      );
+      expect(warned).toBe(true);
+    } finally {
+      rmSpy.mockRestore();
+      setMockUi(false);
+    }
   });
 });
