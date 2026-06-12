@@ -22,6 +22,7 @@
 
 import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
+import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import logger from '../lib/logger';
 import { print } from '../ui';
 import { RateLimitError, ServiceUnavailableError } from './errors';
@@ -138,12 +139,7 @@ export class SonarQubeClient {
       print(`request body: ${requestBody}`, process.stderr);
     }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: requestBody,
-      signal: AbortSignal.timeout(timeout),
-    });
+    const response = await fetchGuarded(url, buildFetchInit(method, headers, timeout, requestBody));
 
     if (debug) {
       print(`response status: ${response.status}`, process.stderr);
@@ -185,11 +181,10 @@ export class SonarQubeClient {
       });
     }
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: this.commonHeaders(),
-      signal: AbortSignal.timeout(GET_REQUEST_TIMEOUT_MS),
-    });
+    const response = await fetchGuarded(
+      url.toString(),
+      buildFetchInit('GET', this.commonHeaders(), GET_REQUEST_TIMEOUT_MS),
+    );
 
     const value = response.ok ? ((await response.json()) as TValue) : undefined;
 
@@ -202,12 +197,15 @@ export class SonarQubeClient {
   async post<T>(endpoint: string, body: unknown, baseUrl?: string): Promise<T> {
     const url = `${baseUrl ?? this.serverURL}${endpoint}`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.commonHeaders('json'),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(POST_REQUEST_TIMEOUT_MS),
-    });
+    const response = await fetchGuarded(
+      url,
+      buildFetchInit(
+        'POST',
+        this.commonHeaders('json'),
+        POST_REQUEST_TIMEOUT_MS,
+        JSON.stringify(body),
+      ),
+    );
 
     await this.raiseForStatus(response, 'POST');
 
@@ -224,12 +222,15 @@ export class SonarQubeClient {
     params: Record<string, string>,
     timeoutMs: number = POST_REQUEST_TIMEOUT_MS,
   ): Promise<void> {
-    const response = await fetch(`${this.serverURL}${endpoint}`, {
-      method: 'POST',
-      headers: this.commonHeaders('form'),
-      body: new URLSearchParams(params).toString(),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const response = await fetchGuarded(
+      `${this.serverURL}${endpoint}`,
+      buildFetchInit(
+        'POST',
+        this.commonHeaders('form'),
+        timeoutMs,
+        new URLSearchParams(params).toString(),
+      ),
+    );
 
     await this.raiseForStatus(response, 'POST');
   }
