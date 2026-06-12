@@ -67,7 +67,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     );
 
     expect(runner.run(makeInvocation())).rejects.toThrow(
-      /Manifest discovery failed \(exit code 1\)/,
+      /Manifest discovery error: failed \(exit code 1\)/,
     );
   });
 
@@ -88,13 +88,45 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     expect((caught as CommandFailedError).message).toMatch(/unexpected output/);
   });
 
-  it('throws CommandFailedError when stdout is not valid JSON', () => {
+  it('throws CommandFailedError when stdout is not valid JSON', async () => {
     const runner = new ScaDiscoverManifestsRunner(
       okInstaller,
       spawnerReturning({ exitCode: 0, stdout: 'not json', stderr: '' }),
     );
 
-    expect(runner.run(makeInvocation())).rejects.toThrow();
+    let caught: unknown;
+    try {
+      await runner.run(makeInvocation());
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(CommandFailedError);
+    expect((caught as CommandFailedError).message).toMatch(/failed to parse output/);
+    expect((caught as CommandFailedError).remediationHint).toMatch(
+      /^Inspect .* for the raw sca-scanner output, then retry\.$/,
+    );
+  });
+
+  it('throws CommandFailedError when the spawn fails', async () => {
+    const runner = new ScaDiscoverManifestsRunner(okInstaller, {
+      spawn: () => Promise.reject(new Error('spawn ENOENT')),
+    });
+
+    let caught: unknown;
+    try {
+      await runner.run(makeInvocation());
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(CommandFailedError);
+    expect((caught as CommandFailedError).message).toMatch(
+      /Manifest discovery error: spawn ENOENT/,
+    );
+    expect((caught as CommandFailedError).remediationHint).toBe(
+      'Verify that the SCA scanner is installed and can run on this machine, then retry.',
+    );
   });
 
   it('forwards the installer-resolved binary path and discover-manifests args to the spawner', async () => {

@@ -32,7 +32,7 @@ import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
-const MANIFEST_DISCOVERY_FAILURE_PREFIX = 'Manifest discovery failed (exit code';
+const MANIFEST_DISCOVERY_FAILURE_PREFIX = 'Manifest discovery error: failed (exit code';
 
 describe('analyze dependency-risks', () => {
   let harness: TestHarness;

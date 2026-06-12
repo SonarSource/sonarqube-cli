@@ -30,10 +30,10 @@ import { buildAnalyzeProjectArgs } from './sca-scanner-args.ts';
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
 const REDACTED_TOKEN = '***';
-const SCA_SCANNER_START_FAILURE_HINT =
+export const SCA_SCANNER_START_FAILURE_HINT =
   'Verify that the SCA scanner is installed and can run on this machine, then retry.';
-const SCA_SCANNER_PARSE_FAILURE_HINT = `Inspect ${LOG_FILE} for the raw sca-scanner output, then retry.`;
-const SCA_SCANNER_EXIT_FAILURE_HINT = `Inspect ${LOG_FILE} for the underlying sca-scanner error, fix the reported issue, then retry.`;
+export const SCA_SCANNER_PARSE_FAILURE_HINT = `Inspect ${LOG_FILE} for the raw sca-scanner output, then retry.`;
+export const SCA_SCANNER_EXIT_FAILURE_HINT = `Inspect ${LOG_FILE} for the underlying sca-scanner error, fix the reported issue, then retry.`;
 
 export interface ScaScannerInvocation {
   baseDir: string;

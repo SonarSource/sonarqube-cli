@@ -20,11 +20,16 @@
 
 import { rmSync } from 'node:fs';
 
+import type { SpawnResult } from '../../../../lib/process';
 import { warn } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { formatSpawnOutput } from '../../_common/install/install-utils';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
-import type { ScaScannerInvocation } from './sca-scanner';
+import {
+  SCA_SCANNER_PARSE_FAILURE_HINT,
+  SCA_SCANNER_START_FAILURE_HINT,
+  type ScaScannerInvocation,
+} from './sca-scanner';
 import { buildDiscoverManifestsArgs } from './sca-scanner-args';
 import type { ScaScannerSpawner } from './sca-scanner-spawner';
 
@@ -46,17 +51,32 @@ export class ScaDiscoverManifestsRunner {
   async run(invocation: ScaScannerInvocation): Promise<string[]> {
     try {
       const binaryPath = await this.installer.install();
-      const result = await this.spawner.spawn(binaryPath, buildDiscoverManifestsArgs(invocation));
+      let result: SpawnResult;
+      try {
+        result = await this.spawner.spawn(binaryPath, buildDiscoverManifestsArgs(invocation));
+      } catch (err) {
+        throw new CommandFailedError(`Manifest discovery error: ${(err as Error).message}`, {
+          remediationHint: SCA_SCANNER_START_FAILURE_HINT,
+        });
+      }
       if ((result.exitCode ?? 1) !== 0) {
         throw new CommandFailedError(
-          `Manifest discovery failed (exit code ${String(result.exitCode)}).\n` +
+          `Manifest discovery error: failed (exit code ${String(result.exitCode)}).\n` +
             formatSpawnOutput(result.stdout, result.stderr),
         );
       }
-      const parsed = JSON.parse(result.stdout) as DiscoverManifestsPayload;
+      let parsed: DiscoverManifestsPayload;
+      try {
+        parsed = JSON.parse(result.stdout) as DiscoverManifestsPayload;
+      } catch (err) {
+        throw new CommandFailedError(
+          `Manifest discovery error: failed to parse output (${(err as Error).message})`,
+          { remediationHint: SCA_SCANNER_PARSE_FAILURE_HINT },
+        );
+      }
       if (!Array.isArray(parsed.files)) {
         throw new CommandFailedError(
-          `Manifest discovery returned unexpected output:\n${result.stdout}`,
+          `Manifest discovery error: returned unexpected output:\n${result.stdout}`,
         );
       }
       return parsed.files.filter((f): f is string => typeof f === 'string');
