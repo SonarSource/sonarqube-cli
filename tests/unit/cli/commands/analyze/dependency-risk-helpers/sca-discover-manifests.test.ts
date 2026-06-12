@@ -140,7 +140,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     const installer: ScaScannerInstaller = {
       install: () => Promise.resolve('/bin/sca-from-installer'),
     };
-    const spawn = mock((_binaryPath: string, _args: string[]) =>
+    const spawn = mock((_binaryPath: string, _args: string[], _env?: Record<string, string>) =>
       Promise.resolve({ exitCode: 0, stdout: JSON.stringify({ files: [] }), stderr: '' }),
     );
     const invocation = makeInvocation({
@@ -154,6 +154,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     expect(spawn).toHaveBeenCalledWith(
       '/bin/sca-from-installer',
       discoverManifestsArgs(invocation),
+      { SONAR_TOKEN: invocation.sonarToken },
     );
   });
 
@@ -222,7 +223,6 @@ describe('ScaDiscoverManifestsRunner.buildArgs', () => {
       '--base-dir=/repo',
       '--api-base-url=https://api.sonarcloud.io',
       '--download-base-url=https://download.sonarcloud.io/tidelift-cli',
-      '--sonar-token=tok',
       '--cache-dir=/cache',
       '--work-dir=/work',
     ]);

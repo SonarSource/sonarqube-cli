@@ -28,7 +28,8 @@ import { CommandFailedError } from '../../_common/error.ts';
 import { type ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
-const REDACTED_TOKEN = '***';
+/** Env var the sca-scanner reads the bearer token from. */
+const SONAR_TOKEN_ENV = 'SONAR_TOKEN';
 
 export const SCA_SCANNER_START_FAILURE_HINT =
   'Verify that the SCA scanner is installed and can run on this machine, then retry.';
@@ -62,10 +63,11 @@ export abstract class ScaScannerRunnerBase<T> {
 
   async run(invocation: ScaScannerInvocation): Promise<T> {
     const args = this.buildArgs(invocation);
-    logger.debug(`sca-scanner args: ${JSON.stringify(this.redactedArgs(args))}`);
+    logger.debug(`sca-scanner args: ${JSON.stringify(args)}`);
+    const env = { [SONAR_TOKEN_ENV]: invocation.sonarToken };
     const binaryPath = await this.installer.install();
     try {
-      const result = await this.spawnScanner(binaryPath, args);
+      const result = await this.spawnScanner(binaryPath, args, env);
       logger.info(`SCA Scanner stdout\n${result.stdout}`);
       logger.warn(`SCA Scanner stderr\n${result.stderr}`);
       this.assertSuccessfulExit(result);
@@ -89,7 +91,6 @@ export abstract class ScaScannerRunnerBase<T> {
       `--base-dir=${invocation.baseDir}`,
       `--api-base-url=${invocation.apiBaseUrl}`,
       `--download-base-url=${invocation.downloadBaseUrl}`,
-      `--sonar-token=${invocation.sonarToken}`,
       `--cache-dir=${invocation.cacheDir}`,
       `--work-dir=${invocation.workDir}`,
       ...extraArgs,
@@ -115,12 +116,6 @@ export abstract class ScaScannerRunnerBase<T> {
   /** Interprets stdout of a successful (exit-code 0) run. */
   protected abstract parseResult(result: SpawnResult): T;
 
-  private redactedArgs(args: string[]): string[] {
-    return args.map((arg) =>
-      arg.startsWith('--sonar-token=') ? `--sonar-token=${REDACTED_TOKEN}` : arg,
-    );
-  }
-
   protected parseJson(result: SpawnResult): unknown {
     try {
       return JSON.parse(result.stdout);
@@ -132,9 +127,13 @@ export abstract class ScaScannerRunnerBase<T> {
     }
   }
 
-  private async spawnScanner(binaryPath: string, args: string[]): Promise<SpawnResult> {
+  private async spawnScanner(
+    binaryPath: string,
+    args: string[],
+    env: Record<string, string>,
+  ): Promise<SpawnResult> {
     try {
-      return await this.spawner.spawn(binaryPath, args);
+      return await this.spawner.spawn(binaryPath, args, env);
     } catch (err) {
       throw new CommandFailedError(`${this.errorPrefix}: ${(err as Error).message}`, {
         remediationHint: SCA_SCANNER_START_FAILURE_HINT,

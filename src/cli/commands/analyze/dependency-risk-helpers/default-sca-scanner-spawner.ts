@@ -1,4 +1,4 @@
-﻿/*
+/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
@@ -23,11 +23,11 @@ import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 const ThreeMinuteTimeoutMs = 3 * 60 * 1000;
 
 export class DefaultScaScannerSpawner implements ScaScannerSpawner {
-  spawn(binaryPath: string, args: string[]): Promise<SpawnResult> {
+  spawn(binaryPath: string, args: string[], env?: Record<string, string>): Promise<SpawnResult> {
     return spawnProcessWithTimeout(
       binaryPath,
       args,
-      { stdout: 'pipe', stderr: 'pipe' },
+      { stdout: 'pipe', stderr: 'pipe', env },
       ThreeMinuteTimeoutMs,
       'Dependency Risk scanner timed out',
     );
