@@ -104,16 +104,22 @@ export function buildCagFlags(opt: CagOption): string {
 
 export function mapCagOptions(opts: CagOption[] | undefined): ClidocOption[] {
   if (!opts) return [];
-  return opts.map((o) => ({
-    flags: buildCagFlags(o),
-    long: `--${o.long}`,
-    short: o.short ? `-${o.short}` : undefined,
-    description: o.help ?? '',
-    type: takesValue(o) ? 'string' : 'boolean',
-    required: o.required,
-    defaultValue: o.default,
-    allowedValues: undefined,
-  }));
+  return opts.map((o) => {
+    const hasValue = takesValue(o);
+    return {
+      flags: buildCagFlags(o),
+      long: `--${o.long}`,
+      short: o.short ? `-${o.short}` : undefined,
+      description: o.help ?? '',
+      type: hasValue ? 'string' : 'boolean',
+      required: o.required,
+      // CAG emits `default: "false"` for boolean flags that initialize to false; surface
+      // a defaultValue only for value-taking options to avoid documenting a stringified
+      // "false" as if it were a meaningful default for a boolean switch.
+      defaultValue: hasValue ? o.default : undefined,
+      allowedValues: undefined,
+    };
+  });
 }
 
 function addCagCommand(

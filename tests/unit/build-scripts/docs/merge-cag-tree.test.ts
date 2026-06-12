@@ -213,6 +213,18 @@ describe('mapCagOptions', () => {
     expect(opts[0].flags).toBe('--json');
   });
 
+  it('omits defaultValue on boolean flags so docs do not show a stringified "false"', () => {
+    const opts = mapCagOptions([{ long: 'json', required: false, default: 'false' }]);
+    expect(opts[0].defaultValue).toBeUndefined();
+  });
+
+  it('preserves defaultValue on value-taking options', () => {
+    const opts = mapCagOptions([
+      { long: 'depth', value_name: 'DEPTH', required: false, default: '3' },
+    ]);
+    expect(opts[0].defaultValue).toBe('3');
+  });
+
   it('reports string type for value-taking options', () => {
     const opts = mapCagOptions([{ long: 'workspace', value_name: 'WORKSPACE', required: false }]);
     expect(opts[0].type).toBe('string');
