@@ -188,7 +188,9 @@ describe('ScaScannerRunner.run', () => {
     const installer: ScaScannerInstaller = {
       install: () => Promise.resolve('/bin/sca-from-installer'),
     };
-    const spawn = mock((_binaryPath: string, _args: string[]) => Promise.resolve(EMPTY_SUCCESS));
+    const spawn = mock((_binaryPath: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve(EMPTY_SUCCESS),
+    );
     const invocation = makeInvocation({
       excludedPaths: ['**/test/**'],
       includeGitIgnoredPaths: true,
@@ -200,7 +202,24 @@ describe('ScaScannerRunner.run', () => {
     await runner.run(invocation);
 
     expect(spawn).toHaveBeenCalledTimes(1);
-    expect(spawn).toHaveBeenCalledWith('/bin/sca-from-installer', analyzeProjectArgs(invocation));
+    expect(spawn).toHaveBeenCalledWith('/bin/sca-from-installer', analyzeProjectArgs(invocation), {
+      SONAR_TOKEN: invocation.sonarToken,
+    });
+  });
+
+  it('passes the sonar token via the SONAR_TOKEN env and never in argv', async () => {
+    const spawn = mock((_binaryPath: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve(EMPTY_SUCCESS),
+    );
+    const invocation = makeInvocation({ sonarToken: 'super-secret' });
+
+    await new ScaScannerRunner(okInstaller, { spawn }).run(invocation);
+
+    const [, args, env] = spawn.mock.calls[0];
+    expect(args.some((arg) => arg.includes('super-secret') || arg.includes('--sonar-token'))).toBe(
+      false,
+    );
+    expect(env).toEqual({ SONAR_TOKEN: 'super-secret' });
   });
 });
 
@@ -211,7 +230,6 @@ describe('ScaScannerRunner.buildArgs', () => {
       '--base-dir=/repo',
       '--api-base-url=https://api.sonarcloud.io',
       '--download-base-url=https://download.sonarcloud.io/tidelift-cli',
-      '--sonar-token=tok',
       '--cache-dir=/cache',
       '--work-dir=/work',
       '--project-key=my-project',

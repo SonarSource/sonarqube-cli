@@ -21,5 +21,5 @@
 import { type SpawnResult } from '../../../../lib/process.ts';
 
 export interface ScaScannerSpawner {
-  spawn(binaryPath: string, args: string[]): Promise<SpawnResult>;
+  spawn(binaryPath: string, args: string[], env?: Record<string, string>): Promise<SpawnResult>;
 }

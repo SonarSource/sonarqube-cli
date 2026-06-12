@@ -53,7 +53,7 @@ function makeClient(
 // Discovery reports no manifests so the secrets pre-scan is a no-op, then the
 // scan call returns the supplied analyze-project payload.
 function mockSpawner(payload: unknown) {
-  return mock((_binaryPath: string, args: string[]) => {
+  return mock((_binaryPath: string, args: string[], _env?: Record<string, string>) => {
     const stdout =
       args[0] === 'discover-manifests' ? JSON.stringify({ files: [] }) : JSON.stringify(payload);
     return Promise.resolve({ exitCode: 0, stdout, stderr: '' });
@@ -101,9 +101,10 @@ describe('ScaScanOrchestrator', () => {
 
     const analyzeCall = spawn.mock.calls.find(([, args]) => args[0] === 'analyze-project');
     expect(analyzeCall).toBeDefined();
-    const [, args] = analyzeCall!;
+    const [, args, env] = analyzeCall!;
     expect(args).toContain('--project-key=my-project');
-    expect(args).toContain('--sonar-token=test-token');
+    expect(args.some((arg) => arg.includes('--sonar-token'))).toBe(false);
+    expect(env).toEqual({ SONAR_TOKEN: 'test-token' });
   });
 
   it('skips the analyze-project scan when the manifest pre-scan throws', async () => {
