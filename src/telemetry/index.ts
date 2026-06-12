@@ -24,6 +24,7 @@ import { type Command } from 'commander';
 
 import { version as VERSION } from '../../package.json';
 import { detectCallerAgent } from '../lib/agent-detector.js';
+import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
 import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
@@ -153,17 +154,17 @@ export async function flushTelemetry(): Promise<void> {
     const remainingTime = deadline - Date.now();
     if (remainingTime <= 0) break;
     try {
-      await fetch(TELEMETRY_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': TELEMETRY_API_KEY,
-        },
-        body: JSON.stringify(telemetry.events[i], (_key, value) =>
-          value === null ? undefined : value,
+      await fetchGuarded(
+        TELEMETRY_ENDPOINT,
+        buildFetchInit(
+          'POST',
+          { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
+          remainingTime,
+          JSON.stringify(telemetry.events[i], (_key, value) =>
+            value === null ? undefined : value,
+          ),
         ),
-        signal: AbortSignal.timeout(remainingTime),
-      });
+      );
 
       sentIndices.add(i);
     } catch {
