@@ -85,6 +85,7 @@ describe('gitPreCommit', () => {
       thrown = e;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toBe('Secrets detected in staged files.');
   });
 
   it('resolves without throwing when no secrets are found', async () => {
@@ -130,6 +131,7 @@ describe('gitPreCommit', () => {
       delete process.env.SONARQUBE_CLI_SERVER;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toBe('Secrets scan failed.');
   });
 
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {
@@ -206,6 +208,7 @@ describe('gitPrePush', () => {
       thrown = e;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toBe('Secrets detected in pushed commits.');
   });
 
   it('resolves without throwing when no secrets found', async () => {
@@ -269,6 +272,7 @@ describe('gitPrePush', () => {
       delete process.env.SONARQUBE_CLI_SERVER;
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toBe('Secrets scan failed.');
   });
 
   it('resolves without throwing when scan fails with keychain auth (fail soft)', async () => {

@@ -28,7 +28,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets';
 import { detectPlatform } from '../../../../src/lib/platform-detector';
 import { TestHarness } from '../../harness';
-import { commitFile, initGitRepo, stageFile } from './git-test-helpers';
+import { commitFile, initGitRepo } from './git-test-helpers';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -39,8 +39,7 @@ const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 // Unreachable but well-formed server URL: binary handles connection-refused gracefully.
 const FAKE_SERVER = 'http://localhost:19999';
 const VALID_TOKEN = 'integration-test-token';
-const TEST_ORG = 'my-org';
-const PACKAGE_JSON_CONTENT = '{"name":"demo","version":"1.0.0"}';
+
 const NON_EXECUTABLE_MODE = 0o644;
 
 function pushRefLine(localSha: string, remoteSha: string, branch = 'refs/heads/main'): string {
@@ -238,58 +237,6 @@ describe('sonar hook git-pre-push', () => {
     { timeout: 30000 },
   );
 
-  it(
-    'exits 2 when --dependency-risks is set without -p',
-    async () => {
-      const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
-      const result = await harness.run('hook git-pre-push --dependency-risks', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('-p');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'warns about uncommitted changes during a push',
-    async () => {
-      initGitRepo(harness.cwd.path);
-      const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
-      stageFile(harness.cwd.path, 'extra.ts', CLEAN_CONTENT);
-
-      harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
-
-      const result = await harness.run('hook git-pre-push', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain('Uncommitted changes detected');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'exits 0 when -p is set without --dependency-risks (secrets-only, no dep-risks side effects)',
-    async () => {
-      initGitRepo(harness.cwd.path);
-      const sha = commitFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
-
-      harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
-
-      const result = await harness.run('hook git-pre-push -p demo', {
-        stdin: pushRefLine(sha, GIT_NULL_OID),
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).not.toContain('dependency manifests');
-    },
-    { timeout: 30000 },
-  );
-
   describe('files mode (pre-commit framework)', () => {
     it(
       'exits 0 when no files are passed',
@@ -380,105 +327,6 @@ describe('sonar hook git-pre-push', () => {
         expect(result.exitCode).toBe(0);
       },
       { timeout: 30000 },
-    );
-
-    it(
-      'exits 2 when --dependency-risks is set without -p',
-      async () => {
-        harness.cwd.writeFile('package.json', PACKAGE_JSON_CONTENT);
-        const result = await harness.run('hook git-pre-push --dependency-risks package.json');
-        expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('-p');
-      },
-      { timeout: 15000 },
-    );
-  });
-
-  describe('with --dependency-risks', () => {
-    it(
-      'exits 0 when stdin is empty (no refs)',
-      async () => {
-        const result = await harness.run('hook git-pre-push -p demo --dependency-risks', {
-          stdin: '',
-        });
-        expect(result.exitCode).toBe(0);
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits 0 when not authenticated (graceful skip)',
-      async () => {
-        harness.state().withScaScannerBinaryInstalled();
-        const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
-        const result = await harness.run('hook git-pre-push -p demo --dependency-risks', {
-          stdin: pushRefLine(sha, GIT_NULL_OID),
-        });
-        expect(result.exitCode).toBe(0);
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits 0 when sca-scanner binary is not installed (graceful skip)',
-      async () => {
-        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
-        const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
-        const result = await harness.run('hook git-pre-push -p demo --dependency-risks', {
-          stdin: pushRefLine(sha, GIT_NULL_OID),
-        });
-        expect(result.exitCode).toBe(0);
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits 0 when pushed files contain no dependency manifests',
-      async () => {
-        initGitRepo(harness.cwd.path);
-        const sha = commitFile(harness.cwd.path, 'index.ts', CLEAN_CONTENT);
-
-        harness.state().withScaScannerBinaryInstalled();
-        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
-
-        const result = await harness.run('hook git-pre-push -p demo --dependency-risks', {
-          stdin: pushRefLine(sha, GIT_NULL_OID),
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout + result.stderr).toContain(
-          'No dependency manifests changed in this push',
-        );
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'exits 0 (fail-open) when a manifest changed but the SCA backend is unavailable',
-      async () => {
-        initGitRepo(harness.cwd.path);
-        const sha = commitFile(harness.cwd.path, 'package.json', PACKAGE_JSON_CONTENT);
-
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken(VALID_TOKEN)
-          .withScaEnabled(true)
-          .withProject('demo')
-          .withProjectSettings('demo', [])
-          .start();
-        harness.state().withScaScannerBinaryInstalled();
-        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
-
-        const result = await harness.run('hook git-pre-push -p demo --dependency-risks', {
-          stdin: pushRefLine(sha, GIT_NULL_OID),
-          timeoutMs: 45_000,
-        });
-
-        // Hook is fail-open on scanner failure: warn on stderr, push not blocked.
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr).toContain('push not blocked');
-      },
-      { timeout: 60000 },
     );
   });
 });

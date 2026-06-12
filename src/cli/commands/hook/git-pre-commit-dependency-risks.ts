@@ -1,4 +1,4 @@
-/*
+﻿/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
@@ -18,10 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Dependency-risks stage of the git pre-push hook. Invoked after the secrets
+// Dependency-risks stage of the git pre-commit hook. Invoked after the secrets
 // stage when the user opted in via `--dependency-risks` and `-p <projectKey>`. Skips
 // silently when no manifests changed, fails-open on infra errors (auth/binary
-// missing, scanner failure), and blocks the push only when risks matching the
+// missing, scanner failure), and blocks the commit only when risks matching the
 // configured filter are found.
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
@@ -67,7 +67,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   const filter = buildRiskFilter(HOOK_STATUS_FILTER);
   if (!filter) {
     warn(
-      `Dependency-risks hook: invalid filter (statuses='${HOOK_STATUS_FILTER}'); push not blocked.`,
+      `Dependency-risks hook: invalid filter (statuses='${HOOK_STATUS_FILTER}'); commit not blocked.`,
     );
     return;
   }
@@ -83,7 +83,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     ).run(options.auth, options.project);
     viewModel = buildDependencyRisksViewModel(result, filter);
   } catch (err) {
-    warn(`Dependency-risks scan failed; push not blocked. Reason: ${(err as Error).message}`);
+    warn(`Dependency-risks scan failed; commit not blocked. Reason: ${(err as Error).message}`);
     return;
   }
 
@@ -94,7 +94,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   throw new CommandFailedError(
     `Dependency risks detected (${matchedCount} matching the configured filter).`,
     {
-      remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' to inspect & fix the risks, then retry the push.`,
+      remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' to inspect & fix the risks, then retry the commit.`,
     },
   );
 }
@@ -110,7 +110,7 @@ async function shouldRunDependencyRiskAnalysis(binaryPath: string, changedFiles:
   }
 
   if (!anyFileMatches(changedFiles, patterns)) {
-    success('No dependency manifests changed in this push — skipping dependency-risks scan.');
+    success('No dependency manifests changed in this commit — skipping dependency-risks scan.');
     return false;
   }
 
