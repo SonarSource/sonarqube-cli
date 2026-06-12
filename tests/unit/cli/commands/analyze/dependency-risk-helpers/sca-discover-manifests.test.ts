@@ -194,7 +194,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     );
 
     try {
-      const files = await runner.run(makeInvocation({ workDir: '/work' }));
+      const files = await runner.run(makeInvocation({ workDir: join(tmpdir(), 'sca-cleanup') }));
 
       expect(files).toEqual([]);
       const warned = getMockUiCalls().some(
