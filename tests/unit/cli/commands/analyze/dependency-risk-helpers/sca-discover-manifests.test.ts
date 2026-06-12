@@ -69,7 +69,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     );
 
     expect(runner.run(makeInvocation())).rejects.toThrow(
-      /Manifest discovery error: failed \(exit code 1\)/,
+      /Manifest discovery error: sca-scanner exited with code 1\./,
     );
   });
 

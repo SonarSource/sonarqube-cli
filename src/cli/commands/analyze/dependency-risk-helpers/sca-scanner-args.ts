@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ScaScannerInvocation } from './sca-scanner';
+import type { ScaScannerInvocation } from './sca-scanner-runner-base';
 
 /**
  * Builds the argv for an sca-scanner subcommand. Every subcommand shares the

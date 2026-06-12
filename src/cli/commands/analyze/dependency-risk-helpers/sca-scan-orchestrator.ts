@@ -30,11 +30,8 @@ import type { SecretsInstaller } from '../../_common/install/secrets';
 import { assertScaAvailable } from '../../_common/sca-availability';
 import { parseAnalysisProperties } from './analysis-properties';
 import { preScanManifestsForSecrets } from './manifest-secrets-guard';
-import {
-  type AnalyzeProjectResponse,
-  type ScaScannerInvocation,
-  ScaScannerRunner,
-} from './sca-scanner';
+import { type AnalyzeProjectResponse, ScaScannerRunner } from './sca-scanner';
+import type { ScaScannerInvocation } from './sca-scanner-runner-base';
 import type { ScaScannerSpawner } from './sca-scanner-spawner';
 import { buildScaUrls } from './sca-urls';
 

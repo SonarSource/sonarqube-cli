@@ -26,7 +26,7 @@ import {
   buildRiskFilter,
   type RiskFilterDescription,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
-import type { ScaScannerInvocation } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import type { ScaScannerInvocation } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import {
   type DependencyRisksViewModel,
   type ErrorVM,

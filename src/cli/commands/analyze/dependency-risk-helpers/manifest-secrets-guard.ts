@@ -30,7 +30,7 @@ import type { SecretsInstaller } from '../../_common/install/secrets';
 import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../secrets';
 import { parseSecretsOutput, type SecretsIssue } from '../secrets-output';
 import { ScaDiscoverManifestsRunner } from './sca-discover-manifests';
-import type { ScaScannerInvocation } from './sca-scanner';
+import type { ScaScannerInvocation } from './sca-scanner-runner-base';
 import type { ScaScannerSpawner } from './sca-scanner-spawner';
 
 /**

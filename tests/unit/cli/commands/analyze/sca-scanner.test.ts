@@ -24,10 +24,10 @@ import { CommandFailedError } from '../../../../../src/cli/commands/_common/erro
 import { ScaScannerInstaller } from '../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import {
   type AnalyzeProjectResponse,
-  ScaScannerInvocation,
   ScaScannerRunner,
 } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { buildAnalyzeProjectArgs } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-args.ts';
+import { ScaScannerInvocation } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import { ScaScannerSpawner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import { LOG_FILE } from '../../../../../src/lib/config-constants.ts';
 import type { SpawnResult } from '../../../../../src/lib/process.ts';
