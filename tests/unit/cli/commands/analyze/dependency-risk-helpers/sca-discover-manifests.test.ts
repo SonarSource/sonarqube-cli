@@ -28,7 +28,7 @@ import { describe, expect, it, mock, spyOn } from 'bun:test';
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error.ts';
 import type { ScaScannerInstaller } from '../../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import { ScaDiscoverManifestsRunner } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-discover-manifests.ts';
-import { buildDiscoverManifestsArgs } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-args.ts';
+import type { ScaScannerInvocation } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import type { ScaScannerSpawner } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import type { SpawnResult } from '../../../../../../src/lib/process.ts';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
@@ -36,6 +36,11 @@ import { makeScaInvocation as makeInvocation, okScaInstaller as okInstaller } fr
 
 function spawnerReturning(result: SpawnResult): ScaScannerSpawner {
   return { spawn: () => Promise.resolve(result) };
+}
+
+function discoverManifestsArgs(invocation: ScaScannerInvocation): string[] {
+  const spawner = spawnerReturning({ exitCode: 0, stdout: '', stderr: '' });
+  return new ScaDiscoverManifestsRunner(okInstaller, spawner).buildArgs(invocation);
 }
 
 describe('ScaDiscoverManifestsRunner.run', () => {
@@ -148,7 +153,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(spawn).toHaveBeenCalledWith(
       '/bin/sca-from-installer',
-      buildDiscoverManifestsArgs(invocation),
+      discoverManifestsArgs(invocation),
     );
   });
 
@@ -207,5 +212,40 @@ describe('ScaDiscoverManifestsRunner.run', () => {
       rmSpy.mockRestore();
       setMockUi(false);
     }
+  });
+});
+
+describe('ScaDiscoverManifestsRunner.buildArgs', () => {
+  it('emits the fixed args in declared order without --project-key', () => {
+    expect(discoverManifestsArgs(makeInvocation({ workDir: '/work' }))).toEqual([
+      'discover-manifests',
+      '--base-dir=/repo',
+      '--api-base-url=https://api.sonarcloud.io',
+      '--download-base-url=https://download.sonarcloud.io/tidelift-cli',
+      '--sonar-token=tok',
+      '--cache-dir=/cache',
+      '--work-dir=/work',
+    ]);
+  });
+
+  it('never emits --project-key even when a project key is set', () => {
+    const args = discoverManifestsArgs(makeInvocation({ projectKey: 'my-project' }));
+    expect(args.some((a) => a.startsWith('--project-key'))).toBe(false);
+  });
+
+  it('forwards scanner properties, exclusions, and flags like analyze-project', () => {
+    const args = discoverManifestsArgs(
+      makeInvocation({
+        scannerProperties: { 'sonar.sca.foo': 'bar' },
+        excludedPaths: ['**/dist/**'],
+        includeGitIgnoredPaths: true,
+        debug: true,
+      }),
+    );
+
+    expect(args).toContain('--scanner-property=sonar.sca.foo=bar');
+    expect(args).toContain('--excluded-path=**/dist/**');
+    expect(args).toContain('--include-gitignored-paths');
+    expect(args).toContain('--debug');
   });
 });

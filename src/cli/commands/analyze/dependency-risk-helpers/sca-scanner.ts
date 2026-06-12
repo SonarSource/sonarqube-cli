@@ -19,7 +19,6 @@
  */
 
 import type { SpawnResult } from '../../../../lib/process.ts';
-import { buildAnalyzeProjectArgs } from './sca-scanner-args.ts';
 import { type ScaScannerInvocation, ScaScannerRunnerBase } from './sca-scanner-runner-base.ts';
 
 // Response shape from sca-scanner. Mirrors `AnalyzeProjectResponse` in
@@ -101,8 +100,10 @@ export interface AnalysisErrorResource {
 }
 
 export class ScaScannerRunner extends ScaScannerRunnerBase<AnalyzeProjectResponse> {
-  protected buildArgs(invocation: ScaScannerInvocation): string[] {
-    return buildAnalyzeProjectArgs(invocation);
+  buildArgs(invocation: ScaScannerInvocation): string[] {
+    return this.buildBaseArgs('analyze-project', invocation, [
+      `--project-key=${invocation.projectKey}`,
+    ]);
   }
 
   protected readonly errorPrefix = 'Dependency risk analysis error';

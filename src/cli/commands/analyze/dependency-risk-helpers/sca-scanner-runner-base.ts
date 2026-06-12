@@ -76,7 +76,38 @@ export abstract class ScaScannerRunnerBase<T> {
   }
 
   /** argv for the subcommand this runner drives. */
-  protected abstract buildArgs(invocation: ScaScannerInvocation): string[];
+  abstract buildArgs(invocation: ScaScannerInvocation): string[];
+
+  /** Builds the shared subcommand argv; `extraArgs` adds subcommand-specific options. */
+  protected buildBaseArgs(
+    subcommand: string,
+    invocation: ScaScannerInvocation,
+    extraArgs: string[] = [],
+  ): string[] {
+    const args: string[] = [
+      subcommand,
+      `--base-dir=${invocation.baseDir}`,
+      `--api-base-url=${invocation.apiBaseUrl}`,
+      `--download-base-url=${invocation.downloadBaseUrl}`,
+      `--sonar-token=${invocation.sonarToken}`,
+      `--cache-dir=${invocation.cacheDir}`,
+      `--work-dir=${invocation.workDir}`,
+      ...extraArgs,
+    ];
+    for (const [name, value] of Object.entries(invocation.scannerProperties)) {
+      args.push(`--scanner-property=${name}=${value}`);
+    }
+    for (const path of invocation.excludedPaths) {
+      args.push(`--excluded-path=${path}`);
+    }
+    if (invocation.includeGitIgnoredPaths) {
+      args.push('--include-gitignored-paths');
+    }
+    if (invocation.debug) {
+      args.push('--debug');
+    }
+    return args;
+  }
 
   /** Prefix prepended to every error message (e.g. `Manifest discovery error: failed to parse output (…)`). */
   protected abstract readonly errorPrefix: string;

@@ -26,7 +26,6 @@ import {
   type AnalyzeProjectResponse,
   ScaScannerRunner,
 } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
-import { buildAnalyzeProjectArgs } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-args.ts';
 import { ScaScannerInvocation } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import { ScaScannerSpawner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import { LOG_FILE } from '../../../../../src/lib/config-constants.ts';
@@ -66,6 +65,10 @@ function makeInvocation(overrides: Partial<ScaScannerInvocation> = {}): ScaScann
     debug: false,
     ...overrides,
   };
+}
+
+function analyzeProjectArgs(invocation: ScaScannerInvocation): string[] {
+  return new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(invocation);
 }
 
 async function expectCommandFailedError(
@@ -197,9 +200,57 @@ describe('ScaScannerRunner.run', () => {
     await runner.run(invocation);
 
     expect(spawn).toHaveBeenCalledTimes(1);
-    expect(spawn).toHaveBeenCalledWith(
-      '/bin/sca-from-installer',
-      buildAnalyzeProjectArgs(invocation),
+    expect(spawn).toHaveBeenCalledWith('/bin/sca-from-installer', analyzeProjectArgs(invocation));
+  });
+});
+
+describe('ScaScannerRunner.buildArgs', () => {
+  it('emits the fixed args in declared order', () => {
+    expect(analyzeProjectArgs(makeInvocation({ workDir: '/work' }))).toEqual([
+      'analyze-project',
+      '--base-dir=/repo',
+      '--api-base-url=https://api.sonarcloud.io',
+      '--download-base-url=https://download.sonarcloud.io/tidelift-cli',
+      '--sonar-token=tok',
+      '--cache-dir=/cache',
+      '--work-dir=/work',
+      '--project-key=my-project',
+    ]);
+  });
+
+  it('repeats --scanner-property=name=value for each entry', () => {
+    const args = analyzeProjectArgs(
+      makeInvocation({ scannerProperties: { 'sonar.sca.foo': 'bar', 'sonar.sca.baz': '1,2' } }),
     );
+
+    expect(args.filter((a) => a.startsWith('--scanner-property='))).toEqual([
+      '--scanner-property=sonar.sca.foo=bar',
+      '--scanner-property=sonar.sca.baz=1,2',
+    ]);
+  });
+
+  it('repeats --excluded-path for each exclusion in input order', () => {
+    const args = analyzeProjectArgs(
+      makeInvocation({ excludedPaths: ['**/test/**', '**/dist/**'] }),
+    );
+
+    expect(args.filter((a) => a.startsWith('--excluded-path='))).toEqual([
+      '--excluded-path=**/test/**',
+      '--excluded-path=**/dist/**',
+    ]);
+  });
+
+  it('emits --include-gitignored-paths only when the flag is true', () => {
+    expect(analyzeProjectArgs(makeInvocation({ includeGitIgnoredPaths: false }))).not.toContain(
+      '--include-gitignored-paths',
+    );
+    expect(analyzeProjectArgs(makeInvocation({ includeGitIgnoredPaths: true }))).toContain(
+      '--include-gitignored-paths',
+    );
+  });
+
+  it('emits --debug only when the flag is true', () => {
+    expect(analyzeProjectArgs(makeInvocation({ debug: false }))).not.toContain('--debug');
+    expect(analyzeProjectArgs(makeInvocation({ debug: true }))).toContain('--debug');
   });
 });

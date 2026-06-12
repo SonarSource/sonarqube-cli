@@ -20,7 +20,6 @@
 
 import type { SpawnResult } from '../../../../lib/process';
 import { CommandFailedError } from '../../_common/error';
-import { buildDiscoverManifestsArgs } from './sca-scanner-args';
 import { type ScaScannerInvocation, ScaScannerRunnerBase } from './sca-scanner-runner-base';
 
 // Response shape emitted on stdout by `sca-scanner discover-manifests`.
@@ -33,8 +32,8 @@ interface DiscoverManifestsPayload {
  * discovered manifest/lockfile paths (relative to the invocation base dir).
  */
 export class ScaDiscoverManifestsRunner extends ScaScannerRunnerBase<string[]> {
-  protected buildArgs(invocation: ScaScannerInvocation): string[] {
-    return buildDiscoverManifestsArgs(invocation);
+  buildArgs(invocation: ScaScannerInvocation): string[] {
+    return this.buildBaseArgs('discover-manifests', invocation);
   }
 
   protected readonly errorPrefix = 'Manifest discovery error';
