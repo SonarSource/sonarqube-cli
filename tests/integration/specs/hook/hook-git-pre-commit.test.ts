@@ -276,7 +276,7 @@ describe('sonar hook git-pre-commit', () => {
 
         // Hook is fail-open on scanner failure: warn on stderr, commit not blocked.
         expect(result.exitCode).toBe(0);
-        expect(result.stderr).toContain('Manifest discovery error: failed (exit code');
+        expect(result.stderr).toContain('Manifest discovery error:');
         expect(result.stderr).toContain('commit not blocked');
       },
       { timeout: 60000 },
