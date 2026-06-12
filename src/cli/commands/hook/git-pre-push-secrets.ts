@@ -28,16 +28,19 @@ export async function runSecretsStage(files: string[], auth: ResolvedAuth): Prom
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) return;
   if (files.length === 0) return;
+
+  let result;
   try {
-    const result = await runSecretsBinary(binaryPath, files, auth);
-    if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
-      throw new CommandFailedError('Secrets detected in pushed commits.', {
-        remediationHint:
-          'Remove the reported secret, amend the commit if needed, then retry the push.',
-      });
-    }
+    result = await runSecretsBinary(binaryPath, files, auth);
   } catch (err) {
-    if (err instanceof CommandFailedError) throw err;
     handleScanError('Push', err as Error);
+    return;
+  }
+
+  if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
+    throw new CommandFailedError('Secrets detected in pushed commits.', {
+      remediationHint:
+        'Remove the reported secret, amend the commit if needed, then retry the push.',
+    });
   }
 }
