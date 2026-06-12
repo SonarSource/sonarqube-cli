@@ -21,6 +21,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { describe, expect, it } from 'bun:test';
+
 import {
   buildCagFlags,
   CAG_NON_AUTH_FULL_NAMES,
