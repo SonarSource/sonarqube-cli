@@ -26,13 +26,12 @@ import { SCA_SCANNER_CACHE_DIR } from '../../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../../lib/logger';
 import { type SonarQubeClient } from '../../../../sonarqube/client';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
+import type { SecretsInstaller } from '../../_common/install/secrets';
 import { assertScaAvailable } from '../../_common/sca-availability';
 import { parseAnalysisProperties } from './analysis-properties';
-import {
-  type AnalyzeProjectResponse,
-  type ScaScannerInvocation,
-  ScaScannerRunner,
-} from './sca-scanner';
+import { preScanManifestsForSecrets } from './manifest-secrets-guard';
+import { type AnalyzeProjectResponse, ScaScannerRunner } from './sca-scanner';
+import type { ScaScannerInvocation } from './sca-scanner-runner-base';
 import type { ScaScannerSpawner } from './sca-scanner-spawner';
 import { buildScaUrls } from './sca-urls';
 
@@ -41,6 +40,7 @@ export class ScaScanOrchestrator {
     private readonly client: SonarQubeClient,
     private readonly installer: ScaScannerInstaller,
     private readonly spawner: ScaScannerSpawner,
+    private readonly secretsInstaller: SecretsInstaller,
   ) {}
 
   async run(auth: ResolvedAuth, projectKey: string): Promise<AnalyzeProjectResponse> {
@@ -49,8 +49,9 @@ export class ScaScanOrchestrator {
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
     const { apiBaseUrl, downloadBaseUrl } = buildScaUrls(auth);
+    const baseDir = process.cwd();
     const invocation: ScaScannerInvocation = {
-      baseDir: process.cwd(),
+      baseDir,
       apiBaseUrl,
       downloadBaseUrl,
       sonarToken: auth.token,
@@ -62,6 +63,16 @@ export class ScaScanOrchestrator {
       includeGitIgnoredPaths: properties.includeGitIgnoredPaths,
       debug: getLogLevelConfig() === 'DEBUG',
     };
+
+    await preScanManifestsForSecrets({
+      invocation,
+      baseDir,
+      auth,
+      scaInstaller: this.installer,
+      scaSpawner: this.spawner,
+      secretsInstaller: this.secretsInstaller,
+    });
+
     return new ScaScannerRunner(this.installer, this.spawner).run(invocation);
   }
 }

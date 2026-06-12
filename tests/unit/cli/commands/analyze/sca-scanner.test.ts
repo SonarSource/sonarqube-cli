@@ -24,9 +24,9 @@ import { CommandFailedError } from '../../../../../src/cli/commands/_common/erro
 import { ScaScannerInstaller } from '../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import {
   type AnalyzeProjectResponse,
-  ScaScannerInvocation,
   ScaScannerRunner,
 } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import { ScaScannerInvocation } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import { ScaScannerSpawner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import { LOG_FILE } from '../../../../../src/lib/config-constants.ts';
 import type { SpawnResult } from '../../../../../src/lib/process.ts';
@@ -67,6 +67,10 @@ function makeInvocation(overrides: Partial<ScaScannerInvocation> = {}): ScaScann
   };
 }
 
+function analyzeProjectArgs(invocation: ScaScannerInvocation): string[] {
+  return new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(invocation);
+}
+
 async function expectCommandFailedError(
   promise: Promise<unknown>,
   messagePattern: RegExp,
@@ -84,68 +88,6 @@ async function expectCommandFailedError(
   expect(commandError.message).toMatch(messagePattern);
   expect(commandError.remediationHint).toBe(remediationHint);
 }
-
-describe('ScaScannerRunner.buildArgs', () => {
-  it('emits the fixed args in declared order', () => {
-    const args = new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(makeInvocation());
-
-    expect(args).toEqual([
-      'analyze-project',
-      '--base-dir=/repo',
-      '--api-base-url=https://api.sonarcloud.io',
-      '--download-base-url=https://download.sonarcloud.io/tidelift-cli',
-      '--sonar-token=tok',
-      '--project-key=my-project',
-      '--cache-dir=/cache',
-      '--work-dir=/work',
-    ]);
-  });
-
-  it('repeats --scanner-property=name=value for each entry', () => {
-    const args = new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(
-      makeInvocation({
-        scannerProperties: { 'sonar.sca.foo': 'bar', 'sonar.sca.baz': '1,2' },
-      }),
-    );
-
-    const pairs = args.filter((a) => a.startsWith('--scanner-property='));
-    expect(pairs).toEqual([
-      '--scanner-property=sonar.sca.foo=bar',
-      '--scanner-property=sonar.sca.baz=1,2',
-    ]);
-  });
-
-  it('repeats --excluded-path for each exclusion in input order', () => {
-    const args = new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(
-      makeInvocation({ excludedPaths: ['**/test/**', '**/dist/**'] }),
-    );
-
-    const excluded = args.filter((a) => a.startsWith('--excluded-path='));
-    expect(excluded).toEqual(['--excluded-path=**/test/**', '--excluded-path=**/dist/**']);
-  });
-
-  it('emits --include-gitignored-paths only when the flag is true', () => {
-    expect(
-      new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(
-        makeInvocation({ includeGitIgnoredPaths: false }),
-      ),
-    ).not.toContain('--include-gitignored-paths');
-    expect(
-      new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(
-        makeInvocation({ includeGitIgnoredPaths: true }),
-      ),
-    ).toContain('--include-gitignored-paths');
-  });
-
-  it('emits --debug only when the flag is true', () => {
-    expect(
-      new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(makeInvocation({ debug: false })),
-    ).not.toContain('--debug');
-    expect(
-      new ScaScannerRunner(okInstaller, noopSpawner).buildArgs(makeInvocation({ debug: true })),
-    ).toContain('--debug');
-  });
-});
 
 describe('ScaScannerRunner.run', () => {
   it('propagates the installer error when install fails', () => {
@@ -258,6 +200,57 @@ describe('ScaScannerRunner.run', () => {
     await runner.run(invocation);
 
     expect(spawn).toHaveBeenCalledTimes(1);
-    expect(spawn).toHaveBeenCalledWith('/bin/sca-from-installer', runner.buildArgs(invocation));
+    expect(spawn).toHaveBeenCalledWith('/bin/sca-from-installer', analyzeProjectArgs(invocation));
+  });
+});
+
+describe('ScaScannerRunner.buildArgs', () => {
+  it('emits the fixed args in declared order', () => {
+    expect(analyzeProjectArgs(makeInvocation({ workDir: '/work' }))).toEqual([
+      'analyze-project',
+      '--base-dir=/repo',
+      '--api-base-url=https://api.sonarcloud.io',
+      '--download-base-url=https://download.sonarcloud.io/tidelift-cli',
+      '--sonar-token=tok',
+      '--cache-dir=/cache',
+      '--work-dir=/work',
+      '--project-key=my-project',
+    ]);
+  });
+
+  it('repeats --scanner-property=name=value for each entry', () => {
+    const args = analyzeProjectArgs(
+      makeInvocation({ scannerProperties: { 'sonar.sca.foo': 'bar', 'sonar.sca.baz': '1,2' } }),
+    );
+
+    expect(args.filter((a) => a.startsWith('--scanner-property='))).toEqual([
+      '--scanner-property=sonar.sca.foo=bar',
+      '--scanner-property=sonar.sca.baz=1,2',
+    ]);
+  });
+
+  it('repeats --excluded-path for each exclusion in input order', () => {
+    const args = analyzeProjectArgs(
+      makeInvocation({ excludedPaths: ['**/test/**', '**/dist/**'] }),
+    );
+
+    expect(args.filter((a) => a.startsWith('--excluded-path='))).toEqual([
+      '--excluded-path=**/test/**',
+      '--excluded-path=**/dist/**',
+    ]);
+  });
+
+  it('emits --include-gitignored-paths only when the flag is true', () => {
+    expect(analyzeProjectArgs(makeInvocation({ includeGitIgnoredPaths: false }))).not.toContain(
+      '--include-gitignored-paths',
+    );
+    expect(analyzeProjectArgs(makeInvocation({ includeGitIgnoredPaths: true }))).toContain(
+      '--include-gitignored-paths',
+    );
+  });
+
+  it('emits --debug only when the flag is true', () => {
+    expect(analyzeProjectArgs(makeInvocation({ debug: false }))).not.toContain('--debug');
+    expect(analyzeProjectArgs(makeInvocation({ debug: true }))).toContain('--debug');
   });
 });

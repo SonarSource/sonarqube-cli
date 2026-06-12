@@ -23,6 +23,7 @@ import { SonarQubeClient } from '../../../sonarqube/client';
 import { error, print, warn } from '../../../ui';
 import { InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
+import { DefaultSecretsInstaller } from '../_common/install/secrets.ts';
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
 import { DefaultScaScannerSpawner } from './dependency-risk-helpers/default-sca-scanner-spawner.ts';
 import { formatDependencyRisksJson } from './dependency-risk-helpers/format-dependency-risks-json.ts';
@@ -51,12 +52,6 @@ export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  warn(`'analyze dependency-risks' is in Beta`);
-  warn(
-    'Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.\n' +
-      '  → Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers',
-  );
-
   const filter = buildRiskFilter(options.statuses);
   if (!filter) {
     throw new InvalidOptionError(`Invalid --statuses value: '${options.statuses}'`);
@@ -67,6 +62,7 @@ export async function analyzeDependencyRisks(
     client,
     new DefaultScaScannerInstaller(),
     new DefaultScaScannerSpawner(),
+    new DefaultSecretsInstaller(),
   ).run(auth, options.project);
 
   const viewModel = buildDependencyRisksViewModel(result, filter);

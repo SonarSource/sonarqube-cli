@@ -18,35 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { rmSync } from 'node:fs';
-
-import { LOG_FILE } from '../../../../lib/config-constants.ts';
-import logger from '../../../../lib/logger.ts';
 import type { SpawnResult } from '../../../../lib/process.ts';
-import { warn } from '../../../../ui';
-import { CommandFailedError } from '../../_common/error.ts';
-import { type ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
-import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
-
-const REDACTED_TOKEN = '***';
-const SCA_SCANNER_START_FAILURE_HINT =
-  'Verify that the SCA scanner is installed and can run on this machine, then retry.';
-const SCA_SCANNER_PARSE_FAILURE_HINT = `Inspect ${LOG_FILE} for the raw sca-scanner output, then retry.`;
-const SCA_SCANNER_EXIT_FAILURE_HINT = `Inspect ${LOG_FILE} for the underlying sca-scanner error, fix the reported issue, then retry.`;
-
-export interface ScaScannerInvocation {
-  baseDir: string;
-  apiBaseUrl: string;
-  downloadBaseUrl: string;
-  sonarToken: string;
-  projectKey: string;
-  cacheDir: string;
-  workDir: string;
-  scannerProperties: Record<string, string>;
-  excludedPaths: string[];
-  includeGitIgnoredPaths: boolean;
-  debug: boolean;
-}
+import { type ScaScannerInvocation, ScaScannerRunnerBase } from './sca-scanner-runner-base.ts';
 
 // Response shape from sca-scanner. Mirrors `AnalyzeProjectResponse` in
 // sonar-sca (SCA-1835) — the same external-facing schema used by persisted
@@ -126,100 +99,16 @@ export interface AnalysisErrorResource {
   message: string;
 }
 
-export class ScaScannerRunner {
-  constructor(
-    private readonly installer: ScaScannerInstaller,
-    private readonly spawner: ScaScannerSpawner,
-  ) {}
-
-  async run(invocation: ScaScannerInvocation): Promise<AnalyzeProjectResponse> {
-    const args = this.buildArgs(invocation);
-    logger.debug(`sca-scanner args: ${JSON.stringify(this.redactedArgs(args))}`);
-
-    const binaryPath = await this.installer.install();
-
-    let result: SpawnResult;
-    try {
-      result = await this.spawner.spawn(binaryPath, args);
-    } catch (err) {
-      throw new CommandFailedError(`Dependency risk analysis error: ${(err as Error).message}`, {
-        remediationHint: SCA_SCANNER_START_FAILURE_HINT,
-      });
-    } finally {
-      this.cleanupWorkDir(invocation.workDir);
-    }
-
-    logger.info(`SCA Scanner stdout\n${result.stdout}`);
-    logger.warn(`SCA Scanner stderr\n${result.stderr}`);
-    return this.reportScanResult(result);
-  }
-
+export class ScaScannerRunner extends ScaScannerRunnerBase<AnalyzeProjectResponse> {
   buildArgs(invocation: ScaScannerInvocation): string[] {
-    const args: string[] = [
-      'analyze-project',
-      `--base-dir=${invocation.baseDir}`,
-      `--api-base-url=${invocation.apiBaseUrl}`,
-      `--download-base-url=${invocation.downloadBaseUrl}`,
-      `--sonar-token=${invocation.sonarToken}`,
+    return this.buildBaseArgs('analyze-project', invocation, [
       `--project-key=${invocation.projectKey}`,
-      `--cache-dir=${invocation.cacheDir}`,
-      `--work-dir=${invocation.workDir}`,
-    ];
-    for (const [name, value] of Object.entries(invocation.scannerProperties)) {
-      args.push(`--scanner-property=${name}=${value}`);
-    }
-    for (const path of invocation.excludedPaths) {
-      args.push(`--excluded-path=${path}`);
-    }
-    if (invocation.includeGitIgnoredPaths) {
-      args.push('--include-gitignored-paths');
-    }
-    if (invocation.debug) {
-      args.push('--debug');
-    }
-    return args;
+    ]);
   }
 
-  private redactedArgs(args: string[]): string[] {
-    return args.map((arg) =>
-      arg.startsWith('--sonar-token=') ? `--sonar-token=${REDACTED_TOKEN}` : arg,
-    );
-  }
+  protected readonly errorPrefix = 'Dependency risk analysis error';
 
-  private reportScanResult(result: SpawnResult): AnalyzeProjectResponse {
-    const exitCode = result.exitCode ?? 1;
-    if (exitCode === 0) {
-      return this.handleScanSuccess(result);
-    }
-    return this.handleScanFailure(exitCode);
-  }
-
-  private handleScanSuccess(result: SpawnResult): AnalyzeProjectResponse {
-    try {
-      return JSON.parse(result.stdout) as AnalyzeProjectResponse;
-    } catch (err) {
-      throw new CommandFailedError(
-        `Dependency risk analysis error: failed to parse output (${(err as Error).message})`,
-        { remediationHint: SCA_SCANNER_PARSE_FAILURE_HINT },
-      );
-    }
-  }
-
-  private handleScanFailure(exitCode: number): never {
-    throw new CommandFailedError(
-      `Dependency risk analysis error: sca-scanner exited with code ${exitCode}.`,
-      {
-        remediationHint: SCA_SCANNER_EXIT_FAILURE_HINT,
-      },
-    );
-  }
-
-  private cleanupWorkDir(workDir: string): void {
-    try {
-      rmSync(workDir, { recursive: true, force: true });
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      warn(`Failed to clean up SCA scanner working directory ${workDir}: ${reason}`);
-    }
+  protected parseResult(result: SpawnResult): AnalyzeProjectResponse {
+    return this.parseJson(result) as AnalyzeProjectResponse;
   }
 }

@@ -18,10 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import type { ScaScannerInstaller } from '../../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import {
   buildRiskFilter,
   type RiskFilterDescription,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/risk-filter.ts';
+import type { ScaScannerInvocation } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import {
   type DependencyRisksViewModel,
   type ErrorVM,
@@ -38,6 +43,27 @@ import {
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 import { buildSummaryVM } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build';
 import { groupChainsByParent } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model/build/group-chains-by-parent.ts';
+
+export const okScaInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
+
+export function makeScaInvocation(
+  overrides: Partial<ScaScannerInvocation> = {},
+): ScaScannerInvocation {
+  return {
+    baseDir: '/repo',
+    apiBaseUrl: 'https://api.sonarcloud.io',
+    downloadBaseUrl: 'https://download.sonarcloud.io/tidelift-cli',
+    sonarToken: 'tok',
+    projectKey: 'my-project',
+    cacheDir: '/cache',
+    workDir: join(tmpdir(), 'sca-work'),
+    scannerProperties: {},
+    excludedPaths: [],
+    includeGitIgnoredPaths: false,
+    debug: false,
+    ...overrides,
+  };
+}
 
 export function pkgId(purl: string): PackageIdentity {
   const atIdx = purl.lastIndexOf('@');
