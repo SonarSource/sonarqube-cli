@@ -510,7 +510,8 @@ describe('analyze dependency-risks', () => {
     });
 
     function getPrinted(): string {
-      const call = getMockUiCalls().find((c) => c.method === 'print');
+      const calls = getMockUiCalls().filter((c) => c.method === 'print');
+      const call = calls.at(-1);
       if (!call) throw new Error('expected print() to be called');
       return call.args[0] as string;
     }
