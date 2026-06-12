@@ -28,7 +28,7 @@ import { makeScaInvocation as makeInvocation } from './_helpers.ts';
 
 describe('buildAnalyzeProjectArgs', () => {
   it('emits the fixed args in declared order', () => {
-    expect(buildAnalyzeProjectArgs(makeInvocation())).toEqual([
+    expect(buildAnalyzeProjectArgs(makeInvocation({ workDir: '/work' }))).toEqual([
       'analyze-project',
       '--base-dir=/repo',
       '--api-base-url=https://api.sonarcloud.io',
@@ -79,7 +79,7 @@ describe('buildAnalyzeProjectArgs', () => {
 
 describe('buildDiscoverManifestsArgs', () => {
   it('emits the fixed args in declared order without --project-key', () => {
-    expect(buildDiscoverManifestsArgs(makeInvocation())).toEqual([
+    expect(buildDiscoverManifestsArgs(makeInvocation({ workDir: '/work' }))).toEqual([
       'discover-manifests',
       '--base-dir=/repo',
       '--api-base-url=https://api.sonarcloud.io',
