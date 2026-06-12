@@ -18,6 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { ScaScannerInstaller } from '../../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import {
   buildRiskFilter,
@@ -53,7 +56,7 @@ export function makeScaInvocation(
     sonarToken: 'tok',
     projectKey: 'my-project',
     cacheDir: '/cache',
-    workDir: '/work',
+    workDir: join(tmpdir(), 'sca-work'),
     scannerProperties: {},
     excludedPaths: [],
     includeGitIgnoredPaths: false,
