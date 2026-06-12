@@ -84,6 +84,12 @@ describe('loopback-server', () => {
       expect(isValidLoopbackOrigin('HTTP://LOCALHOST:8080')).toBe(true);
       expect(isValidLoopbackOrigin('HTTPS://127.0.0.1:8080')).toBe(true);
     });
+
+    it('should accept IPv4-mapped IPv6 loopback variants', () => {
+      // Bun's URL parser normalizes both to the same hostname: [::ffff:7f00:1]
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://[::ffff:127.0.0.1]:8080`)).toBe(true);
+      expect(isValidLoopbackOrigin(`${HTTP_SCHEME}://[::ffff:7f00:1]:8080`)).toBe(true);
+    });
   });
 
   describe('isValidLoopbackHost', () => {
@@ -102,6 +108,11 @@ describe('loopback-server', () => {
     it('should accept host without port', () => {
       expect(isValidLoopbackHost('localhost')).toBe(true);
       expect(isValidLoopbackHost('127.0.0.1')).toBe(true);
+    });
+
+    it('should accept IPv4-mapped IPv6 loopback variants in Host header', () => {
+      expect(isValidLoopbackHost('[::ffff:127.0.0.1]:8080')).toBe(true);
+      expect(isValidLoopbackHost('[::ffff:7f00:1]:8080')).toBe(true);
     });
 
     it('should reject external host headers', () => {

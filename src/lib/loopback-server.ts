@@ -28,7 +28,15 @@ import logger from './logger.js';
 const HTTP_STATUS_OK = 200;
 const HTTP_STATUS_FORBIDDEN = 403;
 const FORCE_CLOSE_TIMEOUT_MS = 2000;
-const ALLOWED_LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const ALLOWED_LOOPBACK_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '[::1]',
+  // IPv4-mapped IPv6 loopback: Bun normalizes all forms to [::ffff:7f00:1],
+  // but list the dotted form explicitly to guard against runtimes that don't.
+  '[::ffff:7f00:1]',
+  '[::ffff:127.0.0.1]',
+]);
 
 export interface LoopbackServerResult {
   port: number;
@@ -50,8 +58,9 @@ export function getSecurityHeaders(): Record<string, string> {
 }
 
 /**
- * Validate if origin is an allowed loopback address (localhost, 127.0.0.1, [::1])
- * Used for DNS rebinding attack prevention
+ * Validate if origin is an allowed loopback address.
+ * Accepts localhost, 127.0.0.1, ::1, and IPv4-mapped IPv6 loopback variants.
+ * Used for DNS rebinding attack prevention.
  */
 export function isValidLoopbackOrigin(origin: string): boolean {
   try {
