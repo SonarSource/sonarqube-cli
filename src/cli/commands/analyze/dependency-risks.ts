@@ -51,12 +51,6 @@ export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  warn(`'analyze dependency-risks' is in Beta`);
-  warn(
-    'Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.\n' +
-      '  → Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers',
-  );
-
   const filter = buildRiskFilter(options.statuses);
   if (!filter) {
     throw new InvalidOptionError(`Invalid --statuses value: '${options.statuses}'`);
