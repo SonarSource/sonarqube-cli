@@ -139,6 +139,38 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Scan stdin for hardcoded secrets',
     },
   ],
+  'sonar context guidelines get': [
+    {
+      command: 'sonar context guidelines get --languages rust',
+      description: 'Get coding guidelines for Rust before writing or editing code',
+    },
+    {
+      command:
+        'sonar context guidelines get --categories "Auth & Identity" "Exception & Error Handling" --languages java',
+      description: 'Get guidelines for specific categories in Java',
+    },
+  ],
+  'sonar context dependencies check': [
+    {
+      command: 'sonar context dependencies check --purl "pkg:npm/lodash@4.17.21"',
+      description: 'Check an npm package for vulnerabilities and license compliance',
+    },
+    {
+      command:
+        'sonar context dependencies check --purl "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"',
+      description: 'Check a Maven dependency before adding it to the project',
+    },
+  ],
+  'sonar context navigation search-signatures': [
+    {
+      command: 'sonar context navigation search-signatures --pattern ".*Service" --limit 10',
+      description: 'Find classes or functions whose name ends with "Service"',
+    },
+    {
+      command: 'sonar context navigation search-signatures --pattern ".*Repository" --output fqns',
+      description: 'List FQNs of all Repository types for use in follow-up queries',
+    },
+  ],
   'sonar config telemetry': [
     {
       command: 'sonar config telemetry --enabled',

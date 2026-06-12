@@ -1,0 +1,547 @@
+{
+  "version": "0.14.0-dev",
+  "subcommands": [
+    {
+      "name": "tool",
+      "about": "Management commands for setup, daemon lifecycle, and skill installation",
+      "subcommands": [
+        {
+          "name": "integrate",
+          "about": "Integrate this workspace and start daemon",
+          "options": [
+            {
+              "long": "workspace",
+              "value_name": "WORKSPACE",
+              "help": "Workspace root path",
+              "required": false
+            },
+            {
+              "long": "json",
+              "value_name": "JSON",
+              "help": "Output as JSON to stdout",
+              "required": false
+            },
+            {
+              "long": "invocation-prefix",
+              "value_name": "PREFIX",
+              "help": "Override the binary invocation referenced in user-facing hints (default: 'sonar-context-augmentation'). Use 'sonar context' when invoking via the sonarqube-cli wrapper",
+              "required": false,
+              "default": "sonar-context-augmentation"
+            }
+          ]
+        },
+        {
+          "name": "start",
+          "about": "Start the daemon using the current workspace configuration"
+        },
+        {
+          "name": "status",
+          "about": "Show running daemon status",
+          "options": [
+            {
+              "long": "json",
+              "value_name": "JSON",
+              "help": "Output as JSON",
+              "required": false
+            },
+            {
+              "long": "cwd",
+              "value_name": "CWD",
+              "help": "Show status for daemon matching this workspace",
+              "required": false
+            },
+            {
+              "long": "project-key",
+              "value_name": "PROJECT_KEY",
+              "help": "Show status for daemon matching this project key",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "stop",
+          "about": "Stop a running daemon",
+          "options": [
+            {
+              "long": "project-key",
+              "value_name": "PROJECT_KEY",
+              "help": "Stop daemon by project key",
+              "required": false
+            },
+            {
+              "long": "cwd",
+              "value_name": "CWD",
+              "help": "Stop daemon matching workspace path",
+              "required": false
+            },
+            {
+              "long": "pid",
+              "value_name": "PID",
+              "help": "Stop daemon by PID",
+              "required": false
+            },
+            {
+              "long": "all",
+              "value_name": "ALL",
+              "help": "Stop all daemons",
+              "required": false
+            },
+            {
+              "long": "json",
+              "value_name": "JSON",
+              "help": "Output as JSON to stdout",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "print-skill",
+          "about": "Print the rendered agent skill (SKILL.md) to stdout",
+          "options": [
+            {
+              "long": "invocation-prefix",
+              "value_name": "PREFIX",
+              "help": "Override the binary invocation referenced inside the rendered SKILL.md (default: 'sonar-context-augmentation'). Use 'sonar context' when invoking via the sonarqube-cli wrapper",
+              "required": false,
+              "default": "sonar-context-augmentation"
+            },
+            {
+              "long": "sca-enabled",
+              "value_name": "BOOL",
+              "help": "Whether SCA tools should be advertised in the rendered SKILL.md",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "guidelines",
+      "about": "MUST call before writing or editing source code",
+      "subcommands": [
+        {
+          "name": "get",
+          "about": "Get coding guidelines. Output is markdown text",
+          "options": [
+            {
+              "long": "categories",
+              "value_name": "CATEGORIES",
+              "help": "Categories to retrieve. Accepts one or more values: --categories \"Auth & Identity\" \"Exception & Error Handling\" or repeated: --categories \"Auth & Identity\" --categories \"Exception & Error Handling\"",
+              "required": false,
+              "num_args": "1+"
+            },
+            {
+              "long": "languages",
+              "value_name": "LANGUAGES",
+              "help": "Target languages (SonarQube key format, e.g. java, typescript, python). Accepts one or more values: --languages java python or repeated: --languages java --languages python",
+              "required": false,
+              "num_args": "1+"
+            },
+            {
+              "long": "mode",
+              "value_name": "MODE",
+              "help": "Retrieval mode",
+              "required": false
+            },
+            {
+              "long": "files",
+              "value_name": "FILES",
+              "help": "File paths to filter by. Accepts one or more values: --files a.rs b.rs",
+              "required": false,
+              "num_args": "1+"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dependencies",
+      "about": "MUST call before adding or upgrading any third-party package",
+      "subcommands": [
+        {
+          "name": "check",
+          "about": "Check a dependency for vulnerabilities, malware, and license compliance",
+          "options": [
+            {
+              "long": "purl",
+              "value_name": "PURL",
+              "help": "Package URL with version (e.g. \"pkg:npm/lodash@4.17.21\")",
+              "required": true
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "architecture",
+      "about": "Use for code understanding, planning, or cross-module work",
+      "subcommands": [
+        {
+          "name": "get-current",
+          "about": "Get the current architecture graph",
+          "options": [
+            {
+              "long": "ecosystem",
+              "value_name": "ECOSYSTEM",
+              "help": "Ecosystem filter (java, cs, py, js, ts)",
+              "required": false
+            },
+            {
+              "long": "depth",
+              "value_name": "DEPTH",
+              "help": "Hierarchy depth (0=root only, 1=root+children, etc., max 50)",
+              "required": false,
+              "default": "3"
+            },
+            {
+              "long": "path-prefix",
+              "value_name": "PATH_PREFIX",
+              "help": "Path prefix to filter nodes (e.g. 'com.example.service')",
+              "required": false
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Fields to include in response",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "get-intended",
+          "about": "Get intended architecture constraints",
+          "options": [
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Fields to include in response",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigation",
+      "about": "Use instead of grep or file reading when finding, reading, or tracing code",
+      "subcommands": [
+        {
+          "name": "search-signatures",
+          "about": "Search code by signature patterns",
+          "options": [
+            {
+              "long": "pattern",
+              "value_name": "PATTERNS",
+              "help": "Regex patterns to match in signatures",
+              "required": true
+            },
+            {
+              "long": "exclude-pattern",
+              "value_name": "EXCLUDE_PATTERNS",
+              "help": "Exclude regex patterns",
+              "required": false
+            },
+            {
+              "long": "include-glob",
+              "value_name": "INCLUDE_GLOB",
+              "help": "File path glob pattern to include",
+              "required": false
+            },
+            {
+              "long": "exclude-glob",
+              "value_name": "EXCLUDE_GLOB",
+              "help": "File path glob pattern to exclude",
+              "required": false
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Comma-separated fields to include: end_column, end_line, file_path, fqn, item_type, signature, start_column, start_line",
+              "required": false
+            },
+            {
+              "long": "limit",
+              "value_name": "LIMIT",
+              "help": "Maximum results (1-10000)",
+              "required": false,
+              "default": "10"
+            },
+            {
+              "long": "output",
+              "value_name": "OUTPUT",
+              "help": "Output mode: json, fqns, or names",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "search-bodies",
+          "about": "Search code by body patterns",
+          "options": [
+            {
+              "long": "pattern",
+              "value_name": "PATTERNS",
+              "help": "Regex patterns to match in code bodies",
+              "required": true
+            },
+            {
+              "long": "exclude-pattern",
+              "value_name": "EXCLUDE_PATTERNS",
+              "help": "Exclude regex patterns",
+              "required": false
+            },
+            {
+              "long": "include-glob",
+              "value_name": "INCLUDE_GLOB",
+              "help": "File path glob pattern to include",
+              "required": false
+            },
+            {
+              "long": "exclude-glob",
+              "value_name": "EXCLUDE_GLOB",
+              "help": "File path glob pattern to exclude",
+              "required": false
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Comma-separated fields to include: end_column, end_line, file_path, fqn, item_type, signature, start_column, start_line",
+              "required": false
+            },
+            {
+              "long": "limit",
+              "value_name": "LIMIT",
+              "help": "Maximum results (1-10000)",
+              "required": false,
+              "default": "10"
+            },
+            {
+              "long": "output",
+              "value_name": "OUTPUT",
+              "help": "Output mode: json, fqns, or names",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "get-source",
+          "about": "Get source code for a fully qualified name",
+          "options": [
+            {
+              "long": "fqn",
+              "value_name": "FQN",
+              "help": "Fully qualified name",
+              "required": false
+            },
+            {
+              "long": "fqn-stdin",
+              "value_name": "FQN_STDIN",
+              "help": "Read FQNs from stdin (one per line)",
+              "required": false
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Comma-separated fields to include: body, end_column, end_line, signature, start_column, start_line, structure_type",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "trace-callers",
+          "about": "Trace upstream call flow",
+          "options": [
+            {
+              "long": "fqn",
+              "value_name": "FQN",
+              "help": "Fully qualified name",
+              "required": false
+            },
+            {
+              "long": "fqn-stdin",
+              "value_name": "FQN_STDIN",
+              "help": "Read FQNs from stdin (one per line)",
+              "required": false
+            },
+            {
+              "long": "depth",
+              "value_name": "DEPTH",
+              "help": "Call chain depth (0-50)",
+              "required": false,
+              "default": "1"
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Comma-separated fields to include: calls, depth, direction, end_column, end_line, file_path, fqn, signature, start_column, start_line",
+              "required": false
+            },
+            {
+              "long": "output",
+              "value_name": "OUTPUT",
+              "help": "Output mode: json, fqns, or names",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "trace-callees",
+          "about": "Trace downstream call flow",
+          "options": [
+            {
+              "long": "fqn",
+              "value_name": "FQN",
+              "help": "Fully qualified name",
+              "required": false
+            },
+            {
+              "long": "fqn-stdin",
+              "value_name": "FQN_STDIN",
+              "help": "Read FQNs from stdin (one per line)",
+              "required": false
+            },
+            {
+              "long": "depth",
+              "value_name": "DEPTH",
+              "help": "Call chain depth (0-50)",
+              "required": false,
+              "default": "1"
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Comma-separated fields to include: calls, depth, direction, end_column, end_line, file_path, fqn, signature, start_column, start_line",
+              "required": false
+            },
+            {
+              "long": "output",
+              "value_name": "OUTPUT",
+              "help": "Output mode: json, fqns, or names",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "get-type-hierarchy",
+          "about": "Get type hierarchy for a fully qualified name",
+          "options": [
+            {
+              "long": "fqn",
+              "value_name": "FQN",
+              "help": "Fully qualified name",
+              "required": false
+            },
+            {
+              "long": "fqn-stdin",
+              "value_name": "FQN_STDIN",
+              "help": "Read FQNs from stdin (one per line)",
+              "required": false
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Comma-separated fields to include: children, dependency_kind, depth, file_path, fqn, parents",
+              "required": false
+            },
+            {
+              "long": "output",
+              "value_name": "OUTPUT",
+              "help": "Output mode: json, fqns, or names",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "get-references",
+          "about": "Get references for a fully qualified name",
+          "options": [
+            {
+              "long": "fqn",
+              "value_name": "FQN",
+              "help": "Fully qualified name",
+              "required": false
+            },
+            {
+              "long": "fqn-stdin",
+              "value_name": "FQN_STDIN",
+              "help": "Read FQNs from stdin (one per line)",
+              "required": false
+            },
+            {
+              "long": "fields",
+              "value_name": "FIELDS",
+              "help": "Comma-separated fields to include: dependency_kinds, file_path, fqn",
+              "required": false
+            },
+            {
+              "long": "output",
+              "value_name": "OUTPUT",
+              "help": "Output mode: json, fqns, or names",
+              "required": false
+            },
+            {
+              "long": "format",
+              "value_name": "FORMAT",
+              "help": "Output format: compact (default) or pretty",
+              "required": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

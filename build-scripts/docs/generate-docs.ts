@@ -33,7 +33,10 @@ import type { Option } from 'commander';
 import { version } from '../../package.json';
 import { COMMAND_TREE } from '../../src/cli/command-tree';
 import type { SonarCommand } from '../../src/cli/commands/_common/sonar-command';
+import { dumpCagTree } from './dump-cag-tree';
 import { EXAMPLES } from './examples';
+import type { ClidocCommand } from './merge-cag-tree';
+import { mergeCagTree } from './merge-cag-tree';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..', '..');
@@ -48,40 +51,6 @@ function optionType(
     return type;
   }
   return opt.required || opt.optional ? 'string' : 'boolean';
-}
-
-interface ClidocArgument {
-  name: string;
-  description: string;
-  required: boolean;
-  variadic: boolean;
-}
-
-interface ClidocOption {
-  flags: string;
-  long: string;
-  short: string | undefined;
-  description: string;
-  type: string;
-  required: boolean;
-  defaultValue: unknown;
-  allowedValues?: string[];
-}
-
-interface ClidocCommand {
-  id: string;
-  name: string;
-  fullName: string;
-  description: string;
-  isGroup: boolean;
-  isRoot: boolean;
-  requiresAuth: boolean;
-  depth: number;
-  parentId: string | null;
-  arguments: ClidocArgument[];
-  options: ClidocOption[];
-  examples: { command: string; description: string }[];
-  children: string[];
 }
 
 const allCommands: ClidocCommand[] = [];
@@ -162,6 +131,14 @@ allCommands.push(rootEntry);
 for (const cmd of visibleTopLevel) {
   serializeCommand(cmd as SonarCommand, 'sonar', 1, rootId);
 }
+
+// ── CAG subcommand tree merge ──────────────────────────────────
+// sonar context [action] [args...] is a Commander passthrough. The docs
+// generator cannot see CAG's clap-based subcommands via Commander, so we
+// download the pinned CAG binary, invoke `tool dump-cli-tree --pretty`, and
+// stitch the result into allCommands under the existing sonar-context entry.
+const cagTree = await dumpCagTree();
+mergeCagTree(cagTree, allCommands);
 
 const data = {
   version,
