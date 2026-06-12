@@ -106,8 +106,13 @@ describe('ScaScanOrchestrator', () => {
     expect(args).toContain('--sonar-token=test-token');
   });
 
-  it('runs manifest discovery before the analyze-project scan', async () => {
-    const spawn = mockSpawner(EMPTY_RESPONSE);
+  it('skips the analyze-project scan when the manifest pre-scan throws', async () => {
+    const spawn = mock((_binaryPath: string, args: string[]) => {
+      if (args[0] === 'discover-manifests') {
+        return Promise.reject(new Error('secrets pre-scan failed'));
+      }
+      return Promise.resolve({ exitCode: 0, stdout: JSON.stringify(EMPTY_RESPONSE), stderr: '' });
+    });
     const orchestrator = new ScaScanOrchestrator(
       makeClient(),
       okInstaller,
@@ -115,9 +120,13 @@ describe('ScaScanOrchestrator', () => {
       noopSecretsInstaller,
     );
 
-    await orchestrator.run(CLOUD_AUTH, 'my-project');
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(orchestrator.run(CLOUD_AUTH, 'my-project')).rejects.toThrow(
+      'secrets pre-scan failed',
+    );
 
     const subcommands = spawn.mock.calls.map(([, args]) => args[0]);
-    expect(subcommands).toEqual(['discover-manifests', 'analyze-project']);
+    expect(subcommands).toContain('discover-manifests');
+    expect(subcommands).not.toContain('analyze-project');
   });
 });
