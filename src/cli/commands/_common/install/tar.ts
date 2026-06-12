@@ -21,12 +21,11 @@
 // Minimal in-process tar reader. Sufficient for SonarSource binary archives
 // where we only need to extract a single regular-file entry by basename.
 // Implements the USTAR header layout (POSIX 1003.1-1988): 512-byte aligned
-// blocks, octal-ASCII size at offset 124, typeflag at 156.
+// blocks, octal-ASCII size at offset 124, typeflag at 156, prefix at 345.
 //
 // Limitations: GNU tar long-name extensions (typeflag 'L' / 'K') are NOT
 // supported — the long-name payload would be misparsed as a header block and
-// the following real entry would be skipped. Any SonarSource archive with
-// paths exceeding 100 bytes must be repacked in USTAR-compatible form.
+// the following real entry would be skipped.
 
 import { gunzipSync } from 'node:zlib';
 
@@ -35,6 +34,8 @@ const TAR_NAME_LEN = 100;
 const TAR_SIZE_OFFSET = 124;
 const TAR_SIZE_LEN = 12;
 const TAR_TYPEFLAG_OFFSET = 156;
+const TAR_PREFIX_OFFSET = 345;
+const TAR_PREFIX_LEN = 155;
 const OCTAL_RADIX = 8;
 
 /**
@@ -58,6 +59,8 @@ export function extractFileFromTar(tar: Buffer, entryBasename: string): Buffer |
       break;
     }
     const name = readNullTerminated(header, 0, TAR_NAME_LEN);
+    const prefix = readNullTerminated(header, TAR_PREFIX_OFFSET, TAR_PREFIX_LEN);
+    const fullName = prefix ? `${prefix}/${name}` : name;
     const sizeStr = readNullTerminated(header, TAR_SIZE_OFFSET, TAR_SIZE_LEN).trim();
     const size = sizeStr ? Number.parseInt(sizeStr, OCTAL_RADIX) : 0;
     const typeflag = String.fromCodePoint(header[TAR_TYPEFLAG_OFFSET]);
@@ -66,7 +69,9 @@ export function extractFileFromTar(tar: Buffer, entryBasename: string): Buffer |
     const dataStart = offset + TAR_BLOCK_SIZE;
     const dataEnd = dataStart + size;
 
-    if (isRegularFile && name && basename(name) === entryBasename) {
+    const hasTraversal =
+      !fullName || fullName.startsWith('/') || fullName.split('/').includes('..');
+    if (isRegularFile && !hasTraversal && basename(fullName) === entryBasename) {
       return Buffer.from(tar.subarray(dataStart, dataEnd));
     }
 

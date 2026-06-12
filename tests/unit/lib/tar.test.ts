@@ -34,6 +34,8 @@ const SIZE_OFFSET = 124;
 const TYPEFLAG_OFFSET = 156;
 const CHECKSUM_OFFSET = 148;
 const CHECKSUM_LEN = 8;
+const PREFIX_OFFSET = 345;
+const PREFIX_LEN = 155;
 const SIZE_OCTAL_LEN = 11; // 12 bytes total: 11 octal digits + NUL
 const CHECKSUM_OCTAL_LEN = 6; // 8 bytes total: 6 octal digits + NUL + space
 const ASCII_SPACE = 0x20;
@@ -44,13 +46,16 @@ const FILL_BYTE = 0xab;
  * Build a minimal valid USTAR file entry: 1 header block + N data blocks.
  * Returns the concatenated buffer (header + data, padded to 512-byte multiples).
  */
-function buildTarEntry(name: string, content: Buffer): Buffer {
+function buildTarEntry(name: string, content: Buffer, prefix?: string): Buffer {
   const header = Buffer.alloc(TAR_BLOCK_SIZE);
   header.write(name, 0, Math.min(name.length, NAME_LEN), 'utf-8');
   header.write('0000644\0', MODE_OFFSET, 'utf-8'); // file mode
   const sizeOctal = content.length.toString(8).padStart(SIZE_OCTAL_LEN, '0') + '\0';
   header.write(sizeOctal, SIZE_OFFSET, 'utf-8');
   header.write('0', TYPEFLAG_OFFSET, 'utf-8'); // regular file
+  if (prefix) {
+    header.write(prefix, PREFIX_OFFSET, Math.min(prefix.length, PREFIX_LEN), 'utf-8');
+  }
   // Fill checksum field with spaces, then compute and write the checksum.
   for (let i = 0; i < CHECKSUM_LEN; i++) header[CHECKSUM_OFFSET + i] = ASCII_SPACE;
   let checksum = 0;
@@ -64,8 +69,10 @@ function buildTarEntry(name: string, content: Buffer): Buffer {
   return Buffer.concat([header, data]);
 }
 
-function buildTarArchive(entries: Array<{ name: string; content: Buffer }>): Buffer {
-  const blocks = entries.map((e) => buildTarEntry(e.name, e.content));
+function buildTarArchive(
+  entries: Array<{ name: string; content: Buffer; prefix?: string }>,
+): Buffer {
+  const blocks = entries.map((e) => buildTarEntry(e.name, e.content, e.prefix));
   const eof = Buffer.alloc(TAR_BLOCK_SIZE * 2); // two empty blocks per spec
   return Buffer.concat([...blocks, eof]);
 }
@@ -96,6 +103,41 @@ describe('tar.extractFileFromTar', () => {
 
   it('returns null when no entry matches', () => {
     const tar = buildTarArchive([{ name: 'README.md', content: Buffer.from('hello', 'utf-8') }]);
+    expect(extractFileFromTar(tar, 'sonar-context-augmentation')).toBeNull();
+  });
+
+  it('extracts an entry stored with a USTAR prefix field (long filename)', () => {
+    const tar = buildTarArchive([
+      {
+        name: 'sonar-context-augmentation',
+        content: Buffer.from('binary-with-prefix', 'utf-8'),
+        prefix: 'some/long/directory/path',
+      },
+    ]);
+    const bytes = extractFileFromTar(tar, 'sonar-context-augmentation');
+    expect(bytes).not.toBeNull();
+    expect(bytes!.toString('utf-8')).toBe('binary-with-prefix');
+  });
+
+  it('rejects entries with path traversal in the prefix field', () => {
+    const tar = buildTarArchive([
+      {
+        name: 'sonar-context-augmentation',
+        content: Buffer.from('malicious', 'utf-8'),
+        prefix: '../../..',
+      },
+    ]);
+    expect(extractFileFromTar(tar, 'sonar-context-augmentation')).toBeNull();
+  });
+
+  it('rejects entries with an absolute path in the prefix field', () => {
+    const tar = buildTarArchive([
+      {
+        name: 'sonar-context-augmentation',
+        content: Buffer.from('malicious', 'utf-8'),
+        prefix: '/absolute/path',
+      },
+    ]);
     expect(extractFileFromTar(tar, 'sonar-context-augmentation')).toBeNull();
   });
 
