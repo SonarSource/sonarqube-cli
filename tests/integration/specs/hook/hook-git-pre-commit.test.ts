@@ -238,6 +238,22 @@ describe('sonar hook git-pre-commit', () => {
     );
 
     it(
+      'exits 1 when a staged file contains a secret (secrets scan runs before dependency-risks)',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.state().withSecretsBinaryInstalled();
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN, TEST_ORG);
+        stageFile(harness.cwd.path, 'secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        const result = await harness.run('hook git-pre-commit -p demo --dependency-risks');
+
+        expect(result.exitCode).toBe(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
       'exits 0 (fail-open) when a manifest is staged but the SCA backend is unavailable',
       async () => {
         initGitRepo(harness.cwd.path);
@@ -250,6 +266,7 @@ describe('sonar hook git-pre-commit', () => {
           .withProject('demo')
           .withProjectSettings('demo', [])
           .start();
+        harness.state().withSecretsBinaryInstalled();
         harness.state().withScaScannerBinaryInstalled();
         harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
@@ -259,6 +276,7 @@ describe('sonar hook git-pre-commit', () => {
 
         // Hook is fail-open on scanner failure: warn on stderr, commit not blocked.
         expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('Manifest discovery error: failed (exit code');
         expect(result.stderr).toContain('commit not blocked');
       },
       { timeout: 60000 },
