@@ -26,6 +26,7 @@ import {
   CAG_NON_AUTH_FULL_NAMES,
   type CagCliTree,
   type ClidocCommand,
+  mapCagOptions,
   mergeCagTree,
 } from '../../../../build-scripts/docs/merge-cag-tree';
 
@@ -188,6 +189,32 @@ describe('buildCagFlags', () => {
 
   it('formats a flag with short alias', () => {
     expect(buildCagFlags({ long: 'verbose', short: 'v', required: false })).toBe('-v, --verbose');
+  });
+
+  it('marks variadic options with an ellipsis', () => {
+    expect(
+      buildCagFlags({
+        long: 'categories',
+        value_name: 'CATEGORIES',
+        num_args: '1+',
+        required: false,
+      }),
+    ).toBe('--categories <CATEGORIES>...');
+  });
+});
+
+describe('mapCagOptions', () => {
+  it('reports boolean type when value_name is absent (real fixture --json)', () => {
+    const opts = mapCagOptions([{ long: 'json', required: false, default: 'false' }]);
+    expect(opts).toHaveLength(1);
+    expect(opts[0].type).toBe('boolean');
+    expect(opts[0].flags).toBe('--json');
+  });
+
+  it('reports string type for value-taking options', () => {
+    const opts = mapCagOptions([{ long: 'workspace', value_name: 'WORKSPACE', required: false }]);
+    expect(opts[0].type).toBe('string');
+    expect(opts[0].flags).toBe('--workspace <WORKSPACE>');
   });
 });
 

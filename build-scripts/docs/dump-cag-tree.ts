@@ -26,7 +26,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { chmod, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,42 +96,51 @@ async function resolveCagBinary(): Promise<string> {
   const ascPath = `${archivePath}.asc`;
 
   console.log(`  Downloading sonar-context-augmentation ${version} for ${platSuffix}…`);
-  await downloadBinary(archiveUrl, archivePath);
-  await downloadBinary(`${archiveUrl}.asc`, ascPath);
+  try {
+    await downloadBinary(archiveUrl, archivePath);
+    await downloadBinary(`${archiveUrl}.asc`, ascPath);
 
-  const [archiveBytes, armoredSignature] = await Promise.all([
-    readFile(archivePath),
-    readFile(ascPath, 'utf-8'),
-  ]);
+    const [archiveBytes, armoredSignature] = await Promise.all([
+      readFile(archivePath),
+      readFile(ascPath, 'utf-8'),
+    ]);
 
-  const expected = SONAR_CONTEXT_AUGMENTATION_SIGNATURES[platSuffix];
-  if (!expected) {
-    throw new Error(
-      `No pinned signature for sonar-context-augmentation on ${platSuffix}. ` +
-        `Run \`bun run fetch:signatures\` to refresh.`,
+    const expected = SONAR_CONTEXT_AUGMENTATION_SIGNATURES[platSuffix];
+    if (!expected) {
+      throw new Error(
+        `No pinned signature for sonar-context-augmentation on ${platSuffix}. ` +
+          `Run \`bun run fetch:signatures\` to refresh.`,
+      );
+    }
+    if (expected !== armoredSignature.trim()) {
+      throw new Error(
+        `Signature mismatch for sonar-context-augmentation on ${platSuffix}: ` +
+          `the downloaded .asc does not match the pinned signature.`,
+      );
+    }
+    await verifyPgpSignature(archiveBytes, armoredSignature, SONARSOURCE_PUBLIC_KEY);
+
+    const binaryBytes = extractFileFromTarGz(
+      archiveBytes,
+      `sonar-context-augmentation${platform.extension}`,
     );
-  }
-  if (expected !== armoredSignature.trim()) {
-    throw new Error(
-      `Signature mismatch for sonar-context-augmentation on ${platSuffix}: ` +
-        `the downloaded .asc does not match the pinned signature.`,
-    );
-  }
-  await verifyPgpSignature(archiveBytes, armoredSignature, SONARSOURCE_PUBLIC_KEY);
+    if (!binaryBytes) {
+      throw new Error(
+        `sonar-context-augmentation binary not found inside ${archiveUrl.split('/').at(-1)}.`,
+      );
+    }
 
-  const binaryBytes = extractFileFromTarGz(
-    archiveBytes,
-    `sonar-context-augmentation${platform.extension}`,
-  );
-  if (!binaryBytes) {
-    throw new Error(
-      `sonar-context-augmentation binary not found inside ${archiveUrl.split('/').at(-1)}.`,
-    );
-  }
-
-  writeFileSync(binaryPath, binaryBytes);
-  if (platform.os !== 'windows') {
-    await chmod(binaryPath, 0o755);
+    writeFileSync(binaryPath, binaryBytes);
+    if (platform.os !== 'windows') {
+      await chmod(binaryPath, 0o755);
+    }
+  } finally {
+    // Remove the downloaded archive and signature whether verification succeeded or
+    // not — failed runs shouldn't leave unverified .tar.gz behind, successful runs
+    // don't need them once the binary is extracted. Mirrors the install path in
+    // src/cli/commands/_common/install/context-augmentation.ts.
+    rmSync(archivePath, { force: true });
+    rmSync(ascPath, { force: true });
   }
 
   return binaryPath;
@@ -169,5 +178,16 @@ export async function dumpCagTree(): Promise<CagCliTree> {
     );
   }
 
-  return JSON.parse(result.stdout) as CagCliTree;
+  try {
+    return JSON.parse(result.stdout) as CagCliTree;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    const stdoutSnippet = result.stdout.slice(0, 200);
+    const stderrSnippet = (result.stderr ?? '').slice(0, 200);
+    throw new Error(
+      `Failed to parse sonar-context-augmentation tool dump-cli-tree output as JSON: ${reason}\n` +
+        `stdout (first 200 chars): ${stdoutSnippet}\n` +
+        `stderr (first 200 chars): ${stderrSnippet}`,
+    );
+  }
 }

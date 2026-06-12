@@ -72,8 +72,32 @@ export const CAG_NON_AUTH_FULL_NAMES = new Set([
   'sonar context tool print-skill',
 ]);
 
+/**
+ * Returns true when the CAG option accepts at least one value.
+ *
+ * CAG strips `value_name` for boolean (zero-arg) flags before emitting the dump, so the
+ * absence of `value_name` is the canonical signal. We treat `num_args` as a secondary
+ * signal for forward compatibility — e.g. a future build that re-introduces value_name
+ * on boolean flags would still report `num_args: "0..=0"` or similar.
+ */
+function takesValue(opt: CagOption): boolean {
+  if (!opt.value_name) return false;
+  if (opt.num_args && /^0(?![+0-9])/.test(opt.num_args)) return false;
+  return true;
+}
+
+/**
+ * CAG emits `num_args: "<min>+"` (e.g. "1+") for variadic options that accept any number
+ * of values, and either `null` or a fixed range like `"2..=3"` otherwise. Treat any "+"
+ * suffix as variadic so docs render `--categories <CATEGORIES>...` rather than as a
+ * single-value option.
+ */
+function isVariadic(opt: CagOption): boolean {
+  return typeof opt.num_args === 'string' && opt.num_args.endsWith('+');
+}
+
 export function buildCagFlags(opt: CagOption): string {
-  const valuePart = opt.value_name ? ` <${opt.value_name}>` : '';
+  const valuePart = takesValue(opt) ? ` <${opt.value_name}>${isVariadic(opt) ? '...' : ''}` : '';
   const longFlag = `--${opt.long}${valuePart}`;
   return opt.short ? `-${opt.short}, ${longFlag}` : longFlag;
 }
@@ -85,7 +109,7 @@ export function mapCagOptions(opts: CagOption[] | undefined): ClidocOption[] {
     long: `--${o.long}`,
     short: o.short ? `-${o.short}` : undefined,
     description: o.help ?? '',
-    type: o.value_name ? 'string' : 'boolean',
+    type: takesValue(o) ? 'string' : 'boolean',
     required: o.required,
     defaultValue: o.default,
     allowedValues: undefined,

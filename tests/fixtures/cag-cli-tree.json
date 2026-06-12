@@ -17,9 +17,9 @@
             },
             {
               "long": "json",
-              "value_name": "JSON",
               "help": "Output as JSON to stdout",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "invocation-prefix",
@@ -40,9 +40,9 @@
           "options": [
             {
               "long": "json",
-              "value_name": "JSON",
               "help": "Output as JSON",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "cwd",
@@ -82,15 +82,15 @@
             },
             {
               "long": "all",
-              "value_name": "ALL",
               "help": "Stop all daemons",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "json",
-              "value_name": "JSON",
               "help": "Output as JSON to stdout",
-              "required": false
+              "required": false,
+              "default": "false"
             }
           ]
         },
@@ -365,9 +365,9 @@
             },
             {
               "long": "fqn-stdin",
-              "value_name": "FQN_STDIN",
               "help": "Read FQNs from stdin (one per line)",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "fields",
@@ -395,9 +395,9 @@
             },
             {
               "long": "fqn-stdin",
-              "value_name": "FQN_STDIN",
               "help": "Read FQNs from stdin (one per line)",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "depth",
@@ -438,9 +438,9 @@
             },
             {
               "long": "fqn-stdin",
-              "value_name": "FQN_STDIN",
               "help": "Read FQNs from stdin (one per line)",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "depth",
@@ -481,9 +481,9 @@
             },
             {
               "long": "fqn-stdin",
-              "value_name": "FQN_STDIN",
               "help": "Read FQNs from stdin (one per line)",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "fields",
@@ -517,9 +517,9 @@
             },
             {
               "long": "fqn-stdin",
-              "value_name": "FQN_STDIN",
               "help": "Read FQNs from stdin (one per line)",
-              "required": false
+              "required": false,
+              "default": "false"
             },
             {
               "long": "fields",
