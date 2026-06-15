@@ -61,6 +61,7 @@ export interface IssuesSearchParams {
   projects?: string;
   organization?: string;
   severities?: string;
+  impactSeverities?: string;
   types?: string;
   issueStatuses?: string;
   rules?: string;

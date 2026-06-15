@@ -256,6 +256,16 @@ export class SonarQubeClient {
     return result.valid ? 'valid' : 'invalid';
   }
 
+  async getServerMode(): Promise<'mqr' | 'standard'> {
+    if (this.isCloud) return 'mqr';
+    const { response, value } = await this.getSafe<{ mode: string }>(
+      '/api/v2/clean-code-policy/mode',
+    );
+    if (response.status === HTTP_STATUS_NOT_FOUND) return 'standard';
+    await this.raiseForStatus(response, 'GET');
+    return value?.mode === 'MQR' ? 'mqr' : 'standard';
+  }
+
   /**
    * Get server system status
    */

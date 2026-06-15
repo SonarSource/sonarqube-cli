@@ -1507,4 +1507,45 @@ describe('SonarQubeClient', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('getServerMode', () => {
+    it('returns mqr immediately for SonarQube Cloud without calling the API', async () => {
+      const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
+      fetchSpy = spyOn(globalThis, 'fetch');
+      expect(await cloudClient.getServerMode()).toBe('mqr');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns mqr when server responds with MQR mode', async () => {
+      fetchSpy = mockFetch({ mode: 'MQR' });
+      expect(await client.getServerMode()).toBe('mqr');
+    });
+
+    it('returns standard when server responds with STANDARD mode', async () => {
+      fetchSpy = mockFetch({ mode: 'STANDARD' });
+      expect(await client.getServerMode()).toBe('standard');
+    });
+
+    it('returns standard when endpoint returns 404 (old server without MQR support)', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve('Not Found'),
+      } as Response);
+      expect(await client.getServerMode()).toBe('standard');
+    });
+
+    it('throws when endpoint returns a server error', () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(''),
+      } as Response);
+      expect(client.getServerMode()).rejects.toThrow();
+    });
+  });
 });
