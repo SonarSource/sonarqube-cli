@@ -303,7 +303,7 @@ integrateCommand
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
 integrateCommand
-  .command('antigravity')
+  .command('antigravity', { hidden: true })
   .description(
     'Setup SonarQube integration for Antigravity. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
   )
@@ -311,7 +311,7 @@ integrateCommand
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option(
     '-g, --global',
-    'Install hooks and config globally to ~/.gemini/config/plugins/sonarqube instead of project directory',
+    'Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory',
   )
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)

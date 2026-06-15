@@ -87,7 +87,7 @@ export const GLOBAL_HOOKS_DIR = join(CLI_DIR, 'hooks');
 // Antigravity
 // ---------------------------------------------------------------------------
 
-/** Antigravity workspace agents directory (relative to the project root). */
+/** Antigravity workspace agents directory (relative to the project root). Shared with Codex CAG skills under `.agents/skills/`. */
 export const ANTIGRAVITY_PROJECT_AGENTS_DIR = '.agents';
 
 /** Project Antigravity hooks config (relative to the project root). */

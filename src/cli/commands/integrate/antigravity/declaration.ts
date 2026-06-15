@@ -34,16 +34,11 @@ export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity-cli';
 export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   globalSecretsHookExists?: boolean;
-  /** Install PostInvocation SQAA hook (project scope). Wired in CLI-551. */
   installSqaaHook?: boolean;
   sqaaEntitled?: boolean;
   installContextAugmentation?: boolean;
 }
 
-/**
- * Minimal declarative integration for CLI-549 orchestration. Secrets hooks,
- * SQAA, and MCP features are added in CLI-550/CLI-551.
- */
 export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrationOptions> = {
   id: ANTIGRAVITY_INTEGRATION_ID,
   displayName: 'Antigravity',

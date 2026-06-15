@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar integrate antigravity` (CLI-549 orchestration).
+// Integration tests for `sonar integrate antigravity`.
 
 import { join } from 'node:path';
 

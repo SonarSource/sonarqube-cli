@@ -26,13 +26,18 @@ import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
-import { installIntegration } from '../_common/registry';
+import { createIntegrationRegistry, installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { supportedIntegrations } from '../index.js';
-import { ANTIGRAVITY_INTEGRATION_ID, type AntigravityIntegrationOptions } from './declaration';
+import {
+  ANTIGRAVITY_INTEGRATION_ID,
+  antigravityIntegration,
+  type AntigravityIntegrationOptions,
+} from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 import { resolveAntigravityInstallTarget } from './install-target';
+
+const antigravityIntegrations = createIntegrationRegistry([antigravityIntegration]);
 
 export async function integrateAntigravity(
   options: IntegrateAgentOptions,
@@ -76,7 +81,7 @@ export async function integrateAntigravity(
   };
 
   await installIntegration({
-    registry: supportedIntegrations,
+    registry: antigravityIntegrations,
     integrationId: ANTIGRAVITY_INTEGRATION_ID,
     options: integrationOptions,
     targetRoot,

@@ -19,7 +19,6 @@
  */
 
 import { createIntegrationRegistry } from './_common/registry';
-import { antigravityIntegration } from './antigravity/declaration';
 import { claudeIntegration } from './claude/declaration';
 import { codexIntegration } from './codex/declaration';
 import { copilotIntegration } from './copilot/declaration';
@@ -31,7 +30,6 @@ export const ALL_INTEGRATIONS = [
   copilotIntegration,
   codexIntegration,
   cursorIntegration,
-  antigravityIntegration,
   ...GIT_INTEGRATIONS,
 ] as const;
 
