@@ -3,8 +3,16 @@
 <head>
   <!-- GTM -->
   <script>
+    window.dataLayer = window.dataLayer || [];
+
+    // Initial page load
+    window.dataLayer.push({
+      'event': 'pageView',
+      'pagePath': window.location.pathname + window.location.hash
+    });
+
+    // Hash/anchor changes
     window.addEventListener('hashchange', function() {
-      window.dataLayer = window.dataLayer || [];
       window.dataLayer.push({
         'event': 'hashChange',
         'pagePath': window.location.pathname + window.location.hash
