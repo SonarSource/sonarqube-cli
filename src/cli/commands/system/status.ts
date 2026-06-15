@@ -28,6 +28,7 @@ import { version as VERSION } from '../../../../package.json';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../../lib/config-constants';
+import { IS_STANDALONE_DISTRIBUTION } from '../../../lib/distribution';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
@@ -48,7 +49,7 @@ import { checkTokenStatus } from '../_common/token';
 import { supportedIntegrations } from '../integrate';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks';
-import { checkForUpdate } from '../self-update/self-update';
+import { checkForUpdate } from '../self-update/update-check';
 
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
 
@@ -85,6 +86,11 @@ interface IntegrationInfo {
   mcp?: McpStatus;
   hooks?: HooksStatus;
 }
+
+type CliUpdateInfo = {
+  latestVersion: string;
+  updateAvailable: boolean;
+};
 
 function abbreviatePath(p: string): string {
   return p.replace(homedir(), '~');
@@ -137,7 +143,7 @@ function checkMcpConfigFile(configPath: string): IntegrationConfigStatus {
   try {
     const raw = readFileSync(configPath, 'utf-8');
     if (configPath.endsWith('.toml')) {
-      const parsed = parseToml(raw) as Record<string, unknown>;
+      const parsed = parseToml(raw);
       const mcpServers = parsed.mcp_servers as Record<string, unknown> | undefined;
       if (!mcpServers || !('sonarqube' in mcpServers)) return 'not_configured';
       const entry = mcpServers.sonarqube;
@@ -335,13 +341,29 @@ function integrationConfigStatusLine(status: IntegrationConfigStatus): string {
   return 'CONFIGURED';
 }
 
+async function getCliUpdateInfo(): Promise<CliUpdateInfo | null> {
+  if (!IS_STANDALONE_DISTRIBUTION) {
+    return null;
+  }
+
+  try {
+    const result = await checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL);
+    return {
+      latestVersion: result.latestVersion,
+      updateAvailable: result.updateAvailable,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function systemStatus(options: SystemStatusOptions): Promise<void> {
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
 
   const [auth, updateResult] = await Promise.all([
     resolveAuth().catch(() => null),
-    checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL).catch(() => null),
+    getCliUpdateInfo(),
   ]);
 
   const tokenStatus: TokenStatus | null = auth

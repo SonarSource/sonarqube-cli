@@ -37,16 +37,9 @@ import { File } from './file';
 import { buildHomeEnv, IS_WINDOWS } from './platform';
 import type { CliResult, RunOptions } from './types.js';
 
-export { EnvironmentBuilder } from './environment-builder.js';
-export { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
-export {
-  FakeSonarQubeServer,
-  FakeSonarQubeServerBuilder,
-  ProjectBuilder,
-} from './fake-sonarqube-server.js';
-export { FakeUpdateScriptServer } from './fake-update-script-server.js';
-export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath, SCRIPT_EXT } from './platform';
-export type { CliResult, RecordedRequest, RunOptions } from './types.js';
+export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
+export { hookScriptName, hookScriptPath, IS_WINDOWS, normalizePath } from './platform';
+export type { CliResult, RecordedRequest } from './types.js';
 
 export class TestHarness {
   public readonly cwd: Dir;
@@ -210,6 +203,7 @@ export class TestHarness {
       cwd: options?.cwd ?? this.cwd.path,
       browserToken: options?.browserToken,
       browserTokenName: options?.browserTokenName,
+      binaryPath: options?.binaryPath,
     });
   }
 

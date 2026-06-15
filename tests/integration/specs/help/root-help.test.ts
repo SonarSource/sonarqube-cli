@@ -107,6 +107,21 @@ describe('root help', () => {
   );
 
   it(
+    'sonar <unknown> reports an unknown command instead of an argument-count error',
+    async () => {
+      const result = await harness.run('totally-unknown-command');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain("unknown command 'totally-unknown-command'");
+      expect(result.stdout + result.stderr).toContain(
+        "Run 'sonar --help' to see the list of available commands.",
+      );
+      expect(result.stdout + result.stderr).not.toContain('Expected 0 arguments');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'sonar auth -h shows subcommand help without hanging',
     async () => {
       const result = await harness.run('auth -h');

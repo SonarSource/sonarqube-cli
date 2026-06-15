@@ -49,8 +49,9 @@ void mock.module('../../../../../src/lib/version', () => ({
   stripBuildNumber: mock(realStripBuildNumber),
 }));
 
-const { extractVersion, checkForUpdate, selfUpdate } =
-  await import('../../../../../src/cli/commands/self-update/self-update');
+const { extractVersion, checkForUpdate } =
+  await import('../../../../../src/cli/commands/self-update/update-check');
+const { selfUpdate } = await import('../../../../../src/cli/commands/self-update/self-update');
 
 describe('extractVersion', () => {
   it('extracts version from a shell script (double quotes)', () => {
