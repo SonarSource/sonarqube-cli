@@ -103,6 +103,7 @@
     "@sentry/bun": "^10.53.1",
     "@toon-format/toon": "^2.1.0",
     "commander": "^15.0.0",
+    "flatted": "3.4.2",
     "js-yaml": "^4.1.1",
     "openpgp": "^6.0.0",
     "picocolors": "^1.1.1",
