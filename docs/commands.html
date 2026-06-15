@@ -1,6 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- GTM -->
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    // Initial page load
+    window.dataLayer.push({
+      'event': 'pageView',
+      'pagePath': window.location.pathname + window.location.hash
+    });
+
+    // Hash/anchor changes
+    window.addEventListener('hashchange', function() {
+      window.dataLayer.push({
+        'event': 'hashChange',
+        'pagePath': window.location.pathname + window.location.hash
+      });
+    });
+  </script>
+  <!-- GTM -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Commands — SonarQube CLI</title>
