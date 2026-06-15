@@ -33,7 +33,8 @@ import { print } from '../../../ui';
 import { InvalidOptionError } from '../_common/error';
 
 export const VALID_FORMATS = ['json', 'toon', 'table', 'csv'];
-export const VALID_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
+export const VALID_STANDARD_SEVERITIES = ['INFO', 'MINOR', 'MAJOR', 'CRITICAL', 'BLOCKER'];
+export const VALID_MQR_SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'BLOCKER'];
 export const VALID_STATUSES = ['OPEN', 'CONFIRMED', 'FALSE_POSITIVE', 'ACCEPTED', 'FIXED'];
 
 export interface ListIssuesOptions {
@@ -49,6 +50,24 @@ export interface ListIssuesOptions {
   format?: string;
   pageSize: number;
   page: number;
+}
+
+function normalizeSeverityValues(raw: string): string[] {
+  return raw.split(',').map((s) => s.trim().toUpperCase());
+}
+
+function parseSeverities(
+  raw: string,
+  mode: 'mqr' | 'standard',
+): { severities?: string; impactSeverities?: string } {
+  const values = normalizeSeverityValues(raw);
+  const validSet = mode === 'mqr' ? VALID_MQR_SEVERITIES : VALID_STANDARD_SEVERITIES;
+  if (values.some((s) => !validSet.includes(s))) {
+    throw new InvalidOptionError(
+      `Invalid severity(es): '${raw}'. Valid values for ${mode === 'mqr' ? 'Multi-Quality Rule (MQR)' : 'Standard Experience'} mode: ${validSet.join(', ')}.`,
+    );
+  }
+  return mode === 'mqr' ? { impactSeverities: values.join(',') } : { severities: values.join(',') };
 }
 
 /**
@@ -89,24 +108,32 @@ export async function listIssues(options: ListIssuesOptions, auth: ResolvedAuth)
     normalizedStatuses = statuses.join(',');
   }
 
-  let normalizedSeverities = options.severities;
-  if (normalizedSeverities) {
-    const severities = normalizedSeverities.split(',').map((s) => s.toUpperCase());
-    if (!severities.every((s) => VALID_SEVERITIES.includes(s))) {
+  if (options.severities) {
+    const preflightValues = normalizeSeverityValues(options.severities);
+    if (
+      preflightValues.some(
+        (s) => !VALID_STANDARD_SEVERITIES.includes(s) && !VALID_MQR_SEVERITIES.includes(s),
+      )
+    ) {
       throw new InvalidOptionError(
-        `Invalid severity(es): '${options.severities}'. Valid severities are: ${VALID_SEVERITIES.join(', ')}`,
+        `Invalid severity(es): '${options.severities}'. ` +
+          `Multi-Quality Rule (MQR) mode values: ${VALID_MQR_SEVERITIES.join(', ')}. ` +
+          `Standard Experience mode values: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
       );
     }
-    normalizedSeverities = severities.join(',');
   }
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const issuesClient = new IssuesClient(client);
 
+  const { severities: normalizedSeverities, impactSeverities: normalizedImpactSeverities } =
+    options.severities ? parseSeverities(options.severities, await client.getServerMode()) : {};
+
   const params: IssuesSearchParams = {
     projects: options.project,
     organization: auth.orgKey,
     severities: normalizedSeverities,
+    impactSeverities: normalizedImpactSeverities,
     types: options.type,
     issueStatuses: normalizedStatuses,
     rules: options.rule,

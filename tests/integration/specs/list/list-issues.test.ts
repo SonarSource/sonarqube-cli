@@ -281,10 +281,69 @@ describe('list issues — argument validation', () => {
   it(
     'exits with code 2 when --severities is not a recognised value',
     async () => {
-      // Validation runs inside the handler — auth must pass first
       harness.withAuth('http://localhost:19999', 'fake-token');
 
       const result = await harness.run('list issues --project my-project --severities UNKNOWN');
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain('Invalid severity');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends impactSeverities param on MQR server',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMode('MQR')
+        .withProject('my-project', (p) =>
+          p.withIssue({ ruleKey: 'java:S1234', message: 'An issue', severity: 'MAJOR' }),
+        )
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run('list issues --project my-project --severities HIGH,MEDIUM');
+
+      expect(result.exitCode).toBe(0);
+      const recorded = server.getRecordedRequests();
+      const issuesReq = recorded.find((r) => r.path === '/api/issues/search');
+      expect(issuesReq?.query.impactSeverities).toBe('HIGH,MEDIUM');
+      expect(issuesReq?.query.severities).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 when Standard-only value is used on MQR server',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMode('MQR')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run('list issues --project my-project --severities MAJOR');
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain('Invalid severity');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 when MQR-only value is used on Standard server',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withMode('STANDARD')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run('list issues --project my-project --severities HIGH');
 
       expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain('Invalid severity');

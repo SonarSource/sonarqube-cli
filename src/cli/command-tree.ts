@@ -76,7 +76,8 @@ import {
   listIssues,
   type ListIssuesOptions,
   VALID_FORMATS,
-  VALID_SEVERITIES,
+  VALID_MQR_SEVERITIES,
+  VALID_STANDARD_SEVERITIES,
   VALID_STATUSES,
 } from './commands/list/issues';
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
@@ -168,7 +169,7 @@ list
   )
   .option(
     '--severities <severities>',
-    `Filter by severity (comma-separated list of: ${VALID_SEVERITIES.join(', ')})`,
+    `Filter by severity. Valid values depend on server mode — Multi-Quality Rule (MQR) mode: ${VALID_MQR_SEVERITIES.join(', ')}; Standard Experience mode: ${VALID_STANDARD_SEVERITIES.join(', ')}.`,
   )
   .addOption(listIssuesFormatOption)
   .option('--branch <branch>', 'Branch name')

@@ -142,6 +142,12 @@ export class FakeSonarQubeServerBuilder {
   private remediationAgentEntitlement = { eligible: true, delegateIssuesEnabled: true };
   private orgsLookupReturnsEmpty = false;
   private orgsLookupErrorCode?: number;
+  private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
+
+  withMode(mode: 'MQR' | 'STANDARD'): this {
+    this.serverMode = mode;
+    return this;
+  }
 
   withProject(key: string, fn?: (p: ProjectBuilder) => void): this {
     const builder = new ProjectBuilder(key);
@@ -291,6 +297,7 @@ export class FakeSonarQubeServerBuilder {
       projectSettings,
       agentJobErrorCode,
       agentJobErrorMessage,
+      serverMode,
       remediationAgentEntitlement,
       orgsLookupReturnsEmpty,
       orgsLookupErrorCode,
@@ -365,6 +372,12 @@ export class FakeSonarQubeServerBuilder {
 
         if (path === '/api/authentication/validate') {
           return new Response(JSON.stringify({ valid: true }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (path === '/api/v2/clean-code-policy/mode') {
+          return new Response(JSON.stringify({ mode: serverMode }), {
             headers: { 'Content-Type': 'application/json' },
           });
         }

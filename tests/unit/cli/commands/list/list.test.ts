@@ -450,20 +450,20 @@ describe('issuesSearchCommand', () => {
   });
 
   it('normalizes severities to uppercase before passing to API', async () => {
-    let capturedSeverities: string | undefined;
+    let capturedParams: Record<string, string> | undefined;
     const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
       <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
-        capturedSeverities = (params as Record<string, string>)?.severities;
+        capturedParams = params as Record<string, string>;
         return Promise.resolve(emptyApiResponse as unknown as T);
       },
     );
 
     try {
       await listIssues(
-        { project: 'my-project', severities: 'major', page: 1, pageSize: 500 },
+        { project: 'my-project', severities: 'high', page: 1, pageSize: 500 },
         mockAuth,
       );
-      expect(capturedSeverities).toBe('MAJOR');
+      expect(capturedParams?.impactSeverities).toBe('HIGH');
     } finally {
       getSpy.mockRestore();
     }
@@ -476,6 +476,85 @@ describe('issuesSearchCommand', () => {
       await listIssues({ project: 'my-project', page: 1, pageSize: 500 }, mockAuth);
     } finally {
       getSpy.mockRestore();
+    }
+  });
+
+  it('routes MQR severities to impactSeverities param on MQR server (SonarQube Cloud)', async () => {
+    let capturedParams: Record<string, string> | undefined;
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
+      <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
+        capturedParams = params as Record<string, string>;
+        return Promise.resolve(emptyApiResponse as unknown as T);
+      },
+    );
+    try {
+      await listIssues(
+        { project: 'my-project', severities: 'HIGH,MEDIUM', page: 1, pageSize: 500 },
+        mockAuth,
+      );
+      expect(capturedParams?.impactSeverities).toBe('HIGH,MEDIUM');
+      expect(capturedParams?.severities).toBeUndefined();
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
+
+  it('routes BLOCKER and INFO to impactSeverities on MQR server', async () => {
+    let capturedParams: Record<string, string> | undefined;
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
+      <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
+        capturedParams = params as Record<string, string>;
+        return Promise.resolve(emptyApiResponse as unknown as T);
+      },
+    );
+    try {
+      await listIssues(
+        { project: 'my-project', severities: 'BLOCKER,INFO', page: 1, pageSize: 500 },
+        mockAuth,
+      );
+      expect(capturedParams?.impactSeverities).toBe('BLOCKER,INFO');
+      expect(capturedParams?.severities).toBeUndefined();
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
+
+  it('throws when Standard-only value is used on MQR server', () => {
+    expect(
+      listIssues({ project: 'proj', severities: 'MAJOR', page: 1, pageSize: 500 }, mockAuth),
+    ).rejects.toThrow('Invalid severity');
+  });
+
+  it('routes Standard severities to severities param on Standard server', async () => {
+    let capturedParams: Record<string, string> | undefined;
+    const getSpy = spyOn(SonarQubeClient.prototype, 'get').mockImplementation(
+      <T>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
+        capturedParams = params as Record<string, string>;
+        return Promise.resolve(emptyApiResponse as unknown as T);
+      },
+    );
+    const modeSpy = spyOn(SonarQubeClient.prototype, 'getServerMode').mockResolvedValue('standard');
+    try {
+      await listIssues(
+        { project: 'my-project', severities: 'MAJOR,CRITICAL', page: 1, pageSize: 500 },
+        mockAuth,
+      );
+      expect(capturedParams?.severities).toBe('MAJOR,CRITICAL');
+      expect(capturedParams?.impactSeverities).toBeUndefined();
+    } finally {
+      getSpy.mockRestore();
+      modeSpy.mockRestore();
+    }
+  });
+
+  it('throws when MQR-only value is used on Standard server', () => {
+    const modeSpy = spyOn(SonarQubeClient.prototype, 'getServerMode').mockResolvedValue('standard');
+    try {
+      expect(
+        listIssues({ project: 'proj', severities: 'HIGH', page: 1, pageSize: 500 }, mockAuth),
+      ).rejects.toThrow('Invalid severity');
+    } finally {
+      modeSpy.mockRestore();
     }
   });
 
