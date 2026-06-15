@@ -1,4 +1,4 @@
-﻿/*
+/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
