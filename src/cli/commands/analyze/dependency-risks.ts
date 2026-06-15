@@ -19,9 +19,10 @@
  */
 
 import { type ResolvedAuth } from '../../../lib/auth-resolver';
+import { discoverProject } from '../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { error, print, warn } from '../../../ui';
-import { InvalidOptionError } from '../_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '../_common/install/secrets.ts';
 import { countSelectedRisks } from './dependency-risk-helpers/count-selected-risks.ts';
@@ -43,7 +44,7 @@ const EXIT_CODE_OK = 0;
 const EXIT_CODE_ERRORS_ONLY = 1;
 
 export interface AnalyzeDependencyRisksOptions {
-  project: string;
+  project?: string;
   format: string;
   statuses: string;
 }
@@ -57,27 +58,50 @@ export async function analyzeDependencyRisks(
     throw new InvalidOptionError(`Invalid --statuses value: '${options.statuses}'`);
   }
 
+  const projectKey = await resolveProjectKey(options.project, auth);
+
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const result = await new ScaScanOrchestrator(
     client,
     new DefaultScaScannerInstaller(),
     new DefaultScaScannerSpawner(),
     new DefaultSecretsInstaller(),
-  ).run(auth, options.project);
+  ).run(auth, projectKey);
 
   const viewModel = buildDependencyRisksViewModel(result, filter);
   switch (options.format) {
     case 'json':
-      print(formatDependencyRisksJson(options.project, viewModel));
+      print(formatDependencyRisksJson(projectKey, viewModel));
       break;
     case 'toon':
-      print(formatDependencyRisksToon(options.project, viewModel));
+      print(formatDependencyRisksToon(projectKey, viewModel));
       break;
     default:
       print(formatDependencyRisksTable(viewModel));
   }
 
   handleResult(countUnresolvedIssues(viewModel), result.errors.length);
+}
+
+async function resolveProjectKey(
+  explicitProject: string | undefined,
+  auth: ResolvedAuth,
+): Promise<string> {
+  if (explicitProject) {
+    print(`Using project key: ${explicitProject}`, process.stderr);
+    return explicitProject;
+  }
+
+  const discovered = await discoverProject(process.cwd(), true, { auth });
+  if (discovered.projectKey) {
+    print(`Using auto-detected project key: ${discovered.projectKey}`, process.stderr);
+    return discovered.projectKey;
+  }
+
+  throw new CommandFailedError('Could not determine project key.', {
+    remediationHint:
+      'Use --project <key> to specify it, or add sonar.projectKey to sonar-project.properties.',
+  });
 }
 
 function handleResult(unresolvedRisksCount: number, errorCount: number) {
