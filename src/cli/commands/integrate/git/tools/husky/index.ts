@@ -24,9 +24,22 @@ import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependen
 import { textSnippet, textSnippetRemover } from '../../../_common/registry/resources';
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { getHuskyBeginMarker, getHuskyEndMarker, legacyHuskyBlock } from '../markers';
-import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
-import { getHuskySnippetContent } from './shell-fragments';
+import {
+  gitCombinedHookExample,
+  gitHookExample,
+  LEGACY_HOOK_MARKER,
+  shouldInstallHook,
+} from '../shared';
+import { getHuskyBeginMarker, getHuskySnippetContent } from './shell-fragments';
+
+export function getHuskyEndMarker(hook: GitHookType): string {
+  return `# sonar:end husky-${hook}`;
+}
+
+/** Legacy husky managed-block delimiters, stripped on (re)install/remove to migrate old installs. */
+function legacyHuskyBlock(hook: GitHookType): { startMarker: string; endMarker: string } {
+  return { startMarker: `# ${LEGACY_HOOK_MARKER}`, endMarker: getHuskyEndMarker(hook) };
+}
 
 export const HUSKY_INTEGRATION_ID = 'husky';
 
@@ -71,8 +84,10 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
 
 export { installViaHusky } from './install';
 export {
+  getHuskyBeginMarker,
   getHuskyPreCommitSnippet,
   getHuskyPrePushSnippet,
   getHuskySnippet,
   getHuskySnippetContent,
+  getRecognizedHuskyMarkers,
 } from './shell-fragments';

@@ -28,7 +28,7 @@ import {
   getHuskyPrePushSnippet,
   installViaHusky,
 } from '../../../../../../src/cli/commands/integrate/git/tools/husky';
-import { getHuskyBeginMarker } from '../../../../../../src/cli/commands/integrate/git/tools/markers';
+import { getHuskyBeginMarker } from '../../../../../../src/cli/commands/integrate/git/tools/husky';
 import {
   getPreCommitHookScript,
   getPrePushHookScript,

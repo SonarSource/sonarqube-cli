@@ -19,8 +19,22 @@
  */
 
 import type { GitHookType } from '../../options';
-import { getHuskyBeginMarker } from '../markers';
-import { resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
+import {
+  LEGACY_HOOK_MARKER,
+  resolveSonarHookCommand,
+  SONAR_HOOK_SKIP_SECRETS_MESSAGE,
+} from '../shared';
+
+// Husky (text-snippet) managed-block markers. The end marker is kept verbatim across versions; only
+// the start marker changed from the legacy secrets-specific text to this normalized begin marker.
+export function getHuskyBeginMarker(hook: GitHookType): string {
+  return `# sonar:begin husky-${hook}`;
+}
+
+/** New begin marker + legacy marker used to detect a husky-managed hook of this type. */
+export function getRecognizedHuskyMarkers(hook: GitHookType): string[] {
+  return [getHuskyBeginMarker(hook), LEGACY_HOOK_MARKER];
+}
 
 function huskyBinBlock(): string {
   return [

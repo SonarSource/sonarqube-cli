@@ -32,14 +32,13 @@ import type {
   IntegrationDeclaration,
 } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { getNativeHookMarker } from '../markers';
 import {
   gitCombinedHookExample,
   gitHookExample,
   LEGACY_HOOK_MARKER,
   shouldInstallHook,
 } from '../shared';
-import { getHookScript } from './shell-fragments';
+import { getHookScript, getNativeHookMarker } from './shell-fragments';
 
 export const NATIVE_GIT_INTEGRATION_ID = 'native-git';
 const GLOBAL_GIT_CONFIG_REMEDIATION_HINT =
@@ -166,4 +165,10 @@ async function resolveNativeGitHookPath(
   return join(await resolveGitHooksDir(context.targetRoot), hook);
 }
 
-export { getHookScript, getPreCommitHookScript, getPrePushHookScript } from './shell-fragments';
+export {
+  getHookScript,
+  getNativeHookMarker,
+  getPreCommitHookScript,
+  getPrePushHookScript,
+  getRecognizedNativeMarkers,
+} from './shell-fragments';

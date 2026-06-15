@@ -24,8 +24,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 import { discreetSuccess, info } from '../../../../../../ui';
 import type { GitHookType } from '../../options';
-import { getRecognizedHuskyMarkers } from '../markers';
-import { getHuskySnippet } from './shell-fragments';
+import { getHuskySnippet, getRecognizedHuskyMarkers } from './shell-fragments';
 
 export async function installViaHusky(huskyHookPath: string, hook: GitHookType): Promise<void> {
   let content: string;

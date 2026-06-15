@@ -40,7 +40,7 @@ import {
 import {
   getNativeHookMarker,
   getRecognizedNativeMarkers,
-} from '../../../../../../src/cli/commands/integrate/git/tools';
+} from '../../../../../../src/cli/commands/integrate/git/tools/native';
 import { PRE_COMMIT_CONFIG_FILE } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
 import { LEGACY_HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
 import { GLOBAL_HOOKS_DIR } from '../../../../../../src/lib/config-constants';
