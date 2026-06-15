@@ -27,7 +27,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
-import { parseSqaaRequestBody, sqaaRequestFirstFilePath } from './sqaa-request-helpers';
+import {
+  allSqaaRequestsUseDeep,
+  parseSqaaRequestBody,
+  sqaaRequestFileCount,
+  sqaaRequestFirstFilePath,
+  totalSqaaFilesSent,
+} from './sqaa-request-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -86,7 +92,7 @@ describe('analyze (no subcommand)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('change set is clean');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -315,7 +321,7 @@ describe('analyze (no subcommand)', () => {
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
       expect(output).not.toContain('no project configured');
-      expect(output).toContain('change set is clean');
+      expect(output).toContain('No issues found');
 
       const sqaaCalls = server
         .getRecordedRequests()
@@ -325,7 +331,7 @@ describe('analyze (no subcommand)', () => {
       expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('new.ts');
       expect(request.projectKey).toBe('explicit-project');
       expect(request.files).toHaveLength(1);
-      expect(request.analysisDepth).toBeUndefined();
+      expect(request.analysisDepth).toBe('DEEP');
     },
     { timeout: 15000 },
   );
@@ -616,7 +622,7 @@ describe('analyze agentic', () => {
       );
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('no issues found');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -650,7 +656,7 @@ describe('analyze agentic', () => {
   );
 
   it(
-    'calls SQAA API and reports no issues found for clean file',
+    'calls SQAA API and reports No issues found for clean file',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -668,7 +674,7 @@ describe('analyze agentic', () => {
       const result = await harness.run('analyze agentic --file src/index.ts');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('no issues found');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -735,7 +741,7 @@ describe('analyze agentic', () => {
       const output = result.stdout + result.stderr;
       expect(output).toContain('NOT_ENTITLED');
       expect(output).toContain('not entitled');
-      expect(output).not.toContain('no issues found');
+      expect(output).not.toContain('No issues found');
     },
     { timeout: 15000 },
   );
@@ -806,7 +812,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('change set is clean');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -836,7 +842,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       const result = await harness.run('analyze agentic');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('change set is clean');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -915,7 +921,9 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(51);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(51);
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -945,9 +953,46 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(51);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(totalSqaaFilesSent(sqaaCalls)).toBe(51);
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'splits on 413 using server-reported payload limits',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withSqaaPayloadLimit({ maxRequestSize: 5 * 1024 * 1024 })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      const largeContent = 'x'.repeat(4 * 1024 * 1024);
+      harness.cwd.writeFile('large-a.ts', largeContent);
+      harness.cwd.writeFile('large-b.ts', largeContent);
+      harness.cwd.writeFile('large-c.ts', largeContent);
+
+      const result = await harness.run('analyze agentic --force');
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls.length).toBe(4);
+      expect(sqaaRequestFileCount(sqaaCalls[0]?.body)).toBe(3);
+      for (const call of sqaaCalls.slice(1)) {
+        expect(sqaaRequestFileCount(call.body)).toBe(1);
+      }
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
+    },
+    { timeout: 60000 },
   );
 
   it(
@@ -972,7 +1017,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       const result = await harness.run('analyze agentic --staged');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('change set is clean');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -1032,7 +1077,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       const result = await harness.run('analyze agentic --base master');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('change set is clean');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -1210,7 +1255,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
   );
 
   it(
-    'does not report "change set is clean" when the API returned errors for every file',
+    'does not report "No issues found" when the API returned errors for every file',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -1236,7 +1281,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       // No issues were reported, so exit code must not be 51.
       expect(result.exitCode).not.toBe(51);
       // When the server returned errors for every file, don't mislead the user with "clean".
-      expect(output).not.toContain('change set is clean');
+      expect(output).not.toContain('No issues found');
     },
     { timeout: 15000 },
   );
@@ -1300,7 +1345,7 @@ describe('verify — change-set mode (no --file)', () => {
       const result = await harness.run('verify');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('change set is clean');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       expect(result.stderr).toContain('deprecated');
       expect(result.stderr).toContain('sonar analyze');
       const sqaaCalls = server
@@ -1332,7 +1377,7 @@ describe('verify — change-set mode (no --file)', () => {
       const result = await harness.run('verify --staged');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('change set is clean');
+      expect(result.stdout + result.stderr).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
@@ -1367,7 +1412,9 @@ describe('verify — change-set mode (no --file)', () => {
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(51);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(51);
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -1397,7 +1444,8 @@ describe('verify — change-set mode (no --file)', () => {
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(51);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(totalSqaaFilesSent(sqaaCalls)).toBe(51);
     },
     { timeout: 30000 },
   );
@@ -1472,7 +1520,7 @@ describe('analyze agentic — API error codes', () => {
   );
 
   it(
-    'retries 503 for multiple files concurrently in change-set mode',
+    'retries 503 per chunk in change-set mode',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -1487,7 +1535,6 @@ describe('analyze agentic — API error codes', () => {
 
       initGitRepo(harness.cwd.path);
       commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
-      // Two files in the same batch will both hit 503 concurrently.
       harness.cwd.writeFile('a.ts', 'const a = 1;');
       harness.cwd.writeFile('b.ts', 'const b = 2;');
 
@@ -1495,11 +1542,12 @@ describe('analyze agentic — API error codes', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Server busy');
-      // Each file gets 1 initial + 3 retries = 4 attempts; 2 files = 8 total.
+      // One chunk with two files: 1 initial + 3 retries = 4 attempts.
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(8);
+      expect(sqaaCalls).toHaveLength(4);
+      expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
     },
     { timeout: 15000 },
   );
@@ -1652,10 +1700,8 @@ describe('analyze agentic — --format json', () => {
   );
 
   it(
-    'JSON report surfaces files skipped on fail-fast and skips the large-changeset prompt',
+    'JSON report lists all files as failures when a chunk fails (no per-file skip bucket)',
     async () => {
-      // 429 fails immediately (no retry), so the first worker to fail triggers
-      // fail-fast and later files are never picked up — without the long 503 backoff.
       const server = await harness
         .newFakeServer()
         .withAuthToken(VALID_TOKEN)
@@ -1668,8 +1714,6 @@ describe('analyze agentic — --format json', () => {
         .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
 
       commitFile(harness.cwd.path, 'README.md', 'hello');
-      // 51 files: > concurrency (20) so fail-fast leaves later files skipped,
-      // and > large-changeset threshold (50) so we also exercise the no-prompt path.
       for (let i = 1; i <= 51; i++) {
         harness.cwd.writeFile(`file${i}.ts`, `const x${i} = ${i};`);
       }
@@ -1677,7 +1721,6 @@ describe('analyze agentic — --format json', () => {
       const result = await harness.run('analyze agentic --format json');
 
       expect(result.exitCode).toBe(1);
-      // JSON consumers should never see the interactive prompt warning.
       expect(result.stderr).not.toContain('large number of files');
 
       const report = JSON.parse(result.stdout) as {
@@ -1686,10 +1729,9 @@ describe('analyze agentic — --format json', () => {
         skipped: string[];
         summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
       };
-      expect(report.failures.length).toBeGreaterThan(0);
-      expect(report.skipped.length).toBeGreaterThan(0);
-      expect(report.summary.totalSkipped).toBe(report.skipped.length);
-      // Every staged file ends up in exactly one bucket (succeeded/failed/skipped).
+      expect(report.failures).toHaveLength(51);
+      expect(report.skipped).toHaveLength(0);
+      expect(report.summary.totalSkipped).toBe(0);
       expect(report.files.length + report.failures.length + report.skipped.length).toBe(51);
     },
     { timeout: 30000 },
@@ -1770,15 +1812,17 @@ describe('analyze agentic — running from a subdirectory', () => {
       const output = result.stdout + result.stderr;
       // Project must still be found — no fallthrough to the "no project configured" warning.
       expect(output).not.toContain('no project configured');
-      expect(output).toContain('change set is clean');
+      expect(output).toContain('No issues found');
 
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(2);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
 
-      // Paths sent to SQAA are relative to the repo root regardless of cwd.
-      const filePaths = sqaaCalls.map((c) => sqaaRequestFirstFilePath(c.body)).sort();
+      const request = parseSqaaRequestBody(sqaaCalls[0].body);
+      const filePaths = (request.files ?? []).map((f) => f.path).sort();
       expect(filePaths).toEqual(['src/ui/inside.ts', 'top-level.ts']);
     },
     { timeout: 15000 },

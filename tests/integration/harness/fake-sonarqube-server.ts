@@ -135,6 +135,7 @@ export class FakeSonarQubeServerBuilder {
   private sqaaResponse?: SqaaResponseConfig;
   private sqaaStatusCode?: number;
   private sqaaStatusBody?: string;
+  private sqaaPayloadLimit?: { maxRequestSize?: number; maxFiles?: number };
   private scaEnabled?: boolean;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
   private agentJobErrorCode?: number;
@@ -231,6 +232,15 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Reject POST /a3s-analysis/analyses with 413 when the raw body or file count
+   * exceeds the configured limits. Returns server meta on the error body.
+   */
+  withSqaaPayloadLimit(limit: { maxRequestSize?: number; maxFiles?: number }): this {
+    this.sqaaPayloadLimit = limit;
+    return this;
+  }
+
   withSqaaEntitlement(
     orgKey: string,
     uuid: string,
@@ -291,6 +301,7 @@ export class FakeSonarQubeServerBuilder {
       sqaaResponse,
       sqaaStatusCode,
       sqaaStatusBody,
+      sqaaPayloadLimit,
       sqaaEntitlementOrgs,
       cagEntitlementOrgs,
       scaEnabled,
@@ -726,9 +737,35 @@ export class FakeSonarQubeServerBuilder {
             });
           }
 
+          const files = requestBody.files as Array<{ path: string; content: string }>;
+
+          if (sqaaPayloadLimit) {
+            const bodyBytes = Buffer.byteLength(body ?? '', 'utf8');
+            const tooMany =
+              sqaaPayloadLimit.maxFiles != null && files.length > sqaaPayloadLimit.maxFiles;
+            const tooLarge =
+              sqaaPayloadLimit.maxRequestSize != null &&
+              bodyBytes > sqaaPayloadLimit.maxRequestSize;
+            if (tooMany || tooLarge) {
+              return new Response(
+                JSON.stringify({
+                  message: tooMany ? 'Too many files in request' : 'Request payload too large',
+                  code: tooMany ? 'TOO_MANY_FILES' : 'REQUEST_TOO_LARGE',
+                  meta: {
+                    maxRequestSize: sqaaPayloadLimit.maxRequestSize,
+                    maxFiles: sqaaPayloadLimit.maxFiles,
+                  },
+                }),
+                { status: 413, headers: { 'Content-Type': 'application/json' } },
+              );
+            }
+          }
+
+          let issueFileIndex = 0;
           const issues = (sqaaResponse.issues ?? []).map((i) => ({
             rule: i.rule,
             message: i.message,
+            filePath: files[issueFileIndex++ % files.length]?.path,
             textRange: i.startLine
               ? { startLine: i.startLine, endLine: i.startLine, startOffset: 0, endOffset: 0 }
               : null,

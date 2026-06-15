@@ -23,6 +23,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+import {
+  allSqaaRequestsUseDeep,
+  parseSqaaRequestBody,
+  sqaaRequestFileCount,
+} from '../analyze/sqaa-request-helpers';
 import { commitFile, initGitRepo } from './git-test-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
@@ -58,11 +63,38 @@ describe('sonar hook codex-post-tool-use', () => {
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
       expect(output.hookSpecificOutput.hookEventName).toBe('PostToolUse');
-      expect(output.hookSpecificOutput.additionalContext).toContain('no issues');
+      expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls.length).toBeGreaterThan(0);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBe('DEEP');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends one multi-file DEEP request when multiple files changed',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+
+      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
     },
     { timeout: 15000 },
   );

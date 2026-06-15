@@ -33,3 +33,27 @@ export class ServiceUnavailableError extends Error {
     this.name = 'ServiceUnavailableError';
   }
 }
+
+export type RequestPayloadTooLargeCode = 'REQUEST_TOO_LARGE' | 'TOO_MANY_FILES';
+
+export interface RequestPayloadTooLargeMeta {
+  maxRequestSize?: number;
+  maxFiles?: number;
+}
+
+/** Thrown by the API client on HTTP 413 (Payload Too Large) for SQAA requests. */
+export class RequestPayloadTooLargeError extends Error {
+  readonly code?: RequestPayloadTooLargeCode;
+  readonly meta?: RequestPayloadTooLargeMeta;
+
+  constructor(
+    message: string,
+    code?: RequestPayloadTooLargeCode,
+    meta?: RequestPayloadTooLargeMeta,
+  ) {
+    super(message);
+    this.name = 'RequestPayloadTooLargeError';
+    this.code = code;
+    this.meta = meta;
+  }
+}

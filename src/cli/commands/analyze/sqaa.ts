@@ -38,11 +38,9 @@ import { resolveChangeSet } from './sqaa-changeset';
 import {
   applyExitCode,
   buildJsonReport,
-  EXIT_CODE_ISSUES_FOUND,
   makeReport,
-  printFileDetails,
   printJsonReport,
-  printSummary,
+  printSqaaTextReport,
   singleFileFailureReport,
   singleFileSuccessReport,
   type SqaaJsonReport,
@@ -177,10 +175,7 @@ async function runSqaaAnalysis(
     return;
   }
 
-  const issueCount = await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch);
-  if (issueCount > 0) {
-    process.exitCode = EXIT_CODE_ISSUES_FOUND;
-  }
+  await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch);
 }
 
 async function runSqaaAnalysisOnFiles(
@@ -203,7 +198,6 @@ async function runSqaaAnalysisOnFiles(
       projectKey,
       branch,
       progress: silentProgress,
-      pathBase: repoRoot,
     };
     const tally = await runAnalyses(ctx);
     printJsonReport(tally, ignored, allPaths, repoRoot);
@@ -220,14 +214,11 @@ async function runSqaaAnalysisOnFiles(
     projectKey,
     branch,
     progress,
-    pathBase: repoRoot,
   };
-  progress.start();
   const tally = await runAnalyses(ctx);
 
-  progress.finish(tally.allResults.length);
-  printFileDetails(tally.allResults);
-  printSummary(tally.totalIssues, tally.totalErrors, tally.totalFailures);
+  progress.finish();
+  printSqaaTextReport({ tally, allPaths, ignoredPaths });
 }
 
 async function fetchSingleFileReport(
@@ -302,7 +293,6 @@ export async function buildSqaaJsonReport(
     projectKey,
     branch,
     progress: silentProgress,
-    pathBase: repoRoot,
   };
 
   const tally = await runAnalyses(ctx);

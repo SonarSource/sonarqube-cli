@@ -21,30 +21,60 @@
 // Text formatting for PostToolUse hook additionalContext (Claude + Codex).
 
 import type { SqaaIssue } from '../../../sonarqube/client';
-import type { SqaaJsonReport } from '../analyze/sqaa-display';
+import {
+  formatPlainCleanCollapsedRow,
+  formatPlainSkippedOrIgnoredRow,
+  formatSqaaRunSummaryPlain,
+  renderPlainAnalyzedFileLines,
+  SQAA_COLLAPSE_CLEAN_THRESHOLD,
+  sqaaFileHasFindings,
+  type SqaaJsonReport,
+  type SqaaRunSummaryStats,
+} from '../analyze/sqaa-display';
+
+function hookSummaryFromReport(report: SqaaJsonReport): SqaaRunSummaryStats {
+  let filesWithIssues = 0;
+  let filesWithErrors = 0;
+  let totalErrors = 0;
+  for (const file of report.files) {
+    totalErrors += file.errors?.length ?? 0;
+    if (file.issues.length > 0) {
+      filesWithIssues += 1;
+    }
+    if ((file.errors?.length ?? 0) > 0) {
+      filesWithErrors += 1;
+    }
+  }
+  return {
+    filesAnalyzed: report.files.length + report.failures.length + report.skipped.length,
+    filesWithIssues,
+    filesWithErrors,
+    totalIssues: report.summary.totalIssues,
+    totalFailures: report.summary.totalFailures,
+    totalErrors,
+  };
+}
 
 export function formatSqaaIssuesForHook(
   issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
+  errors: Array<{ code: string; message: string }> | null | undefined,
+  filePath: string,
 ): string {
-  const lines: string[] = [];
+  const issueCount = issues.length;
+  const errorCount = errors?.length ?? 0;
 
-  if (issues.length === 0) {
-    lines.push('Agentic Analysis completed — no issues found.');
-  } else {
-    lines.push(`Agentic Analysis found ${issues.length} issue${issues.length === 1 ? '' : 's'}:`);
-    issues.forEach((issue, idx) => {
-      const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
-      lines.push(`  [${idx + 1}] ${issue.message}${location} [${issue.rule}]`);
-    });
-  }
-
-  if (errors && errors.length > 0) {
-    lines.push('Agentic Analysis errors:');
-    errors.forEach((e) => lines.push(`  [${e.code}] ${e.message}`));
-  }
-
-  return lines.join('\n');
+  return [
+    ...renderPlainAnalyzedFileLines(filePath, issues, errors),
+    '',
+    formatSqaaRunSummaryPlain({
+      filesAnalyzed: 1,
+      filesWithIssues: issueCount > 0 ? 1 : 0,
+      filesWithErrors: errorCount > 0 ? 1 : 0,
+      totalIssues: issueCount,
+      totalFailures: 0,
+      totalErrors: errorCount,
+    }),
+  ].join('\n');
 }
 
 function appendIgnoredLines(lines: string[], ignored: SqaaJsonReport['ignored']): void {
@@ -84,43 +114,46 @@ export function formatSqaaJsonReportForHook(report: SqaaJsonReport): string | nu
         'Agentic Analysis: no files to analyze — all change set files were excluded (binary or oversized).',
       );
     } else {
-      lines.push('Agentic Analysis completed — no issues found.');
+      lines.push(formatSqaaRunSummaryPlain(hookSummaryFromReport(report)));
     }
     appendIgnoredLines(lines, report.ignored);
     return lines.join('\n');
   }
 
-  if (totalIssues > 0) {
-    lines.push(`Agentic Analysis found ${totalIssues} issue${totalIssues === 1 ? '' : 's'}:`);
-  }
+  const processableCount = report.files.length + report.failures.length + report.skipped.length;
+  const collapseClean = processableCount > SQAA_COLLAPSE_CLEAN_THRESHOLD;
 
-  let issueIndex = 0;
-  for (const file of report.files) {
-    if (file.issues.length === 0 && !(file.errors && file.errors.length > 0)) {
-      continue;
+  if (collapseClean) {
+    const cleanCount = report.files.filter((f) => !sqaaFileHasFindings(f.issues, f.errors)).length;
+    if (cleanCount > 0) {
+      lines.push(formatPlainCleanCollapsedRow(cleanCount));
     }
-    lines.push(`── ${file.path}`);
-    for (const issue of file.issues) {
-      issueIndex += 1;
-      const location = issue.textRange ? ` (line ${issue.textRange.startLine})` : '';
-      lines.push(`  [${issueIndex}] ${issue.message}${location} [${issue.rule}]`);
+    for (const file of report.files) {
+      if (!sqaaFileHasFindings(file.issues, file.errors)) continue;
+      lines.push(...renderPlainAnalyzedFileLines(file.path, file.issues, file.errors));
     }
-    if (file.errors && file.errors.length > 0) {
-      lines.push('  Analysis errors:');
-      file.errors.forEach((e) => lines.push(`  [${e.code}] ${e.message}`));
+  } else {
+    for (const file of report.files) {
+      lines.push(...renderPlainAnalyzedFileLines(file.path, file.issues, file.errors));
     }
   }
 
   if (report.failures.length > 0) {
     lines.push('Agentic Analysis failures:');
-    report.failures.forEach((f) => lines.push(`  ${f.path}: ${f.message}`));
+    report.failures.forEach((f) => lines.push(`  ✗  ${f.path}: ${f.message}`));
   }
 
   if (report.skipped.length > 0) {
-    lines.push(`Skipped ${report.skipped.length} file(s) (analysis not completed).`);
+    for (const path of report.skipped) {
+      lines.push(formatPlainSkippedOrIgnoredRow(path, '[SKIPPED]'));
+    }
   }
 
   appendIgnoredLines(lines, report.ignored);
+  if (lines.length > 0) {
+    lines.push('');
+  }
+  lines.push(formatSqaaRunSummaryPlain(hookSummaryFromReport(report)));
 
   return lines.join('\n');
 }

@@ -74,7 +74,7 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.hookEventName).toBe('PostToolUse');
-    expect(output.hookSpecificOutput.additionalContext).toContain('no issues');
+    expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
   });
 
   it('triggers analysis when tool_name is Write', async () => {

@@ -65,7 +65,7 @@ describe('sonar hook claude-post-tool-use', () => {
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
       expect(output.hookSpecificOutput.hookEventName).toBe('PostToolUse');
-      expect(output.hookSpecificOutput.additionalContext).toContain('no issues');
+      expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
     },
     { timeout: 15000 },
   );
