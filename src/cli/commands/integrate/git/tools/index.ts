@@ -28,6 +28,6 @@ export const GIT_INTEGRATIONS = [
   preCommitIntegration,
 ] as const;
 
-export { getRecognizedHuskyMarkers,HUSKY_INTEGRATION_ID } from './husky';
-export { getRecognizedNativeMarkers,NATIVE_GIT_INTEGRATION_ID } from './native';
+export { getRecognizedHuskyMarkers, HUSKY_INTEGRATION_ID } from './husky';
+export { getRecognizedNativeMarkers, NATIVE_GIT_INTEGRATION_ID } from './native';
 export { hasSonarHookInPreCommitConfig, PRE_COMMIT_INTEGRATION_ID } from './pre-commit';
