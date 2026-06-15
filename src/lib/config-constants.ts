@@ -84,6 +84,42 @@ export const BIN_DIR = join(CLI_DIR, 'bin');
 export const GLOBAL_HOOKS_DIR = join(CLI_DIR, 'hooks');
 
 // ---------------------------------------------------------------------------
+// Antigravity
+// ---------------------------------------------------------------------------
+
+/** Antigravity workspace agents directory (relative to the project root). Shared with Codex CAG skills under `.agents/skills/`. */
+export const ANTIGRAVITY_PROJECT_AGENTS_DIR = '.agents';
+
+/** Project Antigravity hooks config (relative to the project root). */
+export const ANTIGRAVITY_PROJECT_HOOKS_JSON = join(ANTIGRAVITY_PROJECT_AGENTS_DIR, 'hooks.json');
+
+/** Project Sonar hook scripts directory (relative to the project root). */
+export const ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR = join(
+  ANTIGRAVITY_PROJECT_AGENTS_DIR,
+  'sonar',
+  'hooks',
+);
+
+/**
+ * Global Antigravity config root (`sonar integrate antigravity --global`).
+ * Hook scripts and config patches live under this tree (not a plugin bundle).
+ */
+export const ANTIGRAVITY_GLOBAL_CONFIG_DIR = join(homedir(), '.gemini', 'config');
+
+/** Global Antigravity hooks config (`sonar integrate antigravity --global`). */
+export const ANTIGRAVITY_GLOBAL_HOOKS_JSON = join(ANTIGRAVITY_GLOBAL_CONFIG_DIR, 'hooks.json');
+
+/** Global Sonar hook scripts directory (`sonar integrate antigravity --global`). */
+export const ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR = join(
+  ANTIGRAVITY_GLOBAL_CONFIG_DIR,
+  'sonar',
+  'hooks',
+);
+
+/** Global Antigravity skills directory (`sonar integrate antigravity --global` CAG skill). */
+export const ANTIGRAVITY_GLOBAL_SKILLS_DIR = join(ANTIGRAVITY_GLOBAL_CONFIG_DIR, 'skills');
+
+// ---------------------------------------------------------------------------
 // Sonarsource binaries
 // ---------------------------------------------------------------------------
 
