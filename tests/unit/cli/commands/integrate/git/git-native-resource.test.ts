@@ -18,18 +18,48 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { getPreCommitHookScript } from '../../../../../../src/cli/commands/integrate/git/tools/native';
-import { nativeGitHookResource } from '../../../../../../src/cli/commands/integrate/git/tools/native/resource';
+import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
+import type {
+  IntegrationContext,
+  ResourceDeclaration,
+} from '../../../../../../src/cli/commands/integrate/_common/registry';
+import { wholeFileRemover } from '../../../../../../src/cli/commands/integrate/_common/registry';
+import {
+  getPreCommitHookScript,
+  nativeGitIntegration,
+} from '../../../../../../src/cli/commands/integrate/git/tools/native';
+import { LEGACY_HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
 import { getDefaultState } from '../../../../../../src/lib/state';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-native-resource-tmp');
 
-describe('nativeGitHookResource', () => {
+/** The native git hook is now the generic wholeFile resource declared on the native integration. */
+function nativeHookResource(hook: 'pre-commit' | 'pre-push'): ResourceDeclaration {
+  const feature = nativeGitIntegration.features.find((f) => f.id === `${hook}-hook`);
+  const resource = feature?.resources?.[0];
+  if (!resource) {
+    throw new Error(`native ${hook} resource not found`);
+  }
+  return resource;
+}
+
+function context(overrides: Partial<IntegrationContext> = {}): IntegrationContext {
+  return {
+    state: getDefaultState('test'),
+    targetRoot: TEMP_DIR,
+    scope: 'global',
+    executionMode: 'install',
+    resolvedDependencies: new Map(),
+    ...overrides,
+  };
+}
+
+describe('native git hook resource (wholeFile)', () => {
   beforeEach(() => {
     mkdirSync(TEMP_DIR, { recursive: true });
   });
@@ -39,64 +69,70 @@ describe('nativeGitHookResource', () => {
   });
 
   it('treats CRLF hook files as already applied', async () => {
-    const resource = nativeGitHookResource({
-      id: 'hook-file',
-      displayName: 'pre-commit hook',
-      hook: 'pre-commit',
-    });
     writeFileSync(
       join(TEMP_DIR, 'pre-commit'),
       getPreCommitHookScript().replace(/\n/g, '\r\n'),
       'utf-8',
     );
 
-    const isApplied = await resource.isApplied({
-      state: getDefaultState('test'),
-      targetRoot: TEMP_DIR,
-      scope: 'global',
-      executionMode: 'install',
-      resolvedDependencies: new Map(),
-    });
+    expect(await nativeHookResource('pre-commit').isApplied(context())).toBe(true);
+  });
 
-    expect(isApplied).toBe(true);
+  it('cleanup removes a legacy-marked hook; resource then writes fresh content', async () => {
+    const hookPath = join(TEMP_DIR, 'pre-commit');
+    writeFileSync(hookPath, `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\nold\n`, 'utf-8');
+
+    // Simulate the cleanup step: wholeFileRemover removes the legacy file.
+    const cleanup = wholeFileRemover({
+      id: 'hook-file',
+      version: '0',
+      targetPath: hookPath,
+      managedMarker: LEGACY_HOOK_MARKER,
+    });
+    await cleanup.remove(context());
+    expect(existsSync(hookPath)).toBe(false);
+
+    // Resource writes fresh content since the file is now gone.
+    await nativeHookResource('pre-commit').apply(context());
+    expect(readFileSync(hookPath, 'utf-8')).toBe(getPreCommitHookScript());
+  });
+
+  it('refuses to overwrite a foreign hook without --force', async () => {
+    writeFileSync(join(TEMP_DIR, 'pre-commit'), '#!/bin/sh\necho mine\n', 'utf-8');
+
+    expect.assertions(2);
+    try {
+      await nativeHookResource('pre-commit').apply(context());
+    } catch (error) {
+      expect(error).toBeInstanceOf(CommandFailedError);
+      expect((error as CommandFailedError).message).toContain(
+        'A different pre-commit hook already exists at',
+      );
+    }
+  });
+
+  it('overwrites a foreign hook when --force is set', async () => {
+    writeFileSync(join(TEMP_DIR, 'pre-commit'), '#!/bin/sh\necho mine\n', 'utf-8');
+
+    await nativeHookResource('pre-commit').apply(context({ force: true }));
+
+    expect(readFileSync(join(TEMP_DIR, 'pre-commit'), 'utf-8')).toBe(getPreCommitHookScript());
   });
 
   it('remove deletes a Sonar-managed hook file', async () => {
     const hookPath = join(TEMP_DIR, 'pre-commit');
-    const resource = nativeGitHookResource({
-      id: 'hook-file',
-      displayName: 'pre-commit hook',
-      hook: 'pre-commit',
-    });
     writeFileSync(hookPath, getPreCommitHookScript(), { mode: 0o755 });
 
-    await resource.remove!({
-      state: getDefaultState('test'),
-      targetRoot: TEMP_DIR,
-      scope: 'global',
-      executionMode: 'install',
-      resolvedDependencies: new Map(),
-    });
+    await nativeHookResource('pre-commit').remove(context());
 
     expect(existsSync(hookPath)).toBe(false);
   });
 
   it('remove leaves a third-party hook file without the Sonar marker', async () => {
     const hookPath = join(TEMP_DIR, 'pre-commit');
-    const resource = nativeGitHookResource({
-      id: 'hook-file',
-      displayName: 'pre-commit hook',
-      hook: 'pre-commit',
-    });
     writeFileSync(hookPath, '#!/bin/sh\necho custom\n', { mode: 0o755 });
 
-    await resource.remove!({
-      state: getDefaultState('test'),
-      targetRoot: TEMP_DIR,
-      scope: 'global',
-      executionMode: 'install',
-      resolvedDependencies: new Map(),
-    });
+    await nativeHookResource('pre-commit').remove(context());
 
     expect(existsSync(hookPath)).toBe(true);
   });

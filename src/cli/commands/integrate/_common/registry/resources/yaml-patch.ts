@@ -23,7 +23,15 @@ import { readFile } from 'node:fs/promises';
 
 import yaml from 'js-yaml';
 
-import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
+import {
+  PatchResource,
+  type PatchResourceOptions,
+  type RemovableResource,
+  RemoveablePatchResource,
+  type RemoveablePatchResourceOptions,
+  type ResourceDeclaration,
+  type ResourceIdentity,
+} from './common';
 
 export type YamlPatchOptions<TDoc = unknown> = PatchResourceOptions<TDoc>;
 
@@ -34,8 +42,20 @@ export function yamlPatch<TDoc = unknown>(options: YamlPatchOptions<TDoc>): Reso
 export class YamlPatch<TDoc = unknown> extends PatchResource<YamlPatchOptions<TDoc>, TDoc> {
   readonly resourceType = 'yaml-patch';
 
+  constructor(options: YamlPatchOptions<TDoc>) {
+    super(
+      options,
+      new YamlRemoveablePatchResource({
+        id: options.id,
+        version: options.version,
+        targetPath: options.targetPath,
+        removePatch: options.removePatch,
+      }),
+    );
+  }
+
   protected readDocument(path: string): Promise<TDoc> {
-    return readYaml(path) as Promise<TDoc>;
+    return readYaml(path).then((doc) => doc as TDoc);
   }
 
   protected serializeDocument(document: unknown): string {
@@ -51,5 +71,25 @@ async function readYaml(path: string): Promise<unknown> {
     return yaml.load(await readFile(path, 'utf-8')) ?? {};
   } catch {
     return {};
+  }
+}
+
+export type YamlPatchRemoverOptions<TDoc = unknown> = RemoveablePatchResourceOptions<TDoc>;
+
+export function yamlPatchRemover<TDoc = unknown>(
+  options: YamlPatchRemoverOptions<TDoc>,
+): ResourceIdentity & RemovableResource {
+  return new YamlRemoveablePatchResource(options);
+}
+
+class YamlRemoveablePatchResource<TDoc = unknown> extends RemoveablePatchResource<TDoc> {
+  readonly resourceType = 'yaml-patch';
+
+  protected readDocument(path: string): Promise<TDoc> {
+    return readYaml(path).then((doc) => doc as TDoc);
+  }
+
+  protected serializeDocument(document: unknown): string {
+    return yaml.dump(document, { lineWidth: -1 });
   }
 }

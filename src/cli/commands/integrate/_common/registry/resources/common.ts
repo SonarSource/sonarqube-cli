@@ -35,14 +35,20 @@ export interface BaseResourceOptions {
   version?: string;
 }
 
-export interface ResourceDeclaration {
+export interface ResourceIdentity {
   id: string;
-  displayName?: string;
   resourceType: string;
   version?: string;
+}
+
+export interface RemovableResource {
+  remove(context: IntegrationContext): MaybePromise<void>;
+}
+
+export interface ResourceDeclaration extends ResourceIdentity, RemovableResource {
+  displayName?: string;
   apply: (context: IntegrationContext) => MaybePromise<AppliedResource>;
   isApplied: (context: IntegrationContext) => MaybePromise<boolean>;
-  remove?: (context: IntegrationContext) => MaybePromise<void>;
 }
 
 export async function resolvePath(
@@ -108,6 +114,38 @@ export function detectEol(content: string): string {
   return '\n';
 }
 
+export interface RemoveablePatchResourceOptions<TDoc = unknown> {
+  id: string;
+  version?: string;
+  targetPath: PathResolver;
+  removePatch: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
+}
+
+/** Base class for format-specific patch removers. Subclasses supply `readDocument` and `serializeDocument`. */
+export abstract class RemoveablePatchResource<TDoc = unknown> implements RemovableResource {
+  readonly id: string;
+  readonly version?: string;
+  abstract readonly resourceType: string;
+
+  constructor(protected readonly options: RemoveablePatchResourceOptions<TDoc>) {
+    this.id = options.id;
+    this.version = options.version;
+  }
+
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolvePath(context, this.options.targetPath);
+    if (!existsSync(path)) {
+      return;
+    }
+    const document = await this.readDocument(path);
+    const updatedDocument = await this.options.removePatch(document, context);
+    await writeFileIfChanged(path, this.serializeDocument(updatedDocument ?? document));
+  }
+
+  protected abstract readDocument(path: string): Promise<TDoc>;
+  protected abstract serializeDocument(document: unknown): string;
+}
+
 export interface PatchResourceOptions<TDoc = unknown> extends BaseResourceOptions {
   targetPath: PathResolver;
   patch: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
@@ -123,7 +161,10 @@ export abstract class PatchResource<
   readonly version?: string;
   abstract readonly resourceType: string;
 
-  constructor(protected readonly options: O) {
+  constructor(
+    protected readonly options: O,
+    private readonly remover: RemovableResource,
+  ) {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
@@ -141,13 +182,7 @@ export abstract class PatchResource<
   }
 
   async remove(context: IntegrationContext): Promise<void> {
-    const path = await resolvePath(context, this.options.targetPath);
-    if (!existsSync(path)) {
-      return;
-    }
-    const document = await this.readDocument(path);
-    const updatedDocument = await this.options.removePatch(document, context);
-    await writeFileIfChanged(path, this.serializeDocument(updatedDocument ?? document));
+    await this.remover.remove(context);
   }
 
   protected async renderContent(path: string, context: IntegrationContext): Promise<string> {

@@ -28,11 +28,6 @@ export const GIT_INTEGRATIONS = [
   preCommitIntegration,
 ] as const;
 
-export { HUSKY_INTEGRATION_ID } from './husky';
-export { installViaGitHooks, NATIVE_GIT_INTEGRATION_ID } from './native';
-export {
-  hasSonarHookInPreCommitConfig,
-  PRE_COMMIT_CONFIG_FILE,
-  PRE_COMMIT_INTEGRATION_ID,
-} from './pre-commit';
-export { HOOK_MARKER } from './shared';
+export { getRecognizedHuskyMarkers, HUSKY_INTEGRATION_ID } from './husky';
+export { getRecognizedNativeMarkers, NATIVE_GIT_INTEGRATION_ID } from './native';
+export { hasSonarHookInPreCommitConfig, PRE_COMMIT_INTEGRATION_ID } from './pre-commit';

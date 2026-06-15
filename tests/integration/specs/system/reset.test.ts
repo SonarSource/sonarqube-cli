@@ -36,6 +36,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { nativeGitIntegration } from '../../../../src/cli/commands/integrate/git/tools/native';
+import { preCommitIntegration } from '../../../../src/cli/commands/integrate/git/tools/pre-commit';
 import { SCA_SCANNER_CACHE_DIR } from '../../../../src/lib/config-constants';
 import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { hookScriptName, TestHarness } from '../../harness';
@@ -733,6 +734,51 @@ describe('system reset --force', () => {
       expect(commands?.some((command) => command?.includes('sonar-sqaa'))).toBe(false);
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'undoes a pre-commit framework integration and removes the sonar hook from the config',
+    async () => {
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          preCommitIntegration,
+          'pre-commit-hook',
+          'project',
+          harness.cwd.path,
+        );
+      harness.cwd.writeFile(
+        '.pre-commit-config.yaml',
+        [
+          'repos:',
+          '  - repo: local',
+          '    hooks:',
+          '      - id: sonar-pre-commit',
+          '        name: Sonar pre-commit scan',
+          '        entry: sonar hook git-pre-commit --',
+          '        language: system',
+          '        pass_filenames: true',
+          '        stages: [pre-commit]',
+          '      - id: other-hook',
+          '        name: Other hook',
+          '        entry: other-hook',
+          '        language: system',
+        ].join('\n'),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+      expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
+      const configContent = readFileSync(
+        join(harness.cwd.path, '.pre-commit-config.yaml'),
+        'utf-8',
+      );
+      expect(configContent).not.toContain('sonar-pre-commit');
+      expect(configContent).toContain('other-hook');
+    },
+    { timeout: 15000 },
   );
 
   it(

@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 
 import { CommandFailedError } from '../../../../_common/error';
@@ -28,8 +27,10 @@ import {
   equalsIgnoringEol,
   type PathResolver,
   readTextFile,
+  type RemovableResource,
   resolvePath,
   type ResourceDeclaration,
+  type ResourceIdentity,
   writeFileIfChanged,
 } from './common';
 
@@ -48,7 +49,10 @@ export interface WholeFileResourceOptions extends BaseResourceOptions {
   content: WholeFileContent;
   executable?: boolean;
   requiresForce?: boolean;
+  /** Marker identifying the file as Sonar-managed (safe to overwrite without --force). */
   managedMarker?: string;
+  /** Hint rendered (on a separate line) when refusing to overwrite an unmanaged file. */
+  overwriteRemediationHint?: string;
 }
 
 export function wholeFile(options: WholeFileResourceOptions): ResourceDeclaration {
@@ -61,10 +65,18 @@ export class WholeFileResource implements ResourceDeclaration {
   readonly resourceType = 'whole-file';
   readonly version?: string;
 
+  private readonly remover: RemovableResource;
+
   constructor(private readonly options: WholeFileResourceOptions) {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
+    this.remover = new WholeFileRemover({
+      id: options.id,
+      version: options.version,
+      targetPath: options.targetPath,
+      managedMarker: options.managedMarker,
+    });
   }
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
@@ -84,10 +96,7 @@ export class WholeFileResource implements ResourceDeclaration {
   }
 
   async remove(context: IntegrationContext): Promise<void> {
-    const path = await resolvePath(context, this.options.targetPath);
-    if (existsSync(path)) {
-      await rm(path);
-    }
+    await this.remover.remove(context);
   }
 
   private async resolveContent(context: IntegrationContext): Promise<string> {
@@ -118,14 +127,53 @@ export class WholeFileResource implements ResourceDeclaration {
     }
 
     const label = this.displayName ?? this.id;
-    throw new CommandFailedError(
-      `Refusing to overwrite existing ${label} at ${path}. Use --force to replace.`,
-    );
+    throw new CommandFailedError(`A different ${label} already exists at ${path}.`, {
+      remediationHint: this.options.overwriteRemediationHint,
+    });
   }
 
   private isManaged(existing: string): boolean {
-    return (
-      this.options.managedMarker !== undefined && existing.includes(this.options.managedMarker)
-    );
+    const { managedMarker } = this.options;
+    return managedMarker !== undefined && existing.includes(managedMarker);
+  }
+}
+
+export interface WholeFileRemoverOptions {
+  id: string;
+  version?: string;
+  targetPath: PathResolver;
+  /** Marker identifying the file as Sonar-managed. Only removes the file when the marker is found. */
+  managedMarker?: string;
+}
+
+export function wholeFileRemover(
+  options: WholeFileRemoverOptions,
+): ResourceIdentity & RemovableResource {
+  return new WholeFileRemover(options);
+}
+
+class WholeFileRemover implements RemovableResource {
+  readonly id: string;
+  readonly version?: string;
+  readonly resourceType = 'whole-file';
+
+  constructor(private readonly options: WholeFileRemoverOptions) {
+    this.id = options.id;
+    this.version = options.version;
+  }
+
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolvePath(context, this.options.targetPath);
+    const existing = await readTextFile(path);
+    if (existing === undefined) {
+      return;
+    }
+    if (
+      this.options.managedMarker !== undefined &&
+      !existing.includes(this.options.managedMarker)
+    ) {
+      return;
+    }
+    await rm(path);
   }
 }

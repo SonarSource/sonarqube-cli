@@ -118,7 +118,7 @@ describe('declarative integration framework - remove and undo', () => {
       const resource = wholeFile({ id: 'r', targetPath: filePath, content: '#!/bin/sh\n' });
       await resource.apply(context);
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(existsSync(filePath)).toBe(false);
     });
@@ -132,7 +132,7 @@ describe('declarative integration framework - remove and undo', () => {
         content: '#!/bin/sh\n',
       });
 
-      expect(await resource.remove!(context)).toBeUndefined();
+      expect(await resource.remove(context)).toBeUndefined();
     });
 
     it('json-patch: removes keys added by removePatch', async () => {
@@ -150,7 +150,7 @@ describe('declarative integration framework - remove and undo', () => {
       });
       await writeFile(jsonPath, JSON.stringify({ existing: 1, sonar: true }, null, 2) + '\n');
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(JSON.parse(await readFile(jsonPath, 'utf-8'))).toEqual({ existing: 1 });
     });
@@ -167,7 +167,7 @@ describe('declarative integration framework - remove and undo', () => {
         removePatch: (doc) => doc,
       });
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(JSON.parse(await readFile(jsonPath, 'utf-8'))).toEqual({ sonar: true });
     });
@@ -182,7 +182,7 @@ describe('declarative integration framework - remove and undo', () => {
         removePatch: (doc) => doc,
       });
 
-      expect(await resource.remove!(context)).toBeUndefined();
+      expect(await resource.remove(context)).toBeUndefined();
     });
 
     it('yaml-patch: removes entries added by removePatch', async () => {
@@ -200,7 +200,7 @@ describe('declarative integration framework - remove and undo', () => {
       });
       await writeFile(yamlPath, 'existing: 1\nsonar: true\n');
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(await readFile(yamlPath, 'utf-8')).toBe('existing: 1\n');
     });
@@ -218,7 +218,7 @@ describe('declarative integration framework - remove and undo', () => {
         removePatch: (doc) => doc,
       });
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(await readFile(yamlPath, 'utf-8')).toBe(original);
     });
@@ -238,7 +238,7 @@ describe('declarative integration framework - remove and undo', () => {
       });
       await writeFile(tomlPath, 'existing = 1\nsonar = true\n');
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(await readFile(tomlPath, 'utf-8')).toBe('existing = 1\n');
     });
@@ -256,7 +256,7 @@ describe('declarative integration framework - remove and undo', () => {
         removePatch: (doc) => doc,
       });
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(await readFile(tomlPath, 'utf-8')).toBe(original);
     });
@@ -273,7 +273,7 @@ describe('declarative integration framework - remove and undo', () => {
       });
       await resource.apply(context);
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       const content = await readFile(filePath, 'utf-8');
       expect(content).not.toContain('# sonar:begin');
@@ -295,9 +295,46 @@ describe('declarative integration framework - remove and undo', () => {
         'before: 1\n\n# sonar:begin\nrepos: []\n# sonar:end r\n\nafter: 2\n',
       );
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(await readFile(filePath, 'utf-8')).toBe('before: 1\n\nafter: 2\n');
+    });
+
+    it('text-snippet: keeps one blank line when block has a blank line on each side', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const filePath = join(tempDir, 'hook');
+      const resource = textSnippet({
+        id: 's',
+        targetPath: filePath,
+        content: 'body',
+        startMarker: '# sonar:begin s',
+      });
+      await writeFile(
+        filePath,
+        'echo before\n\n# sonar:begin s\nbody\n# sonar:end s\n\necho after\n',
+      );
+
+      await resource.remove(context);
+
+      expect(await readFile(filePath, 'utf-8')).toBe('echo before\n\necho after\n');
+    });
+
+    it('text-snippet: keeps adjacent lines separated when block sits between single newlines', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const filePath = join(tempDir, 'hook');
+      const resource = textSnippet({
+        id: 's',
+        targetPath: filePath,
+        content: 'body',
+        startMarker: '# sonar:begin s',
+      });
+      await writeFile(filePath, 'echo before\n# sonar:begin s\nbody\n# sonar:end s\necho after\n');
+
+      await resource.remove(context);
+
+      expect(await readFile(filePath, 'utf-8')).toBe('echo before\necho after\n');
     });
 
     it('text-snippet: is a no-op when the file does not exist', async () => {
@@ -310,7 +347,7 @@ describe('declarative integration framework - remove and undo', () => {
         startMarker: '# sonar:begin',
       });
 
-      expect(await resource.remove!(context)).toBeUndefined();
+      expect(await resource.remove(context)).toBeUndefined();
     });
 
     it('text-snippet: is a no-op when markers are absent', async () => {
@@ -326,7 +363,7 @@ describe('declarative integration framework - remove and undo', () => {
         startMarker: '# sonar:begin',
       });
 
-      await resource.remove!(context);
+      await resource.remove(context);
 
       expect(await readFile(filePath, 'utf-8')).toBe(original);
     });
@@ -349,12 +386,12 @@ describe('declarative integration framework - remove and undo', () => {
         displayName: 'Feature',
         resources: [
           wholeFile({ id: 'whole', targetPath: filePath, content: '#!/bin/sh\n' }),
-          // Inline resource with no remove() — represents an unremovable resource type
           {
-            id: 'unremovable',
+            id: 'no-op-remove',
             resourceType: 'custom',
-            apply: () => ({ id: 'unremovable', resourceType: 'custom' }),
+            apply: () => ({ id: 'no-op-remove', resourceType: 'custom' }),
             isApplied: () => false,
+            remove: async () => {},
           },
         ],
         operations: [
@@ -370,8 +407,8 @@ describe('declarative integration framework - remove and undo', () => {
       });
 
       expect(existsSync(filePath)).toBe(false);
-      expect(removedResources).toEqual(['whole']);
-      expect(skippedResources).toEqual(['unremovable']);
+      expect(removedResources).toEqual(['whole', 'no-op-remove']);
+      expect(skippedResources).toEqual([]);
       expect(undoneOperations).toEqual(['op-with-undo']);
     });
 

@@ -538,8 +538,8 @@ describe('generic integration installer', () => {
     if (!(forceError instanceof Error)) {
       throw new Error('Expected installIntegration to reject without --force');
     }
-    expect(forceError.message).toBe(
-      `Refusing to overwrite existing pre-commit hook at ${targetPath}. Use --force to replace.`,
+    expect(forceError.message).toContain(
+      `A different pre-commit hook already exists at ${targetPath}`,
     );
 
     await installIntegration({

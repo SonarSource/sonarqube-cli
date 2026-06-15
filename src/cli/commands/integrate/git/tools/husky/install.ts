@@ -24,8 +24,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 import { discreetSuccess, info } from '../../../../../../ui';
 import type { GitHookType } from '../../options';
-import { HOOK_MARKER } from '../shared';
-import { getHuskySnippet } from './shell-fragments';
+import { getHuskySnippet, getRecognizedHuskyMarkers } from './shell-fragments';
 
 export async function installViaHusky(huskyHookPath: string, hook: GitHookType): Promise<void> {
   let content: string;
@@ -39,7 +38,7 @@ export async function installViaHusky(huskyHookPath: string, hook: GitHookType):
       throw error;
     }
   }
-  if (content.includes(HOOK_MARKER)) {
+  if (getRecognizedHuskyMarkers(hook).some((marker) => content.includes(marker))) {
     info(`Secrets check already present in .husky/${hook}.`);
     return;
   }

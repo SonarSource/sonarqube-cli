@@ -25,7 +25,7 @@ import type {
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
 import type { DependencyDeclaration } from './dependencies';
-import type { ResourceDeclaration } from './resources';
+import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from './resources';
 import type { InstallDecision } from './selection';
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -91,6 +91,7 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   dependencies?: DependencyDeclaration[];
   resources?: ResourceDeclaration[];
   operations?: FeatureOperation[];
+  legacyCleanups?: (ResourceIdentity & RemovableResource)[];
   /**
    * Optional "try it out" example rendered by the framework completion summary
    * when this feature is installed.

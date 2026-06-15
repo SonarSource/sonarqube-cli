@@ -22,7 +22,15 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import { CommandFailedError } from '../../../../_common/error';
-import { PatchResource, type PatchResourceOptions, type ResourceDeclaration } from './common';
+import {
+  PatchResource,
+  type PatchResourceOptions,
+  type RemovableResource,
+  RemoveablePatchResource,
+  type RemoveablePatchResourceOptions,
+  type ResourceDeclaration,
+  type ResourceIdentity,
+} from './common';
 
 export interface JsonPatchOptions<TDoc = unknown> extends PatchResourceOptions<TDoc> {
   defaultValue?: TDoc;
@@ -34,6 +42,18 @@ export function jsonPatch<TDoc = unknown>(options: JsonPatchOptions<TDoc>): Reso
 
 export class JsonPatch<TDoc = unknown> extends PatchResource<JsonPatchOptions<TDoc>, TDoc> {
   readonly resourceType = 'json-patch';
+
+  constructor(options: JsonPatchOptions<TDoc>) {
+    super(
+      options,
+      new JsonRemoveablePatchResource({
+        id: options.id,
+        version: options.version,
+        targetPath: options.targetPath,
+        removePatch: options.removePatch,
+      }),
+    );
+  }
 
   protected readDocument(path: string): Promise<TDoc> {
     return readJson(path, this.options.defaultValue ?? {}) as Promise<TDoc>;
@@ -54,5 +74,25 @@ async function readJson(path: string, defaultValue: unknown): Promise<unknown> {
     throw new CommandFailedError(
       `${path} contains invalid JSON. Please fix or delete it and re-run.`,
     );
+  }
+}
+
+export type JsonPatchRemoverOptions<TDoc = unknown> = RemoveablePatchResourceOptions<TDoc>;
+
+export function jsonPatchRemover<TDoc = unknown>(
+  options: JsonPatchRemoverOptions<TDoc>,
+): ResourceIdentity & RemovableResource {
+  return new JsonRemoveablePatchResource(options);
+}
+
+class JsonRemoveablePatchResource<TDoc = unknown> extends RemoveablePatchResource<TDoc> {
+  readonly resourceType = 'json-patch';
+
+  protected readDocument(path: string): Promise<TDoc> {
+    return readJson(path, {}).then((doc) => doc as TDoc);
+  }
+
+  protected serializeDocument(document: unknown): string {
+    return `${JSON.stringify(document, null, 2)}\n`;
   }
 }

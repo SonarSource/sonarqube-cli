@@ -21,7 +21,11 @@
 import { join } from 'node:path';
 
 import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry';
-import { sonarSecretsBinaryDependency, yamlPatch } from '../../../_common/registry';
+import {
+  sonarSecretsBinaryDependency,
+  yamlPatch,
+  yamlPatchRemover,
+} from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
 import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
 import {
@@ -30,7 +34,8 @@ import {
   normalizePreCommitConfig,
   PRE_COMMIT_CONFIG_FILE,
   removeLegacyHook,
-  removeSonarHooksFromPreCommitConfig,
+  removeLegacySonarHook,
+  removeSonarHook,
   upsertSonarHook,
 } from './config';
 
@@ -53,25 +58,44 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
     resources: [
       yamlPatch({
         id: 'hook-config',
+        version: '1',
         displayName: `${hook} hook`,
         targetPath: (context) => join(context.targetRoot, PRE_COMMIT_CONFIG_FILE),
         patch: (document) => {
           const config = normalizePreCommitConfig(document);
-          removeLegacyHook(config);
           upsertSonarHook(config, hook);
 
           return config;
         },
-        removePatch: (document) => removeSonarHooksFromPreCommitConfig(document),
+        removePatch: (document) => {
+          const config = normalizePreCommitConfig(document);
+          removeSonarHook(config, hook);
+
+          return config;
+        },
       }),
     ],
     operations: [
       {
         id: 'activate-hook',
+        version: '1',
         displayName: `${hook} hook activation`,
         apply: ({ targetRoot }) => activatePreCommitFramework(targetRoot, hook),
         undo: ({ targetRoot }) => garbageCollectPreCommitFramework(targetRoot),
       },
+    ],
+    legacyCleanups: [
+      yamlPatchRemover({
+        id: 'hook-config',
+        version: '0',
+        targetPath: (context) => join(context.targetRoot, PRE_COMMIT_CONFIG_FILE),
+        removePatch: (document) => {
+          const config = normalizePreCommitConfig(document);
+          removeLegacyHook(config);
+          removeLegacySonarHook(config, hook);
+          return config;
+        },
+      }),
     ],
   };
 }
@@ -85,6 +109,8 @@ export {
   PRE_COMMIT_LEGACY_REPO,
   type PreCommitConfig,
   removeLegacyHook,
+  removeLegacySonarHook,
+  removeSonarHook,
   removeSonarHooksFromPreCommitConfig,
   runPreCommitInstall,
   upsertSonarHook,

@@ -25,8 +25,10 @@ import {
   includesIgnoringEol,
   type PathResolver,
   readTextFile,
+  type RemovableResource,
   resolvePath,
   type ResourceDeclaration,
+  type ResourceIdentity,
   toEol,
   writeFileIfChanged,
 } from './common';
@@ -49,10 +51,19 @@ export class TextSnippet implements ResourceDeclaration {
   readonly resourceType = 'text-snippet';
   readonly version?: string;
 
+  private readonly remover: RemovableResource;
+
   constructor(private readonly options: TextSnippetResourceOptions) {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
+    this.remover = new TextSnippetRemover({
+      id: options.id,
+      version: options.version,
+      targetPath: options.targetPath,
+      startMarker: options.startMarker,
+      endMarker: this.endMarker,
+    });
   }
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
@@ -78,17 +89,7 @@ export class TextSnippet implements ResourceDeclaration {
   }
 
   async remove(context: IntegrationContext): Promise<void> {
-    const path = await resolvePath(context, this.options.targetPath);
-    const existing = await readTextFile(path);
-    if (!existing?.includes(this.startMarker) || !existing.includes(this.endMarker)) {
-      return;
-    }
-
-    const pattern = new RegExp(
-      String.raw`(?:\r?\n)?${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}(?:\r?\n)?`,
-      'g',
-    );
-    await writeFileIfChanged(path, existing.replaceAll(pattern, ''));
+    await this.remover.remove(context);
   }
 
   private async resolveContent(context: IntegrationContext): Promise<string> {
@@ -97,22 +98,24 @@ export class TextSnippet implements ResourceDeclaration {
   }
 
   private async renderContent(path: string, content: string): Promise<string> {
-    const existing = (await readTextFile(path)) ?? '';
-    const eol = detectEol(existing);
+    const raw = (await readTextFile(path)) ?? '';
+    const eol = detectEol(raw);
+    const existing = raw;
     const managedBlock = this.renderManagedBlock(content, eol);
-    const pattern = new RegExp(
-      String.raw`${escapeRegExp(this.startMarker)}[\s\S]*?${escapeRegExp(this.endMarker)}`,
-    );
-    if (pattern.test(existing)) {
-      return existing.replace(pattern, managedBlock);
+
+    const startIndex = existing.indexOf(this.startMarker);
+    if (startIndex < 0) {
+      return appendBlock(existing, managedBlock, eol);
     }
 
-    const startMarkerIndex = existing.indexOf(this.startMarker);
-    if (startMarkerIndex >= 0) {
-      return `${existing.slice(0, startMarkerIndex)}${managedBlock}${eol}`;
+    // Replace the current block in place: from the start marker to the end marker, or to the end of
+    // the file when the end marker is absent (older fragments were appended without one).
+    const endIndex = existing.indexOf(this.endMarker, startIndex + this.startMarker.length);
+    if (endIndex < 0) {
+      return `${existing.slice(0, startIndex)}${managedBlock}${eol}`;
     }
-
-    return appendBlock(existing, managedBlock, eol);
+    const blockEnd = endIndex + this.endMarker.length;
+    return `${existing.slice(0, startIndex)}${managedBlock}${existing.slice(blockEnd)}`;
   }
 
   private renderManagedBlock(content: string, eol: string): string {
@@ -129,6 +132,46 @@ export class TextSnippet implements ResourceDeclaration {
   }
 }
 
+/**
+ * Removes every managed block delimited by `startMarker`..`endMarker`, dropping the one adjacent line
+ * ending on each side that was inserted with the block. A block whose start marker is present but
+ * whose end marker is missing — older fragments were appended without one — is removed from the start
+ * marker to the end of the content. Returns the content unchanged when the start marker is absent.
+ */
+function removeManagedBlocks(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+  eol: string,
+): string {
+  let result = content;
+  let startIndex = result.indexOf(startMarker);
+  while (startIndex >= 0) {
+    const endIndex = result.indexOf(endMarker, startIndex + startMarker.length);
+    const blockEnd = endIndex >= 0 ? endIndex + endMarker.length : result.length;
+
+    const before = sliceBefore(result, startIndex, eol);
+    const after = sliceAfter(result, blockEnd, eol);
+    const separator =
+      before.length > 0 && after.length > 0 && !before.endsWith(eol) && !after.startsWith(eol)
+        ? eol
+        : '';
+    result = before + separator + after;
+    startIndex = result.indexOf(startMarker);
+  }
+  return result;
+}
+
+/** Slices `[0, index)`, dropping one trailing `eol` if present immediately before `index`. */
+function sliceBefore(content: string, index: number, eol: string): string {
+  return content.slice(0, index - (content.endsWith(eol, index) ? eol.length : 0));
+}
+
+/** Slices `[index, end)`, skipping one leading `eol` if present at `index`. */
+function sliceAfter(content: string, index: number, eol: string): string {
+  return content.slice(index + (content.startsWith(eol, index) ? eol.length : 0));
+}
+
 function appendBlock(existing: string, block: string, eol: string): string {
   if (existing.length === 0) {
     return `${block}${eol}`;
@@ -136,6 +179,45 @@ function appendBlock(existing: string, block: string, eol: string): string {
   return `${existing.trimEnd()}${eol}${eol}${block}${eol}`;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+export interface TextSnippetRemoverOptions {
+  id: string;
+  version?: string;
+  targetPath: PathResolver;
+  startMarker: string;
+  endMarker: string;
+}
+
+export function textSnippetRemover(
+  options: TextSnippetRemoverOptions,
+): ResourceIdentity & RemovableResource {
+  return new TextSnippetRemover(options);
+}
+
+class TextSnippetRemover implements RemovableResource {
+  readonly id: string;
+  readonly version?: string;
+  readonly resourceType = 'text-snippet';
+
+  constructor(private readonly options: TextSnippetRemoverOptions) {
+    this.id = options.id;
+    this.version = options.version;
+  }
+
+  async remove(context: IntegrationContext): Promise<void> {
+    const path = await resolvePath(context, this.options.targetPath);
+    const existing = await readTextFile(path);
+    if (existing === undefined) {
+      return;
+    }
+    const eol = detectEol(existing);
+    const updated = removeManagedBlocks(
+      existing,
+      this.options.startMarker,
+      this.options.endMarker,
+      eol,
+    );
+    if (updated !== existing) {
+      await writeFileIfChanged(path, updated);
+    }
+  }
 }

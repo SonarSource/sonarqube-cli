@@ -40,6 +40,7 @@ await mock.module('../../../../../../src/cli/commands/_common/install/binary', (
 const {
   IntegrationInstaller,
   jsonPatch,
+  textSnippetRemover,
   SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
@@ -161,6 +162,51 @@ describe('declarative integration framework - resources and state recording', ()
     expect(await readFile(targetPath, 'utf-8')).toBe(
       ['#!/bin/sh', '# sonar:begin append', 'managed content', '# sonar:end append', ''].join('\n'),
     );
+  });
+
+  it('textSnippetRemover removes an old block; current textSnippet then writes the new block', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const targetPath = join(tempDir, 'legacy-block.txt');
+    await writeFile(
+      targetPath,
+      ['#!/bin/sh', '# legacy marker', 'old managed content', '# sonar:end block', ''].join('\n'),
+    );
+    const legacy = textSnippetRemover({
+      id: 'block',
+      version: '0',
+      targetPath,
+      startMarker: '# legacy marker',
+      endMarker: '# sonar:end block',
+    });
+    const resource = textSnippet({
+      id: 'block',
+      targetPath,
+      content: 'managed content',
+      startMarker: '# sonar:begin block',
+      endMarker: '# sonar:end block',
+    });
+
+    // isApplied is false while only the legacy block is present.
+    expect(await resource.isApplied(context)).toBe(false);
+
+    // Cleanup step: remove the legacy block first.
+    await legacy.remove(context);
+    const afterCleanup = await readFile(targetPath, 'utf-8');
+    expect(afterCleanup).not.toContain('# legacy marker');
+    expect(afterCleanup).not.toContain('old managed content');
+
+    // Apply step: write the current block.
+    await resource.apply(context);
+    const migrated = await readFile(targetPath, 'utf-8');
+    expect(migrated.split('# sonar:begin block').length - 1).toBe(1);
+    expect(migrated).toContain('managed content');
+    expect(await resource.isApplied(context)).toBe(true);
+
+    // Remove step: current resource cleans up its own block.
+    await resource.remove?.(context);
+    const removed = await readFile(targetPath, 'utf-8');
+    expect(removed).not.toContain('# sonar:begin block');
   });
 
   it('skips operations when shouldApply returns false', async () => {

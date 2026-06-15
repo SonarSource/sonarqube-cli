@@ -465,7 +465,7 @@ describe('integrate git (native hooks)', () => {
         targetRoot: harness.cwd.path,
       });
       expectFeatureDependency(feature, 'sonar-secrets');
-      expectInstalledResource(feature, 'hook-file', 'git-hook-file');
+      expectInstalledResource(feature, 'hook-file', 'whole-file');
       expect(feature.operations).toEqual([]);
       expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
     },
@@ -674,9 +674,11 @@ describe('integrate git (husky)', () => {
 
       expect(result.exitCode).toBe(0);
       const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-commit'), 'utf-8');
+      // The legacy secrets-specific marker is migrated away; the normalized begin/end pair replaces it.
       expect(
         countOccurrences(hookContent, '# Sonar secrets scan - installed by sonar integrate git'),
-      ).toBe(1);
+      ).toBe(0);
+      expect(countOccurrences(hookContent, '# sonar:begin husky-pre-commit')).toBe(1);
       expect(countOccurrences(hookContent, 'hook git-pre-commit')).toBe(1);
       expect(hookContent).toContain('# sonar:end husky-pre-commit');
     },
@@ -787,7 +789,7 @@ describe('integrate git (pre-commit framework)', () => {
       expect(config.repos.some((repo) => repo.repo === LEGACY_PRE_COMMIT_REPO)).toBe(false);
       const localRepo = config.repos.find((repo) => repo.repo === 'local');
       expect(localRepo?.hooks.some((hook) => hook.id === 'other-local-hook')).toBe(true);
-      const sonarHook = localRepo?.hooks.find((hook) => hook.id === 'sonar-secrets');
+      const sonarHook = localRepo?.hooks.find((hook) => hook.id === 'sonar-pre-commit');
       expect(sonarHook?.stages).toEqual(['pre-commit']);
       expect(readCommandLog(preCommitLog)).toEqual(['uninstall', 'clean', 'install']);
 
@@ -827,9 +829,9 @@ describe('integrate git (pre-commit framework)', () => {
         join(harness.cwd.path, '.pre-commit-config.yaml'),
       );
       const localRepo = config.repos.find((repo) => repo.repo === 'local');
-      const sonarHook = localRepo?.hooks.find((hook) => hook.id === 'sonar-secrets');
+      const sonarHook = localRepo?.hooks.find((hook) => hook.id === 'sonar-pre-push');
       expect(sonarHook?.stages).toEqual(['pre-push']);
-      expect(sonarHook?.entry).toBe('sonar hook git-pre-push');
+      expect(sonarHook?.entry).toBe('sonar hook git-pre-push --');
       expect(sonarHook?.pass_filenames).toBe(true);
       expect(readCommandLog(preCommitLog)).toEqual([
         'uninstall',
@@ -891,7 +893,7 @@ describe('integrate git (pre-commit framework)', () => {
       expect(localRepo).toBeDefined();
       expect(localRepo?.hooks.some((hook) => hook.id === 'other-local-hook')).toBe(true);
 
-      const sonarHooks = localRepo?.hooks.filter((hook) => hook.id === 'sonar-secrets');
+      const sonarHooks = localRepo?.hooks.filter((hook) => hook.id === 'sonar-pre-commit');
       expect(sonarHooks).toHaveLength(1);
       expect(sonarHooks?.[0].stages).toEqual(['pre-commit']);
 
@@ -912,6 +914,107 @@ describe('integrate git (pre-commit framework)', () => {
         scope: 'project',
         targetRoot: harness.cwd.path,
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'keeps both the pre-commit and pre-push hooks when each stage is installed',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepoWithPreCommitConfig(harness);
+      const preCommitLog = join(harness.cwd.path, 'pre-commit.log');
+      const extraEnv = setupFakePreCommit(preCommitLog);
+
+      const first = await harness.run('integrate git --hook pre-commit --non-interactive', {
+        extraEnv,
+      });
+      const second = await harness.run('integrate git --hook pre-push --non-interactive', {
+        extraEnv,
+      });
+
+      expect(first.exitCode).toBe(0);
+      expect(second.exitCode).toBe(0);
+
+      const config = readYamlFile<PreCommitYamlConfig>(
+        join(harness.cwd.path, '.pre-commit-config.yaml'),
+      );
+      const localRepo = config.repos.find((repo) => repo.repo === 'local');
+      const ids = localRepo?.hooks.map((hook) => hook.id) ?? [];
+      expect(ids.filter((id) => id === 'sonar-pre-commit')).toHaveLength(1);
+      expect(ids.filter((id) => id === 'sonar-pre-push')).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'migrates legacy sonar-secrets entries to per-stage ids one stage at a time',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepoWithPreCommitConfig(harness);
+      const preCommitLog = join(harness.cwd.path, 'pre-commit.log');
+      harness.cwd.writeFile(
+        '.pre-commit-config.yaml',
+        yaml.dump({
+          repos: [
+            {
+              repo: 'local',
+              hooks: [
+                {
+                  id: 'sonar-secrets',
+                  name: 'Sonar pre-commit scan',
+                  entry: 'sonar hook git-pre-commit --',
+                  language: 'system',
+                  pass_filenames: true,
+                  stages: ['pre-commit'],
+                },
+                {
+                  id: 'sonar-secrets',
+                  name: 'Sonar pre-push scan',
+                  entry: 'sonar hook git-pre-push --',
+                  language: 'system',
+                  pass_filenames: true,
+                  stages: ['pre-push'],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      const extraEnv = setupFakePreCommit(preCommitLog);
+
+      // Running pre-commit migrates only that stage; the pre-push legacy entry is left intact.
+      const first = await harness.run('integrate git --hook pre-commit --non-interactive', {
+        extraEnv,
+      });
+      expect(first.exitCode).toBe(0);
+
+      const midConfig = readYamlFile<PreCommitYamlConfig>(
+        join(harness.cwd.path, '.pre-commit-config.yaml'),
+      );
+      const midLocal = midConfig.repos.find((repo) => repo.repo === 'local');
+      expect(midLocal?.hooks.find((h) => h.id === 'sonar-pre-commit')?.stages).toEqual([
+        'pre-commit',
+      ]);
+      expect(
+        midLocal?.hooks.some((h) => h.id === 'sonar-secrets' && h.stages?.includes('pre-push')),
+      ).toBe(true);
+
+      // Running pre-push migrates that stage too; no legacy entries remain.
+      const second = await harness.run('integrate git --hook pre-push --non-interactive', {
+        extraEnv,
+      });
+      expect(second.exitCode).toBe(0);
+
+      const finalConfig = readYamlFile<PreCommitYamlConfig>(
+        join(harness.cwd.path, '.pre-commit-config.yaml'),
+      );
+      const finalLocal = finalConfig.repos.find((repo) => repo.repo === 'local');
+      const ids = finalLocal?.hooks.map((h) => h.id) ?? [];
+      expect(ids.filter((id) => id === 'sonar-pre-commit')).toHaveLength(1);
+      expect(ids.filter((id) => id === 'sonar-pre-push')).toHaveLength(1);
+      expect(ids.some((id) => id === 'sonar-secrets')).toBe(false);
     },
     { timeout: 15000 },
   );

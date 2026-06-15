@@ -37,6 +37,8 @@ import {
   type PreCommitConfig,
   preCommitIntegration,
   removeLegacyHook,
+  removeLegacySonarHook,
+  removeSonarHook,
   runPreCommitInstall,
   upsertSonarHook,
 } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
@@ -104,9 +106,9 @@ describe('upsertSonarHook', () => {
     upsertSonarHook(config, 'pre-commit');
     const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
     expect(hook).toEqual({
-      id: 'sonar-secrets',
+      id: 'sonar-pre-commit',
       name: 'Sonar pre-commit scan',
-      entry: 'sonar hook git-pre-commit',
+      entry: 'sonar hook git-pre-commit --',
       language: 'system',
       pass_filenames: true,
       stages: ['pre-commit'],
@@ -118,20 +120,20 @@ describe('upsertSonarHook', () => {
     upsertSonarHook(config, 'pre-push');
     const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
     expect(hook).toEqual({
-      id: 'sonar-secrets',
+      id: 'sonar-pre-push',
       name: 'Sonar pre-push scan',
-      entry: 'sonar hook git-pre-push',
+      entry: 'sonar hook git-pre-push --',
       language: 'system',
       pass_filenames: true,
       stages: ['pre-push'],
     });
   });
 
-  it('creates a local repo with the sonar-secrets hook when no repos exist', () => {
+  it('creates a local repo with the per-stage hook when no repos exist', () => {
     const config: PreCommitConfig = { repos: [] };
     upsertSonarHook(config, 'pre-commit');
     const localRepo = config.repos.find((r) => r.repo === 'local');
-    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-pre-commit')).toBe(true);
   });
 
   it('appends a local repo when only unrelated repos exist', () => {
@@ -141,11 +143,11 @@ describe('upsertSonarHook', () => {
     upsertSonarHook(config, 'pre-commit');
     expect(config.repos).toHaveLength(2);
     expect(
-      config.repos.find((r) => r.repo === 'local')?.hooks.some((h) => h.id === 'sonar-secrets'),
+      config.repos.find((r) => r.repo === 'local')?.hooks.some((h) => h.id === 'sonar-pre-commit'),
     ).toBe(true);
   });
 
-  it('adds the hook to an existing local repo that has no sonar-secrets hook yet', () => {
+  it('adds the hook to an existing local repo that has no sonar hook yet', () => {
     const config: PreCommitConfig = {
       repos: [
         { repo: 'local', hooks: [{ id: 'other-hook', name: 'x', entry: 'e', language: 'system' }] },
@@ -154,11 +156,27 @@ describe('upsertSonarHook', () => {
     upsertSonarHook(config, 'pre-commit');
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks).toHaveLength(2);
-    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(true);
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-pre-commit')).toBe(true);
     expect(localRepo?.hooks.some((h) => h.id === 'other-hook')).toBe(true);
   });
 
-  it('replaces the existing sonar-secrets hook in place without duplicating it', () => {
+  it('is idempotent: re-running the same stage replaces it in place', () => {
+    const config: PreCommitConfig = { repos: [] };
+    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks.filter((h) => h.id === 'sonar-pre-commit')).toHaveLength(1);
+  });
+
+  it('lets the pre-commit and pre-push hooks coexist', () => {
+    const config: PreCommitConfig = { repos: [] };
+    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-push');
+    const ids = config.repos.find((r) => r.repo === 'local')?.hooks.map((h) => h.id);
+    expect(ids).toEqual(['sonar-pre-commit', 'sonar-pre-push']);
+  });
+
+  it('migrates a same-stage legacy sonar-secrets hook in place', () => {
     const config: PreCommitConfig = {
       repos: [
         {
@@ -167,7 +185,31 @@ describe('upsertSonarHook', () => {
             {
               id: 'sonar-secrets',
               name: 'old',
-              entry: 'old',
+              entry: 'sonar hook git-pre-commit --',
+              language: 'system',
+              stages: ['pre-commit'],
+            },
+          ],
+        },
+      ],
+    };
+    upsertSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks).toHaveLength(1);
+    expect(localRepo?.hooks[0].id).toBe('sonar-pre-commit');
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(false);
+  });
+
+  it('leaves a legacy hook for the other stage untouched', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-secrets',
+              name: 'old',
+              entry: 'sonar hook git-pre-push --',
               language: 'system',
               stages: ['pre-push'],
             },
@@ -177,12 +219,14 @@ describe('upsertSonarHook', () => {
     };
     upsertSonarHook(config, 'pre-commit');
     const localRepo = config.repos.find((r) => r.repo === 'local');
-    const sonarHooks = localRepo?.hooks.filter((h) => h.id === 'sonar-secrets');
-    expect(sonarHooks).toHaveLength(1);
-    expect(sonarHooks?.[0].stages).toEqual(['pre-commit']);
+    expect(localRepo?.hooks).toHaveLength(2);
+    expect(
+      localRepo?.hooks.some((h) => h.id === 'sonar-secrets' && h.stages?.includes('pre-push')),
+    ).toBe(true);
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-pre-commit')).toBe(true);
   });
 
-  it('replaces the existing sonar-secrets hook in place for pre-push stage', () => {
+  it('appends a pre-push hook alongside a pre-commit legacy entry (no clobbering)', () => {
     const config: PreCommitConfig = {
       repos: [
         {
@@ -201,15 +245,187 @@ describe('upsertSonarHook', () => {
     };
     upsertSonarHook(config, 'pre-push');
     const localRepo = config.repos.find((r) => r.repo === 'local');
-    const hooks = localRepo?.hooks.filter((h) => h.id === 'sonar-secrets');
-    expect(hooks).toHaveLength(1);
-    expect(hooks?.[0].entry).toBe('sonar hook git-pre-push');
+    expect(localRepo?.hooks).toHaveLength(2);
+    expect(
+      localRepo?.hooks.some((h) => h.id === 'sonar-secrets' && h.stages?.includes('pre-commit')),
+    ).toBe(true);
+    expect(localRepo?.hooks.find((h) => h.id === 'sonar-pre-push')?.entry).toBe(
+      'sonar hook git-pre-push --',
+    );
+  });
+
+  it('migrates a stage-less legacy sonar-secrets hook in place (defaults to pre-commit)', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-secrets',
+              name: 'old',
+              entry: 'sonar hook git-pre-commit --',
+              language: 'system',
+            },
+          ],
+        },
+      ],
+    };
+    upsertSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks).toHaveLength(1);
+    expect(localRepo?.hooks[0].id).toBe('sonar-pre-commit');
   });
 
   it('preserves top-level keys that are not repos', () => {
     const config: PreCommitConfig = { default_install_hook_types: ['pre-commit'], repos: [] };
     upsertSonarHook(config, 'pre-commit');
     expect(config.default_install_hook_types).toEqual(['pre-commit']);
+  });
+});
+
+describe('removeSonarHook', () => {
+  it('removes the per-stage hook while keeping unrelated hooks', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-pre-commit',
+              name: 'x',
+              entry: 'sonar hook git-pre-commit --',
+              language: 'system',
+              stages: ['pre-commit'],
+            },
+            { id: 'other-hook', name: 'y', entry: 'e', language: 'system' },
+          ],
+        },
+      ],
+    };
+    removeSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-pre-commit')).toBe(false);
+    expect(localRepo?.hooks.some((h) => h.id === 'other-hook')).toBe(true);
+  });
+
+  it('leaves the other stage hook intact', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-pre-commit',
+              name: 'x',
+              entry: 'sonar hook git-pre-commit --',
+              language: 'system',
+              stages: ['pre-commit'],
+            },
+            {
+              id: 'sonar-pre-push',
+              name: 'y',
+              entry: 'sonar hook git-pre-push --',
+              language: 'system',
+              stages: ['pre-push'],
+            },
+          ],
+        },
+      ],
+    };
+    removeSonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks.map((h) => h.id)).toEqual(['sonar-pre-push']);
+  });
+});
+
+describe('removeLegacySonarHook', () => {
+  it('removes the sonar-secrets hook for the matching stage', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-secrets',
+              name: 'x',
+              entry: 'e',
+              language: 'system',
+              stages: ['pre-commit'],
+            },
+            { id: 'other-hook', name: 'y', entry: 'e', language: 'system' },
+          ],
+        },
+      ],
+    };
+    removeLegacySonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks.some((h) => h.id === 'sonar-secrets')).toBe(false);
+    expect(localRepo?.hooks.some((h) => h.id === 'other-hook')).toBe(true);
+  });
+
+  it('leaves the sonar-secrets hook for a different stage intact', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-secrets',
+              name: 'x',
+              entry: 'e',
+              language: 'system',
+              stages: ['pre-push'],
+            },
+          ],
+        },
+      ],
+    };
+    removeLegacySonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks.map((h) => h.id)).toEqual(['sonar-secrets']);
+  });
+
+  it('removes a stage-less legacy sonar-secrets hook when removing pre-commit', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-secrets',
+              name: 'x',
+              entry: 'e',
+              language: 'system',
+            },
+          ],
+        },
+      ],
+    };
+    removeLegacySonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks).toHaveLength(0);
+  });
+
+  it('does not remove the current per-stage hook id', () => {
+    const config: PreCommitConfig = {
+      repos: [
+        {
+          repo: 'local',
+          hooks: [
+            {
+              id: 'sonar-pre-commit',
+              name: 'x',
+              entry: 'sonar hook git-pre-commit --',
+              language: 'system',
+              stages: ['pre-commit'],
+            },
+          ],
+        },
+      ],
+    };
+    removeLegacySonarHook(config, 'pre-commit');
+    const localRepo = config.repos.find((r) => r.repo === 'local');
+    expect(localRepo?.hooks.map((h) => h.id)).toEqual(['sonar-pre-commit']);
   });
 });
 
@@ -221,7 +437,7 @@ describe('hasSonarHookInPreCommitConfig', () => {
     expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(false);
   });
 
-  it('returns true when the config contains a sonar-secrets hook in a local repo', () => {
+  it('returns true when the config contains a legacy sonar-secrets hook in a local repo', () => {
     writeFileSync(
       join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
       yaml.dump({
@@ -229,6 +445,21 @@ describe('hasSonarHookInPreCommitConfig', () => {
           {
             repo: 'local',
             hooks: [{ id: 'sonar-secrets', name: 'x', entry: 'e', language: 'system' }],
+          },
+        ],
+      }),
+    );
+    expect(hasSonarHookInPreCommitConfig(TEMP_DIR)).toBe(true);
+  });
+
+  it('returns true when the config contains a new per-stage hook in a local repo', () => {
+    writeFileSync(
+      join(TEMP_DIR, PRE_COMMIT_CONFIG_FILE),
+      yaml.dump({
+        repos: [
+          {
+            repo: 'local',
+            hooks: [{ id: 'sonar-pre-push', name: 'x', entry: 'e', language: 'system' }],
           },
         ],
       }),

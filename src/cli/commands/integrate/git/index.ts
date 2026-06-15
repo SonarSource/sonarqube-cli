@@ -35,15 +35,15 @@ import { installIntegration } from '../_common/registry';
 import { supportedIntegrations } from '../index.js';
 import type { GitHookType, IntegrateGitOptions } from './options';
 import {
+  getRecognizedHuskyMarkers,
+  getRecognizedNativeMarkers,
   hasSonarHookInPreCommitConfig,
-  HOOK_MARKER,
   HUSKY_INTEGRATION_ID,
   NATIVE_GIT_INTEGRATION_ID,
   PRE_COMMIT_INTEGRATION_ID,
 } from './tools';
 
 export type { GitHookType, IntegrateGitOptions } from './options';
-export { installViaGitHooks } from './tools';
 
 type GitIntegrationId = 'native-git' | 'husky' | 'pre-commit';
 
@@ -55,8 +55,12 @@ export function isGitHookType(s: string): s is GitHookType {
 // Hook detection
 // ---------------------------------------------------------------------------
 
-export function hasMarker(filePath: string): boolean {
-  return existsSync(filePath) && readFileSync(filePath, 'utf-8').includes(HOOK_MARKER);
+export function hasMarker(filePath: string, markers: string[]): boolean {
+  if (!existsSync(filePath)) {
+    return false;
+  }
+  const content = readFileSync(filePath, 'utf-8');
+  return markers.some((marker) => content.includes(marker));
 }
 
 interface HookInstallation {
@@ -80,10 +84,14 @@ export async function detectSonarHookInstallation(root: string): Promise<HookIns
   const isHusky = normalizePath(hooksDir).startsWith(normalizePath(join(root, '.husky')));
   return {
     preCommitConfig: hasSonarHookInPreCommitConfig(root),
-    huskyPreCommit: isHusky && hasMarker(join(hooksDir, 'pre-commit')),
-    huskyPrePush: isHusky && hasMarker(join(hooksDir, 'pre-push')),
-    gitPreCommit: !isHusky && hasMarker(join(hooksDir, 'pre-commit')),
-    gitPrePush: !isHusky && hasMarker(join(hooksDir, 'pre-push')),
+    huskyPreCommit:
+      isHusky && hasMarker(join(hooksDir, 'pre-commit'), getRecognizedHuskyMarkers('pre-commit')),
+    huskyPrePush:
+      isHusky && hasMarker(join(hooksDir, 'pre-push'), getRecognizedHuskyMarkers('pre-push')),
+    gitPreCommit:
+      !isHusky && hasMarker(join(hooksDir, 'pre-commit'), getRecognizedNativeMarkers('pre-commit')),
+    gitPrePush:
+      !isHusky && hasMarker(join(hooksDir, 'pre-push'), getRecognizedNativeMarkers('pre-push')),
     hooksDir,
   };
 }

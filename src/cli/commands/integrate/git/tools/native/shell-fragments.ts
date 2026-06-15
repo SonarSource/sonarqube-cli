@@ -19,7 +19,25 @@
  */
 
 import type { GitHookType } from '../../options';
-import { HOOK_MARKER, resolveSonarHookCommand, SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../shared';
+import {
+  LEGACY_HOOK_MARKER,
+  resolveSonarHookCommand,
+  SONAR_HOOK_SKIP_SECRETS_MESSAGE,
+} from '../shared';
+
+const NATIVE_HOOK_MARKERS: Record<GitHookType, string> = {
+  'pre-commit': 'sonar pre-commit hook - installed by sonar integrate git',
+  'pre-push': 'sonar pre-push hook - installed by sonar integrate git',
+};
+
+export function getNativeHookMarker(hook: GitHookType): string {
+  return NATIVE_HOOK_MARKERS[hook];
+}
+
+/** New + legacy markers a native hook of this type may legitimately contain (overwrite guard + detection). */
+export function getRecognizedNativeMarkers(hook: GitHookType): string[] {
+  return [NATIVE_HOOK_MARKERS[hook], LEGACY_HOOK_MARKER];
+}
 
 function nativeBinBlock(): string {
   return [
@@ -32,7 +50,7 @@ function nativeBinBlock(): string {
 export function getHookScript(hook: GitHookType): string {
   return [
     '#!/bin/sh',
-    `# ${HOOK_MARKER}`,
+    `# ${getNativeHookMarker(hook)}`,
     nativeBinBlock(),
     `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}`,
     '',

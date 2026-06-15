@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
@@ -32,14 +32,17 @@ import * as preflightSummary from '../../../../../../src/cli/commands/integrate/
 import {
   detectSonarHookInstallation as detectHookInstallation,
   hasMarker,
-  installViaGitHooks,
   integrateGit,
   type IntegrateGitOptions,
   isGitHookType,
   resolveGitHooksDir,
 } from '../../../../../../src/cli/commands/integrate/git';
+import {
+  getNativeHookMarker,
+  getRecognizedNativeMarkers,
+} from '../../../../../../src/cli/commands/integrate/git/tools/native';
 import { PRE_COMMIT_CONFIG_FILE } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
-import { HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
+import { LEGACY_HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
 import { GLOBAL_HOOKS_DIR } from '../../../../../../src/lib/config-constants';
 import * as processLib from '../../../../../../src/lib/process.js';
 import * as discovery from '../../../../../../src/lib/project-workspace';
@@ -67,16 +70,20 @@ describe('isGitHookType', () => {
 });
 
 describe('hasMarker', () => {
-  it('returns true only when the file exists and contains the marker', () => {
+  it('returns true when the file contains a current or legacy recognized marker', () => {
     mkdirSync(TEMP_DIR, { recursive: true });
-    const withMarker = join(TEMP_DIR, 'with-marker');
-    const withoutMarker = join(TEMP_DIR, 'without-marker');
-    writeFileSync(withMarker, `#!/bin/sh\n# ${HOOK_MARKER}\n`);
-    writeFileSync(withoutMarker, '#!/bin/sh\necho hello\n');
+    const legacy = join(TEMP_DIR, 'legacy');
+    const current = join(TEMP_DIR, 'current');
+    const foreign = join(TEMP_DIR, 'foreign');
+    writeFileSync(legacy, `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`);
+    writeFileSync(current, `#!/bin/sh\n# ${getNativeHookMarker('pre-commit')}\n`);
+    writeFileSync(foreign, '#!/bin/sh\necho hello\n');
 
-    expect(hasMarker(withMarker)).toBe(true);
-    expect(hasMarker(withoutMarker)).toBe(false);
-    expect(hasMarker(join(TEMP_DIR, 'nonexistent'))).toBe(false);
+    const markers = getRecognizedNativeMarkers('pre-commit');
+    expect(hasMarker(legacy, markers)).toBe(true);
+    expect(hasMarker(current, markers)).toBe(true);
+    expect(hasMarker(foreign, markers)).toBe(false);
+    expect(hasMarker(join(TEMP_DIR, 'nonexistent'), markers)).toBe(false);
 
     rmSync(TEMP_DIR, { recursive: true, force: true });
   });
@@ -203,8 +210,14 @@ describe('resolveGitHooksDir', () => {
 describe('detectHookInstallation', () => {
   it('sets gitPreCommit and gitPrePush when hooks are in .git/hooks', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
-    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
-    writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+    writeFileSync(
+      join(TEMP_DIR, '.git', 'hooks', 'pre-commit'),
+      `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`,
+    );
+    writeFileSync(
+      join(TEMP_DIR, '.git', 'hooks', 'pre-push'),
+      `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`,
+    );
 
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
 
@@ -264,8 +277,8 @@ describe('detectHookInstallation', () => {
 
   it('sets huskyPreCommit and huskyPrePush when husky is used', async () => {
     mkdirSync(join(TEMP_DIR, '.husky'), { recursive: true });
-    writeFileSync(join(TEMP_DIR, '.husky', 'pre-commit'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
-    writeFileSync(join(TEMP_DIR, '.husky', 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\n`);
+    writeFileSync(join(TEMP_DIR, '.husky', 'pre-commit'), `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`);
+    writeFileSync(join(TEMP_DIR, '.husky', 'pre-push'), `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`);
 
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
       exitCode: 0,
@@ -323,55 +336,6 @@ describe('detectHookInstallation', () => {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
-  });
-});
-
-describe('installViaGitHooks', () => {
-  beforeEach(() => setMockUi(true));
-  afterEach(() => {
-    setMockUi(false);
-    rmSync(TEMP_DIR, { recursive: true, force: true });
-  });
-
-  it('creates the hook file when none exists', async () => {
-    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
-    await installViaGitHooks(hooksDir, 'pre-commit');
-    expect(existsSync(join(hooksDir, 'pre-commit'))).toBe(true);
-    expect(readFileSync(join(hooksDir, 'pre-commit'), 'utf-8')).toContain(HOOK_MARKER);
-  });
-
-  it('throws CommandFailedError when a non-sonar hook exists and force is not set', () => {
-    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
-    mkdirSync(hooksDir, { recursive: true });
-    writeFileSync(join(hooksDir, 'pre-commit'), '#!/bin/sh\necho hello\n');
-    expect.assertions(3);
-    return installViaGitHooks(hooksDir, 'pre-commit').catch((error: unknown) => {
-      expect(error).toBeInstanceOf(CommandFailedError);
-      expect((error as CommandFailedError).message).toContain(
-        'Refusing to overwrite existing pre-commit hook',
-      );
-      expect((error as CommandFailedError).remediationHint).toBe(
-        'Use --force to replace the existing hook.',
-      );
-    });
-  });
-
-  it('overwrites a non-sonar hook when force=true', async () => {
-    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
-    mkdirSync(hooksDir, { recursive: true });
-    writeFileSync(join(hooksDir, 'pre-commit'), '#!/bin/sh\necho hello\n');
-    await installViaGitHooks(hooksDir, 'pre-commit', true);
-    expect(readFileSync(join(hooksDir, 'pre-commit'), 'utf-8')).toContain(HOOK_MARKER);
-  });
-
-  it('overwrites an existing sonar hook without force', async () => {
-    const hooksDir = join(TEMP_DIR, '.git', 'hooks');
-    mkdirSync(hooksDir, { recursive: true });
-    writeFileSync(join(hooksDir, 'pre-push'), `#!/bin/sh\n# ${HOOK_MARKER}\nold content\n`);
-    await installViaGitHooks(hooksDir, 'pre-push');
-    const content = readFileSync(join(hooksDir, 'pre-push'), 'utf-8');
-    expect(content).toContain(HOOK_MARKER);
-    expect(content).not.toContain('old content');
   });
 });
 
@@ -552,7 +516,7 @@ describe('integrateGit', () => {
       });
       expect(
         feature?.resources.some(
-          (resource) => resource.id === 'hook-file' && resource.resourceType === 'git-hook-file',
+          (resource) => resource.id === 'hook-file' && resource.resourceType === 'whole-file',
         ),
       ).toBe(true);
       expect(feature?.operations).toEqual([]);
