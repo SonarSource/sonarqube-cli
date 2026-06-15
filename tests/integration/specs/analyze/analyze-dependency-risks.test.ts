@@ -299,7 +299,7 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(1);
     const output = result.stdout + result.stderr;
     expect(output).toContain('Could not determine project key.');
-    expect(output).toContain('Use --project <key> to specify it');
+    expect(output).toContain('Use --project <key>');
   });
 
   it('prefers an explicit --project over auto-detection', async () => {
