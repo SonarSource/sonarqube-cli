@@ -391,14 +391,14 @@ const dependencyRisksStatusFilterOption = new Option(
 const dependencyRisksExtraHelp = `
 Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.
 Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
-`;
+${projectKeyExtraHelp}`;
 
 analyze
   .command('dependency-risks')
   .description(
     'Analyze project dependencies for security and license risks (beta: subject to change)',
   )
-  .requiredOption('-p, --project <project>', 'Project key')
+  .option('-p, --project <project>', 'Project key (auto-detected when omitted)')
   .addOption(dependencyRisksFormatOption)
   .addOption(dependencyRisksStatusFilterOption)
   .addHelpText('after', dependencyRisksExtraHelp)

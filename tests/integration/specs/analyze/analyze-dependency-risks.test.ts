@@ -275,4 +275,47 @@ describe('analyze dependency-risks', () => {
     );
     expect(server.getRecordedRequests().some((r) => r.path === '/api/system/status')).toBe(false);
   });
+
+  it('auto-detects the project key from sonar-project.properties when --project is omitted', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+    harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=demo\n');
+
+    const result = await harness.run('analyze dependency-risks');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Using auto-detected project key: demo');
+  });
+
+  it('exits with code 1 when no project key can be resolved', async () => {
+    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks');
+
+    expect(result.exitCode).toBe(1);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain('Could not determine project key.');
+    expect(output).toContain('Use --project <key>');
+  });
+
+  it('prefers an explicit --project over auto-detection', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+    // A different key in the config must not override the explicit flag.
+    harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=other\n');
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Using project key: demo');
+    expect(result.stderr).not.toContain('Using auto-detected project key');
+  });
 });
