@@ -131,4 +131,4 @@ When adding, removing, or changing commands, scripts, or project structure, upda
 ## Docs site (`docs/`)
 
 The docs site is generated from the CLI source — do not edit `commands.json`, `llms.txt`, or `sitemap.xml` by hand. This is done by automation post-release. The docs generator also stamps the current package version into the nav badge in `index.html` and `commands.html`, plus the JSON-LD `softwareVersion` and `meta-version` in `index.html`.
-When the Netlify site uses `docs/` as its base directory, keep the deploy settings in `docs/netlify.toml`; set HTML `pretty_urls = true` so the published `/sonarqube/cli` entrypoint resolves to the trailing-slash form expected by document-relative assets.
+Keep a fixed `<base href="/sonarqube/cli/">` in the docs HTML so production resolves relative assets and internal links under the public mount point. This is intentionally production-oriented: Netlify deploy previews served from `/` will not work with that fixed base.
