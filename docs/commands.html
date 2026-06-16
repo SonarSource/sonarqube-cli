@@ -653,6 +653,12 @@ if (location.hash !== '#' + startId) {
   if (main) main.addEventListener('scroll', function() { show(); }, { passive: true });
   var tree = document.querySelector('.sidebar-tree');
   if (tree) tree.addEventListener('scroll', function() { show(); }, { passive: true });
+  fab.querySelector('[data-feedback-toggle]')?.addEventListener('click', function() {
+    fab.classList.toggle('open');
+  });
+  fab.querySelector('[data-feedback-close]')?.addEventListener('click', function() {
+    fab.classList.remove('open');
+  });
 })();
 
 window.addEventListener('hashchange', () => {
@@ -666,11 +672,11 @@ window.addEventListener('hashchange', () => {
 
 <div class="feedback-fab" id="feedbackFab">
   <div class="feedback-fab-popover">
-    <button class="feedback-fab-x" onclick="document.getElementById('feedbackFab').classList.remove('open')" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <button class="feedback-fab-x" data-feedback-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     <p class="feedback-fab-title">How useful was this site?</p>
     <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Share Feedback</a>
   </div>
-  <button class="feedback-fab-btn" onclick="document.getElementById('feedbackFab').classList.toggle('open')">Feedback</button>
+  <button class="feedback-fab-btn" data-feedback-toggle>Feedback</button>
 </div>
 </body>
 </html>
