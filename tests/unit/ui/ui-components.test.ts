@@ -384,7 +384,7 @@ describe('withSpinner: non-TTY output', () => {
       return true;
     });
     try {
-      await withSpinner('On stderr', () => Promise.resolve('done'), process.stderr);
+      await withSpinner('On stderr', () => Promise.resolve('done'), 'stderr');
       expect(stderr.some((s) => s.includes('On stderr'))).toBe(true);
       expect(stdout.join('')).not.toContain('On stderr');
     } finally {

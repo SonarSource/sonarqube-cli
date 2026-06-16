@@ -22,7 +22,7 @@
 
 import { cyan, green, isTTY, red, yellow } from './colors.js';
 import { isMockActive, recordCall } from './mock.js';
-import type { ColorFn } from './types.js';
+import type { ColorFn, OutputChannel } from './types.js';
 
 let _formattedOutputMode = false;
 const _collectedMessages: string[] = [];
@@ -49,6 +49,10 @@ function write(stream: NodeJS.WriteStream, line: string): void {
   stream.write(line + '\n');
 }
 
+export function channelStream(channel: OutputChannel): NodeJS.WriteStream {
+  return channel === 'stderr' ? process.stderr : process.stdout;
+}
+
 export function info(message: string): void {
   if (isMockActive()) {
     recordCall('info', message);
@@ -73,21 +77,18 @@ export function success(message: string): void {
   write(process.stdout, `✅ ${green(message)}`);
 }
 
-export function discreetSuccess(
-  message: string,
-  stream: NodeJS.WriteStream = process.stdout,
-): void {
+export function discreetSuccess(message: string, channel: OutputChannel = 'stdout'): void {
   if (isMockActive()) {
     recordCall('discreetSuccess', message);
     return;
   }
   // Only stdout participates in formatted-output buffering; an explicit stderr
-  // stream writes through immediately since stderr does not carry the payload.
-  if (stream === process.stdout && _formattedOutputMode) {
+  // channel writes through immediately since stderr does not carry the payload.
+  if (channel === 'stdout' && _formattedOutputMode) {
     _collectedMessages.push(`  ✓  ${message}`);
     return;
   }
-  write(stream, `  ${green('✓')}  ${message}`);
+  write(channelStream(channel), `  ${green('✓')}  ${message}`);
 }
 
 export function warn(message: string): void {
@@ -107,32 +108,28 @@ export function error(message: string): void {
 }
 
 // Plain terminal output — human-readable, no semantic icon, optional color
-export function text(
-  message: string,
-  color?: ColorFn,
-  stream: NodeJS.WriteStream = process.stdout,
-): void {
+export function text(message: string, color?: ColorFn, channel: OutputChannel = 'stdout'): void {
   if (isMockActive()) {
     recordCall('text', message);
     return;
   }
   // Only stdout participates in formatted-output buffering; an explicit stderr
-  // stream writes through immediately since stderr does not carry the payload.
-  if (stream === process.stdout && _formattedOutputMode) {
+  // channel writes through immediately since stderr does not carry the payload.
+  if (channel === 'stdout' && _formattedOutputMode) {
     _collectedMessages.push(message);
     return;
   }
   const formatted = color ? color(message) : message;
-  write(stream, formatted);
+  write(channelStream(channel), formatted);
 }
 
 // Raw stream output — no color, no prefix — safe for piping: sonar issues search | jq
-export function print(message: string, stream: NodeJS.WriteStream = process.stdout): void {
+export function print(message: string, channel: OutputChannel = 'stdout'): void {
   if (isMockActive()) {
     recordCall('print', message);
     return;
   }
-  stream.write(message + (message.endsWith('\n') ? '' : '\n'));
+  channelStream(channel).write(message + (message.endsWith('\n') ? '' : '\n'));
 }
 
 // Newline separator

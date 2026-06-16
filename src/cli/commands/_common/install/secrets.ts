@@ -27,7 +27,7 @@ import {
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
 } from '../../../../lib/signatures';
-import { discreetSuccess } from '../../../../ui';
+import { discreetSuccess, type OutputChannel } from '../../../../ui';
 import {
   type BinarySpec,
   buildLocalBinaryName as buildBinaryName,
@@ -49,15 +49,15 @@ export const SECRETS_SPEC: BinarySpec = {
  * Use this in commands where the user implicitly consents to installation by running the command.
  */
 export async function installSecretsBinary(): Promise<string> {
-  const { binaryPath, freshlyInstalled } = await resolveSecretsBinary({ stream: process.stderr });
+  const { binaryPath, freshlyInstalled } = await resolveSecretsBinary({ channel: 'stderr' });
   if (freshlyInstalled) {
-    discreetSuccess(`sonar-secrets installed at ${binaryPath}`, process.stderr);
+    discreetSuccess(`sonar-secrets installed at ${binaryPath}`, 'stderr');
   }
   return binaryPath;
 }
 
 export async function resolveSecretsBinary(
-  options: { force?: boolean; stream?: NodeJS.WriteStream },
+  options: { force?: boolean; channel?: OutputChannel },
   { binDir }: { binDir?: string } = {},
 ): Promise<InstallResult> {
   return installBinary(SECRETS_SPEC, { ...options, binDir });

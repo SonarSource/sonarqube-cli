@@ -27,7 +27,14 @@ import logger from '../../../../lib/logger';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { SonarQubeClient } from '../../../../sonarqube/client';
-import { discreetSuccess, print, text, warn, withSpinner } from '../../../../ui';
+import {
+  discreetSuccess,
+  type OutputChannel,
+  print,
+  text,
+  warn,
+  withSpinner,
+} from '../../../../ui';
 import { buildContextAugmentationEnv } from '../../_common/context-augmentation-env';
 import { CommandFailedError } from '../../_common/error';
 
@@ -316,8 +323,8 @@ function reportCagFailure(result: CagSubprocessResult): void {
   if (result.failureMessage) {
     warn(result.failureMessage);
   }
-  printIndented(result.stdout, process.stdout);
-  printIndented(result.stderr, process.stderr);
+  printIndented(result.stdout, 'stdout');
+  printIndented(result.stderr, 'stderr');
 }
 
 function reportCagFailureFromError(error: unknown): void {
@@ -328,12 +335,12 @@ function reportCagFailureFromError(error: unknown): void {
   warn((error as Error).message);
 }
 
-function printIndented(buffer: string, target: NodeJS.WriteStream): void {
+function printIndented(buffer: string, channel: OutputChannel): void {
   if (buffer.length === 0) {
     return;
   }
   const trimmed = buffer.endsWith('\n') ? buffer.slice(0, -1) : buffer;
   for (const line of trimmed.split('\n')) {
-    print(`  ${line}`, target);
+    print(`  ${line}`, channel);
   }
 }

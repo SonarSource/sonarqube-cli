@@ -84,7 +84,7 @@ export class ScaScanOrchestrator {
         await assertScaAvailable(this.client, auth);
         return this.client.getProjectSettings(projectKey);
       },
-      process.stderr,
+      'stderr',
     );
   }
 
@@ -94,7 +94,7 @@ export class ScaScanOrchestrator {
     return withSpinner(
       'Analyzing dependency risks',
       () => new ScaScannerRunner(this.installer, this.spawner).run(invocation),
-      process.stderr,
+      'stderr',
     );
   }
 }

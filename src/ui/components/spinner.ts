@@ -21,7 +21,9 @@
 // Spinner — animated indicator for long-running async operations
 
 import { cyan, green, red } from '../colors.js';
+import { channelStream } from '../messages.js';
 import { isMockActive, recordCall } from '../mock.js';
+import type { OutputChannel } from '../types.js';
 
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const INTERVAL_MS = 80;
@@ -33,12 +35,14 @@ const INTERVAL_MS = 80;
 export async function withSpinner<T>(
   message: string,
   task: () => Promise<T>,
-  stream: NodeJS.WriteStream = process.stdout,
+  channel: OutputChannel = 'stdout',
 ): Promise<T> {
   if (isMockActive()) {
     recordCall('spinner', message);
     return await task();
   }
+
+  const stream = channelStream(channel);
 
   if (!stream.isTTY) {
     stream.write(`${message}...\n`);

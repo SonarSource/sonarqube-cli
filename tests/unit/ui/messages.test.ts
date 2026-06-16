@@ -182,7 +182,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      text('to stderr', undefined, process.stderr);
+      text('to stderr', undefined, 'stderr');
       expect(output.join('')).toContain('to stderr');
     } finally {
       spy.mockRestore();
@@ -197,7 +197,7 @@ describe('messages: real output (non-mock)', () => {
     });
     setFormattedOutputMode(true);
     try {
-      text('to stderr', undefined, process.stderr);
+      text('to stderr', undefined, 'stderr');
       expect(output.join('')).toContain('to stderr');
       expect(getMessagesForFormattedOutput()).toEqual([]);
     } finally {
@@ -268,7 +268,7 @@ describe('messages: real output (non-mock)', () => {
       return true;
     });
     try {
-      discreetSuccess('installed', process.stderr);
+      discreetSuccess('installed', 'stderr');
       expect(output.join('')).toContain('installed');
     } finally {
       spy.mockRestore();
@@ -283,7 +283,7 @@ describe('messages: real output (non-mock)', () => {
     });
     setFormattedOutputMode(true);
     try {
-      discreetSuccess('installed', process.stderr);
+      discreetSuccess('installed', 'stderr');
       expect(output.join('')).toContain('installed');
       expect(getMessagesForFormattedOutput()).toEqual([]);
     } finally {

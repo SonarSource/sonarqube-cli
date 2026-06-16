@@ -54,7 +54,7 @@ export async function preScanManifestsForSecrets(deps: {
   const manifestFiles = await withSpinner(
     'Discovering dependency manifests',
     () => new ScaDiscoverManifestsRunner(scaInstaller, scaSpawner).run(discoverInvocation),
-    process.stderr,
+    'stderr',
   );
   const resolvedFiles = manifestFiles.map((file) =>
     isAbsolute(file) ? file : join(baseDir, file),
@@ -85,7 +85,7 @@ async function scanManifestsForSecrets(
   const result = await withSpinner(
     'Scanning manifests for secrets',
     () => runSecretsBinary(binaryPath, files, auth),
-    process.stderr,
+    'stderr',
   );
   const exitCode = result.exitCode ?? 1;
 

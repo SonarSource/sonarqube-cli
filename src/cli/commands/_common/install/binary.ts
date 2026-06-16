@@ -33,7 +33,7 @@ import {
   verifyBinarySignature,
 } from '../../../../lib/sonarsource-releases';
 import { recordInstallationInState } from '../../../../lib/state-manager';
-import { print, text, withSpinner } from '../../../../ui';
+import { type OutputChannel, print, text, withSpinner } from '../../../../ui';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,
@@ -52,7 +52,7 @@ export interface BinarySpec {
 export interface InstallOptions {
   force?: boolean;
   binDir?: string;
-  stream?: NodeJS.WriteStream;
+  channel?: OutputChannel;
 }
 
 export interface InstallResult {
@@ -99,22 +99,22 @@ async function downloadAndInstall(
     return { skipped: true, binaryPath };
   }
 
-  const stream = options.stream ?? process.stdout;
+  const channel = options.channel ?? 'stdout';
 
-  text(`     Installing ${spec.name} ${spec.version}`, undefined, stream);
+  text(`     Installing ${spec.name} ${spec.version}`, undefined, channel);
 
   const downloadUrl = buildDownloadUrl(spec.name, spec.version, spec.distPrefix, platform);
   await withSpinner(
     `Downloading ${spec.name} ${spec.version}`,
     () => downloadBinary(downloadUrl, binaryPath),
-    stream,
+    channel,
   );
 
   try {
     await withSpinner(
       'Verifying signature',
       () => verifyBinarySignature(binaryPath, platform, spec.signatures, spec.publicKey),
-      stream,
+      channel,
     );
   } catch (err) {
     rmSync(binaryPath, { force: true });
@@ -128,9 +128,9 @@ async function downloadAndInstall(
   const installedVersion = await withSpinner(
     'Verifying installation',
     () => verifyInstallation(binaryPath),
-    stream,
+    channel,
   );
-  print(`     ${spec.name} ${installedVersion}`, stream);
+  print(`     ${spec.name} ${installedVersion}`, channel);
 
   recordInstallationInState(spec.name, installedVersion, binaryPath);
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);

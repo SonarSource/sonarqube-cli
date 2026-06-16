@@ -56,4 +56,4 @@ export {
   queueMockResponse,
   setMockUi,
 } from './mock.js';
-export type { ColorFn, LogOptions, NoteOptions, PhaseOptions } from './types.js';
+export type { ColorFn, LogOptions, NoteOptions, OutputChannel, PhaseOptions } from './types.js';

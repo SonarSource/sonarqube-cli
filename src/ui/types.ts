@@ -22,6 +22,8 @@
 
 export type ColorFn = (text: string) => string;
 
+export type OutputChannel = 'stdout' | 'stderr';
+
 export type StepStatus =
   | 'done' // ✓  green
   | 'running' // →  cyan
