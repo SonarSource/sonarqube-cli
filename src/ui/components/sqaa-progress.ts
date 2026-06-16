@@ -26,14 +26,7 @@ import { cyan, yellow } from '../colors.js';
 import { warn } from '../messages.js';
 import { isMockActive, recordCall } from '../mock.js';
 
-export type FileStatus =
-  | 'waiting'
-  | 'analyzing'
-  | 'done'
-  | 'failed'
-  | 'retrying'
-  | 'skipped'
-  | 'ignored';
+export type FileStatus = 'waiting' | 'analyzing' | 'done' | 'failed' | 'skipped' | 'ignored';
 
 type RunPhase = 'idle' | 'analyzing' | 'retrying';
 
