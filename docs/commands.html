@@ -196,9 +196,8 @@ function buildPillNode(cmd, flat) {
       if (cmd.isGroup && !flat) {
         if (collapsed.has(cmd.id)) collapsed.delete(cmd.id);
         else collapsed.add(cmd.id);
-        renderTree(document.getElementById('search').value.trim());
       }
-      selectCommand(cmd.id);
+      navigateToCommand(cmd.id);
     });
   }
 
@@ -232,7 +231,7 @@ function renderTreeNode(cmd, flat) {
   label.textContent = cmd.name;
   row.appendChild(label);
 
-  row.addEventListener('click', () => { selectCommand(cmd.id); });
+  row.addEventListener('click', () => { navigateToCommand(cmd.id); });
 
   wrapper.appendChild(row);
 
@@ -319,7 +318,7 @@ function buildColumnView(root) {
         pill.dataset.id = entry.id;
 
 
-        if (c > 0) rowEl.addEventListener('click', () => selectCommand(entry.id));
+        if (c > 0) rowEl.addEventListener('click', () => navigateToCommand(entry.id));
         rowEl.appendChild(pill);
         cell.appendChild(rowEl);
         pillElements[entry.id] = pill;
@@ -422,7 +421,6 @@ function selectCommand(id) {
   if (!cmd) return;
 
   activeId = id;
-  history.replaceState(null, '', '#' + id);
 
   // Re-render tree to update selection + path highlighting
   renderTree(document.getElementById('search').value.trim());
@@ -451,10 +449,22 @@ function selectCommand(id) {
     item.addEventListener('click', () => {
       const targetId = item.dataset.target;
       expandParents(targetId);
-      renderTree(document.getElementById('search').value.trim());
-      selectCommand(targetId);
+      navigateToCommand(targetId);
     });
   });
+}
+
+function navigateToCommand(id) {
+  if (!byId[id]) return;
+
+  const nextHash = '#' + id;
+  if (location.hash !== nextHash) {
+    location.hash = id;
+    return;
+  }
+
+  expandParents(id);
+  selectCommand(id);
 }
 
 function renderDetail(cmd) {
@@ -589,13 +599,13 @@ document.getElementById('search').addEventListener('input', (e) => {
 });
 
 // ── Init ─────────────────────────────────────────────────────
-renderTree('');
-
 const hash = location.hash.slice(1);
 const startId = (hash && byId[hash]) ? hash : 'sonar-auth-login';
 expandParents(startId);
-renderTree('');
 selectCommand(startId);
+if (location.hash !== '#' + startId) {
+  history.replaceState(null, '', '#' + startId);
+}
 
 // ── Theme toggle ─────────────────────────────────────────────
 (function() {
@@ -642,7 +652,6 @@ window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
   if (id && byId[id]) {
     expandParents(id);
-    renderTree(document.getElementById('search').value.trim());
     selectCommand(id);
   }
 });
