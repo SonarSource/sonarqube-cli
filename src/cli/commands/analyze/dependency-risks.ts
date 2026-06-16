@@ -88,13 +88,13 @@ async function resolveProjectKey(
   auth: ResolvedAuth,
 ): Promise<string> {
   if (explicitProject) {
-    print(`Using project key: ${explicitProject}`, process.stderr);
+    print(`     Using project key: ${explicitProject}`, 'stderr');
     return explicitProject;
   }
 
   const discovered = await discoverProject(process.cwd(), true, { auth });
   if (discovered.projectKey) {
-    print(`Using auto-detected project key: ${discovered.projectKey}`, process.stderr);
+    print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
     return discovered.projectKey;
   }
 

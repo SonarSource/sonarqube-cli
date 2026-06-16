@@ -23,7 +23,7 @@ import { rmSync } from 'node:fs';
 import { LOG_FILE } from '../../../../lib/config-constants.ts';
 import logger from '../../../../lib/logger.ts';
 import type { SpawnResult } from '../../../../lib/process.ts';
-import { warn } from '../../../../ui';
+import { warn, withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error.ts';
 import { type ScaScannerInstaller } from '../../_common/install/sca-scanner.ts';
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
@@ -67,7 +67,11 @@ export abstract class ScaScannerRunnerBase<T> {
     const env = { [SONAR_TOKEN_ENV]: invocation.sonarToken };
     const binaryPath = await this.installer.install();
     try {
-      const result = await this.spawnScanner(binaryPath, args, env);
+      const result = await withSpinner(
+        this.spinnerLabel,
+        () => this.spawnScanner(binaryPath, args, env),
+        'stderr',
+      );
       logger.info(`SCA Scanner stdout\n${result.stdout}`);
       logger.warn(`SCA Scanner stderr\n${result.stderr}`);
       this.assertSuccessfulExit(result);
@@ -109,6 +113,9 @@ export abstract class ScaScannerRunnerBase<T> {
     }
     return args;
   }
+
+  /** Spinner label for this runner's subcommand execution. */
+  protected abstract readonly spinnerLabel: string;
 
   /** Prefix prepended to every error message (e.g. `Manifest discovery error: failed to parse output (…)`). */
   protected abstract readonly errorPrefix: string;

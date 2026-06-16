@@ -143,7 +143,7 @@ export class SonarCommand extends Command {
       blank();
       error(thrownError.message);
       if (cliError?.remediationHint) {
-        print(`  → ${cliError.remediationHint}`, process.stderr);
+        print(`  → ${cliError.remediationHint}`, 'stderr');
       }
       logger.error(thrownError.message);
       process.exitCode = cliError?.exitCode ?? 1;

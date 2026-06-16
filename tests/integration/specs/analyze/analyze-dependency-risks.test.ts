@@ -58,20 +58,26 @@ describe('analyze dependency-risks', () => {
     { timeout: 15000 },
   );
 
-  it('exits with code 1 when project does not exist (settings 404)', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+  it(
+    'exits with code 1 when project does not exist (settings 404)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
+      const result = await harness.run('analyze dependency-risks --project demo');
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain('Project demo not found');
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(true);
-  });
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Project demo not found');
+      expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(
+        true,
+      );
+    },
+    { timeout: 15000 },
+  );
 
   it(
     'exits with code 1 when SCA is disabled on the server',
@@ -118,6 +124,34 @@ describe('analyze dependency-risks', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(MANIFEST_DISCOVERY_FAILURE_PREFIX);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'routes progress to stderr and keeps stdout free of progress noise',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      harness.state().withScaScannerBinaryInstalled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze dependency-risks --project demo --format json', {
+        timeoutMs: 30_000,
+      });
+
+      // Progress one-liner + spinner labels belong on stderr.
+      expect(result.stderr).toContain('Synchronizing settings');
+      expect(result.stderr).toContain('Discovering dependency manifests');
+      // stdout must stay clean: no progress text leaks into the payload stream.
+      expect(result.stdout).not.toContain('Synchronizing settings');
+      expect(result.stdout).not.toContain('Discovering dependency manifests');
+      expect(result.stdout).not.toContain('Analyzing dependency risks');
     },
     { timeout: 30000 },
   );

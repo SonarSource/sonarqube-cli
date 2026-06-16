@@ -142,17 +142,17 @@ export class SonarQubeClient {
     const url = `${transformedServerURL}${endpoint}`;
 
     if (debug) {
-      print(`request method: ${method}`, process.stderr);
-      print(`request url: ${url}`, process.stderr);
-      print(`request headers: ${JSON.stringify(redactSensitiveHeaders(headers))}`, process.stderr);
-      print(`request body: ${requestBody}`, process.stderr);
+      print(`request method: ${method}`, 'stderr');
+      print(`request url: ${url}`, 'stderr');
+      print(`request headers: ${JSON.stringify(redactSensitiveHeaders(headers))}`, 'stderr');
+      print(`request body: ${requestBody}`, 'stderr');
     }
 
     const response = await fetchGuarded(url, buildFetchInit(method, headers, timeout, requestBody));
 
     if (debug) {
-      print(`response status: ${response.status}`, process.stderr);
-      print(`response headers: ${JSON.stringify(response.headers)}`, process.stderr);
+      print(`response status: ${response.status}`, 'stderr');
+      print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
     }
 
     await this.raiseForStatus(response, method);

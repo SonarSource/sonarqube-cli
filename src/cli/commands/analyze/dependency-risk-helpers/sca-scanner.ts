@@ -100,13 +100,14 @@ export interface AnalysisErrorResource {
 }
 
 export class ScaScannerRunner extends ScaScannerRunnerBase<AnalyzeProjectResponse> {
+  protected readonly spinnerLabel = 'Analyzing dependency risks';
+  protected readonly errorPrefix = 'Dependency risk analysis error';
+
   buildArgs(invocation: ScaScannerInvocation): string[] {
     return this.buildBaseArgs('analyze-project', invocation, [
       `--project-key=${invocation.projectKey}`,
     ]);
   }
-
-  protected readonly errorPrefix = 'Dependency risk analysis error';
 
   protected parseResult(result: SpawnResult): AnalyzeProjectResponse {
     return this.parseJson(result) as AnalyzeProjectResponse;

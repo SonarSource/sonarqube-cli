@@ -23,7 +23,18 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { blank, error, info, print, success, text, warn } from '../../../src/ui';
+import {
+  blank,
+  discreetSuccess,
+  error,
+  getMessagesForFormattedOutput,
+  info,
+  print,
+  setFormattedOutputMode,
+  success,
+  text,
+  warn,
+} from '../../../src/ui';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
@@ -164,6 +175,50 @@ describe('messages: real output (non-mock)', () => {
     }
   });
 
+  it('text writes to stderr when an explicit stderr stream is passed', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      text('to stderr', undefined, 'stderr');
+      expect(output.join('')).toContain('to stderr');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('text on stderr is not buffered in formatted-output mode', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    setFormattedOutputMode(true);
+    try {
+      text('to stderr', undefined, 'stderr');
+      expect(output.join('')).toContain('to stderr');
+      expect(getMessagesForFormattedOutput()).toEqual([]);
+    } finally {
+      setFormattedOutputMode(false);
+      spy.mockRestore();
+    }
+  });
+
+  it('text on stdout is buffered in formatted-output mode', () => {
+    const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+    setFormattedOutputMode(true);
+    try {
+      text('buffered text');
+      expect(getMessagesForFormattedOutput().some((m) => m.includes('buffered text'))).toBe(true);
+      expect(stdoutSpy).not.toHaveBeenCalled();
+    } finally {
+      setFormattedOutputMode(false);
+      stdoutSpy.mockRestore();
+    }
+  });
+
   it('print writes message to stdout', () => {
     const output: string[] = [];
     const spy = spyOn(process.stdout, 'write').mockImplementation((s) => {
@@ -189,6 +244,64 @@ describe('messages: real output (non-mock)', () => {
       expect(output.join('')).toBe('line\n');
     } finally {
       spy.mockRestore();
+    }
+  });
+
+  it('discreetSuccess writes to stdout by default', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      discreetSuccess('installed');
+      expect(output.join('')).toContain('installed');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('discreetSuccess writes to stderr when an explicit stderr stream is passed', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      discreetSuccess('installed', 'stderr');
+      expect(output.join('')).toContain('installed');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('discreetSuccess on stderr is not buffered in formatted-output mode', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    setFormattedOutputMode(true);
+    try {
+      discreetSuccess('installed', 'stderr');
+      expect(output.join('')).toContain('installed');
+      expect(getMessagesForFormattedOutput()).toEqual([]);
+    } finally {
+      setFormattedOutputMode(false);
+      spy.mockRestore();
+    }
+  });
+
+  it('discreetSuccess on stdout is buffered in formatted-output mode', () => {
+    const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+    setFormattedOutputMode(true);
+    try {
+      discreetSuccess('buffered line');
+      expect(getMessagesForFormattedOutput().some((m) => m.includes('buffered line'))).toBe(true);
+      expect(stdoutSpy).not.toHaveBeenCalled();
+    } finally {
+      setFormattedOutputMode(false);
+      stdoutSpy.mockRestore();
     }
   });
 });

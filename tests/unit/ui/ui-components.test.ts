@@ -371,4 +371,25 @@ describe('withSpinner: non-TTY output', () => {
       writeSpy.mockRestore();
     }
   });
+
+  it('writes to the provided stream (stderr) instead of stdout', async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      stdout.push(String(s));
+      return true;
+    });
+    const stderrSpy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      stderr.push(String(s));
+      return true;
+    });
+    try {
+      await withSpinner('On stderr', () => Promise.resolve('done'), 'stderr');
+      expect(stderr.some((s) => s.includes('On stderr'))).toBe(true);
+      expect(stdout.join('')).not.toContain('On stderr');
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+  });
 });

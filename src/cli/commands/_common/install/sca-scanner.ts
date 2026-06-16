@@ -44,9 +44,11 @@ export const SCA_SCANNER_SPEC: BinarySpec = {
 };
 
 export async function installScaScannerBinary(): Promise<string> {
-  const { binaryPath, freshlyInstalled } = await installBinary(SCA_SCANNER_SPEC);
+  const { binaryPath, freshlyInstalled } = await installBinary(SCA_SCANNER_SPEC, {
+    channel: 'stderr',
+  });
   if (freshlyInstalled) {
-    discreetSuccess(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`);
+    discreetSuccess(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`, 'stderr');
   }
   return binaryPath;
 }

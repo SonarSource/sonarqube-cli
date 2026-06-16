@@ -23,6 +23,7 @@ import { isAbsolute, join } from 'node:path';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import logger from '../../../../lib/logger';
+import { withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { formatSpawnOutput } from '../../_common/install/install-utils';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
@@ -78,7 +79,11 @@ async function scanManifestsForSecrets(
 
   // Spawn error propagate so the callers decide what it means
   // (the command aborts; the hook's wrapper turns it into a non-blocking warning).
-  const result = await runSecretsBinary(binaryPath, files, auth);
+  const result = await withSpinner(
+    'Scanning manifests for secrets',
+    () => runSecretsBinary(binaryPath, files, auth),
+    'stderr',
+  );
   const exitCode = result.exitCode ?? 1;
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
