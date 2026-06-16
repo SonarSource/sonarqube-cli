@@ -21,7 +21,7 @@
  */
 
 /**
- * Generate cli.sonarqube.com data files from the command tree.
+ * Generate SonarQube CLI data files from the command tree.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';

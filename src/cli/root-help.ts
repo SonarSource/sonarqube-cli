@@ -34,7 +34,7 @@ const BANNER_ART = [
 ] as const;
 const ROOT_HELP_OPTION = '--help';
 const ROOT_VERSION_OPTION = '--version';
-const ROOT_DOCUMENTATION_URL = 'https://cli.sonarqube.com';
+const ROOT_DOCUMENTATION_URL = 'https://sonarsource.com/sonarqube/cli';
 const ROOT_FEEDBACK_URL = 'https://forms.gle/jrGic3awT5t5vf7V9';
 const QUICKSTART_STEP_AUTH = 'sonar auth login';
 const QUICKSTART_STEP_ANALYZE = 'sonar analyze --file <file>';

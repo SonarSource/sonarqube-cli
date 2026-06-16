@@ -67,7 +67,7 @@ function getExpectedRootHelp(): string {
     '    -h, --help     Display help for a specific command',
     '    -v, --version  Show current version',
     '',
-    '  Read documentation: https://cli.sonarqube.com',
+    '  Read documentation: https://sonarsource.com/sonarqube/cli',
     '  Share feedback:     https://forms.gle/jrGic3awT5t5vf7V9',
     '',
   ].join('\n');
