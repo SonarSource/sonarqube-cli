@@ -36,6 +36,13 @@ export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
 export interface ContextAugmentationSkillFeatureOptions {
   agentDisplayName: string;
   targetPath: (context: IntegrationContext) => string;
+  /**
+   * Optional transform applied to the rendered skill content before it is
+   * written. Used by Cursor to wrap the skill in `.mdc` rule front-matter
+   * (`alwaysApply: true`) so the rule is injected into every session. When
+   * omitted the raw `print-skill` output is written as-is (Claude/Codex/Copilot).
+   */
+  wrapSkillContent?: (skill: string, context: IntegrationContext) => string;
 }
 
 export function createContextAugmentationFeature<
@@ -53,12 +60,14 @@ export function createContextAugmentationFeature<
         displayName: `${options.agentDisplayName} Context Augmentation skill file`,
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         targetPath: options.targetPath,
-        content: async (context) =>
-          printContextAugmentationSkill({
+        content: async (context) => {
+          const skill = await printContextAugmentationSkill({
             binaryPath: resolveContextAugmentationBinaryPath(context),
             projectRoot: context.targetRoot,
             scaEnabled: context.attrs?.scaEnabled === true,
-          }),
+          });
+          return options.wrapSkillContent ? options.wrapSkillContent(skill, context) : skill;
+        },
       }),
     ],
     operations: [

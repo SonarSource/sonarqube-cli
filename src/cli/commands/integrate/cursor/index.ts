@@ -27,6 +27,10 @@ import {
   displayAgentIntegratePrelude,
   resolveIntegrateInstallTarget,
 } from '../_common/agent-integrate-prelude';
+import {
+  buildContextAugmentationAttrs,
+  resolveContextAugmentationSetup,
+} from '../_common/context-augmentation';
 import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -62,9 +66,20 @@ export async function integrateCursor(
     ctx.project.rootDir,
   );
 
+  // Context Augmentation is project-scoped and entitlement-gated.
+  // resolveContextAugmentationSetup owns the user-facing skip messaging.
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth,
+        projectKey: ctx.projectKey,
+        isGlobal: ctx.isGlobal,
+      });
+
   const integrationOptions = {
     ...options,
     installSqaaInstructions,
+    installContextAugmentation: contextAugmentation !== null,
   } satisfies CursorIntegrationOptions;
 
   await installIntegration({
@@ -75,7 +90,16 @@ export async function integrateCursor(
     scope: installScope,
     auth,
     nonInteractive: options.nonInteractive,
-    attrs: buildAttrs({ projectKey: ctx.projectKey }),
+    attrs: {
+      ...buildAttrs({ projectKey: ctx.projectKey }),
+      ...(contextAugmentation
+        ? buildContextAugmentationAttrs(
+            ctx.serverUrl,
+            ctx.organization,
+            contextAugmentation.scaEnabled,
+          )
+        : {}),
+    },
   });
 }
 

@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import { resolveAgentHookCommand } from '../_common/hooks';
 import { buildSqaaSectionBody } from '../_common/instructions-templates';
@@ -44,6 +45,7 @@ const SONAR_SECRETS_MARKER = 'sonar-secrets';
 const BEFORE_SUBMIT_PROMPT_EVENT = 'beforeSubmitPrompt';
 const RULES_DIR = 'rules';
 const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
+const CAG_RULE_FILE = 'sonar-context-augmentation.mdc';
 // Stable string always present in the rendered rule body — used by the
 // wholeFile remover so teardown only deletes the file we manage.
 const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
@@ -57,6 +59,7 @@ export interface CursorIntegrationOptions extends IntegrateAgentOptions {
    * delivered as an always-applied rule rather than a hook (project scope).
    */
   installSqaaInstructions?: boolean;
+  installContextAugmentation?: boolean;
 }
 
 function resolveCursorMcpConfigPath(context: IntegrationContext): string {
@@ -88,6 +91,19 @@ function resolveCursorSqaaRulePath(context: IntegrationContext): string {
 function buildCursorSqaaRule(context: IntegrationContext): string {
   const projectKey = getRequiredStringAttr(context, 'projectKey', cursorIntegration.displayName);
   return `---\nalwaysApply: true\n---\n\n${buildSqaaSectionBody(projectKey)}`;
+}
+
+function resolveCursorCagRulePath(context: IntegrationContext): string {
+  return join(context.targetRoot, CURSOR_CONFIG_DIR, RULES_DIR, CAG_RULE_FILE);
+}
+
+/**
+ * Wrap the rendered Context Augmentation skill in Cursor `.mdc` rule
+ * front-matter. `alwaysApply: true` makes Cursor inject the skill into every
+ * session without the user attaching it manually.
+ */
+function wrapCursorCagRule(skill: string): string {
+  return `---\nalwaysApply: true\n---\n\n${skill}`;
 }
 
 export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions> = {
@@ -170,5 +186,10 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
         }),
       ],
     },
+    createContextAugmentationFeature<CursorIntegrationOptions>({
+      agentDisplayName: 'Cursor',
+      targetPath: resolveCursorCagRulePath,
+      wrapSkillContent: wrapCursorCagRule,
+    }),
   ],
 };
