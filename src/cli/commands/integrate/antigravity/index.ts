@@ -27,7 +27,6 @@ import {
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
 import { createIntegrationRegistry, installIntegration } from '../_common/registry';
-import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   ANTIGRAVITY_INTEGRATION_ID,
@@ -56,27 +55,17 @@ export async function integrateAntigravity(
         isGlobal: ctx.isGlobal,
       });
 
-  const sqaaEntitled = await resolveSqaaSetup({
-    serverURL: ctx.serverUrl,
-    token: ctx.token,
-    organization: ctx.organization,
-    isGlobal: ctx.isGlobal,
-  });
-  const installSqaaHook = sqaaEntitled && ctx.projectKey !== undefined;
-
   const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget(
     ctx.isGlobal,
     ctx.project.rootDir,
   );
-  const existingGlobalHookPath = ctx.isGlobal ? undefined : detectGlobalSecretsHook();
+  const existingGlobalHookPath = ctx.isGlobal ? undefined : await detectGlobalSecretsHook();
   const globalSecretsHookExists = existingGlobalHookPath !== undefined;
 
   const integrationOptions: AntigravityIntegrationOptions = {
     ...options,
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists,
-    installSqaaHook,
-    sqaaEntitled,
     installContextAugmentation: contextAugmentation !== null,
   };
 

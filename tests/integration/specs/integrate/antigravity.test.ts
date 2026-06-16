@@ -24,8 +24,21 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { TestHarness } from '../../harness';
-import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
+import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
+import {
+  type AntigravityHooksJson,
+  findAntigravityFeature,
+  GLOBAL_HOOK_SCRIPT_PATH,
+  GLOBAL_HOOKS_JSON_PATH,
+  GLOBAL_INSTRUCTIONS_PATH,
+  PROJECT_HOOK_SCRIPT_PATH,
+  PROJECT_HOOKS_JSON_PATH,
+  PROJECT_INSTRUCTIONS_PATH,
+  writeDisabledGlobalHook,
+  writeExistingGlobalHook,
+  writeExistingGlobalInstructions,
+  writeOrphanedGlobalHookConfig,
+} from './antigravity-test-helpers';
 
 const TEST_PROJECT = 'my-project';
 
@@ -45,23 +58,50 @@ describe('integrate antigravity', () => {
 
   describe('project-level install (default)', () => {
     it(
-      'completes successfully and records integration state with connection metadata',
+      'writes hook script, hooks.json, and prompt-secrets instructions',
       async () => {
         const result = await harness.run(
           `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
         );
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Setup complete!');
+        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
+        expect(harness.cwd.exists(...PROJECT_HOOKS_JSON_PATH)).toBe(true);
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
 
-        const integration = getInstalledIntegration(harness, 'antigravity-cli');
-        expect(integration).toBeDefined();
+        const hooksJson = harness.cwd
+          .file(...PROJECT_HOOKS_JSON_PATH)
+          .asJson() as AntigravityHooksJson;
+        const command = normalizePath(
+          hooksJson['sonar-secrets']?.PreToolUse?.[0]?.hooks?.[0]?.command ?? '',
+        );
+        expect(command.startsWith('/')).toBe(false);
+        expect(command.startsWith(IS_WINDOWS ? 'powershell' : 'bash')).toBe(true);
+        expect(command).toContain('.agents/sonar/hooks');
+        expect(command).toMatch(IS_WINDOWS ? /powershell -NoProfile -File "/ : /bash "/);
+        expect(hooksJson['sonar-secrets']?.enabled).toBe(true);
+        expect(hooksJson['sonar-secrets']?.PreToolUse?.[0]?.matcher).toBe('view_file');
 
-        const setupFeature = findInstalledFeature(harness, 'antigravity-cli', 'integration-setup');
-        expect(setupFeature).toBeDefined();
-        expect(setupFeature?.scope).toBe('project');
-        expect(setupFeature?.attrs?.projectKey).toBe(TEST_PROJECT);
-        expect(setupFeature?.attrs?.serverUrl).toBeTruthy();
+        const scriptBody = harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).asText();
+        expect(scriptBody).toContain('sonar hook antigravity-pre-tool-use');
+
+        const instructions = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(instructions).toContain('# SonarQube secrets scanning for prompts protocol');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'records sonar-secrets-hooks and prompt-secrets-instructions in state',
+      async () => {
+        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`);
+
+        const secretsFeature = findAntigravityFeature(harness, 'sonar-secrets-hooks');
+        expect(secretsFeature?.scope).toBe('project');
+        expect(secretsFeature?.attrs?.projectKey).toBe(TEST_PROJECT);
+
+        const instructionsFeature = findAntigravityFeature(harness, 'prompt-secrets-instructions');
+        expect(instructionsFeature?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
@@ -75,11 +115,34 @@ describe('integrate antigravity', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Setup complete!');
-        const integration = getInstalledIntegration(harness, 'antigravity-cli');
-        expect(
-          integration?.features.filter((f) => f.featureId === 'integration-setup'),
-        ).toHaveLength(1);
+        const instructions = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        const headingCount =
+          instructions.split('# SonarQube secrets scanning for prompts protocol').length - 1;
+        expect(headingCount).toBe(1);
+      },
+      { timeout: 60000 },
+    );
+
+    it(
+      'preserves unrelated hooks.json blocks',
+      async () => {
+        harness.cwd.writeFile(
+          '.agents/hooks.json',
+          JSON.stringify({
+            'other-hook': {
+              PreToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }],
+            },
+          }),
+        );
+
+        const result = await harness.run('integrate antigravity --non-interactive');
+        expect(result.exitCode).toBe(0);
+
+        const hooksJson = harness.cwd
+          .file(...PROJECT_HOOKS_JSON_PATH)
+          .asJson() as AntigravityHooksJson;
+        expect(hooksJson['other-hook']).toBeDefined();
+        expect(hooksJson['sonar-secrets']).toBeDefined();
       },
       { timeout: 30000 },
     );
@@ -98,22 +161,162 @@ describe('integrate antigravity', () => {
     );
   });
 
-  describe('global install', () => {
+  describe('global install (-g)', () => {
     it(
-      'targets the Antigravity global config directory',
+      'writes hook script, hooks.json, and instructions under ~/.gemini/config',
       async () => {
         const result = await harness.run('integrate antigravity -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
+        expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(true);
+        expect(harness.userHome.exists(...GLOBAL_HOOKS_JSON_PATH)).toBe(true);
+        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(true);
+
+        const json = harness.userHome
+          .file(...GLOBAL_HOOKS_JSON_PATH)
+          .asJson() as AntigravityHooksJson;
+        const command = normalizePath(
+          json['sonar-secrets']?.PreToolUse?.[0]?.hooks?.[0]?.command ?? '',
+        );
+        const homePathNorm = normalizePath(harness.userHome.path);
+        expect(command.startsWith(IS_WINDOWS ? 'powershell' : 'bash')).toBe(true);
+        expect(command.includes(homePathNorm)).toBe(true);
+        expect(command).toContain('.gemini/config/sonar/hooks');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'records secrets hooks and instructions as global features',
+      async () => {
+        await harness.run('integrate antigravity -g --non-interactive');
+
+        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
+        expect(
+          findAntigravityFeature(harness, 'prompt-secrets-instructions', 'global'),
+        ).toBeDefined();
 
         const expectedGlobalRoot = join(harness.userHome.path, '.gemini', 'config');
-        const setupFeature = findInstalledFeature(
-          harness,
-          'antigravity-cli',
-          'integration-setup',
-          'global',
+        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks', 'global')?.targetRoot).toBe(
+          expectedGlobalRoot,
         );
-        expect(setupFeature?.targetRoot).toBe(expectedGlobalRoot);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'preserves pre-existing global instructions and appends the managed prompt-secrets block',
+      async () => {
+        harness.userHome.writeFile(
+          join('.gemini', 'config', 'instructions', 'sonarqube.instructions.md'),
+          '# pre-existing\n',
+        );
+
+        const result = await harness.run('integrate antigravity -g --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# pre-existing');
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+      },
+      { timeout: 30000 },
+    );
+  });
+
+  describe('project-level install when global Antigravity instructions already exist', () => {
+    it(
+      'writes the project-level instructions file and leaves the global file untouched',
+      async () => {
+        writeExistingGlobalInstructions(harness);
+        const before = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+
+        const result = await harness.run('integrate antigravity --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
+        expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).toContain(
+          '# SonarQube secrets scanning for prompts protocol',
+        );
+        expect(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText()).toBe(before);
+        expect(findAntigravityFeature(harness, 'prompt-secrets-instructions')?.scope).toBe(
+          'project',
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'auto-skips the hook (with message) and asks a custom question when a global hook and global instructions both exist',
+      async () => {
+        writeExistingGlobalHook(harness);
+        writeExistingGlobalInstructions(harness);
+
+        const result = await harness.run('integrate antigravity --skip-context', {
+          stdinChunks: ['\r', '\r'],
+        });
+
+        expect(result.exitCode).toBe(0);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('global secrets scanning hook');
+        expect(output).not.toContain('Install secret scanning hooks?');
+        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
+        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+        expect(output).toContain(
+          'Global Antigravity instructions already exist. Do you also want to create a project-local copy for this repo?',
+        );
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
+        expect(findAntigravityFeature(harness, 'prompt-secrets-instructions')?.scope).toBe(
+          'project',
+        );
+      },
+      { timeout: 30000 },
+    );
+  });
+
+  describe('project install when a global secrets hook already exists', () => {
+    it(
+      'skips project-level secrets hooks but still installs prompt instructions',
+      async () => {
+        writeExistingGlobalHook(harness);
+
+        const result = await harness.run('integrate antigravity --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('global secrets scanning hook');
+        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
+        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
+        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+        expect(findAntigravityFeature(harness, 'prompt-secrets-instructions')).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'installs project-level secrets hooks when the global block is disabled',
+      async () => {
+        writeDisabledGlobalHook(harness);
+
+        const result = await harness.run('integrate antigravity --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
+        expect(harness.cwd.exists(...PROJECT_HOOKS_JSON_PATH)).toBe(true);
+        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'installs project-level secrets hooks when global hooks.json references a missing script',
+      async () => {
+        writeOrphanedGlobalHookConfig(harness);
+
+        const result = await harness.run('integrate antigravity --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('backing script is missing');
+        expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
+        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
       },
       { timeout: 30000 },
     );
