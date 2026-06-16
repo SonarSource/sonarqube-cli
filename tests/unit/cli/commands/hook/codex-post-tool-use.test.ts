@@ -62,7 +62,7 @@ describe('codexPostToolUse', () => {
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.hookSpecificOutput.hookEventName).toBe('PostToolUse');
-    expect(output.hookSpecificOutput.additionalContext).toContain('no issues');
+    expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
   });
 
   it('surfaces per-file analysis errors when totalIssues is zero', async () => {

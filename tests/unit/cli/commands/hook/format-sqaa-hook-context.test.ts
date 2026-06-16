@@ -92,7 +92,7 @@ describe('formatSqaaJsonReportForHook', () => {
       summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
     });
 
-    expect(text).toContain('no issues found');
+    expect(text).toContain('No issues found');
     expect(text).toContain('Excluded 1 file(s)');
     expect(text).toContain('large.bin');
     expect(text).toContain('oversized');

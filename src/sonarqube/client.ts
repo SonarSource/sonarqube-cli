@@ -25,7 +25,12 @@ import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import logger from '../lib/logger';
 import { print } from '../ui';
-import { RateLimitError, ServiceUnavailableError } from './errors';
+import {
+  RateLimitError,
+  RequestPayloadTooLargeError,
+  type RequestPayloadTooLargeMeta,
+  ServiceUnavailableError,
+} from './errors';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url';
 import type { SettingsValue } from './settings-value';
 
@@ -35,6 +40,7 @@ const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
 const REVOKE_USER_TOKEN_TIMEOUT_MS = 10_000;
 const HTTP_STATUS_FORBIDDEN = 403;
 const HTTP_STATUS_NOT_FOUND = 404;
+const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
 const HTTP_STATUS_SERVICE_UNAVAILABLE = 503;
 
@@ -83,6 +89,9 @@ export class SonarQubeClient {
     }
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
       throw new ServiceUnavailableError();
+    }
+    if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
+      throw await parseRequestPayloadTooLargeError(response);
     }
 
     if (method === 'GET') {
@@ -647,6 +656,28 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
     return { ...headers, Authorization: 'REDACTED' };
   }
   return headers;
+}
+
+async function parseRequestPayloadTooLargeError(
+  response: Response,
+): Promise<RequestPayloadTooLargeError> {
+  const fallback = new RequestPayloadTooLargeError(
+    `SonarQube API error: ${response.status} ${response.statusText}`,
+  );
+  try {
+    const body = (await response.json()) as {
+      message?: string;
+      code?: string;
+      meta?: RequestPayloadTooLargeMeta;
+    };
+    const message =
+      body.message ?? `SonarQube API error: ${response.status} ${response.statusText}`;
+    const code =
+      body.code === 'REQUEST_TOO_LARGE' || body.code === 'TOO_MANY_FILES' ? body.code : undefined;
+    return new RequestPayloadTooLargeError(message, code, body.meta);
+  } catch {
+    return fallback;
+  }
 }
 
 export interface AgentJobRequest {

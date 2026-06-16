@@ -24,12 +24,12 @@ import { readFileSync } from 'node:fs';
 
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../../lib/fs-utils';
-import type { SqaaIssue } from '../../../sonarqube/client';
+import type { SqaaAnalysisFile, SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { ServiceUnavailableError } from '../../../sonarqube/errors.js';
-import { blank, text } from '../../../ui';
+import { RequestPayloadTooLargeError, ServiceUnavailableError } from '../../../sonarqube/errors.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import type { CloudAuth } from './sqaa-auth';
+import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking';
 import { displaySqaaResults } from './sqaa-display';
 
 /** Maximum number of retries on 503 responses. */
@@ -37,6 +37,9 @@ export const MAX_503_RETRIES = 3;
 
 /** Interval for the live countdown tick in milliseconds. */
 const COUNTDOWN_TICK_MS = 1000;
+
+const SQAA_FAILURE_HINT =
+  'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.';
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,6 +71,43 @@ export function toRelativePosixPath(file: string, base: string = process.cwd()):
   return rel;
 }
 
+function isRetryableSqaaError(err: unknown, includePayloadTooLarge: boolean): boolean {
+  if (err instanceof ServiceUnavailableError) {
+    return true;
+  }
+  return includePayloadTooLarge && err instanceof RequestPayloadTooLargeError;
+}
+
+async function postSqaaAnalysis(
+  auth: CloudAuth,
+  projectKey: string,
+  branch: string | undefined,
+  files: SqaaAnalysisFile[],
+  options: { analysisDepth?: 'DEEP'; includePayloadTooLarge?: boolean } = {},
+): Promise<SqaaChunkResponse> {
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  try {
+    return await client.createAnalysis({
+      organizationKey: auth.orgKey,
+      projectKey,
+      ...(branch ? { branchName: branch } : {}),
+      ...(options.analysisDepth ? { analysisDepth: options.analysisDepth } : {}),
+      files,
+    });
+  } catch (err) {
+    if (isRetryableSqaaError(err, options.includePayloadTooLarge ?? false)) {
+      throw err;
+    }
+    throw new CommandFailedError(
+      `SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`,
+      {
+        cause: err,
+        remediationHint: SQAA_FAILURE_HINT,
+      },
+    );
+  }
+}
+
 /**
  * Fetch the SQAA API response for a single file. Does not print anything.
  * Throws ServiceUnavailableError on 503 (caller handles retry), CommandFailedError on other failures.
@@ -85,45 +125,17 @@ export async function fetchSqaaResponse(
   pathBase?: string,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
   const filePath = toRelativePosixPath(file, pathBase);
-  const client = new SonarQubeClient(auth.serverUrl, auth.token);
-  try {
-    return await client.createAnalysis({
-      organizationKey: auth.orgKey,
-      projectKey,
-      ...(branch ? { branchName: branch } : {}),
-      files: [{ path: filePath, content: fileContent }],
-    });
-  } catch (err) {
-    if (err instanceof ServiceUnavailableError) {
-      throw err;
-    }
-    throw new CommandFailedError(
-      `SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`,
-      {
-        cause: err,
-        remediationHint:
-          'Check your SonarQube Cloud authentication, project key, and network connectivity, then retry.',
-      },
-    );
-  }
+  return postSqaaAnalysis(auth, projectKey, branch, [{ path: filePath, content: fileContent }]);
 }
 
-/**
- * Calls fetchSqaaResponse with a 503-retry loop.
- */
-export async function fetchWithRetry(
-  auth: CloudAuth,
-  projectKey: string,
-  file: string,
-  fileContent: string,
-  branch: string | undefined,
+async function with503Retry<T>(
+  fetch: () => Promise<T>,
   onRetry?: (attempt: number) => Promise<void>,
-  pathBase?: string,
-): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
+): Promise<T> {
   let lastServiceError: ServiceUnavailableError | undefined;
   for (let attempt = 1; attempt <= MAX_503_RETRIES + 1; attempt++) {
     try {
-      return await fetchSqaaResponse(auth, projectKey, file, fileContent, branch, pathBase);
+      return await fetch();
     } catch (err) {
       if (!(err instanceof ServiceUnavailableError)) {
         throw err;
@@ -138,6 +150,201 @@ export async function fetchWithRetry(
     `SonarQube Agentic Analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
     { cause: lastServiceError },
   );
+}
+
+/**
+ * Calls fetchSqaaResponse with a 503-retry loop.
+ */
+export async function fetchWithRetry(
+  auth: CloudAuth,
+  projectKey: string,
+  file: string,
+  fileContent: string,
+  branch: string | undefined,
+  onRetry?: (attempt: number) => Promise<void>,
+  pathBase?: string,
+): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
+  return with503Retry(
+    () => fetchSqaaResponse(auth, projectKey, file, fileContent, branch, pathBase),
+    onRetry,
+  );
+}
+
+export type SqaaChunkResponse = {
+  issues: SqaaIssue[];
+  errors?: Array<{ code: string; message: string }> | null;
+};
+
+export type SqaaChunkPart = {
+  response: SqaaChunkResponse;
+  files: SqaaChunkFile[];
+};
+
+export type SqaaChunkFetchResult = {
+  parts: SqaaChunkPart[];
+  failedFiles: SqaaChunkFile[];
+  groupErrors: SqaaChunkGroupError[];
+};
+
+export type SqaaChunkGroupError = {
+  files: SqaaChunkFile[];
+  error: Error;
+};
+
+function packLimitsForRequest(
+  auth: CloudAuth,
+  projectKey: string,
+  branch: string | undefined,
+  overrides: { maxRequestBytes?: number; maxFilesPerRequest?: number } = {},
+) {
+  return {
+    ...overrides,
+    organizationKey: auth.orgKey,
+    projectKey,
+    ...(branch ? { branchName: branch } : {}),
+  };
+}
+
+function packLimitsFrom413Error(
+  auth: CloudAuth,
+  projectKey: string,
+  branch: string | undefined,
+  err: RequestPayloadTooLargeError,
+) {
+  return packLimitsForRequest(auth, projectKey, branch, {
+    ...(err.meta?.maxRequestSize == null ? {} : { maxRequestBytes: err.meta.maxRequestSize }),
+    ...(err.meta?.maxFiles == null ? {} : { maxFilesPerRequest: err.meta.maxFiles }),
+  });
+}
+
+/**
+ * Fetch the SQAA API response for a multi-file chunk with `analysisDepth: DEEP`.
+ * Throws ServiceUnavailableError on 503, RequestPayloadTooLargeError on 413.
+ */
+export async function fetchChunkResponse(
+  auth: CloudAuth,
+  projectKey: string,
+  files: SqaaAnalysisFile[],
+  branch: string | undefined,
+): Promise<SqaaChunkResponse> {
+  return postSqaaAnalysis(auth, projectKey, branch, files, {
+    analysisDepth: 'DEEP',
+    includePayloadTooLarge: true,
+  });
+}
+
+/**
+ * Calls fetchChunkResponse with a 503-retry loop.
+ */
+export async function fetchChunkWithRetry(
+  auth: CloudAuth,
+  projectKey: string,
+  files: SqaaAnalysisFile[],
+  branch: string | undefined,
+  onRetry?: (attempt: number) => Promise<void>,
+): Promise<SqaaChunkResponse> {
+  return with503Retry(() => fetchChunkResponse(auth, projectKey, files, branch), onRetry);
+}
+
+function toAnalysisFiles(chunkFiles: SqaaChunkFile[]): SqaaAnalysisFile[] {
+  return chunkFiles.map((f) => ({ path: f.relativePath, content: f.content }));
+}
+
+function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): SqaaChunkFile[][] {
+  const packed = packFilesIntoChunks(files, limits);
+  if (packed.length > 1) {
+    return packed.map((chunk) => chunk.files);
+  }
+  const mid = Math.ceil(files.length / 2);
+  return [files.slice(0, mid), files.slice(mid)];
+}
+
+/** 503 after retry exhaustion is wrapped in CommandFailedError; both must fail-fast. */
+function isTransientChunkFetchError(err: unknown): boolean {
+  if (err instanceof ServiceUnavailableError) {
+    return true;
+  }
+  return err instanceof CommandFailedError && err.cause instanceof ServiceUnavailableError;
+}
+
+async function fetchSplitParts(
+  auth: CloudAuth,
+  projectKey: string,
+  partGroups: SqaaChunkFile[][],
+  branch: string | undefined,
+  onRetry?: (attempt: number) => Promise<void>,
+  onPayloadSplit?: () => void,
+): Promise<SqaaChunkFetchResult> {
+  const parts: SqaaChunkPart[] = [];
+  const failedFiles: SqaaChunkFile[] = [];
+  const groupErrors: SqaaChunkGroupError[] = [];
+  for (const group of partGroups) {
+    try {
+      const result = await fetchChunkWith413Split(
+        auth,
+        projectKey,
+        group,
+        branch,
+        onRetry,
+        onPayloadSplit,
+      );
+      parts.push(...result.parts);
+      failedFiles.push(...result.failedFiles);
+      groupErrors.push(...result.groupErrors);
+    } catch (err) {
+      if (isTransientChunkFetchError(err)) {
+        throw err;
+      }
+      groupErrors.push({ files: group, error: err as Error });
+    }
+  }
+  return { parts, failedFiles, groupErrors };
+}
+
+/**
+ * Send a chunk with 503 retry; on 413 split the chunk and retry sub-chunks sequentially.
+ * Returns partial successes when only some sub-chunks fail after splitting.
+ */
+export async function fetchChunkWith413Split(
+  auth: CloudAuth,
+  projectKey: string,
+  chunkFiles: SqaaChunkFile[],
+  branch: string | undefined,
+  onRetry?: (attempt: number) => Promise<void>,
+  onPayloadSplit?: () => void,
+): Promise<SqaaChunkFetchResult> {
+  try {
+    const response = await fetchChunkWithRetry(
+      auth,
+      projectKey,
+      toAnalysisFiles(chunkFiles),
+      branch,
+      onRetry,
+    );
+    return {
+      parts: [{ response, files: chunkFiles }],
+      failedFiles: [],
+      groupErrors: [],
+    };
+  } catch (err) {
+    if (!(err instanceof RequestPayloadTooLargeError)) {
+      throw err;
+    }
+    if (chunkFiles.length === 1) {
+      return { parts: [], failedFiles: chunkFiles, groupErrors: [] };
+    }
+
+    onPayloadSplit?.();
+
+    return fetchSplitParts(
+      auth,
+      projectKey,
+      splitChunkFiles(chunkFiles, packLimitsFrom413Error(auth, projectKey, branch, err)),
+      branch,
+      onRetry,
+      onPayloadSplit,
+    );
+  }
 }
 
 export async function waitBeforeRetry(
@@ -188,8 +395,6 @@ export async function callSqaaApiAndDisplay(
   fileContent: string,
   branch: string | undefined,
 ): Promise<number> {
-  blank();
-  text('Running SonarQube Agentic Analysis...');
   const response = await fetchWithRetry(auth, projectKey, file, fileContent, branch);
-  return displaySqaaResults(response.issues, response.errors);
+  return displaySqaaResults(response.issues, response.errors, toRelativePosixPath(file));
 }

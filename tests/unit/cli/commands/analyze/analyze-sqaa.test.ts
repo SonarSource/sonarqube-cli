@@ -215,6 +215,17 @@ describe('analyzeSqaa: API call and result display', () => {
       'SonarQube Agentic Analysis failed',
     );
   });
+
+  it('renders file row and summary footer for a clean single-file result', async () => {
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+
+    const lines = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(lines.some((line) => line.includes('src/index.ts'))).toBe(true);
+    expect(lines.some((line) => line.includes('No issues found'))).toBe(true);
+    expect(lines.at(-1)).toContain('1 files analyzed');
+  });
 });
 
 describe('analyzeSqaa: path normalization', () => {

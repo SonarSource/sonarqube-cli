@@ -76,7 +76,7 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
       files: [{ path: normalizedPath, content: fileContent }],
     });
 
-    const text = formatSqaaIssuesForHook(response.issues, response.errors);
+    const text = formatSqaaIssuesForHook(response.issues, response.errors, normalizedPath);
     writePostToolUseHookOutput(text);
   } catch (err) {
     logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
