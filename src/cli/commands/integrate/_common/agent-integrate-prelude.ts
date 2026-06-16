@@ -24,11 +24,17 @@ import { homedir } from 'node:os';
 
 import { isSonarQubeCloud, type ResolvedAuth } from '../../../../lib/auth-resolver';
 import { type DiscoveredProject, discoverProject } from '../../../../lib/project-workspace';
-import type { IntegrationScope } from '../../../../lib/state';
+import type { IntegrationScope, IntegrationStateAttribute } from '../../../../lib/state';
 import { intro, warn, withSpinner } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
+import { supportedIntegrations } from '../index.js';
+import {
+  buildContextAugmentationAttrs,
+  resolveContextAugmentationSetup,
+} from './context-augmentation';
 import { isGlobalIntegrateScope, resolveIntegrateScope } from './integrate-scope';
 import { printAgentPreflightSummary } from './preflight-summary';
+import { installIntegration } from './registry';
 import type { IntegrateAgentOptions } from './types';
 
 export type AgentIntegrateSubcommand = 'antigravity' | 'claude' | 'codex' | 'copilot' | 'cursor';
@@ -156,4 +162,64 @@ export function resolveIntegrateInstallTarget(
     installRoot: isGlobal ? homedir() : projectRoot,
     installScope: isGlobal ? 'global' : 'project',
   };
+}
+
+export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptions> {
+  integrationId: string;
+  context: AgentIntegrateContext;
+  options: IntegrateAgentOptions;
+  auth: ResolvedAuth;
+  /**
+   * Agent-specific feature flags merged into the integration options (e.g. the
+   * SQAA flag, whose name differs per agent). `installContextAugmentation` is
+   * derived here and must not be passed in.
+   */
+  featureOptions?: Partial<TOptions>;
+}
+
+/**
+ * Shared install tail for agent integrations: resolves Context Augmentation
+ * (honouring `--skip-context`), assembles the integration options and recorded
+ * state attrs, and runs `installIntegration`. Keeps each agent handler focused
+ * on its agent-specific setup (prompts, scope warnings, SQAA option name).
+ */
+export async function finalizeAgentInstall<TOptions extends IntegrateAgentOptions>(
+  params: FinalizeAgentInstallParams<TOptions>,
+): Promise<void> {
+  const { context, options, auth } = params;
+  const contextAugmentation = options.skipContext
+    ? null
+    : await resolveContextAugmentationSetup({
+        auth,
+        projectKey: context.projectKey,
+        isGlobal: context.isGlobal,
+      });
+  const { installRoot, installScope } = resolveIntegrateInstallTarget(
+    context.isGlobal,
+    context.project.rootDir,
+  );
+  const attrs: Record<string, IntegrationStateAttribute> = {
+    projectKey: context.projectKey ?? null,
+    ...(contextAugmentation
+      ? buildContextAugmentationAttrs(
+          context.serverUrl,
+          context.organization,
+          contextAugmentation.scaEnabled,
+        )
+      : {}),
+  };
+  await installIntegration({
+    registry: supportedIntegrations,
+    integrationId: params.integrationId,
+    options: {
+      ...options,
+      ...params.featureOptions,
+      installContextAugmentation: contextAugmentation !== null,
+    },
+    targetRoot: installRoot,
+    scope: installScope,
+    auth,
+    nonInteractive: options.nonInteractive,
+    attrs,
+  });
 }

@@ -21,19 +21,12 @@
 // Integrate command — setup SonarQube integration for Codex.
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import type { IntegrationStateAttribute } from '../../../../lib/state';
 import {
   displayAgentIntegratePrelude,
-  resolveIntegrateInstallTarget,
+  finalizeAgentInstall,
 } from '../_common/agent-integrate-prelude';
-import {
-  buildContextAugmentationAttrs,
-  resolveContextAugmentationSetup,
-} from '../_common/context-augmentation';
-import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { supportedIntegrations } from '../index.js';
 import { CODEX_INTEGRATION_ID, type CodexIntegrationOptions } from './declaration';
 
 export async function integrateCodex(
@@ -51,50 +44,12 @@ export async function integrateCodex(
     organization: ctx.organization,
     isGlobal: ctx.isGlobal,
   });
-  const includeSqaa = sqaaEligible && Boolean(ctx.projectKey);
 
-  const { installRoot, installScope } = resolveIntegrateInstallTarget(
-    ctx.isGlobal,
-    ctx.project.rootDir,
-  );
-  const contextAugmentation = options.skipContext
-    ? null
-    : await resolveContextAugmentationSetup({
-        auth,
-        projectKey: ctx.projectKey,
-        isGlobal: ctx.isGlobal,
-      });
-  const integrationOptions = {
-    ...options,
-    installSqaaHook: includeSqaa,
-    installContextAugmentation: contextAugmentation !== null,
-  } satisfies CodexIntegrationOptions;
-
-  await installIntegration({
-    registry: supportedIntegrations,
+  await finalizeAgentInstall<CodexIntegrationOptions>({
     integrationId: CODEX_INTEGRATION_ID,
-    options: integrationOptions,
-    targetRoot: installRoot,
-    scope: installScope,
+    context: ctx,
+    options,
     auth,
-    nonInteractive: options.nonInteractive,
-    attrs: {
-      ...buildAttrs({ projectKey: ctx.projectKey }),
-      ...(contextAugmentation
-        ? buildContextAugmentationAttrs(
-            ctx.serverUrl,
-            ctx.organization,
-            contextAugmentation.scaEnabled,
-          )
-        : {}),
-    },
+    featureOptions: { installSqaaHook: sqaaEligible && Boolean(ctx.projectKey) },
   });
-}
-
-function buildAttrs(args: {
-  projectKey: string | undefined;
-}): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: args.projectKey ?? null,
-  };
 }

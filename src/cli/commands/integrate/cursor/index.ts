@@ -21,20 +21,13 @@
 // Integrate command — setup SonarQube integration for Cursor.
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { warn } from '../../../../ui';
 import {
   displayAgentIntegratePrelude,
-  resolveIntegrateInstallTarget,
+  finalizeAgentInstall,
 } from '../_common/agent-integrate-prelude';
-import {
-  buildContextAugmentationAttrs,
-  resolveContextAugmentationSetup,
-} from '../_common/context-augmentation';
-import { installIntegration } from '../_common/registry';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { supportedIntegrations } from '../index.js';
 import { CURSOR_INTEGRATION_ID, type CursorIntegrationOptions } from './declaration';
 
 export async function integrateCursor(
@@ -50,63 +43,22 @@ export async function integrateCursor(
   }
 
   // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing
-  // messaging (promotion message when not entitled, "not supported with
-  // --global" notice on an entitled global install); its result decides
-  // whether the always-applied SonarQube Agentic Analysis rule is written.
+  // messaging (promotion when not entitled, "not supported with --global" on an
+  // entitled global install); its result decides whether the always-applied
+  // SonarQube Agentic Analysis rule is written. Context Augmentation is resolved
+  // inside finalizeAgentInstall (the install tail shared with the other agents).
   const sqaaEligible = await resolveSqaaSetup({
     serverURL: ctx.serverUrl,
     token: ctx.token,
     organization: ctx.organization,
     isGlobal: ctx.isGlobal,
   });
-  const installSqaaInstructions = sqaaEligible && Boolean(ctx.projectKey);
 
-  const { installRoot, installScope } = resolveIntegrateInstallTarget(
-    ctx.isGlobal,
-    ctx.project.rootDir,
-  );
-
-  // Context Augmentation is project-scoped and entitlement-gated.
-  // resolveContextAugmentationSetup owns the user-facing skip messaging.
-  const contextAugmentation = options.skipContext
-    ? null
-    : await resolveContextAugmentationSetup({
-        auth,
-        projectKey: ctx.projectKey,
-        isGlobal: ctx.isGlobal,
-      });
-
-  const integrationOptions = {
-    ...options,
-    installSqaaInstructions,
-    installContextAugmentation: contextAugmentation !== null,
-  } satisfies CursorIntegrationOptions;
-
-  await installIntegration({
-    registry: supportedIntegrations,
+  await finalizeAgentInstall<CursorIntegrationOptions>({
     integrationId: CURSOR_INTEGRATION_ID,
-    options: integrationOptions,
-    targetRoot: installRoot,
-    scope: installScope,
+    context: ctx,
+    options,
     auth,
-    nonInteractive: options.nonInteractive,
-    attrs: {
-      ...buildAttrs({ projectKey: ctx.projectKey }),
-      ...(contextAugmentation
-        ? buildContextAugmentationAttrs(
-            ctx.serverUrl,
-            ctx.organization,
-            contextAugmentation.scaEnabled,
-          )
-        : {}),
-    },
+    featureOptions: { installSqaaInstructions: sqaaEligible && Boolean(ctx.projectKey) },
   });
-}
-
-function buildAttrs(args: {
-  projectKey: string | undefined;
-}): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: args.projectKey ?? null,
-  };
 }
