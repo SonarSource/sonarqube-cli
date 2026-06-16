@@ -63,7 +63,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   features: [
     {
       id: 'sonar-secrets-hooks',
-      displayName: 'secret scanning hooks',
+      displayName: 'Secret scanning hooks',
       shouldInstall: ({ options }) =>
         options.globalSecretsHookExists === true
           ? skip(
@@ -75,7 +75,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       resources: [
         wholeFile({
           id: 'pretool-secrets-script',
-          displayName: 'Antigravity pre-tool-use hook script',
+          displayName: 'Antigravity PreToolUse hook script',
           targetPath: resolvePretoolSecretsScriptPath,
           content: {
             unix: getSecretPreToolTemplateUnix(),
@@ -95,7 +95,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     },
     {
       id: 'prompt-secrets-instructions',
-      displayName: 'prompt-secrets instructions',
+      displayName: 'Prompt-secrets instructions',
       shouldInstall: ({ scope }) =>
         scope === 'project' && globalAntigravityInstructionsExist()
           ? askUser(
@@ -105,7 +105,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       resources: [
         textSnippet({
           id: 'prompt-secrets-instructions-file',
-          displayName: 'Antigravity prompt-secrets instructions',
+          displayName: 'Antigravity Prompt-secrets instructions',
           targetPath: resolveInstructionsPath,
           startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
           endMarker: sonarEndMarker('antigravity-prompt-secrets'),

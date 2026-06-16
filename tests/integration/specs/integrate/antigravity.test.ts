@@ -258,7 +258,7 @@ describe('integrate antigravity', () => {
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
         expect(output).toContain('global secrets scanning hook');
-        expect(output).not.toContain('Install secret scanning hooks?');
+        expect(output).not.toContain('Install Secret scanning hooks?');
         expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
         expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
         expect(output).toContain(
