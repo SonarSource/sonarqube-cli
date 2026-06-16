@@ -232,7 +232,11 @@ function buildSitemapXml(): string {
 writeFileSync(join(CLIDOC_ROOT, 'llms.txt'), buildLlmsTxt());
 writeFileSync(join(CLIDOC_ROOT, 'sitemap.xml'), buildSitemapXml());
 
-// ── JSON-LD softwareVersion in index.html ─────────────────────
+function stampNavVersionBadge(html: string): string {
+  return html.replace(/(<span[^>]*id="nav-version"[^>]*>)v[^<]*(<\/span>)/, `$1v${version}$2`);
+}
+
+// ── Version metadata in docs HTML ─────────────────────────────
 const indexHtmlPath = join(CLIDOC_ROOT, 'index.html');
 const indexHtml = readFileSync(indexHtmlPath, 'utf-8');
 const updatedIndexHtml = indexHtml.replace(
@@ -240,7 +244,15 @@ const updatedIndexHtml = indexHtml.replace(
   `$1,\n    "softwareVersion": "${version}"$2`,
 );
 const alreadyPatched = indexHtml.includes('"softwareVersion"');
-const finalIndexHtml = alreadyPatched
+const finalIndexHtmlWithVersion = alreadyPatched
   ? indexHtml.replace(/"softwareVersion":\s*"[^"]*"/, `"softwareVersion": "${version}"`)
   : updatedIndexHtml;
+const finalIndexHtml = stampNavVersionBadge(finalIndexHtmlWithVersion).replace(
+  /(<meta name="version" id="meta-version" content=")[^"]*(")/,
+  `$1${version}$2`,
+);
 writeFileSync(indexHtmlPath, finalIndexHtml);
+
+const commandsHtmlPath = join(CLIDOC_ROOT, 'commands.html');
+const commandsHtml = readFileSync(commandsHtmlPath, 'utf-8');
+writeFileSync(commandsHtmlPath, stampNavVersionBadge(commandsHtml));
