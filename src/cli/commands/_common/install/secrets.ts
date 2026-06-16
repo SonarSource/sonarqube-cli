@@ -48,16 +48,18 @@ export const SECRETS_SPEC: BinarySpec = {
  * Install sonar-secrets if not already present, and report success if freshly installed.
  * Use this in commands where the user implicitly consents to installation by running the command.
  */
-export async function installSecretsBinary(): Promise<string> {
-  const { binaryPath, freshlyInstalled } = await resolveSecretsBinary({});
+export async function installSecretsBinary(
+  stream: NodeJS.WriteStream = process.stdout,
+): Promise<string> {
+  const { binaryPath, freshlyInstalled } = await resolveSecretsBinary({ stream });
   if (freshlyInstalled) {
-    discreetSuccess(`sonar-secrets installed at ${binaryPath}`);
+    discreetSuccess(`sonar-secrets installed at ${binaryPath}`, stream);
   }
   return binaryPath;
 }
 
 export async function resolveSecretsBinary(
-  options: { force?: boolean },
+  options: { force?: boolean; stream?: NodeJS.WriteStream },
   { binDir }: { binDir?: string } = {},
 ): Promise<InstallResult> {
   return installBinary(SECRETS_SPEC, { ...options, binDir });
@@ -92,8 +94,10 @@ export interface SecretsInstaller {
  * cannot be installed, aborting the caller.
  */
 export class DefaultSecretsInstaller implements SecretsInstaller {
+  constructor(private readonly stream: NodeJS.WriteStream = process.stdout) {}
+
   install(): Promise<string> {
-    return installSecretsBinary();
+    return installSecretsBinary(this.stream);
   }
 }
 

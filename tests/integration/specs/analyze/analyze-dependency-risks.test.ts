@@ -123,6 +123,34 @@ describe('analyze dependency-risks', () => {
   );
 
   it(
+    'routes progress to stderr and keeps stdout free of progress noise',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .withProject('demo')
+        .withProjectSettings('demo', [])
+        .start();
+      harness.state().withScaScannerBinaryInstalled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze dependency-risks --project demo --format json', {
+        timeoutMs: 30_000,
+      });
+
+      // Progress one-liner + spinner labels belong on stderr.
+      expect(result.stderr).toContain('Checking dependency analysis availability');
+      expect(result.stderr).toContain('Discovering dependency manifests');
+      // stdout must stay clean: no progress text leaks into the payload stream.
+      expect(result.stdout).not.toContain('Checking dependency analysis availability');
+      expect(result.stdout).not.toContain('Discovering dependency manifests');
+      expect(result.stdout).not.toContain('Analyzing dependency risks');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'auto-installs sca-scanner-cli when binary is absent',
     async () => {
       await harness.newFakeBinariesServer().start();

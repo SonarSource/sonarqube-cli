@@ -73,16 +73,21 @@ export function success(message: string): void {
   write(process.stdout, `✅ ${green(message)}`);
 }
 
-export function discreetSuccess(message: string): void {
+export function discreetSuccess(
+  message: string,
+  stream: NodeJS.WriteStream = process.stdout,
+): void {
   if (isMockActive()) {
     recordCall('discreetSuccess', message);
     return;
   }
-  if (_formattedOutputMode) {
+  // Only stdout participates in formatted-output buffering; an explicit stderr
+  // stream writes through immediately since stderr does not carry the payload.
+  if (stream === process.stdout && _formattedOutputMode) {
     _collectedMessages.push(`  ✓  ${message}`);
     return;
   }
-  write(process.stdout, `  ${green('✓')}  ${message}`);
+  write(stream, `  ${green('✓')}  ${message}`);
 }
 
 export function warn(message: string): void {

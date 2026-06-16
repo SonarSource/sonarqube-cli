@@ -63,9 +63,9 @@ export async function analyzeDependencyRisks(
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const result = await new ScaScanOrchestrator(
     client,
-    new DefaultScaScannerInstaller(),
+    new DefaultScaScannerInstaller(process.stderr),
     new DefaultScaScannerSpawner(),
-    new DefaultSecretsInstaller(),
+    new DefaultSecretsInstaller(process.stderr),
   ).run(auth, projectKey);
 
   const viewModel = buildDependencyRisksViewModel(result, filter);
@@ -88,13 +88,13 @@ async function resolveProjectKey(
   auth: ResolvedAuth,
 ): Promise<string> {
   if (explicitProject) {
-    print(`Using project key: ${explicitProject}`, process.stderr);
+    print(`     Using project key: ${explicitProject}`, process.stderr);
     return explicitProject;
   }
 
   const discovered = await discoverProject(process.cwd(), true, { auth });
   if (discovered.projectKey) {
-    print(`Using auto-detected project key: ${discovered.projectKey}`, process.stderr);
+    print(`     Using auto-detected project key: ${discovered.projectKey}`, process.stderr);
     return discovered.projectKey;
   }
 

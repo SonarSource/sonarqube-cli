@@ -23,6 +23,7 @@ import { isAbsolute, join } from 'node:path';
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import logger from '../../../../lib/logger';
+import { withSpinner } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { formatSpawnOutput } from '../../_common/install/install-utils';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
@@ -49,8 +50,11 @@ export async function preScanManifestsForSecrets(deps: {
     ...invocation,
     workDir: join(tmpdir(), `sonar-sca-discover-${Date.now()}`),
   };
-  const manifestFiles = await new ScaDiscoverManifestsRunner(scaInstaller, scaSpawner).run(
-    discoverInvocation,
+  await scaInstaller.install(); // up front so its download spinners don't nest inside the discovery spinner
+  const manifestFiles = await withSpinner(
+    'Discovering dependency manifests',
+    () => new ScaDiscoverManifestsRunner(scaInstaller, scaSpawner).run(discoverInvocation),
+    process.stderr,
   );
   const resolvedFiles = manifestFiles.map((file) =>
     isAbsolute(file) ? file : join(baseDir, file),
@@ -78,7 +82,11 @@ async function scanManifestsForSecrets(
 
   // Spawn error propagate so the callers decide what it means
   // (the command aborts; the hook's wrapper turns it into a non-blocking warning).
-  const result = await runSecretsBinary(binaryPath, files, auth);
+  const result = await withSpinner(
+    'Scanning manifests for secrets',
+    () => runSecretsBinary(binaryPath, files, auth),
+    process.stderr,
+  );
   const exitCode = result.exitCode ?? 1;
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {

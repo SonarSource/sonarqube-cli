@@ -33,7 +33,7 @@ import {
   verifyBinarySignature,
 } from '../../../../lib/sonarsource-releases';
 import { recordInstallationInState } from '../../../../lib/state-manager';
-import { print, text, withSpinner } from '../../../../ui';
+import { print, withSpinner } from '../../../../ui';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,
@@ -52,6 +52,7 @@ export interface BinarySpec {
 export interface InstallOptions {
   force?: boolean;
   binDir?: string;
+  stream?: NodeJS.WriteStream;
 }
 
 export interface InstallResult {
@@ -98,16 +99,22 @@ async function downloadAndInstall(
     return { skipped: true, binaryPath };
   }
 
-  text(`     Installing ${spec.name} ${spec.version}`);
+  const stream = options.stream ?? process.stdout;
+
+  print(`     Installing ${spec.name} ${spec.version}`, stream);
 
   const downloadUrl = buildDownloadUrl(spec.name, spec.version, spec.distPrefix, platform);
-  await withSpinner(`Downloading ${spec.name} ${spec.version}`, () =>
-    downloadBinary(downloadUrl, binaryPath),
+  await withSpinner(
+    `Downloading ${spec.name} ${spec.version}`,
+    () => downloadBinary(downloadUrl, binaryPath),
+    stream,
   );
 
   try {
-    await withSpinner('Verifying signature', () =>
-      verifyBinarySignature(binaryPath, platform, spec.signatures, spec.publicKey),
+    await withSpinner(
+      'Verifying signature',
+      () => verifyBinarySignature(binaryPath, platform, spec.signatures, spec.publicKey),
+      stream,
     );
   } catch (err) {
     rmSync(binaryPath, { force: true });
@@ -118,10 +125,12 @@ async function downloadAndInstall(
     await makeExecutable(binaryPath);
   }
 
-  const installedVersion = await withSpinner('Verifying installation', () =>
-    verifyInstallation(binaryPath),
+  const installedVersion = await withSpinner(
+    'Verifying installation',
+    () => verifyInstallation(binaryPath),
+    stream,
   );
-  print(`     ${spec.name} ${installedVersion}`);
+  print(`     ${spec.name} ${installedVersion}`, stream);
 
   recordInstallationInState(spec.name, installedVersion, binaryPath);
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);
