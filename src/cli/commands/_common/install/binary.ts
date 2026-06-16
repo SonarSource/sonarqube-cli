@@ -33,7 +33,7 @@ import {
   verifyBinarySignature,
 } from '../../../../lib/sonarsource-releases';
 import { recordInstallationInState } from '../../../../lib/state-manager';
-import { print, withSpinner } from '../../../../ui';
+import { print, text, withSpinner } from '../../../../ui';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,
@@ -101,7 +101,7 @@ async function downloadAndInstall(
 
   const stream = options.stream ?? process.stdout;
 
-  print(`     Installing ${spec.name} ${spec.version}`, stream);
+  text(`     Installing ${spec.name} ${spec.version}`, undefined, stream);
 
   const downloadUrl = buildDownloadUrl(spec.name, spec.version, spec.distPrefix, platform);
   await withSpinner(

@@ -107,17 +107,23 @@ export function error(message: string): void {
 }
 
 // Plain terminal output — human-readable, no semantic icon, optional color
-export function text(message: string, color?: ColorFn): void {
+export function text(
+  message: string,
+  color?: ColorFn,
+  stream: NodeJS.WriteStream = process.stdout,
+): void {
   if (isMockActive()) {
     recordCall('text', message);
     return;
   }
-  if (_formattedOutputMode) {
+  // Only stdout participates in formatted-output buffering; an explicit stderr
+  // stream writes through immediately since stderr does not carry the payload.
+  if (stream === process.stdout && _formattedOutputMode) {
     _collectedMessages.push(message);
     return;
   }
   const formatted = color ? color(message) : message;
-  write(process.stdout, formatted);
+  write(stream, formatted);
 }
 
 // Raw stream output — no color, no prefix — safe for piping: sonar issues search | jq

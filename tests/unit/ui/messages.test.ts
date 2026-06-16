@@ -175,6 +175,50 @@ describe('messages: real output (non-mock)', () => {
     }
   });
 
+  it('text writes to stderr when an explicit stderr stream is passed', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      text('to stderr', undefined, process.stderr);
+      expect(output.join('')).toContain('to stderr');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('text on stderr is not buffered in formatted-output mode', () => {
+    const output: string[] = [];
+    const spy = spyOn(process.stderr, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    setFormattedOutputMode(true);
+    try {
+      text('to stderr', undefined, process.stderr);
+      expect(output.join('')).toContain('to stderr');
+      expect(getMessagesForFormattedOutput()).toEqual([]);
+    } finally {
+      setFormattedOutputMode(false);
+      spy.mockRestore();
+    }
+  });
+
+  it('text on stdout is buffered in formatted-output mode', () => {
+    const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+    setFormattedOutputMode(true);
+    try {
+      text('buffered text');
+      expect(getMessagesForFormattedOutput().some((m) => m.includes('buffered text'))).toBe(true);
+      expect(stdoutSpy).not.toHaveBeenCalled();
+    } finally {
+      setFormattedOutputMode(false);
+      stdoutSpy.mockRestore();
+    }
+  });
+
   it('print writes message to stdout', () => {
     const output: string[] = [];
     const spy = spyOn(process.stdout, 'write').mockImplementation((s) => {
