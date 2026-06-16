@@ -99,8 +99,8 @@
       <div class="hero-install-tabs">
         <span class="hero-install-label">Install:</span>
         <div class="tab-group">
-          <button class="tab-btn active" onclick="showHeroTab('linux', this)">Linux / macOS</button>
-          <button class="tab-btn" onclick="showHeroTab('windows', this)">Windows</button>
+          <button class="tab-btn active" data-hero-tab="linux">Linux / macOS</button>
+          <button class="tab-btn" data-hero-tab="windows">Windows</button>
         </div>
       </div>
       <a href="https://github.com/SonarSource/sonarqube-cli?tab=readme-ov-file#sonarqube-cli" class="hero-install-link" target="_blank" rel="noopener">View installation instructions ↗</a>
@@ -108,13 +108,13 @@
     <div id="hero-tab-linux" class="tab-panel active">
       <div class="code-block">
         <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
-        <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+        <button class="copy-btn" data-copy-install>Copy</button>
       </div>
     </div>
     <div id="hero-tab-windows" class="tab-panel">
       <div class="code-block">
         <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
-        <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+        <button class="copy-btn" data-copy-install>Copy</button>
       </div>
     </div>
   </div>
@@ -148,20 +148,20 @@
   <p class="section-sub">One-line install for all platforms.</p>
 
   <div class="tab-group">
-    <button class="tab-btn active" onclick="showTab('linux')">Linux / macOS</button>
-    <button class="tab-btn" onclick="showTab('windows')">Windows</button>
+    <button class="tab-btn active" data-install-tab="linux">Linux / macOS</button>
+    <button class="tab-btn" data-install-tab="windows">Windows</button>
   </div>
 
   <div id="tab-linux" class="tab-panel active">
     <div class="code-block">
       <pre><code>curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash</code></pre>
-      <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+      <button class="copy-btn" data-copy-install>Copy</button>
     </div>
   </div>
   <div id="tab-windows" class="tab-panel">
     <div class="code-block">
       <pre><code>irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex</code></pre>
-      <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+      <button class="copy-btn" data-copy-install>Copy</button>
     </div>
   </div>
 </section>
@@ -175,16 +175,16 @@
 
   <div class="jtbd-layout">
     <div class="jtbd-pills" id="jtbd-pills">
-      <button class="jtbd-pill" onclick="showJtbd('issues')">List issues in my project</button>
-      <button class="jtbd-pill" onclick="showJtbd('analyze')">Analyze a file for issues</button>
-      <button class="jtbd-pill" onclick="showJtbd('secrets-scan')">Scan a file for secrets</button>
-      <button class="jtbd-pill" onclick="showJtbd('hooks')">Block bad commits with git hooks</button>
-      <button class="jtbd-pill" onclick="showJtbd('ai-agent')">Integrate an AI Agent</button>
-      <button class="jtbd-pill" onclick="showJtbd('agentic')">Run Agentic Analysis</button>
-      <button class="jtbd-pill" onclick="showJtbd('remediate')">Remediate issues with AI</button>
-      <button class="jtbd-pill" onclick="showJtbd('dependency-risks')">Scan for dependency risks</button>
-      <button class="jtbd-pill" onclick="showJtbd('pr-issues')" style="display:none">Review issues in a pull request</button>
-      <button class="jtbd-pill" onclick="showJtbd('install')">Update the CLI</button>
+      <button class="jtbd-pill" data-jtbd="issues">List issues in my project</button>
+      <button class="jtbd-pill" data-jtbd="analyze">Analyze a file for issues</button>
+      <button class="jtbd-pill" data-jtbd="secrets-scan">Scan a file for secrets</button>
+      <button class="jtbd-pill" data-jtbd="hooks">Block bad commits with git hooks</button>
+      <button class="jtbd-pill" data-jtbd="ai-agent">Integrate an AI Agent</button>
+      <button class="jtbd-pill" data-jtbd="agentic">Run Agentic Analysis</button>
+      <button class="jtbd-pill" data-jtbd="remediate">Remediate issues with AI</button>
+      <button class="jtbd-pill" data-jtbd="dependency-risks">Scan for dependency risks</button>
+      <button class="jtbd-pill" data-jtbd="pr-issues" style="display:none">Review issues in a pull request</button>
+      <button class="jtbd-pill" data-jtbd="install">Update the CLI</button>
     </div>
     <div class="jtbd-recipe" id="jtbd-recipe"></div>
   </div>
@@ -262,11 +262,11 @@
 
 <div class="feedback-fab" id="feedbackFab">
   <div class="feedback-fab-popover">
-    <button class="feedback-fab-x" onclick="document.getElementById('feedbackFab').classList.remove('open')" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <button class="feedback-fab-x" data-feedback-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     <p class="feedback-fab-title">How useful was this site?</p>
     <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Share Feedback</a>
   </div>
-  <button class="feedback-fab-btn" onclick="document.getElementById('feedbackFab').classList.toggle('open')">Feedback</button>
+  <button class="feedback-fab-btn" data-feedback-toggle>Feedback</button>
 </div>
 
 <script>
@@ -523,12 +523,29 @@
     btn.classList.add('active');
   }
 
-  function showTab(name) {
+  function showTab(name, btn) {
     const section = document.getElementById('install');
     section.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     section.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
-    event.target.classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function escapeAttr(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 
   const JTBD_RECIPES = {
@@ -539,16 +556,16 @@
     ],
     'secrets-scan': [
       { title: 'Authenticate',        cmd: 'sonar auth login',                               desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
-      { title: 'Scan a file',         cmd: 'sonar analyze secrets &lt;file&gt;',             desc: 'Detects hardcoded API keys, tokens, and credentials.' },
+      { title: 'Scan a file',         cmd: 'sonar analyze secrets <file>',                   desc: 'Detects hardcoded API keys, tokens, and credentials.' },
     ],
     issues: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                        desc: 'Connect to SonarQube.' },
-      { title: 'List issues',         cmd: 'sonar list issues --project &lt;key&gt;',                 desc: 'Returns issues in JSON by default.' },
-      { title: 'Filter &amp; format', cmd: 'sonar list issues --project &lt;key&gt; --severities CRITICAL --format table', desc: 'Narrow by severity and output as a table.' },
+      { title: 'List issues',         cmd: 'sonar list issues --project <key>',                       desc: 'Returns issues in JSON by default.' },
+      { title: 'Filter & format',     cmd: 'sonar list issues --project <key> --severities CRITICAL --format table', desc: 'Narrow by severity and output as a table.' },
     ],
     analyze: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                              desc: 'Connect to SonarQube.' },
-      { title: 'Analyze',             cmd: 'sonar analyze --file &lt;file&gt; --project &lt;key&gt;',       desc: 'Runs server-side static analysis on a file (SonarQube Cloud only).' },
+      { title: 'Analyze',             cmd: 'sonar analyze --file <file> --project <key>',                 desc: 'Runs server-side static analysis on a file (SonarQube Cloud only).' },
     ],
     hooks: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                           desc: 'Connect to SonarQube.' },
@@ -556,8 +573,8 @@
     ],
     'pr-issues': [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                                              desc: 'Connect to SonarQube.' },
-      { title: 'List PR issues',      cmd: 'sonar list issues --project &lt;key&gt; --pull-request &lt;number&gt;',        desc: 'Shows only issues introduced in the pull request.' },
-      { title: 'Format as table',     cmd: 'sonar list issues --project &lt;key&gt; --pull-request &lt;number&gt; --format table', desc: 'Human-readable table output.' },
+      { title: 'List PR issues',      cmd: 'sonar list issues --project <key> --pull-request <number>',                  desc: 'Shows only issues introduced in the pull request.' },
+      { title: 'Format as table',     cmd: 'sonar list issues --project <key> --pull-request <number> --format table', desc: 'Human-readable table output.' },
     ],
     agentic: [
       { title: 'Authenticate',        cmd: 'sonar auth login',                    desc: 'Connect to SonarQube Cloud (required for Agentic Analysis).' },
@@ -569,7 +586,7 @@
     ],
     'dependency-risks': [
       { title: 'Authenticate',        cmd: 'sonar auth login',                                desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
-      { title: 'Scan',                cmd: 'sonar analyze dependency-risks -p &lt;key&gt;',  desc: 'Detects security and license risks in your project dependencies.' },
+      { title: 'Scan',                cmd: 'sonar analyze dependency-risks -p <key>',        desc: 'Detects security and license risks in your project dependencies.' },
     ],
     install: [
       { title: 'Check for updates',   cmd: 'sonar self-update --status',      desc: 'Check if a newer version is available without installing.' },
@@ -580,10 +597,27 @@
   function buildStepsHtml(steps) {
     const stepsHtml = '<div class="steps">' + steps.map((s, i) => {
       const arrow = i < steps.length - 1 ? '<div class="steps-arrow">→</div>' : '';
-      return `<div class="step"><div class="step-num">${i + 1}</div><h3>${s.title}</h3><div class="step-code-wrap"><code>${s.cmd}</code><button class="step-copy-btn" onclick="copyStepCmd(this, '${s.cmd.replace(/'/g, "\\'")}')" title="Copy">Copy</button></div><p>${s.desc}</p></div>${arrow}`;
+      return `<div class="step"><div class="step-num">${i + 1}</div><h3>${s.title}</h3><div class="step-code-wrap"><code>${escapeHtml(s.cmd)}</code><button class="step-copy-btn" data-copy-step="${escapeAttr(s.cmd)}" title="Copy">Copy</button></div><p>${s.desc}</p></div>${arrow}`;
     }).join('') + '</div>';
     const docsLink = '<a href="https://docs.sonarsource.com/sonarqube-cli" class="jtbd-docs-link" target="_blank" rel="noopener">Full reference on docs.sonarsource.com ↗</a>';
     return stepsHtml + docsLink;
+  }
+
+  function copyText(text, onSuccess) {
+      const fallbackCopy = () => {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          onSuccess();
+      };
+      if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(onSuccess).catch(fallbackCopy);
+      } else {
+          fallbackCopy();
+      }
   }
 
   function copyStepCmd(btn, cmd) {
@@ -593,25 +627,12 @@
               btn.textContent = 'Copy';
           }, 1500);
       };
-      const fallbackCopy = () => {
-          const ta = document.createElement('textarea');
-          ta.value = cmd;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          ta.remove();
-          displayConfirmation();
-      };
-      if (navigator.clipboard) {
-          navigator.clipboard.writeText(cmd).then(displayConfirmation).catch(fallbackCopy);
-      } else {
-          fallbackCopy();
-      }
+      copyText(cmd, displayConfirmation);
   }
 
   let activeJtbd = null;
 
-  function showJtbd(key) {
+  function showJtbd(key, btn) {
     const steps = JTBD_RECIPES[key];
     const box = document.getElementById('jtbd-recipe');
     const pills = document.querySelectorAll('.jtbd-pill');
@@ -626,7 +647,7 @@
     }
 
     activeJtbd = key;
-    const activePill = document.querySelector(`.jtbd-pill[onclick="showJtbd('${key}')"]`);
+    const activePill = btn ?? document.querySelector(`.jtbd-pill[data-jtbd="${key}"]`);
     if (activePill) activePill.classList.add('active');
     box.innerHTML = buildStepsHtml(steps);
     box.classList.add('visible');
@@ -636,12 +657,34 @@
 
   function copyInstall(btn) {
     const text = btn.closest('.code-block').querySelector('code').textContent;
-    navigator.clipboard.writeText(text).then(() => {
+    copyText(text, () => {
       btn.textContent = 'Copied!';
       btn.classList.add('copied');
       setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
     });
   }
+
+  document.querySelectorAll('[data-hero-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => showHeroTab(btn.dataset.heroTab, btn));
+  });
+
+  document.querySelectorAll('[data-install-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => showTab(btn.dataset.installTab, btn));
+  });
+
+  document.querySelectorAll('[data-copy-install]').forEach((btn) => {
+    btn.addEventListener('click', () => copyInstall(btn));
+  });
+
+  document.querySelectorAll('.jtbd-pill[data-jtbd]').forEach((btn) => {
+    btn.addEventListener('click', () => showJtbd(btn.dataset.jtbd, btn));
+  });
+
+  document.getElementById('jtbd-recipe').addEventListener('click', (event) => {
+    const btn = event.target.closest('.step-copy-btn[data-copy-step]');
+    if (!btn) return;
+    copyStepCmd(btn, btn.dataset.copyStep);
+  });
 
   // ─── Feedback popover trigger ─────────────────────────────────
   (function() {
@@ -663,6 +706,12 @@
     }
     window.addEventListener('scroll', onScroll, { passive: true });
     document.addEventListener('click', onClick);
+    fab.querySelector('[data-feedback-toggle]')?.addEventListener('click', () => {
+      fab.classList.toggle('open');
+    });
+    fab.querySelector('[data-feedback-close]')?.addEventListener('click', () => {
+      fab.classList.remove('open');
+    });
   })();
 
   // ─── ASCII Side-view Wave ────────────────────────────────────
