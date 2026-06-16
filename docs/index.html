@@ -548,6 +548,31 @@
       .replace(/>/g, '&gt;');
   }
 
+  function decodeHtmlEntities(value) {
+    return String(value)
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  function renderRecipeDescription(desc) {
+    const codePattern = /<code>(.*?)<\/code>/g;
+    let html = '';
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codePattern.exec(desc)) !== null) {
+      html += escapeHtml(desc.slice(lastIndex, match.index));
+      html += `<code>${escapeHtml(decodeHtmlEntities(match[1]))}</code>`;
+      lastIndex = match.index + match[0].length;
+    }
+
+    html += escapeHtml(desc.slice(lastIndex));
+    return html;
+  }
+
   const JTBD_RECIPES = {
     'ai-agent': [
       { title: 'Authenticate',          cmd: 'sonar auth login',           desc: 'Connect to SonarQube Cloud or your self-hosted server.' },
@@ -597,7 +622,7 @@
   function buildStepsHtml(steps) {
     const stepsHtml = '<div class="steps">' + steps.map((s, i) => {
       const arrow = i < steps.length - 1 ? '<div class="steps-arrow">→</div>' : '';
-      return `<div class="step"><div class="step-num">${i + 1}</div><h3>${s.title}</h3><div class="step-code-wrap"><code>${escapeHtml(s.cmd)}</code><button class="step-copy-btn" data-copy-step="${escapeAttr(s.cmd)}" title="Copy">Copy</button></div><p>${s.desc}</p></div>${arrow}`;
+      return `<div class="step"><div class="step-num">${i + 1}</div><h3>${escapeHtml(s.title)}</h3><div class="step-code-wrap"><code>${escapeHtml(s.cmd)}</code><button class="step-copy-btn" data-copy-step="${escapeAttr(s.cmd)}" title="Copy">Copy</button></div><p>${renderRecipeDescription(s.desc)}</p></div>${arrow}`;
     }).join('') + '</div>';
     const docsLink = '<a href="https://docs.sonarsource.com/sonarqube-cli" class="jtbd-docs-link" target="_blank" rel="noopener">Full reference on docs.sonarsource.com ↗</a>';
     return stepsHtml + docsLink;
