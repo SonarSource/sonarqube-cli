@@ -91,10 +91,6 @@ export class ScaScanOrchestrator {
   private analyzeDependencyRisks(
     invocation: ScaScannerInvocation,
   ): Promise<AnalyzeProjectResponse> {
-    return withSpinner(
-      'Analyzing dependency risks',
-      () => new ScaScannerRunner(this.installer, this.spawner).run(invocation),
-      'stderr',
-    );
+    return new ScaScannerRunner(this.installer, this.spawner).run(invocation);
   }
 }

@@ -50,11 +50,8 @@ export async function preScanManifestsForSecrets(deps: {
     ...invocation,
     workDir: join(tmpdir(), `sonar-sca-discover-${Date.now()}`),
   };
-  await scaInstaller.install(); // up front so its download spinners don't nest inside the discovery spinner
-  const manifestFiles = await withSpinner(
-    'Discovering dependency manifests',
-    () => new ScaDiscoverManifestsRunner(scaInstaller, scaSpawner).run(discoverInvocation),
-    'stderr',
+  const manifestFiles = await new ScaDiscoverManifestsRunner(scaInstaller, scaSpawner).run(
+    discoverInvocation,
   );
   const resolvedFiles = manifestFiles.map((file) =>
     isAbsolute(file) ? file : join(baseDir, file),

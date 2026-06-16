@@ -32,11 +32,12 @@ interface DiscoverManifestsPayload {
  * discovered manifest/lockfile paths (relative to the invocation base dir).
  */
 export class ScaDiscoverManifestsRunner extends ScaScannerRunnerBase<string[]> {
+  protected readonly spinnerLabel = 'Discovering dependency manifests';
+  protected readonly errorPrefix = 'Manifest discovery error';
+
   buildArgs(invocation: ScaScannerInvocation): string[] {
     return this.buildBaseArgs('discover-manifests', invocation);
   }
-
-  protected readonly errorPrefix = 'Manifest discovery error';
 
   protected parseResult(result: SpawnResult): string[] {
     const parsed = this.parseJson(result) as DiscoverManifestsPayload;
