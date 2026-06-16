@@ -26,7 +26,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { canonicalizePath, toRelativePosixPath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
-import { SonarQubeClient } from '../../../sonarqube/client';
+import { submitValidatedSqaaAnalysis } from '../analyze/sqaa-api';
 import { formatSqaaIssuesForHook, writePostToolUseHookOutput } from './format-sqaa-hook-context';
 import { readStdinJson } from './stdin';
 
@@ -68,13 +68,12 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
 
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
-    const client = new SonarQubeClient(auth.serverUrl, auth.token);
 
-    const response = await client.createAnalysis({
-      organizationKey: auth.orgKey,
+    const response = await submitValidatedSqaaAnalysis(
+      { serverUrl: auth.serverUrl, token: auth.token, orgKey: auth.orgKey },
       projectKey,
-      files: [{ path: normalizedPath, content: fileContent }],
-    });
+      [{ path: normalizedPath, content: fileContent }],
+    );
 
     const text = formatSqaaIssuesForHook(response.issues, response.errors, normalizedPath);
     writePostToolUseHookOutput(text);

@@ -14,8 +14,13 @@ The entry point is generated. To add or change commands, edit `src/cli/command-t
 ## Always use `runCommand()` for command handlers
 Every command action must be wrapped in `runCommand()` from `src/lib/run-command.ts`. Never catch or handle errors manually in command handlers.
 
-## After editing any `.ts` file, format
-Run `bun run format` before finishing. Non-negotiable.
+## After editing any `.ts` file, format and fix imports
+Before finishing, run both — non-negotiable:
+
+1. `bun run format` — Prettier
+2. `bun run lint:fix` — ESLint autofix, including `simple-import-sort/imports` for import order
+
+If only one file changed, `bun x eslint --fix <file>` is fine for step 2.
 
 ## Constants from `config-constants.ts`
 All paths and URLs must be imported from `src/lib/config-constants.ts`. Never hardcode paths or URLs inline.

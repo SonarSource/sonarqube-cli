@@ -23,7 +23,6 @@
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import type { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
-import { CommandFailedError } from '../_common/error.js';
 import {
   fetchChunkWith413Split,
   MAX_503_RETRIES,
@@ -33,6 +32,7 @@ import {
 } from './sqaa-api';
 import type { CloudAuth } from './sqaa-auth';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking';
+import { isPayloadTooLargeCommandError } from './sqaa-errors.js';
 
 export type FileSuccess = {
   file: string;
@@ -44,9 +44,6 @@ export type FileFailure = { file: string; filePath: string; failure: Error };
 export type FileResult = FileSuccess | FileFailure;
 
 type ChunkPath = { file: string; filePath: string };
-
-const PAYLOAD_TOO_LARGE_FAILURE_MESSAGE =
-  'SonarQube Agentic Analysis failed.\n  Request payload too large.';
 
 export interface RunContext {
   files: string[];
@@ -130,7 +127,13 @@ function prepareChunks(
 
   const chunks: SqaaChunk[] = [{ files: readableChunkFiles }];
   const chunkFileIndices = [
-    readableChunkFiles.map((f) => fileIndexByAbsolutePath.get(f.absolutePath)!),
+    readableChunkFiles.map((f) => {
+      const idx = fileIndexByAbsolutePath.get(f.absolutePath);
+      if (idx === undefined) {
+        throw new Error(`Missing file index for ${f.absolutePath}`);
+      }
+      return idx;
+    }),
   ];
   return { chunks, chunkFileIndices };
 }
@@ -143,7 +146,10 @@ function chunkPathsForFiles(
   const partPaths: ChunkPath[] = [];
   const partIndices: number[] = [];
   for (const chunkFile of chunkFiles) {
-    const idx = fileIndexByAbsolutePath.get(chunkFile.absolutePath)!;
+    const idx = fileIndexByAbsolutePath.get(chunkFile.absolutePath);
+    if (idx === undefined) {
+      continue;
+    }
     partPaths.push({ file: chunkFile.absolutePath, filePath: ctx.allPaths[idx] });
     partIndices.push(idx);
   }
@@ -170,28 +176,6 @@ function recordSuccessfulParts(
     }
     const { partPaths, partIndices } = chunkPathsForFiles(ctx, part.files, fileIndexByAbsolutePath);
     recordChunkSuccess(progress, tally, partIndices, partPaths, part.response);
-  }
-}
-
-function recordPayloadTooLargeFailures(
-  ctx: RunContext,
-  tally: RunTally,
-  progress: SqaaProgress,
-  failedFiles: SqaaChunkFile[],
-  fileIndexByAbsolutePath: Map<string, number>,
-): void {
-  for (const failed of failedFiles) {
-    const idx = fileIndexByAbsolutePath.get(failed.absolutePath);
-    if (idx === undefined) {
-      continue;
-    }
-    recordFileFailure(
-      progress,
-      tally,
-      idx,
-      { file: failed.absolutePath, filePath: ctx.allPaths[idx] },
-      new CommandFailedError(PAYLOAD_TOO_LARGE_FAILURE_MESSAGE),
-    );
   }
 }
 
@@ -222,12 +206,12 @@ function recordGroupFetchErrors(
 /** Whether to continue remaining chunks after a mixed or successful chunk fetch. */
 export function shouldContinueAfterChunk(
   parts: Array<{ response: SqaaChunkResponse; files: SqaaChunkFile[] }>,
-  failedFiles: SqaaChunkFile[],
   groupErrors: SqaaChunkGroupError[],
 ): boolean {
-  const totalChunkFailure =
-    parts.length === 0 && failedFiles.length === 0 && groupErrors.length > 0;
-  return !totalChunkFailure;
+  if (groupErrors.length === 0 || parts.length > 0) {
+    return true;
+  }
+  return groupErrors.every((group) => isPayloadTooLargeCommandError(group.error));
 }
 
 async function processChunk(
@@ -242,7 +226,7 @@ async function processChunk(
   markChunkAnalyzing(ctx.progress, chunkIndex, fileIndices);
 
   try {
-    const { parts, failedFiles, groupErrors } = await fetchChunkWith413Split(
+    const { parts, groupErrors } = await fetchChunkWith413Split(
       ctx.cloudAuth,
       ctx.projectKey,
       chunk.files,
@@ -260,11 +244,10 @@ async function processChunk(
     );
 
     recordSuccessfulParts(ctx, tally, ctx.progress, parts, fileIndexByAbsolutePath);
-    recordPayloadTooLargeFailures(ctx, tally, ctx.progress, failedFiles, fileIndexByAbsolutePath);
     recordGroupFetchErrors(ctx, tally, ctx.progress, groupErrors, fileIndexByAbsolutePath);
 
     ctx.progress.updateChunk(chunkIndex, 'done');
-    return shouldContinueAfterChunk(parts, failedFiles, groupErrors);
+    return shouldContinueAfterChunk(parts, groupErrors);
   } catch (err) {
     recordChunkFailure(ctx.progress, tally, chunkIndex, fileIndices, chunkPaths, err as Error);
     return false;
