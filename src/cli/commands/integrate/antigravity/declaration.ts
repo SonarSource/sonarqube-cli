@@ -21,21 +21,39 @@
 import { join } from 'node:path';
 
 import {
+  ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR,
   ANTIGRAVITY_GLOBAL_SKILLS_DIR,
+  ANTIGRAVITY_INSTRUCTIONS_FILENAME,
   ANTIGRAVITY_PROJECT_AGENTS_DIR,
+  ANTIGRAVITY_PROJECT_INSTRUCTIONS_DIR,
 } from '../../../../lib/config-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
+import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
+import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { askUser } from '../_common/registry';
+import {
+  askUser,
+  jsonPatch,
+  skip,
+  sonarSecretsBinaryDependency,
+  textSnippet,
+  wholeFile,
+} from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
+import { getSecretPreToolTemplateUnix, getSecretPreToolTemplateWindows } from './hook-templates';
+import {
+  removeAntigravitySecretsBlock,
+  resolveAntigravityHooksJsonPath,
+  resolvePretoolSecretsScriptPath,
+  upsertAntigravitySecretsBlock,
+} from './hooks';
+import { globalAntigravityInstructionsExist, PROMPT_SECRETS_BODY } from './instructions';
 
 export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity-cli';
 
 export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   globalSecretsHookExists?: boolean;
-  installSqaaHook?: boolean;
-  sqaaEntitled?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -44,9 +62,56 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   displayName: 'Antigravity',
   features: [
     {
-      id: 'integration-setup',
-      displayName: 'Antigravity integration setup',
-      shouldInstall: () => askUser(),
+      id: 'sonar-secrets-hooks',
+      displayName: 'Secret scanning hooks',
+      shouldInstall: ({ options }) =>
+        options.globalSecretsHookExists === true
+          ? skip(
+              'Skipping the project-level secrets scanning hooks because a global secrets scanning hook is already configured.',
+            )
+          : askUser(),
+      postInstallExample: secretsScanningExample('Antigravity'),
+      dependencies: [sonarSecretsBinaryDependency],
+      resources: [
+        wholeFile({
+          id: 'pretool-secrets-script',
+          displayName: 'Antigravity PreToolUse hook script',
+          targetPath: resolvePretoolSecretsScriptPath,
+          content: {
+            unix: getSecretPreToolTemplateUnix(),
+            windows: getSecretPreToolTemplateWindows(),
+          },
+          executable: true,
+        }),
+        jsonPatch({
+          id: 'antigravity-hooks-secrets',
+          displayName: 'Antigravity hooks configuration',
+          targetPath: resolveAntigravityHooksJsonPath,
+          defaultValue: {},
+          patch: (document, context) => upsertAntigravitySecretsBlock(document, context),
+          removePatch: (document) => removeAntigravitySecretsBlock(document),
+        }),
+      ],
+    },
+    {
+      id: 'prompt-secrets-instructions',
+      displayName: 'Prompt-secrets instructions',
+      shouldInstall: ({ scope }) =>
+        scope === 'project' && globalAntigravityInstructionsExist()
+          ? askUser(
+              'Global Antigravity instructions already exist. Do you also want to create a project-local copy for this repo?',
+            )
+          : askUser(),
+      resources: [
+        textSnippet({
+          id: 'prompt-secrets-instructions-file',
+          displayName: 'Antigravity Prompt-secrets instructions',
+          targetPath: resolveInstructionsPath,
+          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
+          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
+          content: PROMPT_SECRETS_BODY,
+        }),
+      ],
     },
     createContextAugmentationFeature<AntigravityIntegrationOptions>({
       agentDisplayName: 'Antigravity',
@@ -54,6 +119,16 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     }),
   ],
 };
+
+function resolveInstructionsPath(context: IntegrationContext): string {
+  return context.scope === 'global'
+    ? join(ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR, ANTIGRAVITY_INSTRUCTIONS_FILENAME)
+    : join(
+        context.targetRoot,
+        ANTIGRAVITY_PROJECT_INSTRUCTIONS_DIR,
+        ANTIGRAVITY_INSTRUCTIONS_FILENAME,
+      );
+}
 
 function resolveAntigravitySkillPath(context: IntegrationContext): string {
   if (context.scope === 'global') {

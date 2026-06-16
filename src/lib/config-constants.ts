@@ -100,6 +100,9 @@ export const ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR = join(
   'hooks',
 );
 
+/** Sonar hook scripts directory relative to `.agents/` (Antigravity PreToolUse cwd). */
+export const ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS = join('sonar', 'hooks');
+
 /**
  * Global Antigravity config root (`sonar integrate antigravity --global`).
  * Hook scripts and config patches live under this tree (not a plugin bundle).
@@ -118,6 +121,21 @@ export const ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR = join(
 
 /** Global Antigravity skills directory (`sonar integrate antigravity --global` CAG skill). */
 export const ANTIGRAVITY_GLOBAL_SKILLS_DIR = join(ANTIGRAVITY_GLOBAL_CONFIG_DIR, 'skills');
+
+/** Antigravity managed instructions filename. */
+export const ANTIGRAVITY_INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
+
+/** Project Antigravity instructions directory (relative to the project root). */
+export const ANTIGRAVITY_PROJECT_INSTRUCTIONS_DIR = join(
+  ANTIGRAVITY_PROJECT_AGENTS_DIR,
+  'instructions',
+);
+
+/** Global Antigravity instructions directory (`sonar integrate antigravity --global`). */
+export const ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR = join(
+  ANTIGRAVITY_GLOBAL_CONFIG_DIR,
+  'instructions',
+);
 
 // ---------------------------------------------------------------------------
 // Sonarsource binaries

@@ -57,6 +57,7 @@ import {
   type AgentPostToolUseOptions,
 } from './commands/hook/agent-post-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
+import { antigravityPreToolUse } from './commands/hook/antigravity-pre-tool-use';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
 import {
   codexPostToolUse,
@@ -307,7 +308,7 @@ integrateCommand
 integrateCommand
   .command('antigravity', { hidden: true })
   .description(
-    'Setup SonarQube integration for Antigravity. This will install secrets scanning hooks, configure SonarQube Agentic Analysis and MCP Server.',
+    'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Context Augmentation.',
   )
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
@@ -544,6 +545,11 @@ hookCommand
   .command('copilot-pre-tool-use')
   .description('PreToolUse handler for Copilot: scan files for secrets before agent reads them')
   .anonymousAction(() => copilotPreToolUse());
+
+hookCommand
+  .command('antigravity-pre-tool-use')
+  .description('PreToolUse handler for Antigravity: scan files for secrets before agent reads them')
+  .anonymousAction(() => antigravityPreToolUse());
 
 hookCommand
   .command('claude-prompt-submit')
