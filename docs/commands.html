@@ -47,17 +47,15 @@
 <!-- ─── Nav ──────────────────────────────────────────────────── -->
 <nav class="nav">
   <div class="brand-lockup">
-    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--sonar" title="SonarSource home">
-      <img class="brand-image brand-image--sonar brand-image--dark" src="assets/sonar-lockup-dark.svg" alt="Sonar">
-      <img class="brand-image brand-image--sonar brand-image--light" src="assets/sonar-lockup-light.svg" alt="Sonar">
+    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--sonar" title="SonarSource home" aria-label="SonarSource home">
+      <span class="brand-mark brand-mark--sonar" aria-hidden="true"></span>
     </a>
     <span class="brand-separator" aria-hidden="true"></span>
-    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--cli" title="SonarSource home">
-      <img class="brand-image brand-image--cli brand-image--dark" src="assets/SQ-CLI_Dark Backgrounds.svg" alt="SonarQube CLI">
-      <img class="brand-image brand-image--cli brand-image--light" src="assets/SQ-CLI_Light Backgrounds.svg" alt="SonarQube CLI">
+    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--cli" title="SonarQube CLI on SonarSource" aria-label="SonarQube CLI on SonarSource">
+      <span class="brand-mark brand-mark--cli" aria-hidden="true"></span>
+      <span class="version brand-version" id="nav-version">v1.0.0</span>
     </a>
   </div>
-  <span class="version" id="nav-version" style="display:none">v0.0.0</span>
   <div class="nav-links">
     <a href="index.html" class="nav-link">Home</a>
     <a href="commands.html" class="nav-link active">Commands</a>
@@ -117,7 +115,6 @@ for (const cmd of data.commands) {
 // Set version
 const navV = document.getElementById('nav-version');
 navV.textContent = 'v' + data.version;
-navV.style.display = '';
 
 // ── State ────────────────────────────────────────────────────
 const collapsed = new Set(); // IDs of collapsed groups
