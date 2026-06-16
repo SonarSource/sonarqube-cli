@@ -17,7 +17,7 @@ jobs:
       id-token: write # required for Vault OIDC auth
       contents: write # required to create the draft GitHub release
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ inputs.branch }}
           fetch-depth: 0
@@ -25,7 +25,7 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@c154b4a417b51cb98dd71137f49bf20e77c56820 # 3.4.0
+        uses: SonarSource/vault-action-wrapper@881045d830534a70ec3c7c275fa3714412c8ff6e # 3.6.1
         with:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
@@ -41,7 +41,7 @@ jobs:
 
       - name: Get release version
         id: version
-        uses: SonarSource/release-github-actions/get-release-version@v1
+        uses: SonarSource/release-github-actions/get-release-version@7dd4782e88df1ac018969c71a89266c0d36dd758 # 1.7.2
         with:
           branch: ${{ inputs.branch }}
 
