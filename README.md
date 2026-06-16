@@ -23,8 +23,8 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 ## Documentation
 
 - **📘 Official Documentation:** [docs.sonarsource.com/sonarqube-cli](https://docs.sonarsource.com/sonarqube-cli)
-- **🌐 Project Website:** [cli.sonarqube.com](https://cli.sonarqube.com/)
-- **📖 Command Reference:** [cli.sonarqube.com/commands.html](https://cli.sonarqube.com/commands.html)
+- **🌐 Project Website:** [sonarsource.com/sonarqube/cli](https://sonarsource.com/sonarqube/cli)
+- **📖 Command Reference:** [sonarsource.com/sonarqube/cli/commands.html](https://sonarsource.com/sonarqube/cli/commands.html)
 
 ## Table of Contents
 

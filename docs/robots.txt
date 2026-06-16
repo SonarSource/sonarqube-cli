@@ -1,6 +1,6 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://cli.sonarqube.com/sitemap.xml
+Sitemap: https://sonarsource.com/sonarqube/cli/sitemap.xml
 
 Content-Signal: ai-train=no, search=yes, ai-input=yes
