@@ -77,7 +77,7 @@ describe('integrate antigravity', () => {
         );
         expect(command.startsWith('/')).toBe(false);
         expect(command.startsWith(IS_WINDOWS ? 'powershell' : 'bash')).toBe(true);
-        expect(command).toContain('.agents/sonar/hooks');
+        expect(command).toContain('sonar/hooks');
         expect(command).toMatch(IS_WINDOWS ? /powershell -NoProfile -File "/ : /bash "/);
         expect(hooksJson['sonar-secrets']?.enabled).toBe(true);
         expect(hooksJson['sonar-secrets']?.PreToolUse?.[0]?.matcher).toBe('view_file');

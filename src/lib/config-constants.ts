@@ -100,6 +100,9 @@ export const ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR = join(
   'hooks',
 );
 
+/** Sonar hook scripts directory relative to `.agents/` (Antigravity PreToolUse cwd). */
+export const ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS = join('sonar', 'hooks');
+
 /**
  * Global Antigravity config root (`sonar integrate antigravity --global`).
  * Hook scripts and config patches live under this tree (not a plugin bundle).

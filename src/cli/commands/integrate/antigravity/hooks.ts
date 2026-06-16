@@ -19,13 +19,14 @@
  */
 
 import { existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
   ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR,
   ANTIGRAVITY_PROJECT_HOOKS_JSON,
   ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR,
+  ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
 } from '../../../../lib/config-constants';
 import { warn } from '../../../../ui';
 import { HOOK_TIMEOUT_SEC, readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks';
@@ -162,8 +163,11 @@ export function resolvePretoolSecretsScriptPath(context: IntegrationContext): st
 }
 
 export function resolveAntigravityHookCommandPath(context: IntegrationContext): string {
-  const scriptPath = resolvePretoolSecretsScriptPath(context);
-  return context.scope === 'global' ? scriptPath : relative(context.targetRoot, scriptPath);
+  if (context.scope === 'global') {
+    return resolvePretoolSecretsScriptPath(context);
+  }
+  // hooks.json lives under .agents/; Antigravity invokes PreToolUse commands with cwd=.agents/
+  return join(ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS, hookScriptName());
 }
 
 export function formatAntigravityHookCommand(scriptPath: string): string {
