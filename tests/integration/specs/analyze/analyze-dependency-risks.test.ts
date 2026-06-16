@@ -146,10 +146,10 @@ describe('analyze dependency-risks', () => {
       });
 
       // Progress one-liner + spinner labels belong on stderr.
-      expect(result.stderr).toContain('Checking dependency analysis availability');
+      expect(result.stderr).toContain('Synchronizing settings');
       expect(result.stderr).toContain('Discovering dependency manifests');
       // stdout must stay clean: no progress text leaks into the payload stream.
-      expect(result.stdout).not.toContain('Checking dependency analysis availability');
+      expect(result.stdout).not.toContain('Synchronizing settings');
       expect(result.stdout).not.toContain('Discovering dependency manifests');
       expect(result.stdout).not.toContain('Analyzing dependency risks');
     },

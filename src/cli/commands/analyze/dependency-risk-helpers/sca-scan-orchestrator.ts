@@ -25,6 +25,7 @@ import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { SCA_SCANNER_CACHE_DIR } from '../../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../../lib/logger';
 import { type SonarQubeClient } from '../../../../sonarqube/client';
+import type { SettingsValue } from '../../../../sonarqube/settings-value';
 import { withSpinner } from '../../../../ui';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
 import type { SecretsInstaller } from '../../_common/install/secrets';
@@ -45,14 +46,7 @@ export class ScaScanOrchestrator {
   ) {}
 
   async run(auth: ResolvedAuth, projectKey: string): Promise<AnalyzeProjectResponse> {
-    const settings = await withSpinner(
-      'Checking dependency analysis availability',
-      async () => {
-        await assertScaAvailable(this.client, auth);
-        return this.client.getProjectSettings(projectKey);
-      },
-      process.stderr,
-    );
+    const settings = await this.synchronizeSettings(auth, projectKey);
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
     const { apiBaseUrl, downloadBaseUrl } = buildScaUrls(auth);
@@ -80,6 +74,23 @@ export class ScaScanOrchestrator {
       secretsInstaller: this.secretsInstaller,
     });
 
+    return this.analyzeDependencyRisks(invocation);
+  }
+
+  private synchronizeSettings(auth: ResolvedAuth, projectKey: string): Promise<SettingsValue[]> {
+    return withSpinner(
+      'Synchronizing settings',
+      async () => {
+        await assertScaAvailable(this.client, auth);
+        return this.client.getProjectSettings(projectKey);
+      },
+      process.stderr,
+    );
+  }
+
+  private analyzeDependencyRisks(
+    invocation: ScaScannerInvocation,
+  ): Promise<AnalyzeProjectResponse> {
     return withSpinner(
       'Analyzing dependency risks',
       () => new ScaScannerRunner(this.installer, this.spawner).run(invocation),
