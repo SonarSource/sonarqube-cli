@@ -31,6 +31,7 @@ import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../.
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
+const SQAA_RULE_DIRS = ['.cursor', 'rules', 'sonar-agentic-analysis.mdc'];
 const PROMPT_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.cursor', 'hooks.json'];
 
@@ -428,6 +429,157 @@ describe('integrate cursor', () => {
         ).toBeUndefined();
         // The MCP server feature still installs.
         expect(harness.cwd.exists(...MCP_JSON_DIRS)).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+  });
+
+  describe('SonarQube Agentic Analysis instructions', () => {
+    const TEST_ORG = 'my-org';
+    const TEST_PROJECT = 'my-project';
+
+    // Stand up a fake SonarQube Cloud server with SQAA entitlement for the test
+    // org, swap the harness auth to a cloud connection, and return env vars that
+    // point the CLI's hard-coded SonarCloud URL constants at the fake server.
+    async function setupCloudWithEntitlement(
+      options: { eligible?: boolean; enabled?: boolean } = {},
+    ): Promise<{ extraEnv: Record<string, string> }> {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234', options)
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+      return {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      };
+    }
+
+    it(
+      'writes an always-applied .cursor/rules/sonar-agentic-analysis.mdc when entitled, project scope, with a project key',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run(
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+          { extraEnv },
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists(...SQAA_RULE_DIRS)).toBe(true);
+
+        const body = harness.cwd.file(...SQAA_RULE_DIRS).asText();
+        // Cursor auto-loads the rule in every session via the front-matter.
+        expect(body).toContain('alwaysApply: true');
+        expect(body).toContain('# SonarQube Agentic Analysis protocol');
+        // Project key is baked into the example command.
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+
+        expect(
+          findInstalledFeature(harness, 'cursor', 'sqaa-instructions', 'project'),
+        ).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'prompts to install SQAA and writes the rule when accepted (entitled org, interactive)',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run(`integrate cursor --project ${TEST_PROJECT}`, {
+          extraEnv,
+          stdinChunks: ['\r', '\r', '\r'],
+        });
+
+        expect(result.exitCode).toBe(0);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Install SonarQube Agentic Analysis instructions?');
+        const body = harness.cwd.file(...SQAA_RULE_DIRS).asText();
+        expect(body).toContain('# SonarQube Agentic Analysis protocol');
+        expect(
+          findInstalledFeature(harness, 'cursor', 'sqaa-instructions', 'project'),
+        ).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips the SQAA rule under -g even when entitled, and warns',
+      async () => {
+        // `--global` and `--project` are mutually exclusive, so the project key
+        // is discovered from disk in the global flow.
+        const { extraEnv } = await setupCloudWithEntitlement();
+        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+
+        const result = await harness.run('integrate cursor -g --non-interactive', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
+        // Never written project-side on a global install.
+        expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
+        expect(findInstalledFeature(harness, 'cursor', 'sqaa-instructions')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits the SQAA rule when no project key is provided or discoverable',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        const result = await harness.run('integrate cursor --non-interactive', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
+        expect(findInstalledFeature(harness, 'cursor', 'sqaa-instructions')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips SQAA and shows the promotion message when the org is not entitled',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement({ enabled: false });
+
+        const result = await harness.run(
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+          { extraEnv },
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(`${result.stdout}\n${result.stderr}`).toContain(
+          'SonarQube Agentic Analysis is available on SonarQube Cloud',
+        );
+        expect(harness.cwd.file(...SQAA_RULE_DIRS).exists()).toBe(false);
+        expect(findInstalledFeature(harness, 'cursor', 'sqaa-instructions')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      're-running is idempotent — rule body is unchanged',
+      async () => {
+        const { extraEnv } = await setupCloudWithEntitlement();
+
+        await harness.run(`integrate cursor --project ${TEST_PROJECT} --non-interactive`, {
+          extraEnv,
+        });
+        const firstBody = harness.cwd.file(...SQAA_RULE_DIRS).asText();
+
+        const result = await harness.run(
+          `integrate cursor --project ${TEST_PROJECT} --non-interactive`,
+          { extraEnv },
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file(...SQAA_RULE_DIRS).asText()).toBe(firstBody);
       },
       { timeout: 30000 },
     );
