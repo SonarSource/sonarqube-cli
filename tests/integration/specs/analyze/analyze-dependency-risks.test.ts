@@ -58,20 +58,26 @@ describe('analyze dependency-risks', () => {
     { timeout: 15000 },
   );
 
-  it('exits with code 1 when project does not exist (settings 404)', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken(VALID_TOKEN)
-      .withScaEnabled(true)
-      .start();
-    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+  it(
+    'exits with code 1 when project does not exist (settings 404)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withScaEnabled(true)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-    const result = await harness.run('analyze dependency-risks --project demo');
+      const result = await harness.run('analyze dependency-risks --project demo');
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain('Project demo not found');
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(true);
-  });
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Project demo not found');
+      expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(
+        true,
+      );
+    },
+    { timeout: 15000 },
+  );
 
   it(
     'exits with code 1 when SCA is disabled on the server',
