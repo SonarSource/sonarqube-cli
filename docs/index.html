@@ -62,18 +62,25 @@
 
 <!-- ─── Nav ──────────────────────────────────────────────────── -->
 <nav class="nav">
-  <a href="index.html" class="logo">
-    <img class="logo-dark"  src="assets/SQ-CLI_Dark Backgrounds.svg"  alt="SonarQube CLI">
-    <img class="logo-light" src="assets/SQ-CLI_Light Backgrounds.svg" alt="SonarQube CLI">
-  </a>
+  <div class="brand-lockup">
+    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--sonar" title="SonarSource home">
+      <img class="brand-image brand-image--sonar brand-image--dark" src="assets/sonar-lockup-dark.svg" alt="Sonar">
+      <img class="brand-image brand-image--sonar brand-image--light" src="assets/sonar-lockup-light.svg" alt="Sonar">
+    </a>
+    <span class="brand-separator" aria-hidden="true"></span>
+    <a href="https://www.sonarsource.com/" class="brand-home-link brand-home-link--cli" title="SonarSource home">
+      <img class="brand-image brand-image--cli brand-image--dark" src="assets/SQ-CLI_Dark Backgrounds.svg" alt="SonarQube CLI">
+      <img class="brand-image brand-image--cli brand-image--light" src="assets/SQ-CLI_Light Backgrounds.svg" alt="SonarQube CLI">
+    </a>
+  </div>
   <span class="version" id="nav-version" style="display:none">v0.8.1</span>
   <div class="nav-links">
     <a href="index.html" class="nav-link active">Home</a>
     <a href="commands.html" class="nav-link">Commands</a>
-    <a href="https://docs.sonarsource.com/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">Docs</a>
-    <a href="https://github.com/SonarSource/sonarqube-cli" class="nav-link" target="_blank" rel="noopener">GitHub</a>
-    <a href="llms.txt" class="nav-link">llms.txt</a>
-    <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="nav-link" target="_blank" rel="noopener">Feedback</a>
+    <a href="https://docs.sonarsource.com/sonarqube-cli" class="nav-link nav-link-secondary" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/SonarSource/sonarqube-cli" class="nav-link nav-link-secondary" target="_blank" rel="noopener">GitHub</a>
+    <a href="llms.txt" class="nav-link nav-link-llms">llms.txt</a>
+    <a href="https://forms.gle/zuNTSBFq2EKsum3E6" class="nav-link nav-link-secondary" target="_blank" rel="noopener">Feedback</a>
     <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">☀</button>
   </div>
 </nav>
