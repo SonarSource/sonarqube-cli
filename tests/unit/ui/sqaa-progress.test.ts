@@ -163,10 +163,41 @@ describe('SqaaProgress — TTY', () => {
     const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
       const stdout = captureStdout(() => progress.warnPayloadSplit());
-      expect(stdout).toBe('');
+      expect(stdout).toContain('\x1B[1A');
       expect(String(stderrSpy.mock.calls[0]?.[0])).toContain('Request size limit reached');
     } finally {
       stderrSpy.mockRestore();
+      progress.finish();
+    }
+  });
+
+  it('warnPayloadSplit erases the live line before writing the warning', () => {
+    const progress = new SqaaProgress({ files: FILES, isTTY: true });
+    captureStdout(() => progress.start());
+
+    const events: Array<'stdout-erase' | 'stderr-warn'> = [];
+    const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+      const text = String(chunk);
+      if (text.includes('\x1B[1A') || text.includes('\x1b[1A')) {
+        events.push('stdout-erase');
+      }
+      return true;
+    });
+    const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => {
+      events.push('stderr-warn');
+      return true;
+    });
+    try {
+      progress.warnPayloadSplit();
+      const warnIdx = events.indexOf('stderr-warn');
+      const eraseBeforeWarn = events.lastIndexOf('stdout-erase', warnIdx);
+      expect(warnIdx).toBeGreaterThanOrEqual(0);
+      expect(eraseBeforeWarn).toBeGreaterThanOrEqual(0);
+      expect(eraseBeforeWarn).toBeLessThan(warnIdx);
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+      progress.finish();
     }
   });
 });

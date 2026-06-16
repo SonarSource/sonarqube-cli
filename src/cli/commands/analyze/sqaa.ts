@@ -215,10 +215,12 @@ async function runSqaaAnalysisOnFiles(
     branch,
     progress,
   };
-  const tally = await runAnalyses(ctx);
-
-  progress.finish();
-  printSqaaTextReport({ tally, allPaths, ignoredPaths });
+  try {
+    const tally = await runAnalyses(ctx);
+    printSqaaTextReport({ tally, allPaths, ignoredPaths });
+  } finally {
+    progress.finish();
+  }
 }
 
 async function fetchSingleFileReport(

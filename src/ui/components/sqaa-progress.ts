@@ -98,6 +98,11 @@ export class SqaaProgress {
       recordCall('sqaaProgress.warnPayloadSplit');
       return;
     }
+    // Erase the live line first so the warning is not overwritten by the
+    // next animation tick; the live line is re-rendered fresh below it.
+    if (this.isTTY) {
+      this.eraseLiveLine();
+    }
     warn(PAYLOAD_SPLIT_WARNING);
   }
 
