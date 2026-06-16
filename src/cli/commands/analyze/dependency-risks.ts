@@ -63,9 +63,9 @@ export async function analyzeDependencyRisks(
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   const result = await new ScaScanOrchestrator(
     client,
-    new DefaultScaScannerInstaller(process.stderr),
+    new DefaultScaScannerInstaller(),
     new DefaultScaScannerSpawner(),
-    new DefaultSecretsInstaller(process.stderr),
+    new DefaultSecretsInstaller(),
   ).run(auth, projectKey);
 
   const viewModel = buildDependencyRisksViewModel(result, filter);

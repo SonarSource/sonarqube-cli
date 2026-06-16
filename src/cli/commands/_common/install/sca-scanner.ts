@@ -43,12 +43,12 @@ export const SCA_SCANNER_SPEC: BinarySpec = {
   publicKey: SONARSOURCE_PUBLIC_KEY,
 };
 
-export async function installScaScannerBinary(
-  stream: NodeJS.WriteStream = process.stdout,
-): Promise<string> {
-  const { binaryPath, freshlyInstalled } = await installBinary(SCA_SCANNER_SPEC, { stream });
+export async function installScaScannerBinary(): Promise<string> {
+  const { binaryPath, freshlyInstalled } = await installBinary(SCA_SCANNER_SPEC, {
+    stream: process.stderr,
+  });
   if (freshlyInstalled) {
-    discreetSuccess(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`, stream);
+    discreetSuccess(`${SCA_SCANNER_BINARY_NAME} installed at ${binaryPath}`, process.stderr);
   }
   return binaryPath;
 }
@@ -70,10 +70,8 @@ export interface ScaScannerInstaller {
 }
 
 export class DefaultScaScannerInstaller implements ScaScannerInstaller {
-  constructor(private readonly stream: NodeJS.WriteStream = process.stdout) {}
-
   install(): Promise<string> {
-    return installScaScannerBinary(this.stream);
+    return installScaScannerBinary();
   }
 }
 
