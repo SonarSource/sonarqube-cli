@@ -2,7 +2,8 @@
 
 A CLI tool (`sonar`) that integrates SonarQube Server and Cloud into developer workflows.
 
-Release builds publish standalone executables for `linux-x86-64`, `linux-arm64`, `macos-arm64`, and `windows-x86-64`. binaries.sonarsource.com artifacts use the `.bin` suffix on Linux/macOS and `.exe` on Windows (e.g. `sonarqube-cli-{version}-linux-x86-64.bin`); versions published before that convention remain `.exe` on the CDN. Dependency binaries (sonar-secrets, sca-scanner-cli) still use `.exe` in download URLs. The `user-scripts/install.sh` and `user-scripts/install-prerelease.sh` installers select the Linux artifact using `uname -m` (`aarch64` / `arm64` → `linux-arm64`, `x86_64` / `amd64` → `linux-x86-64`) and try `.bin` then `.exe` when downloading.
+Release builds publish standalone executables for `linux-x86-64`, `linux-arm64`, `macos-arm64`, and `windows-x86-64`, plus `homebrew` variants for the same platforms. Standalone filenames remain `sonarqube-cli-{version}-{platform}.{bin|exe}`; Homebrew filenames use `sonarqube-cli-{version}-homebrew-{platform}.{bin|exe}`. binaries.sonarsource.com artifacts use the `.bin` suffix on Linux/macOS and `.exe` on Windows (e.g. `sonarqube-cli-{version}-linux-x86-64.bin`); versions published before that convention remain `.exe` on the CDN. Dependency binaries (sonar-secrets, sca-scanner-cli) still use `.exe` in download URLs. The `user-scripts/install.sh` and `user-scripts/install-prerelease.sh` installers select the Linux artifact using `uname -m` (`aarch64` / `arm64` → `linux-arm64`, `x86_64` / `amd64` → `linux-x86-64`) and try `.bin` then `.exe` when downloading.
+Binary builds inject `SONARQUBE_CLI_DISTRIBUTION` as a compile-time constant through Bun's `define`; supported values are `standalone` (default) and `homebrew`. CI cross-builds those binaries through `build-scripts/build-binary.ts` with `SONARQUBE_CLI_DISTRIBUTION`, `SONARQUBE_CLI_TARGET`, and `SONARQUBE_CLI_OUTFILE`.
 
 # Running checks
 
