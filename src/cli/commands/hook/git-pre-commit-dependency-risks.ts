@@ -94,7 +94,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
 
   const matchedCount = countSelectedRisks(viewModel);
   if (matchedCount === 0) {
-    discreetSuccess('No dependency risks found');
+    discreetSuccess('No dependency risks found.');
     return;
   }
 
