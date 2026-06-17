@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared closing step for agent integrate commands (the counterpart to
+// Shared postlude for agent integrate commands (the closing counterpart to
 // agent-integrate-prelude): given an agent's resolved context and its
 // agent-specific feature flags, resolve Context Augmentation, assemble the
 // integration options and recorded attrs, and run the install.

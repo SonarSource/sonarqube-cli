@@ -21,7 +21,7 @@
 // Integrate command — setup SonarQube integration for Codex.
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import { finalizeAgentInstall } from '../_common/agent-integrate-install';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
