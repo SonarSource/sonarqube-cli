@@ -78,6 +78,68 @@ const SCAN_RESULT_EMPTY: AnalyzeProjectResponse = {
   errors: [],
 };
 
+// One BLOCKER + two HIGH risks, all NEW (status null + newlyIntroduced true).
+const SCAN_RESULT_MULTI_SEVERITY: AnalyzeProjectResponse = {
+  releases: [
+    {
+      key: 'lodash:4.17.21',
+      packageUrl: 'pkg:npm/lodash@4.17.21',
+      packageManager: 'npm',
+      packageName: 'lodash',
+      version: '4.17.21',
+      licenseExpression: null,
+      known: true,
+      knownPackage: true,
+      newlyIntroduced: true,
+      dependencyFilePaths: ['package.json'],
+      dependencyChains: [['pkg:npm/lodash@4.17.21']],
+      issues: [
+        {
+          key: 'issue-1',
+          severity: 'HIGH',
+          showIncreasedSeverityWarning: null,
+          type: 'VULNERABILITY',
+          quality: 'SECURITY',
+          status: null,
+          vulnerabilityId: 'CVE-2024-0001',
+          cweIds: null,
+          cvssScore: '7.5',
+          spdxLicenseId: null,
+          versionOptions: null,
+        },
+        {
+          key: 'issue-2',
+          severity: 'BLOCKER',
+          showIncreasedSeverityWarning: null,
+          type: 'VULNERABILITY',
+          quality: 'SECURITY',
+          status: null,
+          vulnerabilityId: 'CVE-2024-0002',
+          cweIds: null,
+          cvssScore: '9.8',
+          spdxLicenseId: null,
+          versionOptions: null,
+        },
+        {
+          key: 'issue-3',
+          severity: 'HIGH',
+          showIncreasedSeverityWarning: null,
+          type: 'VULNERABILITY',
+          quality: 'SECURITY',
+          status: null,
+          vulnerabilityId: 'CVE-2024-0003',
+          cweIds: null,
+          cvssScore: '8.1',
+          spdxLicenseId: null,
+          versionOptions: null,
+        },
+      ],
+    },
+  ],
+  parsedFiles: ['package.json'],
+  errors: [],
+};
+
 describe('runDepRisksStage', () => {
   let resolveScaScannerBinaryPathSpy: ReturnType<typeof spyOn>;
   let watchPatternsSpy: ReturnType<typeof spyOn>;
@@ -105,7 +167,7 @@ describe('runDepRisksStage', () => {
     clearMockUiCalls();
   });
 
-  it('prints the risk table and throws CommandFailedError when risks are found', async () => {
+  it('throws CommandFailedError with a minimal summary when risks are found', async () => {
     let thrown: unknown;
     try {
       await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
@@ -115,21 +177,36 @@ describe('runDepRisksStage', () => {
 
     expect(thrown).toBeInstanceOf(CommandFailedError);
     const err = thrown as CommandFailedError;
-    expect(err.message).toBe('Dependency risks detected (1 matching the configured filter).');
+    expect(err.message).toBe('1 dependency risk found (1 HIGH)');
     expect(err.remediationHint).toBe(
-      "Run 'sonar analyze dependency-risks -p demo' to inspect & fix the risks, then retry the commit.",
+      "Run 'sonar analyze dependency-risks -p demo' for details and fix recommendations. Bypass with 'git commit --no-verify' if risks are already reviewed.",
     );
-
-    const printCall = findMockUiCall('print', 'lodash@4.17.21');
-    expect(printCall).toBeDefined();
   });
 
-  it('resolves without throwing when the scan finds no risks', async () => {
+  it('reports the severity breakdown highest-first when multiple risks are found', async () => {
+    orchestratorRunSpy.mockResolvedValue(SCAN_RESULT_MULTI_SEVERITY);
+
+    let thrown: unknown;
+    try {
+      await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toBe(
+      '3 dependency risks found (1 BLOCKER, 2 HIGH)',
+    );
+  });
+
+  it('reports success and does not throw when the scan finds no risks', async () => {
     orchestratorRunSpy.mockResolvedValue(SCAN_RESULT_EMPTY);
 
     await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
 
     expect(getMockUiCalls().filter((c) => c.method === 'print')).toHaveLength(0);
+    const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
+    expect(successCall).toBeDefined();
   });
 
   it('skips when no dependency manifests changed in the commit', async () => {

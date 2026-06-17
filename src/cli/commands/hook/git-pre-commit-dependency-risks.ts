@@ -27,7 +27,7 @@
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
-import { print, success, warn } from '../../../ui';
+import { discreetSuccess, success, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import {
   resolveScaScannerBinaryPath,
@@ -36,14 +36,16 @@ import {
 import { ResolveOnlySecretsInstaller } from '../_common/install/secrets';
 import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks';
 import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/default-sca-scanner-spawner';
+import { pluralize } from '../analyze/dependency-risk-helpers/pluralize';
 import { buildRiskFilter } from '../analyze/dependency-risk-helpers/risk-filter';
 import { ScaScanOrchestrator } from '../analyze/dependency-risk-helpers/sca-scan-orchestrator';
 import {
   anyFileMatches,
   ScaWatchPatternsRunner,
 } from '../analyze/dependency-risk-helpers/sca-watch-patterns';
-import { formatDependencyRisksTable } from '../analyze/dependency-risk-helpers/table';
+import type { DependencyRisksViewModel } from '../analyze/dependency-risk-helpers/view-model';
 import { buildDependencyRisksViewModel } from '../analyze/dependency-risk-helpers/view-model/build';
+import { SEVERITIES } from '../analyze/dependency-risk-helpers/view-model/build/severity';
 
 const HOOK_STATUS_FILTER = 'new';
 
@@ -88,15 +90,27 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   }
 
   const matchedCount = countSelectedRisks(viewModel);
-  if (matchedCount === 0) return;
+  if (matchedCount === 0) {
+    discreetSuccess('No dependency risks found.');
+    return;
+  }
 
-  print(formatDependencyRisksTable(viewModel));
   throw new CommandFailedError(
-    `Dependency risks detected (${matchedCount} matching the configured filter).`,
+    `${matchedCount} dependency ${pluralize(matchedCount, 'risk')} found (${formatSeverityBreakdown(viewModel)})`,
     {
-      remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' to inspect & fix the risks, then retry the commit.`,
+      remediationHint: `Run 'sonar analyze dependency-risks -p ${options.project}' for details and fix recommendations. Bypass with 'git commit --no-verify' if risks are already reviewed.`,
     },
   );
+}
+
+function formatSeverityBreakdown(viewModel: DependencyRisksViewModel): string {
+  return SEVERITIES.map((severity) => ({
+    severity,
+    count: countSelectedRisks(viewModel, (risk) => risk.severity === severity),
+  }))
+    .filter(({ count }) => count > 0)
+    .map(({ severity, count }) => `${count} ${severity}`)
+    .join(', ');
 }
 
 async function shouldRunDependencyRiskAnalysis(binaryPath: string, changedFiles: string[]) {
