@@ -24,6 +24,7 @@ export {
   contextAugmentationBinaryDependency,
 } from './context-augmentation';
 export {
+  scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
   SonarSourceBinary,
   sonarSourceBinary,

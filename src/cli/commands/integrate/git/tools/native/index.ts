@@ -27,11 +27,13 @@ import { resolveGitHooksDir } from '../../../../_common/git-repo';
 import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
 import { wholeFile, wholeFileRemover } from '../../../_common/registry/resources';
 import type {
+  FeatureContainer,
   FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
 } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
+import { createDepRisksSubfeature, createSecretsSubfeature } from '../git-integration-subfeatures';
 import {
   gitCombinedHookExample,
   gitHookExample,
@@ -53,20 +55,21 @@ export const nativeGitIntegration: IntegrationDeclaration<IntegrateGitOptions> =
   combinedPostInstallExample: gitCombinedHookExample,
 };
 
-function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitOptions> {
-  return {
+function createNativeGitFeature(
+  hook: GitHookType,
+): FeatureContainer<IntegrateGitOptions> | FeatureDeclaration<IntegrateGitOptions> {
+  const base: FeatureDeclaration<IntegrateGitOptions> = {
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
-    dependencies: [sonarSecretsBinaryDependency],
     resources: [
       wholeFile({
         id: 'hook-file',
         version: '1',
         displayName: `${hook} hook`,
         targetPath: (context) => resolveNativeGitHookPath(context, hook),
-        content: getHookScript(hook),
+        content: (context) => getHookScript(hook, context),
         executable: true,
         requiresForce: true,
         managedMarker: getNativeHookMarker(hook),
@@ -96,6 +99,16 @@ function createNativeGitFeature(hook: GitHookType): FeatureDeclaration<Integrate
       }),
     ],
   };
+
+  if (hook === 'pre-commit') {
+    return {
+      ...base,
+      subfeatures: [createSecretsSubfeature(), createDepRisksSubfeature()],
+    } satisfies FeatureContainer<IntegrateGitOptions>;
+  }
+
+  // Pre-push: no subfeatures, dependency on the feature directly.
+  return { ...base, dependencies: [sonarSecretsBinaryDependency] };
 }
 
 async function unsetGlobalHooksPath(expectedHooksDir: string): Promise<void> {

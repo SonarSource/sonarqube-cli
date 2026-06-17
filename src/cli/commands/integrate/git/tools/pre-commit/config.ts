@@ -27,6 +27,8 @@ import yaml from 'js-yaml';
 
 import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
+import { assertSafeSonarProjectKeyForHookScript } from '../../../_common/hooks';
+import type { IntegrationContext } from '../../../_common/registry/types';
 import type { GitHookType } from '../../options';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
@@ -61,15 +63,31 @@ export interface PreCommitConfig {
   [key: string]: unknown;
 }
 
-function buildSonarHook(stage: GitHookType): PreCommitHookEntry {
+function buildSonarHook(stage: GitHookType, context?: IntegrationContext): PreCommitHookEntry {
+  const depRisksArgs = stage === 'pre-commit' ? resolveDepRisksArgs(context) : '';
   return {
     id: PRE_COMMIT_HOOK_IDS[stage],
     name: `Sonar ${stage} scan`,
-    entry: `sonar hook git-${stage} --`,
+    entry: `sonar hook git-${stage}${depRisksArgs} --`,
     language: 'system',
     pass_filenames: true,
     stages: [stage],
   };
+}
+
+function resolveDepRisksArgs(context: IntegrationContext | undefined): string {
+  if (!context?.attrs?.dependencyRisks) {
+    return '';
+  }
+  const projectKey =
+    typeof context.attrs.projectKey === 'string' ? context.attrs.projectKey : undefined;
+  if (!projectKey) {
+    return '';
+  }
+  // No shell quoting needed — pre-commit splits entry on whitespace; the key is validated
+  // safe (no spaces/special chars) by assertSafeSonarProjectKeyForHookScript.
+  assertSafeSonarProjectKeyForHookScript(projectKey);
+  return ` --dependency-risks -p ${projectKey}`;
 }
 
 export function normalizePreCommitConfig(raw: unknown): PreCommitConfig {
@@ -152,8 +170,12 @@ export function removeSonarHooksFromPreCommitConfig(document: unknown): PreCommi
  * replaces the current per-stage entry, else the same-stage legacy `sonar-secrets` entry (migrating
  * it in place), else appends. A legacy entry for the other stage is left untouched.
  */
-export function upsertSonarHook(config: PreCommitConfig, stage: GitHookType): void {
-  const hook = buildSonarHook(stage);
+export function upsertSonarHook(
+  config: PreCommitConfig,
+  stage: GitHookType,
+  context?: IntegrationContext,
+): void {
+  const hook = buildSonarHook(stage, context);
   const localRepo = findLocalRepo(config);
   if (!localRepo) {
     config.repos.push({ repo: 'local', hooks: [hook] });

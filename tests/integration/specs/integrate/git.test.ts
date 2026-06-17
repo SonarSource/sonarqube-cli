@@ -118,6 +118,11 @@ const LEGACY_PRE_COMMIT_REPO = 'https://github.com/SonarSource/sonar-secrets-pre
 // prompt starts listening, so give those chunks extra room.
 const PROJECT_PROMPT_CHUNK_DELAY_MS = 900;
 
+type InstalledSubfeatureJson = {
+  featureId: string;
+  dependencies: Array<{ id: string }>;
+};
+
 type InstalledStateJson = {
   dependencies: {
     installed: Array<{
@@ -136,6 +141,7 @@ type InstalledStateJson = {
         dependencies: Array<{ id: string }>;
         resources: Array<{ id: string; resourceType: string }>;
         operations: Array<{ id: string }>;
+        subfeatures?: InstalledSubfeatureJson[];
       }>;
     }>;
   };
@@ -173,6 +179,16 @@ function expectFeatureDependency(feature: InstalledFeatureJson, id: string): voi
   const dependency = feature.dependencies.find((entry) => entry.id === id);
   expect(dependency).toBeDefined();
   expect(dependency?.id).toBe(id);
+}
+
+function expectSubfeatureHasDependency(
+  feature: InstalledFeatureJson,
+  subfeatureId: string,
+  dependencyId: string,
+): void {
+  const subfeature = feature.subfeatures?.find((s) => s.featureId === subfeatureId);
+  expect(subfeature).toBeDefined();
+  expect(subfeature?.dependencies.some((d) => d.id === dependencyId)).toBe(true);
 }
 
 function expectInstalledResource(
@@ -464,7 +480,7 @@ describe('integrate git (native hooks)', () => {
         scope: 'project',
         targetRoot: harness.cwd.path,
       });
-      expectFeatureDependency(feature, 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'whole-file');
       expect(feature.operations).toEqual([]);
       expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
@@ -607,6 +623,92 @@ describe('integrate git (native hooks)', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'exits with error when --dependency-risks is used without -p',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-commit --dependency-risks --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain('--dependency-risks requires -p');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with error when --global is combined with --dependency-risks',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const result = await harness.run(
+        'integrate git --global --dependency-risks -p my-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain(
+        '--dependency-risks and -p are not supported with --global',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'bakes the project key into the native pre-commit hook when --dependency-risks is set',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      harness.state().withScaScannerBinaryInstalled();
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(0);
+
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).toContain('--dependency-risks -p');
+      expect(hookContent).toContain('my-project');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
+      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    '--dependency-risks with --hook pre-push is rejected',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-push --dependency-risks -p my-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(0);
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      expect(gitIntegration.features.some((f) => f.featureId === 'pre-commit-hook')).toBe(false);
+      const pushFeature = gitIntegration.features.find((f) => f.featureId === 'pre-push-hook');
+      expect(pushFeature).toBeDefined();
+      expect(pushFeature?.subfeatures).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
 });
 
 describe('integrate git (husky)', () => {
@@ -644,7 +746,7 @@ describe('integrate git (husky)', () => {
         scope: 'project',
         targetRoot: harness.cwd.path,
       });
-      expectFeatureDependency(feature, 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
       expect(feature.operations).toEqual([]);
       expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
@@ -713,6 +815,34 @@ describe('integrate git (husky)', () => {
       expectInstalledResource(feature, 'hook-file', 'text-snippet');
       expect(feature.operations).toEqual([]);
       expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'bakes the project key into the husky pre-commit hook when --dependency-risks is set',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      harness.state().withScaScannerBinaryInstalled();
+      initGitRepoWithHusky(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(0);
+
+      const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-commit'), 'utf-8');
+      expect(hookContent).toContain('--dependency-risks -p');
+      expect(hookContent).toContain('my-project');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const huskyIntegration = getInstalledIntegration(state, 'husky');
+      const feature = huskyIntegration.features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
+      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
     },
     { timeout: 15000 },
   );
@@ -802,7 +932,7 @@ describe('integrate git (pre-commit framework)', () => {
         scope: 'project',
         targetRoot: harness.cwd.path,
       });
-      expectFeatureDependency(feature, 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectInstalledResource(feature, 'hook-config', 'yaml-patch');
       expectInstalledOperation(feature, 'activate-hook');
       expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
@@ -1015,6 +1145,40 @@ describe('integrate git (pre-commit framework)', () => {
       expect(ids.filter((id) => id === 'sonar-pre-commit')).toHaveLength(1);
       expect(ids.filter((id) => id === 'sonar-pre-push')).toHaveLength(1);
       expect(ids.some((id) => id === 'sonar-secrets')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'bakes the project key into the pre-commit config hook entry when --dependency-risks is set',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      harness.state().withScaScannerBinaryInstalled();
+      initGitRepoWithPreCommitConfig(harness);
+      const preCommitLog = join(harness.cwd.path, 'pre-commit.log');
+
+      const result = await harness.run(
+        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+        { extraEnv: setupFakePreCommit(preCommitLog) },
+      );
+
+      expect(result.exitCode).toBe(0);
+
+      const config = readYamlFile<PreCommitYamlConfig>(
+        join(harness.cwd.path, '.pre-commit-config.yaml'),
+      );
+      const localRepo = config.repos.find((repo) => repo.repo === 'local');
+      const sonarHook = localRepo?.hooks.find((hook) => hook.id === 'sonar-pre-commit');
+      expect(sonarHook?.entry).toContain('--dependency-risks');
+      expect(sonarHook?.entry).toContain('-p my-project');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const preCommitIntegration = getInstalledIntegration(state, 'pre-commit');
+      const feature = preCommitIntegration.features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
+      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
     },
     { timeout: 15000 },
   );

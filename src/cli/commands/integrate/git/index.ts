@@ -136,6 +136,13 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
   validateHookOption(options.hook);
 
+  if (options.global && (options.dependencyRisks || options.project)) {
+    throw new InvalidOptionError('--dependency-risks and -p are not supported with --global.');
+  }
+  if (options.dependencyRisks && !options.project) {
+    throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
+  }
+
   intro('SonarQube Git Integration (secrets scanning)');
 
   if (options.global) {
@@ -180,6 +187,11 @@ async function installGitFeatures(
     scope,
     force: options.force,
     nonInteractive: options.nonInteractive,
+    // Attrs are project-scope only; global hooks do not support a project key.
+    attrs:
+      scope === 'project'
+        ? { projectKey: options.project ?? null, dependencyRisks: options.dependencyRisks ?? false }
+        : undefined,
   });
 }
 

@@ -20,13 +20,18 @@
 
 import { join } from 'node:path';
 
-import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry';
+import type {
+  FeatureContainer,
+  FeatureDeclaration,
+  IntegrationDeclaration,
+} from '../../../_common/registry';
 import {
   sonarSecretsBinaryDependency,
   yamlPatch,
   yamlPatchRemover,
 } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
+import { createDepRisksSubfeature, createSecretsSubfeature } from '../git-integration-subfeatures';
 import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
 import {
   activatePreCommitFramework,
@@ -48,29 +53,28 @@ export const preCommitIntegration: IntegrationDeclaration<IntegrateGitOptions> =
   combinedPostInstallExample: gitCombinedHookExample,
 };
 
-function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitOptions> {
-  return {
+function createPreCommitFeature(
+  hook: GitHookType,
+): FeatureContainer<IntegrateGitOptions> | FeatureDeclaration<IntegrateGitOptions> {
+  const base: FeatureDeclaration<IntegrateGitOptions> = {
     id: `${hook}-hook`,
     displayName: `${hook} hook`,
     shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
-    dependencies: [sonarSecretsBinaryDependency],
     resources: [
       yamlPatch({
         id: 'hook-config',
         version: '1',
         displayName: `${hook} hook`,
         targetPath: (context) => join(context.targetRoot, PRE_COMMIT_CONFIG_FILE),
-        patch: (document) => {
+        patch: (document, context) => {
           const config = normalizePreCommitConfig(document);
-          upsertSonarHook(config, hook);
-
+          upsertSonarHook(config, hook, context);
           return config;
         },
         removePatch: (document) => {
           const config = normalizePreCommitConfig(document);
           removeSonarHook(config, hook);
-
           return config;
         },
       }),
@@ -98,6 +102,16 @@ function createPreCommitFeature(hook: GitHookType): FeatureDeclaration<Integrate
       }),
     ],
   };
+
+  if (hook === 'pre-commit') {
+    return {
+      ...base,
+      subfeatures: [createSecretsSubfeature(), createDepRisksSubfeature()],
+    } satisfies FeatureContainer<IntegrateGitOptions>;
+  }
+
+  // Pre-push: no subfeatures, dependency on the feature directly.
+  return { ...base, dependencies: [sonarSecretsBinaryDependency] };
 }
 
 export {
