@@ -134,9 +134,8 @@ export class IntegrationInstaller {
         const validIds = new Set(feature.subfeatures.map((s) => s.id));
         const unknown = subfeatureIds.filter((id) => !validIds.has(id));
         if (unknown.length > 0) {
-          throw new Error(
-            `Unknown subfeature(s) ${unknown.map((id) => `${integration.id}.${featureId}.${id}`).join(', ')}`,
-          );
+          const prefix = `${integration.id}.${featureId}.`;
+          throw new Error(`Unknown subfeature(s) ${unknown.map((id) => prefix + id).join(', ')}`);
         }
         return {
           ...feature,
