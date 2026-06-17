@@ -142,7 +142,7 @@ export async function verifyBinarySignature(
   const platformKey = `${platformInfo.os}-${platformInfo.arch}`;
   const armoredSignature = signatures[platformKey];
   if (!armoredSignature) {
-    throw new Error(`Signature not found for ${platformKey}. Run: npm run fetch:signatures`);
+    throw new Error(`Signature not found for '${platformKey}'. Run: npm run fetch:signatures`);
   }
 
   const binary = readFileSync(binaryPath);

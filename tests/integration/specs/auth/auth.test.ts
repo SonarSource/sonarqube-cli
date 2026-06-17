@@ -149,7 +149,7 @@ describe('auth login', () => {
       );
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Organization "nonexistent-org" not found or not accessible');
+      expect(result.stderr).toContain("Organization 'nonexistent-org' not found or not accessible");
     },
     { timeout: 15000 },
   );

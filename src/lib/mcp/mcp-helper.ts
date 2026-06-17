@@ -144,7 +144,7 @@ export async function writeMcpServerEntry(filePath: string, serverConfig: object
     try {
       existing = JSON.parse(await readFile(filePath, 'utf-8')) as Record<string, unknown>;
     } catch {
-      throw new Error(`${filePath} contains invalid JSON. Please fix or delete it and re-run.`);
+      throw new Error(`'${filePath}' contains invalid JSON. Please fix or delete it and re-run.`);
     }
   }
 

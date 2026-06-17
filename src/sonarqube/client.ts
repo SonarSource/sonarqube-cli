@@ -477,7 +477,7 @@ export class SonarQubeClient {
     });
 
     if (result.response.status === HTTP_STATUS_NOT_FOUND) {
-      throw new Error(`Project ${projectKey} not found`);
+      throw new Error(`Project '${projectKey}' not found`);
     }
 
     await this.raiseForStatus(result.response, 'GET');

@@ -120,7 +120,7 @@ describe('verifyBinarySignature', () => {
     };
     expect(
       verifyBinarySignature(binaryPath, unknownPlatform, {}, armoredPublicKey),
-    ).rejects.toThrow('Signature not found for linux-arm');
+    ).rejects.toThrow("Signature not found for 'linux-arm'");
   });
 
   it('throws when the binary content does not match the signature', () => {

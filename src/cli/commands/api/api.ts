@@ -89,7 +89,7 @@ export async function apiCommand(
     const validDataMethods = Array.from(METHODS_WITH_BODY)
       .map((m) => m.toLowerCase())
       .join(', ');
-    throw new InvalidOptionError(`--data is only valid for ${validDataMethods} requests`);
+    throw new InvalidOptionError(`--data is only valid for '${validDataMethods}' requests`);
   }
 
   if (options.data) {
