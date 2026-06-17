@@ -253,7 +253,7 @@ integrateCommand
     '-p, --project <project>',
     'Project key baked into the dependency-risks hook (required with --dependency-risks)',
   )
-  .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
+  .authenticatedAction((auth, options: IntegrateGitOptions) => integrateGit(options, auth));
 
 const projectKeyExtraHelp = `
 Instead of providing an explicit --project, you can add sonar.projectKey to sonar-project.properties at the repository root.
