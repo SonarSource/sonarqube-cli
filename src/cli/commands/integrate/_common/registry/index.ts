@@ -71,12 +71,13 @@ export {
   yamlPatchRemover,
   type YamlPatchRemoverOptions,
 } from './resources';
-export { askUser, install, type InstallDecision, skip } from './selection';
+export { askUser, install, type InstallDecision, isFeatureContainer, skip } from './selection';
 export type {
   AppliedFeature,
   AppliedOperation,
   AppliedResource,
   DependencyInstallContext,
+  FeatureContainer,
   FeatureDeclaration,
   FeatureOperation,
   InstalledDependency,
@@ -87,4 +88,5 @@ export type {
   LegacyFeatureDeclaration,
   MaybePromise,
   PostInstallExample,
+  SubfeatureDeclaration,
 } from './types';

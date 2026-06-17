@@ -29,6 +29,7 @@ import type {
   InstalledIntegrationFeature,
   InstalledIntegrationOperation,
   InstalledIntegrationResource,
+  InstalledSubfeature,
   IntegrationScope,
 } from '../../../../../lib/state';
 import type {
@@ -39,6 +40,7 @@ import type {
   InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,
+  SubfeatureDeclaration,
 } from './types';
 
 export function recordInstalledFeature<TOptions>(
@@ -47,6 +49,7 @@ export function recordInstalledFeature<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
   applied: AppliedFeature,
+  activeSubfeatures?: SubfeatureDeclaration<TOptions>[],
 ): InstalledIntegrationFeature {
   const now = new Date().toISOString();
   const installedIntegration = upsertInstalledIntegration(state, integration, now);
@@ -81,6 +84,17 @@ export function recordInstalledFeature<TOptions>(
       new Set((feature.operations ?? []).map((operation) => operation.id)),
     ),
     attrs: context.attrs,
+    subfeatures: activeSubfeatures
+      ? activeSubfeatures.map(
+          (sub): InstalledSubfeature => ({
+            featureId: sub.id,
+            dependencies: upsertDependencyReferences(
+              existing?.subfeatures?.find((s) => s.featureId === sub.id)?.dependencies ?? [],
+              new Set((sub.dependencies ?? []).map((d) => d.id)),
+            ),
+          }),
+        )
+      : existing?.subfeatures,
   };
 
   if (existing) {
@@ -102,9 +116,10 @@ export function recordInstalledFeature<TOptions>(
 export function collectReferencedDependencyIds(state: CliState): Set<string> {
   return new Set(
     state.integrations.installed.flatMap((integration) =>
-      integration.features.flatMap((feature) =>
-        feature.dependencies.map((dependency) => dependency.id),
-      ),
+      integration.features.flatMap((feature) => [
+        ...feature.dependencies.map((d) => d.id),
+        ...(feature.subfeatures?.flatMap((sub) => sub.dependencies.map((d) => d.id)) ?? []),
+      ]),
     ),
   );
 }

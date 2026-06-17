@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { FeatureContainer, FeatureDeclaration } from './types';
+
 /**
  * Outcome of a feature's `shouldInstall` evaluation. Integrations declare the
  * intent; the installer resolves it (prompting / skip messaging) centrally.
@@ -60,4 +62,11 @@ export function normalizeDecision(result: boolean | InstallDecision | undefined)
     return skip();
   }
   return result;
+}
+
+/** Type guard — returns true when `feature` is a {@link FeatureContainer}. */
+export function isFeatureContainer<TOptions>(
+  feature: FeatureDeclaration<TOptions>,
+): feature is FeatureContainer<TOptions> {
+  return 'subfeatures' in feature;
 }
