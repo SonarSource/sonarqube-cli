@@ -34,6 +34,19 @@ export class ServiceUnavailableError extends Error {
   }
 }
 
+/** Thrown by the API client on HTTP 400 (Bad Request) for structured SQAA/API errors. */
+export class BadRequestError extends Error {
+  readonly code?: string;
+  readonly meta?: Record<string, unknown>;
+
+  constructor(message: string, code?: string, meta?: Record<string, unknown>) {
+    super(message);
+    this.name = 'BadRequestError';
+    this.code = code;
+    this.meta = meta;
+  }
+}
+
 export type RequestPayloadTooLargeCode = 'REQUEST_TOO_LARGE' | 'TOO_MANY_FILES';
 
 export interface RequestPayloadTooLargeMeta {

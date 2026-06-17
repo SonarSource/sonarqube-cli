@@ -20,6 +20,7 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
+import { CommandFailedError } from '../../../../../src/cli/commands/_common/error.js';
 import type { FileResult, RunTally } from '../../../../../src/cli/commands/analyze/sqaa-analysis';
 import {
   computeRunSummaryStats,
@@ -27,6 +28,7 @@ import {
   formatSqaaPathPlain,
   formatSqaaRunSummaryPlain,
   printSqaaTextReport,
+  renderFailureDetailLines,
   SQAA_COLLAPSE_CLEAN_THRESHOLD,
 } from '../../../../../src/cli/commands/analyze/sqaa-display';
 import type { SqaaIssue } from '../../../../../src/sonarqube/client';
@@ -88,7 +90,7 @@ describe('formatSqaaRunSummaryPlain', () => {
         totalFailures: 0,
         totalErrors: 0,
       }),
-    ).toBe('✓  No issues found · 7 files analyzed');
+    ).toBe('✓ No issues found · 7 files analyzed');
   });
 
   it('formats issues summary', () => {
@@ -184,6 +186,79 @@ describe('printSqaaTextReport', () => {
     expect(texts.some((l) => l.includes('[SKIPPED]') && l.includes('src/c.ts'))).toBe(true);
     expect(texts.at(-1)).toContain('1 failure');
   });
+
+  it('renders per-file failure detail and remediation hint without redundant heading', () => {
+    setMockUi(true);
+    clearMockUiCalls();
+
+    const tally: RunTally = {
+      allResults: [
+        {
+          file: 'b.ts',
+          filePath: 'b.ts',
+          failure: new CommandFailedError("File path must use forward slashes: 'b\\.ts'", {
+            remediationHint: "Normalize paths to POSIX form (e.g. 'src/index.ts').",
+          }),
+        },
+      ],
+      totalIssues: 0,
+      totalErrors: 0,
+      totalFailures: 1,
+    };
+
+    printSqaaTextReport({ tally, allPaths: ['b.ts'] });
+
+    const texts = getMockTextLines();
+    expect(texts.some((l) => l.includes('SonarQube Agentic Analysis failed'))).toBe(false);
+    expect(texts.some((l) => l.includes("File path must use forward slashes: 'b\\.ts'"))).toBe(
+      true,
+    );
+    expect(texts.some((l) => l.includes('→ Normalize paths to POSIX form'))).toBe(true);
+  });
+
+  it('renders all failed files with a failures-only summary', () => {
+    setMockUi(true);
+    clearMockUiCalls();
+
+    const validationError = new CommandFailedError(
+      'SonarQube Agentic Analysis failed. File path must use forward slashes.',
+      { remediationHint: "Normalize paths to POSIX form (e.g. 'src/index.ts')." },
+    );
+    const tally: RunTally = {
+      allResults: [
+        { file: '/repo/a.ts', filePath: 'a.ts', failure: validationError },
+        { file: '/repo/b.ts', filePath: 'b.ts', failure: validationError },
+      ],
+      totalIssues: 0,
+      totalErrors: 0,
+      totalFailures: 2,
+    };
+
+    printSqaaTextReport({ tally, allPaths: ['a.ts', 'b.ts'] });
+
+    const texts = getMockTextLines();
+    expect(texts.filter((l) => l.includes('a.ts') || l.includes('b.ts'))).toHaveLength(2);
+    expect(texts.some((l) => l.includes('forward slashes'))).toBe(true);
+    expect(texts.at(-1)).toBe('2 files analyzed · 2 failures');
+  });
+});
+
+describe('renderFailureDetailLines', () => {
+  it('strips heading prefix from a single-line message', () => {
+    const lines = renderFailureDetailLines(
+      new CommandFailedError('SonarQube Agentic Analysis failed. network error'),
+      false,
+    );
+    expect(lines).toEqual(['     network error']);
+  });
+
+  it('strips legacy multiline heading and indents each detail line', () => {
+    const lines = renderFailureDetailLines(
+      new CommandFailedError('SonarQube Agentic Analysis failed.\n  network error'),
+      false,
+    );
+    expect(lines).toEqual(['     network error']);
+  });
 });
 
 describe('computeRunSummaryStats', () => {
@@ -218,5 +293,31 @@ describe('computeRunSummaryStats', () => {
         totalErrors: 2,
       }),
     ).toBe('3 files analyzed · 1 with errors · 2 errors');
+  });
+
+  it('includes failures and issues in the same summary', () => {
+    expect(
+      formatSqaaRunSummaryPlain({
+        filesAnalyzed: 5,
+        filesWithIssues: 2,
+        filesWithErrors: 0,
+        totalIssues: 2,
+        totalFailures: 1,
+        totalErrors: 0,
+      }),
+    ).toBe('5 files analyzed · 1 failure · 2 with issues · 2 issues found');
+  });
+
+  it('summarizes when every analyzed file failed', () => {
+    expect(
+      formatSqaaRunSummaryPlain({
+        filesAnalyzed: 2,
+        filesWithIssues: 0,
+        filesWithErrors: 0,
+        totalIssues: 0,
+        totalFailures: 2,
+        totalErrors: 0,
+      }),
+    ).toBe('2 files analyzed · 2 failures');
   });
 });

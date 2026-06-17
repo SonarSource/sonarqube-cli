@@ -25,9 +25,11 @@ import { basename, dirname } from 'node:path';
 import type { SqaaIssue } from '../../../sonarqube/client';
 import { print, text } from '../../../ui';
 import { bold, dim, green, red, softBlue, yellow } from '../../../ui/colors.js';
+import { CliError } from '../_common/error.js';
 import type { FileFailure, FileResult, FileSuccess, RunTally } from './sqaa-analysis';
 import { toRelativePosixPath } from './sqaa-api';
 import type { IgnoredFile } from './sqaa-changeset';
+import { SQAA_FAILURE_HEADING } from './sqaa-errors.js';
 
 /** When analyzed file count exceeds this, clean files collapse to one summary row. */
 export const SQAA_COLLAPSE_CLEAN_THRESHOLD = 20;
@@ -36,6 +38,40 @@ export const SQAA_COLLAPSE_CLEAN_THRESHOLD = 20;
 export const EXIT_CODE_ISSUES_FOUND = 51;
 
 const ISSUE_LINE_INDENT = '     ';
+
+function stripSqaaFailureHeading(text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length === 0 || trimmed === SQAA_FAILURE_HEADING) {
+    return null;
+  }
+  const headingPrefix = `${SQAA_FAILURE_HEADING} `;
+  if (trimmed.startsWith(headingPrefix)) {
+    return trimmed.slice(headingPrefix.length);
+  }
+  return trimmed;
+}
+
+function failureDetailLines(message: string): string[] {
+  return message
+    .split('\n')
+    .map((line) => stripSqaaFailureHeading(line))
+    .filter((line): line is string => line != null && line.length > 0);
+}
+
+/** Indented detail + optional remediation hint for a failed file row. */
+export function renderFailureDetailLines(error: Error, colored: boolean): string[] {
+  const lines: string[] = [];
+  for (const detail of failureDetailLines(error.message)) {
+    const line = `${ISSUE_LINE_INDENT}${detail}`;
+    lines.push(colored ? dim(line) : line);
+  }
+  const hint = error instanceof CliError ? error.remediationHint : undefined;
+  if (hint) {
+    const line = `${ISSUE_LINE_INDENT}→ ${hint}`;
+    lines.push(colored ? dim(line) : line);
+  }
+  return lines;
+}
 
 export interface SqaaJsonReport {
   files: Array<{
@@ -226,22 +262,40 @@ export function computeRunSummaryStats(tally: RunTally, allPaths: string[]): Sqa
 
 function formatSqaaRunSummary(stats: SqaaRunSummaryStats, colored: boolean): string {
   const num = (n: number) => (colored ? yellow(String(n)) : String(n));
+  const failNum = (n: number) => (colored ? red(String(n)) : String(n));
   const lbl = (s: string) => (colored ? bold(s) : s);
   const okIcon = colored ? green('✓') : '✓';
 
-  if (stats.totalFailures > 0) {
+  const hasFailures = stats.totalFailures > 0;
+  const hasIssues = stats.totalIssues > 0;
+  const hasErrors = stats.totalErrors > 0;
+
+  if (!hasFailures && !hasIssues && !hasErrors) {
+    return `${okIcon} ${lbl('No issues found')} · ${num(stats.filesAnalyzed)} ${lbl('files analyzed')}`;
+  }
+
+  const parts: string[] = [`${num(stats.filesAnalyzed)} ${lbl('files analyzed')}`];
+
+  if (hasFailures) {
     const failureWord = stats.totalFailures === 1 ? 'failure' : 'failures';
-    return `${num(stats.filesAnalyzed)} ${lbl('files analyzed')} · ${num(stats.totalFailures)} ${lbl(failureWord)}`;
+    parts.push(`${failNum(stats.totalFailures)} ${lbl(failureWord)}`);
   }
-  if (stats.totalIssues > 0) {
+  if (hasIssues) {
     const issueWord = stats.totalIssues === 1 ? 'issue' : 'issues';
-    return `${num(stats.filesAnalyzed)} ${lbl('files analyzed')} · ${num(stats.filesWithIssues)} ${lbl('with issues')} · ${num(stats.totalIssues)} ${lbl(issueWord)} found`;
+    parts.push(
+      `${num(stats.filesWithIssues)} ${lbl('with issues')}`,
+      `${num(stats.totalIssues)} ${lbl(issueWord)} found`,
+    );
   }
-  if (stats.totalErrors > 0) {
+  if (hasErrors) {
     const errorWord = stats.totalErrors === 1 ? 'error' : 'errors';
-    return `${num(stats.filesAnalyzed)} ${lbl('files analyzed')} · ${num(stats.filesWithErrors)} ${lbl('with errors')} · ${num(stats.totalErrors)} ${lbl(errorWord)}`;
+    parts.push(
+      `${num(stats.filesWithErrors)} ${lbl('with errors')}`,
+      `${num(stats.totalErrors)} ${lbl(errorWord)}`,
+    );
   }
-  return `${okIcon}  ${lbl('No issues found')} · ${num(stats.filesAnalyzed)} ${lbl('files analyzed')}`;
+
+  return parts.join(' · ');
 }
 
 /** Plain-text run summary footer. */
@@ -304,10 +358,10 @@ function renderFileEntryLines(
   }
 
   if ('failure' in result) {
-    const messageLine = colored
-      ? dim(`     ${result.failure.message}`)
-      : `     ${result.failure.message}`;
-    return [formatFailedFileRow(path, colored), messageLine];
+    return [
+      formatFailedFileRow(path, colored),
+      ...renderFailureDetailLines(result.failure, colored),
+    ];
   }
 
   if (fileHasFindings(result)) {
@@ -411,6 +465,17 @@ export function printSqaaTextReport(options: PrintSqaaTextReportOptions): void {
   text('');
   text(formatSqaaRunSummaryColored(stats));
   applyExitCode(stats);
+}
+
+/** Single `--file` failure: same ✗ row + summary footer as change-set analysis. */
+export function printSingleFileTextFailure(filePath: string, error: Error): void {
+  const tally: RunTally = {
+    allResults: [{ file: filePath, filePath, failure: error }],
+    totalIssues: 0,
+    totalErrors: 0,
+    totalFailures: 1,
+  };
+  printSqaaTextReport({ tally, allPaths: [filePath] });
 }
 
 export function makeReport(

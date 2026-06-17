@@ -28,7 +28,7 @@ bun run test:e2e          # end-to-end tests
 - Always fix TypeScript errors before considering a task done.
 - Never attempt to fix linting issues until the implementation is correct.
 - Use `import type` for type-only imports.
-- **MANDATORY**: After editing any `.ts` file, run `bun run format` to format all source files at once, or `bun x prettier --write <file>` for a single file.
+- **MANDATORY**: After editing any `.ts` file, run `bun run format` (or `bun x prettier --write <file>`), then `bun run lint:fix` (or `bun x eslint --fix <file>`) so ESLint autofix applies `simple-import-sort/imports` and other safe fixes.
 
 ## Commands
 
