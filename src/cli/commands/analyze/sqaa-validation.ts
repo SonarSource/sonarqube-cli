@@ -179,8 +179,8 @@ export function validateSqaaAnalysisFiles(
     throw emptyFilesValidationError();
   }
 
-  const { valid, rejected } = partitionSqaaAnalysisFiles(files, options);
-  if (rejected.length > 0 || valid.length === 0) {
-    throw rejected[0]?.error ?? emptyFilesValidationError();
+  const { rejected } = partitionSqaaAnalysisFiles(files, options);
+  if (rejected.length > 0) {
+    throw rejected[0].error;
   }
 }
