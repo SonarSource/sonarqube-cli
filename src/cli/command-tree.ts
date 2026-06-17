@@ -46,24 +46,16 @@ import {
   type AnalyzeSqaaOptions,
   VALID_FORMATS as SQAA_FORMATS,
 } from './commands/analyze/sqaa';
+import { collectSqaaFileOption } from './commands/analyze/sqaa-file-arg';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
 import { authStatus } from './commands/auth/status';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './commands/config/telemetry';
 import { derivePassthroughSubcommand, runContextPassthrough } from './commands/context';
-import {
-  agentPostToolUse,
-  type AgentPostToolUseOptions,
-} from './commands/hook/agent-post-tool-use';
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import { antigravityPreToolUse } from './commands/hook/antigravity-pre-tool-use';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
-import { claudeStop, type ClaudeStopOptions } from './commands/hook/claude-stop';
-import {
-  codexPostToolUse,
-  type CodexPostToolUseOptions,
-} from './commands/hook/codex-post-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
 import { cursorPromptSubmit } from './commands/hook/cursor-prompt-submit';
@@ -366,7 +358,12 @@ const sqaaFormatOption = new Option('--format <format>', 'Output format')
 // `--branch` is intentionally excluded from the bare command.
 function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
   return cmd
-    .option('--file <file>', 'Analyze a single file (skips change set detection)')
+    .option(
+      '--file <path>',
+      'Analyze file(s); optional :MAIN or :TEST scope suffix (repeatable)',
+      collectSqaaFileOption,
+      [],
+    )
     .option('--staged', 'Analyze staged files only (git diff --cached)')
     .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
     .option(
@@ -566,28 +563,6 @@ hookCommand
   .command('cursor-prompt-submit')
   .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
   .anonymousAction(() => cursorPromptSubmit());
-
-hookCommand
-  .command('claude-post-tool-use')
-  .description('PostToolUse handler: run Agentic Analysis after agent edits or writes a file')
-  .requiredOption('--project <key>', 'SonarQube Cloud project key')
-  .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
-
-hookCommand
-  .command('claude-stop')
-  .description(
-    'Stop handler for Claude Code: run Agentic Analysis on the git change set at end of turn',
-  )
-  .requiredOption('--project <key>', 'SonarQube Cloud project key')
-  .anonymousAction((options: ClaudeStopOptions) => claudeStop(options));
-
-hookCommand
-  .command('codex-post-tool-use')
-  .description(
-    'PostToolUse handler for Codex: run Agentic Analysis on the git change set after apply_patch',
-  )
-  .requiredOption('--project <key>', 'SonarQube Cloud project key')
-  .anonymousAction((options: CodexPostToolUseOptions) => codexPostToolUse(options));
 
 hookCommand
   .command('git-pre-commit')

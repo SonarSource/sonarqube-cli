@@ -20,7 +20,11 @@
 
 // Pack SQAA request files into sub-chunks when splitting after a 413 response.
 
-import type { SqaaAnalysisFile, SqaaAnalysisRequest } from '../../../sonarqube/client';
+import type {
+  SqaaAnalysisFile,
+  SqaaAnalysisRequest,
+  SqaaFileScope,
+} from '../../../sonarqube/client';
 
 export interface SqaaChunkFile {
   /** Absolute path on disk (for reading / error reporting). */
@@ -28,6 +32,7 @@ export interface SqaaChunkFile {
   /** Project-relative POSIX path sent to SQAA. */
   relativePath: string;
   content: string;
+  scope?: SqaaFileScope;
 }
 
 export interface SqaaChunk {
@@ -141,5 +146,9 @@ export function packFilesIntoChunks(
 }
 
 function toAnalysisFile(file: SqaaChunkFile): SqaaAnalysisFile {
-  return { path: file.relativePath, content: file.content };
+  return {
+    path: file.relativePath,
+    content: file.content,
+    ...(file.scope ? { scope: file.scope } : {}),
+  };
 }

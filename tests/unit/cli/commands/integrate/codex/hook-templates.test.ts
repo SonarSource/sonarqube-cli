@@ -25,26 +25,24 @@ import {
   WINDOWS_SONAR_COMMAND_GUARD,
 } from '../../../../../../src/cli/commands/integrate/_common/hooks';
 import {
-  getSqaaPostToolTemplateUnix,
-  getSqaaPostToolTemplateWindows,
+  getSecretPromptTemplateUnix,
+  getSecretPromptTemplateWindows,
 } from '../../../../../../src/cli/commands/integrate/codex/hook-templates';
 
-describe('Codex SQAA PostToolUse Hook Templates', () => {
-  it('PostTool Unix hook: delegates to codex-post-tool-use with project key', () => {
-    const template = getSqaaPostToolTemplateUnix('my-project');
+describe('Codex secrets hook templates', () => {
+  it('UserPromptSubmit Unix hook: delegates to codex-prompt-submit', () => {
+    const template = getSecretPromptTemplateUnix();
 
     expect(template.startsWith('#!/bin/bash')).toBe(true);
-    expect(template.includes('sonar hook codex-post-tool-use')).toBe(true);
-    expect(template.includes("--project 'my-project'")).toBe(true);
+    expect(template.includes('sonar hook codex-prompt-submit')).toBe(true);
     expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
     expect(template.includes('sonar analyze agentic')).toBe(false);
   });
 
-  it('PostTool Windows hook: delegates to codex-post-tool-use with project key', () => {
-    const template = getSqaaPostToolTemplateWindows('my-project');
+  it('UserPromptSubmit Windows hook: delegates to codex-prompt-submit', () => {
+    const template = getSecretPromptTemplateWindows();
 
-    expect(template.includes('sonar hook codex-post-tool-use')).toBe(true);
-    expect(template.includes("--project 'my-project'")).toBe(true);
+    expect(template.includes('sonar hook codex-prompt-submit')).toBe(true);
     expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
     expect(template.includes('sonar analyze agentic')).toBe(false);
   });

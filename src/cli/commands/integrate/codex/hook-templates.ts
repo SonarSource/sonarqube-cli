@@ -20,12 +20,7 @@
 
 // Hook script templates for Codex integration.
 
-import {
-  formatSqaaPostToolHookCommandUnix,
-  formatSqaaPostToolHookCommandWindows,
-  unixTemplate,
-  windowsTemplate,
-} from '../_common/hooks';
+import { unixTemplate, windowsTemplate } from '../_common/hooks';
 
 export function getSecretPromptTemplateUnix(): string {
   return unixTemplate('sonar hook codex-prompt-submit');
@@ -33,12 +28,4 @@ export function getSecretPromptTemplateUnix(): string {
 
 export function getSecretPromptTemplateWindows(): string {
   return windowsTemplate('sonar hook codex-prompt-submit');
-}
-
-export function getSqaaPostToolTemplateUnix(projectKey: string): string {
-  return unixTemplate(formatSqaaPostToolHookCommandUnix('codex-post-tool-use', projectKey));
-}
-
-export function getSqaaPostToolTemplateWindows(projectKey: string): string {
-  return windowsTemplate(formatSqaaPostToolHookCommandWindows('codex-post-tool-use', projectKey));
 }

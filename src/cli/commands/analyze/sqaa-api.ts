@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../../lib/fs-utils';
-import type { SqaaAnalysisFile, SqaaIssue } from '../../../sonarqube/client';
+import type { SqaaAnalysisFile, SqaaFileScope, SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '../../../sonarqube/errors.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
@@ -167,11 +167,15 @@ export async function fetchSqaaResponse(
   fileContent: string,
   branch: string | undefined,
   pathBase?: string,
+  scope?: SqaaFileScope,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
   const filePath = toRelativePosixPath(file, pathBase);
-  const { response, rejected } = await postSqaaAnalysis(auth, projectKey, branch, [
-    { path: filePath, content: fileContent },
-  ]);
+  const analysisFile: SqaaAnalysisFile = {
+    path: filePath,
+    content: fileContent,
+    ...(scope ? { scope } : {}),
+  };
+  const { response, rejected } = await postSqaaAnalysis(auth, projectKey, branch, [analysisFile]);
   if (rejected.length > 0) {
     throw rejected[0].error;
   }
@@ -213,9 +217,10 @@ export async function fetchWithRetry(
   branch: string | undefined,
   onRetry?: (attempt: number) => Promise<void>,
   pathBase?: string,
+  scope?: SqaaFileScope,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
   return with503Retry(
-    () => fetchSqaaResponse(auth, projectKey, file, fileContent, branch, pathBase),
+    () => fetchSqaaResponse(auth, projectKey, file, fileContent, branch, pathBase, scope),
     onRetry,
   );
 }
@@ -296,7 +301,11 @@ export async function fetchChunkWithRetry(
 }
 
 function toAnalysisFiles(chunkFiles: SqaaChunkFile[]): SqaaAnalysisFile[] {
-  return chunkFiles.map((f) => ({ path: f.relativePath, content: f.content }));
+  return chunkFiles.map((f) => ({
+    path: f.relativePath,
+    content: f.content,
+    ...(f.scope ? { scope: f.scope } : {}),
+  }));
 }
 
 function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): SqaaChunkFile[][] {
@@ -467,10 +476,20 @@ export async function callSqaaApiAndDisplay(
   file: string,
   fileContent: string,
   branch: string | undefined,
+  scope?: SqaaFileScope,
 ): Promise<number> {
   const filePath = toRelativePosixPath(file);
   try {
-    const response = await fetchWithRetry(auth, projectKey, file, fileContent, branch);
+    const response = await fetchWithRetry(
+      auth,
+      projectKey,
+      file,
+      fileContent,
+      branch,
+      undefined,
+      undefined,
+      scope,
+    );
     return displaySqaaResults(response.issues, response.errors, filePath);
   } catch (err) {
     printSingleFileTextFailure(filePath, err as Error);

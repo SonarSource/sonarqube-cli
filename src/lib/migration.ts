@@ -146,7 +146,7 @@ export interface RunMigrationsOptions {
 export async function runMigrations(
   projectRoot: string,
   globalDir?: string,
-  installSqaa = false,
+  _installSqaa = false,
   projectKey?: string,
   options: RunMigrationsOptions = {},
 ): Promise<void> {
@@ -191,17 +191,12 @@ export async function runMigrations(
       migrateHookScripts(projectRoot, globalDir);
     }
 
-    // Install new PostToolUse hook (and refresh secrets hooks unless skipped)
-    await installHooks(projectRoot, globalDir, installSqaa, projectKey, { skipSecretsHooks });
+    // Install secrets hooks (legacy migration path; SQAA hooks are no longer installed)
+    await installHooks(projectRoot, globalDir, false, projectKey, { skipSecretsHooks });
 
     // Clean up obsolete sonar-a3s artifacts (settings.json entries + hook dir on disk)
     await removeObsoleteHookArtifacts(projectRoot, OBSOLETE_A3S_MARKER);
-
-    // Register PostToolUse hook in state (legacy format for backward compat).
-    // Only for cloud connections: on-premise servers have no SQAA entitlement.
-    if (installSqaa) {
-      addInstalledHook(state, 'claude-code', 'sonar-sqaa', 'PostToolUse');
-    }
+    await removeObsoleteHookArtifacts(projectRoot, 'sonar-sqaa');
 
     // Populate agentExtensions registry from old hooks.installed (if not yet migrated)
     migrateToExtensionsRegistry(state, projectRoot, globalDir);
@@ -209,6 +204,7 @@ export async function runMigrations(
     // Remove obsolete sonar-a3s entries from the in-memory state object before saving.
     // Must happen after migrateToExtensionsRegistry to avoid re-migrating stale entries.
     cleanObsoleteFromState(state, OBSOLETE_A3S_MARKER);
+    cleanObsoleteFromState(state, 'sonar-sqaa');
 
     // Mark migration complete
     state.agents['claude-code'].configuredByCliVersion = CURRENT_VERSION;

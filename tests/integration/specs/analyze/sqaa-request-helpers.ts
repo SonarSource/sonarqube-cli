@@ -37,6 +37,10 @@ export function sqaaRequestFirstFilePath(body: string | undefined): string | und
   return parseSqaaRequestBody(body).files?.[0]?.path;
 }
 
+export function sqaaRequestFirstFileScope(body: string | undefined): string | undefined {
+  return parseSqaaRequestBody(body).files?.[0]?.scope;
+}
+
 /** Number of files in a SQAA request body. */
 export function sqaaRequestFileCount(body: string | undefined): number {
   return parseSqaaRequestBody(body).files?.length ?? 0;

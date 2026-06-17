@@ -48,6 +48,6 @@ export async function integrateCodex(
     context: ctx,
     options,
     auth,
-    featureOptions: { installSqaaHook: sqaaEligible && Boolean(ctx.projectKey) },
+    featureOptions: { installSqaaInstructions: sqaaEligible && Boolean(ctx.projectKey) },
   });
 }

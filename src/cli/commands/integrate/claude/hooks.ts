@@ -32,8 +32,6 @@ import {
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
-  getSqaaPostToolTemplateUnix,
-  getSqaaPostToolTemplateWindows,
 } from './hook-templates';
 
 const HOOKS_DIR = 'hooks';
@@ -226,14 +224,13 @@ export interface InstallHooksOptions {
 
 /**
  * Install all hooks (cross-platform).
- * Secrets hooks install to globalDir (if provided), SQAA hook installs to projectRoot.
- * SQAA hook is only installed when installSqaa is true (requires cloud connection + entitlement).
+ * Secrets hooks install to globalDir (if provided).
  */
 export async function installHooks(
   projectRoot: string,
   globalDir?: string,
-  installSqaa = false,
-  projectKey?: string,
+  _installSqaa = false,
+  _projectKey?: string,
   options: InstallHooksOptions = {},
 ): Promise<void> {
   const secretsDir = globalDir ?? projectRoot;
@@ -261,18 +258,6 @@ export async function installHooks(
         scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
         scriptContentUnix: getSecretPromptTemplateUnix(),
         scriptContentWindows: getSecretPromptTemplateWindows(),
-      });
-    }
-    if (installSqaa && projectKey) {
-      await installHook({
-        installDir: projectRoot,
-        scope: 'project',
-        agent: 'claude',
-        eventType: 'PostToolUse',
-        matcher: 'Edit|Write',
-        scriptPath: 'sonar-sqaa/build-scripts/posttool-sqaa',
-        scriptContentUnix: getSqaaPostToolTemplateUnix(projectKey),
-        scriptContentWindows: getSqaaPostToolTemplateWindows(projectKey),
       });
     }
   } catch (error) {

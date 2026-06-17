@@ -129,22 +129,6 @@ export function shellQuotePowerShell(value: string): string {
   return "'" + value.replaceAll("'", POWERSHELL_EMBEDDED_SINGLE_QUOTE) + "'";
 }
 
-export function formatSqaaPostToolHookCommandUnix(
-  hookSubcommand: 'claude-post-tool-use' | 'claude-stop' | 'codex-post-tool-use',
-  projectKey: string,
-): string {
-  assertSafeSonarProjectKeyForHookScript(projectKey);
-  return `sonar hook ${hookSubcommand} --project ${shellQuoteBash(projectKey)}`;
-}
-
-export function formatSqaaPostToolHookCommandWindows(
-  hookSubcommand: 'claude-post-tool-use' | 'claude-stop' | 'codex-post-tool-use',
-  projectKey: string,
-): string {
-  assertSafeSonarProjectKeyForHookScript(projectKey);
-  return `sonar hook ${hookSubcommand} --project ${shellQuotePowerShell(projectKey)}`;
-}
-
 /** Absolute path to the platform-specific hook script under `<targetRoot>/<configDir>/hooks/`. */
 export function resolveAgentHookScriptPath(
   context: IntegrationContext,

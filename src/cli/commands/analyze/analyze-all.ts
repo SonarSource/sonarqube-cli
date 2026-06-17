@@ -34,9 +34,10 @@ import type { OutputFormat } from './sqaa';
 import { analyzeSqaa, buildSqaaJsonReport } from './sqaa';
 import { resolveChangeSet } from './sqaa-changeset';
 import { applyExitCode, makeReport, type SqaaJsonReport } from './sqaa-display';
+import { resolveSqaaFileArgs } from './sqaa-file-arg';
 
 export interface AnalyzeAllOptions {
-  file?: string;
+  file?: string[];
   staged?: boolean;
   base?: string;
   project?: string;
@@ -72,13 +73,13 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
     return analyzeAllJson(options, auth);
   }
 
-  const { file, staged, base, project, force, format } = options;
+  const { file: rawFiles, staged, base, project, force, format } = options;
 
-  if (file !== undefined) {
-    await analyzeSecrets({ paths: [file] }, auth);
-    // Bare `analyze` is a best-effort catch-all: skip agentic gracefully when no
-    // project is configured rather than failing the whole command.
-    await analyzeSqaa({ file, project, format }, auth, { requireProject: false });
+  if (rawFiles?.length) {
+    const entries = resolveSqaaFileArgs(rawFiles);
+    const paths = entries.map((e) => e.absolutePath);
+    await analyzeSecrets({ paths }, auth);
+    await analyzeSqaa({ file: rawFiles, project, format }, auth, { requireProject: false });
     return;
   }
 
@@ -104,10 +105,15 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
 async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
   setFormattedOutputMode(true);
   try {
-    const { file, staged, base } = options;
+    const { file: rawFiles, staged, base } = options;
 
-    if (file !== undefined) {
-      await runSecretsAndAgentic([file], options, auth);
+    if (rawFiles?.length) {
+      const entries = resolveSqaaFileArgs(rawFiles);
+      await runSecretsAndAgentic(
+        entries.map((e) => e.absolutePath),
+        options,
+        auth,
+      );
       return;
     }
 
