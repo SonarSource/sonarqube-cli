@@ -45,7 +45,10 @@ const SONAR_SECRETS_MARKER = 'sonar-secrets';
 const BEFORE_SUBMIT_PROMPT_EVENT = 'beforeSubmitPrompt';
 const RULES_DIR = 'rules';
 const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
-const SKILLS_DIR = 'skills';
+// Shared cross-tool skills directory. Cursor reads `.agents/skills` (same as
+// Codex and Antigravity), so the CAG skill is written there rather than to a
+// Cursor-specific `.cursor/skills` to avoid a duplicate skill of the same name.
+const AGENTS_SKILLS_DIR = join('.agents', 'skills');
 const CAG_SKILL_NAME = 'sonar-context-augmentation';
 // Stable string always present in the rendered rule body — used by the
 // wholeFile remover so teardown only deletes the file we manage.
@@ -94,11 +97,13 @@ function buildCursorSqaaRule(context: IntegrationContext): string {
   return `---\nalwaysApply: true\n---\n\n${buildSqaaSectionBody(projectKey)}`;
 }
 
-// Cursor auto-discovers skills under `.cursor/skills/<name>/SKILL.md` and loads
-// them on demand, so Context Augmentation is delivered as a native skill (same
-// rendered SKILL.md the other agents receive), not an always-applied rule.
+// Context Augmentation is delivered as a native, on-demand skill (the same
+// rendered SKILL.md the other agents receive), written to the shared
+// `.agents/skills` directory that Cursor auto-discovers — not an always-applied
+// rule, and not a Cursor-private `.cursor/skills` copy that would duplicate the
+// skill Codex/Antigravity already install there.
 function resolveCursorCagSkillPath(context: IntegrationContext): string {
-  return join(context.targetRoot, CURSOR_CONFIG_DIR, SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
+  return join(context.targetRoot, AGENTS_SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
 }
 
 export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions> = {

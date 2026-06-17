@@ -20,8 +20,9 @@
 
 /**
  * Offline e2e proving the post-update path refreshes a recorded `cursor` CAG
- * skill. Cursor auto-discovers skills under `.cursor/skills/<name>/SKILL.md`, so
- * (like the other agents) the rendered skill is written there verbatim.
+ * skill. Cursor reads skills from the shared `.agents/skills` directory (like
+ * Codex and Antigravity), so the rendered skill is written there verbatim —
+ * one skill shared across those tools rather than a duplicate copy.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -74,7 +75,7 @@ describe('sonar-context-augmentation cursor skill refresh (offline, real binary)
     await harness.dispose();
   });
 
-  it('overwrites the stale skill with refreshed content under .cursor/skills/', () => {
+  it('overwrites the stale skill with refreshed content under .agents/skills/', () => {
     expect(existsSync(cursorSkillPath)).toBe(true);
     const content = readFileSync(cursorSkillPath, 'utf-8');
     expect(content).not.toContain(STALE_SKILL_SENTINEL);

@@ -22,10 +22,8 @@
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { warn } from '../../../../ui';
-import {
-  displayAgentIntegratePrelude,
-  finalizeAgentInstall,
-} from '../_common/agent-integrate-prelude';
+import { finalizeAgentInstall } from '../_common/agent-integrate-install';
+import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { CURSOR_INTEGRATION_ID, type CursorIntegrationOptions } from './declaration';

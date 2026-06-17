@@ -68,10 +68,11 @@ export const CODEX_SKILL_RELATIVE_PATH = join(
   CONTEXT_AUGMENTATION_BINARY_NAME,
   'SKILL.md',
 );
-// Cursor auto-discovers skills under `.cursor/skills/<name>/SKILL.md`, so CAG
-// is delivered as a native skill — same rendered SKILL.md as the other agents.
+// Cursor reads skills from the shared `.agents/skills` directory (like Codex and
+// Antigravity), so CAG is written there — one skill shared across those tools,
+// not a duplicate Cursor-private copy.
 export const CURSOR_SKILL_RELATIVE_PATH = join(
-  '.cursor',
+  '.agents',
   'skills',
   CONTEXT_AUGMENTATION_BINARY_NAME,
   'SKILL.md',
