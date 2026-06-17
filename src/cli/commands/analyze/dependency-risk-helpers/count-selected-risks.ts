@@ -18,9 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { Severity } from './sca-scanner';
 import type { DependencyRisksViewModel } from './view-model';
-import { SEVERITIES } from './view-model/build/severity';
 import type { RiskVM } from './view-model/risk';
 
 export function countSelectedRisks(
@@ -34,21 +32,4 @@ export function countSelectedRisks(
     }
   }
   return count;
-}
-
-export function countSelectedRisksBySeverity(
-  vm: DependencyRisksViewModel,
-): Record<Severity, number> {
-  const counts = Object.fromEntries(SEVERITIES.map((severity) => [severity, 0])) as Record<
-    Severity,
-    number
-  >;
-  for (const pkg of vm.packages) {
-    for (const group of pkg.groups) {
-      for (const risk of group.selectedRisks) {
-        counts[risk.severity] += 1;
-      }
-    }
-  }
-  return counts;
 }

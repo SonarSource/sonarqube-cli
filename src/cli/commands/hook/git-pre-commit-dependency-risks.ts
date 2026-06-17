@@ -34,10 +34,7 @@ import {
   ScaScannerNoopInstaller,
 } from '../_common/install/sca-scanner';
 import { ResolveOnlySecretsInstaller } from '../_common/install/secrets';
-import {
-  countSelectedRisks,
-  countSelectedRisksBySeverity,
-} from '../analyze/dependency-risk-helpers/count-selected-risks';
+import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-selected-risks';
 import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/default-sca-scanner-spawner';
 import { pluralize } from '../analyze/dependency-risk-helpers/pluralize';
 import { buildRiskFilter } from '../analyze/dependency-risk-helpers/risk-filter';
@@ -107,9 +104,12 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
 }
 
 function formatSeverityBreakdown(viewModel: DependencyRisksViewModel): string {
-  const counts = countSelectedRisksBySeverity(viewModel);
-  return SEVERITIES.filter((severity) => counts[severity] > 0)
-    .map((severity) => `${counts[severity]} ${severity}`)
+  return SEVERITIES.map((severity) => ({
+    severity,
+    count: countSelectedRisks(viewModel, (risk) => risk.severity === severity),
+  }))
+    .filter(({ count }) => count > 0)
+    .map(({ severity, count }) => `${count} ${severity}`)
     .join(', ');
 }
 
