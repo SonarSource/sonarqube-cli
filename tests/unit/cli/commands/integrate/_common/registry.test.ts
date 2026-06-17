@@ -390,6 +390,31 @@ describe('declarative integration framework', () => {
     );
   });
 
+  it('selectFeatures rejects subfeatureIds for a non-container feature', () => {
+    const integration = makeIntegration({
+      features: [{ id: 'plain', displayName: 'Plain' }],
+    });
+
+    expect(() =>
+      installer.selectFeatures(integration, [{ featureId: 'plain', subfeatureIds: ['sub'] }]),
+    ).toThrow('Feature test-integration.plain is not a container');
+  });
+
+  it('selectFeatures rejects unknown subfeature ids on a container', () => {
+    const container: FeatureContainer = {
+      id: 'container',
+      displayName: 'Container',
+      subfeatures: [{ id: 'valid', displayName: 'Valid' }],
+    };
+    const integration = makeIntegration({ features: [container] });
+
+    expect(() =>
+      installer.selectFeatures(integration, [
+        { featureId: 'container', subfeatureIds: ['valid', 'typo'] },
+      ]),
+    ).toThrow('Unknown subfeature(s) test-integration.container.typo');
+  });
+
   it('selects features matching an invocation, honoring boolean and decision results', async () => {
     interface GitOptions {
       hook?: 'pre-commit' | 'pre-push';
