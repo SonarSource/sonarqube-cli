@@ -55,7 +55,10 @@ export async function analyzeDependencyRisks(
 ): Promise<void> {
   const filter = buildRiskFilter(options.statuses);
   if (!filter) {
-    throw new InvalidOptionError(`Invalid --statuses value: '${options.statuses}'`);
+    throw new InvalidOptionError(
+      `Invalid --statuses value: '${options.statuses}'`,
+      'See https://docs.sonarsource.com/sonarqube-cli/analysis/sca#filter-by-status for valid presets and status values.',
+    );
   }
 
   const projectKey = await resolveProjectKey(options.project, auth);
