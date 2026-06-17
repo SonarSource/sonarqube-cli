@@ -64,9 +64,9 @@ describe('integrate cursor', () => {
     await harness.dispose();
   });
 
-  it('is not listed in sonar integrate --help (hidden until GA)', async () => {
+  it('is listed in sonar integrate --help', async () => {
     const result = await harness.run('integrate --help');
-    expect(result.stdout).not.toContain('cursor');
+    expect(result.stdout).toContain('cursor');
   });
 
   describe('project-level install (default)', () => {
