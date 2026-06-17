@@ -451,7 +451,7 @@ describe('SonarQubeClient', () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getProjectSettings('missing')).rejects.toThrow(
-        'Project missing not found',
+        "Project 'missing' not found",
       );
     });
 

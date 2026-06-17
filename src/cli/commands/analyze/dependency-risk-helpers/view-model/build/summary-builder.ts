@@ -59,7 +59,7 @@ function highestSeverityOf(pkg: PackageVM): Severity {
     }
   }
   if (highest === undefined) {
-    throw new Error(`Package ${pkg.package.label()} has no risks`);
+    throw new Error(`Package '${pkg.package.label()}' has no risks`);
   }
   return highest;
 }

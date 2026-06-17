@@ -71,7 +71,7 @@ describe('analyze dependency-risks', () => {
       const result = await harness.run('analyze dependency-risks --project demo');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Project demo not found');
+      expect(result.stdout + result.stderr).toContain("Project 'demo' not found");
       expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(
         true,
       );

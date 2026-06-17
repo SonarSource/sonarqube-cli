@@ -209,7 +209,7 @@ async function validateOrSelectOrganization(
   if (org) {
     const orgExists = await client.checkOrganization(org);
     if (!orgExists) {
-      throw new CommandFailedError(`Organization "${org}" not found or not accessible.`, {
+      throw new CommandFailedError(`Organization '${org}' not found or not accessible.`, {
         remediationHint:
           "Check the organization key and your access, then rerun 'sonar auth login'.",
       });

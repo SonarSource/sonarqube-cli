@@ -69,7 +69,7 @@ export function readSqaaFileContent(file: string): string {
 export function toRelativePosixPath(file: string, base: string = process.cwd()): string {
   const rel = toRelativePosixPathOrNull(file, base);
   if (rel == null) {
-    throw new InvalidOptionError(`File must be inside ${base}: ${file}`);
+    throw new InvalidOptionError(`File must be inside '${base}': ${file}`);
   }
   return rel;
 }
