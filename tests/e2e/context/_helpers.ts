@@ -34,6 +34,7 @@ import {
 import { CLAUDE_INTEGRATION_ID } from '../../../src/cli/commands/integrate/claude/declaration';
 import { CODEX_INTEGRATION_ID } from '../../../src/cli/commands/integrate/codex/declaration';
 import { COPILOT_INTEGRATION_ID } from '../../../src/cli/commands/integrate/copilot/declaration';
+import { CURSOR_INTEGRATION_ID } from '../../../src/cli/commands/integrate/cursor/declaration';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../src/lib/install-types';
 import type {
   CliState,
@@ -67,9 +68,18 @@ export const CODEX_SKILL_RELATIVE_PATH = join(
   CONTEXT_AUGMENTATION_BINARY_NAME,
   'SKILL.md',
 );
+// Cursor reads skills from the shared `.agents/skills` directory (like Codex and
+// Antigravity), so CAG is written there — one skill shared across those tools,
+// not a duplicate Cursor-private copy.
+export const CURSOR_SKILL_RELATIVE_PATH = join(
+  '.agents',
+  'skills',
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  'SKILL.md',
+);
 
 export interface SeedSkillOptions {
-  agentId: 'claude-code' | 'copilot-cli' | 'codex';
+  agentId: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
   projectRoot: string;
   global?: boolean;
   version?: string;
@@ -156,6 +166,8 @@ function resolveIntegrationId(agentId: SeedSkillOptions['agentId']): string {
       return COPILOT_INTEGRATION_ID;
     case 'codex':
       return CODEX_INTEGRATION_ID;
+    case 'cursor':
+      return CURSOR_INTEGRATION_ID;
   }
 }
 
@@ -167,6 +179,8 @@ function resolveSkillRelativePath(agentId: SeedSkillOptions['agentId']): string 
       return COPILOT_SKILL_RELATIVE_PATH;
     case 'codex':
       return CODEX_SKILL_RELATIVE_PATH;
+    case 'cursor':
+      return CURSOR_SKILL_RELATIVE_PATH;
   }
 }
 

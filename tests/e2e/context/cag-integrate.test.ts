@@ -137,4 +137,29 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     expect(existsSync(cagBinaryPath), 'no CAG download when entitlement is disabled').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
+
+  it('skips CAG entirely for `integrate cursor` on a SonarQube Server connection', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(TOKEN)
+      .withProject(PROJECT_KEY)
+      .start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    harness.state().withSecretsBinaryInstalled();
+    harness.cwd.writeFile(
+      'sonar-project.properties',
+      [`sonar.host.url=${server.baseUrl()}`, `sonar.projectKey=${PROJECT_KEY}`].join('\n'),
+    );
+
+    const result = await harness.run('integrate cursor --non-interactive', {
+      timeoutMs: INTEGRATE_TIMEOUT_MS,
+    });
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      'Skipping Context Augmentation: not available on SonarQube Server.',
+    );
+    expect(existsSync(cagBinaryPath), 'no CAG download on SonarQube Server').toBe(false);
+    expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
+  });
 });

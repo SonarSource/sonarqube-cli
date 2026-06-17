@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import { resolveAgentHookCommand } from '../_common/hooks';
 import { buildSqaaSectionBody } from '../_common/instructions-templates';
@@ -44,6 +45,11 @@ const SONAR_SECRETS_MARKER = 'sonar-secrets';
 const BEFORE_SUBMIT_PROMPT_EVENT = 'beforeSubmitPrompt';
 const RULES_DIR = 'rules';
 const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
+// Shared cross-tool skills directory. Cursor reads `.agents/skills` (same as
+// Codex and Antigravity), so the CAG skill is written there rather than to a
+// Cursor-specific `.cursor/skills` to avoid a duplicate skill of the same name.
+const AGENTS_SKILLS_DIR = join('.agents', 'skills');
+const CAG_SKILL_NAME = 'sonar-context-augmentation';
 // Stable string always present in the rendered rule body — used by the
 // wholeFile remover so teardown only deletes the file we manage.
 const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
@@ -57,6 +63,7 @@ export interface CursorIntegrationOptions extends IntegrateAgentOptions {
    * delivered as an always-applied rule rather than a hook (project scope).
    */
   installSqaaInstructions?: boolean;
+  installContextAugmentation?: boolean;
 }
 
 function resolveCursorMcpConfigPath(context: IntegrationContext): string {
@@ -88,6 +95,15 @@ function resolveCursorSqaaRulePath(context: IntegrationContext): string {
 function buildCursorSqaaRule(context: IntegrationContext): string {
   const projectKey = getRequiredStringAttr(context, 'projectKey', cursorIntegration.displayName);
   return `---\nalwaysApply: true\n---\n\n${buildSqaaSectionBody(projectKey)}`;
+}
+
+// Context Augmentation is delivered as a native, on-demand skill (the same
+// rendered SKILL.md the other agents receive), written to the shared
+// `.agents/skills` directory that Cursor auto-discovers — not an always-applied
+// rule, and not a Cursor-private `.cursor/skills` copy that would duplicate the
+// skill Codex/Antigravity already install there.
+function resolveCursorCagSkillPath(context: IntegrationContext): string {
+  return join(context.targetRoot, AGENTS_SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
 }
 
 export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions> = {
@@ -170,5 +186,9 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
         }),
       ],
     },
+    createContextAugmentationFeature<CursorIntegrationOptions>({
+      agentDisplayName: 'Cursor',
+      targetPath: resolveCursorCagSkillPath,
+    }),
   ],
 };
