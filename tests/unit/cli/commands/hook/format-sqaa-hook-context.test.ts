@@ -18,9 +18,27 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 
-import { formatSqaaJsonReportForHook } from '../../../../../src/cli/commands/hook/format-sqaa-hook-context';
+import {
+  formatSqaaJsonReportForHook,
+  writeStopHookOutput,
+} from '../../../../../src/cli/commands/hook/format-sqaa-hook-context';
+
+describe('writeStopHookOutput', () => {
+  it('writes Stop hookEventName and additionalContext as JSON on stdout', () => {
+    const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    writeStopHookOutput('findings here');
+
+    expect(stdoutSpy).toHaveBeenCalledTimes(1);
+    const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
+    expect(output.hookSpecificOutput.hookEventName).toBe('Stop');
+    expect(output.hookSpecificOutput.additionalContext).toBe('findings here');
+
+    stdoutSpy.mockRestore();
+  });
+});
 
 describe('formatSqaaJsonReportForHook', () => {
   it('returns null for an empty change set', () => {

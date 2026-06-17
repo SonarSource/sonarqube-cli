@@ -59,6 +59,7 @@ import {
 import { agentPromptSubmit } from './commands/hook/agent-prompt-submit';
 import { antigravityPreToolUse } from './commands/hook/antigravity-pre-tool-use';
 import { claudePreToolUse } from './commands/hook/claude-pre-tool-use';
+import { claudeStop, type ClaudeStopOptions } from './commands/hook/claude-stop';
 import {
   codexPostToolUse,
   type CodexPostToolUseOptions,
@@ -571,6 +572,14 @@ hookCommand
   .description('PostToolUse handler: run Agentic Analysis after agent edits or writes a file')
   .requiredOption('--project <key>', 'SonarQube Cloud project key')
   .anonymousAction((options: AgentPostToolUseOptions) => agentPostToolUse(options));
+
+hookCommand
+  .command('claude-stop')
+  .description(
+    'Stop handler for Claude Code: run Agentic Analysis on the git change set at end of turn',
+  )
+  .requiredOption('--project <key>', 'SonarQube Cloud project key')
+  .anonymousAction((options: ClaudeStopOptions) => claudeStop(options));
 
 hookCommand
   .command('codex-post-tool-use')

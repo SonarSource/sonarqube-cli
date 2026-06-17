@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Text formatting for PostToolUse hook additionalContext (Claude + Codex).
+// Text formatting for SQAA hook output (Claude/Codex PostToolUse and Claude Stop additionalContext).
 
 import type { SqaaIssue } from '../../../sonarqube/client';
 import {
@@ -162,6 +162,14 @@ export function writePostToolUseHookOutput(additionalContext: string): void {
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext },
+    }) + '\n',
+  );
+}
+
+export function writeStopHookOutput(additionalContext: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: { hookEventName: 'Stop', additionalContext },
     }) + '\n',
   );
 }

@@ -592,7 +592,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   });
 
   it(
-    'installs PostToolUse SQAA hook when Cloud org has SQAA entitlement (repair path)',
+    'installs PostToolUse and Stop SQAA hooks when Cloud org has SQAA entitlement (repair path)',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -617,6 +617,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(result.exitCode).toBe(0);
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
+      expect(settings.hooks?.Stop).toBeDefined();
       expect(
         harness.cwd.exists(
           '.claude',
@@ -624,6 +625,15 @@ describe('integrate claude — SQAA entitlement guard', () => {
           'sonar-sqaa',
           'build-scripts',
           hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(true);
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('stop-sqaa'),
         ),
       ).toBe(true);
     },
@@ -661,6 +671,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(installedHooks.some((h) => h.name === 'sonar-sqaa' && h.type === 'PostToolUse')).toBe(
         true,
       );
+      expect(installedHooks.some((h) => h.name === 'sonar-sqaa' && h.type === 'Stop')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -688,6 +699,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(result.exitCode).toBe(0);
       const settings = harness.cwd.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeUndefined();
+      expect(settings.hooks?.Stop).toBeUndefined();
       expect(
         harness.cwd.exists(
           '.claude',
@@ -695,6 +707,15 @@ describe('integrate claude — SQAA entitlement guard', () => {
           'sonar-sqaa',
           'build-scripts',
           hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(false);
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('stop-sqaa'),
         ),
       ).toBe(false);
     },
@@ -1169,6 +1190,15 @@ describe('integrate claude — file placement (local vs global)', () => {
             'sonar-sqaa',
             'build-scripts',
             hookScriptName('posttool-sqaa'),
+          ),
+        ).toBe(true);
+        expect(
+          harness.cwd.exists(
+            '.claude',
+            'hooks',
+            'sonar-sqaa',
+            'build-scripts',
+            hookScriptName('stop-sqaa'),
           ),
         ).toBe(true);
         // Secrets scripts must NOT be duplicated at project level.
@@ -2088,7 +2118,7 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install SonarQube Agentic Analysis hook?');
 
-      // Accepting installs the PostToolUse SQAA hook script and records it.
+      // Accepting installs the PostToolUse and Stop SQAA hook scripts and records them.
       expect(
         harness.cwd.exists(
           '.claude',
@@ -2096,6 +2126,15 @@ describe('integrate claude — interactive feature selection', () => {
           'sonar-sqaa',
           'build-scripts',
           hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(true);
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('stop-sqaa'),
         ),
       ).toBe(true);
       expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeDefined();

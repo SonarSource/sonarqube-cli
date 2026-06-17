@@ -50,3 +50,11 @@ export function getSqaaPostToolTemplateUnix(projectKey: string): string {
 export function getSqaaPostToolTemplateWindows(projectKey: string): string {
   return windowsTemplate(formatSqaaPostToolHookCommandWindows('claude-post-tool-use', projectKey));
 }
+
+export function getSqaaStopTemplateUnix(projectKey: string): string {
+  return unixTemplate(formatSqaaPostToolHookCommandUnix('claude-stop', projectKey));
+}
+
+export function getSqaaStopTemplateWindows(projectKey: string): string {
+  return windowsTemplate(formatSqaaPostToolHookCommandWindows('claude-stop', projectKey));
+}

@@ -130,7 +130,7 @@ export function shellQuotePowerShell(value: string): string {
 }
 
 export function formatSqaaPostToolHookCommandUnix(
-  hookSubcommand: 'claude-post-tool-use' | 'codex-post-tool-use',
+  hookSubcommand: 'claude-post-tool-use' | 'claude-stop' | 'codex-post-tool-use',
   projectKey: string,
 ): string {
   assertSafeSonarProjectKeyForHookScript(projectKey);
@@ -138,7 +138,7 @@ export function formatSqaaPostToolHookCommandUnix(
 }
 
 export function formatSqaaPostToolHookCommandWindows(
-  hookSubcommand: 'claude-post-tool-use' | 'codex-post-tool-use',
+  hookSubcommand: 'claude-post-tool-use' | 'claude-stop' | 'codex-post-tool-use',
   projectKey: string,
 ): string {
   assertSafeSonarProjectKeyForHookScript(projectKey);

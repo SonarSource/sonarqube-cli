@@ -659,7 +659,8 @@ describe('integrate copilot', () => {
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
         // Project key is baked into the example command.
-        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
+        expect(body).not.toContain('--file');
 
         const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-instructions');
         expect(promptSecrets?.scope).toBe('project');

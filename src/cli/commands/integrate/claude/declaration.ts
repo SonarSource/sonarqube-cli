@@ -42,6 +42,8 @@ import {
   getSecretPromptTemplateWindows,
   getSqaaPostToolTemplateUnix,
   getSqaaPostToolTemplateWindows,
+  getSqaaStopTemplateUnix,
+  getSqaaStopTemplateWindows,
 } from './hook-templates';
 
 const CLAUDE_CONFIG_DIR = '.claude';
@@ -138,6 +140,27 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           },
           executable: true,
         }),
+        wholeFile({
+          id: 'stop-sqaa-script',
+          displayName: 'Claude Stop hook script',
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'sonar-sqaa/build-scripts/stop-sqaa',
+            ),
+          content: (context) => {
+            const projectKey = getRequiredStringAttr(
+              context,
+              'projectKey',
+              claudeIntegration.displayName,
+            );
+            return process.platform === 'win32'
+              ? getSqaaStopTemplateWindows(projectKey)
+              : getSqaaStopTemplateUnix(projectKey);
+          },
+          executable: true,
+        }),
         jsonPatch({
           id: 'claude-settings-sqaa-hook',
           displayName: 'Claude SonarQube Agentic Analysis hook configuration',
@@ -152,6 +175,14 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
                 'Edit|Write',
                 'sonar-sqaa',
                 'sonar-sqaa/build-scripts/posttool-sqaa',
+              ),
+              createAgentHookEntry(
+                context,
+                CLAUDE_CONFIG_DIR,
+                'Stop',
+                '*',
+                'sonar-sqaa',
+                'sonar-sqaa/build-scripts/stop-sqaa',
               ),
             ]),
           removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),

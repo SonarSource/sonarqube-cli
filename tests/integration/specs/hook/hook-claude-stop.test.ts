@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar hook codex-post-tool-use`.
+// Integration tests for `sonar hook claude-stop`.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -34,7 +34,7 @@ const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
 const TEST_PROJECT = 'my-project';
 
-describe('sonar hook codex-post-tool-use', () => {
+describe('sonar hook claude-stop', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -48,7 +48,7 @@ describe('sonar hook codex-post-tool-use', () => {
   });
 
   it(
-    'exits 0 and outputs Agentic Analysis JSON when the git change set is clean',
+    'exits 0 and outputs Stop hook JSON when the git change set is clean',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -58,11 +58,11 @@ describe('sonar hook codex-post-tool-use', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run(`hook claude-stop --project ${TEST_PROJECT}`);
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
-      expect(output.hookSpecificOutput.hookEventName).toBe('PostToolUse');
+      expect(output.hookSpecificOutput.hookEventName).toBe('Stop');
       expect(output.hookSpecificOutput.additionalContext).toContain('No issues found');
       const sqaaCalls = server
         .getRecordedRequests()
@@ -86,7 +86,7 @@ describe('sonar hook codex-post-tool-use', () => {
       harness.cwd.writeFile('a.ts', 'const a = 1;');
       harness.cwd.writeFile('b.ts', 'const b = 2;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run(`hook claude-stop --project ${TEST_PROJECT}`);
 
       expect(result.exitCode).toBe(0);
       const sqaaCalls = server
@@ -100,20 +100,7 @@ describe('sonar hook codex-post-tool-use', () => {
   );
 
   it(
-    'exits 0 and outputs no hook response when not authenticated',
-    async () => {
-      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
-
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'surfaces findings in additionalContext when issues are returned',
+    'surfaces findings in Stop additionalContext when issues are returned',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -131,13 +118,51 @@ describe('sonar hook codex-post-tool-use', () => {
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run(`hook claude-stop --project ${TEST_PROJECT}`);
 
       expect(result.exitCode).toBe(0);
       const output = JSON.parse(result.stdout.trim());
-      expect(output.hookSpecificOutput.hookEventName).toBe('PostToolUse');
+      expect(output.hookSpecificOutput.hookEventName).toBe('Stop');
       expect(output.hookSpecificOutput.additionalContext).toContain('Remove this unused variable');
       expect(output.hookSpecificOutput.additionalContext).toContain('typescript:S1234');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 and outputs no hook response when not authenticated',
+    async () => {
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+
+      const result = await harness.run(`hook claude-stop --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 0 with empty stdout when stop_hook_active is true',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+
+      const result = await harness.run(`hook claude-stop --project ${TEST_PROJECT}`, {
+        stdin: JSON.stringify({ stop_hook_active: true }),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
   );
@@ -152,7 +177,7 @@ describe('sonar hook codex-post-tool-use', () => {
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
-      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+      const result = await harness.run(`hook claude-stop --project ${TEST_PROJECT}`);
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');

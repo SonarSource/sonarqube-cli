@@ -56,6 +56,7 @@ export async function updateStateAfterConfiguration(
     }
     if (sqaaEnabled) {
       addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-sqaa', 'PostToolUse');
+      addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-sqaa', 'Stop');
     }
 
     const attrs = {
@@ -73,14 +74,24 @@ export async function updateStateAfterConfiguration(
     }
     // SQAA is always project-scoped, even on a global Claude install.
     if (sqaaEnabled) {
-      extensions.push({
-        kind: 'hook',
-        name: 'sonar-sqaa',
-        hookType: 'PostToolUse',
-        projectRoot,
-        global: false,
-        attrs,
-      });
+      extensions.push(
+        {
+          kind: 'hook',
+          name: 'sonar-sqaa',
+          hookType: 'PostToolUse',
+          projectRoot,
+          global: false,
+          attrs,
+        },
+        {
+          kind: 'hook',
+          name: 'sonar-sqaa',
+          hookType: 'Stop',
+          projectRoot,
+          global: false,
+          attrs,
+        },
+      );
     }
     recordAgentExtensions(state, CLAUDE_AGENT_ID, projectRoot, isGlobal, extensions);
 

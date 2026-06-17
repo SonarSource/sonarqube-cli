@@ -35,10 +35,11 @@ describe('instructions-templates', () => {
     expect(result.endsWith('\n')).toBe(true);
   });
 
-  it('buildSqaaSectionBody renders the SQAA protocol body with the analyze command for the project', () => {
+  it('buildSqaaSectionBody renders the SQAA protocol body with the change-set analyze command', () => {
     const result = buildSqaaSectionBody('my-project');
 
     expect(result).toContain('# SonarQube Agentic Analysis protocol');
-    expect(result).toContain('sonar analyze agentic --project my-project --file');
+    expect(result).toContain('sonar analyze agentic --project my-project');
+    expect(result).not.toContain('--file');
   });
 });
