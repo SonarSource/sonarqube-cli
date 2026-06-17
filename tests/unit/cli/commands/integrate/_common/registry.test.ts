@@ -358,7 +358,7 @@ describe('declarative integration framework', () => {
       dependencies: [{ id: 'sub-dep' }],
     });
     expect(state.dependencies.installed.some((d) => d.id === 'sub-dep')).toBe(true);
-    void context;
+    expect(context).toBeDefined();
   });
 
   it('lists registered integrations', () => {

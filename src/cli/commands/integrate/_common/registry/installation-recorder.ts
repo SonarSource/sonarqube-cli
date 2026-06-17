@@ -113,13 +113,17 @@ export function recordInstalledFeature<TOptions>(
   return existing ?? next;
 }
 
+function featureDependencyIds(feature: InstalledIntegrationFeature): string[] {
+  return [
+    ...feature.dependencies.map((d) => d.id),
+    ...(feature.subfeatures?.flatMap((sub) => sub.dependencies.map((d) => d.id)) ?? []),
+  ];
+}
+
 export function collectReferencedDependencyIds(state: CliState): Set<string> {
   return new Set(
     state.integrations.installed.flatMap((integration) =>
-      integration.features.flatMap((feature) => [
-        ...feature.dependencies.map((d) => d.id),
-        ...(feature.subfeatures?.flatMap((sub) => sub.dependencies.map((d) => d.id)) ?? []),
-      ]),
+      integration.features.flatMap(featureDependencyIds),
     ),
   );
 }

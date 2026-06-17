@@ -125,7 +125,19 @@ export class IntegrationInstaller {
         throw new Error(`Unknown feature ${integration.id}.${featureId}`);
       }
 
-      if (subfeatureIds !== undefined && isFeatureContainer(feature)) {
+      if (subfeatureIds !== undefined) {
+        if (!isFeatureContainer(feature)) {
+          throw new Error(
+            `Feature ${integration.id}.${featureId} is not a container and does not support subfeature selection`,
+          );
+        }
+        const validIds = new Set(feature.subfeatures.map((s) => s.id));
+        const unknown = subfeatureIds.filter((id) => !validIds.has(id));
+        if (unknown.length > 0) {
+          throw new Error(
+            `Unknown subfeature(s) ${unknown.map((id) => `${integration.id}.${featureId}.${id}`).join(', ')}`,
+          );
+        }
         return {
           ...feature,
           subfeatures: feature.subfeatures.filter((s) => subfeatureIds.includes(s.id)),
@@ -549,13 +561,13 @@ export class IntegrationInstaller {
     return [...dependencies.values()];
   }
 
-  private makeResolvedDependencies(
+  private makeResolvedDependencies<TOptions>(
     state: CliState,
-    feature: Pick<FeatureDeclaration, 'dependencies'>,
+    feature: FeatureDeclaration<TOptions>,
     overrides: ReadonlyMap<string, InstalledDependency> = new Map(),
   ): Map<string, InstalledDependency> {
     const resolvedDependencies = new Map<string, InstalledDependency>();
-    for (const dependency of feature.dependencies ?? []) {
+    for (const dependency of resolveAllDeps(feature)) {
       const installedDependency =
         overrides.get(dependency.id) ?? this.findInstalledDependency(state, dependency);
       if (installedDependency) {
