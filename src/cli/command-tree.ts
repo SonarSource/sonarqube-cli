@@ -324,9 +324,8 @@ integrateCommand
     integrateAntigravity(options, auth),
   );
 
-// hidden until stable — remove { hidden: true } when sonar integrate cursor goes GA (CLI-221)
 integrateCommand
-  .command('cursor', { hidden: true })
+  .command('cursor')
   .description(
     'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.',
   )
