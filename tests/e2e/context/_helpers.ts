@@ -68,12 +68,13 @@ export const CODEX_SKILL_RELATIVE_PATH = join(
   CONTEXT_AUGMENTATION_BINARY_NAME,
   'SKILL.md',
 );
-// Cursor delivers CAG as an always-applied `.cursor/rules` rule rather than a
-// SKILL.md, so the rendered skill is wrapped in `.mdc` front-matter.
+// Cursor auto-discovers skills under `.cursor/skills/<name>/SKILL.md`, so CAG
+// is delivered as a native skill — same rendered SKILL.md as the other agents.
 export const CURSOR_SKILL_RELATIVE_PATH = join(
   '.cursor',
-  'rules',
-  'sonar-context-augmentation.mdc',
+  'skills',
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  'SKILL.md',
 );
 
 export interface SeedSkillOptions {

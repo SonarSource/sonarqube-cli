@@ -20,9 +20,8 @@
 
 /**
  * Offline e2e proving the post-update path refreshes a recorded `cursor` CAG
- * rule. Unlike the SKILL.md agents, Cursor writes the rendered skill to
- * `.cursor/rules/sonar-context-augmentation.mdc` wrapped in `alwaysApply: true`
- * front-matter, so this asserts both the path and the wrapping (real binary).
+ * skill. Cursor auto-discovers skills under `.cursor/skills/<name>/SKILL.md`, so
+ * (like the other agents) the rendered skill is written there verbatim.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -48,11 +47,11 @@ const POST_UPDATE_TIMEOUT_MS = 150_000;
 
 setDefaultTimeout(DEFAULT_TIMEOUT_MS);
 
-const STALE_SKILL_SENTINEL = '<<stale-cursor-rule-placeholder-cag-cursor-e2e>>';
+const STALE_SKILL_SENTINEL = '<<stale-cursor-skill-placeholder-cag-cursor-e2e>>';
 
-describe('sonar-context-augmentation cursor rule refresh (offline, real binary)', () => {
+describe('sonar-context-augmentation cursor skill refresh (offline, real binary)', () => {
   let harness: TestHarness;
-  let cursorRulePath: string;
+  let cursorSkillPath: string;
 
   beforeAll(async () => {
     harness = await TestHarness.create();
@@ -60,12 +59,12 @@ describe('sonar-context-augmentation cursor rule refresh (offline, real binary)'
     seedState(harness, {
       skills: [{ agentId: 'cursor', projectRoot: harness.cwd.path }],
     });
-    cursorRulePath = join(harness.cwd.path, CURSOR_SKILL_RELATIVE_PATH);
+    cursorSkillPath = join(harness.cwd.path, CURSOR_SKILL_RELATIVE_PATH);
 
     // Pre-write a sentinel so the refresh has to overwrite it — proves the
-    // post-update path actually re-rendered the declarative rule.
-    mkdirSync(dirname(cursorRulePath), { recursive: true });
-    writeFileSync(cursorRulePath, STALE_SKILL_SENTINEL, 'utf-8');
+    // post-update path actually re-rendered the declarative skill.
+    mkdirSync(dirname(cursorSkillPath), { recursive: true });
+    writeFileSync(cursorSkillPath, STALE_SKILL_SENTINEL, 'utf-8');
 
     const result = await harness.run('--version', { timeoutMs: POST_UPDATE_TIMEOUT_MS });
     expect(result.exitCode, result.stderr).toBe(0);
@@ -75,13 +74,10 @@ describe('sonar-context-augmentation cursor rule refresh (offline, real binary)'
     await harness.dispose();
   });
 
-  it('overwrites the stale rule with refreshed content under .cursor/rules/, wrapped in alwaysApply front-matter', () => {
-    expect(existsSync(cursorRulePath)).toBe(true);
-    const content = readFileSync(cursorRulePath, 'utf-8');
+  it('overwrites the stale skill with refreshed content under .cursor/skills/', () => {
+    expect(existsSync(cursorSkillPath)).toBe(true);
+    const content = readFileSync(cursorSkillPath, 'utf-8');
     expect(content).not.toContain(STALE_SKILL_SENTINEL);
-    // Cursor injects the rule into every session via the front-matter.
-    expect(content.startsWith('---\nalwaysApply: true\n---')).toBe(true);
-    // The wrapped body is still the real rendered skill.
     expectSkillRendersWithWrapperInvocation(content);
   });
 
@@ -104,6 +100,6 @@ describe('sonar-context-augmentation cursor rule refresh (offline, real binary)'
     );
     expect(resource).toBeDefined();
     expect(resource?.version).toBe(SONAR_CONTEXT_AUGMENTATION_VERSION);
-    expect(resource?.path).toBe(cursorRulePath);
+    expect(resource?.path).toBe(cursorSkillPath);
   });
 });

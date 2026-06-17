@@ -45,7 +45,8 @@ const SONAR_SECRETS_MARKER = 'sonar-secrets';
 const BEFORE_SUBMIT_PROMPT_EVENT = 'beforeSubmitPrompt';
 const RULES_DIR = 'rules';
 const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
-const CAG_RULE_FILE = 'sonar-context-augmentation.mdc';
+const SKILLS_DIR = 'skills';
+const CAG_SKILL_NAME = 'sonar-context-augmentation';
 // Stable string always present in the rendered rule body — used by the
 // wholeFile remover so teardown only deletes the file we manage.
 const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
@@ -93,17 +94,11 @@ function buildCursorSqaaRule(context: IntegrationContext): string {
   return `---\nalwaysApply: true\n---\n\n${buildSqaaSectionBody(projectKey)}`;
 }
 
-function resolveCursorCagRulePath(context: IntegrationContext): string {
-  return join(context.targetRoot, CURSOR_CONFIG_DIR, RULES_DIR, CAG_RULE_FILE);
-}
-
-/**
- * Wrap the rendered Context Augmentation skill in Cursor `.mdc` rule
- * front-matter. `alwaysApply: true` makes Cursor inject the skill into every
- * session without the user attaching it manually.
- */
-function wrapCursorCagRule(skill: string): string {
-  return `---\nalwaysApply: true\n---\n\n${skill}`;
+// Cursor auto-discovers skills under `.cursor/skills/<name>/SKILL.md` and loads
+// them on demand, so Context Augmentation is delivered as a native skill (same
+// rendered SKILL.md the other agents receive), not an always-applied rule.
+function resolveCursorCagSkillPath(context: IntegrationContext): string {
+  return join(context.targetRoot, CURSOR_CONFIG_DIR, SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
 }
 
 export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions> = {
@@ -188,8 +183,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     },
     createContextAugmentationFeature<CursorIntegrationOptions>({
       agentDisplayName: 'Cursor',
-      targetPath: resolveCursorCagRulePath,
-      wrapSkillContent: wrapCursorCagRule,
+      targetPath: resolveCursorCagSkillPath,
     }),
   ],
 };
