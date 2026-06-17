@@ -48,7 +48,7 @@ export const GENERIC_HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as
 export const METHODS_WITH_BODY = new Set<HttpMethod>(['POST', 'PATCH', 'PUT']);
 export type HttpMethod = (typeof GENERIC_HTTP_METHODS)[number];
 
-export type CagEntitlementStatus = 'enabled' | 'not_enabled' | 'check_failed';
+export type CagEntitlementStatus = 'allowed' | 'not_allowed' | 'check_failed';
 
 export type SqaaEntitlementStatus = 'enabled' | 'not_enabled' | 'check_failed';
 
@@ -392,13 +392,13 @@ export class SonarQubeClient {
 
   async checkCagEntitlement(organizationUuid: string): Promise<CagEntitlementStatus> {
     try {
-      const endpoint = `/a3s-analysis/cag-org-config/${organizationUuid}`;
-      const result = await this.get<{ id: string; enabled: boolean; eligible: boolean }>(
+      const endpoint = `/a3s-analysis/cag-entitlement/${organizationUuid}`;
+      const result = await this.get<{ allowed: boolean; consumption?: object }>(
         endpoint,
         undefined,
         resolveFromEndpoint(this.serverURL, endpoint),
       );
-      return result.eligible && result.enabled ? 'enabled' : 'not_enabled';
+      return result.allowed ? 'allowed' : 'not_allowed';
     } catch {
       return 'check_failed';
     }
@@ -406,7 +406,7 @@ export class SonarQubeClient {
 
   async hasCagEntitlement(organizationKey?: string): Promise<CagEntitlementStatus> {
     if (!organizationKey || !isSonarQubeCloud(this.serverURL)) {
-      return 'not_enabled';
+      return 'not_allowed';
     }
     const uuid = await this.getOrganizationId(organizationKey);
     if (!uuid) {

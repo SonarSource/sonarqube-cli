@@ -107,7 +107,7 @@ export async function resolveContextAugmentationSetup(
     // that could not use CAG anyway).
     if (p.auth.orgKey) {
       const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
-      if ((await client.hasCagEntitlement(p.auth.orgKey)) === 'enabled') {
+      if ((await client.hasCagEntitlement(p.auth.orgKey)) === 'allowed') {
         warn(
           'Skipping Context Augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
         );
@@ -131,9 +131,9 @@ export async function resolveContextAugmentationSetup(
     );
     return null;
   }
-  if (entitlement === 'not_enabled') {
+  if (entitlement === 'not_allowed') {
     warn(
-      'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
+      'Skipping Context Augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
     );
     return null;
   }
