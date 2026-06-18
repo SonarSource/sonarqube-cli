@@ -65,6 +65,8 @@ import {
 } from './commands/hook/codex-post-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
+import { cursorPreFileRead } from './commands/hook/cursor-pre-file-read';
+import { cursorPreToolUse } from './commands/hook/cursor-pre-tool-use';
 import { cursorPromptSubmit } from './commands/hook/cursor-prompt-submit';
 import { gitPreCommit, type GitPreCommitOptions } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
@@ -322,9 +324,8 @@ integrateCommand
     integrateAntigravity(options, auth),
   );
 
-// hidden until stable — remove { hidden: true } when sonar integrate cursor goes GA (CLI-221)
 integrateCommand
-  .command('cursor', { hidden: true })
+  .command('cursor')
   .description(
     'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.',
   )
@@ -565,6 +566,16 @@ hookCommand
   .command('cursor-prompt-submit')
   .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
   .anonymousAction(() => cursorPromptSubmit());
+
+hookCommand
+  .command('cursor-pre-file-read')
+  .description('beforeReadFile handler for Cursor: scan files for secrets before agent reads them')
+  .anonymousAction(() => cursorPreFileRead());
+
+hookCommand
+  .command('cursor-pre-tool-use')
+  .description('preToolUse handler for Cursor: scan Read tool targets for secrets before execution')
+  .anonymousAction(() => cursorPreToolUse());
 
 hookCommand
   .command('claude-post-tool-use')

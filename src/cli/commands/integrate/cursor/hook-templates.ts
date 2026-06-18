@@ -29,3 +29,19 @@ export function getSecretPromptTemplateUnix(): string {
 export function getSecretPromptTemplateWindows(): string {
   return windowsTemplate('sonar hook cursor-prompt-submit');
 }
+
+export function getSecretPreFileReadTemplateUnix(): string {
+  return unixTemplate('sonar hook cursor-pre-file-read');
+}
+
+export function getSecretPreFileReadTemplateWindows(): string {
+  return windowsTemplate('sonar hook cursor-pre-file-read');
+}
+
+export function getSecretPreToolUseTemplateUnix(): string {
+  return unixTemplate('sonar hook cursor-pre-tool-use');
+}
+
+export function getSecretPreToolUseTemplateWindows(): string {
+  return windowsTemplate('sonar hook cursor-pre-tool-use');
+}

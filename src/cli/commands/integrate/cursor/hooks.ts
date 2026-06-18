@@ -18,92 +18,120 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Cursor-specific hooks.json helpers.
+// Cursor-specific hook helpers for .cursor/hooks.json.
 //
-// Cursor's hook config diverges from the shared `{ hooks: { <event>: HookConfig[] } }` shape used
-// by Claude and Codex (see `_common/hooks.ts`): it wraps the map in a `{ version, hooks }` document
-// and each event entry is a flat `{ command }` object rather than a `{ matcher, hooks: [...] }`
-// nesting. Ownership of an entry is identified by the marker embedded in its command path.
-// See https://cursor.com/docs/agent/hooks.
+// Cursor uses a flat hook format — each entry is `{ command, matcher, timeout, failClosed }` —
+// unlike the nested Claude/Codex format. These helpers are isolated here and do not modify
+// the shared hook infrastructure.
 
-const DEFAULT_CURSOR_HOOKS_VERSION = 1;
+import { HOOK_TIMEOUT_SEC, resolveAgentHookCommand, SONAR_SECRETS_MARKER } from '../_common/hooks';
+import type { IntegrationContext } from '../_common/registry';
 
-export interface CursorHookEntry {
+export const CURSOR_HOOK_MATCHERS: Record<string, string> = {
+  beforeReadFile: 'Read|TabRead',
+  beforeSubmitPrompt: 'UserPromptSubmit',
+  preToolUse: 'Read',
+};
+
+export function resolveCursorHookMatcher(eventType: string): string {
+  return CURSOR_HOOK_MATCHERS[eventType] ?? '.*';
+}
+
+export interface CursorFlatHookEntry {
   command: string;
-  timeout?: number;
+  matcher: string;
+  timeout: number;
+  failClosed: boolean;
 }
 
 export interface CursorHooksDocument {
-  version?: number;
-  hooks?: Record<string, CursorHookEntry[]>;
+  version: 1;
+  hooks: Record<string, CursorFlatHookEntry[]>;
   [key: string]: unknown;
 }
 
-function toCursorHooksDocument(document: unknown): CursorHooksDocument {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return { version: DEFAULT_CURSOR_HOOKS_VERSION, hooks: {} };
-  }
+export interface ManagedCursorHookEntry {
+  eventType: string;
+  marker: string;
+  entry: CursorFlatHookEntry;
+}
 
-  const settings = document as CursorHooksDocument;
+/** Build a managed Cursor hook entry for a given event and script. */
+export function buildCursorHookEntry(
+  context: IntegrationContext,
+  configDir: string,
+  eventType: string,
+  scriptPath: string,
+  failClosed = false,
+): ManagedCursorHookEntry {
   return {
-    ...settings,
-    version: settings.version ?? DEFAULT_CURSOR_HOOKS_VERSION,
-    hooks: settings.hooks ? { ...settings.hooks } : {},
+    eventType,
+    marker: SONAR_SECRETS_MARKER,
+    entry: {
+      command: resolveAgentHookCommand(context, configDir, scriptPath),
+      matcher: resolveCursorHookMatcher(eventType),
+      timeout: HOOK_TIMEOUT_SEC,
+      failClosed,
+    },
   };
 }
 
-// `entry` is typed as a well-formed CursorHookEntry, but the array is parsed from a user-editable
-// hooks.json and may contain hand-written or third-party junk (missing/non-string command, or even
-// a non-object element), so widen the type and guard before calling String.includes.
-function ownsCursorHookEntry(entry: CursorHookEntry | null | undefined, marker: string): boolean {
-  return typeof entry?.command === 'string' && entry.command.includes(marker);
-}
-
 /**
- * Idempotent upsert: drop any existing entry for `eventType` owned by `marker` (its command
- * contains the marker) and append the desired `{ command }` entry. Returns a new document; does
- * not mutate the input.
+ * Idempotent upsert: for each managed entry, drop any existing entries whose
+ * command contains the marker, then append the desired entry.
  */
-export function upsertCursorHook(
+export function upsertCursorHooks(
   document: unknown,
-  eventType: string,
-  command: string,
-  marker: string,
+  entries: ManagedCursorHookEntry[],
 ): CursorHooksDocument {
-  const settings = toCursorHooksDocument(document);
-  settings.hooks ??= {};
+  const hooksDoc = toCursorHooksDocument(document);
 
-  // The event value comes from a user-editable hooks.json and may not be an array
-  // (e.g. hand-edited to an object or string); treat any non-array as empty.
-  const raw = settings.hooks[eventType];
-  const existing = Array.isArray(raw) ? raw : [];
-  settings.hooks[eventType] = [
-    ...existing.filter((entry) => !ownsCursorHookEntry(entry, marker)),
-    { command },
-  ];
-
-  return settings;
-}
-
-/**
- * Remove every hook entry whose command contains `marker`, dropping now-empty event arrays.
- * Idempotent inverse of {@link upsertCursorHook} for the same marker.
- */
-export function removeCursorHook(document: unknown, marker: string): CursorHooksDocument {
-  const settings = toCursorHooksDocument(document);
-  if (!settings.hooks) {
-    return settings;
+  for (const { eventType, marker, entry } of entries) {
+    const existing = Array.isArray(hooksDoc.hooks[eventType]) ? hooksDoc.hooks[eventType] : [];
+    hooksDoc.hooks[eventType] = [...existing.filter((e) => !ownsCursorHookEntry(e, marker)), entry];
   }
 
-  const hooks: Record<string, CursorHookEntry[]> = {};
-  for (const [eventType, entries] of Object.entries(settings.hooks)) {
-    // Tolerate non-array event values from a hand-edited hooks.json (treat as empty).
+  return hooksDoc;
+}
+
+/**
+ * Remove hook entries whose command contains any of the given markers.
+ * Idempotent inverse of {@link upsertCursorHooks} for the same markers.
+ */
+export function removeCursorHooks(document: unknown, markers: string[]): CursorHooksDocument {
+  const hooksDoc = toCursorHooksDocument(document);
+  const hooks: Record<string, CursorFlatHookEntry[]> = {};
+
+  for (const [eventType, entries] of Object.entries(hooksDoc.hooks)) {
     const list = Array.isArray(entries) ? entries : [];
-    const filtered = list.filter((entry) => !ownsCursorHookEntry(entry, marker));
+    const filtered = list.filter((e) => !markers.some((m) => ownsCursorHookEntry(e, m)));
     if (filtered.length > 0) {
       hooks[eventType] = filtered;
     }
   }
 
-  return { ...settings, hooks };
+  return { ...hooksDoc, hooks };
+}
+
+function ownsCursorHookEntry(
+  entry: CursorFlatHookEntry | null | undefined,
+  marker: string,
+): boolean {
+  return typeof entry?.command === 'string' && entry.command.includes(marker);
+}
+
+function toCursorHooksDocument(document: unknown): CursorHooksDocument {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) {
+    return { version: 1, hooks: {} };
+  }
+
+  const doc = document as Partial<CursorHooksDocument>;
+  return {
+    ...doc,
+    version: doc.version ?? 1,
+    hooks:
+      doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks)
+        ? { ...doc.hooks }
+        : {},
+  };
 }
