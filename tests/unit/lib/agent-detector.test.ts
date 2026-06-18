@@ -22,6 +22,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   detectCallerAgent,
+  isAntigravityAgentEnv,
   isClaudeCodeAgentEnv,
   isCodexAgentEnv,
   isCopilotCliAgentEnv,
@@ -73,6 +74,21 @@ describe('agent-detector', () => {
       withProcessEnv('CURSOR_AGENT', '1', () => {
         expect(isCursorAgentEnv()).toBe(true);
       });
+    });
+  });
+
+  describe('isAntigravityAgentEnv', () => {
+    it('is true when ANTIGRAVITY_AGENT=1', () => {
+      expect(isAntigravityAgentEnv(env({ ANTIGRAVITY_AGENT: '1' }))).toBe(true);
+    });
+
+    it('is true when ANTIGRAVITY_AGENT=true', () => {
+      expect(isAntigravityAgentEnv(env({ ANTIGRAVITY_AGENT: 'true' }))).toBe(true);
+    });
+
+    it('is false when ANTIGRAVITY_AGENT is absent or not a recognized value', () => {
+      expect(isAntigravityAgentEnv(env({}))).toBe(false);
+      expect(isAntigravityAgentEnv(env({ ANTIGRAVITY_AGENT: '0' }))).toBe(false);
     });
   });
 
@@ -156,6 +172,19 @@ describe('agent-detector', () => {
   describe('detectCallerAgent', () => {
     it('returns null when no markers', () => {
       expect(detectCallerAgent(env({}))).toBeNull();
+    });
+
+    it('prefers antigravity over claude and cursor when Antigravity and Claude markers are set', () => {
+      expect(
+        detectCallerAgent(
+          env({
+            ANTIGRAVITY_AGENT: '1',
+            CLAUDECODE: '1',
+            CLAUDE_PROJECT_DIR: '/x',
+            CURSOR_TRACE_ID: 't',
+          }),
+        ),
+      ).toBe('antigravity');
     });
 
     it('prefers claude over cursor when both families are set', () => {

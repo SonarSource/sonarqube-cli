@@ -180,6 +180,7 @@ export function getMcpConfigFilePath(
       ? join(homedir(), '.cursor', 'mcp.json')
       : join(projectRoot, '.cursor', 'mcp.json');
   } else if (agent === 'antigravity') {
+    // Antigravity uses one global MCP file for all workspaces; scope is ignored.
     return ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON;
   }
   throw new Error(`Unsupported agent: ${agent}`);

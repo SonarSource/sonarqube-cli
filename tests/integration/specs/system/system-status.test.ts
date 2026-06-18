@@ -128,6 +128,42 @@ function legacyAgentState(): Record<string, unknown> {
   });
 }
 
+function antigravityStatusState(
+  targetRoot: string,
+  scope: 'project' | 'global' = 'project',
+): Record<string, unknown> {
+  const featureTemplate = {
+    scope,
+    targetRoot,
+    installedByCliVersion: '0.14.0',
+    installedAt: new Date().toISOString(),
+    updatedByCliVersion: '0.14.0',
+    updatedAt: new Date().toISOString(),
+    dependencies: [],
+    operations: [],
+    resources: [],
+  };
+
+  return baseState({
+    integrations: {
+      installed: [
+        {
+          id: 'antigravity-test',
+          integrationId: 'antigravity',
+          installedByCliVersion: '0.14.0',
+          installedAt: new Date().toISOString(),
+          updatedByCliVersion: '0.14.0',
+          updatedAt: new Date().toISOString(),
+          features: [
+            { ...featureTemplate, featureId: 'sonar-secrets-hooks' },
+            { ...featureTemplate, featureId: 'mcp-server' },
+          ],
+        },
+      ],
+    },
+  });
+}
+
 describe('system status', () => {
   let harness: TestHarness;
 
@@ -1069,6 +1105,52 @@ describe('system status', () => {
       // Both should have MCP configured
       expect(claude?.mcp?.configured).toBe(true);
       expect(copilot?.mcp?.configured).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows Antigravity secrets hook and MCP status when both are configured',
+    async () => {
+      const scriptPath = join(harness.cwd.path, '.agents', 'sonar', 'hooks', 'pretool-secrets.sh');
+      mkdirSync(join(harness.cwd.path, '.agents', 'sonar', 'hooks'), { recursive: true });
+      writeFileSync(scriptPath, '#!/bin/bash\n');
+      writeFileSync(
+        join(harness.cwd.path, '.agents', 'hooks.json'),
+        JSON.stringify({
+          'sonar-secrets': {
+            enabled: true,
+            PreToolUse: [
+              {
+                matcher: 'view_file',
+                hooks: [{ command: `bash "${scriptPath}"` }],
+              },
+            ],
+          },
+        }),
+      );
+      harness.userHome.writeFile(join('.gemini', 'config', 'mcp_config.json'), VALID_MCP_CONFIG);
+      harness.state().withRawState(JSON.stringify(antigravityStatusState(harness.cwd.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Antigravity');
+      expect(result.stdout).toContain('Secrets Hook');
+      expect(result.stdout).toContain('MCP Server');
+
+      const jsonResult = await harness.run('system status --json');
+      expect(jsonResult.exitCode).toBe(0);
+      const json = JSON.parse(jsonResult.stdout) as {
+        integrations: Array<{
+          id: string;
+          hooks?: { valid: boolean };
+          mcp?: { valid: boolean };
+        }>;
+      };
+      const antigravity = json.integrations.find((entry) => entry.id === 'antigravity');
+      expect(antigravity?.hooks?.valid).toBe(true);
+      expect(antigravity?.mcp?.valid).toBe(true);
     },
     { timeout: 15000 },
   );
