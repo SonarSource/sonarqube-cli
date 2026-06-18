@@ -25,13 +25,13 @@ import type { FeatureContainer, FeatureDeclaration } from './types';
  * intent; the installer resolves it (prompting / skip messaging) centrally.
  */
 export type InstallDecision =
-  | { action: 'install' }
+  | { action: 'install'; message?: string }
   | { action: 'skip'; message?: string }
   | { action: 'ask'; question?: string };
 
-/** Install the feature without asking. */
-export function install(): InstallDecision {
-  return { action: 'install' };
+/** Install the feature without asking, optionally printing a message. */
+export function install(message?: string): InstallDecision {
+  return { action: 'install', message };
 }
 
 /** Skip the feature, optionally explaining why. */
