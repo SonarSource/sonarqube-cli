@@ -61,6 +61,16 @@ const EXIT_UNRESOLVED_RISKS = 51;
 
 interface DependencyRisksJson {
   project: string;
+  packages: Array<{
+    groups: Array<{
+      type: string;
+      selectedRisks: Array<{
+        severity: string;
+        status: string;
+        vulnerabilityId: string;
+      }>;
+    }>;
+  }>;
   summary: {
     packagesScanned: number;
     totalRisks: number;
@@ -95,7 +105,7 @@ for (const region of STAGING_REGIONS) {
         await harness.dispose();
       });
 
-      it('reports dependency risks for a vulnerable npm package', async () => {
+      it('reports dependency risks in json format', async () => {
         const result = await harness.run(
           `analyze dependency-risks --project ${projectKey} --format json`,
           { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
@@ -110,8 +120,69 @@ for (const region of STAGING_REGIONS) {
 
         expect(payload.project).toBe(projectKey);
         expect(payload.errors).toHaveLength(0);
-        expect(payload.summary.packagesScanned).toBeGreaterThan(0);
-        expect(payload.summary.totalRisks).toBeGreaterThan(0);
+        expect(payload.summary.packagesScanned).toBe(1);
+        expect(payload.summary.totalRisks).toBe(10);
+
+        const group = payload.packages[0].groups[0];
+        expect(group.type).toBe('VULNERABILITY');
+        expect(group.selectedRisks).toHaveLength(10);
+
+        const cve = group.selectedRisks.find((r) => r.vulnerabilityId === 'CVE-2019-10744');
+        expect(cve).toBeDefined();
+        expect(cve!.severity).toBe('HIGH');
+        expect(cve!.status).toBe('NEW');
+      });
+
+      it('reports dependency risks in toon format', async () => {
+        const result = await harness.run(
+          `analyze dependency-risks --project ${projectKey} --format toon`,
+          { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
+        );
+
+        expect(
+          result.exitCode,
+          `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+        ).toBe(EXIT_UNRESOLVED_RISKS);
+
+        expect(result.stdout).toContain(`project: ${projectKey}`);
+        expect(result.stdout).toContain('totalRisks: 10');
+        expect(result.stdout).toContain('packagesScanned: 1');
+        expect(result.stdout).toContain('pkg:npm/lodash@4.17.4');
+        expect(result.stdout).toContain('type: VULNERABILITY');
+        expect(result.stdout).toContain(
+          'selectedRisks[10]{severity,status,cvssScore,vulnerabilityId}:',
+        );
+        expect(result.stdout).toContain('HIGH,NEW,"9.1",CVE-2019-10744');
+        // progress noise must not bleed into stdout
+        expect(result.stdout).not.toContain('Analyzing dependency risks');
+      });
+
+      it('reports dependency risks in table format', async () => {
+        const result = await harness.run(
+          `analyze dependency-risks --project ${projectKey} --format table`,
+          { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
+        );
+
+        expect(
+          result.exitCode,
+          `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+        ).toBe(EXIT_UNRESOLVED_RISKS);
+
+        expect(result.stdout).toContain(
+          '── lodash@4.17.4 [NEW] (10 risks) ──────────────────────────────────────────────',
+        );
+        expect(result.stdout).toContain('  HIGH      NEW      CVSS 9.1 CVE-2019-10744');
+        expect(result.stdout).toContain('Summary: 1 dependencies checked, 10 risks found');
+        expect(result.stdout).toContain(
+          'Filtering by: new, open, confirm (discarded: accept, safe, fixed)',
+        );
+        expect(result.stdout).toContain(
+          '  VULNERABILITY       BLOCKER ✓   0    HIGH ✗   3    MEDIUM ✗   5    LOW ✗   2    INFO ✓   0',
+        );
+        expect(result.stdout).toContain('  lodash@4.17.4 (10 risks, highest severity HIGH)');
+        expect(result.stdout).toContain(
+          '    Recommended versions without known vulnerabilities: 4.18.1 (latest stable) | 4.18.0 (nearest)',
+        );
       });
     },
   );
