@@ -92,6 +92,7 @@ const INTEGRATION_TO_MCP_AGENT: Record<string, string> = {
   'claude-code': 'claude',
   'copilot-cli': 'copilot',
   codex: 'codex',
+  antigravity: 'antigravity',
 };
 
 // integrationId → sonar integrate subcommand
@@ -99,6 +100,7 @@ const INTEGRATION_TO_COMMAND: Record<string, string> = {
   'claude-code': 'sonar integrate claude',
   'copilot-cli': 'sonar integrate copilot',
   codex: 'sonar integrate codex',
+  antigravity: 'sonar integrate antigravity',
 };
 
 function findMcpFeatures(

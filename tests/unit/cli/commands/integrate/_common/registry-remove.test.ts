@@ -46,6 +46,25 @@ describe('declarative integration framework - remove and undo', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it('treats empty JSON files as the default document', async () => {
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    const jsonPath = join(tempDir, 'settings.json');
+    await writeFile(jsonPath, '');
+    const jsonResource = jsonPatch({
+      id: 'json-empty',
+      targetPath: jsonPath,
+      defaultValue: { fallback: true },
+      patch: (document) => ({ ...(document as Record<string, unknown>), enabled: true }),
+      removePatch: (document) => document,
+    });
+
+    await jsonResource.apply(context);
+
+    const written = JSON.parse(await readFile(jsonPath, 'utf-8')) as Record<string, unknown>;
+    expect(written).toEqual({ fallback: true, enabled: true });
+  });
+
   it('fails when JSON files contain invalid content', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);

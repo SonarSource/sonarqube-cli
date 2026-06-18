@@ -112,6 +112,12 @@ export const ANTIGRAVITY_GLOBAL_CONFIG_DIR = join(homedir(), '.gemini', 'config'
 /** Global Antigravity hooks config (`sonar integrate antigravity --global`). */
 export const ANTIGRAVITY_GLOBAL_HOOKS_JSON = join(ANTIGRAVITY_GLOBAL_CONFIG_DIR, 'hooks.json');
 
+/** Global Antigravity MCP config (Antigravity only supports a single user-level file). */
+export const ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON = join(
+  ANTIGRAVITY_GLOBAL_CONFIG_DIR,
+  'mcp_config.json',
+);
+
 /** Global Sonar hook scripts directory (`sonar integrate antigravity --global`). */
 export const ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR = join(
   ANTIGRAVITY_GLOBAL_CONFIG_DIR,

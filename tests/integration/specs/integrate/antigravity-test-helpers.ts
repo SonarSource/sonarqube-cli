@@ -47,6 +47,9 @@ export const GLOBAL_HOOK_SCRIPT_PATH = [
 export const PROJECT_HOOKS_JSON_PATH = ['.agents', 'hooks.json'] as const;
 export const GLOBAL_HOOKS_JSON_PATH = ['.gemini', 'config', 'hooks.json'] as const;
 
+/** Antigravity MCP config (`Manage MCP Servers` → View raw config). */
+export const GLOBAL_MCP_CONFIG_PATH = ['.gemini', 'config', 'mcp_config.json'] as const;
+
 export const PROJECT_INSTRUCTIONS_PATH = [
   '.agents',
   'instructions',
@@ -76,7 +79,7 @@ export function findAntigravityFeature(
   featureId: string,
   scope?: string,
 ): InstalledIntegrationFeature | undefined {
-  return findInstalledFeature(harness, 'antigravity-cli', featureId, scope);
+  return findInstalledFeature(harness, 'antigravity', featureId, scope);
 }
 
 export function makeAntigravitySecretsBlock(command: string): AntigravityHooksJson {

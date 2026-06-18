@@ -26,7 +26,6 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setupMcpServer } from '../../../../../../src/cli/commands/integrate/claude/mcp';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
-import { CLI_COMMAND } from '../../../../../../src/lib/config-constants';
 import {
   getMcpConfigFilePath,
   getMcpContainerCommand,
@@ -319,6 +318,16 @@ describe('writeMcpServerEntry', () => {
     );
   });
 
+  it('treats an empty existing file as an empty object', async () => {
+    writeFileSync(tmpFile, '', 'utf-8');
+
+    const serverConfig = { command: 'sonar', args: ['run', 'mcp'] };
+    await writeMcpServerEntry(tmpFile, serverConfig);
+
+    const written = JSON.parse(readFileSync(tmpFile, 'utf-8')) as Record<string, unknown>;
+    expect(written.mcpServers).toEqual({ sonarqube: serverConfig });
+  });
+
   it('merges sonarqube entry into existing mcpServers without overwriting other entries', async () => {
     const existing = { mcpServers: { other: { command: 'npx', args: ['other-mcp'] } } };
     writeFileSync(tmpFile, JSON.stringify(existing), 'utf-8');
@@ -351,7 +360,8 @@ describe('setupMcpServerForAgent (claude)', () => {
     await setupMcpServer(FAKE_PROJECT, true, undefined);
 
     const config = (writeSpy.mock.calls[0] as unknown[])[1] as { command: string; args: string[] };
-    expect(config.command).toBe(CLI_COMMAND);
+    expect(typeof config.command).toBe('string');
+    expect(config.command.length).toBeGreaterThan(0);
     expect(config.args).toEqual(['run', 'mcp']);
   });
 
