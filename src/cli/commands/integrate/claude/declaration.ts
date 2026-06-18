@@ -31,9 +31,10 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
+import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { askUser, jsonPatch, skip, wholeFile } from '../_common/registry';
+import { askUser, jsonPatch, skip, textSnippetRemover, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -47,6 +48,7 @@ import {
 } from './hook-templates';
 
 const CLAUDE_CONFIG_DIR = '.claude';
+const CLAUDE_MD_FILE = 'CLAUDE.md';
 const SETTINGS_FILE = 'settings.json';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
@@ -161,12 +163,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           },
           executable: true,
         }),
-        // TODO: Add a cleanup resource (or migration step) that strips the legacy
-        // CLAUDE.md instructions block by its managed markers, e.g.:
-        //   removeMarkedSection(claudeMdPath,
-        //     sonarBeginMarker('claude-agentic-analysis-protocol'),
-        //     sonarEndMarker('claude-agentic-analysis-protocol'))
-        // so upgrading from the instructions-based variant doesn't leave orphaned content.
         jsonPatch({
           id: 'claude-settings-sqaa-hook',
           displayName: 'Claude SonarQube Agentic Analysis hook configuration',
@@ -194,6 +190,14 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
         }),
       ],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'sqaa-instructions-cleanup',
+          targetPath: resolveClaudeMdPath,
+          startMarker: sonarBeginMarker('claude-agentic-analysis-protocol'),
+          endMarker: sonarEndMarker('claude-agentic-analysis-protocol'),
+        }),
+      ],
     },
     {
       id: 'mcp-server',
@@ -219,6 +223,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
 
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);
+}
+
+function resolveClaudeMdPath(context: IntegrationContext): string {
+  return join(context.targetRoot, CLAUDE_MD_FILE);
 }
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {

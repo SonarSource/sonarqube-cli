@@ -44,7 +44,7 @@ export function resolveSqaaFileArgs(
   for (const path of rawArgs) {
     const absolutePath = resolve(cwd, path);
     if (seenAbsolute.has(absolutePath)) {
-      throw new InvalidOptionError(`Duplicate --file entry: ${path}`);
+      continue;
     }
     seenAbsolute.add(absolutePath);
     if (!existsSync(absolutePath)) {

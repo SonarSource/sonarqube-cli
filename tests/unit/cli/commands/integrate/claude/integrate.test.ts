@@ -600,7 +600,7 @@ describe('integrateCommand', () => {
       expect.anything(),
       projectRootDir,
       isGlobal,
-      sqaaEnabled,
+      sqaaEnabled && projectKey !== undefined,
       expectedOptions,
     );
   }

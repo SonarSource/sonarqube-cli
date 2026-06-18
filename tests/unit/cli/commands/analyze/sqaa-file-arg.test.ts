@@ -36,14 +36,16 @@ describe('sqaa-file-arg', () => {
     expect(collectSqaaFileOption('b.ts', ['a.ts'])).toEqual(['a.ts', 'b.ts']);
   });
 
-  it('resolveSqaaFileArgs resolves paths and rejects missing files and duplicates', () => {
+  it('resolveSqaaFileArgs resolves paths, skips duplicate entries, and rejects missing files', () => {
     const dir = mkdtempSync(join(tmpdir(), 'sqaa-file-arg-'));
     const existing = join(dir, 'exists.ts');
     writeFileSync(existing, 'x');
 
     expect(resolveSqaaFileArgs(['exists.ts'], dir)).toEqual([{ absolutePath: existing }]);
+    expect(resolveSqaaFileArgs(['exists.ts', 'exists.ts'], dir)).toEqual([
+      { absolutePath: existing },
+    ]);
 
     expect(() => resolveSqaaFileArgs(['missing.ts'], dir)).toThrow(InvalidOptionError);
-    expect(() => resolveSqaaFileArgs(['exists.ts', 'exists.ts'], dir)).toThrow(InvalidOptionError);
   });
 });

@@ -125,9 +125,13 @@ export async function integrateClaude(
     installError = error instanceof Error ? error : new Error(String(error));
   }
   await removeObsoleteHookArtifacts(ctx.project.rootDir, OBSOLETE_A3S_MARKER);
-  await updateStateAfterConfiguration(config, ctx.project.rootDir, ctx.isGlobal, sqaaEnabled, {
-    skipSecretsHooks,
-  });
+  await updateStateAfterConfiguration(
+    config,
+    ctx.project.rootDir,
+    ctx.isGlobal,
+    integrationOptions.installSqaaHook,
+    { skipSecretsHooks },
+  );
   if (installError) {
     throw installError;
   }
