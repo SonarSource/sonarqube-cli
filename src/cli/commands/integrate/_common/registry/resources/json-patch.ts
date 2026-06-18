@@ -68,8 +68,12 @@ async function readJson(path: string, defaultValue: unknown): Promise<unknown> {
   if (!existsSync(path)) {
     return defaultValue;
   }
+  const raw = await readFile(path, 'utf-8');
+  if (raw.trim().length === 0) {
+    return defaultValue;
+  }
   try {
-    return JSON.parse(await readFile(path, 'utf-8')) as unknown;
+    return JSON.parse(raw) as unknown;
   } catch {
     throw new CommandFailedError(
       `${path} contains invalid JSON. Please fix or delete it and re-run.`,

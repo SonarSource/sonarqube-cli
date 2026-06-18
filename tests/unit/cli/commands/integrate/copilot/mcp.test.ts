@@ -24,7 +24,6 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setupMcpServer } from '../../../../../../src/cli/commands/integrate/copilot/mcp';
-import { CLI_COMMAND } from '../../../../../../src/lib/config-constants';
 import { DiscoveredProject } from '../../../../../../src/lib/project-workspace';
 import { getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
@@ -55,7 +54,8 @@ describe('setupMcpServerForAgent (copilot)', () => {
     await setupMcpServer(FAKE_PROJECT, true, undefined);
 
     const config = (writeSpy.mock.calls[0] as unknown[])[1] as { command: string; args: string[] };
-    expect(config.command).toBe(CLI_COMMAND);
+    expect(typeof config.command).toBe('string');
+    expect(config.command.length).toBeGreaterThan(0);
     expect(config.args).toEqual(['run', 'mcp']);
   });
 

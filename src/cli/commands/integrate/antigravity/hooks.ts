@@ -48,19 +48,19 @@ export interface AntigravityToolHookEntry {
   hooks: AntigravityHookCommand[];
 }
 
-export interface AntigravitySecretsBlock {
-  enabled?: boolean;
-  PreToolUse?: AntigravityToolHookEntry[];
-  PostInvocation?: AntigravityFlatHookEntry[];
-}
-
 export interface AntigravityFlatHookEntry {
   type?: 'command';
   command: string;
   timeout?: number;
 }
 
-export type AntigravityHooksDocument = Record<string, AntigravitySecretsBlock | undefined>;
+export interface AntigravityHookBlock {
+  enabled?: boolean;
+  PreToolUse?: AntigravityToolHookEntry[];
+  PostInvocation?: AntigravityFlatHookEntry[];
+}
+
+export type AntigravityHooksDocument = Record<string, AntigravityHookBlock | undefined>;
 
 /**
  * Probe `~/.gemini/config/hooks.json` for an existing global sonar-secrets
@@ -137,7 +137,7 @@ export function removeAntigravitySecretsBlock(document: unknown): AntigravityHoo
     return rest;
   }
 
-  const nextBlock: AntigravitySecretsBlock = { ...block };
+  const nextBlock: AntigravityHookBlock = { ...block };
   if (preToolUse.length > 0) {
     nextBlock.PreToolUse = preToolUse;
   } else {

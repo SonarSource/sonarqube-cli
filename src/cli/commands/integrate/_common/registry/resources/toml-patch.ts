@@ -73,8 +73,12 @@ async function readToml(
   if (!existsSync(path)) {
     return defaultValue;
   }
+  const raw = await readFile(path, 'utf-8');
+  if (raw.trim().length === 0) {
+    return defaultValue;
+  }
   try {
-    return parse(await readFile(path, 'utf-8'));
+    return parse(raw);
   } catch {
     throw new CommandFailedError(
       `${path} contains invalid TOML. Please fix or delete it and re-run.`,

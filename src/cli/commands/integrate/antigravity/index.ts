@@ -20,23 +20,24 @@
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
-import { info } from '../../../../ui';
+import { info, warn } from '../../../../ui';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import {
   buildContextAugmentationAttrs,
   resolveContextAugmentationSetup,
 } from '../_common/context-augmentation';
-import { createIntegrationRegistry, installIntegration } from '../_common/registry';
+import { installIntegration } from '../_common/registry';
+import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import {
-  ANTIGRAVITY_INTEGRATION_ID,
-  antigravityIntegration,
-  type AntigravityIntegrationOptions,
-} from './declaration';
+import { supportedIntegrations } from '../index.js';
+import { ANTIGRAVITY_INTEGRATION_ID, type AntigravityIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 import { resolveAntigravityInstallTarget } from './install-target';
 
-const antigravityIntegrations = createIntegrationRegistry([antigravityIntegration]);
+/** Shown on project-scoped integrate: hooks/instructions are local, but MCP is always global. */
+export const ANTIGRAVITY_GLOBAL_MCP_NOTICE =
+  'Antigravity only supports a user-level MCP configuration (~/.gemini/config/mcp_config.json). ' +
+  'The SonarQube MCP entry is shared across all workspaces; integrating from another project overwrites it.';
 
 export async function integrateAntigravity(
   options: IntegrateAgentOptions,
@@ -47,6 +48,15 @@ export async function integrateAntigravity(
   if (options.skipContext) {
     info('Skipping Context Augmentation (--skip-context).');
   }
+
+  const sqaaEligible = await resolveSqaaSetup({
+    serverURL: ctx.serverUrl,
+    token: ctx.token,
+    organization: ctx.organization,
+    isGlobal: ctx.isGlobal,
+  });
+  const includeSqaa = sqaaEligible && Boolean(ctx.projectKey);
+
   const contextAugmentation = options.skipContext
     ? null
     : await resolveContextAugmentationSetup({
@@ -66,11 +76,16 @@ export async function integrateAntigravity(
     ...options,
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists,
+    installSqaaInstructions: includeSqaa,
     installContextAugmentation: contextAugmentation !== null,
   };
 
+  if (!ctx.isGlobal) {
+    warn(ANTIGRAVITY_GLOBAL_MCP_NOTICE);
+  }
+
   await installIntegration({
-    registry: antigravityIntegrations,
+    registry: supportedIntegrations,
     integrationId: ANTIGRAVITY_INTEGRATION_ID,
     options: integrationOptions,
     targetRoot,

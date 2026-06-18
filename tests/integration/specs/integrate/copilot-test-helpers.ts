@@ -118,12 +118,11 @@ export function writeExistingGlobalInstructions(harness: TestHarness): void {
 }
 
 /**
- * Force the project-level hook configuration update to fail by pre-creating
- * `hooks.json` as a directory.
+ * Force the project-level hook configuration update to fail by pre-seeding
+ * `hooks.json` with invalid JSON.
  */
 export function obstructHooksJson(harness: TestHarness): void {
-  mkdirSync(harness.cwd.file('.github', 'hooks').path, { recursive: true });
-  mkdirSync(harness.cwd.file(...PROJECT_HOOKS_JSON_PATH).path);
+  harness.cwd.writeFile('.github/hooks/hooks.json', '{ invalid json\n');
 }
 
 /**
