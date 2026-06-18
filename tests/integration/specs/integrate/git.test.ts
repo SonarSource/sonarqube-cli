@@ -414,9 +414,9 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       // '\r' selects project scope, '\r' accepts 'Install pre-commit hook?',
-      // 'n' declines 'Enable dependency-risks scanning?', 'n' declines 'Install pre-push hook?'.
+      // dep-risks is auto-skipped (no project key), 'n' declines 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
-        stdinChunks: ['\r', '\r', 'n', 'n'],
+        stdinChunks: ['\r', '\r', 'n'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
@@ -516,9 +516,9 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       // '\r' selects project scope, '\r' accepts 'Install pre-commit hook?',
-      // 'n' declines 'Enable dependency-risks scanning?', '\r' accepts 'Install pre-push hook?'.
+      // dep-risks is auto-skipped (no project key), '\r' accepts 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
-        stdinChunks: ['\r', '\r', 'n', '\r'],
+        stdinChunks: ['\r', '\r', '\r'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
@@ -538,6 +538,70 @@ describe('integrate git (native hooks)', () => {
       for (const feature of gitIntegration.features) {
         expect(feature.attrs).toEqual({ projectKey: null, dependencyRisks: false });
       }
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prompts for dep-risks and bakes it in when user accepts with project key provided',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      harness.state().withScaScannerBinaryInstalled();
+      initGitRepo(harness);
+
+      // '\r' selects project scope, '\r' accepts 'Enable dependency-risks scanning?'.
+      // Pre-commit is forced by --hook; pre-push is skipped. Dep-risks prompt appears
+      // because -p supplies a project key.
+      const result = await harness.run('integrate git --hook pre-commit -p my-project', {
+        stdinChunks: ['\r', '\r'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).toContain('--dependency-risks -p');
+      expect(hookContent).toContain('my-project');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(feature.attrs).toMatchObject({ projectKey: 'my-project', dependencyRisks: true });
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prompts for dep-risks and omits it when user declines with project key provided',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      // '\r' selects project scope, 'n' declines 'Enable dependency-risks scanning?'.
+      const result = await harness.run('integrate git --hook pre-commit -p my-project', {
+        stdinChunks: ['\r', 'n'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).not.toContain('--dependency-risks');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(feature.attrs).toMatchObject({ projectKey: 'my-project', dependencyRisks: false });
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
+      expect(
+        feature.subfeatures?.find((s) => s.featureId === 'pre-commit-dependency-risks'),
+      ).toBeUndefined();
     },
     { timeout: 15000 },
   );
