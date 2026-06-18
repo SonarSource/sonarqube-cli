@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { enableLocalAnalyzerMode } from '../../../lib/sonar-sqaa';
 import {
   blank,
   getMessagesForFormattedOutput,
@@ -42,6 +43,7 @@ export interface AnalyzeAllOptions {
   project?: string;
   force?: boolean;
   format?: OutputFormat;
+  local?: boolean;
 }
 
 interface SecretsReport {
@@ -68,17 +70,22 @@ function printCombinedReport(secrets: SecretsReport | null, agentic: SqaaJsonRep
  * In text mode, each analysis prints its own output sequentially.
  */
 export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
+  // Enable local SQAA routing for every downstream path (text + json), since the json path builds its
+  // report without going through analyzeSqaa (which is where the agentic command enables it).
+  if (options.local) {
+    enableLocalAnalyzerMode();
+  }
   if (options.format === 'json') {
     return analyzeAllJson(options, auth);
   }
 
-  const { file, staged, base, project, force, format } = options;
+  const { file, staged, base, project, force, format, local } = options;
 
   if (file !== undefined) {
     await analyzeSecrets({ paths: [file] }, auth);
     // Bare `analyze` is a best-effort catch-all: skip agentic gracefully when no
     // project is configured rather than failing the whole command.
-    await analyzeSqaa({ file, project, format }, auth, { requireProject: false });
+    await analyzeSqaa({ file, project, format, local }, auth, { requireProject: false });
     return;
   }
 
@@ -98,7 +105,9 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
   // cover slightly different sets if the working tree changes between calls — this
   // is acceptable since the analyses are independent and best-effort.
   // requireProject: false → bare `analyze` skips agentic gracefully when unconfigured.
-  await analyzeSqaa({ staged, base, project, force, format }, auth, { requireProject: false });
+  await analyzeSqaa({ staged, base, project, force, format, local }, auth, {
+    requireProject: false,
+  });
 }
 
 async function analyzeAllJson(options: AnalyzeAllOptions, auth: ResolvedAuth): Promise<void> {
