@@ -98,11 +98,12 @@ for (const region of STAGING_REGIONS) {
       });
 
       afterEach(async () => {
-        await deleteProject(cfg, projectKey).catch((err) => {
-          // Best-effort teardown
-          console.warn(`[sca-staging] teardown failed for project ${projectKey}: ${err}`);
-        });
-        await harness.dispose();
+        if (projectKey) {
+          await deleteProject(cfg, projectKey).catch((err) => {
+            console.warn(`[sca-staging] teardown failed for project ${projectKey}: ${err}`);
+          });
+        }
+        await harness?.dispose();
       });
 
       it('reports dependency risks in json format', async () => {
