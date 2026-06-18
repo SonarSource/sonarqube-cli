@@ -99,7 +99,6 @@ describe('integrate antigravity', () => {
         expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
         expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
         expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
-        expect(result.stdout + result.stderr).toContain('user-level MCP configuration');
         expect(findAntigravityFeature(harness, 'mcp-server')).toBeDefined();
       },
       { timeout: 30000 },
@@ -182,7 +181,6 @@ describe('integrate antigravity', () => {
         const result = await harness.run('integrate antigravity -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout + result.stderr).not.toContain('user-level MCP configuration');
         expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(true);
         expect(harness.userHome.exists(...GLOBAL_HOOKS_JSON_PATH)).toBe(true);
         expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(true);

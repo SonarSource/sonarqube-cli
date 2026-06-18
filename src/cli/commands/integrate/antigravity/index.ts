@@ -20,7 +20,7 @@
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
-import { info, warn } from '../../../../ui';
+import { info } from '../../../../ui';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import {
   buildContextAugmentationAttrs,
@@ -33,11 +33,6 @@ import { supportedIntegrations } from '../index.js';
 import { ANTIGRAVITY_INTEGRATION_ID, type AntigravityIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 import { resolveAntigravityInstallTarget } from './install-target';
-
-/** Shown on project-scoped integrate: hooks/instructions are local, but MCP is always global. */
-export const ANTIGRAVITY_GLOBAL_MCP_NOTICE =
-  'Antigravity only supports a user-level MCP configuration (~/.gemini/config/mcp_config.json). ' +
-  'The SonarQube MCP entry is shared across all workspaces; integrating from another project overwrites it.';
 
 export async function integrateAntigravity(
   options: IntegrateAgentOptions,
@@ -79,10 +74,6 @@ export async function integrateAntigravity(
     installSqaaInstructions: includeSqaa,
     installContextAugmentation: contextAugmentation !== null,
   };
-
-  if (!ctx.isGlobal) {
-    warn(ANTIGRAVITY_GLOBAL_MCP_NOTICE);
-  }
 
   await installIntegration({
     registry: supportedIntegrations,
