@@ -148,10 +148,17 @@ export function removeAntigravitySecretsBlock(document: unknown): AntigravityHoo
   return doc;
 }
 
-export function resolveAntigravityHooksJsonPath(context: IntegrationContext): string {
-  return context.scope === 'global'
+export function resolveAntigravityHooksJsonPathForScope(
+  scope: 'project' | 'global',
+  targetRoot: string,
+): string {
+  return scope === 'global'
     ? ANTIGRAVITY_GLOBAL_HOOKS_JSON
-    : join(context.targetRoot, ANTIGRAVITY_PROJECT_HOOKS_JSON);
+    : join(targetRoot, ANTIGRAVITY_PROJECT_HOOKS_JSON);
+}
+
+export function resolveAntigravityHooksJsonPath(context: IntegrationContext): string {
+  return resolveAntigravityHooksJsonPathForScope(context.scope, context.targetRoot);
 }
 
 export function resolvePretoolSecretsScriptPath(context: IntegrationContext): string {

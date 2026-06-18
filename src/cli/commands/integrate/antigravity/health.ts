@@ -22,10 +22,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 
 import {
-  ANTIGRAVITY_GLOBAL_HOOKS_JSON,
-  ANTIGRAVITY_PROJECT_HOOKS_JSON,
-} from '../../../../lib/config-constants';
-import {
   extractScriptPathFromHookCommand,
   hookReferencesSonarSecrets,
   isSonarSecretsPreToolUseEntry,
@@ -34,16 +30,6 @@ import {
 } from './hooks';
 
 export type AntigravityIntegrationConfigStatus = 'configured' | 'invalid' | 'not_configured';
-
-/** Resolve the hooks.json path for an installed Antigravity secrets-hook feature. */
-export function resolveAntigravitySecretsHooksJsonPath(
-  scope: 'project' | 'global',
-  targetRoot: string,
-): string {
-  return scope === 'global'
-    ? ANTIGRAVITY_GLOBAL_HOOKS_JSON
-    : join(targetRoot, ANTIGRAVITY_PROJECT_HOOKS_JSON);
-}
 
 /**
  * Validate the on-disk Antigravity PreToolUse secrets hook (sonar-secrets block +

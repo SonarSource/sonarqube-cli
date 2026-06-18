@@ -24,13 +24,11 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import {
-  checkAntigravitySecretsHookFile,
-  resolveAntigravitySecretsHooksJsonPath,
-} from '../../../../../../src/cli/commands/integrate/antigravity/health';
+import { checkAntigravitySecretsHookFile } from '../../../../../../src/cli/commands/integrate/antigravity/health';
 import {
   formatAntigravityHookCommand,
   hookScriptName,
+  resolveAntigravityHooksJsonPathForScope,
 } from '../../../../../../src/cli/commands/integrate/antigravity/hooks';
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
@@ -40,15 +38,15 @@ import {
 } from '../../../../../../src/lib/config-constants';
 import { getMcpConfigFilePath } from '../../../../../../src/lib/mcp/mcp-helper';
 
-describe('resolveAntigravitySecretsHooksJsonPath', () => {
+describe('resolveAntigravityHooksJsonPathForScope', () => {
   it('returns project hooks.json under the target root', () => {
-    expect(resolveAntigravitySecretsHooksJsonPath('project', '/repo')).toBe(
+    expect(resolveAntigravityHooksJsonPathForScope('project', '/repo')).toBe(
       join('/repo', ANTIGRAVITY_PROJECT_HOOKS_JSON),
     );
   });
 
   it('returns global hooks.json for global scope', () => {
-    expect(resolveAntigravitySecretsHooksJsonPath('global', '/ignored')).toBe(
+    expect(resolveAntigravityHooksJsonPathForScope('global', '/ignored')).toBe(
       ANTIGRAVITY_GLOBAL_HOOKS_JSON,
     );
   });

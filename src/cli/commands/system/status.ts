@@ -46,10 +46,8 @@ import { SECRETS_SPEC } from '../_common/install/secrets';
 import type { TokenStatus } from '../_common/token';
 import { checkTokenStatus } from '../_common/token';
 import { supportedIntegrations } from '../integrate';
-import {
-  checkAntigravitySecretsHookFile,
-  resolveAntigravitySecretsHooksJsonPath,
-} from '../integrate/antigravity/health';
+import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health';
+import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks';
 import { checkForUpdate } from '../self-update/self-update';
 
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
@@ -250,7 +248,7 @@ function getHooksStatusMap(state: CliState): Map<string, HooksStatus> {
   const statusMap = new Map<string, HooksStatus>();
   for (const feature of hookFeatures) {
     const key = `antigravity:${feature.targetRoot}`;
-    const hooksPath = resolveAntigravitySecretsHooksJsonPath(feature.scope, feature.targetRoot);
+    const hooksPath = resolveAntigravityHooksJsonPathForScope(feature.scope, feature.targetRoot);
     statusMap.set(key, { config: checkAntigravitySecretsHookFile(hooksPath) });
   }
   return statusMap;
