@@ -20,6 +20,7 @@
 import { existsSync } from 'node:fs';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { enableLocalAnalyzerMode } from '../../../lib/sonar-sqaa';
 import { blank, print, text, warn } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
@@ -60,6 +61,7 @@ export interface AnalyzeSqaaOptions {
   project?: string;
   force?: boolean;
   format?: OutputFormat;
+  local?: boolean;
 }
 
 /**
@@ -107,7 +109,11 @@ export async function analyzeSqaa(
   // Explicit `analyze agentic` / `verify` require a project (exit 1 when missing);
   // the bare `sonar analyze` catch-all opts out so it can still run other analyses.
   const { requireProject = true } = runOptions;
-  const { file, staged, base, branch, project, force, format = 'text' } = options;
+  const { file, staged, base, branch, project, force, format = 'text', local } = options;
+
+  if (local) {
+    enableLocalAnalyzerMode();
+  }
 
   if (staged && base !== undefined) {
     throw new InvalidOptionError('--staged and --base cannot be used together');

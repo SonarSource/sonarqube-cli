@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import { toRelativePosixPath as toRelativePosixPathOrNull } from '../../../lib/fs-utils';
+import { analyzeViaDaemon, isLocalAnalyzerMode, isMutualizedFile } from '../../../lib/sonar-sqaa';
 import type { SqaaAnalysisFile, SqaaIssue } from '../../../sonarqube/client';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '../../../sonarqube/errors.js';
@@ -78,6 +79,54 @@ function isRetryableSqaaError(err: unknown, includePayloadTooLarge: boolean): bo
   return includePayloadTooLarge && err instanceof RequestPayloadTooLargeError;
 }
 
+/**
+ * Local analyzer routing: mutualized-language files go to the in-process sonar-sqaa daemon over a
+ * Unix domain socket; everything else falls back to the cloud API. Issues from both are merged.
+ */
+async function postSqaaAnalysisLocal(
+  auth: CloudAuth,
+  projectKey: string,
+  branch: string | undefined,
+  files: SqaaAnalysisFile[],
+  options: { analysisDepth?: 'DEEP' },
+): Promise<SqaaChunkResponse> {
+  const localFiles = files.filter((f) => isMutualizedFile(f.path));
+  const cloudFiles = files.filter((f) => !isMutualizedFile(f.path));
+  const issues: SqaaIssue[] = [];
+  const errors: Array<{ code: string; message: string }> = [];
+
+  if (localFiles.length > 0) {
+    const response = await analyzeViaDaemon(
+      { serverUrl: auth.serverUrl, orgKey: auth.orgKey, token: auth.token },
+      projectKey,
+      branch,
+      localFiles,
+      options.analysisDepth ? { analysisDepth: options.analysisDepth } : {},
+    );
+    issues.push(...response.issues);
+    if (response.errors) {
+      errors.push(...response.errors);
+    }
+  }
+
+  if (cloudFiles.length > 0) {
+    const client = new SonarQubeClient(auth.serverUrl, auth.token);
+    const response = await client.createAnalysis({
+      organizationKey: auth.orgKey,
+      projectKey,
+      ...(branch ? { branchName: branch } : {}),
+      ...(options.analysisDepth ? { analysisDepth: options.analysisDepth } : {}),
+      files: cloudFiles,
+    });
+    issues.push(...response.issues);
+    if (response.errors) {
+      errors.push(...response.errors);
+    }
+  }
+
+  return { issues, errors: errors.length > 0 ? errors : null };
+}
+
 async function postSqaaAnalysis(
   auth: CloudAuth,
   projectKey: string,
@@ -85,6 +134,18 @@ async function postSqaaAnalysis(
   files: SqaaAnalysisFile[],
   options: { analysisDepth?: 'DEEP'; includePayloadTooLarge?: boolean } = {},
 ): Promise<SqaaChunkResponse> {
+  if (isLocalAnalyzerMode()) {
+    try {
+      return await postSqaaAnalysisLocal(auth, projectKey, branch, files, {
+        ...(options.analysisDepth ? { analysisDepth: options.analysisDepth } : {}),
+      });
+    } catch (err) {
+      throw new CommandFailedError(
+        `Local SonarQube Agentic Analysis failed.\n  ${(err as Error).message}`,
+        { cause: err, remediationHint: SQAA_FAILURE_HINT },
+      );
+    }
+  }
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
   try {
     return await client.createAnalysis({

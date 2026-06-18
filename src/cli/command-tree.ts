@@ -373,6 +373,10 @@ function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
       'SonarQube Cloud project key (overrides auto-detected project)',
     )
     .option('--force', 'Skip the large change set confirmation prompt')
+    .option(
+      '--local',
+      'Analyze mutualized-language files via the local sonar-sqaa daemon (experimental); other files use the cloud',
+    )
     .addOption(sqaaFormatOption);
 }
 
