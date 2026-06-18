@@ -152,7 +152,7 @@ function filteringByLine(filter: RiskFilterDescription): string {
   let line = `Filtering by: ${kept}`;
   if (filter.discardedStatuses.length > 0) {
     const discarded = formatStatuses(filter.discardedStatuses);
-    line += ` ${dim(`(discarded: ${discarded})`)}`;
+    line += dim(` (discarded: ${discarded})`);
   }
   if (filter.minSeverity !== undefined) {
     line += `; severity ${filter.minSeverity.toLowerCase()} or above`;
