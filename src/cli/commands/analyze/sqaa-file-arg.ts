@@ -20,10 +20,10 @@
 
 // Parse repeatable `--file <path>` arguments for SQAA.
 
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { InvalidOptionError } from '../_common/error.js';
+import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 
 export interface ResolvedSqaaFileEntry {
   absolutePath: string;
@@ -49,6 +49,11 @@ export function resolveSqaaFileArgs(
     seenAbsolute.add(absolutePath);
     if (!existsSync(absolutePath)) {
       throw new InvalidOptionError(`File not found: ${path}`);
+    }
+    if (!statSync(absolutePath).isFile()) {
+      throw new CommandFailedError(`Failed to read file: ${path} is a directory`, {
+        remediationHint: `Check that '${path}' exists and is readable as a file, then retry.`,
+      });
     }
     entries.push({ absolutePath });
   }

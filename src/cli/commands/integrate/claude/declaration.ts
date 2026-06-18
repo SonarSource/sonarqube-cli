@@ -161,6 +161,12 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
           },
           executable: true,
         }),
+        // TODO: Add a cleanup resource (or migration step) that strips the legacy
+        // CLAUDE.md instructions block by its managed markers, e.g.:
+        //   removeMarkedSection(claudeMdPath,
+        //     sonarBeginMarker('claude-agentic-analysis-protocol'),
+        //     sonarEndMarker('claude-agentic-analysis-protocol'))
+        // so upgrading from the instructions-based variant doesn't leave orphaned content.
         jsonPatch({
           id: 'claude-settings-sqaa-hook',
           displayName: 'Claude SonarQube Agentic Analysis hook configuration',
