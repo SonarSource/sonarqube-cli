@@ -99,12 +99,11 @@ describe('analyze dependency-risks', () => {
     { timeout: 15000 },
   );
 
-  // todo: https://sonarsource.atlassian.net/browse/CLI-452 Add end-to-end tests
   // The next two tests assert on scanner *failure* because the in-process
   // fake server does not implement the SCA-scanner backend APIs.
   // The failure surfaces during the secrets pre-scan's `discover-manifests` step.
-  // Move happy-path coverage to a real-backend e2e
-  // suite (e.g. SonarQube Cloud staging) once one exists.
+  // Happy-path coverage against a real backend lives in the credential-gated
+  // SonarQube Cloud staging suite at `tests/e2e/sca/sca-staging.test.ts`.
   it(
     'reports a scanner failure when the SCA backend is unavailable',
     async () => {
