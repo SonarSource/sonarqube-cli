@@ -26,6 +26,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { CallerAgent } from './agent-detector.js';
+import type { Distribution } from './distribution.js';
 
 /**
  * Region for SonarCloud instances
@@ -439,7 +440,9 @@ export interface TelemetryEventPayload {
   organization_uuid_v4: string | null;
   /** Installation ID of the SonarQube Server, null when not authenticated or SQC */
   sqs_installation_id: string | null;
-  /** Inferred caller agent from the process environment. See `detectCallerAgent`. */
+  /** Distribution channel of the running CLI binary. */
+  distribution: Distribution;
+  /** Inferred caller (Cursor, Claude Code, or Copilot CLI) from the process environment. See `detectCallerAgent`. */
   caller_agent: CallerAgent | null;
 }
 
