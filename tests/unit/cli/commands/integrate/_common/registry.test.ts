@@ -419,6 +419,24 @@ describe('declarative integration framework', () => {
     );
   });
 
+  it('selectFeatures filters container subfeatures to the requested ids', () => {
+    const container: FeatureContainer = {
+      id: 'container',
+      displayName: 'Container',
+      subfeatures: [
+        { id: 'sub-a', displayName: 'Sub A' },
+        { id: 'sub-b', displayName: 'Sub B' },
+        { id: 'sub-c', displayName: 'Sub C' },
+      ],
+    };
+    const integration = makeIntegration({ features: [container] });
+
+    const [selected] = installer.selectFeatures(integration, [
+      { featureId: 'container', subfeatureIds: ['sub-c', 'sub-a'] },
+    ]);
+    expect((selected as FeatureContainer).subfeatures.map((s) => s.id)).toEqual(['sub-a', 'sub-c']);
+  });
+
   it('selectFeatures rejects subfeatureIds for a non-container feature', () => {
     const integration = makeIntegration({
       features: [{ id: 'plain', displayName: 'Plain' }],
