@@ -54,24 +54,20 @@ SonarQube Agentic Analysis is the final confirmation layer at the end of every t
 
 When the trigger fires, you **MUST**:
 
-1. Classify **each file you edited this turn** as \`MAIN\` (production code) or \`TEST\` (test, spec, fixture, or mock), using the file path **and** its role in the change.
-2. Run SonarQube Agentic Analysis once with one \`--file\` per edited file and the matching scope suffix:
+1. Run SonarQube Agentic Analysis once on the git change set (modified and untracked files in the working tree):
 
 \`\`\`bash
-sonar analyze agentic --project ${projectKey} \\
-  --file src/foo.ts:MAIN \\
-  --file tests/foo.test.ts:TEST
+sonar analyze agentic --project ${projectKey}
 \`\`\`
 
-Append \`:MAIN\` or \`:TEST\` to every edited file when you can classify it confidently. Omit the suffix only when genuinely unsure (unscoped). If more than 50 files were edited and the command prompts for confirmation, re-run with \`--force\`.
+If more than 50 files changed and the command prompts for confirmation, re-run with \`--force\`.
 
 Non-negotiable rules:
 
 1. Mid-turn edits do **not** need SonarQube Agentic Analysis — only the final on-disk state matters. Skipping SonarQube Agentic Analysis at end-of-turn is a protocol violation.
 2. Run SonarQube Agentic Analysis **before** sending your final reply, marking the task done, or handing control back to the user.
-3. List every file you edited; do not rely on a bare change-set command unless you truly cannot enumerate the files.
-4. If SonarQube Agentic Analysis reports issues on lines you touched in this turn, fix them, then re-run the same scoped \`--file\` command. Repeat until the change set is clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
-5. If SonarQube Agentic Analysis is skipped (no SonarQube Cloud connection, or no project configured), state the skip reason to the user once and continue — do not retry.
-6. Do not suppress, summarize away, or omit SonarQube Agentic Analysis findings from your reply. Surface them verbatim.
+3. If SonarQube Agentic Analysis reports issues on lines you touched in this turn, fix them, then re-run the same change-set command. Repeat until the change set is clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
+4. If SonarQube Agentic Analysis is skipped (no SonarQube Cloud connection, or no project configured), state the skip reason to the user once and continue — do not retry.
+5. Do not suppress, summarize away, or omit SonarQube Agentic Analysis findings from your reply. Surface them verbatim.
 `;
 }

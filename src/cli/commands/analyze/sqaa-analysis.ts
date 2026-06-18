@@ -22,7 +22,6 @@
 
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import type { SqaaIssue } from '../../../sonarqube/client';
-import type { SqaaFileScope } from '../../../sonarqube/client';
 import type { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import {
   fetchChunkWith413Split,
@@ -49,7 +48,6 @@ type ChunkPath = { file: string; filePath: string };
 export interface RunContext {
   files: string[];
   allPaths: string[];
-  fileScopes?: Array<SqaaFileScope | undefined>;
   cloudAuth: CloudAuth;
   projectKey: string;
   branch: string | undefined;
@@ -117,7 +115,6 @@ function prepareChunks(
         absolutePath: file,
         relativePath: ctx.allPaths[idx],
         content: readSqaaFileContent(file),
-        ...(ctx.fileScopes?.[idx] ? { scope: ctx.fileScopes[idx] } : {}),
       });
     } catch (err) {
       recordFileFailure(progress, tally, idx, { file, filePath: ctx.allPaths[idx] }, err as Error);

@@ -65,12 +65,6 @@ describe('validateSqaaAnalysisFiles', () => {
     ).toThrow(/Duplicate file path/);
   });
 
-  it('rejects invalid scope', () => {
-    expect(() =>
-      validateSqaaAnalysisFiles([{ path: 'src/a.ts', content: 'a', scope: 'INVALID' as 'MAIN' }]),
-    ).toThrow(/Invalid scope/);
-  });
-
   it('rejects invalid analysisDepth option', () => {
     expect(() =>
       validateSqaaAnalysisFiles([{ path: 'src/a.ts', content: 'a' }], {
@@ -83,8 +77,8 @@ describe('validateSqaaAnalysisFiles', () => {
     expect(() =>
       validateSqaaAnalysisFiles(
         [
-          { path: 'src/main.ts', content: 'a', scope: 'MAIN' },
-          { path: 'src/main.test.ts', content: 'b', scope: 'TEST' },
+          { path: 'src/main.ts', content: 'a' },
+          { path: 'src/main.test.ts', content: 'b' },
         ],
         { analysisDepth: 'DEEP' },
       ),

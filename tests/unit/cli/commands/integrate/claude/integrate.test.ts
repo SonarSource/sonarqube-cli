@@ -301,7 +301,7 @@ describe('integrateCommand', () => {
         options: expect.objectContaining({
           projectRoot: '/project/root',
           globalSecretsHookExists: false,
-          installSqaaInstructions: false,
+          installSqaaHook: false,
           installContextAugmentation: true,
         }),
         scope: 'project',
@@ -433,7 +433,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        installSqaaInstructions: false,
+        installSqaaHook: false,
       });
       expect(runMigrationsSpy).toHaveBeenCalledWith(
         '/project/root',
@@ -451,7 +451,7 @@ describe('integrateCommand', () => {
       );
     });
 
-    it('still installs project-scoped SQAA instructions when SQAA is entitled', async () => {
+    it('still installs the project-scoped sonar-sqaa hook when SQAA is entitled', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
       mockSqaaEntitlement(true);
 
@@ -464,7 +464,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: true,
-        installSqaaInstructions: true,
+        installSqaaHook: true,
       });
     });
   });
@@ -486,7 +486,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        installSqaaInstructions: false,
+        installSqaaHook: false,
       });
     });
   });
@@ -508,7 +508,7 @@ describe('integrateCommand', () => {
       expect(skipNotice).toBeUndefined();
     });
 
-    it('skips SQAA instructions (and warns) even when the org is entitled', async () => {
+    it('skips the SQAA hook (and warns) even when the org is entitled', async () => {
       mockDiscoveredProject({ rootDir: '/project/root', projectKey: 'a-project' });
       mockSqaaEntitlement(true);
 
@@ -523,7 +523,7 @@ describe('integrateCommand', () => {
         projectRoot: '/project/root',
         projectKey: 'a-project',
         globalSecretsHookExists: false,
-        installSqaaInstructions: false,
+        installSqaaHook: false,
       });
       expect(runMigrationsSpy).toHaveBeenLastCalledWith(
         '/project/root',
@@ -592,7 +592,7 @@ describe('integrateCommand', () => {
       projectRoot: projectRootDir,
       projectKey,
       globalSecretsHookExists: skipSecretsHooks,
-      installSqaaInstructions: sqaaEnabled && projectKey !== undefined,
+      installSqaaHook: sqaaEnabled && projectKey !== undefined,
     });
 
     expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
@@ -612,7 +612,7 @@ describe('integrateCommand', () => {
     projectRoot,
     projectKey,
     globalSecretsHookExists,
-    installSqaaInstructions,
+    installSqaaHook,
   }: {
     targetRoot: string;
     scope: 'global' | 'project';
@@ -620,7 +620,7 @@ describe('integrateCommand', () => {
     projectRoot: string;
     projectKey?: string;
     globalSecretsHookExists: boolean;
-    installSqaaInstructions: boolean;
+    installSqaaHook: boolean;
   }): void {
     const attrs = {
       projectKey: projectKey ?? null,
@@ -634,7 +634,7 @@ describe('integrateCommand', () => {
         options: expect.objectContaining({
           projectRoot,
           globalSecretsHookExists,
-          installSqaaInstructions,
+          installSqaaHook,
         }),
         scope,
         targetRoot,

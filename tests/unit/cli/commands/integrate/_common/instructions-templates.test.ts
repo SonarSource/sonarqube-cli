@@ -35,13 +35,11 @@ describe('instructions-templates', () => {
     expect(result.endsWith('\n')).toBe(true);
   });
 
-  it('buildSqaaSectionBody renders scoped multi-file analyze guidance', () => {
+  it('buildSqaaSectionBody renders the SQAA protocol body with the change-set analyze command', () => {
     const result = buildSqaaSectionBody('my-project');
 
     expect(result).toContain('# SonarQube Agentic Analysis protocol');
     expect(result).toContain('sonar analyze agentic --project my-project');
-    expect(result).toContain('--file src/foo.ts:MAIN');
-    expect(result).toContain('--file tests/foo.test.ts:TEST');
-    expect(result).toContain('Classify **each file you edited this turn**');
+    expect(result).not.toContain('--file');
   });
 });

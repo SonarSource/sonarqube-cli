@@ -31,6 +31,10 @@ import {
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
+  getSqaaPostToolTemplateUnix,
+  getSqaaPostToolTemplateWindows,
+  getSqaaStopTemplateUnix,
+  getSqaaStopTemplateWindows,
 } from '../../../../../../src/cli/commands/integrate/claude/hook-templates';
 
 describe('Secret Scanning Hook Templates', () => {
@@ -80,13 +84,70 @@ describe('Secret Scanning Hook Templates', () => {
   });
 });
 
+describe('SQAA PostToolUse Hook Templates', () => {
+  it('PostTool Unix hook: bash shebang, delegates to sonar hook with project key', () => {
+    const template = getSqaaPostToolTemplateUnix('my-project');
+
+    expect(template.startsWith('#!/bin/bash')).toBe(true);
+    expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
+    expect(template.includes("--project 'my-project'")).toBe(true);
+    expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
+  });
+
+  it('PostTool Unix hook: no embedded business logic', () => {
+    const template = getSqaaPostToolTemplateUnix('my-project');
+
+    expect(template.includes('sonar analyze agentic')).toBe(false);
+    expect(template.includes('permissionDecision')).toBe(false);
+    expect(template.includes('sed -n')).toBe(false);
+  });
+
+  it('PostTool Windows hook: delegates to sonar hook with project key', () => {
+    const template = getSqaaPostToolTemplateWindows('my-project');
+
+    expect(template.includes('sonar hook claude-post-tool-use')).toBe(true);
+    expect(template.includes("--project 'my-project'")).toBe(true);
+    expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
+  });
+
+  it('PostTool Windows hook: no embedded business logic', () => {
+    const template = getSqaaPostToolTemplateWindows('my-project');
+
+    expect(template.includes('sonar analyze agentic')).toBe(false);
+    expect(template.includes('permissionDecision')).toBe(false);
+  });
+});
+
+describe('SQAA Stop Hook Templates', () => {
+  it('Stop Unix hook: bash shebang, delegates to sonar hook with project key', () => {
+    const template = getSqaaStopTemplateUnix('my-project');
+
+    expect(template.startsWith('#!/bin/bash')).toBe(true);
+    expect(template.includes('sonar hook claude-stop')).toBe(true);
+    expect(template.includes("--project 'my-project'")).toBe(true);
+    expect(template.includes(UNIX_SONAR_COMMAND_GUARD)).toBe(true);
+  });
+
+  it('Stop Windows hook: delegates to sonar hook with project key', () => {
+    const template = getSqaaStopTemplateWindows('my-project');
+
+    expect(template.includes('sonar hook claude-stop')).toBe(true);
+    expect(template.includes("--project 'my-project'")).toBe(true);
+    expect(template.includes(WINDOWS_SONAR_COMMAND_GUARD)).toBe(true);
+  });
+});
+
 describe('Template Integrity', () => {
-  it('All secret templates are valid non-empty strings with distinct content', () => {
+  it('All 8 templates are valid non-empty strings with distinct content', () => {
     const templates = [
       getSecretPreToolTemplateUnix(),
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
+      getSqaaPostToolTemplateUnix('proj'),
+      getSqaaPostToolTemplateWindows('proj'),
+      getSqaaStopTemplateUnix('proj'),
+      getSqaaStopTemplateWindows('proj'),
     ];
 
     const uniqueContents = new Set(templates);
@@ -96,7 +157,8 @@ describe('Template Integrity', () => {
       expect(typeof template).toBe('string');
     });
 
-    expect(uniqueContents.size).toBe(templates.length);
+    const EXPECTED_TEMPLATE_COUNT = templates.length;
+    expect(uniqueContents.size).toBe(EXPECTED_TEMPLATE_COUNT);
   });
 
   it('No template references old sonar secret check command', () => {
@@ -105,10 +167,24 @@ describe('Template Integrity', () => {
       getSecretPreToolTemplateWindows(),
       getSecretPromptTemplateUnix(),
       getSecretPromptTemplateWindows(),
+      getSqaaPostToolTemplateUnix('proj'),
+      getSqaaPostToolTemplateWindows('proj'),
+      getSqaaStopTemplateUnix('proj'),
+      getSqaaStopTemplateWindows('proj'),
     ];
 
     templates.forEach((template) => {
       expect(template.includes('sonar secret check')).toBe(false);
     });
+  });
+
+  it('SQAA templates route to the correct hook subcommands', () => {
+    expect(getSqaaPostToolTemplateUnix('proj').includes('claude-post-tool-use')).toBe(true);
+    expect(getSqaaPostToolTemplateWindows('proj').includes('claude-post-tool-use')).toBe(true);
+    expect(getSqaaStopTemplateUnix('proj').includes('claude-stop')).toBe(true);
+    expect(getSqaaStopTemplateWindows('proj').includes('claude-stop')).toBe(true);
+
+    expect(getSecretPreToolTemplateUnix().includes('claude-post-tool-use')).toBe(false);
+    expect(getSecretPromptTemplateUnix().includes('claude-stop')).toBe(false);
   });
 });

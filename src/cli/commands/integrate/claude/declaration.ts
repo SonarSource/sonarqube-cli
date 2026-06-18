@@ -25,26 +25,29 @@ import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-help
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
-import { removeAgentHooks } from '../_common/hooks';
 import {
-  buildSqaaSectionBody,
-  sonarBeginMarker,
-  sonarEndMarker,
-} from '../_common/instructions-templates';
+  createAgentHookEntry,
+  removeAgentHooks,
+  resolveAgentHookScriptPath,
+  upsertAgentHooks,
+} from '../_common/hooks';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { askUser, jsonPatch, skip, textSnippet } from '../_common/registry';
+import { askUser, jsonPatch, skip, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
   getSecretPromptTemplateUnix,
   getSecretPromptTemplateWindows,
+  getSqaaPostToolTemplateUnix,
+  getSqaaPostToolTemplateWindows,
+  getSqaaStopTemplateUnix,
+  getSqaaStopTemplateWindows,
 } from './hook-templates';
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
-const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
@@ -53,7 +56,7 @@ export const CLAUDE_INTEGRATION_ID = 'claude-code';
 export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   globalSecretsHookExists?: boolean;
-  installSqaaInstructions?: boolean;
+  installSqaaHook?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -105,31 +108,84 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       }),
     },
     {
-      id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
-      shouldInstall: ({ options }) =>
-        options.installSqaaInstructions === true ? askUser() : skip(),
+      id: 'sonar-sqaa-hook',
+      displayName: 'SonarQube Agentic Analysis hook',
+      shouldInstall: ({ options }) => {
+        if (options.installSqaaHook === true) {
+          return askUser();
+        }
+        return skip();
+      },
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
-        textSnippet({
-          id: 'sqaa-instructions-file',
-          displayName: 'Claude SonarQube Agentic Analysis instructions',
-          targetPath: resolveClaudeMdPath,
-          startMarker: sonarBeginMarker('claude-agentic-analysis-protocol'),
-          endMarker: sonarEndMarker('claude-agentic-analysis-protocol'),
-          content: (context) =>
-            buildSqaaSectionBody(
-              getRequiredStringAttr(context, 'projectKey', claudeIntegration.displayName),
+        wholeFile({
+          id: 'posttool-sqaa-script',
+          displayName: 'Claude PostToolUse hook script',
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'sonar-sqaa/build-scripts/posttool-sqaa',
             ),
+          content: (context) => {
+            const projectKey = getRequiredStringAttr(
+              context,
+              'projectKey',
+              claudeIntegration.displayName,
+            );
+            return process.platform === 'win32'
+              ? getSqaaPostToolTemplateWindows(projectKey)
+              : getSqaaPostToolTemplateUnix(projectKey);
+          },
+          executable: true,
+        }),
+        wholeFile({
+          id: 'stop-sqaa-script',
+          displayName: 'Claude Stop hook script',
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'sonar-sqaa/build-scripts/stop-sqaa',
+            ),
+          content: (context) => {
+            const projectKey = getRequiredStringAttr(
+              context,
+              'projectKey',
+              claudeIntegration.displayName,
+            );
+            return process.platform === 'win32'
+              ? getSqaaStopTemplateWindows(projectKey)
+              : getSqaaStopTemplateUnix(projectKey);
+          },
+          executable: true,
         }),
         jsonPatch({
-          id: 'claude-settings-sqaa-hook-cleanup',
-          displayName: 'Remove legacy SonarQube Agentic Analysis hooks',
+          id: 'claude-settings-sqaa-hook',
+          displayName: 'Claude SonarQube Agentic Analysis hook configuration',
           targetPath: resolveClaudeSettingsPath,
           defaultValue: { hooks: {} },
-          patch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
-          removePatch: (document) => document as Record<string, unknown>,
+          patch: (document, context) =>
+            upsertAgentHooks(document, [
+              createAgentHookEntry(
+                context,
+                CLAUDE_CONFIG_DIR,
+                'PostToolUse',
+                'Edit|Write',
+                'sonar-sqaa',
+                'sonar-sqaa/build-scripts/posttool-sqaa',
+              ),
+              createAgentHookEntry(
+                context,
+                CLAUDE_CONFIG_DIR,
+                'Stop',
+                '*',
+                'sonar-sqaa',
+                'sonar-sqaa/build-scripts/stop-sqaa',
+              ),
+            ]),
+          removePatch: (document) => removeAgentHooks(document, ['sonar-sqaa']),
         }),
       ],
     },
@@ -157,10 +213,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
 
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);
-}
-
-function resolveClaudeMdPath(context: IntegrationContext): string {
-  return join(context.targetRoot, CLAUDE_MD_FILE);
 }
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {

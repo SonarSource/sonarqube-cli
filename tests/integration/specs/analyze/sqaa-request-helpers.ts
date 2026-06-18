@@ -25,7 +25,7 @@ export interface ParsedSqaaRequestBody {
   projectKey?: string;
   branchName?: string;
   analysisDepth?: string;
-  files?: Array<{ path: string; content: string; scope?: string }>;
+  files?: Array<{ path: string; content: string }>;
 }
 
 export function parseSqaaRequestBody(body: string | undefined): ParsedSqaaRequestBody {
@@ -35,10 +35,6 @@ export function parseSqaaRequestBody(body: string | undefined): ParsedSqaaReques
 /** Path of the first entry in `files[]`. */
 export function sqaaRequestFirstFilePath(body: string | undefined): string | undefined {
   return parseSqaaRequestBody(body).files?.[0]?.path;
-}
-
-export function sqaaRequestFirstFileScope(body: string | undefined): string | undefined {
-  return parseSqaaRequestBody(body).files?.[0]?.scope;
 }
 
 /** Number of files in a SQAA request body. */

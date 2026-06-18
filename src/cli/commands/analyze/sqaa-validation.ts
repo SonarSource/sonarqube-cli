@@ -20,11 +20,10 @@
 
 // Pre-flight validation for SQAA analysis requests (before POST).
 
-import type { SqaaAnalysisDepth, SqaaAnalysisFile, SqaaFileScope } from '../../../sonarqube/client';
+import type { SqaaAnalysisDepth, SqaaAnalysisFile } from '../../../sonarqube/client';
 import type { CommandFailedError } from '../_common/error.js';
 import { sqaaCommandFailedError } from './sqaa-errors.js';
 
-const VALID_SCOPES = new Set<SqaaFileScope>(['MAIN', 'TEST']);
 const VALID_DEPTHS = new Set<SqaaAnalysisDepth>(['STANDARD', 'DEEP']);
 
 const ABSOLUTE_PATH_PATTERN = /^([a-zA-Z]:[/\\]|\/)/;
@@ -84,20 +83,8 @@ function relativePathValidationError(path: string): CommandFailedError | undefin
   return undefined;
 }
 
-function scopeValidationError(
-  scope: SqaaFileScope | undefined,
-  path: string,
-): CommandFailedError | undefined {
-  if (scope === undefined) {
-    return undefined;
-  }
-  if (!VALID_SCOPES.has(scope)) {
-    return makeValidationError(
-      `Invalid scope '${scope}' for file '${path}'.`,
-      "Use scope 'MAIN' or 'TEST' when set, or omit scope entirely.",
-    );
-  }
-  return undefined;
+function validateSqaaAnalysisFile(file: SqaaAnalysisFile): CommandFailedError | undefined {
+  return relativePathValidationError(file.path);
 }
 
 function analysisDepthValidationError(
@@ -127,10 +114,6 @@ function emptyFilesValidationError(): CommandFailedError {
     'files[] must contain at least one file.',
     'Include at least one file with path and content in the analysis request.',
   );
-}
-
-function validateSqaaAnalysisFile(file: SqaaAnalysisFile): CommandFailedError | undefined {
-  return relativePathValidationError(file.path) ?? scopeValidationError(file.scope, file.path);
 }
 
 /**

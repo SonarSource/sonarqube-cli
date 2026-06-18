@@ -18,44 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Parse `--file path[:MAIN|TEST]` arguments for SQAA.
+// Parse repeatable `--file <path>` arguments for SQAA.
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { SqaaFileScope } from '../../../sonarqube/client';
 import { InvalidOptionError } from '../_common/error.js';
-
-const VALID_SCOPES = new Set<SqaaFileScope>(['MAIN', 'TEST']);
-
-export interface ParsedSqaaFileArg {
-  path: string;
-  scope?: SqaaFileScope;
-}
 
 export interface ResolvedSqaaFileEntry {
   absolutePath: string;
-  scope?: SqaaFileScope;
 }
 
 /** Commander collector for repeatable `--file` options. */
 export function collectSqaaFileOption(value: string, previous: string[] = []): string[] {
   return [...previous, value];
-}
-
-/**
- * Parse a single `--file` value. Scope is recognized only when the suffix after
- * the last `:` is exactly `MAIN` or `TEST` (literal colons in paths are unsupported).
- */
-export function parseSqaaFileArg(raw: string): ParsedSqaaFileArg {
-  const colonIndex = raw.lastIndexOf(':');
-  if (colonIndex > 0) {
-    const suffix = raw.slice(colonIndex + 1);
-    if (VALID_SCOPES.has(suffix as SqaaFileScope)) {
-      return { path: raw.slice(0, colonIndex), scope: suffix as SqaaFileScope };
-    }
-  }
-  return { path: raw };
 }
 
 export function resolveSqaaFileArgs(
@@ -65,8 +41,7 @@ export function resolveSqaaFileArgs(
   const seenAbsolute = new Set<string>();
   const entries: ResolvedSqaaFileEntry[] = [];
 
-  for (const raw of rawArgs) {
-    const { path, scope } = parseSqaaFileArg(raw);
+  for (const path of rawArgs) {
     const absolutePath = resolve(cwd, path);
     if (seenAbsolute.has(absolutePath)) {
       throw new InvalidOptionError(`Duplicate --file entry: ${path}`);
@@ -75,7 +50,7 @@ export function resolveSqaaFileArgs(
     if (!existsSync(absolutePath)) {
       throw new InvalidOptionError(`File not found: ${path}`);
     }
-    entries.push({ absolutePath, scope });
+    entries.push({ absolutePath });
   }
 
   return entries;

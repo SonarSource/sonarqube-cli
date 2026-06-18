@@ -592,7 +592,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   });
 
   it(
-    'writes SQAA instructions to CLAUDE.md and removes legacy sonar-sqaa hooks when entitled',
+    'installs PostToolUse and Stop SQAA hooks when Cloud org has SQAA entitlement (repair path)',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -602,40 +602,10 @@ describe('integrate claude — SQAA entitlement guard', () => {
         .withProject('my-project')
         .start();
 
+      // Point both Cloud URL constants at the fake server so SONARCLOUD_HOSTNAME check passes
+      // and getOrganizationId / checkSqaaEntitlement hit the same fake server
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
-
-      harness.cwd.writeFile(
-        '.claude/settings.json',
-        JSON.stringify({
-          hooks: {
-            PostToolUse: [
-              {
-                matcher: 'Edit|Write',
-                hooks: [
-                  {
-                    type: 'command',
-                    command: '.claude/hooks/sonar-sqaa/build-scripts/posttool-sqaa.sh',
-                    timeout: 60,
-                  },
-                ],
-              },
-            ],
-            Stop: [
-              {
-                matcher: '*',
-                hooks: [
-                  {
-                    type: 'command',
-                    command: '.claude/hooks/sonar-sqaa/build-scripts/stop-sqaa.sh',
-                    timeout: 60,
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-      );
 
       const result = await harness.run(`integrate claude --project my-project --non-interactive`, {
         extraEnv: {
@@ -645,30 +615,33 @@ describe('integrate claude — SQAA entitlement guard', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const claudeMd = harness.cwd.file('CLAUDE.md').asText();
-      expect(claudeMd).toContain('<!-- sonar:begin:claude-agentic-analysis-protocol -->');
-      expect(claudeMd).toContain('# SonarQube Agentic Analysis protocol');
-      expect(claudeMd).toContain('sonar analyze agentic --project my-project');
-      expect(claudeMd).toContain('--file src/foo.ts:MAIN');
-
-      const settings = harness.cwd.file('.claude', 'settings.json').asJson() as {
-        hooks?: {
-          PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
-          Stop?: Array<{ hooks?: Array<{ command?: string }> }>;
-        };
-      };
-      const sqaaCommands = [
-        ...(settings.hooks?.PostToolUse ?? []),
-        ...(settings.hooks?.Stop ?? []),
-      ].flatMap((entry) => entry.hooks?.map((hook) => hook.command) ?? []);
-      expect(sqaaCommands.some((command) => command?.includes('sonar-sqaa'))).toBe(false);
-      expect(findClaudeFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeDefined();
+      expect(settings.hooks?.Stop).toBeDefined();
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(true);
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('stop-sqaa'),
+        ),
+      ).toBe(true);
     },
     { timeout: 30000 },
   );
 
   it(
-    'does not register legacy sonar-sqaa hooks in state after fresh SQAA instructions install',
+    'records sonar-sqaa in agents.claude-code.hooks.installed after fresh SQAA install',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -695,13 +668,16 @@ describe('integrate claude — SQAA entitlement guard', () => {
         type: string;
       }>;
 
-      expect(installedHooks.some((h) => h.name === 'sonar-sqaa')).toBe(false);
+      expect(installedHooks.some((h) => h.name === 'sonar-sqaa' && h.type === 'PostToolUse')).toBe(
+        true,
+      );
+      expect(installedHooks.some((h) => h.name === 'sonar-sqaa' && h.type === 'Stop')).toBe(true);
     },
     { timeout: 30000 },
   );
 
   it(
-    'does not write SQAA instructions when org has no SQAA entitlement',
+    'does not install PostToolUse SQAA hook when org has no SQAA entitlement (repair path)',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -721,18 +697,27 @@ describe('integrate claude — SQAA entitlement guard', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(harness.cwd.exists('CLAUDE.md')).toBe(false);
-      const settings = harness.cwd.file('.claude', 'settings.json').asJson() as {
-        hooks?: {
-          PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
-          Stop?: Array<{ hooks?: Array<{ command?: string }> }>;
-        };
-      };
-      const sqaaCommands = [
-        ...(settings.hooks?.PostToolUse ?? []),
-        ...(settings.hooks?.Stop ?? []),
-      ].flatMap((entry) => entry.hooks?.map((hook) => hook.command) ?? []);
-      expect(sqaaCommands.some((command) => command?.includes('sonar-sqaa'))).toBe(false);
+      const settings = harness.cwd.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks?.PostToolUse).toBeUndefined();
+      expect(settings.hooks?.Stop).toBeUndefined();
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(false);
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('stop-sqaa'),
+        ),
+      ).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -748,7 +733,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
   });
 
   it(
-    'skips SQAA instructions on a -g install even when the org is entitled, and warns',
+    'skips the sonar-sqaa hook on a -g install even when the org is entitled, and warns',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -771,11 +756,16 @@ describe('integrate claude — SQAA entitlement guard', () => {
       expect(`${result.stdout}\n${result.stderr}`).toContain('not supported with --global');
 
       const state = harness.stateJsonFile.asJson();
+      const sqaaExt = (state.agentExtensions as Array<{ name: string; global: boolean }>).find(
+        (e) => e.name === 'sonar-sqaa',
+      );
+      expect(sqaaExt).toBeUndefined();
+
       const claudeIntegration = state.integrations.installed.find(
         (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
       );
       const sqaaFeature = claudeIntegration?.features.find(
-        (feature: { featureId: string }) => feature.featureId === 'sqaa-instructions',
+        (feature: { featureId: string }) => feature.featureId === 'sonar-sqaa-hook',
       );
       expect(sqaaFeature).toBeUndefined();
     },
@@ -843,7 +833,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
         settings.hooks?.PostToolUse as Array<{ hooks: Array<{ command: string }> }>
       )?.flatMap((e) => e.hooks.map((h) => h.command));
       expect(postToolUseCommands?.some((c: string) => c.includes('sonar-a3s'))).toBe(false);
-      expect(postToolUseCommands?.some((c: string) => c.includes('sonar-sqaa'))).toBe(false);
+      expect(postToolUseCommands?.some((c: string) => c.includes('sonar-sqaa'))).toBe(true);
       expect(postToolUseCommands?.some((c: string) => c.includes('some-other-tool'))).toBe(true);
       expect(harness.cwd.exists('.claude', 'hooks', 'sonar-a3s')).toBe(false);
     },
@@ -939,7 +929,7 @@ describe('integrate claude — SQAA entitlement guard', () => {
 
       expect(extensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
       expect(hooks.some((h) => h.name === 'sonar-a3s')).toBe(false);
-      expect(extensions.some((e) => e.name === 'sonar-sqaa')).toBe(false);
+      expect(extensions.some((e) => e.name === 'sonar-sqaa')).toBe(true);
     },
     { timeout: 30000 },
   );
@@ -1171,7 +1161,7 @@ describe('integrate claude — file placement (local vs global)', () => {
     );
 
     it(
-      'still writes project-scoped SQAA instructions when the org has SQAA entitlement',
+      'still writes the project-scoped sonar-sqaa hook when the org has SQAA entitlement',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -1192,9 +1182,25 @@ describe('integrate claude — file placement (local vs global)', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
-          '<!-- sonar:begin:claude-agentic-analysis-protocol -->',
-        );
+        // SQAA hook must still land project-locally because it is always project-scoped.
+        expect(
+          harness.cwd.exists(
+            '.claude',
+            'hooks',
+            'sonar-sqaa',
+            'build-scripts',
+            hookScriptName('posttool-sqaa'),
+          ),
+        ).toBe(true);
+        expect(
+          harness.cwd.exists(
+            '.claude',
+            'hooks',
+            'sonar-sqaa',
+            'build-scripts',
+            hookScriptName('stop-sqaa'),
+          ),
+        ).toBe(true);
         // Secrets scripts must NOT be duplicated at project level.
         expect(harness.cwd.exists('.claude', 'hooks', 'sonar-secrets')).toBe(false);
       },
@@ -2037,7 +2043,7 @@ describe('integrate claude — interactive feature selection', () => {
       expect(output).toContain('Install MCP server?');
       // SQAA is not eligible, so it is skipped without a prompt but the shared
       // promotion message is surfaced.
-      expect(output).not.toContain('Install SonarQube Agentic Analysis instructions?');
+      expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
       expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
 
       // Accepted features are installed on disk.
@@ -2055,7 +2061,7 @@ describe('integrate claude — interactive feature selection', () => {
       // Declarative state records only the accepted features.
       expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
       expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
-      expect(findClaudeFeature(harness, 'sqaa-instructions')).toBeUndefined();
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -2087,7 +2093,7 @@ describe('integrate claude — interactive feature selection', () => {
   );
 
   it(
-    'asks before installing SQAA instructions when the org is entitled and a project key is known',
+    'asks before installing the SQAA hook when the org is entitled and a project key is known',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -2099,6 +2105,7 @@ describe('integrate claude — interactive feature selection', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
+      // '\r' selects project scope, then the hook + MCP + SQAA feature prompts.
       const result = await harness.run('integrate claude --project my-project', {
         stdinChunks: ['\r', '\r', '\r', '\r'],
         extraEnv: {
@@ -2109,11 +2116,28 @@ describe('integrate claude — interactive feature selection', () => {
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Install SonarQube Agentic Analysis instructions?');
-      expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
-        '# SonarQube Agentic Analysis protocol',
-      );
-      expect(findClaudeFeature(harness, 'sqaa-instructions')).toBeDefined();
+      expect(output).toContain('Install SonarQube Agentic Analysis hook?');
+
+      // Accepting installs the PostToolUse and Stop SQAA hook scripts and records them.
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('posttool-sqaa'),
+        ),
+      ).toBe(true);
+      expect(
+        harness.cwd.exists(
+          '.claude',
+          'hooks',
+          'sonar-sqaa',
+          'build-scripts',
+          hookScriptName('stop-sqaa'),
+        ),
+      ).toBe(true);
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeDefined();
     },
     { timeout: 30000 },
   );
@@ -2147,8 +2171,8 @@ describe('integrate claude — interactive feature selection', () => {
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Could not determine SonarQube Agentic Analysis entitlement');
-      expect(output).not.toContain('Install SonarQube Agentic Analysis instructions?');
-      expect(findClaudeFeature(harness, 'sqaa-instructions')).toBeUndefined();
+      expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+      expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
     },
     { timeout: 30000 },
   );

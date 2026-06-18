@@ -480,8 +480,7 @@ describe('integrate cursor', () => {
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
         // Project key is baked into the example command.
         expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
-        expect(body).toContain('--file src/foo.ts:MAIN');
-        expect(body).toContain('--file tests/foo.test.ts:TEST');
+        expect(body).not.toContain('--file');
 
         expect(
           findInstalledFeature(harness, 'cursor', 'sqaa-instructions', 'project'),

@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import type { SqaaFileScope } from '../../../sonarqube/client';
 import { print, text, warn } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
@@ -44,7 +43,7 @@ import {
   singleFileSuccessReport,
   type SqaaJsonReport,
 } from './sqaa-display';
-import { resolveSqaaFileArgs } from './sqaa-file-arg';
+import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
 const SQAA_LARGE_CHANGESET_THRESHOLD = 50;
@@ -116,8 +115,7 @@ export async function analyzeSqaa(
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     if (entries.length === 1) {
-      const { absolutePath, scope } = entries[0];
-      await runSqaaAnalysis(absolutePath, auth, branch, project, format, requireProject, scope);
+      await runSqaaAnalysis(entries[0].absolutePath, auth, branch, project, format, requireProject);
       return;
     }
 
@@ -171,7 +169,6 @@ async function runSqaaAnalysis(
   explicitProject?: string,
   format: OutputFormat = 'text',
   requireProject = true,
-  scope?: SqaaFileScope,
 ): Promise<void> {
   const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
   const resolved = resolveSqaaContext(resolution, { requireProject });
@@ -181,24 +178,17 @@ async function runSqaaAnalysis(
   const fileContent = readSqaaFileContent(file);
 
   if (format === 'json') {
-    const report = await fetchSingleFileReport(
-      cloudAuth,
-      projectKey,
-      file,
-      fileContent,
-      branch,
-      scope,
-    );
+    const report = await fetchSingleFileReport(cloudAuth, projectKey, file, fileContent, branch);
     print(JSON.stringify(report, null, 2));
     applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
     return;
   }
 
-  await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch, scope);
+  await callSqaaApiAndDisplay(cloudAuth, projectKey, file, fileContent, branch);
 }
 
 async function runSqaaAnalysisOnExplicitFiles(
-  entries: Array<{ absolutePath: string; scope?: SqaaFileScope }>,
+  entries: ResolvedSqaaFileEntry[],
   resolved: { cloudAuth: CloudAuth; projectKey: string },
   branch?: string,
   format: OutputFormat = 'text',
@@ -206,14 +196,12 @@ async function runSqaaAnalysisOnExplicitFiles(
   const cwd = process.cwd();
   const files = entries.map((e) => e.absolutePath);
   const allPaths = files.map((f) => toRelativePosixPath(f, cwd));
-  const fileScopes = entries.map((e) => e.scope);
 
   if (format === 'json') {
     const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
     const ctx: RunContext = {
       files,
       allPaths,
-      fileScopes,
       cloudAuth: resolved.cloudAuth,
       projectKey: resolved.projectKey,
       branch,
@@ -229,7 +217,6 @@ async function runSqaaAnalysisOnExplicitFiles(
   const ctx: RunContext = {
     files,
     allPaths,
-    fileScopes,
     cloudAuth: resolved.cloudAuth,
     projectKey: resolved.projectKey,
     branch,
@@ -298,20 +285,10 @@ async function fetchSingleFileReport(
   file: string,
   fileContent: string,
   branch?: string,
-  scope?: SqaaFileScope,
 ): Promise<SqaaJsonReport> {
   const filePath = toRelativePosixPath(file);
   try {
-    const response = await fetchWithRetry(
-      cloudAuth,
-      projectKey,
-      file,
-      fileContent,
-      branch,
-      undefined,
-      undefined,
-      scope,
-    );
+    const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch);
     return singleFileSuccessReport(filePath, response.issues, response.errors);
   } catch (err) {
     return singleFileFailureReport(filePath, (err as Error).message);
@@ -336,7 +313,7 @@ export async function buildSqaaJsonReport(
     if (!resolved) return null;
 
     if (entries.length === 1) {
-      const { absolutePath, scope } = entries[0];
+      const { absolutePath } = entries[0];
       const fileContent = readSqaaFileContent(absolutePath);
       return fetchSingleFileReport(
         resolved.cloudAuth,
@@ -344,7 +321,6 @@ export async function buildSqaaJsonReport(
         absolutePath,
         fileContent,
         branch,
-        scope,
       );
     }
 
@@ -356,12 +332,10 @@ export async function buildSqaaJsonReport(
     const cwd = process.cwd();
     const absolutePaths = entries.map((e) => e.absolutePath);
     const allPaths = absolutePaths.map((f) => toRelativePosixPath(f, cwd));
-    const fileScopes = entries.map((e) => e.scope);
     const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
     const ctx: RunContext = {
       files: absolutePaths,
       allPaths,
-      fileScopes,
       cloudAuth: resolved.cloudAuth,
       projectKey: resolved.projectKey,
       branch,

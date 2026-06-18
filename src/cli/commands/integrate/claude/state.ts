@@ -42,7 +42,7 @@ export async function updateStateAfterConfiguration(
   config: ConfigurationData,
   projectRoot: string,
   isGlobal: boolean,
-  _sqaaEnabled: boolean,
+  sqaaEnabled: boolean,
   options: UpdateStateOptions = {},
 ): Promise<void> {
   const { skipSecretsHooks = false } = options;
@@ -53,6 +53,10 @@ export async function updateStateAfterConfiguration(
     if (!skipSecretsHooks) {
       addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-secrets', 'PreToolUse');
       addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-secrets', 'UserPromptSubmit');
+    }
+    if (sqaaEnabled) {
+      addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-sqaa', 'PostToolUse');
+      addInstalledHook(state, CLAUDE_AGENT_ID, 'sonar-sqaa', 'Stop');
     }
 
     const attrs = {
@@ -69,7 +73,26 @@ export async function updateStateAfterConfiguration(
       );
     }
     // SQAA is always project-scoped, even on a global Claude install.
-    // Legacy hook entries are no longer registered; SQAA uses CLAUDE.md instructions.
+    if (sqaaEnabled) {
+      extensions.push(
+        {
+          kind: 'hook',
+          name: 'sonar-sqaa',
+          hookType: 'PostToolUse',
+          projectRoot,
+          global: false,
+          attrs,
+        },
+        {
+          kind: 'hook',
+          name: 'sonar-sqaa',
+          hookType: 'Stop',
+          projectRoot,
+          global: false,
+          attrs,
+        },
+      );
+    }
     recordAgentExtensions(state, CLAUDE_AGENT_ID, projectRoot, isGlobal, extensions);
 
     // Save connection so `sonar auth status` reports the active connection

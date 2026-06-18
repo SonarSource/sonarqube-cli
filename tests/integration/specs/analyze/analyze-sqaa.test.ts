@@ -32,7 +32,6 @@ import {
   parseSqaaRequestBody,
   sqaaRequestFileCount,
   sqaaRequestFirstFilePath,
-  sqaaRequestFirstFileScope,
   totalSqaaFilesSent,
 } from './sqaa-request-helpers';
 
@@ -628,33 +627,6 @@ describe('analyze agentic', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'sends file scope in the SQAA API body when --file path:SCOPE is used',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken(VALID_TOKEN)
-        .withSqaaResponse({ issues: [] })
-        .start();
-
-      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
-      harness.cwd.writeFile('tests/a.test.ts', 'it("x", () => {});');
-
-      const result = await harness.run(
-        `analyze agentic --file tests/a.test.ts:TEST --project ${TEST_PROJECT}`,
-      );
-
-      expect(result.exitCode).toBe(0);
-      const sqaaCalls = server
-        .getRecordedRequests()
-        .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls).toHaveLength(1);
-      expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('tests/a.test.ts');
-      expect(sqaaRequestFirstFileScope(sqaaCalls[0].body)).toBe('TEST');
     },
     { timeout: 15000 },
   );

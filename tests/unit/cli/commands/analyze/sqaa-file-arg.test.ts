@@ -27,7 +27,6 @@ import { describe, expect, it } from 'bun:test';
 import { InvalidOptionError } from '../../../../../src/cli/commands/_common/error';
 import {
   collectSqaaFileOption,
-  parseSqaaFileArg,
   resolveSqaaFileArgs,
 } from '../../../../../src/cli/commands/analyze/sqaa-file-arg';
 
@@ -37,39 +36,14 @@ describe('sqaa-file-arg', () => {
     expect(collectSqaaFileOption('b.ts', ['a.ts'])).toEqual(['a.ts', 'b.ts']);
   });
 
-  it('parseSqaaFileArg leaves unscoped paths unchanged', () => {
-    expect(parseSqaaFileArg('src/foo.ts')).toEqual({ path: 'src/foo.ts' });
-    expect(parseSqaaFileArg('tests/foo.test.ts')).toEqual({ path: 'tests/foo.test.ts' });
-  });
-
-  it('parseSqaaFileArg recognizes :MAIN and :TEST only as the last segment', () => {
-    expect(parseSqaaFileArg('tests/foo.test.ts:TEST')).toEqual({
-      path: 'tests/foo.test.ts',
-      scope: 'TEST',
-    });
-    expect(parseSqaaFileArg('src/foo.ts:MAIN')).toEqual({
-      path: 'src/foo.ts',
-      scope: 'MAIN',
-    });
-    expect(parseSqaaFileArg('weird:path:MAIN')).toEqual({ path: 'weird:path', scope: 'MAIN' });
-    expect(parseSqaaFileArg('src/foo:bar.ts')).toEqual({ path: 'src/foo:bar.ts' });
-  });
-
-  it('resolveSqaaFileArgs rejects missing files and duplicates', () => {
+  it('resolveSqaaFileArgs resolves paths and rejects missing files and duplicates', () => {
     const dir = mkdtempSync(join(tmpdir(), 'sqaa-file-arg-'));
     const existing = join(dir, 'exists.ts');
     writeFileSync(existing, 'x');
 
-    expect(resolveSqaaFileArgs(['exists.ts'], dir)).toEqual([
-      { absolutePath: existing, scope: undefined },
-    ]);
-    expect(resolveSqaaFileArgs(['exists.ts:MAIN'], dir)).toEqual([
-      { absolutePath: existing, scope: 'MAIN' },
-    ]);
+    expect(resolveSqaaFileArgs(['exists.ts'], dir)).toEqual([{ absolutePath: existing }]);
 
     expect(() => resolveSqaaFileArgs(['missing.ts'], dir)).toThrow(InvalidOptionError);
-    expect(() => resolveSqaaFileArgs(['exists.ts', 'exists.ts:TEST'], dir)).toThrow(
-      InvalidOptionError,
-    );
+    expect(() => resolveSqaaFileArgs(['exists.ts', 'exists.ts'], dir)).toThrow(InvalidOptionError);
   });
 });

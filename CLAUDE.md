@@ -56,26 +56,13 @@ All three integrations build the feature with the shared `createSonarSecretsHook
 
 ### Agent SQAA delivery
 
-SonarQube Agentic Analysis (SQAA) is **instructions-first** on all entitled agents (Claude, Codex, Copilot, Cursor). Integrate writes the shared `buildSqaaSectionBody(projectKey)` template (`integrate/_common/instructions-templates.ts`), which tells the agent to classify each edited file as `MAIN` or `TEST` and run one scoped `--file` per file at end of turn:
+SonarQube Agentic Analysis (SQAA) is delivered per agent:
 
-```bash
-sonar analyze agentic --project <key> \
-  --file src/foo.ts:MAIN \
-  --file tests/foo.test.ts:TEST
-```
+- **Claude Code** uses two hooks when entitled (project scope only). `PostToolUse` on `Edit|Write` runs `sonar hook claude-post-tool-use --project <key>` for immediate single-file STANDARD analysis after each edit (`agent-post-tool-use.ts`). `Stop` at end of turn runs `sonar hook claude-stop --project <key>` for aggregated git change-set DEEP analysis (`claude-stop.ts`). Both report findings via `hookSpecificOutput.additionalContext` and never block the agent (`format-sqaa-hook-context.ts`). The Stop handler skips when `stop_hook_active` is true in stdin to avoid re-running analysis on a continuation pass.
+- **Codex** uses a `PostToolUse` hook on `apply_patch` running `sonar hook codex-post-tool-use --project <key>` for change-set DEEP analysis after each patch (`codex-post-tool-use.ts`).
+- **Copilot and Cursor use instructions instead** — Cursor's `afterFileEdit` hook is fire-and-forget (it cannot return `additionalContext` to the conversation), so a post-edit hook would be useless for SQAA. Both write the shared `buildSqaaSectionBody(projectKey)` template (`integrate/_common/instructions-templates.ts`) telling the agent to run `sonar analyze agentic --project <key>` once at end of turn (git change-set, no `--file` loop). Cursor's `sqaa-instructions` feature (`integrate/cursor/declaration.ts`) wraps it in `.cursor/rules/sonar-agentic-analysis.mdc` with `alwaysApply: true` YAML front-matter; Copilot writes `.github/instructions/sonarqube.instructions.md`.
 
-Delivery surfaces:
-
-- **Claude Code** — `sqaa-instructions` `textSnippet` into project `CLAUDE.md` (`claude-agentic-analysis-protocol` marker). Re-integrate removes legacy `sonar-sqaa` hooks from `.claude/settings.json`.
-- **Codex** — `sqaa-instructions` `textSnippet` into project `AGENTS.md` (`codex-agentic-analysis-protocol` marker). Re-integrate removes legacy `sonar-sqaa` hooks from `.codex/hooks.json`.
-- **Copilot** — `textSnippet` into `.github/instructions/sonarqube.instructions.md` (`sonarqube-agentic-analysis-protocol` marker).
-- **Cursor** — `wholeFile` into `.cursor/rules/sonar-agentic-analysis.mdc` with `alwaysApply: true` front-matter.
-
-The CLI accepts repeatable `--file path[:MAIN|TEST]` on `sonar analyze agentic` / bare `sonar analyze` (no separate `--file-scope` flag). One `--file` runs single-file STANDARD analysis; multiple `--file` values run an explicit multi-file DEEP batch with per-file scope forwarded to the SQAA API.
-
-SQAA is **project-scoped and opt-in**: integrate orchestrators call `resolveSqaaSetup()` and only install when the org is entitled and a project key is known; `resolveSqaaSetup` owns the user-facing promotion / `--global` skip messaging. `wholeFile` / `textSnippet` removers key on the `# SonarQube Agentic Analysis protocol` managed marker so teardown only deletes content the CLI wrote.
-
-Secrets scanning remains **hooked** (prompt submit / pre-read guards); only SQAA moved to instructions.
+Like the hook-based agents, SQAA is **project-scoped and opt-in**: integrate orchestrators call `resolveSqaaSetup()` and only install when the org is entitled and a project key is known; `resolveSqaaSetup` owns the user-facing promotion / `--global` skip messaging. Cursor/Copilot `wholeFile` / `textSnippet` removers key on the `# SonarQube Agentic Analysis protocol` managed marker so teardown only deletes content the CLI wrote.
 
 ### Context Augmentation
 
