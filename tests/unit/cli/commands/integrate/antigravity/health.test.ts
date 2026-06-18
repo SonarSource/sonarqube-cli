@@ -28,19 +28,27 @@ import {
   checkAntigravitySecretsHookFile,
   resolveAntigravitySecretsHooksJsonPath,
 } from '../../../../../../src/cli/commands/integrate/antigravity/health';
-import { ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON } from '../../../../../../src/lib/config-constants';
+import {
+  formatAntigravityHookCommand,
+  hookScriptName,
+} from '../../../../../../src/cli/commands/integrate/antigravity/hooks';
+import {
+  ANTIGRAVITY_GLOBAL_HOOKS_JSON,
+  ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
+  ANTIGRAVITY_PROJECT_HOOKS_JSON,
+} from '../../../../../../src/lib/config-constants';
 import { getMcpConfigFilePath } from '../../../../../../src/lib/mcp/mcp-helper';
 
 describe('resolveAntigravitySecretsHooksJsonPath', () => {
   it('returns project hooks.json under the target root', () => {
     expect(resolveAntigravitySecretsHooksJsonPath('project', '/repo')).toBe(
-      join('/repo', '.agents', 'hooks.json'),
+      join('/repo', ANTIGRAVITY_PROJECT_HOOKS_JSON),
     );
   });
 
   it('returns global hooks.json for global scope', () => {
-    expect(resolveAntigravitySecretsHooksJsonPath('global', '/ignored')).toContain(
-      '.gemini/config/hooks.json',
+    expect(resolveAntigravitySecretsHooksJsonPath('global', '/ignored')).toBe(
+      ANTIGRAVITY_GLOBAL_HOOKS_JSON,
     );
   });
 });
@@ -61,7 +69,7 @@ describe('checkAntigravitySecretsHookFile', () => {
 
   it('returns configured when sonar-secrets block and script exist', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'sonar-antigravity-health-'));
-    const scriptPath = join(tempDir, 'pretool-secrets.sh');
+    const scriptPath = join(tempDir, hookScriptName());
     writeFileSync(scriptPath, '#!/bin/bash\n');
     writeFileSync(
       join(tempDir, 'hooks.json'),
@@ -71,7 +79,7 @@ describe('checkAntigravitySecretsHookFile', () => {
           PreToolUse: [
             {
               matcher: 'view_file',
-              hooks: [{ command: `bash "${scriptPath}"` }],
+              hooks: [{ command: formatAntigravityHookCommand(scriptPath) }],
             },
           ],
         },
@@ -91,7 +99,9 @@ describe('checkAntigravitySecretsHookFile', () => {
           PreToolUse: [
             {
               matcher: 'view_file',
-              hooks: [{ command: 'bash "/missing/pretool-secrets.sh"' }],
+              hooks: [
+                { command: formatAntigravityHookCommand(join('/missing', hookScriptName())) },
+              ],
             },
           ],
         },

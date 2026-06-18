@@ -27,6 +27,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CLI_VERSION } from '../../../../package.json';
 import { SECRETS_SPEC } from '../../../../src/cli/commands/_common/install/secrets';
+import {
+  formatAntigravityHookCommand,
+  hookScriptName,
+} from '../../../../src/cli/commands/integrate/antigravity/hooks';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 
 function baseState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -1112,7 +1116,7 @@ describe('system status', () => {
   it(
     'shows Antigravity secrets hook and MCP status when both are configured',
     async () => {
-      const scriptPath = join(harness.cwd.path, '.agents', 'sonar', 'hooks', 'pretool-secrets.sh');
+      const scriptPath = join(harness.cwd.path, '.agents', 'sonar', 'hooks', hookScriptName());
       mkdirSync(join(harness.cwd.path, '.agents', 'sonar', 'hooks'), { recursive: true });
       writeFileSync(scriptPath, '#!/bin/bash\n');
       writeFileSync(
@@ -1123,7 +1127,7 @@ describe('system status', () => {
             PreToolUse: [
               {
                 matcher: 'view_file',
-                hooks: [{ command: `bash "${scriptPath}"` }],
+                hooks: [{ command: formatAntigravityHookCommand(scriptPath) }],
               },
             ],
           },
