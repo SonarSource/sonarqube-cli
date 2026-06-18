@@ -18,13 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'bun:test';
 
-import { InvalidOptionError } from '../../../../../src/cli/commands/_common/error';
+import {
+  CommandFailedError,
+  InvalidOptionError,
+} from '../../../../../src/cli/commands/_common/error';
 import {
   collectSqaaFileOption,
   resolveSqaaFileArgs,
@@ -47,5 +50,31 @@ describe('sqaa-file-arg', () => {
     ]);
 
     expect(() => resolveSqaaFileArgs(['missing.ts'], dir)).toThrow(InvalidOptionError);
+  });
+
+  it('normalizes Windows-style backslash separators before resolving paths', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sqaa-file-arg-win-'));
+    const nested = join(dir, 'python', 'scripts', 'check_md_code_blocks.py');
+    mkdirSync(join(dir, 'python', 'scripts'), { recursive: true });
+    writeFileSync(nested, 'x');
+
+    expect(resolveSqaaFileArgs([String.raw`python\scripts\check_md_code_blocks.py`], dir)).toEqual([
+      { absolutePath: nested },
+    ]);
+  });
+
+  it('rejects directories and paths outside the working directory', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sqaa-file-arg-reject-'));
+    mkdirSync(join(dir, 'src'), { recursive: true });
+
+    expect(() => resolveSqaaFileArgs(['../outside.ts'], dir)).toThrow(InvalidOptionError);
+
+    const differentRoot =
+      process.platform === 'win32'
+        ? String.raw`D:\other-project\file.ts`
+        : '/other-project/file.ts';
+    expect(() => resolveSqaaFileArgs([differentRoot], dir)).toThrow(InvalidOptionError);
+
+    expect(() => resolveSqaaFileArgs(['src'], dir)).toThrow(CommandFailedError);
   });
 });

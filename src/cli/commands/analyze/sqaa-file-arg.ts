@@ -20,9 +20,10 @@
 
 // Parse repeatable `--file <path>` arguments for SQAA.
 
-import { existsSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { normalizePath, toRelativePosixPath } from '../../../lib/fs-utils';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 
 export interface ResolvedSqaaFileEntry {
@@ -42,16 +43,20 @@ export function resolveSqaaFileArgs(
   const entries: ResolvedSqaaFileEntry[] = [];
 
   for (const path of rawArgs) {
-    const absolutePath = resolve(cwd, path);
+    const absolutePath = resolve(cwd, normalizePath(path));
     if (seenAbsolute.has(absolutePath)) {
       continue;
     }
     seenAbsolute.add(absolutePath);
-    if (!existsSync(absolutePath)) {
+    if (toRelativePosixPath(absolutePath, cwd) === null) {
+      throw new InvalidOptionError(`File must be inside ${cwd}: ${path}`);
+    }
+    const stat = statSync(absolutePath, { throwIfNoEntry: false });
+    if (!stat) {
       throw new InvalidOptionError(`File not found: ${path}`);
     }
-    if (!statSync(absolutePath).isFile()) {
-      throw new CommandFailedError(`Failed to read file: ${path} is a directory`, {
+    if (!stat.isFile()) {
+      throw new CommandFailedError(`Failed to read file: ${path} is not a regular file`, {
         remediationHint: `Check that '${path}' exists and is readable as a file, then retry.`,
       });
     }

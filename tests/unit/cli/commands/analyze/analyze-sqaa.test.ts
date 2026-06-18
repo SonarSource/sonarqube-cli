@@ -53,6 +53,7 @@ const FAKE_AUTH: import('../../../../../src/lib/auth-resolver.js').ResolvedAuth 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
+let statSyncSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let createAnalysisSpy: ReturnType<typeof spyOn>;
 let spawnProcessSpy: ReturnType<typeof spyOn>;
@@ -88,6 +89,7 @@ beforeEach(() => {
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
 
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
+  statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
 
   createAnalysisSpy = spyOn(SonarQubeClient.prototype, 'createAnalysis').mockResolvedValue({
@@ -113,6 +115,7 @@ afterEach(() => {
   loadStateSpy.mockRestore();
   saveStateSpy.mockRestore();
   existsSpy.mockRestore();
+  statSyncSpy.mockRestore();
   readFileSpy.mockRestore();
   createAnalysisSpy.mockRestore();
   spawnProcessSpy.mockRestore();
@@ -122,7 +125,7 @@ afterEach(() => {
 
 describe('analyzeSqaa: input validation', () => {
   it('throws InvalidOptionError when file does not exist', () => {
-    existsSpy.mockReturnValue(false);
+    statSyncSpy.mockReturnValue(undefined);
 
     expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow(
       InvalidOptionError,

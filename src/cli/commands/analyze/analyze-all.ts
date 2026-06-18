@@ -79,7 +79,7 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
     const entries = resolveSqaaFileArgs(rawFiles);
     const paths = entries.map((e) => e.absolutePath);
     await analyzeSecrets({ paths }, auth);
-    await analyzeSqaa({ file: rawFiles, project, force, format }, auth, { requireProject: false });
+    await analyzeSqaa({ file: paths, project, force, format }, auth, { requireProject: false });
     return;
   }
 
