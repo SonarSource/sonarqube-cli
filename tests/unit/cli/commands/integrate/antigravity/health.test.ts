@@ -117,6 +117,57 @@ describe('checkAntigravitySecretsHookFile', () => {
 
     expect(checkAntigravitySecretsHookFile(join(tempDir, 'hooks.json'))).toBe('invalid');
   });
+
+  it('returns not_configured when the sonar-secrets block is disabled', () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sonar-antigravity-health-'));
+    const scriptPath = join(tempDir, hookScriptName());
+    writeFileSync(scriptPath, '#!/bin/bash\n');
+    writeFileSync(
+      join(tempDir, 'hooks.json'),
+      JSON.stringify({
+        'sonar-secrets': {
+          enabled: false,
+          PreToolUse: [
+            {
+              matcher: 'view_file',
+              hooks: [{ command: formatAntigravityHookCommand(scriptPath) }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(checkAntigravitySecretsHookFile(join(tempDir, 'hooks.json'))).toBe('not_configured');
+  });
+
+  it('returns not_configured when the sonar-secrets block is absent', () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sonar-antigravity-health-'));
+    writeFileSync(join(tempDir, 'hooks.json'), JSON.stringify({ other: { enabled: true } }));
+
+    expect(checkAntigravitySecretsHookFile(join(tempDir, 'hooks.json'))).toBe('not_configured');
+  });
+
+  it('returns invalid when the PreToolUse matcher is not view_file', () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sonar-antigravity-health-'));
+    const scriptPath = join(tempDir, hookScriptName());
+    writeFileSync(scriptPath, '#!/bin/bash\n');
+    writeFileSync(
+      join(tempDir, 'hooks.json'),
+      JSON.stringify({
+        'sonar-secrets': {
+          enabled: true,
+          PreToolUse: [
+            {
+              matcher: 'edit_file',
+              hooks: [{ command: formatAntigravityHookCommand(scriptPath) }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(checkAntigravitySecretsHookFile(join(tempDir, 'hooks.json'))).toBe('invalid');
+  });
 });
 
 describe('getMcpConfigFilePath (antigravity)', () => {

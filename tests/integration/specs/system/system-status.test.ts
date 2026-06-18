@@ -1158,4 +1158,62 @@ describe('system status', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'shows invalid Antigravity secrets hook config and recommends reinstall',
+    async () => {
+      mkdirSync(join(harness.cwd.path, '.agents'), { recursive: true });
+      writeFileSync(
+        join(harness.cwd.path, '.agents', 'hooks.json'),
+        JSON.stringify({
+          'sonar-secrets': {
+            enabled: true,
+            PreToolUse: [
+              {
+                matcher: 'view_file',
+                hooks: [
+                  {
+                    command: formatAntigravityHookCommand(
+                      join(harness.cwd.path, '.agents', 'sonar', 'hooks', hookScriptName()),
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+      harness.userHome.writeFile(join('.gemini', 'config', 'mcp_config.json'), VALID_MCP_CONFIG);
+      harness.state().withRawState(JSON.stringify(antigravityStatusState(harness.cwd.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Antigravity');
+      expect(result.stdout).toContain('Secrets Hook');
+      expect(result.stdout).toContain('INVALID CONFIG');
+      expect(result.stdout).toContain('RECOMMENDATIONS');
+      expect(result.stdout).toContain('sonar integrate antigravity');
+      expect(result.stdout).toContain('reinstall secrets hook configuration');
+
+      const jsonResult = await harness.run('system status --json');
+      expect(jsonResult.exitCode).toBe(0);
+      const json = JSON.parse(jsonResult.stdout) as {
+        healthy: boolean;
+        recommendations: string[];
+        integrations: Array<{
+          id: string;
+          hooks?: { configured: boolean; valid: boolean };
+        }>;
+      };
+      const antigravity = json.integrations.find((entry) => entry.id === 'antigravity');
+      expect(antigravity?.hooks?.configured).toBe(true);
+      expect(antigravity?.hooks?.valid).toBe(false);
+      expect(json.healthy).toBe(false);
+      expect(json.recommendations.some((r) => r.includes('sonar integrate antigravity'))).toBe(
+        true,
+      );
+    },
+    { timeout: 15000 },
+  );
 });
