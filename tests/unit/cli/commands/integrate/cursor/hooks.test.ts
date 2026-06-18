@@ -302,8 +302,11 @@ describe('buildCursorHookEntry', () => {
       'sonar-secrets/build-scripts/prompt-secrets',
     );
 
-    // On Windows the command is prefixed with 'powershell -NoProfile -File'; strip it before checking absoluteness.
-    const commandPath = entry.entry.command.replace(/^powershell -NoProfile -File /, '');
+    // On Windows the command is prefixed with 'powershell -NoProfile -ExecutionPolicy Bypass -File'; strip it before checking absoluteness.
+    const commandPath = entry.entry.command.replace(
+      /^powershell -NoProfile -ExecutionPolicy Bypass -File /,
+      '',
+    );
     expect(commandPath).toMatch(/^[/\\]/);
   });
 

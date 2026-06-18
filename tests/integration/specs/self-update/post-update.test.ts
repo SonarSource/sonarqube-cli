@@ -234,10 +234,10 @@ describe('post-update migration', () => {
       const promptScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('prompt-secrets')}`;
       const settingsRel = '.claude/settings.json';
       const expectedPretoolCommand = IS_WINDOWS
-        ? `powershell -NoProfile -File ${pretoolScriptRel}`
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${pretoolScriptRel}`
         : pretoolScriptRel;
       const expectedPromptCommand = IS_WINDOWS
-        ? `powershell -NoProfile -File ${promptScriptRel}`
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${promptScriptRel}`
         : promptScriptRel;
 
       harness.cwd.writeFile(

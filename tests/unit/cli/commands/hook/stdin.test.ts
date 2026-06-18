@@ -69,6 +69,22 @@ describe('readStdinJson', () => {
     expect(await promise).toEqual(payload);
   });
 
+  it('strips a non-JSON prefix before the opening brace', async () => {
+    const payload = { tool_name: 'Read', tool_input: { file_path: '/tmp/test.ts' } };
+    const promise = readStdinJson<typeof payload>();
+    emitStdin('data', Buffer.from('n++' + JSON.stringify(payload)));
+    emitStdin('end');
+    expect(await promise).toEqual(payload);
+  });
+
+  it('strips trailing framing bytes after the closing brace', async () => {
+    const payload = { tool_name: 'Read', tool_input: { file_path: '/tmp/test.ts' } };
+    const promise = readStdinJson<typeof payload>();
+    emitStdin('data', Buffer.from(JSON.stringify(payload) + 'n++'));
+    emitStdin('end');
+    expect(await promise).toEqual(payload);
+  });
+
   it('throws when stdin contains invalid JSON', async () => {
     const promise = readStdinJson();
     emitStdin('data', Buffer.from('not-valid-json'));
