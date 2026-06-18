@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import {
   type DependencyDeclaration,
+  type FeatureContainer,
   type FeatureDeclaration,
   installIntegration,
   type IntegrationDeclaration,
@@ -610,6 +611,78 @@ describe('generic integration installer', () => {
         features: [{ featureId: 'first' }],
       },
     ]);
+  });
+
+  it('prints container display name then each active subfeature on a separate indented line', async () => {
+    const container: FeatureContainer = {
+      id: 'container',
+      displayName: 'Container Feature',
+      subfeatures: [
+        { id: 'subfeature-1', displayName: 'Subfeature One' },
+        { id: 'subfeature-2', displayName: 'Subfeature Two' },
+      ],
+      resources: [
+        wholeFile({
+          id: 'container-file',
+          displayName: 'Container file',
+          targetPath: join(tempDir, 'container.txt'),
+          content: 'enabled=true\n',
+        }),
+      ],
+    };
+    const integration = registerIntegration(registry, 'installer-container-messages', [container]);
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(hasUiCall('text', '     Installing Container Feature...')).toBe(true);
+    expect(hasUiCall('text', '       - Subfeature One')).toBe(true);
+    expect(hasUiCall('text', '       - Subfeature Two')).toBe(true);
+  });
+
+  it('only lists active subfeatures when some are filtered out by shouldInstall', async () => {
+    const container: FeatureContainer<{ enableOptional?: boolean }> = {
+      id: 'container',
+      displayName: 'Container Feature',
+      subfeatures: [
+        { id: 'subfeature-1', displayName: 'Subfeature One' },
+        {
+          id: 'subfeature-2',
+          displayName: 'Subfeature Two',
+          shouldInstall: ({ options }) => options.enableOptional === true,
+        },
+      ],
+      resources: [
+        wholeFile({
+          id: 'container-file',
+          displayName: 'Container file',
+          targetPath: join(tempDir, 'container.txt'),
+          content: 'enabled=true\n',
+        }),
+      ],
+    };
+    const integration = registerIntegration<{ enableOptional?: boolean }>(
+      registry,
+      'installer-container-filtered-subfeatures',
+      [container],
+    );
+
+    await installIntegration({
+      registry,
+      integrationId: integration.id,
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+    });
+
+    expect(hasUiCall('text', '     Installing Container Feature...')).toBe(true);
+    expect(hasUiCall('text', '       - Subfeature One')).toBe(true);
+    expect(hasUiCall('text', '       - Subfeature Two')).toBe(false);
   });
 
   it('warns and continues when reading or writing state fails', async () => {
