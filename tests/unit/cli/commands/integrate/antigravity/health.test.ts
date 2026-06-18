@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
@@ -36,6 +36,7 @@ import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   ANTIGRAVITY_PROJECT_HOOKS_JSON,
+  ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
 } from '../../../../../../src/lib/config-constants';
 import { getMcpConfigFilePath } from '../../../../../../src/lib/mcp/mcp-helper';
 
@@ -67,7 +68,7 @@ describe('checkAntigravitySecretsHookFile', () => {
     expect(checkAntigravitySecretsHookFile(join(tempDir, 'hooks.json'))).toBe('not_configured');
   });
 
-  it('returns configured when sonar-secrets block and script exist', () => {
+  it('returns configured when sonar-secrets block and script exist (absolute command path)', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'sonar-antigravity-health-'));
     const scriptPath = join(tempDir, hookScriptName());
     writeFileSync(scriptPath, '#!/bin/bash\n');
@@ -87,6 +88,40 @@ describe('checkAntigravitySecretsHookFile', () => {
     );
 
     expect(checkAntigravitySecretsHookFile(join(tempDir, 'hooks.json'))).toBe('configured');
+  });
+
+  it('returns configured when the hook command path is relative to hooks.json', () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sonar-antigravity-health-'));
+    const agentsDir = join(tempDir, '.agents');
+    const scriptPath = join(
+      agentsDir,
+      ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
+      hookScriptName(),
+    );
+    mkdirSync(dirname(scriptPath), { recursive: true });
+    writeFileSync(scriptPath, '#!/bin/bash\n');
+    writeFileSync(
+      join(agentsDir, 'hooks.json'),
+      JSON.stringify({
+        'sonar-secrets': {
+          enabled: true,
+          PreToolUse: [
+            {
+              matcher: 'view_file',
+              hooks: [
+                {
+                  command: formatAntigravityHookCommand(
+                    join(ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS, hookScriptName()),
+                  ),
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(checkAntigravitySecretsHookFile(join(agentsDir, 'hooks.json'))).toBe('configured');
   });
 
   it('returns invalid when the backing script is missing', () => {

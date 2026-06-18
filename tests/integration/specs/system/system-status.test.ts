@@ -31,6 +31,7 @@ import {
   formatAntigravityHookCommand,
   hookScriptName,
 } from '../../../../src/cli/commands/integrate/antigravity/hooks';
+import { ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS } from '../../../../src/lib/config-constants';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 
 function baseState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -1127,7 +1128,13 @@ describe('system status', () => {
             PreToolUse: [
               {
                 matcher: 'view_file',
-                hooks: [{ command: formatAntigravityHookCommand(scriptPath) }],
+                hooks: [
+                  {
+                    command: formatAntigravityHookCommand(
+                      join(ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS, hookScriptName()),
+                    ),
+                  },
+                ],
               },
             ],
           },

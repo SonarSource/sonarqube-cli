@@ -19,7 +19,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
@@ -82,7 +82,15 @@ export function checkAntigravitySecretsHookFile(
   }
 
   const scriptPath = extractScriptPathFromHookCommand(command);
-  if (!scriptPath || !existsSync(scriptPath)) {
+  if (!scriptPath) {
+    return 'invalid';
+  }
+
+  // Project installs store paths relative to `.agents/` (Antigravity PreToolUse cwd).
+  const resolvedScriptPath = isAbsolute(scriptPath)
+    ? scriptPath
+    : join(dirname(hooksJsonPath), scriptPath);
+  if (!existsSync(resolvedScriptPath)) {
     return 'invalid';
   }
 
