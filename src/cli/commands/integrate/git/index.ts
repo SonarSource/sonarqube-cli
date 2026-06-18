@@ -139,9 +139,6 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
   if (options.global && (options.dependencyRisks || options.project)) {
     throw new InvalidOptionError('--dependency-risks and -p are not supported with --global.');
   }
-  if (options.dependencyRisks && !options.project) {
-    throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
-  }
 
   intro('SonarQube Git Integration (secrets scanning)');
 

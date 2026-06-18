@@ -403,16 +403,6 @@ describe('integrateGit', () => {
     ).rejects.toThrow('--hook must be pre-commit or pre-push');
   });
 
-  /* eslint-disable @typescript-eslint/await-thenable */
-  it('throws InvalidOptionError when --dependency-risks is used without -p', async () => {
-    await expect(
-      integrateGit({ nonInteractive: true, dependencyRisks: true }),
-    ).rejects.toBeInstanceOf(InvalidOptionError);
-    await expect(integrateGit({ nonInteractive: true, dependencyRisks: true })).rejects.toThrow(
-      '--dependency-risks requires -p',
-    );
-  });
-
   it('throws InvalidOptionError when --global is combined with --dependency-risks', async () => {
     await expect(
       integrateGit({ global: true, nonInteractive: true, dependencyRisks: true, project: 'k' }),

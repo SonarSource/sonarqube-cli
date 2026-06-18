@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { InvalidOptionError } from '../../../_common/error';
 import {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
@@ -40,7 +41,15 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
     id: 'pre-commit-dependency-risks',
     displayName: 'pre-commit dependency-risks scan',
     shouldInstall: ({ options, nonInteractive, scope }) => {
-      if (scope === 'global') return skip();
+      if (scope === 'global') {
+        return skip('Dependency-risks scanning is not available for global hooks');
+      }
+      if (options.dependencyRisks && !options.project) {
+        throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
+      }
+      if (!options.project) {
+        return skip('Dependency-risks scanning is not available without a project key.');
+      }
       if (options.dependencyRisks) return install();
       if (nonInteractive) return skip();
       return askUser('Enable dependency-risks scanning on the pre-commit hook?');
