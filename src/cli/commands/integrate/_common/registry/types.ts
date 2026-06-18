@@ -46,6 +46,12 @@ export interface ContainerIntegrationContext extends IntegrationContext {
   activeSubfeatures: readonly SubfeatureDeclaration[];
 }
 
+export function isContainerIntegrationContext(
+  ctx: IntegrationContext,
+): ctx is ContainerIntegrationContext {
+  return 'activeSubfeatures' in ctx;
+}
+
 export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   options: TOptions;
   targetRoot: string;

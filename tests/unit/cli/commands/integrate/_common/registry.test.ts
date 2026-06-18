@@ -32,6 +32,7 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
+import { isContainerIntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry/types.ts';
 import { getDefaultState, type InstalledIntegrationFeature } from '../../../../../../src/lib/state';
 
 const binaryInstall = await import('../../../../../../src/cli/commands/_common/install/binary');
@@ -333,7 +334,7 @@ describe('declarative integration framework', () => {
   });
 
   it('populates activeSubfeatures in context for container operations', async () => {
-    let capturedSubfeatures: ContainerIntegrationContext['activeSubfeatures'] | undefined;
+    let integrationContext: IntegrationContext | undefined;
     const container: FeatureContainer<{ enableSca?: boolean }> = {
       id: 'container',
       displayName: 'Container',
@@ -349,7 +350,7 @@ describe('declarative integration framework', () => {
         {
           id: 'capture-op',
           apply: (ctx) => {
-            capturedSubfeatures = (ctx as ContainerIntegrationContext).activeSubfeatures;
+            integrationContext = ctx;
           },
         },
       ],
@@ -362,7 +363,11 @@ describe('declarative integration framework', () => {
       { feature: filteredContainer, targetRoot: tempDir, scope: 'project' },
     ]);
 
-    expect(capturedSubfeatures?.map((s) => s.id)).toEqual(['mandatory']);
+    expect(integrationContext).toBeDefined();
+    expect(isContainerIntegrationContext(integrationContext!)).toBeTrue();
+    expect(
+      (integrationContext as ContainerIntegrationContext)?.activeSubfeatures?.map((s) => s.id),
+    ).toEqual(['mandatory']);
   });
 
   it('records active subfeatures nested under the container feature in state', async () => {
