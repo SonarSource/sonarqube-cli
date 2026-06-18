@@ -361,6 +361,35 @@ describe('declarative integration framework', () => {
     expect(context).toBeDefined();
   });
 
+  it('reconciles subfeature dependency references across re-installs', async () => {
+    const depOld = sonarSourceBinary({ id: 'dep-old', binary: SonarSourceBinary.SonarSecrets });
+    const depNew = sonarSourceBinary({ id: 'dep-new', binary: SonarSourceBinary.SonarSecrets });
+
+    const makeContainer = (dep: typeof depOld): FeatureContainer => ({
+      id: 'container',
+      displayName: 'Container',
+      subfeatures: [{ id: 'sub-a', displayName: 'Sub A', dependencies: [dep] }],
+    });
+
+    const integration = makeIntegration({ features: [makeContainer(depOld)] });
+    const state = getDefaultState('test');
+
+    // First install: subfeature declares dep-old
+    await installer.applyAndRecordFeatures(state, integration, [
+      { feature: makeContainer(depOld), targetRoot: tempDir, scope: 'project' },
+    ]);
+    expect(state.integrations.installed[0]?.features[0]?.subfeatures?.[0]?.dependencies).toEqual([
+      { id: 'dep-old' },
+    ]);
+
+    // Re-install: subfeature now declares dep-new instead
+    await installer.applyAndRecordFeatures(state, integration, [
+      { feature: makeContainer(depNew), targetRoot: tempDir, scope: 'project' },
+    ]);
+    const subfeature = state.integrations.installed[0]?.features[0]?.subfeatures?.[0];
+    expect(subfeature?.dependencies).toEqual([{ id: 'dep-new' }]);
+  });
+
   it('lists registered integrations', () => {
     const registry = new IntegrationRegistry();
     const first = makeIntegration({ id: 'first' });
