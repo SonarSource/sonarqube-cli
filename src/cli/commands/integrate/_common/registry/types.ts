@@ -42,6 +42,16 @@ export interface IntegrationContext {
   resolvedDependencies: ReadonlyMap<string, InstalledDependency>;
 }
 
+export interface ContainerIntegrationContext extends IntegrationContext {
+  activeSubfeatures: readonly SubfeatureDeclaration[];
+}
+
+export function isContainerIntegrationContext(
+  ctx: IntegrationContext,
+): ctx is ContainerIntegrationContext {
+  return 'activeSubfeatures' in ctx;
+}
+
 export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   options: TOptions;
   targetRoot: string;
@@ -97,6 +107,27 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
    * when this feature is installed.
    */
   postInstallExample?: PostInstallExample;
+}
+
+/**
+ * Thin subfeature declaration — metadata, install condition, and binary dependencies only.
+ * No resources or operations; those belong to the owning {@link FeatureContainer}.
+ */
+export type SubfeatureDeclaration<TOptions = Record<string, unknown>> = Pick<
+  FeatureDeclaration<TOptions>,
+  'id' | 'displayName' | 'shouldInstall' | 'dependencies'
+>;
+
+/**
+ * A {@link FeatureDeclaration} that groups thin {@link SubfeatureDeclaration}s under it.
+ * The container owns the centralized resource; subfeatures contribute only binary
+ * dependencies and install conditions (no resources, no operations).
+ * Use {@link isFeatureContainer} from `selection` to downcast before accessing `subfeatures`.
+ */
+export interface FeatureContainer<
+  TOptions = Record<string, unknown>,
+> extends FeatureDeclaration<TOptions> {
+  subfeatures: SubfeatureDeclaration<TOptions>[];
 }
 
 export interface LegacyFeatureDeclaration {
