@@ -282,6 +282,7 @@ describe('declarative integration framework', () => {
       id: 'container',
       displayName: 'Container',
       subfeatures: [],
+      defaultInstallSubfeatureIds: [],
     };
 
     expect(isFeatureContainer(plain)).toBe(false);
@@ -306,6 +307,7 @@ describe('declarative integration framework', () => {
           shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
         },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
 
@@ -354,6 +356,7 @@ describe('declarative integration framework', () => {
           },
         },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
     const state = getDefaultState('test');
@@ -379,6 +382,7 @@ describe('declarative integration framework', () => {
         { id: 'sub-a', displayName: 'Sub A', shouldInstall: () => install(), dependencies: [dep] },
         { id: 'sub-b', displayName: 'Sub B', shouldInstall: () => skip() },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
     const state = getDefaultState('test');
@@ -408,6 +412,7 @@ describe('declarative integration framework', () => {
       id: 'container',
       displayName: 'Container',
       subfeatures: [{ id: 'sub-a', displayName: 'Sub A', dependencies: [dep] }],
+      defaultInstallSubfeatureIds: [],
     });
 
     const integration = makeIntegration({ features: [makeContainer(depOld)] });
@@ -467,6 +472,7 @@ describe('declarative integration framework', () => {
         { id: 'sub-b', displayName: 'Sub B' },
         { id: 'sub-c', displayName: 'Sub C' },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
 
@@ -491,6 +497,7 @@ describe('declarative integration framework', () => {
       id: 'container',
       displayName: 'Container',
       subfeatures: [{ id: 'valid', displayName: 'Valid' }],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
 
