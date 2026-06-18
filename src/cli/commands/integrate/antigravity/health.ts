@@ -25,17 +25,12 @@ import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
   ANTIGRAVITY_PROJECT_HOOKS_JSON,
 } from '../../../../lib/config-constants';
-import { SONAR_SECRETS_MARKER } from '../_common/hooks';
 import {
-  ANTIGRAVITY_PRE_TOOL_HOOK_MARKER,
-  type AntigravityHookBlock,
-  type AntigravityHooksDocument,
-  type AntigravityToolHookEntry,
   extractScriptPathFromHookCommand,
-  hookScriptName,
-  PRETOOL_SECRETS_BASENAME,
+  hookReferencesSonarSecrets,
+  isSonarSecretsPreToolUseEntry,
   SONAR_SECRETS_BLOCK_NAME,
-  VIEW_FILE_MATCHER,
+  toAntigravityHooksDocument,
 } from './hooks';
 
 export type AntigravityIntegrationConfigStatus = 'configured' | 'invalid' | 'not_configured';
@@ -92,25 +87,4 @@ export function checkAntigravitySecretsHookFile(
   }
 
   return 'configured';
-}
-
-function isSonarSecretsPreToolUseEntry(entry: AntigravityToolHookEntry): boolean {
-  if (entry.matcher !== VIEW_FILE_MATCHER) return false;
-  return entry.hooks.some((hook) => hookReferencesSonarSecrets(hook.command));
-}
-
-function hookReferencesSonarSecrets(command: string): boolean {
-  return (
-    command.includes(ANTIGRAVITY_PRE_TOOL_HOOK_MARKER) ||
-    command.includes(SONAR_SECRETS_MARKER) ||
-    command.includes(PRETOOL_SECRETS_BASENAME) ||
-    command.includes(hookScriptName())
-  );
-}
-
-function toAntigravityHooksDocument(document: unknown): AntigravityHooksDocument {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) {
-    return {};
-  }
-  return { ...(document as Record<string, AntigravityHookBlock | undefined>) };
 }
