@@ -76,6 +76,7 @@ export type {
   AppliedFeature,
   AppliedOperation,
   AppliedResource,
+  ContainerIntegrationContext,
   DependencyInstallContext,
   FeatureContainer,
   FeatureDeclaration,

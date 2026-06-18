@@ -37,6 +37,7 @@ import type {
   AppliedFeature,
   AppliedOperation,
   AppliedResource,
+  ContainerIntegrationContext,
   FeatureContainer,
   FeatureDeclaration,
   FeatureOperation,
@@ -472,7 +473,7 @@ export class IntegrationInstaller {
       feature,
       preparedDependencies.resolvedDependencies,
     );
-    const featureContext = { ...context, resolvedDependencies };
+    const featureContext = this.buildFeatureContext(context, feature, resolvedDependencies);
 
     await this.cleanupRecordedLegacyInstallations(feature, installedFeature, featureContext);
 
@@ -495,6 +496,21 @@ export class IntegrationInstaller {
     }
 
     return { dependencies, resources, operations };
+  }
+
+  private buildFeatureContext<TOptions>(
+    context: IntegrationContext,
+    feature: FeatureDeclaration<TOptions>,
+    resolvedDependencies: ReadonlyMap<string, InstalledDependency>,
+  ): IntegrationContext {
+    if (!isFeatureContainer(feature)) {
+      return { ...context, resolvedDependencies };
+    }
+    return {
+      ...context,
+      resolvedDependencies,
+      activeSubfeatures: feature.subfeatures,
+    } as ContainerIntegrationContext;
   }
 
   private async cleanupRecordedLegacyInstallations<TOptions>(

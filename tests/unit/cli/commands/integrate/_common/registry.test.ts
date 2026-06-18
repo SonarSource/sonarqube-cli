@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type {
+  ContainerIntegrationContext,
   FeatureContainer,
   FeatureDeclaration,
   IntegrationContext,
@@ -329,6 +330,39 @@ describe('declarative integration framework', () => {
     expect(
       (withSca[0] as FeatureContainer<{ enableSca?: boolean }>).subfeatures.map((s) => s.id),
     ).toEqual(['mandatory', 'optional']);
+  });
+
+  it('populates activeSubfeatures in context for container operations', async () => {
+    let capturedSubfeatures: ContainerIntegrationContext['activeSubfeatures'] | undefined;
+    const container: FeatureContainer<{ enableSca?: boolean }> = {
+      id: 'container',
+      displayName: 'Container',
+      subfeatures: [
+        { id: 'mandatory', displayName: 'Mandatory', shouldInstall: () => install() },
+        {
+          id: 'optional',
+          displayName: 'Optional',
+          shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
+        },
+      ],
+      operations: [
+        {
+          id: 'capture-op',
+          apply: (ctx) => {
+            capturedSubfeatures = (ctx as ContainerIntegrationContext).activeSubfeatures;
+          },
+        },
+      ],
+    };
+    const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
+    const state = getDefaultState('test');
+
+    const filteredContainer = { ...container, subfeatures: [container.subfeatures[0]] };
+    await installer.applyAndRecordFeatures(state, integration, [
+      { feature: filteredContainer, targetRoot: tempDir, scope: 'project' },
+    ]);
+
+    expect(capturedSubfeatures?.map((s) => s.id)).toEqual(['mandatory']);
   });
 
   it('records active subfeatures nested under the container feature in state', async () => {

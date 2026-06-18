@@ -42,6 +42,10 @@ export interface IntegrationContext {
   resolvedDependencies: ReadonlyMap<string, InstalledDependency>;
 }
 
+export interface ContainerIntegrationContext extends IntegrationContext {
+  activeSubfeatures: readonly SubfeatureDeclaration[];
+}
+
 export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   options: TOptions;
   targetRoot: string;
