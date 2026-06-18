@@ -30,7 +30,7 @@ import {
   CLI_COMMAND,
 } from '../../../../lib/config-constants';
 import { getMcpConfig } from '../../../../lib/mcp/mcp-helper';
-import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
 import {
@@ -134,8 +134,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
           displayName: 'Antigravity MCP configuration',
           targetPath: () => ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
           defaultValue: {},
-          patch: (document, context) =>
-            upsertJsonMcpServer(document, getDesiredAntigravityMcpConfig(context)),
+          patch: (document) =>
+            upsertJsonMcpServer(document, getMcpConfig(CLI_COMMAND, { withFsMount: false })),
           removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],
@@ -187,18 +187,5 @@ function resolveAntigravitySkillPath(context: IntegrationContext): string {
     'skills',
     'sonar-context-augmentation',
     'SKILL.md',
-  );
-}
-
-function getDesiredAntigravityMcpConfig(context: IntegrationContext) {
-  return getMcpConfig(
-    CLI_COMMAND,
-    context.scope === 'global'
-      ? { withFsMount: false }
-      : {
-          withFsMount: true,
-          projectRoot: context.targetRoot,
-          projectKey: getOptionalStringAttr(context, 'projectKey'),
-        },
   );
 }

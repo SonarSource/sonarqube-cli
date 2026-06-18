@@ -98,6 +98,7 @@ describe('integrate antigravity', () => {
         };
         expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
         expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
+        expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
         expect(result.stdout + result.stderr).toContain('user-level MCP configuration');
         expect(findAntigravityFeature(harness, 'mcp-server')).toBeDefined();
       },
@@ -203,6 +204,7 @@ describe('integrate antigravity', () => {
         };
         expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
         expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
+        expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
         expect(findAntigravityFeature(harness, 'mcp-server', 'global')).toBeDefined();
       },
       { timeout: 30000 },
@@ -581,9 +583,9 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      'global MCP omits --project when no project key is resolved',
+      'omits --project even when integrate supplies a project key',
       async () => {
-        await harness.run('integrate antigravity -g --non-interactive');
+        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`);
 
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
           mcpServers?: { sonarqube?: { args?: string[] } };
@@ -591,12 +593,13 @@ describe('integrate antigravity', () => {
         const args = mcp.mcpServers?.sonarqube?.args ?? [];
         expect(args.slice(0, 2)).toEqual(['run', 'mcp']);
         expect(args).not.toContain('--project');
+        expect(args).not.toContain(TEST_PROJECT);
       },
       { timeout: 30000 },
     );
 
     it(
-      'overwrites sonarqube MCP when bound to a different project',
+      'replaces a stale sonarqube MCP entry that had --project',
       async () => {
         harness.userHome.writeFile(
           join('.gemini', 'config', 'mcp_config.json'),
@@ -619,7 +622,7 @@ describe('integrate antigravity', () => {
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
           mcpServers?: { sonarqube?: { args?: string[] } };
         };
-        expect(mcp.mcpServers?.sonarqube?.args).toContain('proj-b');
+        expect(mcp.mcpServers?.sonarqube?.args).toEqual(['run', 'mcp']);
       },
       { timeout: 30000 },
     );
