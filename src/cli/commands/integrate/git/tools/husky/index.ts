@@ -91,6 +91,7 @@ function createHuskyFeature(
     return {
       ...base,
       subfeatures: [createSecretsSubfeature(), createDepRisksSubfeature()],
+      defaultInstallSubfeatureIds: ['pre-commit-secrets'],
     } satisfies FeatureContainer<IntegrateGitOptions>;
   }
 

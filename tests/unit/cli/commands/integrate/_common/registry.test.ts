@@ -348,6 +348,7 @@ describe('declarative integration framework', () => {
           shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
         },
       ],
+      defaultInstallSubfeatureIds: [],
       operations: [
         {
           id: 'capture-op',
@@ -391,6 +392,7 @@ describe('declarative integration framework', () => {
           shouldInstall: () => askUser('Enable other?'),
         },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
     queueMockResponse(true); // accept 'opted-in'
@@ -425,6 +427,7 @@ describe('declarative integration framework', () => {
           shouldInstall: () => askUser('Enable it?'),
         },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
     queueMockResponse(null); // Ctrl+C
