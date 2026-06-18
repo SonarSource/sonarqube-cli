@@ -27,11 +27,6 @@ jobs:
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
-      PACKAGE_VERSION: ${{ steps.project_version.outputs.PACKAGE_VERSION }}
-      ARTIFACT_LINUX: ${{ steps.project_version.outputs.ARTIFACT_LINUX }}
-      ARTIFACT_LINUX_ARM64: ${{ steps.project_version.outputs.ARTIFACT_LINUX_ARM64 }}
-      ARTIFACT_MACOS: ${{ steps.project_version.outputs.ARTIFACT_MACOS }}
-      ARTIFACT_WINDOWS: ${{ steps.project_version.outputs.ARTIFACT_WINDOWS }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -49,13 +44,8 @@ jobs:
         env:
           BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
         run: |
-          PACKAGE_VERSION=$(bun build-scripts/set-build-number.ts "${BUILD_NUMBER}")
-          echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
-          echo "PROJECT_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
-          echo "ARTIFACT_LINUX=sonarqube-cli-${PACKAGE_VERSION}-linux-x86-64.bin" >> $GITHUB_OUTPUT
-          echo "ARTIFACT_LINUX_ARM64=sonarqube-cli-${PACKAGE_VERSION}-linux-arm64.bin" >> $GITHUB_OUTPUT
-          echo "ARTIFACT_MACOS=sonarqube-cli-${PACKAGE_VERSION}-macos-arm64.bin" >> $GITHUB_OUTPUT
-          echo "ARTIFACT_WINDOWS=sonarqube-cli-${PACKAGE_VERSION}-windows-x86-64.exe" >> $GITHUB_OUTPUT
+          PROJECT_VERSION=$(bun build-scripts/set-build-number.ts "${BUILD_NUMBER}")
+          echo "PROJECT_VERSION=${PROJECT_VERSION}" >> $GITHUB_OUTPUT
 
   build-binaries:
     name: Build All Binaries
@@ -86,21 +76,46 @@ jobs:
         run: bun run fetch:signatures
 
       - name: Cross-compile all platform binaries
+        shell: bash
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
         run: |
-          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }} --target bun-linux-x64
-          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_LINUX_ARM64 }} --target bun-linux-arm64
-          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }} --target bun-darwin-arm64
-          bun build src/index.ts --compile --outfile dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }} --target bun-windows-x64
+          set -euo pipefail
+
+          build_binary() {
+            local distribution="$1"
+            local target="$2"
+            local classifier="$3"
+            local extension="$4"
+            local filename
+
+            if [ "$distribution" = "standalone" ]; then
+              filename="sonarqube-cli-${PROJECT_VERSION}-${classifier}.${extension}"
+            else
+              filename="sonarqube-cli-${PROJECT_VERSION}-${distribution}-${classifier}.${extension}"
+            fi
+
+            SONARQUBE_CLI_DISTRIBUTION="$distribution" SONARQUBE_CLI_TARGET="$target" SONARQUBE_CLI_OUTFILE="dist/${filename}" bun build-scripts/build-binary.ts
+          }
+
+          for distribution in standalone homebrew; do
+            build_binary "$distribution" bun-linux-x64 linux-x86-64 bin
+            build_binary "$distribution" bun-linux-arm64 linux-arm64 bin
+            build_binary "$distribution" bun-darwin-arm64 macos-arm64 bin
+            build_binary "$distribution" bun-windows-x64 windows-x86-64 exe
+          done
 
       - name: GPG-sign all binaries
+        shell: bash
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
         run: |
-          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }}
-          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_LINUX_ARM64 }}
-          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
-          bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }}
+          set -euo pipefail
+
+          while IFS= read -r -d '' binary; do
+            bun build-scripts/sign.ts "$binary"
+          done < <(find dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \) -print0)
 
       - name: Upload all binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -109,7 +124,7 @@ jobs:
           path: dist/
 
   sign-macos:
-    name: Sign and Notarize macOS Binary
+    name: Sign and Notarize macOS Binaries
     runs-on: macos-latest-xlarge
     needs: [prepare, build-binaries]
     if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
@@ -146,7 +161,8 @@ jobs:
           artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
-      - name: Code-sign and notarize macOS binary
+      - name: Code-sign and notarize macOS binaries
+        shell: bash
         env:
           CERTIFICATE: ${{ fromJSON(steps.secrets.outputs.vault).CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).CSC_KEY_PASSWORD }}
@@ -154,6 +170,8 @@ jobs:
           APPLE_ID: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ fromJSON(steps.secrets.outputs.vault).APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
+          set -euo pipefail
+
           echo "$CERTIFICATE" | base64 --decode > /tmp/certificate.p12
           security create-keychain -p "" build.keychain
           security default-keychain -s build.keychain
@@ -162,21 +180,21 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
           rm /tmp/certificate.p12
 
-          codesign \
-            --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" \
-            --identifier sonarqube-cli \
-            --options runtime \
-            --timestamp \
-            dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
-          codesign --verify --verbose dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+          sign_macos_binary() {
+            local binary="$1"
+            local archive="/tmp/$(basename "$binary").zip"
 
-          zip /tmp/notarize.zip dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
-          xcrun notarytool submit /tmp/notarize.zip \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-          rm /tmp/notarize.zip
+            codesign --sign "Developer ID Application: SonarSource SA ($APPLE_TEAM_ID)" --identifier sonarqube-cli --options runtime --timestamp "$binary"
+            codesign --verify --verbose "$binary"
+
+            zip "$archive" "$binary"
+            xcrun notarytool submit "$archive" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            rm "$archive"
+          }
+
+          while IFS= read -r -d '' binary; do
+            sign_macos_binary "$binary"
+          done < <(find dist -maxdepth 1 -type f -name '*-macos-arm64.bin' -print0)
 
       - name: Clean up build keychain
         if: always()
@@ -184,19 +202,25 @@ jobs:
           security default-keychain -s ~/Library/Keychains/login.keychain-db 2>/dev/null || true
           security delete-keychain build.keychain 2>/dev/null || true
 
-      - name: Re-GPG-sign macOS binary
+      - name: Re-GPG-sign macOS binaries
+        shell: bash
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-        run: bun build-scripts/sign.ts dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
+        run: |
+          set -euo pipefail
 
-      - name: Upload signed macOS binary
+          while IFS= read -r -d '' binary; do
+            bun build-scripts/sign.ts "$binary"
+          done < <(find dist -maxdepth 1 -type f -name '*-macos-arm64.bin' -print0)
+
+      - name: Upload signed macOS binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: binary-macos-signed
+          name: binaries-macos-signed
           path: |
-            dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}
-            dist/${{ needs.prepare.outputs.ARTIFACT_MACOS }}.asc
+            dist/*-macos-arm64.bin
+            dist/*-macos-arm64.bin.asc
 
   publish-binaries:
     name: Publish Binaries to Artifactory
@@ -237,11 +261,11 @@ jobs:
           name: binaries
           path: dist/
 
-      - name: Download signed macOS binary
+      - name: Download signed macOS binaries
         if: needs.sign-macos.result == 'success'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: binary-macos-signed
+          name: binaries-macos-signed
           path: dist/
 
       - name: Copy user scripts to dist
@@ -260,7 +284,7 @@ jobs:
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
           PROJECT: ${{ github.event.repository.name }}
           BUILD_NUMBER: ${{ needs.prepare.outputs.BUILD_NUMBER }}
-          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:bin:linux-x86-64,org.sonarsource.cli:sonarqube-cli:bin:linux-arm64,org.sonarsource.cli:sonarqube-cli:bin:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64'
+          ARTIFACTS_TO_PUBLISH: 'org.sonarsource.cli:sonarqube-cli:bin:linux-x86-64,org.sonarsource.cli:sonarqube-cli:bin:linux-arm64,org.sonarsource.cli:sonarqube-cli:bin:macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:windows-x86-64,org.sonarsource.cli:sonarqube-cli:bin:homebrew-linux-x86-64,org.sonarsource.cli:sonarqube-cli:bin:homebrew-linux-arm64,org.sonarsource.cli:sonarqube-cli:bin:homebrew-macos-arm64,org.sonarsource.cli:sonarqube-cli:exe:homebrew-windows-x86-64'
         run: |
           jf config add repox \
             --artifactory-url="${ARTIFACTORY_URL}" \
@@ -405,12 +429,18 @@ jobs:
 
       - name: Place platform binary
         shell: bash
+        env:
+          PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
         run: |
+          set -euo pipefail
+
           if [ "${{ matrix.os }}" = "linux" ]; then
-            cp "dist/${{ needs.prepare.outputs.ARTIFACT_LINUX }}" dist/sonarqube-cli
+            artifact="sonarqube-cli-${PROJECT_VERSION}-linux-x86-64.bin"
+            cp "dist/${artifact}" dist/sonarqube-cli
             chmod +x dist/sonarqube-cli
           else
-            cp "dist/${{ needs.prepare.outputs.ARTIFACT_WINDOWS }}" dist/sonarqube-cli.exe
+            artifact="sonarqube-cli-${PROJECT_VERSION}-windows-x86-64.exe"
+            cp "dist/${artifact}" dist/sonarqube-cli.exe
           fi
 
       - name: Setup integration resources

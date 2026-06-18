@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { isFeatureContainer } from './selection';
 import type { IntegrationDeclaration } from './types';
 
 export class IntegrationRegistry {
@@ -67,6 +68,15 @@ export class IntegrationRegistry {
       }
       for (const operation of feature.operations ?? []) {
         this.ensureNonEmptyId(operation.id, 'Operation');
+      }
+      if (isFeatureContainer(feature)) {
+        this.ensureUnique(
+          feature.subfeatures.map((sub) => sub.id),
+          `Duplicate subfeature id in container ${declaration.id}.${feature.id}`,
+        );
+        for (const subfeature of feature.subfeatures) {
+          this.ensureNonEmptyId(subfeature.id, 'Subfeature');
+        }
       }
     }
     this.ensureUnique(

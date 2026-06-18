@@ -24,6 +24,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { SQAA_GLOBAL_SKIP_MESSAGE } from '../../../../src/cli/commands/integrate/_common/sqaa-entitlement';
+import { CLI_COMMAND } from '../../../../src/lib/config-constants';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import {
   type AntigravityHooksJson,
@@ -31,6 +33,7 @@ import {
   GLOBAL_HOOK_SCRIPT_PATH,
   GLOBAL_HOOKS_JSON_PATH,
   GLOBAL_INSTRUCTIONS_PATH,
+  GLOBAL_MCP_CONFIG_PATH,
   PROJECT_HOOK_SCRIPT_PATH,
   PROJECT_HOOKS_JSON_PATH,
   PROJECT_INSTRUCTIONS_PATH,
@@ -41,6 +44,7 @@ import {
 } from './antigravity-test-helpers';
 
 const TEST_PROJECT = 'my-project';
+const TEST_ORG = 'my-org';
 
 describe('integrate antigravity', () => {
   let harness: TestHarness;
@@ -87,6 +91,15 @@ describe('integrate antigravity', () => {
 
         const instructions = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(instructions).toContain('# SonarQube secrets scanning for prompts protocol');
+
+        expect(harness.userHome.exists(...GLOBAL_MCP_CONFIG_PATH)).toBe(true);
+        const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
+          mcpServers?: { sonarqube?: { command?: string; args?: string[] } };
+        };
+        expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
+        expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
+        expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
+        expect(findAntigravityFeature(harness, 'mcp-server')).toBeDefined();
       },
       { timeout: 30000 },
     );
@@ -182,6 +195,15 @@ describe('integrate antigravity', () => {
         expect(command.startsWith(IS_WINDOWS ? 'powershell' : 'bash')).toBe(true);
         expect(command.includes(homePathNorm)).toBe(true);
         expect(command).toContain('.gemini/config/sonar/hooks');
+
+        expect(harness.userHome.exists(...GLOBAL_MCP_CONFIG_PATH)).toBe(true);
+        const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
+          mcpServers?: { sonarqube?: { command?: string; args?: string[] } };
+        };
+        expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
+        expect(mcp.mcpServers?.sonarqube?.args?.slice(0, 2)).toEqual(['run', 'mcp']);
+        expect(mcp.mcpServers?.sonarqube?.args ?? []).not.toContain('--project');
+        expect(findAntigravityFeature(harness, 'mcp-server', 'global')).toBeDefined();
       },
       { timeout: 30000 },
     );
@@ -252,7 +274,7 @@ describe('integrate antigravity', () => {
         writeExistingGlobalInstructions(harness);
 
         const result = await harness.run('integrate antigravity --skip-context', {
-          stdinChunks: ['\r', '\r'],
+          stdinChunks: ['\r', '\r', '\r'],
         });
 
         expect(result.exitCode).toBe(0);
@@ -398,6 +420,223 @@ describe('integrate antigravity', () => {
         expect(help).toContain('sonar.projectKey');
       },
       { timeout: 15000 },
+    );
+  });
+
+  describe('SQAA instructions', () => {
+    it(
+      'writes SQAA instructions when the org is entitled and a project key is present',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        const result = await harness.run(
+          `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
+          {
+            extraEnv: {
+              SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+              SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+            },
+          },
+        );
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).toContain('# SonarQube Agentic Analysis protocol');
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+        expect(findAntigravityFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'does not install SQAA instructions when the org has no entitlement',
+      async () => {
+        const result = await harness.run('integrate antigravity --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube Agentic Analysis protocol');
+        expect(findAntigravityFeature(harness, 'sqaa-instructions')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'does not install SQAA instructions without a project key even when entitled',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        const result = await harness.run('integrate antigravity --non-interactive', {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body).not.toContain('# SonarQube Agentic Analysis protocol');
+        expect(findAntigravityFeature(harness, 'sqaa-instructions')).toBeUndefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips SQAA on global install with the consistent notice when entitled',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        const result = await harness.run('integrate antigravity -g --non-interactive', {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+            SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+          },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(findAntigravityFeature(harness, 'sqaa-instructions', 'global')).toBeUndefined();
+        expect(`${result.stdout}\n${result.stderr}`).toContain(SQAA_GLOBAL_SKIP_MESSAGE);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      're-running does not duplicate the SQAA instructions marker block when entitled',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('cloud-token')
+          .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+          .withSqaaEntitlement(TEST_ORG, 'test-uuid-1234')
+          .withProject(TEST_PROJECT)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+        const extraEnv = {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        };
+        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`, {
+          extraEnv,
+        });
+        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`, {
+          extraEnv,
+        });
+
+        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        expect(body.match(/# SonarQube Agentic Analysis protocol/g)?.length).toBe(1);
+      },
+      { timeout: 60000 },
+    );
+  });
+
+  describe('MCP server', () => {
+    it(
+      'preserves unrelated MCP servers on project install',
+      async () => {
+        harness.userHome.writeFile(
+          join('.gemini', 'config', 'mcp_config.json'),
+          JSON.stringify({
+            mcpServers: {
+              other: { command: 'other-mcp', args: [] },
+            },
+          }),
+        );
+
+        await harness.run('integrate antigravity --non-interactive');
+
+        const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
+          mcpServers?: Record<string, { command?: string }>;
+        };
+        expect(mcp.mcpServers?.other?.command).toBe('other-mcp');
+        expect(mcp.mcpServers?.sonarqube?.command).toBe(CLI_COMMAND);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'omits --project even when integrate supplies a project key',
+      async () => {
+        await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`);
+
+        const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
+          mcpServers?: { sonarqube?: { args?: string[] } };
+        };
+        const args = mcp.mcpServers?.sonarqube?.args ?? [];
+        expect(args.slice(0, 2)).toEqual(['run', 'mcp']);
+        expect(args).not.toContain('--project');
+        expect(args).not.toContain(TEST_PROJECT);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'replaces a stale sonarqube MCP entry that had --project',
+      async () => {
+        harness.userHome.writeFile(
+          join('.gemini', 'config', 'mcp_config.json'),
+          JSON.stringify({
+            mcpServers: {
+              sonarqube: {
+                command: CLI_COMMAND,
+                args: ['run', 'mcp', '--project', 'proj-a'],
+              },
+            },
+          }),
+        );
+
+        const result = await harness.run(
+          `integrate antigravity --project proj-b --non-interactive`,
+        );
+
+        expect(result.exitCode).toBe(0);
+
+        const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
+          mcpServers?: { sonarqube?: { args?: string[] } };
+        };
+        expect(mcp.mcpServers?.sonarqube?.args).toEqual(['run', 'mcp']);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'is idempotent on MCP re-run',
+      async () => {
+        await harness.run('integrate antigravity --non-interactive');
+        await harness.run('integrate antigravity --non-interactive');
+
+        const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
+          mcpServers?: Record<string, unknown>;
+        };
+        expect(Object.keys(mcp.mcpServers ?? {})).toEqual(['sonarqube']);
+      },
+      { timeout: 60000 },
     );
   });
 });

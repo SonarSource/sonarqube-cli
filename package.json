@@ -7,7 +7,7 @@
     "sonar": "./dist/index.js"
   },
   "scripts": {
-    "build:binary": "bun build src/index.ts --compile --outfile dist/sonarqube-cli",
+    "build:binary": "bun build-scripts/build-binary.ts",
     "postbuild:binary": "bun build-scripts/codesign-local.ts",
     "dev": "bun run src/index.ts",
     "test:unit": "bun test --parallel ./tests/unit/",
@@ -134,6 +134,9 @@
     "prettier": "^3.8.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0"
+  },
+  "overrides": {
+    "flatted": "3.4.2"
   },
   "lint-staged": {
     "*.ts": [

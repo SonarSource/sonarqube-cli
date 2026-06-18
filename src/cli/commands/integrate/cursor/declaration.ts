@@ -18,14 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
-import { getOptionalStringAttr } from '../_common/attrs';
+import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import { resolveAgentHookCommand } from '../_common/hooks';
+import { buildSqaaSectionBody } from '../_common/instructions-templates';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { jsonPatch } from '../_common/registry';
+import { askUser, jsonPatch, skip, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
 import { removeCursorHook, upsertCursorHook } from './hooks';
@@ -39,9 +43,27 @@ const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const SECRETS_PROMPT_HOOK_FEATURE_ID = 'sonar-secrets-prompt-hook';
 const SONAR_SECRETS_MARKER = 'sonar-secrets';
 const BEFORE_SUBMIT_PROMPT_EVENT = 'beforeSubmitPrompt';
+const RULES_DIR = 'rules';
+const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
+// Shared cross-tool skills directory. Cursor reads `.agents/skills` (same as
+// Codex and Antigravity), so the CAG skill is written there rather than to a
+// Cursor-specific `.cursor/skills` to avoid a duplicate skill of the same name.
+const AGENTS_SKILLS_DIR = join('.agents', 'skills');
+const CAG_SKILL_NAME = 'sonar-context-augmentation';
+// Stable string always present in the rendered rule body — used by the
+// wholeFile remover so teardown only deletes the file we manage.
+const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
 
 export interface CursorIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
+  /**
+   * Write the SonarQube Agentic Analysis rule (`.cursor/rules`) instructing the
+   * agent to run `sonar analyze agentic` after edits. Cursor's `afterFileEdit`
+   * hook cannot inject analysis results back into the conversation, so SQAA is
+   * delivered as an always-applied rule rather than a hook (project scope).
+   */
+  installSqaaInstructions?: boolean;
+  installContextAugmentation?: boolean;
 }
 
 function resolveCursorMcpConfigPath(context: IntegrationContext): string {
@@ -59,6 +81,29 @@ function getDesiredCursorMcpConfig(context: IntegrationContext) {
           projectKey: getOptionalStringAttr(context, 'projectKey'),
         },
   );
+}
+
+function resolveCursorSqaaRulePath(context: IntegrationContext): string {
+  return join(context.targetRoot, CURSOR_CONFIG_DIR, RULES_DIR, SQAA_RULE_FILE);
+}
+
+/**
+ * Render the SonarQube Agentic Analysis rule as a Cursor `.mdc` file. The
+ * `alwaysApply: true` front-matter makes Cursor inject the protocol into every
+ * session without the user attaching it manually.
+ */
+function buildCursorSqaaRule(context: IntegrationContext): string {
+  const projectKey = getRequiredStringAttr(context, 'projectKey', cursorIntegration.displayName);
+  return `---\nalwaysApply: true\n---\n\n${buildSqaaSectionBody(projectKey)}`;
+}
+
+// Context Augmentation is delivered as a native, on-demand skill (the same
+// rendered SKILL.md the other agents receive), written to the shared
+// `.agents/skills` directory that Cursor auto-discovers — not an always-applied
+// rule, and not a Cursor-private `.cursor/skills` copy that would duplicate the
+// skill Codex/Antigravity already install there.
+function resolveCursorCagSkillPath(context: IntegrationContext): string {
+  return join(context.targetRoot, AGENTS_SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
 }
 
 export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions> = {
@@ -111,6 +156,22 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
       },
     }),
     {
+      id: 'sqaa-instructions',
+      displayName: 'SonarQube Agentic Analysis instructions',
+      shouldInstall: ({ options }) =>
+        options.installSqaaInstructions === true ? askUser() : skip(),
+      scope: 'project',
+      resources: [
+        wholeFile({
+          id: 'sqaa-instructions-rule',
+          displayName: 'Cursor SonarQube Agentic Analysis rule',
+          targetPath: resolveCursorSqaaRulePath,
+          content: buildCursorSqaaRule,
+          managedMarker: SQAA_RULE_MARKER,
+        }),
+      ],
+    },
+    {
       id: 'mcp-server',
       displayName: 'MCP server',
       resources: [
@@ -125,5 +186,9 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
         }),
       ],
     },
+    createContextAugmentationFeature<CursorIntegrationOptions>({
+      agentDisplayName: 'Cursor',
+      targetPath: resolveCursorCagSkillPath,
+    }),
   ],
 };

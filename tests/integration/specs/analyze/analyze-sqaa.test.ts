@@ -1769,6 +1769,37 @@ describe('analyze agentic — --format json', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'single oversized file exits 1 with structured 413 message (--file)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withSqaaPayloadLimit({ maxRequestSize: 64 })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('large.ts', 'x'.repeat(256));
+
+      const result = await harness.run('analyze agentic --file large.ts');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Request payload too large');
+      expect(output).toContain('→ Reduce file sizes');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+    },
+    { timeout: 15000 },
+  );
 });
 
 describe('analyze agentic — running from a subdirectory', () => {

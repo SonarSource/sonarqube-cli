@@ -451,7 +451,7 @@ describe('SonarQubeClient', () => {
       fetchSpy = mockFetch({ errors: [{ msg: 'Not found' }] }, false, 404);
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.getProjectSettings('missing')).rejects.toThrow(
-        'Project missing not found',
+        "Project 'missing' not found",
       );
     });
 
@@ -1106,11 +1106,21 @@ describe('SonarQubeClient', () => {
       expect(messages.some((m) => m.includes('request method:'))).toBe(false);
     });
 
-    it('throws on non-ok POST response', () => {
+    it('throws BadRequestError on non-ok POST response', () => {
       fetchSpy = mockFetch({ message: 'Bad request' }, false, 400);
       expect(
         client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
-      ).rejects.toThrow('400');
+      ).rejects.toMatchObject({ name: 'BadRequestError', message: 'Bad request' });
+    });
+
+    it('preserves raw body for non-SQAA POST 400 responses', () => {
+      fetchSpy = mockFetch({ errors: [{ msg: 'Transition failed' }] }, false, 400);
+      expect(
+        client.genericRequest('POST', '/api/issues/do_transition', '{"k":"v"}', 'form'),
+      ).rejects.toMatchObject({
+        name: 'BadRequestError',
+        message: expect.stringContaining('Transition failed'),
+      });
     });
 
     it('throws access denied on GET 403', () => {
@@ -1231,10 +1241,37 @@ describe('SonarQubeClient', () => {
       expect(result.issues).toHaveLength(1);
     });
 
-    it('throws on non-OK response', () => {
-      fetchSpy = mockFetch({ message: 'Invalid request body' }, false, 400);
+    it('throws BadRequestError on structured 400 response', () => {
+      fetchSpy = mockFetch(
+        { message: 'Invalid request body', code: 'INVALID_FILE_PATH' },
+        false,
+        400,
+      );
 
-      expect(client.createAnalysis(singleFileRequest)).rejects.toThrow('400');
+      expect(client.createAnalysis(singleFileRequest)).rejects.toMatchObject({
+        name: 'BadRequestError',
+        message: 'Invalid request body',
+        code: 'INVALID_FILE_PATH',
+      });
+    });
+
+    it('throws RequestPayloadTooLargeError on structured 413 response', () => {
+      fetchSpy = mockFetch(
+        {
+          message: 'Request payload too large',
+          code: 'REQUEST_TOO_LARGE',
+          meta: { maxRequestSize: 512_000 },
+        },
+        false,
+        413,
+      );
+
+      expect(client.createAnalysis(singleFileRequest)).rejects.toMatchObject({
+        name: 'RequestPayloadTooLargeError',
+        message: 'Request payload too large',
+        code: 'REQUEST_TOO_LARGE',
+        meta: { maxRequestSize: 512_000 },
+      });
     });
   });
 

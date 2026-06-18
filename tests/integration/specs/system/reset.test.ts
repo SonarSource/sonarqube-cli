@@ -42,6 +42,10 @@ import { generateKeychainAccount } from '../../../../src/lib/keychain';
 import { hookScriptName, TestHarness } from '../../harness';
 import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
+import {
+  PROJECT_HOOK_SCRIPT_PATH,
+  PROJECT_INSTRUCTIONS_PATH,
+} from '../integrate/antigravity-test-helpers';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
 const CURSOR_PROMPT_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
@@ -827,6 +831,67 @@ describe('system reset --force', () => {
       const commands = hooks.hooks?.beforeSubmitPrompt?.map((entry) => entry.command);
       expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
       expect(commands?.some((command) => command?.includes('sonar-secrets'))).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'undoes an Antigravity project integration and preserves unrelated hooks and MCP servers',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(server.baseUrl(), 'tok');
+
+      harness.cwd.writeFile(
+        '.agents/hooks.json',
+        JSON.stringify({
+          'other-hook': {
+            PreToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }],
+          },
+        }),
+      );
+      harness.userHome.writeFile(
+        join('.gemini', 'config', 'mcp_config.json'),
+        JSON.stringify({
+          mcpServers: {
+            other: { command: 'other-mcp', args: [] },
+          },
+        }),
+      );
+
+      const integrateResult = await harness.run(
+        'integrate antigravity --project my-project --non-interactive',
+      );
+
+      expect(integrateResult.exitCode).toBe(0);
+      expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
+
+      const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
+      harness.state().withRawState(stateAfterIntegrate);
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+      expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
+      expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
+
+      const hooks = harness.cwd.file('.agents', 'hooks.json').asJson() as {
+        'sonar-secrets'?: unknown;
+        'other-hook'?: unknown;
+      };
+      expect(hooks['other-hook']).toBeDefined();
+      expect(hooks['sonar-secrets']).toBeUndefined();
+
+      const mcp = harness.userHome.file('.gemini', 'config', 'mcp_config.json').asJson() as {
+        mcpServers?: Record<string, unknown>;
+      };
+      expect(mcp.mcpServers?.other).toBeDefined();
+      expect(mcp.mcpServers?.sonarqube).toBeUndefined();
+
+      expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).not.toContain(
+        '# SonarQube secrets scanning for prompts protocol',
+      );
     },
     { timeout: 30000 },
   );

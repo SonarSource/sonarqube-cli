@@ -21,16 +21,12 @@
 // Integrate command — setup SonarQube integration for Cursor.
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { warn } from '../../../../ui';
-import {
-  displayAgentIntegratePrelude,
-  resolveIntegrateInstallTarget,
-} from '../_common/agent-integrate-prelude';
-import { installIntegration } from '../_common/registry';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude';
+import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
+import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { supportedIntegrations } from '../index.js';
-import { CURSOR_INTEGRATION_ID } from './declaration';
+import { CURSOR_INTEGRATION_ID, type CursorIntegrationOptions } from './declaration';
 
 export async function integrateCursor(
   options: IntegrateAgentOptions,
@@ -44,27 +40,23 @@ export async function integrateCursor(
     );
   }
 
-  const { installRoot, installScope } = resolveIntegrateInstallTarget(
-    ctx.isGlobal,
-    ctx.project.rootDir,
-  );
-
-  await installIntegration({
-    registry: supportedIntegrations,
-    integrationId: CURSOR_INTEGRATION_ID,
-    options,
-    targetRoot: installRoot,
-    scope: installScope,
-    auth,
-    nonInteractive: options.nonInteractive,
-    attrs: buildAttrs({ projectKey: ctx.projectKey }),
+  // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing
+  // messaging (promotion when not entitled, "not supported with --global" on an
+  // entitled global install); its result decides whether the always-applied
+  // SonarQube Agentic Analysis rule is written. Context Augmentation is resolved
+  // inside finalizeAgentInstall (the install tail shared with the other agents).
+  const sqaaEligible = await resolveSqaaSetup({
+    serverURL: ctx.serverUrl,
+    token: ctx.token,
+    organization: ctx.organization,
+    isGlobal: ctx.isGlobal,
   });
-}
 
-function buildAttrs(args: {
-  projectKey: string | undefined;
-}): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: args.projectKey ?? null,
-  };
+  await finalizeAgentInstall<CursorIntegrationOptions>({
+    integrationId: CURSOR_INTEGRATION_ID,
+    context: ctx,
+    options,
+    auth,
+    featureOptions: { installSqaaInstructions: sqaaEligible && Boolean(ctx.projectKey) },
+  });
 }

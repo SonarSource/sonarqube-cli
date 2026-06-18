@@ -20,21 +20,20 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { resolveAntigravityInstallTarget } from '../../../../../../src/cli/commands/integrate/antigravity/install-target';
-import { ANTIGRAVITY_GLOBAL_CONFIG_DIR } from '../../../../../../src/lib/config-constants';
+import { resolveDistribution } from '../../../src/lib/distribution';
 
-describe('resolveAntigravityInstallTarget', () => {
-  it('uses the project root for project-scoped installs', () => {
-    expect(resolveAntigravityInstallTarget(false, '/repo')).toEqual({
-      installRoot: '/repo',
-      installScope: 'project',
-    });
+describe('distribution', () => {
+  it('defaults to standalone when no distribution is provided', () => {
+    expect(resolveDistribution(undefined)).toBe('standalone');
   });
 
-  it('uses the global Antigravity config directory for --global installs', () => {
-    expect(resolveAntigravityInstallTarget(true, '/repo')).toEqual({
-      installRoot: ANTIGRAVITY_GLOBAL_CONFIG_DIR,
-      installScope: 'global',
-    });
+  it('returns the configured distribution for known values', () => {
+    expect(resolveDistribution('homebrew')).toBe('homebrew');
+  });
+
+  it('throws for unknown values', () => {
+    expect(() => resolveDistribution('custom-channel')).toThrow(
+      "Unknown distribution 'custom-channel'. Expected one of: standalone, homebrew.",
+    );
   });
 });

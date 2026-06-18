@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '../../../../../src/cli/commands/_common/error.js';
 import {
   distributeChunkResponse,
   runAnalyses,
@@ -28,6 +29,8 @@ import {
 import * as sqaaApi from '../../../../../src/cli/commands/analyze/sqaa-api';
 import type { CloudAuth } from '../../../../../src/cli/commands/analyze/sqaa-auth';
 import type { SqaaChunkFile } from '../../../../../src/cli/commands/analyze/sqaa-chunking';
+import { payloadTooLargeCommandError } from '../../../../../src/cli/commands/analyze/sqaa-errors.js';
+import { RequestPayloadTooLargeError } from '../../../../../src/sonarqube/errors.js';
 import { SqaaProgress } from '../../../../../src/ui/components/sqaa-progress.js';
 
 describe('distributeChunkResponse', () => {
@@ -63,24 +66,58 @@ describe('shouldContinueAfterChunk', () => {
     expect(
       shouldContinueAfterChunk(
         [{ response: { issues: [], errors: null }, files: [] }],
-        [],
         [{ files: [], error: new Error('fail') }],
       ),
     ).toBe(true);
   });
 
-  it('stops when the entire chunk failed via group errors only', () => {
-    expect(shouldContinueAfterChunk([], [], [{ files: [], error: new Error('fail') }])).toBe(false);
+  it('continues when validation failures are recorded alongside successes', () => {
+    expect(
+      shouldContinueAfterChunk(
+        [{ response: { issues: [], errors: null }, files: [] }],
+        [{ files: [], error: new CommandFailedError('invalid path') }],
+      ),
+    ).toBe(true);
   });
 
-  it('continues when only 413 per-file failures were recorded', () => {
+  it('stops when the entire chunk failed via non-413 group errors only', () => {
+    expect(shouldContinueAfterChunk([], [{ files: [], error: new Error('fail') }])).toBe(false);
+  });
+
+  it('continues when only 413 per-file failures were recorded in groupErrors', () => {
     expect(
       shouldContinueAfterChunk(
         [],
-        [{ absolutePath: '/repo/a.ts', relativePath: 'a.ts', content: 'x' }],
-        [],
+        [
+          {
+            files: [{ absolutePath: '/repo/a.ts', relativePath: 'a.ts', content: 'x' }],
+            error: payloadTooLargeCommandError(
+              new RequestPayloadTooLargeError('Request payload too large', 'REQUEST_TOO_LARGE'),
+            ),
+          },
+        ],
       ),
     ).toBe(true);
+  });
+
+  it('stops when groupErrors mix 413 and non-413 failures', () => {
+    expect(
+      shouldContinueAfterChunk(
+        [],
+        [
+          {
+            files: [{ absolutePath: '/repo/a.ts', relativePath: 'a.ts', content: 'x' }],
+            error: payloadTooLargeCommandError(
+              new RequestPayloadTooLargeError('Request payload too large', 'REQUEST_TOO_LARGE'),
+            ),
+          },
+          {
+            files: [{ absolutePath: '/repo/b.ts', relativePath: 'b.ts', content: 'x' }],
+            error: new Error('network down'),
+          },
+        ],
+      ),
+    ).toBe(false);
   });
 });
 
@@ -120,8 +157,14 @@ describe('runAnalyses partial 413', () => {
           files: [c],
         },
       ],
-      failedFiles: [b],
-      groupErrors: [],
+      groupErrors: [
+        {
+          files: [b],
+          error: payloadTooLargeCommandError(
+            new RequestPayloadTooLargeError('Payload too large', 'REQUEST_TOO_LARGE'),
+          ),
+        },
+      ],
     });
 
     const files = ['/repo/a.ts', '/repo/b.ts', '/repo/c.ts'];
@@ -152,7 +195,6 @@ describe('runAnalyses partial 413', () => {
     });
     fetchSpy.mockResolvedValue({
       parts: [{ response: { issues: [], errors: null }, files: [ok] }],
-      failedFiles: [],
       groupErrors: [],
     });
 

@@ -24,7 +24,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '../auth-resolver';
-import { CLI_COMMAND } from '../config-constants';
+import { ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON } from '../config-constants';
 import { normalizePath } from '../fs-utils';
 import type { ContainerRuntime } from '../tool-detector';
 
@@ -141,10 +141,15 @@ export function getMcpContainerCommand(
 export async function writeMcpServerEntry(filePath: string, serverConfig: object): Promise<void> {
   let existing: Record<string, unknown> = {};
   if (existsSync(filePath)) {
-    try {
-      existing = JSON.parse(await readFile(filePath, 'utf-8')) as Record<string, unknown>;
-    } catch {
-      throw new Error(`${filePath} contains invalid JSON. Please fix or delete it and re-run.`);
+    const raw = await readFile(filePath, 'utf-8');
+    if (raw.trim().length === 0) {
+      existing = {};
+    } else {
+      try {
+        existing = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        throw new Error(`'${filePath}' contains invalid JSON. Please fix or delete it and re-run.`);
+      }
     }
   }
 
@@ -174,6 +179,8 @@ export function getMcpConfigFilePath(
     return isGlobal
       ? join(homedir(), '.cursor', 'mcp.json')
       : join(projectRoot, '.cursor', 'mcp.json');
+  } else if (agent === 'antigravity') {
+    return ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON;
   }
   throw new Error(`Unsupported agent: ${agent}`);
 }
@@ -186,7 +193,7 @@ export async function setupMcpServerForAgent(
 ): Promise<void> {
   const targetFile = getMcpConfigFilePath(agent, isGlobal, projectRoot);
   const serverConfig = getMcpConfig(
-    CLI_COMMAND,
+    normalizePath(process.execPath),
     isGlobal ? { withFsMount: false } : { withFsMount: true, projectRoot, projectKey },
   );
 

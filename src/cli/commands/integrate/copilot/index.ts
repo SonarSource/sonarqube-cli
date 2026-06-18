@@ -19,19 +19,10 @@
  */
 
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
-import type { IntegrationStateAttribute } from '../../../../lib/state';
-import {
-  displayAgentIntegratePrelude,
-  resolveIntegrateInstallTarget,
-} from '../_common/agent-integrate-prelude';
-import {
-  buildContextAugmentationAttrs,
-  resolveContextAugmentationSetup,
-} from '../_common/context-augmentation';
-import { installIntegration } from '../_common/registry';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude';
+import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude';
 import { resolveSqaaSetup } from '../_common/sqaa-entitlement';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { supportedIntegrations } from '../index.js';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 
@@ -41,62 +32,23 @@ export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAge
   // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing
   // messaging: it surfaces the promotion message when the org is not entitled
   // and the "not supported with --global" notice on an entitled global install.
-  // We use the result to decide whether to bake in a project key.
   const entitled = await resolveSqaaSetup({
     serverURL: ctx.serverUrl,
     token: ctx.token,
     organization: ctx.organization,
     isGlobal: ctx.isGlobal,
   });
-  const sqaaProjectKey = entitled && ctx.projectKey ? ctx.projectKey : undefined;
-
-  const { installRoot: targetRoot, installScope: scope } = resolveIntegrateInstallTarget(
-    ctx.isGlobal,
-    ctx.project.rootDir,
-  );
   const existingGlobalHookPath = ctx.isGlobal ? undefined : await detectGlobalSecretsHook();
-  const globalSecretsHookExists = existingGlobalHookPath !== undefined;
 
-  const contextAugmentation = options.skipContext
-    ? null
-    : await resolveContextAugmentationSetup({
-        auth,
-        projectKey: ctx.projectKey,
-        isGlobal: ctx.isGlobal,
-      });
-  const integrationOptions: CopilotIntegrationOptions = {
-    ...options,
-    projectRoot: ctx.project.rootDir,
-    globalSecretsHookExists,
-    installSqaaInstructions: sqaaProjectKey !== undefined,
-    installContextAugmentation: contextAugmentation !== null,
-  };
-
-  await installIntegration({
-    registry: supportedIntegrations,
+  await finalizeAgentInstall<CopilotIntegrationOptions>({
     integrationId: COPILOT_INTEGRATION_ID,
-    options: integrationOptions,
-    targetRoot,
-    scope,
+    context: ctx,
+    options,
     auth,
-    nonInteractive: options.nonInteractive,
-    attrs: {
-      ...buildIntegrationAttrs(ctx.projectKey),
-      ...(contextAugmentation
-        ? buildContextAugmentationAttrs(
-            ctx.serverUrl,
-            ctx.organization,
-            contextAugmentation.scaEnabled,
-          )
-        : {}),
+    featureOptions: {
+      projectRoot: ctx.project.rootDir,
+      globalSecretsHookExists: existingGlobalHookPath !== undefined,
+      installSqaaInstructions: entitled && Boolean(ctx.projectKey),
     },
   });
-}
-
-function buildIntegrationAttrs(
-  projectKey: string | undefined,
-): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: projectKey ?? null,
-  };
 }

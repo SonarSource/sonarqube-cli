@@ -26,6 +26,7 @@ import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import logger from '../lib/logger';
 import { print } from '../ui';
 import {
+  BadRequestError,
   RateLimitError,
   RequestPayloadTooLargeError,
   type RequestPayloadTooLargeMeta,
@@ -38,6 +39,7 @@ const GET_REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 const POST_REQUEST_TIMEOUT_MS = 60000; // 60 seconds for analysis
 /** Best-effort token revocation should fail fast when the server is unreachable. */
 const REVOKE_USER_TOKEN_TIMEOUT_MS = 10_000;
+const HTTP_STATUS_BAD_REQUEST = 400;
 const HTTP_STATUS_FORBIDDEN = 403;
 const HTTP_STATUS_NOT_FOUND = 404;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
@@ -89,6 +91,9 @@ export class SonarQubeClient {
     }
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
       throw new ServiceUnavailableError();
+    }
+    if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
+      throw await parseBadRequestError(response);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       throw await parseRequestPayloadTooLargeError(response);
@@ -172,7 +177,10 @@ export class SonarQubeClient {
 
     await this.raiseForStatus(result.response, 'GET');
 
-    return result.value!;
+    if (result.value === undefined) {
+      throw new Error('SonarQube API error: empty response body');
+    }
+    return result.value;
   }
 
   // false positive
@@ -469,7 +477,7 @@ export class SonarQubeClient {
     });
 
     if (result.response.status === HTTP_STATUS_NOT_FOUND) {
-      throw new Error(`Project ${projectKey} not found`);
+      throw new Error(`Project '${projectKey}' not found`);
     }
 
     await this.raiseForStatus(result.response, 'GET');
@@ -658,26 +666,55 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
   return headers;
 }
 
+interface StructuredErrorBody {
+  message?: string;
+  code?: string;
+  meta?: RequestPayloadTooLargeMeta | Record<string, unknown>;
+}
+
+async function readStructuredErrorBody(response: Response): Promise<{
+  body?: StructuredErrorBody;
+  text: string;
+}> {
+  const text = await response.text();
+  try {
+    return { body: JSON.parse(text) as StructuredErrorBody, text };
+  } catch {
+    return { text };
+  }
+}
+
+function badRequestFallbackMessage(response: Response, text: string): string {
+  const detail = text ? ' - ' + text : '';
+  return `SonarQube API error: ${response.status} ${response.statusText}${detail}`;
+}
+
+async function parseBadRequestError(response: Response): Promise<BadRequestError> {
+  const { body, text } = await readStructuredErrorBody(response);
+  const fallback = badRequestFallbackMessage(response, text);
+  if (!body) {
+    return new BadRequestError(fallback);
+  }
+  return new BadRequestError(
+    body.message ?? fallback,
+    body.code,
+    body.meta as Record<string, unknown> | undefined,
+  );
+}
+
 async function parseRequestPayloadTooLargeError(
   response: Response,
 ): Promise<RequestPayloadTooLargeError> {
-  const fallback = new RequestPayloadTooLargeError(
-    `SonarQube API error: ${response.status} ${response.statusText}`,
-  );
-  try {
-    const body = (await response.json()) as {
-      message?: string;
-      code?: string;
-      meta?: RequestPayloadTooLargeMeta;
-    };
-    const message =
-      body.message ?? `SonarQube API error: ${response.status} ${response.statusText}`;
-    const code =
-      body.code === 'REQUEST_TOO_LARGE' || body.code === 'TOO_MANY_FILES' ? body.code : undefined;
-    return new RequestPayloadTooLargeError(message, code, body.meta);
-  } catch {
-    return fallback;
+  const { body, text } = await readStructuredErrorBody(response);
+  const fallback = badRequestFallbackMessage(response, text);
+  if (!body) {
+    return new RequestPayloadTooLargeError(fallback);
   }
+  const message = body.message ?? fallback;
+  const code =
+    body.code === 'REQUEST_TOO_LARGE' || body.code === 'TOO_MANY_FILES' ? body.code : undefined;
+  const meta = body.meta;
+  return new RequestPayloadTooLargeError(message, code, meta);
 }
 
 export interface AgentJobRequest {

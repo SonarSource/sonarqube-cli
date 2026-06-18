@@ -109,6 +109,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setMockUi(false);
+  process.exitCode = 0;
   loadStateSpy.mockRestore();
   saveStateSpy.mockRestore();
   existsSpy.mockRestore();
@@ -208,12 +209,20 @@ describe('analyzeSqaa: API call and result display', () => {
     expect(request.branchName).toBe('feature/my-branch');
   });
 
-  it('throws CommandFailedError when SQAA API call fails', () => {
+  it('renders per-file failure rows when a single --file analysis fails', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
-    expect(analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH)).rejects.toThrow(
-      'SonarQube Agentic Analysis failed',
-    );
+    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    const lines = getMockUiCalls()
+      .filter((c) => c.method === 'text')
+      .map((c) => String(c.args[0]));
+    expect(lines.some((line) => line.includes('src/index.ts'))).toBe(true);
+    expect(lines.some((line) => line.includes('Network error'))).toBe(true);
+    expect(lines.some((line) => line.includes('SonarQube Agentic Analysis failed'))).toBe(false);
+    expect(lines.at(-1)).toContain('1 failure');
+    expect(process.exitCode).toBe(1);
   });
 
   it('renders file row and summary footer for a clean single-file result', async () => {

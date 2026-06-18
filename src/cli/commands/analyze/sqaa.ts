@@ -20,7 +20,7 @@
 import { existsSync } from 'node:fs';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { blank, print, text, warn } from '../../../ui';
+import { print, text, warn } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import type { RunContext } from './sqaa-analysis';
@@ -125,13 +125,11 @@ export async function analyzeSqaa(
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
 
   if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
-    blank();
     text('SonarQube Agentic Analysis: no files in the change set to analyze.');
     return;
   }
 
   if (changeSet.files.length === 0) {
-    blank();
     text(
       'SonarQube Agentic Analysis: no files to analyze — all change set files were excluded (binary or oversized).',
     );
@@ -217,9 +215,11 @@ async function runSqaaAnalysisOnFiles(
   };
   try {
     const tally = await runAnalyses(ctx);
-    printSqaaTextReport({ tally, allPaths, ignoredPaths });
-  } finally {
     progress.finish();
+    printSqaaTextReport({ tally, allPaths, ignoredPaths });
+  } catch (err) {
+    progress.finish();
+    throw err;
   }
 }
 
