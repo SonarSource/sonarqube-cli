@@ -39,6 +39,7 @@ import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/def
 import { pluralize } from '../analyze/dependency-risk-helpers/pluralize';
 import { buildRiskFilter } from '../analyze/dependency-risk-helpers/risk-filter';
 import { ScaScanOrchestrator } from '../analyze/dependency-risk-helpers/sca-scan-orchestrator';
+import type { Severity } from '../analyze/dependency-risk-helpers/sca-scanner';
 import {
   anyFileMatches,
   ScaWatchPatternsRunner,
@@ -48,6 +49,7 @@ import { buildDependencyRisksViewModel } from '../analyze/dependency-risk-helper
 import { SEVERITIES } from '../analyze/dependency-risk-helpers/view-model/build/severity';
 
 const HOOK_STATUS_FILTER = 'new';
+const HOOK_MIN_SEVERITY: Severity = 'MEDIUM';
 
 export interface DepRisksStageOptions {
   project: string;
@@ -66,7 +68,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     return;
   }
 
-  const filter = buildRiskFilter(HOOK_STATUS_FILTER);
+  const filter = buildRiskFilter(HOOK_STATUS_FILTER, HOOK_MIN_SEVERITY);
   if (!filter) {
     warn(
       `Dependency-risks hook: invalid filter (statuses='${HOOK_STATUS_FILTER}'); commit not blocked.`,

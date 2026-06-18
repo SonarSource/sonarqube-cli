@@ -29,8 +29,8 @@ import type {
   RiskVM,
 } from '../../../../../../src/cli/commands/analyze/dependency-risk-helpers/view-model';
 
-function risk(status: EffectiveStatus): RiskVM {
-  return { severity: 'HIGH', status };
+function risk(status: EffectiveStatus, severity: RiskVM['severity'] = 'HIGH'): RiskVM {
+  return { severity, status };
 }
 
 const ALL_STATUSES: readonly EffectiveStatus[] = [
@@ -108,5 +108,43 @@ describe('buildRiskFilter — vm', () => {
 
   it('returns null for an unknown token', () => {
     expect(buildRiskFilter('bogus')).toBeNull();
+  });
+});
+
+describe('buildRiskFilter — minSeverity', () => {
+  it('narrows a status filter to risks at or above the given severity', () => {
+    const { predicate } = buildRiskFilter('all', 'MEDIUM')!;
+    expect(predicate(risk('OPEN', 'BLOCKER'))).toBe(true);
+    expect(predicate(risk('OPEN', 'HIGH'))).toBe(true);
+    expect(predicate(risk('OPEN', 'MEDIUM'))).toBe(true);
+    expect(predicate(risk('OPEN', 'LOW'))).toBe(false);
+    expect(predicate(risk('OPEN', 'INFO'))).toBe(false);
+  });
+
+  it('still applies the status constraint alongside the severity constraint', () => {
+    const { predicate } = buildRiskFilter('new', 'MEDIUM')!;
+    expect(predicate(risk('NEW', 'HIGH'))).toBe(true);
+    expect(predicate(risk('OPEN', 'HIGH'))).toBe(false);
+  });
+
+  it('supports a severity-only filter when statuses are empty', () => {
+    const filter = buildRiskFilter('', 'MEDIUM');
+    expect(filter).not.toBeNull();
+    const { predicate, description } = filter!;
+    expect(description.effectiveStatuses).toEqual([
+      'NEW',
+      'OPEN',
+      'CONFIRM',
+      'ACCEPT',
+      'SAFE',
+      'FIXED',
+    ]);
+    expect(description.discardedStatuses).toEqual([]);
+    expect(predicate(risk('SAFE', 'HIGH'))).toBe(true);
+    expect(predicate(risk('FIXED', 'LOW'))).toBe(false);
+  });
+
+  it('returns null when neither statuses nor minSeverity are provided', () => {
+    expect(buildRiskFilter('')).toBeNull();
   });
 });
