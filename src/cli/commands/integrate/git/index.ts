@@ -185,10 +185,7 @@ async function installGitFeatures(
     force: options.force,
     nonInteractive: options.nonInteractive,
     // Attrs are project-scope only; global hooks do not support a project key.
-    attrs:
-      scope === 'project'
-        ? { projectKey: options.project ?? null, dependencyRisks: options.dependencyRisks ?? false }
-        : undefined,
+    attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
   });
 }
 

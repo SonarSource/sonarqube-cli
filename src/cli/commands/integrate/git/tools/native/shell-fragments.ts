@@ -18,11 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../../_common/hooks';
 import type { IntegrationContext } from '../../../_common/registry/types';
 import type { GitHookType } from '../../options';
 import {
   LEGACY_HOOK_MARKER,
+  resolveDepRisksArgs,
   resolveSonarHookCommand,
   SONAR_HOOK_SKIP_SECRETS_MESSAGE,
 } from '../shared';
@@ -67,17 +67,4 @@ export function getPreCommitHookScript(context?: IntegrationContext): string {
 
 export function getPrePushHookScript(): string {
   return getHookScript('pre-push');
-}
-
-function resolveDepRisksArgs(context: IntegrationContext | undefined): string {
-  if (!context?.attrs?.dependencyRisks) {
-    return '';
-  }
-  const projectKey =
-    typeof context.attrs.projectKey === 'string' ? context.attrs.projectKey : undefined;
-  if (!projectKey) {
-    return '';
-  }
-  assertSafeSonarProjectKeyForHookScript(projectKey);
-  return ` --dependency-risks -p ${shellQuoteBash(projectKey)}`;
 }

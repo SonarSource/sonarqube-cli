@@ -27,9 +27,9 @@ import yaml from 'js-yaml';
 
 import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
-import { assertSafeSonarProjectKeyForHookScript } from '../../../_common/hooks';
 import type { IntegrationContext } from '../../../_common/registry/types';
 import type { GitHookType } from '../../options';
+import { resolveDepRisksArgs } from '../shared';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 // Legacy id shared by both stages before per-stage ids existed. Retained only so existing installs
@@ -64,7 +64,8 @@ export interface PreCommitConfig {
 }
 
 function buildSonarHook(stage: GitHookType, context?: IntegrationContext): PreCommitHookEntry {
-  const depRisksArgs = stage === 'pre-commit' ? resolveDepRisksArgs(context) : '';
+  const depRisksArgs =
+    stage === 'pre-commit' ? resolveDepRisksArgs(context, { shellQuote: false }) : '';
   return {
     id: PRE_COMMIT_HOOK_IDS[stage],
     name: `Sonar ${stage} scan`,
@@ -73,21 +74,6 @@ function buildSonarHook(stage: GitHookType, context?: IntegrationContext): PreCo
     pass_filenames: true,
     stages: [stage],
   };
-}
-
-function resolveDepRisksArgs(context: IntegrationContext | undefined): string {
-  if (!context?.attrs?.dependencyRisks) {
-    return '';
-  }
-  const projectKey =
-    typeof context.attrs.projectKey === 'string' ? context.attrs.projectKey : undefined;
-  if (!projectKey) {
-    return '';
-  }
-  // No shell quoting needed — pre-commit splits entry on whitespace; the key is validated
-  // safe (no spaces/special chars) by assertSafeSonarProjectKeyForHookScript.
-  assertSafeSonarProjectKeyForHookScript(projectKey);
-  return ` --dependency-risks -p ${projectKey}`;
 }
 
 export function normalizePreCommitConfig(raw: unknown): PreCommitConfig {

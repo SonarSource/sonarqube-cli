@@ -27,6 +27,8 @@ import { askUser, install, skip } from '../../_common/registry/selection';
 import type { SubfeatureDeclaration } from '../../_common/registry/types';
 import type { IntegrateGitOptions } from '../options';
 
+export const PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID = 'pre-commit-dependency-risks';
+
 export function createSecretsSubfeature(): SubfeatureDeclaration<IntegrateGitOptions> {
   return {
     id: 'pre-commit-secrets',
@@ -38,7 +40,7 @@ export function createSecretsSubfeature(): SubfeatureDeclaration<IntegrateGitOpt
 
 export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOptions> {
   return {
-    id: 'pre-commit-dependency-risks',
+    id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
     shouldInstall: ({ options, nonInteractive, scope }) => {
       if (scope === 'global') {

@@ -536,7 +536,7 @@ describe('integrate git (native hooks)', () => {
         .sort((a, b) => a.localeCompare(b));
       expect(featureIds).toEqual(['pre-commit-hook', 'pre-push-hook']);
       for (const feature of gitIntegration.features) {
-        expect(feature.attrs).toEqual({ projectKey: null, dependencyRisks: false });
+        expect(feature.attrs).toEqual({ projectKey: null });
       }
     },
     { timeout: 15000 },
@@ -568,7 +568,7 @@ describe('integrate git (native hooks)', () => {
       const state = harness.stateJsonFile.asJson() as InstalledStateJson;
       const gitIntegration = getInstalledIntegration(state, 'native-git');
       const feature = gitIntegration.features[0];
-      expect(feature.attrs).toMatchObject({ projectKey: 'my-project', dependencyRisks: true });
+      expect(feature.attrs).toMatchObject({ projectKey: 'my-project' });
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
     },
@@ -597,7 +597,7 @@ describe('integrate git (native hooks)', () => {
       const state = harness.stateJsonFile.asJson() as InstalledStateJson;
       const gitIntegration = getInstalledIntegration(state, 'native-git');
       const feature = gitIntegration.features[0];
-      expect(feature.attrs).toMatchObject({ projectKey: 'my-project', dependencyRisks: false });
+      expect(feature.attrs).toMatchObject({ projectKey: 'my-project' });
       expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expect(
         feature.subfeatures?.find((s) => s.featureId === 'pre-commit-dependency-risks'),

@@ -20,12 +20,32 @@
 
 import { platform } from 'node:os';
 
+import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks';
 import type { PostInstallExample } from '../../_common/registry';
+import type { ContainerIntegrationContext, IntegrationContext } from '../../_common/registry';
 import type { InstallDecision } from '../../_common/registry/selection';
 import { askUser, install, skip } from '../../_common/registry/selection';
 import type { GitHookType, IntegrateGitOptions } from '../options';
+import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeatures';
 
 export const LEGACY_HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
+
+export function resolveDepRisksArgs(
+  context: IntegrationContext | undefined,
+  { shellQuote = true }: { shellQuote?: boolean } = {},
+): string {
+  const containerCtx = context as ContainerIntegrationContext | undefined;
+  if (!containerCtx?.activeSubfeatures.some((s) => s.id === PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID)) {
+    return '';
+  }
+  const projectKey =
+    typeof context?.attrs?.projectKey === 'string' ? context.attrs.projectKey : undefined;
+  if (!projectKey) {
+    return '';
+  }
+  assertSafeSonarProjectKeyForHookScript(projectKey);
+  return ` --dependency-risks -p ${shellQuote ? shellQuoteBash(projectKey) : projectKey}`;
+}
 
 export function shouldInstallHook(
   hook: GitHookType,
