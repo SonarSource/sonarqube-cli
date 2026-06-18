@@ -63,7 +63,7 @@ export interface PreCommitConfig {
   [key: string]: unknown;
 }
 
-function buildSonarHook(stage: GitHookType, context?: IntegrationContext): PreCommitHookEntry {
+function buildSonarHook(stage: GitHookType, context: IntegrationContext): PreCommitHookEntry {
   const depRisksArgs =
     stage === 'pre-commit' ? resolveDepRisksArgs(context, { shellQuote: false }) : '';
   return {
@@ -159,7 +159,7 @@ export function removeSonarHooksFromPreCommitConfig(document: unknown): PreCommi
 export function upsertSonarHook(
   config: PreCommitConfig,
   stage: GitHookType,
-  context?: IntegrationContext,
+  context: IntegrationContext,
 ): void {
   const hook = buildSonarHook(stage, context);
   const localRepo = findLocalRepo(config);

@@ -98,12 +98,8 @@ function createHuskyFeature(
   return { ...base, dependencies: [sonarSecretsBinaryDependency] };
 }
 
-export { installViaHusky } from './install';
 export {
   getHuskyBeginMarker,
-  getHuskyPreCommitSnippet,
-  getHuskyPrePushSnippet,
-  getHuskySnippet,
   getHuskySnippetContent,
   getRecognizedHuskyMarkers,
 } from './shell-fragments';

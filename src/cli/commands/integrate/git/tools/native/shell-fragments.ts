@@ -50,7 +50,7 @@ function nativeBinBlock(): string {
 }
 
 /** Returns the hook script. For pre-commit, bakes `--dependency-risks -p <key>` when `context` carries dep-risks attrs. */
-export function getHookScript(hook: GitHookType, context?: IntegrationContext): string {
+export function getHookScript(hook: GitHookType, context: IntegrationContext): string {
   const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
   return [
     '#!/bin/sh',
@@ -59,12 +59,4 @@ export function getHookScript(hook: GitHookType, context?: IntegrationContext): 
     `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
     '',
   ].join('\n');
-}
-
-export function getPreCommitHookScript(context?: IntegrationContext): string {
-  return getHookScript('pre-commit', context);
-}
-
-export function getPrePushHookScript(): string {
-  return getHookScript('pre-push');
 }

@@ -20,9 +20,11 @@
 
 import { platform } from 'node:os';
 
+import { CommandFailedError } from '../../../_common/error';
 import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks';
 import type { PostInstallExample } from '../../_common/registry';
-import type { ContainerIntegrationContext, IntegrationContext } from '../../_common/registry';
+import type { IntegrationContext } from '../../_common/registry';
+import { isContainerIntegrationContext } from '../../_common/registry';
 import type { InstallDecision } from '../../_common/registry/selection';
 import { askUser, install, skip } from '../../_common/registry/selection';
 import type { GitHookType, IntegrateGitOptions } from '../options';
@@ -31,15 +33,17 @@ import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeature
 export const LEGACY_HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
 
 export function resolveDepRisksArgs(
-  context: IntegrationContext | undefined,
+  context: IntegrationContext,
   { shellQuote = true }: { shellQuote?: boolean } = {},
 ): string {
-  const containerCtx = context as ContainerIntegrationContext | undefined;
-  if (!containerCtx?.activeSubfeatures.some((s) => s.id === PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID)) {
+  if (!isContainerIntegrationContext(context)) {
+    throw new CommandFailedError('resolveDepRisksArgs requires a ContainerIntegrationContext');
+  }
+  if (!context.activeSubfeatures.some((s) => s.id === PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID)) {
     return '';
   }
   const projectKey =
-    typeof context?.attrs?.projectKey === 'string' ? context.attrs.projectKey : undefined;
+    typeof context.attrs?.projectKey === 'string' ? context.attrs.projectKey : undefined;
   if (!projectKey) {
     return '';
   }

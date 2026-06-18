@@ -25,12 +25,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
 import type {
-  IntegrationContext,
+  ContainerIntegrationContext,
   ResourceDeclaration,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { wholeFileRemover } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import {
-  getPreCommitHookScript,
+  getHookScript,
   nativeGitIntegration,
 } from '../../../../../../src/cli/commands/integrate/git/tools/native';
 import { LEGACY_HOOK_MARKER } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
@@ -48,13 +48,16 @@ function nativeHookResource(hook: 'pre-commit' | 'pre-push'): ResourceDeclaratio
   return resource;
 }
 
-function context(overrides: Partial<IntegrationContext> = {}): IntegrationContext {
+function context(
+  overrides: Partial<ContainerIntegrationContext> = {},
+): ContainerIntegrationContext {
   return {
     state: getDefaultState('test'),
     targetRoot: TEMP_DIR,
     scope: 'global',
     executionMode: 'install',
     resolvedDependencies: new Map(),
+    activeSubfeatures: [],
     ...overrides,
   };
 }
@@ -71,7 +74,7 @@ describe('native git hook resource (wholeFile)', () => {
   it('treats CRLF hook files as already applied', async () => {
     writeFileSync(
       join(TEMP_DIR, 'pre-commit'),
-      getPreCommitHookScript().replace(/\n/g, '\r\n'),
+      getHookScript('pre-commit', context()).replace(/\n/g, '\r\n'),
       'utf-8',
     );
 
@@ -94,7 +97,7 @@ describe('native git hook resource (wholeFile)', () => {
 
     // Resource writes fresh content since the file is now gone.
     await nativeHookResource('pre-commit').apply(context());
-    expect(readFileSync(hookPath, 'utf-8')).toBe(getPreCommitHookScript());
+    expect(readFileSync(hookPath, 'utf-8')).toBe(getHookScript('pre-commit', context()));
   });
 
   it('refuses to overwrite a foreign hook without --force', async () => {
@@ -116,12 +119,14 @@ describe('native git hook resource (wholeFile)', () => {
 
     await nativeHookResource('pre-commit').apply(context({ force: true }));
 
-    expect(readFileSync(join(TEMP_DIR, 'pre-commit'), 'utf-8')).toBe(getPreCommitHookScript());
+    expect(readFileSync(join(TEMP_DIR, 'pre-commit'), 'utf-8')).toBe(
+      getHookScript('pre-commit', context()),
+    );
   });
 
   it('remove deletes a Sonar-managed hook file', async () => {
     const hookPath = join(TEMP_DIR, 'pre-commit');
-    writeFileSync(hookPath, getPreCommitHookScript(), { mode: 0o755 });
+    writeFileSync(hookPath, getHookScript('pre-commit', context()), { mode: 0o755 });
 
     await nativeHookResource('pre-commit').remove(context());
 

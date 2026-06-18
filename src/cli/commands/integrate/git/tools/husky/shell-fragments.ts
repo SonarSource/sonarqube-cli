@@ -46,23 +46,11 @@ function huskyBinBlock(): string {
   ].join('\n');
 }
 
-export function getHuskySnippetContent(hook: GitHookType, context?: IntegrationContext): string {
+export function getHuskySnippetContent(hook: GitHookType, context: IntegrationContext): string {
   const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
   return [
     huskyBinBlock(),
     `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
     '',
   ].join('\n');
-}
-
-export function getHuskySnippet(hook: GitHookType): string {
-  return ['', getHuskyBeginMarker(hook), getHuskySnippetContent(hook)].join('\n');
-}
-
-export function getHuskyPreCommitSnippet(): string {
-  return getHuskySnippet('pre-commit');
-}
-
-export function getHuskyPrePushSnippet(): string {
-  return getHuskySnippet('pre-push');
 }

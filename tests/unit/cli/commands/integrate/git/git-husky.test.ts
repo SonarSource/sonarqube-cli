@@ -23,31 +23,49 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type {
+  ContainerIntegrationContext,
+  ResourceDeclaration,
+} from '../../../../../../src/cli/commands/integrate/_common/registry';
 import {
-  getHuskyPreCommitSnippet,
-  getHuskyPrePushSnippet,
-  installViaHusky,
+  getHuskyBeginMarker,
+  getHuskySnippetContent,
+  huskyIntegration,
 } from '../../../../../../src/cli/commands/integrate/git/tools/husky';
-import { getHuskyBeginMarker } from '../../../../../../src/cli/commands/integrate/git/tools/husky';
-import {
-  getPreCommitHookScript,
-  getPrePushHookScript,
-} from '../../../../../../src/cli/commands/integrate/git/tools/native';
-import {
-  LEGACY_HOOK_MARKER,
-  SONAR_HOOK_SKIP_SECRETS_MESSAGE,
-} from '../../../../../../src/cli/commands/integrate/git/tools/shared';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
+import { getHookScript } from '../../../../../../src/cli/commands/integrate/git/tools/native';
+import { SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '../../../../../../src/cli/commands/integrate/git/tools/shared';
+import { getDefaultState } from '../../../../../../src/lib/state';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-husky-tmp');
-const HOOK_PATH = join(TEMP_DIR, 'pre-commit');
 
-/** Temp repo used to run generated pre-commit scripts (staged file → sonar skip branch). */
+/** Temp repo used to run generated pre-commit scripts (staged file -> sonar skip branch). */
 const HOOK_RUN_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-run-tmp');
 const HOOK_RUN_SCRIPT = 'hook-under-test';
 
-/** `sonar` not on PATH; keep `/usr/bin` for `git` + `sh` + `xargs` etc. */
+/** sonar not on PATH; keep /usr/bin for git + sh + xargs etc. */
 const MINIMAL_HOOK_PATH = '/usr/bin:/bin';
+
+function context(): ContainerIntegrationContext {
+  return {
+    state: getDefaultState('test'),
+    targetRoot: TEMP_DIR,
+    scope: 'global',
+    executionMode: 'install',
+    resolvedDependencies: new Map(),
+    activeSubfeatures: [],
+  };
+}
+
+function huskyHookResource(hook: 'pre-commit' | 'pre-push'): ResourceDeclaration {
+  const feature = huskyIntegration.features.find((f) => f.id === `${hook}-hook`);
+  const resource = feature?.resources?.[0];
+  if (!resource) throw new Error(`husky ${hook} resource not found`);
+  return resource;
+}
+
+function huskyHookPath(hook: 'pre-commit' | 'pre-push'): string {
+  return join(TEMP_DIR, '.husky', hook);
+}
 
 function initGitRepoWithStagedFile(cwd: string) {
   mkdirSync(cwd, { recursive: true });
@@ -68,65 +86,53 @@ function runWrittenHook(cwd: string, scriptName: string) {
   });
 }
 
-describe('installViaHusky', () => {
+describe('husky hook resource (textSnippet)', () => {
   beforeEach(() => {
     mkdirSync(TEMP_DIR, { recursive: true });
-    setMockUi(true);
-    clearMockUiCalls();
   });
 
   afterEach(() => {
-    setMockUi(false);
     rmSync(TEMP_DIR, { recursive: true, force: true });
   });
 
   it('writes the snippet when the hook file does not exist', async () => {
-    await installViaHusky(HOOK_PATH, 'pre-commit');
+    await huskyHookResource('pre-commit').apply(context());
 
-    const content = readFileSync(HOOK_PATH, 'utf-8');
+    const content = readFileSync(huskyHookPath('pre-commit'), 'utf-8');
     expect(content).toContain(getHuskyBeginMarker('pre-commit'));
+    expect(content).toContain(getHuskySnippetContent('pre-commit', context()));
   });
 
   it('appends the pre-commit snippet to an existing hook file that has no marker', async () => {
-    writeFileSync(HOOK_PATH, '#!/bin/sh\necho "existing hook"\n');
+    mkdirSync(join(TEMP_DIR, '.husky'), { recursive: true });
+    writeFileSync(huskyHookPath('pre-commit'), '#!/bin/sh\necho "existing hook"\n');
 
-    await installViaHusky(HOOK_PATH, 'pre-commit');
+    await huskyHookResource('pre-commit').apply(context());
 
-    const content = readFileSync(HOOK_PATH, 'utf-8');
+    const content = readFileSync(huskyHookPath('pre-commit'), 'utf-8');
     expect(content).toContain('existing hook');
     expect(content).toContain(getHuskyBeginMarker('pre-commit'));
-    expect(content).toContain(getHuskyPreCommitSnippet());
-    expect(
-      getMockUiCalls().some(
-        (c) => c.method === 'discreetSuccess' && String(c.args[0]).includes('pre-commit'),
-      ),
-    ).toBe(true);
+    expect(content).toContain(getHuskySnippetContent('pre-commit', context()));
   });
 
   it('appends the pre-push snippet when hook type is pre-push', async () => {
-    const hookPath = join(TEMP_DIR, 'pre-push');
-    writeFileSync(hookPath, '#!/bin/sh\necho "existing hook"\n');
+    mkdirSync(join(TEMP_DIR, '.husky'), { recursive: true });
+    writeFileSync(huskyHookPath('pre-push'), '#!/bin/sh\necho "existing hook"\n');
 
-    await installViaHusky(hookPath, 'pre-push');
+    await huskyHookResource('pre-push').apply(context());
 
-    const content = readFileSync(hookPath, 'utf-8');
-    expect(content).toContain(getHuskyPrePushSnippet());
-    expect(
-      getMockUiCalls().some(
-        (c) => c.method === 'discreetSuccess' && String(c.args[0]).includes('pre-push'),
-      ),
-    ).toBe(true);
+    const content = readFileSync(huskyHookPath('pre-push'), 'utf-8');
+    expect(content).toContain(getHuskyBeginMarker('pre-push'));
+    expect(content).toContain(getHuskySnippetContent('pre-push', context()));
   });
 
-  it('does not write the file when the marker is already present', async () => {
-    writeFileSync(HOOK_PATH, `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\necho "already installed"\n`);
-    const before = readFileSync(HOOK_PATH, 'utf-8');
+  it('is idempotent: applying twice produces the same content', async () => {
+    await huskyHookResource('pre-commit').apply(context());
+    const afterFirst = readFileSync(huskyHookPath('pre-commit'), 'utf-8');
 
-    await installViaHusky(HOOK_PATH, 'pre-commit');
+    await huskyHookResource('pre-commit').apply(context());
 
-    expect(readFileSync(HOOK_PATH, 'utf-8')).toBe(before);
-    expect(getMockUiCalls().some((c) => c.method === 'info')).toBe(true);
-    expect(getMockUiCalls().some((c) => c.method === 'discreetSuccess')).toBe(false);
+    expect(readFileSync(huskyHookPath('pre-commit'), 'utf-8')).toBe(afterFirst);
   });
 });
 
@@ -143,8 +149,8 @@ describe('git-shell-fragments (pre-commit hook execution)', () => {
   });
 
   it.skipIf(IS_WINDOWS).each([
-    ['Husky snippet', getHuskyPreCommitSnippet],
-    ['native hook script', getPreCommitHookScript],
+    ['Husky snippet', () => getHuskySnippetContent('pre-commit', context())],
+    ['native hook script', () => getHookScript('pre-commit', context())],
   ] as const)(
     'with staged files and no sonar on PATH, %s exits 0 and skips secrets scan',
     (_, getScript) => {
@@ -156,14 +162,16 @@ describe('git-shell-fragments (pre-commit hook execution)', () => {
   );
 
   it('pre-push templates still include the skip message when sonar is missing', () => {
-    expect(getPrePushHookScript()).toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
-    expect(getHuskyPrePushSnippet()).toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
+    expect(getHookScript('pre-push', context())).toContain(SONAR_HOOK_SKIP_SECRETS_MESSAGE);
+    expect(getHuskySnippetContent('pre-push', context())).toContain(
+      SONAR_HOOK_SKIP_SECRETS_MESSAGE,
+    );
   });
 
   it.skipIf(IS_WINDOWS)(
-    'regression: native script without `|| :` after command -v fails under sh -e',
+    'regression: native script without || : after command -v fails under sh -e',
     () => {
-      const buggy = getPreCommitHookScript().replace(
+      const buggy = getHookScript('pre-commit', context()).replace(
         'command -v sonar 2>/dev/null || :',
         'command -v sonar 2>/dev/null',
       );

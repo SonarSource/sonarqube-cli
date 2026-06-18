@@ -178,10 +178,4 @@ async function resolveNativeGitHookPath(
   return join(await resolveGitHooksDir(context.targetRoot), hook);
 }
 
-export {
-  getHookScript,
-  getNativeHookMarker,
-  getPreCommitHookScript,
-  getPrePushHookScript,
-  getRecognizedNativeMarkers,
-} from './shell-fragments';
+export { getHookScript, getNativeHookMarker, getRecognizedNativeMarkers } from './shell-fragments';

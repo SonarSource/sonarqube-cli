@@ -92,3 +92,4 @@ export type {
   PostInstallExample,
   SubfeatureDeclaration,
 } from './types';
+export { isContainerIntegrationContext } from './types';
