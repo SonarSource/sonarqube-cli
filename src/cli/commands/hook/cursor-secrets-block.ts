@@ -45,7 +45,7 @@ export function secretsFoundInScan(result: { exitCode: number | null }): boolean
   return (result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND;
 }
 
-export function denyCursorFileAccess(filePath: string | undefined): never {
+export async function denyCursorFileAccess(filePath: string | undefined): Promise<never> {
   const ignored = filePath === undefined ? false : appendToCursorIgnore(filePath);
   let message: string;
   if (filePath === undefined) {
@@ -55,8 +55,16 @@ export function denyCursorFileAccess(filePath: string | undefined): never {
   } else {
     message = `${SECRETS_IN_FILE_MESSAGE}: ${filePath}.`;
   }
-  process.stdout.write(
-    JSON.stringify({ permission: 'deny', user_message: message, agent_message: message }) + '\n',
-  );
+  // process.stdout.write() is buffered and async on pipes; calling process.exit() immediately
+  // after can truncate the deny JSON before Cursor reads it. Awaiting the write callback
+  // guarantees the payload is fully flushed before the process terminates.
+  await new Promise<void>((resolve) => {
+    process.stdout.write(
+      JSON.stringify({ permission: 'deny', user_message: message, agent_message: message }) + '\n',
+      () => {
+        resolve();
+      },
+    );
+  });
   process.exit(CURSOR_BLOCK_EXIT_CODE);
 }

@@ -58,7 +58,7 @@ export async function cursorPreFileRead(): Promise<void> {
   try {
     const result = await scanTextForSecrets(deps, content);
     if (secretsFoundInScan(result)) {
-      denyCursorFileAccess(filePath);
+      await denyCursorFileAccess(filePath);
     }
   } catch (err) {
     logger.debug(`cursorPreFileRead secrets scan failed: ${(err as Error).message}`);

@@ -48,7 +48,12 @@ describe('cursorPreFileRead', () => {
   let readFileSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(
+      (_data: unknown, cb?: unknown) => {
+        if (typeof cb === 'function') cb();
+        return true;
+      },
+    );
     exitSpy = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
       token: 'tok',
@@ -140,7 +145,12 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
     projectRoot = mkdtempSync(join(tmpdir(), 'cursor-pre-file-read-'));
     mkdirSync(join(projectRoot, '.cursor'));
 
-    stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(
+      (_data: unknown, cb?: unknown) => {
+        if (typeof cb === 'function') cb();
+        return true;
+      },
+    );
     exitSpy = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockResolvedValue({
       token: 'tok',

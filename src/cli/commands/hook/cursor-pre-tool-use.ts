@@ -60,7 +60,7 @@ export async function cursorPreToolUse(): Promise<void> {
     const content = await readFile(filePath, 'utf-8');
     const result = await scanTextForSecrets(deps, content);
     if (secretsFoundInScan(result)) {
-      denyCursorFileAccess(filePath);
+      await denyCursorFileAccess(filePath);
     }
   } catch (err) {
     logger.debug(`cursorPreToolUse secrets scan failed: ${(err as Error).message}`);
