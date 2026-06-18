@@ -39,7 +39,8 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
   return {
     id: 'pre-commit-dependency-risks',
     displayName: 'pre-commit dependency-risks scan',
-    shouldInstall: ({ options, nonInteractive }) => {
+    shouldInstall: ({ options, nonInteractive, scope }) => {
+      if (scope === 'global') return skip();
       if (options.dependencyRisks) return install();
       if (nonInteractive) return skip();
       return askUser('Enable dependency-risks scanning on the pre-commit hook?');

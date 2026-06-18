@@ -162,7 +162,7 @@ function getInstalledIntegration(state: InstalledStateJson, integrationId: strin
     (entry) => entry.integrationId === integrationId,
   );
   expect(integration).toBeDefined();
-  return integration as InstalledIntegrationJson;
+  return integration!;
 }
 
 function expectInstalledDependency(
@@ -413,10 +413,10 @@ describe('integrate git (native hooks)', () => {
       // and resolveGitHooksDir() resolves to .git/hooks as expected
       initGitRepo(harness);
 
-      // '\r' selects project scope, '\r' accepts the 'Install pre-commit hook?'
-      // prompt, 'n' declines 'Install pre-push hook?'.
+      // '\r' selects project scope, '\r' accepts 'Install pre-commit hook?',
+      // 'n' declines 'Enable dependency-risks scanning?', 'n' declines 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
-        stdinChunks: ['\r', '\r', 'n'],
+        stdinChunks: ['\r', '\r', 'n', 'n'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
@@ -515,10 +515,10 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // '\r' selects project scope, then '\r' accepts both the
-      // 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
+      // '\r' selects project scope, '\r' accepts 'Install pre-commit hook?',
+      // 'n' declines 'Enable dependency-risks scanning?', '\r' accepts 'Install pre-push hook?'.
       const result = await harness.run('integrate git', {
-        stdinChunks: ['\r', '\r', '\r'],
+        stdinChunks: ['\r', '\r', 'n', '\r'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
@@ -536,7 +536,7 @@ describe('integrate git (native hooks)', () => {
         .sort((a, b) => a.localeCompare(b));
       expect(featureIds).toEqual(['pre-commit-hook', 'pre-push-hook']);
       for (const feature of gitIntegration.features) {
-        expect(feature.attrs).toBeUndefined();
+        expect(feature.attrs).toEqual({ projectKey: null, dependencyRisks: false });
       }
     },
     { timeout: 15000 },
@@ -764,7 +764,7 @@ describe('integrate git (husky)', () => {
         [
           '#!/bin/sh',
           '# Sonar secrets scan - installed by sonar integrate git',
-          `CLEAN_PATH=$(echo "$PATH" | tr ':' '\\n' | grep -v node_modules | tr '\\n' ':' | sed 's/:$//')`,
+          String.raw`CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node_modules | tr '\n' ':' | sed 's/:$//')`,
           `SONAR_BIN=$(PATH=$CLEAN_PATH command -v sonar 2>/dev/null || :)`,
           '[ -z "$SONAR_BIN" ] && { echo "sonarqube-cli not found, skipping secrets scan"; exit 0; }',
           '"$SONAR_BIN" hook git-pre-commit',
@@ -1144,7 +1144,7 @@ describe('integrate git (pre-commit framework)', () => {
       const ids = finalLocal?.hooks.map((h) => h.id) ?? [];
       expect(ids.filter((id) => id === 'sonar-pre-commit')).toHaveLength(1);
       expect(ids.filter((id) => id === 'sonar-pre-push')).toHaveLength(1);
-      expect(ids.some((id) => id === 'sonar-secrets')).toBe(false);
+      expect(ids.includes('sonar-secrets')).toBe(false);
     },
     { timeout: 15000 },
   );
