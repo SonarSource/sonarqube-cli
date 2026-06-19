@@ -31,7 +31,7 @@ import { confirmPrompt, discreetSuccess, info } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
-import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from './resources';
+import type { ResourceDeclaration } from './resources';
 import { isFeatureContainer, normalizeDecision } from './selection';
 import type {
   AppliedFeature,
@@ -279,19 +279,6 @@ export class IntegrationInstaller {
     );
   }
 
-  legacyCleanupNeedsApply(
-    installedFeature: InstalledIntegrationFeature | undefined,
-    cleanup: ResourceIdentity & RemovableResource,
-  ): boolean {
-    if (installedFeature === undefined) {
-      // Integration not yet recorded in state: only run version-0 cleanups to remove
-      // artifacts that predate declarative state tracking.
-      return resolveVersion(cleanup.version) === '0';
-    }
-    const installedResource = installedFeature.resources.find((r) => r.id === cleanup.id);
-    return resolveVersion(installedResource?.version) === resolveVersion(cleanup.version);
-  }
-
   async applyAndRecordFeatures<TOptions>(
     state: CliState,
     integration: IntegrationDeclaration<TOptions>,
@@ -478,7 +465,7 @@ export class IntegrationInstaller {
     );
     const featureContext = this.buildFeatureContext(context, feature, resolvedDependencies);
 
-    await this.cleanupRecordedLegacyInstallations(feature, installedFeature, featureContext);
+    await this.cleanupRecordedLegacyInstallations(feature, featureContext);
 
     for (const resource of feature.resources ?? []) {
       if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
@@ -518,11 +505,9 @@ export class IntegrationInstaller {
 
   private async cleanupRecordedLegacyInstallations<TOptions>(
     feature: FeatureDeclaration<TOptions>,
-    installedFeature: InstalledIntegrationFeature | undefined,
     featureContext: IntegrationContext,
   ) {
     for (const cleanup of feature.legacyCleanups ?? []) {
-      if (!this.legacyCleanupNeedsApply(installedFeature, cleanup)) continue;
       await cleanup.remove(featureContext);
     }
   }
