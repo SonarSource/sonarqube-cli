@@ -22,11 +22,12 @@ import { platform } from 'node:os';
 
 import { CommandFailedError } from '../../../_common/error';
 import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks';
-import type { PostInstallExample } from '../../_common/registry';
-import type { IntegrationContext } from '../../_common/registry';
-import { isContainerIntegrationContext } from '../../_common/registry';
-import type { InstallDecision } from '../../_common/registry/selection';
-import { askUser, install, skip } from '../../_common/registry/selection';
+import type {
+  InstallDecision,
+  IntegrationContext,
+  PostInstallExample,
+} from '../../_common/registry';
+import { askUser, install, isContainerIntegrationContext, skip } from '../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../options';
 import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeatures';
 
