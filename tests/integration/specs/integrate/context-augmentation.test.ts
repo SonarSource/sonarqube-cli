@@ -333,13 +333,13 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG with a warning when the org does not have it enabled',
+    'skips CAG with a warning when the org is not allowed to use it',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY, { enabled: false })
+        .withCagEntitlement(ORG_KEY, { allowed: false })
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -366,7 +366,46 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain('not enabled for your organization');
+      expect(result.stderr).toContain('not available for your organization');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'skips CAG with a warning when the entitlement check fails',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlementStatusCode(500)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
+      expect(nonProbe).toEqual([]);
+      const state = loadState(harness);
+      expect(findRecordedCagFeature(state)).toBeUndefined();
+      expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
+      expect(result.stderr).toContain('could not verify entitlement');
     },
     { timeout: 30000 },
   );
@@ -774,13 +813,13 @@ describe('integrate codex — Context Augmentation', () => {
   );
 
   it(
-    'skips CAG with a warning when the org does not have it enabled',
+    'skips CAG with a warning when the org is not allowed to use it',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
-        .withCagEntitlement(ORG_KEY, { enabled: false })
+        .withCagEntitlement(ORG_KEY, { allowed: false })
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -805,7 +844,7 @@ describe('integrate codex — Context Augmentation', () => {
       const nonProbe = readInvocations(harness).filter((i) => i.argv[0] !== '--version');
       expect(nonProbe).toEqual([]);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain('not enabled for your organization');
+      expect(result.stderr).toContain('not available for your organization');
     },
     { timeout: 30000 },
   );

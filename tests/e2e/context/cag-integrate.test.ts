@@ -24,7 +24,7 @@
  * the real CAG binary at all on connections where CAG must be skipped:
  *
  *   - SonarQube Server (non-Cloud) connections.
- *   - Cloud connections where the org's CAG entitlement is disabled.
+ *   - Cloud connections where the org is not allowed to use CAG.
  *
  * Both paths must exit before `installContextAugmentationBinary()` runs, so
  * we assert no binary lands under `<cliHome>/bin/` and no declarative CAG
@@ -103,12 +103,12 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
 
-  it('skips CAG when entitlement is not enabled on the Cloud org', async () => {
+  it('skips CAG when the Cloud org is not allowed to use it', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken(TOKEN)
       .withProject(PROJECT_KEY)
-      .withCagEntitlement(ORG_KEY, { enabled: false })
+      .withCagEntitlement(ORG_KEY, { allowed: false })
       .start();
     const serverUrl = server.baseUrl();
     harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -132,9 +132,9 @@ describe('sonar integrate <agent> — CAG pre-flight skip paths (real CLI, fake 
 
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stderr).toContain(
-      'Skipping Context Augmentation: not enabled for your organization. Enable it in your SonarQube Cloud organization settings.',
+      'Skipping Context Augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
     );
-    expect(existsSync(cagBinaryPath), 'no CAG download when entitlement is disabled').toBe(false);
+    expect(existsSync(cagBinaryPath), 'no CAG download when access is denied').toBe(false);
     expect(findRecordedCagFeature(harness.stateJsonFile.asJson() as CliState)).toBeUndefined();
   });
 
