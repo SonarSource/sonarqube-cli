@@ -50,6 +50,21 @@ const MUTUALIZED_EXTENSIONS = new Set([
   'bash',
   'ps1',
   'rb',
+  // JavaScript / TypeScript / CSS (SonarJS bundles its own Node runtime).
+  'js',
+  'jsx',
+  'cjs',
+  'mjs',
+  'ts',
+  'tsx',
+  'cts',
+  'mts',
+  'css',
+  'scss',
+  'less',
+  // Apex (Salesforce).
+  'cls',
+  'trigger',
 ]);
 
 /**
