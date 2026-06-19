@@ -111,7 +111,7 @@ describe('buildRiskFilter — vm', () => {
   });
 });
 
-describe('buildRiskFilter — minSeverity', () => {
+describe('buildRiskFilter — minimalSeverity', () => {
   it('narrows a status filter to risks at or above the given severity', () => {
     const { predicate } = buildRiskFilter('all', 'MEDIUM')!;
     expect(predicate(risk('OPEN', 'BLOCKER'))).toBe(true);
@@ -144,7 +144,7 @@ describe('buildRiskFilter — minSeverity', () => {
     expect(predicate(risk('FIXED', 'LOW'))).toBe(false);
   });
 
-  it('returns null when neither statuses nor minSeverity are provided', () => {
+  it('returns null when neither statuses nor minimalSeverity are provided', () => {
     expect(buildRiskFilter('')).toBeNull();
   });
 });

@@ -27,7 +27,7 @@ export type RiskFilterPredicate = (risk: RiskVM) => boolean;
 export interface RiskFilterDescription {
   effectiveStatuses: EffectiveStatus[];
   discardedStatuses: EffectiveStatus[];
-  minSeverity?: Severity;
+  minimalSeverity?: Severity;
 }
 export interface RiskFilter {
   description: RiskFilterDescription;
@@ -52,7 +52,7 @@ const PRESET_EXPANSIONS: Record<StatusPreset, EffectiveStatus[]> = {
   all: [...EFFECTIVE_STATUSES],
 };
 
-export function buildRiskFilter(statuses: string, minSeverity?: Severity): RiskFilter | null {
+export function buildRiskFilter(statuses: string, minimalSeverity?: Severity): RiskFilter | null {
   const tokens = statuses
     .split(',')
     .map((s) => s.trim().toLowerCase())
@@ -71,7 +71,7 @@ export function buildRiskFilter(statuses: string, minSeverity?: Severity): RiskF
     }
   }
 
-  if (set.size === 0 && minSeverity === undefined) return null;
+  if (set.size === 0 && minimalSeverity === undefined) return null;
 
   const statusMatches = (status: EffectiveStatus) => set.size === 0 || set.has(status);
 
@@ -79,14 +79,15 @@ export function buildRiskFilter(statuses: string, minSeverity?: Severity): RiskF
     effectiveStatuses: EFFECTIVE_STATUSES.filter(statusMatches),
     discardedStatuses: EFFECTIVE_STATUSES.filter((s) => !statusMatches(s)),
   };
-  if (minSeverity !== undefined) {
-    description.minSeverity = minSeverity;
+  if (minimalSeverity !== undefined) {
+    description.minimalSeverity = minimalSeverity;
   }
 
   return {
     description,
     predicate: (risk) =>
       statusMatches(risk.status) &&
-      (minSeverity === undefined || severityRank(risk.severity) <= severityRank(minSeverity)),
+      (minimalSeverity === undefined ||
+        severityRank(risk.severity) <= severityRank(minimalSeverity)),
   };
 }

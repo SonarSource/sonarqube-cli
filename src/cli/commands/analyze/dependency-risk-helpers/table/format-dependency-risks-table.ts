@@ -154,8 +154,8 @@ function filteringByLine(filter: RiskFilterDescription): string {
     const discarded = formatStatuses(filter.discardedStatuses);
     line += dim(` (discarded: ${discarded})`);
   }
-  if (filter.minSeverity !== undefined) {
-    line += `; severity ${filter.minSeverity.toLowerCase()} or above`;
+  if (filter.minimalSeverity !== undefined) {
+    line += `; severity ${filter.minimalSeverity.toLowerCase()} or above`;
   }
   return line;
 }
