@@ -37,6 +37,7 @@ import { CommandFailedError } from './commands/_common/error';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
 import { analyzeAll, type AnalyzeAllOptions } from './commands/analyze/analyze-all';
+import { SEVERITIES } from './commands/analyze/dependency-risk-helpers/view-model/build/severity';
 import {
   analyzeDependencyRisks,
   type AnalyzeDependencyRisksOptions,
@@ -426,6 +427,11 @@ const dependencyRisksStatusFilterOption = new Option(
     '    --statuses active,safe\n',
 ).default('active');
 
+const dependencyRisksMinSeverityOption = new Option(
+  '--min-severity <severity>',
+  'Minimum severity level to include (default: all severities)',
+).choices(SEVERITIES);
+
 const dependencyRisksExtraHelp = `
 Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.
 Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/analyzing-projects-for-dependencies#supported-languages-and-package-managers
@@ -439,6 +445,7 @@ analyze
   .option('-p, --project <project>', 'Project key (auto-detected when omitted)')
   .addOption(dependencyRisksFormatOption)
   .addOption(dependencyRisksStatusFilterOption)
+  .addOption(dependencyRisksMinSeverityOption)
   .addHelpText('after', dependencyRisksExtraHelp)
   .authenticatedAction((auth, options: AnalyzeDependencyRisksOptions) =>
     analyzeDependencyRisks(options, auth),

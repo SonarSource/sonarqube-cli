@@ -32,6 +32,7 @@ import { formatDependencyRisksToon } from './dependency-risk-helpers/format-depe
 import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
 import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
+import type { Severity } from './dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
 import { buildDependencyRisksViewModel } from './dependency-risk-helpers/view-model/build';
@@ -47,13 +48,14 @@ export interface AnalyzeDependencyRisksOptions {
   project?: string;
   format: string;
   statuses: string;
+  minSeverity?: Severity;
 }
 
 export async function analyzeDependencyRisks(
   options: AnalyzeDependencyRisksOptions,
   auth: ResolvedAuth,
 ): Promise<void> {
-  const filter = buildRiskFilter(options.statuses);
+  const filter = buildRiskFilter(options.statuses, options.minSeverity);
   if (!filter) {
     throw new InvalidOptionError(
       `Invalid --statuses value: '${options.statuses}'`,
