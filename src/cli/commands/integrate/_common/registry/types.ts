@@ -128,6 +128,7 @@ export interface FeatureContainer<
   TOptions = Record<string, unknown>,
 > extends FeatureDeclaration<TOptions> {
   subfeatures: SubfeatureDeclaration<TOptions>[];
+  defaultInstallSubfeatureIds: string[];
 }
 
 export interface LegacyFeatureDeclaration {

@@ -28,7 +28,9 @@ import { version as CURRENT_VERSION } from '../../../../../package.json';
 import * as scaScannerInstall from '../../../../../src/cli/commands/_common/install/sca-scanner';
 import * as secretsInstall from '../../../../../src/cli/commands/_common/install/secrets';
 import {
+  type ContainerIntegrationContext,
   type DependencyDeclaration,
+  type FeatureContainer,
   type IntegrationContext,
   IntegrationRegistry,
   wholeFile,
@@ -470,6 +472,196 @@ describe('migrateDeclarativeIntegrations', () => {
     expect(fs.readFileSync(dependencyPathA, 'utf-8')).toBe('/new/shared-dependency');
     expect(fs.readFileSync(dependencyPathB, 'utf-8')).toBe('/new/shared-dependency');
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('activates only migrationDefaultSubfeatureIds when upgrading from old plain-feature state', async () => {
+    const capturedContexts: IntegrationContext[] = [];
+    const now = '2026-01-01T00:00:00.000Z';
+
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      features: [
+        {
+          featureId: 'container-feature',
+          scope: 'project',
+          targetRoot: tempDir,
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+          // no subfeatures — simulates an old plain-feature install
+        },
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const container: FeatureContainer = {
+      id: 'container-feature',
+      displayName: 'Container feature',
+      defaultInstallSubfeatureIds: ['sub-a'],
+      subfeatures: [
+        { id: 'sub-a', displayName: 'Sub A' },
+        { id: 'sub-b', displayName: 'Sub B' },
+      ],
+      operations: [
+        {
+          id: 'test-op',
+          apply: (ctx) => {
+            capturedContexts.push(ctx);
+          },
+        },
+      ],
+    };
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [container],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(capturedContexts).toHaveLength(1);
+    expect('activeSubfeatures' in capturedContexts[0]).toBeTrue();
+    expect(
+      (capturedContexts[0] as ContainerIntegrationContext).activeSubfeatures.map((s) => s.id),
+    ).toEqual(['sub-a']);
+
+    const savedFeature = saveStateSpy.mock.calls[0][0].integrations.installed[0].features[0];
+    expect(savedFeature.subfeatures).toHaveLength(1);
+    expect(savedFeature.subfeatures![0]).toMatchObject({ featureId: 'sub-a' });
+  });
+
+  it('restores previously active container subfeatures from recorded state, excluding newly added ones', async () => {
+    const capturedContexts: IntegrationContext[] = [];
+    const now = '2026-01-01T00:00:00.000Z';
+
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      features: [
+        {
+          featureId: 'container-feature',
+          scope: 'project',
+          targetRoot: tempDir,
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+          subfeatures: [{ featureId: 'sub-a', dependencies: [] }],
+        },
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const container: FeatureContainer = {
+      id: 'container-feature',
+      displayName: 'Container feature',
+      subfeatures: [
+        { id: 'sub-a', displayName: 'Sub A' },
+        { id: 'sub-b', displayName: 'Sub B' },
+        { id: 'sub-c', displayName: 'Sub C' }, // newly added, not in recorded state
+      ],
+      defaultInstallSubfeatureIds: ['sub-b'],
+      operations: [
+        {
+          id: 'test-op',
+          apply: (ctx) => {
+            capturedContexts.push(ctx);
+          },
+        },
+      ],
+    };
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [container],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(capturedContexts).toHaveLength(1);
+    expect(
+      (capturedContexts[0] as ContainerIntegrationContext).activeSubfeatures.map((s) => s.id),
+    ).toEqual(['sub-a']);
+
+    const savedFeature = saveStateSpy.mock.calls[0][0].integrations.installed[0].features[0];
+    expect(savedFeature.subfeatures).toHaveLength(1);
+    expect(savedFeature.subfeatures![0]).toMatchObject({ featureId: 'sub-a' });
+  });
+
+  it('applies plain feature normally when old state has container subfeatures recorded', async () => {
+    const capturedContexts: IntegrationContext[] = [];
+    const now = '2026-01-01T00:00:00.000Z';
+
+    const state = makeState();
+    state.integrations.installed.push({
+      id: 'integration-id',
+      integrationId: 'test-integration',
+      installedByCliVersion: '0.9.0',
+      installedAt: now,
+      updatedByCliVersion: '0.9.0',
+      updatedAt: now,
+      features: [
+        {
+          featureId: 'plain-feature',
+          scope: 'project',
+          targetRoot: tempDir,
+          installedByCliVersion: '0.9.0',
+          installedAt: now,
+          updatedByCliVersion: '0.9.0',
+          updatedAt: now,
+          dependencies: [],
+          resources: [],
+          operations: [],
+          subfeatures: [{ featureId: 'old-sub', dependencies: [] }],
+        },
+      ],
+    });
+    loadStateSpy.mockReturnValue(state);
+
+    const registry = new IntegrationRegistry();
+    registry.register({
+      id: 'test-integration',
+      displayName: 'Test integration',
+      features: [
+        {
+          id: 'plain-feature',
+          displayName: 'Plain feature',
+          operations: [
+            {
+              id: 'test-op',
+              apply: (ctx) => {
+                capturedContexts.push(ctx);
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    await migrateDeclarativeIntegrations(registry);
+
+    expect(capturedContexts).toHaveLength(1);
+    expect('activeSubfeatures' in capturedContexts[0]).toBeFalse();
   });
 });
 
