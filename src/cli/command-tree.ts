@@ -324,7 +324,7 @@ integrateCommand
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
 integrateCommand
-  .command('antigravity', { hidden: true })
+  .command('antigravity')
   .description(
     'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Context Augmentation.',
   )

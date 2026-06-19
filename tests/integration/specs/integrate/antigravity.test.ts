@@ -60,6 +60,11 @@ describe('integrate antigravity', () => {
     await harness.dispose();
   });
 
+  it('is listed in sonar integrate --help', async () => {
+    const result = await harness.run('integrate --help');
+    expect(result.stdout).toContain('antigravity');
+  });
+
   describe('project-level install (default)', () => {
     it(
       'writes hook script, hooks.json, and prompt-secrets instructions',
