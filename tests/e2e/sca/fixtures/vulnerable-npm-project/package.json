@@ -1,0 +1,10 @@
+{
+  "name": "sonar-cli-sca-e2e-fixture",
+  "version": "1.0.0",
+  "description": "Static npm project with a vulnerable dependency, scanned by the SCA staging e2e test.",
+  "private": true,
+  "license": "LGPL-3.0-only",
+  "dependencies": {
+    "lodash": "4.17.4"
+  }
+}
