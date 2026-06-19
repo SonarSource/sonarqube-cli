@@ -39,7 +39,7 @@ function makeInvocation({
   scope = 'project',
 }: PartialInvocation = {}) {
   return {
-    options: options,
+    options,
     nonInteractive,
     scope,
     targetRoot: '/tmp',
@@ -89,11 +89,11 @@ describe('createDepRisksSubfeature', () => {
     expect(result).toMatchObject({ action: 'ask' });
   });
 
-  it('skips in non-interactive mode when --dependency-risks is not set', () => {
+  it('asks user in non-interactive mode when --dependency-risks is not set (installer converts ask+nonInteractive to install)', () => {
     const sub = createDepRisksSubfeature();
     const result = sub.shouldInstall!(
       makeInvocation({ options: { project: 'my-project' }, nonInteractive: true }),
     );
-    expect(result).toMatchObject({ action: 'skip' });
+    expect(result).toMatchObject({ action: 'ask' });
   });
 });

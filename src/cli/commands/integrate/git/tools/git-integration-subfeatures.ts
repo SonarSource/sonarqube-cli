@@ -42,7 +42,7 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
   return {
     id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
-    shouldInstall: ({ options, nonInteractive, scope }) => {
+    shouldInstall: ({ options, scope }) => {
       if (scope === 'global') {
         return skip('Dependency-risks scanning is not available for global hooks');
       }
@@ -54,7 +54,6 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
         return skip('Dependency-risks scanning is not available without a project key.');
       }
       if (options.dependencyRisks) return install();
-      if (nonInteractive) return skip();
       return askUser('Enable dependency-risks scanning on the pre-commit hook?');
     },
     dependencies: [sonarSecretsBinaryDependency, scaScannerBinaryDependency],
