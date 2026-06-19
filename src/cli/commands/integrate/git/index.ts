@@ -26,7 +26,8 @@ import { join } from 'node:path';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, intro, text, warn } from '../../../../ui';
+import { blank, confirmPrompt, info, intro, text, warn } from '../../../../ui';
+import { yellow } from '../../../../ui/colors.ts';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { resolveIntegrateScope } from '../_common/integrate-scope';
@@ -140,7 +141,9 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
     throw new InvalidOptionError('--dependency-risks and -p are not supported with --global.');
   }
 
-  intro('SonarQube Git Integration (secrets scanning)');
+  intro('SonarQube Git Integration (source code scanning)');
+  info('This integration includes secrets and dependency risks detection in your git repository.');
+  info(yellow('Some scan types may be unavailable for certain hook types.'));
 
   if (options.global) {
     return integrateGitGlobal(options);
