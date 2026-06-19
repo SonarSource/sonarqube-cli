@@ -219,13 +219,17 @@ function readYamlFile<T>(path: string): T {
   return yaml.load(readFileSync(path, 'utf-8')) as T;
 }
 
-type SetupAuthOptions = { withSecretsBinary?: boolean };
+type SetupAuthOptions = { withSecretsBinary?: boolean; scaEnabled?: boolean };
 
 async function setupAuthenticated(
   harness: TestHarness,
   options: SetupAuthOptions = {},
 ): Promise<void> {
-  const server = await harness.newFakeServer().withAuthToken(INTEGRATION_TEST_TOKEN).start();
+  const serverBuilder = harness.newFakeServer().withAuthToken(INTEGRATION_TEST_TOKEN);
+  if (options.scaEnabled) {
+    serverBuilder.withScaEnabled(true);
+  }
+  const server = await serverBuilder.start();
   const chain = harness
     .state()
     .withActiveConnection(server.baseUrl())
@@ -545,7 +549,7 @@ describe('integrate git (native hooks)', () => {
   it(
     'prompts for dep-risks and bakes it in when user accepts with project key provided',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
 
@@ -578,7 +582,7 @@ describe('integrate git (native hooks)', () => {
   it(
     'prompts for dep-risks and omits it when user declines with project key provided',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       initGitRepo(harness);
 
       // -p implies project scope (no scope prompt). 'n' declines 'Enable dependency-risks scanning?'.
@@ -602,6 +606,57 @@ describe('integrate git (native hooks)', () => {
       expect(
         feature.subfeatures?.find((s) => s.featureId === 'pre-commit-dependency-risks'),
       ).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'skips dep-risks prompt when SCA is not enabled on the server',
+    async () => {
+      // No scaEnabled: true → fake server returns 404 for the SCA endpoint → check_failed → skip.
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      // Only '\r' needed: scope prompt. Dep-risks prompt is suppressed because SCA is unavailable.
+      const result = await harness.run('integrate git --hook pre-commit -p my-project', {
+        stdinChunks: ['\r'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).not.toContain('--dependency-risks');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(
+        feature.subfeatures?.find((s) => s.featureId === 'pre-commit-dependency-risks'),
+      ).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'skips dep-risks and prints a message when --dependency-risks is set but SCA is not enabled',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+
+      const result = await harness.run(
+        'integrate git --hook pre-commit --dependency-risks -p my-project --non-interactive',
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Dependency-risks scanning is not available');
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).not.toContain('--dependency-risks');
     },
     { timeout: 15000 },
   );
@@ -762,7 +817,7 @@ describe('integrate git (native hooks)', () => {
   it(
     'bakes the project key into the native pre-commit hook when --dependency-risks is set',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
 
@@ -926,7 +981,7 @@ describe('integrate git (husky)', () => {
   it(
     'bakes the project key into the husky pre-commit hook when --dependency-risks is set',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepoWithHusky(harness);
 
@@ -1258,7 +1313,7 @@ describe('integrate git (pre-commit framework)', () => {
   it(
     'bakes the project key into the pre-commit config hook entry when --dependency-risks is set',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepoWithPreCommitConfig(harness);
       const preCommitLog = join(harness.cwd.path, 'pre-commit.log');

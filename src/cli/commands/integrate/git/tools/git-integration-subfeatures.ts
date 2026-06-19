@@ -18,7 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { InvalidOptionError } from '../../../_common/error';
+import { SonarQubeClient } from '../../../../../sonarqube/client';
+import { CommandFailedError, InvalidOptionError } from '../../../_common/error';
+import { assertScaAvailable } from '../../../_common/sca-availability';
 import {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
@@ -43,7 +45,7 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
   return {
     id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
-    shouldInstall: ({ options, scope }) => {
+    shouldInstall: async ({ options, scope, auth }) => {
       if (scope === 'global') {
         return skip('Dependency-risks scanning is not available for global hooks');
       }
@@ -53,6 +55,17 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
       }
       if (!options.project) {
         return skip('Dependency-risks scanning is not available without a project key.');
+      }
+      if (auth) {
+        const client = new SonarQubeClient(auth.serverUrl, auth.token);
+        try {
+          await assertScaAvailable(client, auth);
+        } catch (err) {
+          if (err instanceof CommandFailedError) {
+            return skip(err.message);
+          }
+          throw err;
+        }
       }
       if (options.dependencyRisks) return install();
       return askUser('Enable dependency-risks scanning on the pre-commit hook?');
