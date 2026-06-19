@@ -282,17 +282,19 @@ describe('declarative integration framework', () => {
       id: 'container',
       displayName: 'Container',
       subfeatures: [],
+      defaultInstallSubfeatureIds: [],
     };
 
     expect(isFeatureContainer(plain)).toBe(false);
     expect(isFeatureContainer(container)).toBe(true);
   });
 
-  it('selectFeaturesForInvocation filters subfeatures by shouldInstall conditions', async () => {
+  it('selectFeaturesForInvocation filters subfeatures by shouldInstall (install/skip)', async () => {
     const dep = sonarSourceBinary({ id: 'test-dep', binary: SonarSourceBinary.SonarSecrets });
     const container: FeatureContainer<{ enableSca?: boolean }> = {
       id: 'container',
       displayName: 'Container',
+      shouldInstall: () => install(),
       subfeatures: [
         {
           id: 'mandatory',
@@ -306,6 +308,7 @@ describe('declarative integration framework', () => {
           shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
         },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
 
@@ -316,7 +319,6 @@ describe('declarative integration framework', () => {
       nonInteractive: true,
       state: getDefaultState('test'),
     });
-    expect(withoutSca).toHaveLength(1);
     expect(
       (withoutSca[0] as FeatureContainer<{ enableSca?: boolean }>).subfeatures.map((s) => s.id),
     ).toEqual(['mandatory']);
@@ -346,6 +348,7 @@ describe('declarative integration framework', () => {
           shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
         },
       ],
+      defaultInstallSubfeatureIds: [],
       operations: [
         {
           id: 'capture-op',
@@ -370,6 +373,80 @@ describe('declarative integration framework', () => {
     ).toEqual(['mandatory']);
   });
 
+  it('selectFeaturesForInvocation prompts for subfeature askUser, installing on confirm and skipping on decline', async () => {
+    setMockUi(true);
+    const container: FeatureContainer<Record<string, unknown>> = {
+      id: 'container',
+      displayName: 'Container',
+      shouldInstall: () => install(),
+      subfeatures: [
+        {
+          id: 'opted-in',
+          displayName: 'Opted-in feature',
+          shouldInstall: () => askUser('Enable it?'),
+        },
+        {
+          id: 'declined',
+          displayName: 'Declined feature',
+          shouldInstall: () => askUser('Enable other?'),
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const integration = makeIntegration({ features: [container] });
+    queueMockResponse(true); // accept 'opted-in'
+    queueMockResponse(false); // decline 'declined'
+
+    const result = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: '/tmp',
+      scope: 'project',
+      nonInteractive: false,
+      state: getDefaultState('test'),
+    });
+
+    const selected = (result[0] as FeatureContainer<Record<string, unknown>>).subfeatures;
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.id).toBe('opted-in');
+    const confirmCalls = getMockUiCalls().filter((c) => c.method === 'confirmPrompt');
+    expect(confirmCalls).toHaveLength(2);
+    expect(confirmCalls[0]?.args[0]).toBe('Enable it?');
+  });
+
+  it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at subfeature prompt', async () => {
+    setMockUi(true);
+    const container: FeatureContainer<Record<string, unknown>> = {
+      id: 'container',
+      displayName: 'Container',
+      shouldInstall: () => install(),
+      subfeatures: [
+        {
+          id: 'optional',
+          displayName: 'Optional feature',
+          shouldInstall: () => askUser('Enable it?'),
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const integration = makeIntegration({ features: [container] });
+    queueMockResponse(null); // Ctrl+C
+
+    let caughtError: unknown;
+    try {
+      await installer.selectFeaturesForInvocation(integration, {
+        options: {},
+        targetRoot: '/tmp',
+        scope: 'project',
+        nonInteractive: false,
+        state: getDefaultState('test'),
+      });
+    } catch (err) {
+      caughtError = err;
+    }
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error).message).toContain('Installation cancelled');
+  });
+
   it('records active subfeatures nested under the container feature in state', async () => {
     const dep = sonarSourceBinary({ id: 'sub-dep', binary: SonarSourceBinary.SonarSecrets });
     const container: FeatureContainer = {
@@ -379,6 +456,7 @@ describe('declarative integration framework', () => {
         { id: 'sub-a', displayName: 'Sub A', shouldInstall: () => install(), dependencies: [dep] },
         { id: 'sub-b', displayName: 'Sub B', shouldInstall: () => skip() },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
     const state = getDefaultState('test');
@@ -408,6 +486,7 @@ describe('declarative integration framework', () => {
       id: 'container',
       displayName: 'Container',
       subfeatures: [{ id: 'sub-a', displayName: 'Sub A', dependencies: [dep] }],
+      defaultInstallSubfeatureIds: [],
     });
 
     const integration = makeIntegration({ features: [makeContainer(depOld)] });
@@ -467,6 +546,7 @@ describe('declarative integration framework', () => {
         { id: 'sub-b', displayName: 'Sub B' },
         { id: 'sub-c', displayName: 'Sub C' },
       ],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
 
@@ -491,6 +571,7 @@ describe('declarative integration framework', () => {
       id: 'container',
       displayName: 'Container',
       subfeatures: [{ id: 'valid', displayName: 'Valid' }],
+      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
 
@@ -571,6 +652,31 @@ describe('declarative integration framework', () => {
     expect(selected).toEqual([]);
     expect(findMockUiCall('info', 'covered')).toBeDefined();
     expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
+  });
+
+  it('prints an optional message when a feature is installed, and stays silent otherwise', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [
+        {
+          id: 'with-message',
+          displayName: 'With message',
+          shouldInstall: () => install('auto-configured'),
+        },
+        { id: 'silent', displayName: 'Silent', shouldInstall: () => install() },
+      ],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      state: getDefaultState('test'),
+    });
+
+    expect(selected.map((feature) => feature.id)).toEqual(['with-message', 'silent']);
+    expect(findMockUiCall('discreetSuccess', 'auto-configured')).toBeDefined();
+    expect(getMockUiCalls().filter((call) => call.method === 'discreetSuccess')).toHaveLength(1);
   });
 
   it('prompts the user when a feature asks, installing on confirm and skipping on decline', async () => {

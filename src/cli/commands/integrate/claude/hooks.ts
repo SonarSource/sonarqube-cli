@@ -116,7 +116,7 @@ async function installHook(params: HookInstallParams): Promise<void> {
   const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${scriptExt}`);
   const commandPath = scope === 'global' ? fullScriptPath : relativePath;
   const command = isWindows
-    ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
+    ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${commandPath.replaceAll('\\', '/')}`
     : commandPath;
 
   // Marker derived from first path segment (e.g. 'sonar-secrets' from 'sonar-secrets/build-scripts/pretool-secrets')

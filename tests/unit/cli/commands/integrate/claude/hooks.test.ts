@@ -203,11 +203,11 @@ describe('installHooks', () => {
   // so platform-specific assertions branch on the real
   // host platform.
   const IS_WINDOWS = process.platform === 'win32';
-  // On Windows the registered command is `powershell -NoProfile -File .claude/...`
+  // On Windows the registered command is `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/...`
   // (forward slashes via replaceAll); on Unix it is the bare `.claude/...` path.
   const isProjectScopedCommand = (command: string): boolean =>
     IS_WINDOWS
-      ? command.includes('powershell -NoProfile -File .claude/')
+      ? command.includes('powershell -NoProfile -ExecutionPolicy Bypass -File .claude/')
       : command.startsWith('.claude/');
 
   let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;

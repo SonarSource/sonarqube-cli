@@ -18,9 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { IntegrationContext } from '../../../_common/registry/types';
 import type { GitHookType } from '../../options';
 import {
   LEGACY_HOOK_MARKER,
+  resolveDepRisksArgs,
   resolveSonarHookCommand,
   SONAR_HOOK_SKIP_SECRETS_MESSAGE,
 } from '../shared';
@@ -44,18 +46,11 @@ function huskyBinBlock(): string {
   ].join('\n');
 }
 
-export function getHuskySnippetContent(hook: GitHookType): string {
-  return [huskyBinBlock(), `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}`, ''].join('\n');
-}
-
-export function getHuskySnippet(hook: GitHookType): string {
-  return ['', getHuskyBeginMarker(hook), getHuskySnippetContent(hook)].join('\n');
-}
-
-export function getHuskyPreCommitSnippet(): string {
-  return getHuskySnippet('pre-commit');
-}
-
-export function getHuskyPrePushSnippet(): string {
-  return getHuskySnippet('pre-push');
+export function getHuskySnippetContent(hook: GitHookType, context: IntegrationContext): string {
+  const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
+  return [
+    huskyBinBlock(),
+    `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
+    '',
+  ].join('\n');
 }

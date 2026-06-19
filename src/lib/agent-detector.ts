@@ -23,13 +23,21 @@
  * Best-effort: hook subprocesses often omit variables present in the agent's integrated terminal.
  */
 
-export type CallerAgent = 'cursor' | 'claude' | 'copilot' | 'codex';
+export type CallerAgent = 'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity';
 
 /** Cursor IDE / agent terminal markers. */
 export function isCursorAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
   return (
     env.CURSOR_AGENT === '1' || Boolean(env.CURSOR_PROJECT_DIR) || Boolean(env.CURSOR_TRACE_ID)
   );
+}
+
+/**
+ * Google Antigravity markers. Antigravity also sets Claude-compat vars when the
+ * Claude extension is present — prefer this check before `isClaudeCodeAgentEnv`.
+ */
+export function isAntigravityAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.ANTIGRAVITY_AGENT === '1' || env.ANTIGRAVITY_AGENT === 'true';
 }
 
 /** Claude Code integrated terminal / tooling markers. */
@@ -53,15 +61,15 @@ export function isCodexAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /**
- * Precedence: Codex > Copilot CLI > Claude Code > Cursor.
- * Codex and Copilot CLI vars are the most specific (unlikely to collide);
- * Claude Code beats Cursor when both families could be set.
+ * Precedence: Codex > Copilot CLI > Antigravity > Claude Code > Cursor.
+ * Antigravity sets Claude-compat env vars, so it must be checked before Claude.
  *
  * @param env - Defaults to `process.env`; inject a custom object for tests.
  */
 export function detectCallerAgent(env: NodeJS.ProcessEnv = process.env): CallerAgent | null {
   if (isCodexAgentEnv(env)) return 'codex';
   if (isCopilotCliAgentEnv(env)) return 'copilot';
+  if (isAntigravityAgentEnv(env)) return 'antigravity';
   if (isClaudeCodeAgentEnv(env)) return 'claude';
   if (isCursorAgentEnv(env)) return 'cursor';
   return null;

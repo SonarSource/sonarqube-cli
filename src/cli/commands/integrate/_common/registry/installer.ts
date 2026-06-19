@@ -27,7 +27,7 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
-import { confirmPrompt, info } from '../../../../../ui';
+import { confirmPrompt, discreetSuccess, info } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
@@ -184,6 +184,9 @@ export class IntegrationInstaller {
     const decision = normalizeDecision(await feature.shouldInstall?.(invocation));
     switch (decision.action) {
       case 'install':
+        if (decision.message) {
+          discreetSuccess(decision.message);
+        }
         return true;
       case 'skip':
         if (decision.message) {

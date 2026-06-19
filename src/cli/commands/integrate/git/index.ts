@@ -26,7 +26,8 @@ import { join } from 'node:path';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, intro, text, warn } from '../../../../ui';
+import { blank, confirmPrompt, info, intro, text, warn } from '../../../../ui';
+import { yellow } from '../../../../ui/colors.js';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { resolveIntegrateScope } from '../_common/integrate-scope';
@@ -136,7 +137,13 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
 export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
   validateHookOption(options.hook);
 
-  intro('SonarQube Git Integration (secrets scanning)');
+  if (options.global && (options.dependencyRisks || options.project)) {
+    throw new InvalidOptionError('--dependency-risks and -p are not supported with --global.');
+  }
+
+  intro('SonarQube Git Integration (source code scanning)');
+  info('This integration includes secrets and dependency risks detection in your git repository.');
+  info(yellow('Some scan types may be unavailable for certain hook types.'));
 
   if (options.global) {
     return integrateGitGlobal(options);
@@ -150,6 +157,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
 
   const scope = await resolveIntegrateScope({
     ...options,
+    projectKey: options.project,
     projectRoot: isGit ? gitRoot : process.cwd(),
   });
   if (scope === 'global') {
@@ -180,6 +188,8 @@ async function installGitFeatures(
     scope,
     force: options.force,
     nonInteractive: options.nonInteractive,
+    // Attrs are project-scope only; global hooks do not support a project key.
+    attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
   });
 }
 

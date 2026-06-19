@@ -21,6 +21,7 @@
 import { type Command, Help, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
+import { IS_STANDALONE_DISTRIBUTION } from '../lib/distribution';
 import { loadState } from '../lib/repository/state-repository';
 import { initSentry } from '../lib/sentry';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
@@ -32,6 +33,7 @@ import {
   TELEMETRY_FLUSH_MODE_ENV,
 } from '../telemetry';
 import { blank, error, warn } from '../ui';
+import { CommandFailedError } from './commands/_common/error';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
 import { analyzeAll, type AnalyzeAllOptions } from './commands/analyze/analyze-all';
@@ -65,6 +67,8 @@ import {
 } from './commands/hook/codex-post-tool-use';
 import { codexPromptSubmit } from './commands/hook/codex-prompt-submit';
 import { copilotPreToolUse } from './commands/hook/copilot-pre-tool-use';
+import { cursorPreFileRead } from './commands/hook/cursor-pre-file-read';
+import { cursorPreToolUse } from './commands/hook/cursor-pre-tool-use';
 import { cursorPromptSubmit } from './commands/hook/cursor-prompt-submit';
 import { gitPreCommit, type GitPreCommitOptions } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
@@ -97,6 +101,7 @@ export const COMMAND_TREE = new SonarCommand();
 
 COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
+  .argument('[command]')
   .version(VERSION, '-v, --version', 'display version for command')
   .enablePositionalOptions()
   .configureOutput({
@@ -113,7 +118,12 @@ COMMAND_TREE.name('sonar')
       return getBanner(VERSION) + '\n' + Help.prototype.formatHelp.call(helper, cmd, helper);
     },
   })
-  .anonymousAction(function (this: Command) {
+  .anonymousAction(function (this: Command, command?: string) {
+    if (command) {
+      throw new CommandFailedError(`unknown command '${command}'`, {
+        remediationHint: "Run 'sonar --help' to see the list of available commands.",
+      });
+    }
     this.outputHelp();
   });
 
@@ -223,7 +233,7 @@ const integrateCommand = COMMAND_TREE.command('integrate')
 integrateCommand
   .command('git')
   .description(
-    'Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
+    'Install a Git pre-commit hook that scans staged files for secrets and dependency risks before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
   )
   .option(
     '--hook <type>',
@@ -234,6 +244,14 @@ integrateCommand
   .option(
     '--global',
     'Install hook globally for all repositories (sets git config --global core.hooksPath)',
+  )
+  .option(
+    '--dependency-risks',
+    'Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)',
+  )
+  .option(
+    '-p, --project <project>',
+    'Project key baked into the dependency-risks hook (required with --dependency-risks)',
   )
   .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
 
@@ -306,7 +324,7 @@ integrateCommand
   .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCodex(options, auth));
 
 integrateCommand
-  .command('antigravity', { hidden: true })
+  .command('antigravity')
   .description(
     'Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Context Augmentation.',
   )
@@ -322,9 +340,8 @@ integrateCommand
     integrateAntigravity(options, auth),
   );
 
-// hidden until stable — remove { hidden: true } when sonar integrate cursor goes GA (CLI-221)
 integrateCommand
-  .command('cursor', { hidden: true })
+  .command('cursor')
   .description(
     'Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.',
   )
@@ -497,14 +514,16 @@ system
   .anonymousAction((options: SystemResetOptions) => systemReset(options));
 
 // Update the CLI to the latest version
-COMMAND_TREE.command('self-update')
-  .description('Update SonarQube CLI to the latest version')
-  .rootHelp({
-    category: 'cli-management',
-  })
-  .option('--status', 'Check for a newer version without installing')
-  .option('--force', 'Install the latest version even if already up to date')
-  .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
+if (IS_STANDALONE_DISTRIBUTION) {
+  COMMAND_TREE.command('self-update')
+    .description('Update SonarQube CLI to the latest version')
+    .rootHelp({
+      category: 'cli-management',
+    })
+    .option('--status', 'Check for a newer version without installing')
+    .option('--force', 'Install the latest version even if already up to date')
+    .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
+}
 
 const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
   'Run SonarQube services',
@@ -565,6 +584,16 @@ hookCommand
   .command('cursor-prompt-submit')
   .description('beforeSubmitPrompt handler for Cursor: scan prompts for secrets before sending')
   .anonymousAction(() => cursorPromptSubmit());
+
+hookCommand
+  .command('cursor-pre-file-read')
+  .description('beforeReadFile handler for Cursor: scan files for secrets before agent reads them')
+  .anonymousAction(() => cursorPreFileRead());
+
+hookCommand
+  .command('cursor-pre-tool-use')
+  .description('preToolUse handler for Cursor: scan Read tool targets for secrets before execution')
+  .anonymousAction(() => cursorPreToolUse());
 
 hookCommand
   .command('claude-post-tool-use')

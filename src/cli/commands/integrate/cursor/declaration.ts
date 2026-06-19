@@ -20,29 +20,44 @@
 
 import { join } from 'node:path';
 
-import { CLI_COMMAND } from '../../../../lib/config-constants';
+import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
-import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
-import { resolveAgentHookCommand } from '../_common/hooks';
+import {
+  resolveAgentHooksConfigPath,
+  secretsScanningExample,
+} from '../_common/features/sonar-secrets-hooks-feature';
+import { resolveAgentHookScriptPath } from '../_common/hooks';
 import { buildSqaaSectionBody } from '../_common/instructions-templates';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { askUser, jsonPatch, skip, wholeFile } from '../_common/registry';
+import {
+  askUser,
+  isFeatureInstalledGloballyForProject,
+  jsonPatch,
+  skip,
+  sonarSecretsBinaryDependency,
+  wholeFile,
+} from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
-import { getSecretPromptTemplateUnix, getSecretPromptTemplateWindows } from './hook-templates';
-import { removeCursorHook, upsertCursorHook } from './hooks';
+import {
+  getSecretPreFileReadTemplateUnix,
+  getSecretPreFileReadTemplateWindows,
+  getSecretPreToolUseTemplateUnix,
+  getSecretPreToolUseTemplateWindows,
+  getSecretPromptTemplateUnix,
+  getSecretPromptTemplateWindows,
+} from './hook-templates';
+import { buildCursorHookEntry, removeCursorHooks, upsertCursorHooks } from './hooks';
 
-export const CURSOR_CONFIG_DIR = '.cursor';
+const HOOKS_JSON = 'hooks.json';
+const PREREAD_SCRIPT_REL = 'sonar-secrets/build-scripts/before-read-file-secrets';
+const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pre-tool-use-secrets';
+const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
 export const CURSOR_INTEGRATION_ID = 'cursor';
 
-const HOOKS_FILE = 'hooks.json';
-const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
-const SECRETS_PROMPT_HOOK_FEATURE_ID = 'sonar-secrets-prompt-hook';
-const SONAR_SECRETS_MARKER = 'sonar-secrets';
-const BEFORE_SUBMIT_PROMPT_EVENT = 'beforeSubmitPrompt';
 const RULES_DIR = 'rules';
 const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
 // Shared cross-tool skills directory. Cursor reads `.agents/skills` (same as
@@ -106,55 +121,93 @@ function resolveCursorCagSkillPath(context: IntegrationContext): string {
   return join(context.targetRoot, AGENTS_SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
 }
 
+function resolveCursorHooksJsonPath(context: IntegrationContext): string {
+  return resolveAgentHooksConfigPath(context, CURSOR_CONFIG_DIR, HOOKS_JSON);
+}
+
 export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions> = {
   id: CURSOR_INTEGRATION_ID,
   displayName: 'Cursor',
   features: [
-    createSonarSecretsHooksFeature<CursorIntegrationOptions>({
-      agentDisplayName: 'Cursor',
-      integrationId: CURSOR_INTEGRATION_ID,
-      configDir: CURSOR_CONFIG_DIR,
-      hooksConfigFileName: HOOKS_FILE,
-      hooksPatchId: 'cursor-hooks-secrets-hook',
-      featureId: SECRETS_PROMPT_HOOK_FEATURE_ID,
-      displayName: 'Secret scanning hook for prompts',
-      scripts: [
-        {
+    {
+      id: 'sonar-secrets-hooks',
+      displayName: 'secret scanning hooks',
+      shouldInstall: ({ options, scope, state }) => {
+        const globalHookExists =
+          options.globalSecretsHookExists ??
+          isFeatureInstalledGloballyForProject(
+            state,
+            scope,
+            CURSOR_INTEGRATION_ID,
+            'sonar-secrets-hooks',
+          );
+        return globalHookExists
+          ? skip(
+              'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
+            )
+          : askUser();
+      },
+      postInstallExample: secretsScanningExample('Cursor'),
+      dependencies: [sonarSecretsBinaryDependency],
+      resources: [
+        wholeFile({
+          id: 'preread-secrets-script',
+          displayName: 'Cursor beforeReadFile hook script',
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PREREAD_SCRIPT_REL),
+          content: {
+            unix: getSecretPreFileReadTemplateUnix(),
+            windows: getSecretPreFileReadTemplateWindows(),
+          },
+          executable: true,
+        }),
+        wholeFile({
+          id: 'pretool-secrets-script',
+          displayName: 'Cursor preToolUse hook script',
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PRETOOL_SCRIPT_REL),
+          content: {
+            unix: getSecretPreToolUseTemplateUnix(),
+            windows: getSecretPreToolUseTemplateWindows(),
+          },
+          executable: true,
+        }),
+        wholeFile({
           id: 'prompt-secrets-script',
           displayName: 'Cursor beforeSubmitPrompt hook script',
-          scriptPath: PROMPT_SCRIPT_REL,
+          targetPath: (context) =>
+            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PROMPT_SCRIPT_REL),
           content: {
             unix: getSecretPromptTemplateUnix(),
             windows: getSecretPromptTemplateWindows(),
           },
-        },
-      ],
-      hookEntries: [
-        {
-          eventType: BEFORE_SUBMIT_PROMPT_EVENT,
-          marker: SONAR_SECRETS_MARKER,
-          scriptPath: PROMPT_SCRIPT_REL,
-        },
-      ],
-      // Cursor's hooks.json uses a flat `{ command }` schema wrapped in `{ version, hooks }`,
-      // unlike the nested Claude/Codex shape the factory writes by default.
-      hookWriter: {
-        defaultValue: { version: 1, hooks: {} },
-        patch: (document, context, entries, configDir) =>
-          entries.reduce(
-            (doc, entry) =>
-              upsertCursorHook(
-                doc,
-                entry.eventType,
-                resolveAgentHookCommand(context, configDir, entry.scriptPath),
-                entry.marker,
+          executable: true,
+        }),
+        jsonPatch({
+          id: 'cursor-hooks-config',
+          displayName: 'Cursor hooks configuration',
+          targetPath: resolveCursorHooksJsonPath,
+          defaultValue: { version: 1, hooks: {} },
+          patch: (document, context) =>
+            upsertCursorHooks(document, [
+              buildCursorHookEntry(context, CURSOR_CONFIG_DIR, 'preToolUse', PRETOOL_SCRIPT_REL),
+              buildCursorHookEntry(
+                context,
+                CURSOR_CONFIG_DIR,
+                'beforeReadFile',
+                PREREAD_SCRIPT_REL,
               ),
-            document,
-          ),
-        removePatch: (document, markers) =>
-          markers.reduce((doc, marker) => removeCursorHook(doc, marker), document),
-      },
-    }),
+              buildCursorHookEntry(
+                context,
+                CURSOR_CONFIG_DIR,
+                'beforeSubmitPrompt',
+                PROMPT_SCRIPT_REL,
+              ),
+            ]),
+          removePatch: (document) => removeCursorHooks(document, ['sonar-secrets']),
+        }),
+      ],
+    },
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',

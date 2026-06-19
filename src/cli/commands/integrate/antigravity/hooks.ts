@@ -148,10 +148,17 @@ export function removeAntigravitySecretsBlock(document: unknown): AntigravityHoo
   return doc;
 }
 
-export function resolveAntigravityHooksJsonPath(context: IntegrationContext): string {
-  return context.scope === 'global'
+export function resolveAntigravityHooksJsonPathForScope(
+  scope: 'project' | 'global',
+  targetRoot: string,
+): string {
+  return scope === 'global'
     ? ANTIGRAVITY_GLOBAL_HOOKS_JSON
-    : join(context.targetRoot, ANTIGRAVITY_PROJECT_HOOKS_JSON);
+    : join(targetRoot, ANTIGRAVITY_PROJECT_HOOKS_JSON);
+}
+
+export function resolveAntigravityHooksJsonPath(context: IntegrationContext): string {
+  return resolveAntigravityHooksJsonPathForScope(context.scope, context.targetRoot);
 }
 
 export function resolvePretoolSecretsScriptPath(context: IntegrationContext): string {
@@ -190,20 +197,21 @@ export function hookScriptName(): string {
   return `${PRETOOL_SECRETS_BASENAME}${process.platform === 'win32' ? '.ps1' : '.sh'}`;
 }
 
-function isSonarSecretsPreToolUseEntry(entry: AntigravityToolHookEntry): boolean {
+export function isSonarSecretsPreToolUseEntry(entry: AntigravityToolHookEntry): boolean {
   if (entry.matcher !== VIEW_FILE_MATCHER) return false;
   return entry.hooks.some((hook) => hookReferencesSonarSecrets(hook.command));
 }
 
-function hookReferencesSonarSecrets(command: string): boolean {
+export function hookReferencesSonarSecrets(command: string): boolean {
   return (
     command.includes(ANTIGRAVITY_PRE_TOOL_HOOK_MARKER) ||
     command.includes(SONAR_SECRETS_MARKER) ||
-    command.includes(PRETOOL_SECRETS_BASENAME)
+    command.includes(PRETOOL_SECRETS_BASENAME) ||
+    command.includes(hookScriptName())
   );
 }
 
-function toAntigravityHooksDocument(document: unknown): AntigravityHooksDocument {
+export function toAntigravityHooksDocument(document: unknown): AntigravityHooksDocument {
   if (!document || typeof document !== 'object' || Array.isArray(document)) {
     return {};
   }

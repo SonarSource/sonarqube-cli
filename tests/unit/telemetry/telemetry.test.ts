@@ -29,6 +29,7 @@ import type { Command } from 'commander';
 
 import * as agentDetector from '../../../src/lib/agent-detector.js';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
+import { DISTRIBUTION } from '../../../src/lib/distribution.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
 import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
@@ -91,6 +92,7 @@ function makeStoredEvent(overrides: Partial<StoredTelemetryEvent> = {}): StoredT
       user_uuid: null,
       organization_uuid_v4: null,
       sqs_installation_id: null,
+      distribution: DISTRIBUTION,
       caller_agent: null,
     },
     ...overrides,
@@ -228,6 +230,13 @@ describe('storeEvent', () => {
 
       const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
       expect(event.event_payload.result).toBe('failure');
+    });
+
+    it('sets distribution from the resolved CLI distribution', async () => {
+      await storeEvent(makeCommand('auth login'), true);
+
+      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(event.event_payload.distribution).toBe(DISTRIBUTION);
     });
 
     it('sets event_payload.caller from detectCallerAgent', async () => {

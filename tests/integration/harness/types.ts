@@ -54,6 +54,8 @@ export interface RunOptions {
    */
   browserToken?: string;
   browserTokenName?: string;
+  /** Override the compiled CLI binary path for this invocation. */
+  binaryPath?: string;
 }
 
 export interface RecordedRequest {

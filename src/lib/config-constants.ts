@@ -198,6 +198,13 @@ export const AGENTIC_ANALYSIS_DOCS_URL =
 export const AGENT_ACTIVITY_PATH = '/project/agent_activity';
 
 // ---------------------------------------------------------------------------
+// Cursor
+// ---------------------------------------------------------------------------
+
+export const CURSOR_CONFIG_DIR = '.cursor';
+export const CURSOR_IGNORE_FILE = '.cursorignore';
+
+// ---------------------------------------------------------------------------
 // Context Augmentation
 // ---------------------------------------------------------------------------
 
