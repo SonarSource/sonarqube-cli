@@ -27,7 +27,7 @@ import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
 import { findGitRoot } from '../../../../lib/project-workspace';
 import { blank, confirmPrompt, info, intro, text, warn } from '../../../../ui';
-import { yellow } from '../../../../ui/colors.ts';
+import { yellow } from '../../../../ui/colors.js';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { resolveIntegrateScope } from '../_common/integrate-scope';
