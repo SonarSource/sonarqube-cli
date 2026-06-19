@@ -54,6 +54,7 @@ import {
 const FIXTURE_DIR = join(import.meta.dir, 'fixtures', 'vulnerable-npm-project');
 
 const SCAN_TIMEOUT_MS = 180_000;
+const HOOK_TIMEOUT_MS = 30_000;
 
 // Exit code from analyze/dependency-risks.ts: 51 = unresolved risks found.
 const EXIT_UNRESOLVED_RISKS = 51;
@@ -94,7 +95,7 @@ for (const region of STAGING_REGIONS) {
 
         projectKey = uniqueProjectKey('sonarqube-cli-its-sca');
         await createProject(cfg, projectKey);
-      });
+      }, HOOK_TIMEOUT_MS);
 
       afterEach(async () => {
         if (projectKey) {
@@ -103,7 +104,7 @@ for (const region of STAGING_REGIONS) {
           });
         }
         await harness?.dispose();
-      });
+      }, HOOK_TIMEOUT_MS);
 
       it(
         'reports dependency risks in json format',
