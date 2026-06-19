@@ -23,10 +23,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
-import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, info, intro, text, warn } from '../../../../ui';
+import { discoverProject, findGitRoot } from '../../../../lib/project-workspace';
+import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '../../../../ui';
 import { yellow } from '../../../../ui/colors.js';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
@@ -134,7 +135,10 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global');
 }
 
-export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
+export async function integrateGit(
+  options: IntegrateGitOptions,
+  auth: ResolvedAuth,
+): Promise<void> {
   validateHookOption(options.hook);
 
   if (options.global && (options.dependencyRisks || options.project)) {
@@ -171,7 +175,31 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
     });
   }
 
-  await installGitFeatures(options, gitRoot, 'project');
+  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth);
+
+  await installGitFeatures(resolvedOptions, gitRoot, 'project');
+}
+
+async function resolveProjectKey(
+  options: IntegrateGitOptions,
+  root: string,
+  auth: ResolvedAuth,
+): Promise<IntegrateGitOptions> {
+  if (options.project) {
+    phase('Project', [phaseItem('Key', 'done', options.project)]);
+    return options;
+  }
+
+  const discovered = await discoverProject(root, true, { auth });
+  if (discovered.projectKey) {
+    phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
+    return { ...options, project: discovered.projectKey };
+  }
+
+  warn(
+    'No project key detected — some features will not be available. Run `sonar integrate git --help` for ways to define a project.',
+  );
+  return options;
 }
 
 async function installGitFeatures(

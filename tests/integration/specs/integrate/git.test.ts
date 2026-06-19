@@ -607,6 +607,44 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
+    'opts into dependency-risks interactively and auto-discovers project key',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      harness.state().withScaScannerBinaryInstalled();
+      initGitRepo(harness);
+      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=auto-project\n');
+
+      // '\r' selects project scope, '\r' accepts 'Install pre-commit hook?',
+      // '\r' accepts 'Enable dependency-risks?' (dep-risks is a pre-commit subfeature,
+      // so it prompts immediately after pre-commit is accepted), 'n' declines
+      // 'Install pre-push hook?'. Project key discovered from sonar-project.properties.
+      const result = await harness.run('integrate git', {
+        stdinChunks: ['\r', '\r', '\r', 'n'],
+        stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const hookContent = readFileSync(
+        join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
+        'utf-8',
+      );
+      expect(hookContent).toContain('--dependency-risks -p');
+      expect(hookContent).toContain('auto-project');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const gitIntegration = getInstalledIntegration(state, 'native-git');
+      const feature = gitIntegration.features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expect(feature.attrs?.projectKey).toBe('auto-project');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
+      expectInstalledDependency(state, 'sonar-secrets', 'sonarsource-binary');
+      expectInstalledDependency(state, 'sca-scanner-cli', 'sonarsource-binary');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'fails with an explicit notice when the user declines every per-feature prompt',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
