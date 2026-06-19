@@ -154,6 +154,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
 
   const scope = await resolveIntegrateScope({
     ...options,
+    projectKey: options.project,
     projectRoot: isGit ? gitRoot : process.cwd(),
   });
   if (scope === 'global') {

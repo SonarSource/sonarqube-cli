@@ -549,11 +549,11 @@ describe('integrate git (native hooks)', () => {
       harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
 
-      // '\r' selects project scope, '\r' accepts 'Enable dependency-risks scanning?'.
+      // -p implies project scope (no scope prompt). '\r' accepts 'Enable dependency-risks scanning?'.
       // Pre-commit is forced by --hook; pre-push is skipped. Dep-risks prompt appears
       // because -p supplies a project key.
       const result = await harness.run('integrate git --hook pre-commit -p my-project', {
-        stdinChunks: ['\r', '\r'],
+        stdinChunks: ['\r'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
@@ -581,9 +581,9 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // '\r' selects project scope, 'n' declines 'Enable dependency-risks scanning?'.
+      // -p implies project scope (no scope prompt). 'n' declines 'Enable dependency-risks scanning?'.
       const result = await harness.run('integrate git --hook pre-commit -p my-project', {
-        stdinChunks: ['\r', 'n'],
+        stdinChunks: ['n'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
