@@ -52,6 +52,7 @@ const {
   SonarSourceBinary,
   sonarSourceBinary,
   textSnippet,
+  textSnippetRemover,
   tomlPatch,
   wholeFile,
   yamlPatch,
@@ -744,6 +745,55 @@ describe('declarative integration framework', () => {
 
     expect(selected.map((feature) => feature.id)).toEqual(['asked', 'defaulted']);
     expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(0);
+  });
+
+  it('runs legacy cleanups unconditionally even when state records resource at a higher version', async () => {
+    const state = getDefaultState('test');
+    const targetPath = join(tempDir, 'managed-file');
+    const legacyStartMarker = '# legacy:begin';
+    const legacyEndMarker = '# legacy:end';
+    const currentStartMarker = '# sonar:begin';
+
+    const feature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      resources: [
+        textSnippet({
+          id: 'resource',
+          version: '1',
+          targetPath,
+          content: 'new content',
+          startMarker: currentStartMarker,
+        }),
+      ],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'resource',
+          version: '0',
+          targetPath,
+          startMarker: legacyStartMarker,
+          endMarker: legacyEndMarker,
+        }),
+      ],
+    };
+    const integration = makeIntegration({ features: [feature] });
+    const context = makeContext(state, tempDir);
+
+    // First install: state is empty so legacy cleanup runs, recording resource at version '1'.
+    await writeFile(targetPath, `${legacyStartMarker}\nold\n${legacyEndMarker}\n`);
+    await applyAndRecord(installer, context, integration, feature);
+    expect(state.integrations.installed[0]?.features[0]?.resources[0]?.version).toBe('1');
+
+    // Simulate file reversion (e.g. git reset) while state still records version '1'.
+    await writeFile(targetPath, `${legacyStartMarker}\nold\n${legacyEndMarker}\n`);
+
+    // Re-install: legacy cleanup must run unconditionally despite state having version '1'.
+    await applyAndRecord(installer, context, integration, feature);
+
+    const content = await readFile(targetPath, 'utf-8');
+    expect(content).not.toContain(legacyStartMarker);
+    expect(content).toContain(currentStartMarker);
+    expect(content).toContain('new content');
   });
 
   it('applies declared resources and records the feature once', async () => {
