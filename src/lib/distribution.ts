@@ -50,4 +50,5 @@ if (rawDistribution !== undefined) {
 }
 
 // Channel builds inject this env access at compile time via Bun's `define`.
-export const DISTRIBUTION = rawDistribution ?? DEFAULT_DISTRIBUTION;
+export const DISTRIBUTION: Distribution = rawDistribution ?? DEFAULT_DISTRIBUTION;
+export const IS_STANDALONE_DISTRIBUTION = DISTRIBUTION === 'standalone';

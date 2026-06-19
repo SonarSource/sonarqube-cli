@@ -36,8 +36,8 @@ const DEFAULT_BINARY = join(
 );
 const DEFAULT_TIMEOUT_MS = 30000;
 
-function getBinaryPath(coverageMode: boolean): string {
-  const binaryPath = coverageMode ? COVERAGE_BINARY : DEFAULT_BINARY;
+function getBinaryPath(coverageMode: boolean, overridePath?: string): string {
+  const binaryPath = overridePath ?? (coverageMode ? COVERAGE_BINARY : DEFAULT_BINARY);
   if (!existsSync(binaryPath)) {
     throw new Error(
       `CLI binary not found at: ${binaryPath}\n` + `Run 'bun run build:binary' to build it first.`,
@@ -64,10 +64,11 @@ export async function runCli(
     cwd: string;
     browserToken?: string;
     browserTokenName?: string;
+    binaryPath?: string;
   },
 ): Promise<CliResult> {
   const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
-  const binaryPath = getBinaryPath(coverageMode);
+  const binaryPath = getBinaryPath(coverageMode, options.binaryPath);
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const startTime = Date.now();
   mkdirSync(options.cwd, { recursive: true });

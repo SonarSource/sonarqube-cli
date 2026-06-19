@@ -21,6 +21,7 @@
 import { type Command, Help, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
+import { IS_STANDALONE_DISTRIBUTION } from '../lib/distribution';
 import { loadState } from '../lib/repository/state-repository';
 import { initSentry } from '../lib/sentry';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
@@ -32,6 +33,7 @@ import {
   TELEMETRY_FLUSH_MODE_ENV,
 } from '../telemetry';
 import { blank, error, warn } from '../ui';
+import { CommandFailedError } from './commands/_common/error';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
 import { analyzeAll, type AnalyzeAllOptions } from './commands/analyze/analyze-all';
@@ -99,6 +101,7 @@ export const COMMAND_TREE = new SonarCommand();
 
 COMMAND_TREE.name('sonar')
   .description('SonarQube CLI')
+  .argument('[command]')
   .version(VERSION, '-v, --version', 'display version for command')
   .enablePositionalOptions()
   .configureOutput({
@@ -115,7 +118,12 @@ COMMAND_TREE.name('sonar')
       return getBanner(VERSION) + '\n' + Help.prototype.formatHelp.call(helper, cmd, helper);
     },
   })
-  .anonymousAction(function (this: Command) {
+  .anonymousAction(function (this: Command, command?: string) {
+    if (command) {
+      throw new CommandFailedError(`unknown command '${command}'`, {
+        remediationHint: "Run 'sonar --help' to see the list of available commands.",
+      });
+    }
     this.outputHelp();
   });
 
@@ -498,14 +506,16 @@ system
   .anonymousAction((options: SystemResetOptions) => systemReset(options));
 
 // Update the CLI to the latest version
-COMMAND_TREE.command('self-update')
-  .description('Update SonarQube CLI to the latest version')
-  .rootHelp({
-    category: 'cli-management',
-  })
-  .option('--status', 'Check for a newer version without installing')
-  .option('--force', 'Install the latest version even if already up to date')
-  .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
+if (IS_STANDALONE_DISTRIBUTION) {
+  COMMAND_TREE.command('self-update')
+    .description('Update SonarQube CLI to the latest version')
+    .rootHelp({
+      category: 'cli-management',
+    })
+    .option('--status', 'Check for a newer version without installing')
+    .option('--force', 'Install the latest version even if already up to date')
+    .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
+}
 
 const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
   'Run SonarQube services',
