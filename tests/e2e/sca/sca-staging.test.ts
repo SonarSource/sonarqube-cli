@@ -40,7 +40,7 @@
 import { cpSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../integration/harness';
 import {
@@ -54,7 +54,6 @@ import {
 const FIXTURE_DIR = join(import.meta.dir, 'fixtures', 'vulnerable-npm-project');
 
 const SCAN_TIMEOUT_MS = 180_000;
-setDefaultTimeout(SCAN_TIMEOUT_MS);
 
 // Exit code from analyze/dependency-risks.ts: 51 = unresolved risks found.
 const EXIT_UNRESOLVED_RISKS = 51;
@@ -106,77 +105,89 @@ for (const region of STAGING_REGIONS) {
         await harness?.dispose();
       });
 
-      it('reports dependency risks in json format', async () => {
-        const result = await harness.run(
-          `analyze dependency-risks --project ${projectKey} --format json`,
-          { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
-        );
+      it(
+        'reports dependency risks in json format',
+        async () => {
+          const result = await harness.run(
+            `analyze dependency-risks --project ${projectKey} --format json`,
+            { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
+          );
 
-        expect(
-          result.exitCode,
-          `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
-        ).toBe(EXIT_UNRESOLVED_RISKS);
+          expect(
+            result.exitCode,
+            `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+          ).toBe(EXIT_UNRESOLVED_RISKS);
 
-        const payload = JSON.parse(result.stdout) as DependencyRisksJson;
+          const payload = JSON.parse(result.stdout) as DependencyRisksJson;
 
-        expect(payload.project).toBe(projectKey);
-        expect(payload.errors).toHaveLength(0);
-        expect(payload.summary.packagesScanned).toBe(1);
-        expect(payload.summary.totalRisks).toBeGreaterThanOrEqual(10);
+          expect(payload.project).toBe(projectKey);
+          expect(payload.errors).toHaveLength(0);
+          expect(payload.summary.packagesScanned).toBe(1);
+          expect(payload.summary.totalRisks).toBeGreaterThanOrEqual(10);
 
-        const group = payload.packages[0].groups[0];
-        expect(group.type).toBe('VULNERABILITY');
-        expect(group.selectedRisks.length).toBeGreaterThanOrEqual(10);
+          const group = payload.packages[0].groups[0];
+          expect(group.type).toBe('VULNERABILITY');
+          expect(group.selectedRisks.length).toBeGreaterThanOrEqual(10);
 
-        const cve = group.selectedRisks.find((r) => r.vulnerabilityId === 'CVE-2019-10744');
-        expect(cve).toBeDefined();
-        expect(cve!.severity).toBe('HIGH');
-        expect(cve!.status).toBe('NEW');
-      });
+          const cve = group.selectedRisks.find((r) => r.vulnerabilityId === 'CVE-2019-10744');
+          expect(cve).toBeDefined();
+          expect(cve!.severity).toBe('HIGH');
+          expect(cve!.status).toBe('NEW');
+        },
+        SCAN_TIMEOUT_MS,
+      );
 
-      it('reports dependency risks in toon format', async () => {
-        const result = await harness.run(
-          `analyze dependency-risks --project ${projectKey} --format toon`,
-          { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
-        );
+      it(
+        'reports dependency risks in toon format',
+        async () => {
+          const result = await harness.run(
+            `analyze dependency-risks --project ${projectKey} --format toon`,
+            { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
+          );
 
-        expect(
-          result.exitCode,
-          `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
-        ).toBe(EXIT_UNRESOLVED_RISKS);
+          expect(
+            result.exitCode,
+            `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+          ).toBe(EXIT_UNRESOLVED_RISKS);
 
-        expect(result.stdout).toContain(`project: ${projectKey}`);
-        expect(result.stdout).toContain('packagesScanned: 1');
-        expect(result.stdout).toContain('pkg:npm/lodash@4.17.4');
-        expect(result.stdout).toContain('type: VULNERABILITY');
-        expect(result.stdout).toContain('selectedRisks[');
-        expect(result.stdout).toContain('{severity,status,cvssScore,vulnerabilityId}:');
-        expect(result.stdout).toContain('HIGH,NEW,"9.1",CVE-2019-10744');
-        // progress noise must not bleed into stdout
-        expect(result.stdout).not.toContain('Analyzing dependency risks');
-      });
+          expect(result.stdout).toContain(`project: ${projectKey}`);
+          expect(result.stdout).toContain('packagesScanned: 1');
+          expect(result.stdout).toContain('pkg:npm/lodash@4.17.4');
+          expect(result.stdout).toContain('type: VULNERABILITY');
+          expect(result.stdout).toContain('selectedRisks[');
+          expect(result.stdout).toContain('{severity,status,cvssScore,vulnerabilityId}:');
+          expect(result.stdout).toContain('HIGH,NEW,"9.1",CVE-2019-10744');
+          // progress noise must not bleed into stdout
+          expect(result.stdout).not.toContain('Analyzing dependency risks');
+        },
+        SCAN_TIMEOUT_MS,
+      );
 
-      it('reports dependency risks in table format', async () => {
-        const result = await harness.run(
-          `analyze dependency-risks --project ${projectKey} --format table`,
-          { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
-        );
+      it(
+        'reports dependency risks in table format',
+        async () => {
+          const result = await harness.run(
+            `analyze dependency-risks --project ${projectKey} --format table`,
+            { extraEnv: cfg.cliEnv, timeoutMs: SCAN_TIMEOUT_MS },
+          );
 
-        expect(
-          result.exitCode,
-          `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
-        ).toBe(EXIT_UNRESOLVED_RISKS);
+          expect(
+            result.exitCode,
+            `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+          ).toBe(EXIT_UNRESOLVED_RISKS);
 
-        expect(result.stdout).toContain('── lodash@4.17.4 [NEW] (');
-        expect(result.stdout).toContain('  HIGH      NEW      CVSS 9.1 CVE-2019-10744');
-        expect(result.stdout).toContain('Summary: 1 dependencies checked,');
-        expect(result.stdout).toContain(
-          'Filtering by: new, open, confirm (discarded: accept, safe, fixed)',
-        );
-        expect(result.stdout).toContain('  lodash@4.17.4 (');
-        expect(result.stdout).toContain('highest severity HIGH');
-        expect(result.stdout).toContain('Recommended versions without known vulnerabilities:');
-      });
+          expect(result.stdout).toContain('── lodash@4.17.4 [NEW] (');
+          expect(result.stdout).toContain('  HIGH      NEW      CVSS 9.1 CVE-2019-10744');
+          expect(result.stdout).toContain('Summary: 1 dependencies checked,');
+          expect(result.stdout).toContain(
+            'Filtering by: new, open, confirm (discarded: accept, safe, fixed)',
+          );
+          expect(result.stdout).toContain('  lodash@4.17.4 (');
+          expect(result.stdout).toContain('highest severity HIGH');
+          expect(result.stdout).toContain('Recommended versions without known vulnerabilities:');
+        },
+        SCAN_TIMEOUT_MS,
+      );
     },
   );
 }
