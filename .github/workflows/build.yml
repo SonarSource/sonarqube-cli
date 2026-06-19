@@ -28,7 +28,7 @@ jobs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
@@ -52,7 +52,7 @@ jobs:
     runs-on: github-ubuntu-latest-m
     needs: prepare
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
@@ -129,7 +129,7 @@ jobs:
     needs: [prepare, build-binaries]
     if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup Cloudflare WARP
         uses: SonarSource/gh-action_setup-cloudflare-warp@fe31a2b2f31595cffdef290985700732cb3469d6 # v2.1.0
@@ -232,7 +232,7 @@ jobs:
       - scan
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup JFrog CLI
         uses: jfrog/setup-jfrog-cli@1641575d87647fb969c0545f0b6a76873e328b7c # v5.0.0
@@ -317,7 +317,7 @@ jobs:
     name: Lint
     runs-on: github-ubuntu-latest-s
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Vault Secrets
         id: secrets
@@ -353,7 +353,7 @@ jobs:
           - os: windows
             runner: warp-custom-windows-2022-s
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Vault Secrets
         id: secrets
@@ -400,7 +400,7 @@ jobs:
           - os: windows
             runner: warp-custom-windows-2022-s
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Vault Secrets
         id: secrets
@@ -499,7 +499,7 @@ jobs:
     runs-on: github-ubuntu-latest-s
     needs: [prepare, lint, unit-tests, integration-and-e2e]
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
