@@ -617,6 +617,7 @@ describe('generic integration installer', () => {
     const container: FeatureContainer = {
       id: 'container',
       displayName: 'Container Feature',
+      defaultInstallSubfeatureIds: ['subfeature-1', 'subfeature-2'],
       subfeatures: [
         { id: 'subfeature-1', displayName: 'Subfeature One' },
         { id: 'subfeature-2', displayName: 'Subfeature Two' },
@@ -649,6 +650,7 @@ describe('generic integration installer', () => {
     const container: FeatureContainer<{ enableOptional?: boolean }> = {
       id: 'container',
       displayName: 'Container Feature',
+      defaultInstallSubfeatureIds: ['subfeature-1'],
       subfeatures: [
         { id: 'subfeature-1', displayName: 'Subfeature One' },
         {
