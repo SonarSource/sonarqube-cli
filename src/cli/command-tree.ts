@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command, Help, Option } from 'commander';
+import { type Command, Help, InvalidArgumentError, Option } from 'commander';
 
 import { version as VERSION } from '../../package.json';
 import { IS_STANDALONE_DISTRIBUTION } from '../lib/distribution';
@@ -37,6 +37,7 @@ import { CommandFailedError } from './commands/_common/error';
 import { parseInteger } from './commands/_common/parsing';
 import { SonarCommand } from './commands/_common/sonar-command.js';
 import { analyzeAll, type AnalyzeAllOptions } from './commands/analyze/analyze-all';
+import type { Severity } from './commands/analyze/dependency-risk-helpers/sca-scanner';
 import { SEVERITIES } from './commands/analyze/dependency-risk-helpers/view-model/build/severity';
 import {
   analyzeDependencyRisks,
@@ -429,8 +430,14 @@ const dependencyRisksStatusFilterOption = new Option(
 
 const dependencyRisksMinSeverityOption = new Option(
   '--min-severity <severity>',
-  'Minimum severity level to include (default: all severities)',
-).choices(SEVERITIES);
+  `Minimum severity level to include. Allowed values: ${SEVERITIES.join(', ')} (default: all severities)`,
+).argParser((v) => {
+  const upper = v.toUpperCase();
+  if (!SEVERITIES.includes(upper as Severity)) {
+    throw new InvalidArgumentError(`Allowed choices are ${SEVERITIES.join(', ')}.`);
+  }
+  return upper;
+});
 
 const dependencyRisksExtraHelp = `
 Dependency manifest files (e.g. package-lock.json, pom.xml) will be uploaded to SonarQube for analysis.

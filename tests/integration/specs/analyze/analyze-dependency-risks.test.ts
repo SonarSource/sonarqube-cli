@@ -229,7 +229,9 @@ describe('analyze dependency-risks', () => {
     );
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain("error: option '--min-severity <severity>'");
+    expect(result.stdout + result.stderr).toContain(
+      "error: option '--min-severity <severity>' argument 'bogus' is invalid. Allowed choices are BLOCKER, HIGH, MEDIUM, LOW, INFO.",
+    );
   });
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
