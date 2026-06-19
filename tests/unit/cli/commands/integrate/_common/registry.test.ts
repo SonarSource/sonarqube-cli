@@ -654,6 +654,31 @@ describe('declarative integration framework', () => {
     expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
   });
 
+  it('prints an optional message when a feature is installed, and stays silent otherwise', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [
+        {
+          id: 'with-message',
+          displayName: 'With message',
+          shouldInstall: () => install('auto-configured'),
+        },
+        { id: 'silent', displayName: 'Silent', shouldInstall: () => install() },
+      ],
+    });
+
+    const selected = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      state: getDefaultState('test'),
+    });
+
+    expect(selected.map((feature) => feature.id)).toEqual(['with-message', 'silent']);
+    expect(findMockUiCall('discreetSuccess', 'auto-configured')).toBeDefined();
+    expect(getMockUiCalls().filter((call) => call.method === 'discreetSuccess')).toHaveLength(1);
+  });
+
   it('prompts the user when a feature asks, installing on confirm and skipping on decline', async () => {
     setMockUi(true);
     const integration = makeIntegration({

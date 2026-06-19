@@ -33,7 +33,8 @@ export function createSecretsSubfeature(): SubfeatureDeclaration<IntegrateGitOpt
   return {
     id: 'pre-commit-secrets',
     displayName: 'pre-commit secrets scan',
-    shouldInstall: () => install(),
+    shouldInstall: () =>
+      install('Secrets scan is required for other hook types and is enabled by default'),
     dependencies: [sonarSecretsBinaryDependency],
   };
 }

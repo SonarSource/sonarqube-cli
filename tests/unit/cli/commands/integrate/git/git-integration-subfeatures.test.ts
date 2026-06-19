@@ -48,9 +48,12 @@ function makeInvocation({
 }
 
 describe('createSecretsSubfeature', () => {
-  it('always installs', () => {
+  it('always installs with an explanatory message', () => {
     const sub = createSecretsSubfeature();
-    expect(sub.shouldInstall!(makeInvocation())).toMatchObject({ action: 'install' });
+    expect(sub.shouldInstall!(makeInvocation())).toMatchObject({
+      action: 'install',
+      message: 'Secrets scan is required for other hook types and is enabled by default',
+    });
   });
 });
 
