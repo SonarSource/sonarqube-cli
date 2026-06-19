@@ -56,11 +56,23 @@ export async function readGitPushRefs(): Promise<PushRef[]> {
 /**
  * Read stdin, parse as JSON, and return the result typed as T.
  * Throws if stdin is not valid JSON or if the read times out.
+ *
+ * Strips any non-JSON framing bytes before the first `{` or `[` and after the
+ * last `}` or `]` to handle hook runners (e.g. Cursor ≥ 3.8.11) that wrap the
+ * JSON payload with framing bytes.
  */
 export async function readStdinJson<T>(): Promise<T> {
   const raw = await readRawStdin();
+  const jsonStart = raw.search(/[{[]/);
+  const withoutPrefix = jsonStart > 0 ? raw.slice(jsonStart) : raw;
+  const closeChar = withoutPrefix.startsWith('[') ? ']' : '}';
+  const closeIdx = withoutPrefix.lastIndexOf(closeChar);
+  const jsonStr =
+    closeIdx >= 0 && closeIdx < withoutPrefix.length - 1
+      ? withoutPrefix.slice(0, closeIdx + 1)
+      : withoutPrefix;
   try {
-    return JSON.parse(raw) as T;
+    return JSON.parse(jsonStr) as T;
   } catch {
     throw new Error('Failed to parse stdin as JSON');
   }

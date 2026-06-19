@@ -45,7 +45,7 @@ export function unixTemplate(command: string): string {
 }
 
 export function windowsTemplate(command: string): string {
-  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\n`;
+  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\nexit $LASTEXITCODE\n`;
 }
 
 /**
@@ -172,7 +172,7 @@ export function resolveAgentHookScriptPath(
 }
 
 /**
- * Hook `command` string: `powershell -NoProfile -File <path>` on Windows, raw
+ * Hook `command` string: `powershell -NoProfile -ExecutionPolicy Bypass -File <path>` on Windows, raw
  * path on Unix. Absolute path for global scope, relative path (portable when
  * the project is moved) for project scope.
  */
@@ -187,7 +187,7 @@ export function resolveAgentHookCommand(
     context.scope === 'global' ? join(context.targetRoot, relativePath) : relativePath;
 
   return process.platform === 'win32'
-    ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
+    ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${commandPath.replaceAll('\\', '/')}`
     : commandPath;
 }
 
