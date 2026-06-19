@@ -245,6 +245,14 @@ integrateCommand
     '--global',
     'Install hook globally for all repositories (sets git config --global core.hooksPath)',
   )
+  .option(
+    '--dependency-risks',
+    'Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)',
+  )
+  .option(
+    '-p, --project <project>',
+    'Project key baked into the dependency-risks hook (required with --dependency-risks)',
+  )
   .authenticatedAction((_auth, options: IntegrateGitOptions) => integrateGit(options));
 
 const projectKeyExtraHelp = `

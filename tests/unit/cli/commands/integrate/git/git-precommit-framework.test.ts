@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import yaml from 'js-yaml';
 
 import { CommandFailedError } from '../../../../../../src/cli/commands/_common/error';
-import type { IntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry';
+import type { ContainerIntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { IntegrationInstaller } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import {
   activatePreCommitFramework,
@@ -46,6 +46,17 @@ import * as processLib from '../../../../../../src/lib/process.js';
 import { getDefaultState } from '../../../../../../src/lib/state';
 
 const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.git-precommit-framework-tmp');
+
+function context(): ContainerIntegrationContext {
+  return {
+    state: getDefaultState('test'),
+    targetRoot: TEMP_DIR,
+    scope: 'global',
+    executionMode: 'install',
+    resolvedDependencies: new Map(),
+    activeSubfeatures: [],
+  };
+}
 
 const PRE_COMMIT_OK = { exitCode: 0, stdout: '', stderr: '' };
 const PRE_COMMIT_FAIL = { exitCode: 1, stdout: '', stderr: 'something went wrong' };
@@ -103,7 +114,7 @@ describe('removeLegacyHook', () => {
 describe('upsertSonarHook', () => {
   it('writes the correct hook shape for pre-commit stage', () => {
     const config: PreCommitConfig = { repos: [] };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
     expect(hook).toEqual({
       id: 'sonar-pre-commit',
@@ -117,7 +128,7 @@ describe('upsertSonarHook', () => {
 
   it('writes the correct hook shape for pre-push stage', () => {
     const config: PreCommitConfig = { repos: [] };
-    upsertSonarHook(config, 'pre-push');
+    upsertSonarHook(config, 'pre-push', context());
     const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
     expect(hook).toEqual({
       id: 'sonar-pre-push',
@@ -131,7 +142,7 @@ describe('upsertSonarHook', () => {
 
   it('creates a local repo with the per-stage hook when no repos exist', () => {
     const config: PreCommitConfig = { repos: [] };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks.some((h) => h.id === 'sonar-pre-commit')).toBe(true);
   });
@@ -140,7 +151,7 @@ describe('upsertSonarHook', () => {
     const config: PreCommitConfig = {
       repos: [{ repo: 'https://github.com/pre-commit/pre-commit-hooks', hooks: [] }],
     };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     expect(config.repos).toHaveLength(2);
     expect(
       config.repos.find((r) => r.repo === 'local')?.hooks.some((h) => h.id === 'sonar-pre-commit'),
@@ -153,7 +164,7 @@ describe('upsertSonarHook', () => {
         { repo: 'local', hooks: [{ id: 'other-hook', name: 'x', entry: 'e', language: 'system' }] },
       ],
     };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks).toHaveLength(2);
     expect(localRepo?.hooks.some((h) => h.id === 'sonar-pre-commit')).toBe(true);
@@ -162,16 +173,16 @@ describe('upsertSonarHook', () => {
 
   it('is idempotent: re-running the same stage replaces it in place', () => {
     const config: PreCommitConfig = { repos: [] };
-    upsertSonarHook(config, 'pre-commit');
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
+    upsertSonarHook(config, 'pre-commit', context());
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks.filter((h) => h.id === 'sonar-pre-commit')).toHaveLength(1);
   });
 
   it('lets the pre-commit and pre-push hooks coexist', () => {
     const config: PreCommitConfig = { repos: [] };
-    upsertSonarHook(config, 'pre-commit');
-    upsertSonarHook(config, 'pre-push');
+    upsertSonarHook(config, 'pre-commit', context());
+    upsertSonarHook(config, 'pre-push', context());
     const ids = config.repos.find((r) => r.repo === 'local')?.hooks.map((h) => h.id);
     expect(ids).toEqual(['sonar-pre-commit', 'sonar-pre-push']);
   });
@@ -193,7 +204,7 @@ describe('upsertSonarHook', () => {
         },
       ],
     };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks).toHaveLength(1);
     expect(localRepo?.hooks[0].id).toBe('sonar-pre-commit');
@@ -217,7 +228,7 @@ describe('upsertSonarHook', () => {
         },
       ],
     };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks).toHaveLength(2);
     expect(
@@ -243,7 +254,7 @@ describe('upsertSonarHook', () => {
         },
       ],
     };
-    upsertSonarHook(config, 'pre-push');
+    upsertSonarHook(config, 'pre-push', context());
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks).toHaveLength(2);
     expect(
@@ -270,7 +281,7 @@ describe('upsertSonarHook', () => {
         },
       ],
     };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     const localRepo = config.repos.find((r) => r.repo === 'local');
     expect(localRepo?.hooks).toHaveLength(1);
     expect(localRepo?.hooks[0].id).toBe('sonar-pre-commit');
@@ -278,7 +289,7 @@ describe('upsertSonarHook', () => {
 
   it('preserves top-level keys that are not repos', () => {
     const config: PreCommitConfig = { default_install_hook_types: ['pre-commit'], repos: [] };
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
     expect(config.default_install_hook_types).toEqual(['pre-commit']);
   });
 });
@@ -673,12 +684,13 @@ describe('pre-commit integration remove', () => {
     );
 
     const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
-    const context: IntegrationContext = {
+    const context: ContainerIntegrationContext = {
       state: getDefaultState('test'),
       targetRoot: TEMP_DIR,
       scope: 'project',
       executionMode: 'install',
       resolvedDependencies: new Map(),
+      activeSubfeatures: [],
     };
 
     try {

@@ -289,11 +289,12 @@ describe('declarative integration framework', () => {
     expect(isFeatureContainer(container)).toBe(true);
   });
 
-  it('selectFeaturesForInvocation filters subfeatures by shouldInstall conditions', async () => {
+  it('selectFeaturesForInvocation filters subfeatures by shouldInstall (install/skip)', async () => {
     const dep = sonarSourceBinary({ id: 'test-dep', binary: SonarSourceBinary.SonarSecrets });
     const container: FeatureContainer<{ enableSca?: boolean }> = {
       id: 'container',
       displayName: 'Container',
+      shouldInstall: () => install(),
       subfeatures: [
         {
           id: 'mandatory',
@@ -318,7 +319,6 @@ describe('declarative integration framework', () => {
       nonInteractive: true,
       state: getDefaultState('test'),
     });
-    expect(withoutSca).toHaveLength(1);
     expect(
       (withoutSca[0] as FeatureContainer<{ enableSca?: boolean }>).subfeatures.map((s) => s.id),
     ).toEqual(['mandatory']);
@@ -348,6 +348,7 @@ describe('declarative integration framework', () => {
           shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
         },
       ],
+      defaultInstallSubfeatureIds: [],
       operations: [
         {
           id: 'capture-op',
@@ -356,7 +357,6 @@ describe('declarative integration framework', () => {
           },
         },
       ],
-      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
     const state = getDefaultState('test');
@@ -371,6 +371,80 @@ describe('declarative integration framework', () => {
     expect(
       (integrationContext as ContainerIntegrationContext)?.activeSubfeatures?.map((s) => s.id),
     ).toEqual(['mandatory']);
+  });
+
+  it('selectFeaturesForInvocation prompts for subfeature askUser, installing on confirm and skipping on decline', async () => {
+    setMockUi(true);
+    const container: FeatureContainer<Record<string, unknown>> = {
+      id: 'container',
+      displayName: 'Container',
+      shouldInstall: () => install(),
+      subfeatures: [
+        {
+          id: 'opted-in',
+          displayName: 'Opted-in feature',
+          shouldInstall: () => askUser('Enable it?'),
+        },
+        {
+          id: 'declined',
+          displayName: 'Declined feature',
+          shouldInstall: () => askUser('Enable other?'),
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const integration = makeIntegration({ features: [container] });
+    queueMockResponse(true); // accept 'opted-in'
+    queueMockResponse(false); // decline 'declined'
+
+    const result = await installer.selectFeaturesForInvocation(integration, {
+      options: {},
+      targetRoot: '/tmp',
+      scope: 'project',
+      nonInteractive: false,
+      state: getDefaultState('test'),
+    });
+
+    const selected = (result[0] as FeatureContainer<Record<string, unknown>>).subfeatures;
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.id).toBe('opted-in');
+    const confirmCalls = getMockUiCalls().filter((c) => c.method === 'confirmPrompt');
+    expect(confirmCalls).toHaveLength(2);
+    expect(confirmCalls[0]?.args[0]).toBe('Enable it?');
+  });
+
+  it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at subfeature prompt', async () => {
+    setMockUi(true);
+    const container: FeatureContainer<Record<string, unknown>> = {
+      id: 'container',
+      displayName: 'Container',
+      shouldInstall: () => install(),
+      subfeatures: [
+        {
+          id: 'optional',
+          displayName: 'Optional feature',
+          shouldInstall: () => askUser('Enable it?'),
+        },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const integration = makeIntegration({ features: [container] });
+    queueMockResponse(null); // Ctrl+C
+
+    let caughtError: unknown;
+    try {
+      await installer.selectFeaturesForInvocation(integration, {
+        options: {},
+        targetRoot: '/tmp',
+        scope: 'project',
+        nonInteractive: false,
+        state: getDefaultState('test'),
+      });
+    } catch (err) {
+      caughtError = err;
+    }
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error).message).toContain('Installation cancelled');
   });
 
   it('records active subfeatures nested under the container feature in state', async () => {

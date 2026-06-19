@@ -27,7 +27,9 @@ import yaml from 'js-yaml';
 
 import { spawnProcess } from '../../../../../../lib/process';
 import { CommandFailedError } from '../../../../_common/error';
+import type { IntegrationContext } from '../../../_common/registry/types';
 import type { GitHookType } from '../../options';
+import { resolveDepRisksArgs } from '../shared';
 
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
 // Legacy id shared by both stages before per-stage ids existed. Retained only so existing installs
@@ -61,11 +63,13 @@ export interface PreCommitConfig {
   [key: string]: unknown;
 }
 
-function buildSonarHook(stage: GitHookType): PreCommitHookEntry {
+function buildSonarHook(stage: GitHookType, context: IntegrationContext): PreCommitHookEntry {
+  const depRisksArgs =
+    stage === 'pre-commit' ? resolveDepRisksArgs(context, { shellQuote: false }) : '';
   return {
     id: PRE_COMMIT_HOOK_IDS[stage],
     name: `Sonar ${stage} scan`,
-    entry: `sonar hook git-${stage} --`,
+    entry: `sonar hook git-${stage}${depRisksArgs} --`,
     language: 'system',
     pass_filenames: true,
     stages: [stage],
@@ -152,8 +156,12 @@ export function removeSonarHooksFromPreCommitConfig(document: unknown): PreCommi
  * replaces the current per-stage entry, else the same-stage legacy `sonar-secrets` entry (migrating
  * it in place), else appends. A legacy entry for the other stage is left untouched.
  */
-export function upsertSonarHook(config: PreCommitConfig, stage: GitHookType): void {
-  const hook = buildSonarHook(stage);
+export function upsertSonarHook(
+  config: PreCommitConfig,
+  stage: GitHookType,
+  context: IntegrationContext,
+): void {
+  const hook = buildSonarHook(stage, context);
   const localRepo = findLocalRepo(config);
   if (!localRepo) {
     config.repos.push({ repo: 'local', hooks: [hook] });

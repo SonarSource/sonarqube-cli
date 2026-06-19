@@ -18,9 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { IntegrationContext } from '../../../_common/registry/types';
 import type { GitHookType } from '../../options';
 import {
   LEGACY_HOOK_MARKER,
+  resolveDepRisksArgs,
   resolveSonarHookCommand,
   SONAR_HOOK_SKIP_SECRETS_MESSAGE,
 } from '../shared';
@@ -47,20 +49,14 @@ function nativeBinBlock(): string {
   ].join('\n');
 }
 
-export function getHookScript(hook: GitHookType): string {
+/** Returns the hook script. For pre-commit, bakes `--dependency-risks -p <key>` when `context` carries dep-risks attrs. */
+export function getHookScript(hook: GitHookType, context: IntegrationContext): string {
+  const depRisksArgs = hook === 'pre-commit' ? resolveDepRisksArgs(context) : '';
   return [
     '#!/bin/sh',
     `# ${getNativeHookMarker(hook)}`,
     nativeBinBlock(),
-    `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}`,
+    `"$SONAR_BIN" hook ${resolveSonarHookCommand(hook)}${depRisksArgs}`,
     '',
   ].join('\n');
-}
-
-export function getPreCommitHookScript(): string {
-  return getHookScript('pre-commit');
-}
-
-export function getPrePushHookScript(): string {
-  return getHookScript('pre-push');
 }

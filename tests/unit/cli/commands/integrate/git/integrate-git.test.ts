@@ -403,6 +403,22 @@ describe('integrateGit', () => {
     ).rejects.toThrow('--hook must be pre-commit or pre-push');
   });
 
+  it('throws InvalidOptionError when --global is combined with --dependency-risks', async () => {
+    await expect(
+      integrateGit({ global: true, nonInteractive: true, dependencyRisks: true, project: 'k' }),
+    ).rejects.toBeInstanceOf(InvalidOptionError);
+    await expect(
+      integrateGit({ global: true, nonInteractive: true, dependencyRisks: true, project: 'k' }),
+    ).rejects.toThrow('--dependency-risks and -p are not supported with --global');
+  });
+
+  it('throws InvalidOptionError when --global is combined with -p alone', async () => {
+    await expect(
+      integrateGit({ global: true, nonInteractive: true, project: 'k' }),
+    ).rejects.toBeInstanceOf(InvalidOptionError);
+  });
+  /* eslint-enable @typescript-eslint/await-thenable */
+
   it('throws CommandFailedError when not inside a git repository', () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/not-a-repo', isGit: false });
     expect(integrateGit({ nonInteractive: true })).rejects.toThrow('No git repository found');
@@ -436,7 +452,8 @@ describe('integrateGit', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: TEMP_DIR,
-        dependencies: [{ id: 'sonar-secrets' }],
+        dependencies: [],
+        subfeatures: [{ featureId: 'pre-commit-secrets', dependencies: [{ id: 'sonar-secrets' }] }],
       });
       expect(
         feature?.resources.some(
@@ -479,7 +496,8 @@ describe('integrateGit', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: TEMP_DIR,
-        dependencies: [{ id: 'sonar-secrets' }],
+        dependencies: [],
+        subfeatures: [{ featureId: 'pre-commit-secrets', dependencies: [{ id: 'sonar-secrets' }] }],
       });
       expect(
         feature?.resources.some(
@@ -512,7 +530,8 @@ describe('integrateGit', () => {
         featureId: 'pre-commit-hook',
         scope: 'project',
         targetRoot: TEMP_DIR,
-        dependencies: [{ id: 'sonar-secrets' }],
+        dependencies: [],
+        subfeatures: [{ featureId: 'pre-commit-secrets', dependencies: [{ id: 'sonar-secrets' }] }],
       });
       expect(
         feature?.resources.some(

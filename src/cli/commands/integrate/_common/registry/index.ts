@@ -28,6 +28,7 @@ export { renderCompletionSummary } from './completion-summary';
 export { createIntegrationRegistry, IntegrationRegistry, registerIntegrations } from './core';
 export {
   type DependencyDeclaration,
+  scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
   SonarSourceBinary,
   sonarSourceBinary,
@@ -91,3 +92,4 @@ export type {
   PostInstallExample,
   SubfeatureDeclaration,
 } from './types';
+export { isContainerIntegrationContext } from './types';

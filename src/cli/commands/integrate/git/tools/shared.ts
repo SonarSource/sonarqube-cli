@@ -20,12 +20,36 @@
 
 import { platform } from 'node:os';
 
+import { CommandFailedError } from '../../../_common/error';
+import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks';
 import type { PostInstallExample } from '../../_common/registry';
+import type { IntegrationContext } from '../../_common/registry';
+import { isContainerIntegrationContext } from '../../_common/registry';
 import type { InstallDecision } from '../../_common/registry/selection';
 import { askUser, install, skip } from '../../_common/registry/selection';
 import type { GitHookType, IntegrateGitOptions } from '../options';
+import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeatures';
 
 export const LEGACY_HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
+
+export function resolveDepRisksArgs(
+  context: IntegrationContext,
+  { shellQuote = true }: { shellQuote?: boolean } = {},
+): string {
+  if (!isContainerIntegrationContext(context)) {
+    throw new CommandFailedError('resolveDepRisksArgs requires a ContainerIntegrationContext');
+  }
+  if (!context.activeSubfeatures.some((s) => s.id === PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID)) {
+    return '';
+  }
+  const projectKey =
+    typeof context.attrs?.projectKey === 'string' ? context.attrs.projectKey : undefined;
+  if (!projectKey) {
+    return '';
+  }
+  assertSafeSonarProjectKeyForHookScript(projectKey);
+  return ` --dependency-risks -p ${shellQuote ? shellQuoteBash(projectKey) : projectKey}`;
+}
 
 export function shouldInstallHook(
   hook: GitHookType,

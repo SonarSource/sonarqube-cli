@@ -30,12 +30,25 @@ import {
   removeJsonMcpServer,
   upsertJsonMcpServer,
 } from '../../../../../../src/cli/commands/integrate/_common/mcp-config';
+import type { ContainerIntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { removeCopilotHookConfig } from '../../../../../../src/cli/commands/integrate/copilot/hooks';
 import {
   normalizePreCommitConfig,
   removeSonarHooksFromPreCommitConfig,
   upsertSonarHook,
 } from '../../../../../../src/cli/commands/integrate/git/tools/pre-commit';
+import { getDefaultState } from '../../../../../../src/lib/state';
+
+function context(): ContainerIntegrationContext {
+  return {
+    state: getDefaultState('test'),
+    targetRoot: '/tmp',
+    scope: 'global',
+    executionMode: 'install',
+    resolvedDependencies: new Map(),
+    activeSubfeatures: [],
+  };
+}
 
 describe('integration remove helpers', () => {
   it('removeAgentHooks strips entries managed by marker', () => {
@@ -146,7 +159,7 @@ describe('integration remove helpers', () => {
 
   it('removeSonarHooksFromPreCommitConfig removes local sonar hook', () => {
     const config = normalizePreCommitConfig({ repos: [] });
-    upsertSonarHook(config, 'pre-commit');
+    upsertSonarHook(config, 'pre-commit', context());
 
     const removed = removeSonarHooksFromPreCommitConfig(config);
 
