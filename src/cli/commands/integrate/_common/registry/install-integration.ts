@@ -35,6 +35,7 @@ import { renderCompletionSummary } from './completion-summary';
 import type { IntegrationRegistry } from './core';
 import type { FeatureApplication } from './installer';
 import { integrationInstaller } from './installer';
+import { isFeatureContainer } from './selection';
 import type {
   FeatureDeclaration,
   IntegrationContext,
@@ -111,6 +112,11 @@ export async function installIntegration<TOptions>({
         callbacks: {
           onFeatureApplyStart: (feature) => {
             text(`     Installing ${feature.displayName}...`);
+            if (isFeatureContainer(feature)) {
+              for (const subfeature of feature.subfeatures) {
+                text(`       - ${subfeature.displayName}`);
+              }
+            }
           },
           onDependencySkipped: (dependency) => {
             text(`     ${dependency.displayName ?? dependency.id} already installed`);
