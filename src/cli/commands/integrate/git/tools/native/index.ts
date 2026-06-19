@@ -60,7 +60,7 @@ function createNativeGitFeature(
 ): FeatureContainer<IntegrateGitOptions> | FeatureDeclaration<IntegrateGitOptions> {
   const base: FeatureDeclaration<IntegrateGitOptions> = {
     id: `${hook}-hook`,
-    displayName: `${hook} hook`,
+    displayName: `${hook} code scanning hook`,
     shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
     resources: [

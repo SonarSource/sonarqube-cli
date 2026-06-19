@@ -233,7 +233,7 @@ const integrateCommand = COMMAND_TREE.command('integrate')
 integrateCommand
   .command('git')
   .description(
-    'Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
+    'Install a Git pre-commit hook that scans staged files for secrets and dependency risks before each commit, or a Git pre-push hook that scans committed files for secrets before each push.',
   )
   .option(
     '--hook <type>',

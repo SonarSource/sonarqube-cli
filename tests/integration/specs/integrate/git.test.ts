@@ -413,15 +413,15 @@ describe('integrate git (native hooks)', () => {
       // and resolveGitHooksDir() resolves to .git/hooks as expected
       initGitRepo(harness);
 
-      // '\r' selects project scope, '\r' accepts 'Install pre-commit hook?',
-      // dep-risks is auto-skipped (no project key), 'n' declines 'Install pre-push hook?'.
+      // '\r' selects project scope, '\r' accepts 'Install pre-commit code scanning hook?',
+      // dep-risks is auto-skipped (no project key), 'n' declines 'Install pre-push code scanning hook?'.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', '\r', 'n'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit code scanning hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(false);
     },
@@ -440,8 +440,8 @@ describe('integrate git (native hooks)', () => {
 
       expect(result.exitCode).toBe(0);
       const bothHooksOutput = result.stdout + result.stderr;
-      expect(bothHooksOutput).toContain('✓  pre-commit hook');
-      expect(bothHooksOutput).toContain('✓  pre-push hook');
+      expect(bothHooksOutput).toContain('✓  pre-commit code scanning hook');
+      expect(bothHooksOutput).toContain('✓  pre-push code scanning hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
 
@@ -494,15 +494,15 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // '\r' selects project scope, 'n' declines the 'Install pre-commit hook?'
-      // prompt, '\r' accepts 'Install pre-push hook?'.
+      // '\r' selects project scope, 'n' declines the 'Install pre-commit code scanning hook?'
+      // prompt, '\r' accepts 'Install pre-push code scanning hook?'.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', 'n', '\r'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push code scanning hook');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(false);
     },
@@ -515,8 +515,8 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
 
-      // '\r' selects project scope, '\r' accepts 'Install pre-commit hook?',
-      // dep-risks is auto-skipped (no project key), '\r' accepts 'Install pre-push hook?'.
+      // '\r' selects project scope, '\r' accepts 'Install pre-commit code scanning hook?',
+      // dep-risks is auto-skipped (no project key), '\r' accepts 'Install pre-push code scanning hook?'.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', '\r', '\r'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
@@ -524,8 +524,8 @@ describe('integrate git (native hooks)', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Install pre-commit hook?');
-      expect(output).toContain('Install pre-push hook?');
+      expect(output).toContain('Install pre-commit code scanning hook?');
+      expect(output).toContain('Install pre-push code scanning hook?');
       expect(harness.cwd.exists('.git', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.cwd.exists('.git', 'hooks', 'pre-push')).toBe(true);
 
@@ -613,7 +613,7 @@ describe('integrate git (native hooks)', () => {
       initGitRepo(harness);
 
       // '\r' selects project scope, then 'n' declines both the
-      // 'Install pre-commit hook?' and 'Install pre-push hook?' prompts.
+      // 'Install pre-commit code scanning hook?' and 'Install pre-push code scanning hook?' prompts.
       const result = await harness.run('integrate git', {
         stdinChunks: ['\r', 'n', 'n'],
         stdinChunkDelayMs: PROJECT_PROMPT_CHUNK_DELAY_MS,
@@ -635,13 +635,13 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       // Per-feature confirm flow: '\r' confirms the global hook warning, '\r' accepts
-      // 'Install pre-commit hook?', 'n' declines 'Install pre-push hook?'.
+      // 'Install pre-commit code scanning hook?', 'n' declines 'Install pre-push code scanning hook?'.
       const result = await harness.run('integrate git --global', {
         stdinChunks: ['\r', '\r', 'n'],
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit code scanning hook');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
     },
@@ -675,13 +675,13 @@ describe('integrate git (native hooks)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       // Per-feature confirm flow: '\r' confirms the global hook warning, 'n' declines
-      // 'Install pre-commit hook?', '\r' accepts 'Install pre-push hook?'.
+      // 'Install pre-commit code scanning hook?', '\r' accepts 'Install pre-push code scanning hook?'.
       const result = await harness.run('integrate git --global', {
         stdinChunks: ['\r', 'n', '\r'],
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push code scanning hook');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(true);
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(false);
     },
@@ -795,8 +795,10 @@ describe('integrate git (husky)', () => {
       const result = await harness.run('integrate git --hook pre-commit --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installing pre-commit hook...');
-      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
+      expect(result.stdout + result.stderr).toContain(
+        'Installing pre-commit code scanning hook...',
+      );
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit code scanning hook');
       expect(harness.cwd.exists('.husky', 'pre-commit')).toBe(true);
       const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-commit'), 'utf-8');
       expect(hookContent).toContain('hook git-pre-commit');
@@ -860,8 +862,8 @@ describe('integrate git (husky)', () => {
       const result = await harness.run('integrate git --hook pre-push --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installing pre-push hook...');
-      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
+      expect(result.stdout + result.stderr).toContain('Installing pre-push code scanning hook...');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push code scanning hook');
       expect(harness.cwd.exists('.husky', 'pre-push')).toBe(true);
       const hookContent = readFileSync(join(harness.cwd.path, '.husky', 'pre-push'), 'utf-8');
       expect(hookContent).toContain('hook git-pre-push');
@@ -974,8 +976,10 @@ describe('integrate git (pre-commit framework)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installing pre-commit hook...');
-      expect(result.stdout + result.stderr).toContain('✓  pre-commit hook');
+      expect(result.stdout + result.stderr).toContain(
+        'Installing pre-commit code scanning hook...',
+      );
+      expect(result.stdout + result.stderr).toContain('✓  pre-commit code scanning hook');
 
       const config = readYamlFile<PreCommitYamlConfig>(
         join(harness.cwd.path, '.pre-commit-config.yaml'),
@@ -1016,8 +1020,8 @@ describe('integrate git (pre-commit framework)', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Installing pre-push hook...');
-      expect(result.stdout + result.stderr).toContain('✓  pre-push hook');
+      expect(result.stdout + result.stderr).toContain('Installing pre-push code scanning hook...');
+      expect(result.stdout + result.stderr).toContain('✓  pre-push code scanning hook');
 
       const config = readYamlFile<PreCommitYamlConfig>(
         join(harness.cwd.path, '.pre-commit-config.yaml'),

@@ -614,7 +614,7 @@ describe('integrateGitGlobal', () => {
       const summaryCall = calls.find((c) => c.method === 'phase' && c.args[0] === 'Installed');
       expect(summaryCall).toBeDefined();
       const items = (summaryCall?.args[1] ?? []) as Array<{ text: string }>;
-      expect(items.some((item) => item.text === 'pre-commit hook')).toBe(true);
+      expect(items.some((item) => item.text === 'pre-commit code scanning hook')).toBe(true);
       expect(state.integrations.installed[0]?.integrationId).toBe('native-git');
     } finally {
       spawnSpy.mockRestore();
