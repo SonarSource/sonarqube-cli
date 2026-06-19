@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '../../../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../../../sonarqube/client';
 import { CommandFailedError, InvalidOptionError } from '../../../_common/error';
 import { assertScaAvailable } from '../../../_common/sca-availability';
@@ -30,6 +31,19 @@ import type { SubfeatureDeclaration } from '../../_common/registry/types';
 import type { IntegrateGitOptions } from '../options';
 
 export const PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID = 'pre-commit-dependency-risks';
+
+async function scaSkipReason(auth: ResolvedAuth) {
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  try {
+    await assertScaAvailable(client, auth);
+    return null;
+  } catch (err) {
+    if (err instanceof CommandFailedError) {
+      return skip(err.message);
+    }
+    throw err;
+  }
+}
 
 export function createSecretsSubfeature(): SubfeatureDeclaration<IntegrateGitOptions> {
   return {
@@ -56,17 +70,9 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
       if (!options.project) {
         return skip('Dependency-risks scanning is not available without a project key.');
       }
-      if (auth) {
-        const client = new SonarQubeClient(auth.serverUrl, auth.token);
-        try {
-          await assertScaAvailable(client, auth);
-        } catch (err) {
-          if (err instanceof CommandFailedError) {
-            return skip(err.message);
-          }
-          throw err;
-        }
-      }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const skipDecision = await scaSkipReason(auth!);
+      if (skipDecision) return skipDecision;
       if (options.dependencyRisks) return install();
       return askUser('Enable dependency-risks scanning on the pre-commit hook?');
     },
