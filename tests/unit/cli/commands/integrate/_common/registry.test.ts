@@ -357,7 +357,6 @@ describe('declarative integration framework', () => {
           },
         },
       ],
-      defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
     const state = getDefaultState('test');
