@@ -227,7 +227,7 @@ async function setupAuthenticated(
 ): Promise<void> {
   const serverBuilder = harness.newFakeServer().withAuthToken(INTEGRATION_TEST_TOKEN);
   if (options.scaEnabled) {
-    serverBuilder.withScaEnabled(true);
+    serverBuilder.withVersion('2026.4.0.0').withScaEnabled(true);
   }
   const server = await serverBuilder.start();
   const chain = harness
@@ -643,7 +643,18 @@ describe('integrate git (native hooks)', () => {
   it(
     'skips dep-risks and prints a message when --dependency-risks is set but SCA is not enabled',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      // Version-compatible server but SCA feature disabled: assertScaAvailable passes the
+      // version check then throws on the enablement check, so dep-risks is skipped.
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(INTEGRATION_TEST_TOKEN)
+        .withVersion('2026.4.0.0')
+        .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), INTEGRATION_TEST_TOKEN)
+        .withSecretsBinaryInstalled();
       initGitRepo(harness);
 
       const result = await harness.run(
@@ -651,7 +662,9 @@ describe('integrate git (native hooks)', () => {
       );
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Dependency-risks scanning is not available');
+      expect(result.stdout + result.stderr).toContain(
+        'Software Composition Analysis is not available for the current connection.',
+      );
       const hookContent = readFileSync(
         join(harness.cwd.path, '.git', 'hooks', 'pre-commit'),
         'utf-8',
@@ -664,7 +677,7 @@ describe('integrate git (native hooks)', () => {
   it(
     'opts into dependency-risks interactively and auto-discovers project key',
     async () => {
-      await setupAuthenticated(harness, { withSecretsBinary: true });
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
       harness.state().withScaScannerBinaryInstalled();
       initGitRepo(harness);
       harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=auto-project\n');
