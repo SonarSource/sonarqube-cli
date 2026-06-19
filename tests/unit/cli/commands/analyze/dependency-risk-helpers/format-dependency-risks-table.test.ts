@@ -118,6 +118,19 @@ describe('formatDependencyRisksTable — general smoke', () => {
     expect(filterLine).toContain('discarded: accept, safe, fixed');
     expect(filterLine.indexOf('new, open, confirm')).toBeLessThan(filterLine.indexOf('discarded:'));
   });
+
+  it('appends the minimum severity to the filter line when one is set', () => {
+    const filter = buildRiskFilter('active', 'MEDIUM')!.description;
+    const out = formatDependencyRisksTable(
+      mockDependencyRisksViewModel({
+        packages: [],
+        packagesScanned: 0,
+        summary: buildSummaryVM([], 0, filter),
+      }),
+    );
+    const filterLine = lineWith(out, 'Filtering by:');
+    expect(filterLine).toContain('severity medium or above');
+  });
 });
 
 describe('package header', () => {

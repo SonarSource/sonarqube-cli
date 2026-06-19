@@ -23,7 +23,10 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandFailedError } from '../../../../../src/cli/commands/_common/error.ts';
 import * as scaInstall from '../../../../../src/cli/commands/_common/install/sca-scanner.ts';
 import { ScaScanOrchestrator } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
-import type { AnalyzeProjectResponse } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
+import type {
+  AnalyzeProjectResponse,
+  Severity,
+} from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { ScaWatchPatternsRunner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../../src/cli/commands/hook/git-pre-commit-dependency-risks.ts';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.ts';
@@ -140,6 +143,27 @@ const SCAN_RESULT_MULTI_SEVERITY: AnalyzeProjectResponse = {
   errors: [],
 };
 
+// Derives a scan result from the SCAN_RESULT_WITH_RISK template, replacing its single
+// issue with one NEW VULNERABILITY issue per requested severity.
+function withSeverities(...severities: Severity[]): AnalyzeProjectResponse {
+  const [release] = SCAN_RESULT_WITH_RISK.releases;
+  const [template] = release.issues;
+  return {
+    ...SCAN_RESULT_WITH_RISK,
+    releases: [
+      {
+        ...release,
+        issues: severities.map((severity, i) => ({
+          ...template,
+          key: `issue-${i + 1}`,
+          severity,
+          vulnerabilityId: `CVE-2024-${String(i + 1).padStart(4, '0')}`,
+        })),
+      },
+    ],
+  };
+}
+
 describe('runDepRisksStage', () => {
   let resolveScaScannerBinaryPathSpy: ReturnType<typeof spyOn>;
   let watchPatternsSpy: ReturnType<typeof spyOn>;
@@ -196,6 +220,31 @@ describe('runDepRisksStage', () => {
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as CommandFailedError).message).toBe(
       '3 dependency risks found (1 BLOCKER, 2 HIGH)',
+    );
+  });
+
+  it('does not block when all risks are below MEDIUM severity', async () => {
+    orchestratorRunSpy.mockResolvedValue(withSeverities('LOW', 'INFO'));
+
+    await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+
+    const successCall = findMockUiCall('discreetSuccess', 'No dependency risks found.');
+    expect(successCall).toBeDefined();
+  });
+
+  it('blocks on MEDIUM-and-above risks while excluding lower severities from the count', async () => {
+    orchestratorRunSpy.mockResolvedValue(withSeverities('HIGH', 'MEDIUM', 'LOW'));
+
+    let thrown: unknown;
+    try {
+      await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toBe(
+      '2 dependency risks found (1 HIGH, 1 MEDIUM)',
     );
   });
 

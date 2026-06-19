@@ -18,13 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { Severity } from './sca-scanner';
 import type { EffectiveStatus, RiskVM } from './view-model';
+import { severityRank } from './view-model/build/severity';
 
 export type RiskFilterPredicate = (risk: RiskVM) => boolean;
 
 export interface RiskFilterDescription {
   effectiveStatuses: EffectiveStatus[];
   discardedStatuses: EffectiveStatus[];
+  minimalSeverity?: Severity;
 }
 export interface RiskFilter {
   description: RiskFilterDescription;
@@ -49,8 +52,11 @@ const PRESET_EXPANSIONS: Record<StatusPreset, EffectiveStatus[]> = {
   all: [...EFFECTIVE_STATUSES],
 };
 
-export function buildRiskFilter(input: string): RiskFilter | null {
-  const tokens = input.split(',').map((s) => s.trim().toLowerCase());
+export function buildRiskFilter(statuses: string, minimalSeverity?: Severity): RiskFilter | null {
+  const tokens = statuses
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s !== '');
   const set = new Set<EffectiveStatus>();
 
   for (const token of tokens) {
@@ -65,12 +71,23 @@ export function buildRiskFilter(input: string): RiskFilter | null {
     }
   }
 
-  if (set.size === 0) return null;
+  if (set.size === 0 && minimalSeverity === undefined) return null;
+
+  const statusMatches = (status: EffectiveStatus) => set.size === 0 || set.has(status);
+
+  const description: RiskFilterDescription = {
+    effectiveStatuses: EFFECTIVE_STATUSES.filter(statusMatches),
+    discardedStatuses: EFFECTIVE_STATUSES.filter((s) => !statusMatches(s)),
+  };
+  if (minimalSeverity !== undefined) {
+    description.minimalSeverity = minimalSeverity;
+  }
+
   return {
-    description: {
-      effectiveStatuses: EFFECTIVE_STATUSES.filter((s) => set.has(s)),
-      discardedStatuses: EFFECTIVE_STATUSES.filter((s) => !set.has(s)),
-    },
-    predicate: (risk) => set.has(risk.status),
+    description,
+    predicate: (risk) =>
+      statusMatches(risk.status) &&
+      (minimalSeverity === undefined ||
+        severityRank(risk.severity) <= severityRank(minimalSeverity)),
   };
 }

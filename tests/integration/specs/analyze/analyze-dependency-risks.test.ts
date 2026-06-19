@@ -221,6 +221,19 @@ describe('analyze dependency-risks', () => {
     );
   });
 
+  it('rejects an unknown --min-severity value', async () => {
+    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run(
+      'analyze dependency-risks --project demo --min-severity bogus',
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      "error: option '--min-severity <severity>' argument 'bogus' is invalid. Allowed choices are BLOCKER, HIGH, MEDIUM, LOW, INFO.",
+    );
+  });
+
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
     const server = await harness
       .newFakeServer()
