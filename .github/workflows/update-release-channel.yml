@@ -22,10 +22,10 @@ jobs:
     runs-on: sonar-xs
     environment: release-channel-admin
     permissions:
-      id-token: write   # OIDC → Vault
+      id-token: write # OIDC → Vault
       contents: read
     steps:
-      - uses: SonarSource/ci-github-actions/update-release-channel@v1
+      - uses: SonarSource/ci-github-actions/update-release-channel@master
         with:
           version: ${{ inputs.version }}
           channel: ${{ inputs.channel }}
