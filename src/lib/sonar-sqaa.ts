@@ -52,6 +52,28 @@ const MUTUALIZED_EXTENSIONS = new Set([
   'rb',
 ]);
 
+/**
+ * Context-dependent languages routed to the local daemon to run in no-context (degraded) mode
+ * (experimental): reduced accuracy, results will not match SonarQube Cloud. Kept distinct from the
+ * context-free MUTUALIZED_EXTENSIONS set so the experimental surface is explicit.
+ */
+const DEGRADED_LOCAL_EXTENSIONS = new Set([
+  'java',
+  'kt',
+  'kts',
+  // C-Family. Plain '.h' is omitted (ambiguous C/C++/Obj-C) and stays on cloud.
+  'c',
+  'cc',
+  'cpp',
+  'cxx',
+  'c++',
+  'hh',
+  'hpp',
+  'hxx',
+  'm',
+  'mm',
+]);
+
 /** Returns true when local analyzer mode is enabled (via --local flag → env, or directly via env). */
 export function isLocalAnalyzerMode(): boolean {
   return process.env.SONAR_SQAA_LOCAL === '1' || process.env.SONAR_SQAA_LOCAL === 'true';
@@ -72,7 +94,8 @@ export function isMutualizedFile(filePath: string): boolean {
   if (dot < 0) {
     return false;
   }
-  return MUTUALIZED_EXTENSIONS.has(base.slice(dot + 1).toLowerCase());
+  const ext = base.slice(dot + 1).toLowerCase();
+  return MUTUALIZED_EXTENSIONS.has(ext) || DEGRADED_LOCAL_EXTENSIONS.has(ext);
 }
 
 /** First 16 bytes of SHA-256(serverUrl \0 orgKey) as 32 lowercase hex chars (matches the daemon). */
@@ -195,5 +218,25 @@ export async function analyzeViaDaemon(
   if (status !== 200) {
     throw new Error(`Local sonar-sqaa analysis failed: HTTP ${status} ${text}`);
   }
-  return JSON.parse(text) as SqaaAnalysisResponse;
+  const response = JSON.parse(text) as SqaaAnalysisResponse;
+  warnIfDegraded(response);
+  return response;
+}
+
+let degradedWarningEmitted = false;
+
+/**
+ * Context-dependent languages (Java/Kotlin/C-Family) currently run locally in no-context (degraded)
+ * mode: the daemon emits an INVALID_CONTEXT error when an analyzer falls back. Warn the user once that
+ * accuracy is reduced and results will not match SonarQube Cloud.
+ */
+function warnIfDegraded(response: SqaaAnalysisResponse): void {
+  if (degradedWarningEmitted || !response.errors?.some((e) => e.code === 'INVALID_CONTEXT')) {
+    return;
+  }
+  degradedWarningEmitted = true;
+  logger.warn(
+    'Local analysis ran in degraded (no-context) mode for one or more files: reduced accuracy, ' +
+      'results will not match SonarQube Cloud.',
+  );
 }
