@@ -451,11 +451,14 @@ describe('integrateGit', () => {
   });
   /* eslint-enable @typescript-eslint/await-thenable */
 
-  it('throws CommandFailedError when not inside a git repository', () => {
+  it('throws CommandFailedError when not inside a git repository', async () => {
     findGitRootSpy.mockReturnValue({ gitRoot: '/not-a-repo', isGit: false });
-    expect(integrateGit({ nonInteractive: true }, MOCK_AUTH)).rejects.toThrow(
+    /* eslint-disable @typescript-eslint/await-thenable */
+    await expect(integrateGit({ nonInteractive: true }, MOCK_AUTH)).rejects.toThrow(
       'No git repository found',
     );
+    /* eslint-enable @typescript-eslint/await-thenable */
+    expect(discoverProjectSpy).not.toHaveBeenCalled();
   });
 
   it('shows repository summary before the scope prompt when in a git repository', async () => {
@@ -607,6 +610,7 @@ describe('integrateGit', () => {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
     }
+    expect(discoverProjectSpy).toHaveBeenCalledWith(TEMP_DIR, true, { auth: MOCK_AUTH });
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });

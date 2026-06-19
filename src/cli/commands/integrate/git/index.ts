@@ -168,14 +168,14 @@ export async function integrateGit(
     return integrateGitGlobal(options);
   }
 
-  const resolvedOptions = await resolveProjectKey(options, isGit ? gitRoot : process.cwd(), auth);
-
   if (!isGit) {
     throw new CommandFailedError('No git repository found.', {
       remediationHint:
         'Run this command from inside a git repository, or use --global to install a global hook.',
     });
   }
+
+  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth);
 
   await installGitFeatures(resolvedOptions, gitRoot, 'project');
 }
