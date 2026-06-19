@@ -47,6 +47,7 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
         return skip('Dependency-risks scanning is not available for global hooks');
       }
       if (options.dependencyRisks && !options.project) {
+        // explicit command parameter dependency-risks requires project to be resolved
         throw new InvalidOptionError('--dependency-risks requires -p <projectKey>.');
       }
       if (!options.project) {
