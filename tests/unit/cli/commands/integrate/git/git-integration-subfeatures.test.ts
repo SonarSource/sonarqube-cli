@@ -95,31 +95,6 @@ describe('createDepRisksSubfeature', () => {
     });
   });
 
-  it('installs when --dependency-risks and project key are both set (no auth)', async () => {
-    const sub = createDepRisksSubfeature();
-    expect(
-      await sub.shouldInstall!(
-        makeInvocation({ options: { dependencyRisks: true, project: 'my-project' } }),
-      ),
-    ).toMatchObject({ action: 'install' });
-  });
-
-  it('asks user when project key is set but --dependency-risks is not (no auth)', async () => {
-    const sub = createDepRisksSubfeature();
-    expect(
-      await sub.shouldInstall!(makeInvocation({ options: { project: 'my-project' } })),
-    ).toMatchObject({ action: 'ask' });
-  });
-
-  it('asks user in non-interactive mode when --dependency-risks is not set (installer converts ask+nonInteractive to install)', async () => {
-    const sub = createDepRisksSubfeature();
-    expect(
-      await sub.shouldInstall!(
-        makeInvocation({ options: { project: 'my-project' }, nonInteractive: true }),
-      ),
-    ).toMatchObject({ action: 'ask' });
-  });
-
   describe('with auth', () => {
     let checkScaEnabledSpy: ReturnType<typeof spyOn>;
 
@@ -144,7 +119,20 @@ describe('createDepRisksSubfeature', () => {
       });
     });
 
-    it('asks user when SCA is available and --dependency-risks is not set', async () => {
+    it('installs when --dependency-risks and project key are both set', async () => {
+      checkScaEnabledSpy.mockResolvedValue(true);
+      const sub = createDepRisksSubfeature();
+      expect(
+        await sub.shouldInstall!(
+          makeInvocation({
+            options: { dependencyRisks: true, project: 'my-project' },
+            auth: CLOUD_AUTH,
+          }),
+        ),
+      ).toMatchObject({ action: 'install' });
+    });
+
+    it('asks user when project key is set but --dependency-risks is not', async () => {
       checkScaEnabledSpy.mockResolvedValue(true);
       const sub = createDepRisksSubfeature();
       expect(
@@ -154,17 +142,18 @@ describe('createDepRisksSubfeature', () => {
       ).toMatchObject({ action: 'ask' });
     });
 
-    it('installs when SCA is available and --dependency-risks is set', async () => {
+    it('asks user in non-interactive mode when --dependency-risks is not set (installer converts ask+nonInteractive to install)', async () => {
       checkScaEnabledSpy.mockResolvedValue(true);
       const sub = createDepRisksSubfeature();
       expect(
         await sub.shouldInstall!(
           makeInvocation({
-            options: { project: 'my-project', dependencyRisks: true },
+            options: { project: 'my-project' },
+            nonInteractive: true,
             auth: CLOUD_AUTH,
           }),
         ),
-      ).toMatchObject({ action: 'install' });
+      ).toMatchObject({ action: 'ask' });
     });
   });
 });
