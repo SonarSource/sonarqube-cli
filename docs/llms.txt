@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.0.0
+- Version: 1.1.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -59,7 +59,7 @@ Usage: sonar list issues [-p <value>] [--statuses <value>] [--severities <value>
 Options:
   --project, -p  <string>   Project key
   --statuses  <string>   Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED)
-  --severities  <string>   Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)
+  --severities  <string>   Filter by severity. Valid values depend on server mode — Multi-Quality Rule (MQR) mode: INFO, LOW, MEDIUM, HIGH, BLOCKER; Standard Experience mode: INFO, MINOR, MAJOR, CRITICAL, BLOCKER.
   --format  <string>   Output format
   --branch  <string>   Branch name
   --pull-request  <string>   Pull request ID
@@ -109,14 +109,16 @@ Examples:
   sonar integrate claude -g
 
 ### sonar integrate git *
-Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.
-Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--global]
+Install a Git pre-commit hook that scans staged files for secrets and dependency risks before each commit, or a Git pre-push hook that scans committed files for secrets before each push.
+Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--global] [--dependency-risks] [-p <value>]
 
 Options:
   --hook  <string>   Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)
   --force   Overwrite existing hook if it is not from sonar integrate git
   --non-interactive   Non-interactive mode (no prompts)
   --global   Install hook globally for all repositories (sets git config --global core.hooksPath)
+  --dependency-risks   Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)
+  --project, -p  <string>   Project key baked into the dependency-risks hook (required with --dependency-risks)
 
 Examples:
   sonar integrate git
@@ -154,6 +156,26 @@ Options:
   --non-interactive   Non-interactive mode (no prompts)
   --skip-context   Skip the sonar-context-augmentation install/init/skill step
 
+### sonar integrate antigravity *
+Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Context Augmentation.
+Usage: sonar integrate antigravity [-p <value>] [--non-interactive] [--global] [--skip-context]
+
+Options:
+  --project, -p  <string>   Project key. Mutually exclusive with --global.
+  --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory
+  --skip-context   Skip the sonar-context-augmentation install/init/skill step
+
+### sonar integrate cursor *
+Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.
+Usage: sonar integrate cursor [-p <value>] [--non-interactive] [--global] [--skip-context]
+
+Options:
+  --project, -p  <string>   Project key. Mutually exclusive with --global.
+  --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.
+  --skip-context   Skip the sonar-context-augmentation install/init/skill step
+
 ### sonar context
 Augment AI agents with context from your codebase (beta: subject to change)
 Usage: sonar context [action] [args]
@@ -175,10 +197,10 @@ Examples:
 
 ### sonar analyze dependency-risks *
 Analyze project dependencies for security and license risks (beta: subject to change)
-Usage: sonar analyze dependency-risks [-p <value>] [--format <value>] [--statuses <value>]
+Usage: sonar analyze dependency-risks [-p <value>] [--format <value>] [--statuses <value>] [--min-severity <value>]
 
 Options:
-  --project, -p  <string>   Project key
+  --project, -p  <string>   Project key (auto-detected when omitted)
   --format  <string>   Output format
   --statuses  <string>   Filter issues by status
 
@@ -195,6 +217,7 @@ Examples:
     --statuses new,confirm
     --statuses active,safe
 
+  --min-severity  <string>   Minimum severity level to include. Allowed values: BLOCKER, HIGH, MEDIUM, LOW, INFO (default: all severities)
 
 ### sonar analyze agentic *
 Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.

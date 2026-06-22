@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "commands": [
     {
       "id": "sonar",
@@ -175,7 +175,7 @@
         {
           "flags": "--severities <severities>",
           "long": "--severities",
-          "description": "Filter by severity (comma-separated list of: INFO, MINOR, MAJOR, CRITICAL, BLOCKER)",
+          "description": "Filter by severity. Valid values depend on server mode — Multi-Quality Rule (MQR) mode: INFO, LOW, MEDIUM, HIGH, BLOCKER; Standard Experience mode: INFO, MINOR, MAJOR, CRITICAL, BLOCKER.",
           "type": "string",
           "required": false
         },
@@ -389,14 +389,16 @@
         "sonar-integrate-git",
         "sonar-integrate-claude",
         "sonar-integrate-copilot",
-        "sonar-integrate-codex"
+        "sonar-integrate-codex",
+        "sonar-integrate-antigravity",
+        "sonar-integrate-cursor"
       ]
     },
     {
       "id": "sonar-integrate-git",
       "name": "git",
       "fullName": "sonar integrate git",
-      "description": "Install a Git pre-commit hook that scans staged files for secrets before each commit, or a Git pre-push hook that scans committed files for secrets before each push.",
+      "description": "Install a Git pre-commit hook that scans staged files for secrets and dependency risks before each commit, or a Git pre-push hook that scans committed files for secrets before each push.",
       "isGroup": false,
       "isRoot": false,
       "requiresAuth": true,
@@ -430,6 +432,21 @@
           "long": "--global",
           "description": "Install hook globally for all repositories (sets git config --global core.hooksPath)",
           "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--dependency-risks",
+          "long": "--dependency-risks",
+          "description": "Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key baked into the dependency-risks hook (required with --dependency-risks)",
+          "type": "string",
           "required": false
         }
       ],
@@ -577,6 +594,98 @@
           "flags": "--non-interactive",
           "long": "--non-interactive",
           "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--skip-context",
+          "long": "--skip-context",
+          "description": "Skip the sonar-context-augmentation install/init/skill step",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-integrate-antigravity",
+      "name": "antigravity",
+      "fullName": "sonar integrate antigravity",
+      "description": "Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Context Augmentation.",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-integrate",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key. Mutually exclusive with --global.",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--skip-context",
+          "long": "--skip-context",
+          "description": "Skip the sonar-context-augmentation install/init/skill step",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-integrate-cursor",
+      "name": "cursor",
+      "fullName": "sonar integrate cursor",
+      "description": "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure SonarQube Agentic Analysis.",
+      "isGroup": false,
+      "isRoot": false,
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-integrate",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key. Mutually exclusive with --global.",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
           "type": "boolean",
           "required": false
         },
@@ -746,9 +855,9 @@
           "flags": "-p, --project <project>",
           "long": "--project",
           "short": "-p",
-          "description": "Project key",
+          "description": "Project key (auto-detected when omitted)",
           "type": "string",
-          "required": true
+          "required": false
         },
         {
           "flags": "--format <format>",
@@ -759,6 +868,7 @@
           "defaultValue": "table",
           "allowedValues": [
             "json",
+            "toon",
             "table"
           ]
         },
@@ -769,6 +879,13 @@
           "type": "string",
           "required": false,
           "defaultValue": "active"
+        },
+        {
+          "flags": "--min-severity <severity>",
+          "long": "--min-severity",
+          "description": "Minimum severity level to include. Allowed values: BLOCKER, HIGH, MEDIUM, LOW, INFO (default: all severities)",
+          "type": "string",
+          "required": false
         }
       ],
       "examples": [],
