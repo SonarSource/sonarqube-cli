@@ -18,7 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { InvalidOptionError } from '../../../_common/error';
+import type { ResolvedAuth } from '../../../../../lib/auth-resolver';
+import { SonarQubeClient } from '../../../../../sonarqube/client';
+import { CommandFailedError, InvalidOptionError } from '../../../_common/error';
+import { assertScaAvailable } from '../../../_common/sca-availability';
 import {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
@@ -28,6 +31,19 @@ import type { SubfeatureDeclaration } from '../../_common/registry/types';
 import type { IntegrateGitOptions } from '../options';
 
 export const PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID = 'pre-commit-dependency-risks';
+
+async function scaSkipReason(auth: ResolvedAuth) {
+  const client = new SonarQubeClient(auth.serverUrl, auth.token);
+  try {
+    await assertScaAvailable(client, auth);
+    return null;
+  } catch (err) {
+    if (err instanceof CommandFailedError) {
+      return skip(err.message);
+    }
+    throw err;
+  }
+}
 
 export function createSecretsSubfeature(): SubfeatureDeclaration<IntegrateGitOptions> {
   return {
@@ -43,7 +59,7 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
   return {
     id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
-    shouldInstall: ({ options, scope }) => {
+    shouldInstall: async ({ options, scope, auth }) => {
       if (scope === 'global') {
         return skip('Dependency-risks scanning is not available for global hooks');
       }
@@ -54,6 +70,9 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
       if (!options.project) {
         return skip('Dependency-risks scanning is not available without a project key.');
       }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const skipDecision = await scaSkipReason(auth!);
+      if (skipDecision) return skipDecision;
       if (options.dependencyRisks) return install();
       return askUser('Enable dependency-risks scanning on the pre-commit hook?');
     },

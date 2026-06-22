@@ -109,7 +109,7 @@ export function validateHookOption(hook: string | undefined): void {
   }
 }
 
-async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
+async function integrateGitGlobal(options: IntegrateGitOptions, auth: ResolvedAuth): Promise<void> {
   validateHookOption(options.hook);
 
   warn('Global hook installation');
@@ -132,7 +132,7 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   }
   blank();
 
-  await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global');
+  await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global', auth);
 }
 
 export async function integrateGit(
@@ -150,7 +150,7 @@ export async function integrateGit(
   info(yellow('Some scan types may be unavailable for certain hook types.'));
 
   if (options.global) {
-    return integrateGitGlobal(options);
+    return integrateGitGlobal(options, auth);
   }
 
   const { gitRoot, isGit } = findGitRoot(process.cwd());
@@ -165,7 +165,7 @@ export async function integrateGit(
     projectRoot: isGit ? gitRoot : process.cwd(),
   });
   if (scope === 'global') {
-    return integrateGitGlobal(options);
+    return integrateGitGlobal(options, auth);
   }
 
   if (!isGit) {
@@ -177,7 +177,7 @@ export async function integrateGit(
 
   const resolvedOptions = await resolveProjectKey(options, gitRoot, auth);
 
-  await installGitFeatures(resolvedOptions, gitRoot, 'project');
+  await installGitFeatures(resolvedOptions, gitRoot, 'project', auth);
 }
 
 async function resolveProjectKey(
@@ -206,6 +206,7 @@ async function installGitFeatures(
   options: IntegrateGitOptions,
   targetRoot: string,
   scope: 'project' | 'global',
+  auth: ResolvedAuth,
 ): Promise<void> {
   const integrationId = await resolveGitIntegrationId(targetRoot, scope);
   await installIntegration({
@@ -214,6 +215,7 @@ async function installGitFeatures(
     options,
     targetRoot,
     scope,
+    auth,
     force: options.force,
     nonInteractive: options.nonInteractive,
     // Attrs are project-scope only; global hooks do not support a project key.
