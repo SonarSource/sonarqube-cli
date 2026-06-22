@@ -28,6 +28,7 @@ export { renderCompletionSummary } from './completion-summary';
 export { createIntegrationRegistry, IntegrationRegistry, registerIntegrations } from './core';
 export {
   type DependencyDeclaration,
+  scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
   SonarSourceBinary,
   sonarSourceBinary,
@@ -71,12 +72,14 @@ export {
   yamlPatchRemover,
   type YamlPatchRemoverOptions,
 } from './resources';
-export { askUser, install, type InstallDecision, skip } from './selection';
+export { askUser, install, type InstallDecision, isFeatureContainer, skip } from './selection';
 export type {
   AppliedFeature,
   AppliedOperation,
   AppliedResource,
+  ContainerIntegrationContext,
   DependencyInstallContext,
+  FeatureContainer,
   FeatureDeclaration,
   FeatureOperation,
   InstalledDependency,
@@ -87,4 +90,6 @@ export type {
   LegacyFeatureDeclaration,
   MaybePromise,
   PostInstallExample,
+  SubfeatureDeclaration,
 } from './types';
+export { isContainerIntegrationContext } from './types';

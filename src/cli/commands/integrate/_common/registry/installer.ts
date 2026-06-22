@@ -27,16 +27,18 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
-import { confirmPrompt, info } from '../../../../../ui';
+import { confirmPrompt, discreetSuccess, info } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
-import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from './resources';
-import { normalizeDecision } from './selection';
+import type { ResourceDeclaration } from './resources';
+import { isFeatureContainer, normalizeDecision } from './selection';
 import type {
   AppliedFeature,
   AppliedOperation,
   AppliedResource,
+  ContainerIntegrationContext,
+  FeatureContainer,
   FeatureDeclaration,
   FeatureOperation,
   InstalledDependency,
@@ -44,10 +46,20 @@ import type {
   IntegrationDeclaration,
   IntegrationExecutionMode,
   IntegrationInvocation,
+  SubfeatureDeclaration,
 } from './types';
 
 function resolveVersion(version: string | undefined): string {
   return version ?? '0';
+}
+
+function resolveAllDeps<TOptions>(feature: FeatureDeclaration<TOptions>): DependencyDeclaration[] {
+  return [
+    ...(feature.dependencies ?? []),
+    ...(isFeatureContainer(feature)
+      ? feature.subfeatures.flatMap((s) => s.dependencies ?? [])
+      : []),
+  ];
 }
 
 interface ApplyFeatureCallbacks<TOptions = Record<string, unknown>> {
@@ -101,14 +113,37 @@ export interface RemoveFeatureCallbacks {
 export class IntegrationInstaller {
   selectFeatures<TOptions>(
     integration: IntegrationDeclaration<TOptions>,
-    featureIds: string[],
+    featureIds: (string | { featureId: string; subfeatureIds: string[] })[],
   ): FeatureDeclaration<TOptions>[] {
     const featuresById = new Map(integration.features.map((feature) => [feature.id, feature]));
-    return featureIds.map((id) => {
-      const feature = featuresById.get(id);
+
+    return featureIds.map((entry) => {
+      const featureId = typeof entry === 'string' ? entry : entry.featureId;
+      const subfeatureIds = typeof entry === 'string' ? undefined : entry.subfeatureIds;
+
+      const feature = featuresById.get(featureId);
       if (!feature) {
-        throw new Error(`Unknown feature ${integration.id}.${id}`);
+        throw new Error(`Unknown feature ${integration.id}.${featureId}`);
       }
+
+      if (subfeatureIds !== undefined) {
+        if (!isFeatureContainer(feature)) {
+          throw new Error(
+            `Feature ${integration.id}.${featureId} is not a container and does not support subfeature selection`,
+          );
+        }
+        const validIds = new Set(feature.subfeatures.map((s) => s.id));
+        const unknown = subfeatureIds.filter((id) => !validIds.has(id));
+        if (unknown.length > 0) {
+          const prefix = `${integration.id}.${featureId}.`;
+          throw new Error(`Unknown subfeature(s) ${unknown.map((id) => prefix + id).join(', ')}`);
+        }
+        return {
+          ...feature,
+          subfeatures: feature.subfeatures.filter((s) => subfeatureIds.includes(s.id)),
+        };
+      }
+
       return feature;
     });
   }
@@ -118,12 +153,28 @@ export class IntegrationInstaller {
     invocation: IntegrationInvocation<TOptions>,
   ): Promise<FeatureDeclaration<TOptions>[]> {
     const selected: FeatureDeclaration<TOptions>[] = [];
-    for (const feature of integration.features) {
+    for (let feature of integration.features) {
       if (await this.shouldInstallFeature(feature, invocation)) {
+        if (isFeatureContainer(feature)) {
+          feature = await this.selectActiveSubfeatures(feature, invocation);
+        }
         selected.push(feature);
       }
     }
     return selected;
+  }
+
+  private async selectActiveSubfeatures<TOptions>(
+    container: FeatureContainer<TOptions>,
+    invocation: IntegrationInvocation<TOptions>,
+  ): Promise<FeatureContainer<TOptions>> {
+    const active: SubfeatureDeclaration<TOptions>[] = [];
+    for (const subfeature of container.subfeatures) {
+      if (await this.shouldInstallFeature(subfeature, invocation)) {
+        active.push(subfeature);
+      }
+    }
+    return { ...container, subfeatures: active };
   }
 
   private async shouldInstallFeature<TOptions>(
@@ -133,6 +184,9 @@ export class IntegrationInstaller {
     const decision = normalizeDecision(await feature.shouldInstall?.(invocation));
     switch (decision.action) {
       case 'install':
+        if (decision.message) {
+          discreetSuccess(decision.message);
+        }
         return true;
       case 'skip':
         if (decision.message) {
@@ -225,19 +279,6 @@ export class IntegrationInstaller {
     );
   }
 
-  legacyCleanupNeedsApply(
-    installedFeature: InstalledIntegrationFeature | undefined,
-    cleanup: ResourceIdentity & RemovableResource,
-  ): boolean {
-    if (installedFeature === undefined) {
-      // Integration not yet recorded in state: only run version-0 cleanups to remove
-      // artifacts that predate declarative state tracking.
-      return resolveVersion(cleanup.version) === '0';
-    }
-    const installedResource = installedFeature.resources.find((r) => r.id === cleanup.id);
-    return resolveVersion(installedResource?.version) === resolveVersion(cleanup.version);
-  }
-
   async applyAndRecordFeatures<TOptions>(
     state: CliState,
     integration: IntegrationDeclaration<TOptions>,
@@ -270,13 +311,15 @@ export class IntegrationInstaller {
           preparedDependencies,
           options.callbacks ?? {},
         );
+        const feature = execution.application.feature;
         installedFeatures.push(
           recordInstalledFeature(
             state,
             execution.context,
             integration,
-            execution.application.feature,
+            feature,
             applied,
+            isFeatureContainer(feature) ? feature.subfeatures : undefined,
           ),
         );
       } catch (error) {
@@ -402,7 +445,7 @@ export class IntegrationInstaller {
     const resources: AppliedResource[] = [];
     const operations: AppliedOperation[] = [];
 
-    for (const dependency of feature.dependencies ?? []) {
+    for (const dependency of resolveAllDeps(feature)) {
       const dependencyError = preparedDependencies.failedDependencies.get(dependency.id);
       if (dependencyError) {
         throw dependencyError;
@@ -420,9 +463,9 @@ export class IntegrationInstaller {
       feature,
       preparedDependencies.resolvedDependencies,
     );
-    const featureContext = { ...context, resolvedDependencies };
+    const featureContext = this.buildFeatureContext(context, feature, resolvedDependencies);
 
-    await this.cleanupRecordedLegacyInstallations(feature, installedFeature, featureContext);
+    await this.cleanupRecordedLegacyInstallations(feature, featureContext);
 
     for (const resource of feature.resources ?? []) {
       if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
@@ -445,13 +488,26 @@ export class IntegrationInstaller {
     return { dependencies, resources, operations };
   }
 
+  private buildFeatureContext<TOptions>(
+    context: IntegrationContext,
+    feature: FeatureDeclaration<TOptions>,
+    resolvedDependencies: ReadonlyMap<string, InstalledDependency>,
+  ): IntegrationContext {
+    if (!isFeatureContainer(feature)) {
+      return { ...context, resolvedDependencies };
+    }
+    return {
+      ...context,
+      resolvedDependencies,
+      activeSubfeatures: feature.subfeatures,
+    } as ContainerIntegrationContext;
+  }
+
   private async cleanupRecordedLegacyInstallations<TOptions>(
     feature: FeatureDeclaration<TOptions>,
-    installedFeature: InstalledIntegrationFeature | undefined,
     featureContext: IntegrationContext,
   ) {
     for (const cleanup of feature.legacyCleanups ?? []) {
-      if (!this.legacyCleanupNeedsApply(installedFeature, cleanup)) continue;
       await cleanup.remove(featureContext);
     }
   }
@@ -492,7 +548,7 @@ export class IntegrationInstaller {
     const dependencies = new Map<string, UniqueDependencyExecution<TOptions>>();
 
     for (const execution of executions) {
-      for (const dependency of execution.application.feature.dependencies ?? []) {
+      for (const dependency of resolveAllDeps(execution.application.feature)) {
         const existing = dependencies.get(dependency.id);
         if (existing && existing.dependency !== dependency) {
           throw new Error(
@@ -508,13 +564,13 @@ export class IntegrationInstaller {
     return [...dependencies.values()];
   }
 
-  private makeResolvedDependencies(
+  private makeResolvedDependencies<TOptions>(
     state: CliState,
-    feature: Pick<FeatureDeclaration, 'dependencies'>,
+    feature: FeatureDeclaration<TOptions>,
     overrides: ReadonlyMap<string, InstalledDependency> = new Map(),
   ): Map<string, InstalledDependency> {
     const resolvedDependencies = new Map<string, InstalledDependency>();
-    for (const dependency of feature.dependencies ?? []) {
+    for (const dependency of resolveAllDeps(feature)) {
       const installedDependency =
         overrides.get(dependency.id) ?? this.findInstalledDependency(state, dependency);
       if (installedDependency) {

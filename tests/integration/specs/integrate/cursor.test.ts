@@ -32,17 +32,21 @@ import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
 const SQAA_RULE_DIRS = ['.cursor', 'rules', 'sonar-agentic-analysis.mdc'];
-const PROMPT_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
+const HOOK_BUILD_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.cursor', 'hooks.json'];
 
 interface CursorMcpFile {
   mcpServers?: Record<string, { command?: string; args?: string[] }>;
 }
 
+type CursorHookEntry = { command?: string; matcher?: string };
+
 interface CursorHooksFile {
   version?: number;
   hooks?: {
-    beforeSubmitPrompt?: Array<{ command?: string }>;
+    beforeSubmitPrompt?: CursorHookEntry[];
+    beforeReadFile?: CursorHookEntry[];
+    preToolUse?: CursorHookEntry[];
   };
 }
 
@@ -60,9 +64,9 @@ describe('integrate cursor', () => {
     await harness.dispose();
   });
 
-  it('is not listed in sonar integrate --help (hidden until GA)', async () => {
+  it('is listed in sonar integrate --help', async () => {
     const result = await harness.run('integrate --help');
-    expect(result.stdout).not.toContain('cursor');
+    expect(result.stdout).toContain('cursor');
   });
 
   describe('project-level install (default)', () => {
@@ -115,7 +119,7 @@ describe('integrate cursor', () => {
         expect(integration).toBeDefined();
         expect(integration!.features.map((f) => f.featureId).sort()).toEqual([
           'mcp-server',
-          'sonar-secrets-prompt-hook',
+          'sonar-secrets-hooks',
         ]);
 
         const mcpFeature = findInstalledFeature(harness, 'cursor', 'mcp-server');
@@ -248,7 +252,7 @@ describe('integrate cursor', () => {
         expect(result.exitCode).toBe(0);
 
         const scriptFile = harness.cwd.file(
-          ...PROMPT_SCRIPT_DIRS,
+          ...HOOK_BUILD_SCRIPT_DIRS,
           hookScriptName('prompt-secrets'),
         );
         expect(scriptFile.exists()).toBe(true);
@@ -258,6 +262,41 @@ describe('integrate cursor', () => {
         expect(hooks.version).toBe(1);
         const entry = hooks.hooks?.beforeSubmitPrompt?.[0];
         expect(entry?.command).toContain('sonar-secrets');
+        expect(entry?.matcher).toBe('UserPromptSubmit');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes executable beforeReadFile and preToolUse scripts with correct matchers',
+      async () => {
+        const result = await harness.run('integrate cursor --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+
+        const preReadScript = harness.cwd.file(
+          ...HOOK_BUILD_SCRIPT_DIRS,
+          hookScriptName('before-read-file-secrets'),
+        );
+        const preToolScript = harness.cwd.file(
+          ...HOOK_BUILD_SCRIPT_DIRS,
+          hookScriptName('pre-tool-use-secrets'),
+        );
+        expect(preReadScript.exists()).toBe(true);
+        expect(preReadScript.isExecutable).toBe(true);
+        expect(preToolScript.exists()).toBe(true);
+        expect(preToolScript.isExecutable).toBe(true);
+
+        // A wrong matcher (e.g. "*") is invalid regex and silently disables the hook.
+        // beforeReadFile uses Read|TabRead (TabRead covers Tab completion reads).
+        // preToolUse uses Read only — TabRead is not a valid preToolUse tool type per Cursor docs.
+        const hooks: CursorHooksFile = harness.cwd.file(...HOOKS_JSON_DIRS).asJson();
+        const beforeReadFile = hooks.hooks?.beforeReadFile?.[0];
+        const preToolUse = hooks.hooks?.preToolUse?.[0];
+        expect(beforeReadFile?.command).toContain('sonar-secrets');
+        expect(beforeReadFile?.matcher).toBe('Read|TabRead');
+        expect(preToolUse?.command).toContain('sonar-secrets');
+        expect(preToolUse?.matcher).toBe('Read');
       },
       { timeout: 30000 },
     );
@@ -276,16 +315,11 @@ describe('integrate cursor', () => {
     );
 
     it(
-      'records the sonar-secrets-prompt-hook feature and the sonar-secrets dependency in state',
+      'records the sonar-secrets-hooks feature and the sonar-secrets dependency in state',
       async () => {
         await harness.run('integrate cursor --non-interactive');
 
-        const feature = findInstalledFeature(
-          harness,
-          'cursor',
-          'sonar-secrets-prompt-hook',
-          'project',
-        );
+        const feature = findInstalledFeature(harness, 'cursor', 'sonar-secrets-hooks', 'project');
         expect(feature).toBeDefined();
         expect(feature?.dependencies?.some((d) => d.id === 'sonar-secrets')).toBe(true);
       },
@@ -394,7 +428,7 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         expect(
-          harness.userHome.exists(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')),
+          harness.userHome.exists(...HOOK_BUILD_SCRIPT_DIRS, hookScriptName('prompt-secrets')),
         ).toBe(true);
 
         const hooks: CursorHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
@@ -410,11 +444,7 @@ describe('integrate cursor', () => {
       async () => {
         harness
           .state()
-          .withInstalledIntegrationFeature(
-            cursorIntegration,
-            'sonar-secrets-prompt-hook',
-            'global',
-          );
+          .withInstalledIntegrationFeature(cursorIntegration, 'sonar-secrets-hooks', 'global');
 
         const result = await harness.run('integrate cursor --non-interactive');
 
@@ -425,7 +455,7 @@ describe('integrate cursor', () => {
         expect(harness.cwd.exists('.cursor', 'hooks')).toBe(false);
         expect(harness.cwd.exists(...HOOKS_JSON_DIRS)).toBe(false);
         expect(
-          findInstalledFeature(harness, 'cursor', 'sonar-secrets-prompt-hook', 'project'),
+          findInstalledFeature(harness, 'cursor', 'sonar-secrets-hooks', 'project'),
         ).toBeUndefined();
         // The MCP server feature still installs.
         expect(harness.cwd.exists(...MCP_JSON_DIRS)).toBe(true);

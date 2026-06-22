@@ -46,22 +46,22 @@ function getExpectedRootHelp(): string {
     '    2. Run sonar analyze --file <file> to scan your code for issues',
     '',
     '  COMMANDS',
-    '    analyze                               Analyze code for quality and security issues',
-    '    analyze secrets                       Scan files or stdin for hardcoded secrets',
-    '    analyze dependency-risks              Analyze project dependencies for security and license risks (beta: subject to change)',
-    '    analyze agentic                       Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.',
-    '    remediate                             Trigger AI agent remediation for eligible issues (SonarQube Cloud only)',
+    '    analyze                                                  Analyze code for quality and security issues',
+    '    analyze secrets                                          Scan files or stdin for hardcoded secrets',
+    '    analyze dependency-risks                                 Analyze project dependencies for security and license risks (beta: subject to change)',
+    '    analyze agentic                                          Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.',
+    '    remediate                                                Trigger AI agent remediation for eligible issues (SonarQube Cloud only)',
     '',
-    '    list <issues|projects>                List issues and projects from SonarQube Cloud or Server',
-    '    api <method> <endpoint>               Make authenticated API requests to SonarQube',
-    '    context [action] [args...]            Augment AI agents with context from your codebase (beta: subject to change)',
+    '    list <issues|projects>                                   List issues and projects from SonarQube Cloud or Server',
+    '    api <method> <endpoint>                                  Make authenticated API requests to SonarQube',
+    '    context [action] [args...]                               Augment AI agents with context from your codebase (beta: subject to change)',
     '',
-    '    integrate <git|claude|copilot|codex>  Setup SonarQube integration for AI coding agents, git and others.',
+    '    integrate <git|claude|copilot|codex|antigravity|cursor>  Setup SonarQube integration for AI coding agents, git and others.',
     '',
-    '    auth <login|logout|status>            Manage authentication tokens and credentials',
-    '    config <telemetry>                    Configure CLI settings',
-    '    system <status|reset>                 System diagnostics and maintenance commands for the SonarQube CLI installation.',
-    '    self-update                           Update SonarQube CLI to the latest version',
+    '    auth <login|logout|status>                               Manage authentication tokens and credentials',
+    '    config <telemetry>                                       Configure CLI settings',
+    '    system <status|reset>                                    System diagnostics and maintenance commands for the SonarQube CLI installation.',
+    '    self-update                                              Update SonarQube CLI to the latest version',
     '',
     '  OPTIONS',
     '    -h, --help     Display help for a specific command',
@@ -102,6 +102,21 @@ describe('root help', () => {
       expect(helpResult.exitCode).toBe(0);
       expect(stripAnsi(bareResult.stdout)).toBe(getExpectedRootHelp());
       expect(stripAnsi(helpResult.stdout)).toBe(getExpectedRootHelp());
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sonar <unknown> reports an unknown command instead of an argument-count error',
+    async () => {
+      const result = await harness.run('totally-unknown-command');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain("unknown command 'totally-unknown-command'");
+      expect(result.stdout + result.stderr).toContain(
+        "Run 'sonar --help' to see the list of available commands.",
+      );
+      expect(result.stdout + result.stderr).not.toContain('Expected 0 arguments');
     },
     { timeout: 15000 },
   );

@@ -52,11 +52,11 @@ export function hookScriptName(name: string): string {
 
 /**
  * Extract the script path from a hook command string.
- * On Windows commands are wrapped as `powershell -NoProfile -File <path>`;
+ * On Windows commands are wrapped as `powershell -NoProfile -ExecutionPolicy Bypass -File <path>`;
  * this strips that prefix. Always normalizes to forward slashes.
  */
 export function hookScriptPath(command: string): string {
-  const powershellPrefix = 'powershell -NoProfile -File ';
+  const powershellPrefix = 'powershell -NoProfile -ExecutionPolicy Bypass -File ';
   const path = command.startsWith(powershellPrefix)
     ? command.slice(powershellPrefix.length)
     : command;

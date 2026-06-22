@@ -24,6 +24,7 @@ import { type Command } from 'commander';
 
 import { version as VERSION } from '../../package.json';
 import { detectCallerAgent } from '../lib/agent-detector.js';
+import { DISTRIBUTION } from '../lib/distribution.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
@@ -90,6 +91,7 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
     user_uuid: conn?.userUuid ?? null,
     organization_uuid_v4: conn?.organizationUuidV4 ?? null,
     sqs_installation_id: conn?.sqsInstallationId ?? null,
+    distribution: DISTRIBUTION,
     caller_agent: detectCallerAgent(),
   };
 

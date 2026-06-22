@@ -177,9 +177,9 @@ packages[1]:
           HIGH,ACCEPT,"7.5",CVE-2024-0001
         recommendation:
           action: NO_FIX_AVAILABLE
-          fixVersions[0]:
+          fixVersions: []
         totalKnownRisksCount: 1
-errors[0]:
+errors: []
 summary:
   packagesScanned: 1
   totalRisks: 1
@@ -209,10 +209,10 @@ summary:
       recommendations:
         VULNERABILITY:
           action: NO_FIX_AVAILABLE
-          fixVersions[0]:
+          fixVersions: []
   filter:
     effectiveStatuses[6]: NEW,OPEN,CONFIRM,ACCEPT,SAFE,FIXED
-    discardedStatuses[0]:`;
+    discardedStatuses: []`;
 
 const EXPECTED_TABLE = `── lodash@4.17.21 (1 risk) ─────────────────────────────────────────────────────
 in: package-lock.json

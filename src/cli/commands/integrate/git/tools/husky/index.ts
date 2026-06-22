@@ -22,8 +22,13 @@ import { join } from 'node:path';
 
 import { sonarSecretsBinaryDependency } from '../../../_common/registry/dependencies';
 import { textSnippet, textSnippetRemover } from '../../../_common/registry/resources';
-import type { FeatureDeclaration, IntegrationDeclaration } from '../../../_common/registry/types';
+import type {
+  FeatureContainer,
+  FeatureDeclaration,
+  IntegrationDeclaration,
+} from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
+import { createDepRisksSubfeature, createSecretsSubfeature } from '../git-integration-subfeatures';
 import {
   gitCombinedHookExample,
   gitHookExample,
@@ -50,13 +55,14 @@ export const huskyIntegration: IntegrationDeclaration<IntegrateGitOptions> = {
   combinedPostInstallExample: gitCombinedHookExample,
 };
 
-function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitOptions> {
-  return {
+function createHuskyFeature(
+  hook: GitHookType,
+): FeatureContainer<IntegrateGitOptions> | FeatureDeclaration<IntegrateGitOptions> {
+  const base: FeatureDeclaration<IntegrateGitOptions> = {
     id: `${hook}-hook`,
-    displayName: `${hook} hook`,
+    displayName: `${hook} code scanning hook`,
     shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
-    dependencies: [sonarSecretsBinaryDependency],
     resources: [
       textSnippet({
         id: 'hook-file',
@@ -67,7 +73,7 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
         executable: true,
         startMarker: getHuskyBeginMarker(hook),
         endMarker: getHuskyEndMarker(hook),
-        content: getHuskySnippetContent(hook).trimEnd(),
+        content: (context) => getHuskySnippetContent(hook, context).trimEnd(),
       }),
     ],
     legacyCleanups: [
@@ -80,14 +86,21 @@ function createHuskyFeature(hook: GitHookType): FeatureDeclaration<IntegrateGitO
       }),
     ],
   };
+
+  if (hook === 'pre-commit') {
+    return {
+      ...base,
+      subfeatures: [createSecretsSubfeature(), createDepRisksSubfeature()],
+      defaultInstallSubfeatureIds: ['pre-commit-secrets'],
+    } satisfies FeatureContainer<IntegrateGitOptions>;
+  }
+
+  // Pre-push: no subfeatures, dependency on the feature directly.
+  return { ...base, dependencies: [sonarSecretsBinaryDependency] };
 }
 
-export { installViaHusky } from './install';
 export {
   getHuskyBeginMarker,
-  getHuskyPreCommitSnippet,
-  getHuskyPrePushSnippet,
-  getHuskySnippet,
   getHuskySnippetContent,
   getRecognizedHuskyMarkers,
 } from './shell-fragments';

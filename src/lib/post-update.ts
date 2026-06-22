@@ -27,8 +27,10 @@ import { installScaScannerBinary } from '../cli/commands/_common/install/sca-sca
 import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
 import { supportedIntegrations } from '../cli/commands/integrate';
 import {
+  type FeatureDeclaration,
   integrationInstaller,
   type IntegrationRegistry,
+  isFeatureContainer,
 } from '../cli/commands/integrate/_common/registry';
 import { CLAUDE_INTEGRATION_ID } from '../cli/commands/integrate/claude/declaration';
 import { installHooks } from '../cli/commands/integrate/claude/hooks.js';
@@ -41,7 +43,7 @@ import {
   removeObsoleteHookArtifacts,
 } from './migration.js';
 import { loadState, saveState, stateFileExists } from './repository/state-repository';
-import type { CliState, HookExtension } from './state.js';
+import type { CliState, HookExtension, InstalledIntegrationFeature } from './state.js';
 import { isNewerVersion } from './version';
 
 /**
@@ -111,7 +113,7 @@ export async function migrateDeclarativeIntegrations(
 
     const applications = [];
     for (const installedFeature of knownFeatures) {
-      const feature = featuresById.get(installedFeature.featureId);
+      const feature = getFeature(featuresById, installedFeature);
       if (!feature) {
         continue;
       }
@@ -124,7 +126,7 @@ export async function migrateDeclarativeIntegrations(
       }
 
       applications.push({
-        feature,
+        feature: feature,
         targetRoot: installedFeature.targetRoot,
         scope: installedFeature.scope,
         attrs: installedFeature.attrs,
@@ -157,6 +159,31 @@ export async function migrateDeclarativeIntegrations(
   if (stateChanged) {
     saveState(state);
   }
+}
+
+function getFeature(
+  featuresById: Map<string, FeatureDeclaration>,
+  installedFeature: InstalledIntegrationFeature,
+): FeatureDeclaration | undefined {
+  const feature = featuresById.get(installedFeature.featureId);
+  if (!feature) {
+    return undefined;
+  }
+
+  let applicationFeature = feature;
+  if (isFeatureContainer(feature)) {
+    const activeIds = new Set(
+      installedFeature.subfeatures !== undefined
+        ? installedFeature.subfeatures.map((s) => s.featureId)
+        : feature.defaultInstallSubfeatureIds,
+    );
+    const filteredContainer = {
+      ...feature,
+      subfeatures: feature.subfeatures.filter((s) => activeIds.has(s.id)),
+    };
+    applicationFeature = filteredContainer;
+  }
+  return applicationFeature;
 }
 
 /**

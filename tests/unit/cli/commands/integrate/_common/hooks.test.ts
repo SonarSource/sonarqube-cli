@@ -48,11 +48,12 @@ describe('unixTemplate', () => {
 });
 
 describe('windowsTemplate', () => {
-  it('includes the command guard, reads stdin, and pipes it to the command', () => {
+  it('includes the command guard, reads stdin, pipes it to the command, and propagates exit code', () => {
     const body = windowsTemplate('sonar hook claude-pre-tool-use');
     expect(body).toContain(WINDOWS_SONAR_COMMAND_GUARD);
     expect(body).toContain('$stdinData = [Console]::In.ReadToEnd()');
     expect(body).toContain('$stdinData | & sonar hook claude-pre-tool-use');
+    expect(body).toContain('exit $LASTEXITCODE');
   });
 });
 

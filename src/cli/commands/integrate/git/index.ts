@@ -23,10 +23,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { GLOBAL_HOOKS_DIR } from '../../../../lib/config-constants';
 import { normalizePath } from '../../../../lib/fs-utils';
-import { findGitRoot } from '../../../../lib/project-workspace';
-import { blank, confirmPrompt, intro, text, warn } from '../../../../ui';
+import { discoverProject, findGitRoot } from '../../../../lib/project-workspace';
+import { blank, confirmPrompt, info, intro, phase, phaseItem, text, warn } from '../../../../ui';
+import { yellow } from '../../../../ui/colors.js';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { GitRepo, resolveGitHooksDir } from '../../_common/git-repo';
 import { resolveIntegrateScope } from '../_common/integrate-scope';
@@ -133,10 +135,19 @@ async function integrateGitGlobal(options: IntegrateGitOptions): Promise<void> {
   await installGitFeatures(options, GLOBAL_HOOKS_DIR, 'global');
 }
 
-export async function integrateGit(options: IntegrateGitOptions): Promise<void> {
+export async function integrateGit(
+  options: IntegrateGitOptions,
+  auth: ResolvedAuth,
+): Promise<void> {
   validateHookOption(options.hook);
 
-  intro('SonarQube Git Integration (secrets scanning)');
+  if (options.global && (options.dependencyRisks || options.project)) {
+    throw new InvalidOptionError('--dependency-risks and -p are not supported with --global.');
+  }
+
+  intro('SonarQube Git Integration (source code scanning)');
+  info('This integration includes secrets and dependency risks detection in your git repository.');
+  info(yellow('Some scan types may be unavailable for certain hook types.'));
 
   if (options.global) {
     return integrateGitGlobal(options);
@@ -150,6 +161,7 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
 
   const scope = await resolveIntegrateScope({
     ...options,
+    projectKey: options.project,
     projectRoot: isGit ? gitRoot : process.cwd(),
   });
   if (scope === 'global') {
@@ -163,7 +175,31 @@ export async function integrateGit(options: IntegrateGitOptions): Promise<void> 
     });
   }
 
-  await installGitFeatures(options, gitRoot, 'project');
+  const resolvedOptions = await resolveProjectKey(options, gitRoot, auth);
+
+  await installGitFeatures(resolvedOptions, gitRoot, 'project');
+}
+
+async function resolveProjectKey(
+  options: IntegrateGitOptions,
+  root: string,
+  auth: ResolvedAuth,
+): Promise<IntegrateGitOptions> {
+  if (options.project) {
+    phase('Project', [phaseItem('Key', 'done', options.project)]);
+    return options;
+  }
+
+  const discovered = await discoverProject(root, true, { auth });
+  if (discovered.projectKey) {
+    phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
+    return { ...options, project: discovered.projectKey };
+  }
+
+  warn(
+    'No project key detected — some features will not be available. Run `sonar integrate git --help` for ways to define a project.',
+  );
+  return options;
 }
 
 async function installGitFeatures(
@@ -180,6 +216,8 @@ async function installGitFeatures(
     scope,
     force: options.force,
     nonInteractive: options.nonInteractive,
+    // Attrs are project-scope only; global hooks do not support a project key.
+    attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
   });
 }
 

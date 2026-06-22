@@ -22,14 +22,23 @@ import { join } from 'node:path';
 
 import {
   ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR,
+  ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   ANTIGRAVITY_GLOBAL_SKILLS_DIR,
   ANTIGRAVITY_INSTRUCTIONS_FILENAME,
   ANTIGRAVITY_PROJECT_AGENTS_DIR,
   ANTIGRAVITY_PROJECT_INSTRUCTIONS_DIR,
+  CLI_COMMAND,
 } from '../../../../lib/config-constants';
+import { getMcpConfig } from '../../../../lib/mcp/mcp-helper';
+import { getRequiredStringAttr } from '../_common/attrs';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
-import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates';
+import {
+  buildSqaaSectionBody,
+  sonarBeginMarker,
+  sonarEndMarker,
+} from '../_common/instructions-templates';
+import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
 import {
   askUser,
@@ -49,11 +58,13 @@ import {
 } from './hooks';
 import { globalAntigravityInstructionsExist, PROMPT_SECRETS_BODY } from './instructions';
 
-export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity-cli';
+export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity';
 
 export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   globalSecretsHookExists?: boolean;
+  /** Install SQAA instructions (project scope only). */
+  installSqaaInstructions?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -90,6 +101,42 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
           defaultValue: {},
           patch: (document, context) => upsertAntigravitySecretsBlock(document, context),
           removePatch: (document) => removeAntigravitySecretsBlock(document),
+        }),
+      ],
+    },
+    {
+      id: 'sqaa-instructions',
+      displayName: 'SonarQube Agentic Analysis instructions',
+      shouldInstall: ({ options }) =>
+        options.installSqaaInstructions === true ? askUser() : skip(),
+      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
+      scope: 'project',
+      resources: [
+        textSnippet({
+          id: 'sqaa-instructions-file',
+          displayName: 'SonarQube Agentic Analysis instructions for Antigravity',
+          targetPath: resolveInstructionsPath,
+          startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
+          endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
+          content: (context) =>
+            buildSqaaSectionBody(
+              getRequiredStringAttr(context, 'projectKey', antigravityIntegration.displayName),
+            ),
+        }),
+      ],
+    },
+    {
+      id: 'mcp-server',
+      displayName: 'MCP server',
+      resources: [
+        jsonPatch({
+          id: 'antigravity-mcp-config',
+          displayName: 'Antigravity MCP configuration',
+          targetPath: () => ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
+          defaultValue: {},
+          patch: (document) =>
+            upsertJsonMcpServer(document, getMcpConfig(CLI_COMMAND, { withFsMount: false })),
+          removePatch: (document) => removeJsonMcpServer(document),
         }),
       ],
     },

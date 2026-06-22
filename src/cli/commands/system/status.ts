@@ -28,6 +28,7 @@ import { version as VERSION } from '../../../../package.json';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../../lib/config-constants';
+import { IS_STANDALONE_DISTRIBUTION } from '../../../lib/distribution';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
@@ -46,7 +47,9 @@ import { SECRETS_SPEC } from '../_common/install/secrets';
 import type { TokenStatus } from '../_common/token';
 import { checkTokenStatus } from '../_common/token';
 import { supportedIntegrations } from '../integrate';
-import { checkForUpdate } from '../self-update/self-update';
+import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health';
+import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks';
+import { checkForUpdate } from '../self-update/update-check';
 
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
 
@@ -66,10 +69,14 @@ export interface SystemStatusOptions {
   json?: boolean;
 }
 
-type McpConfigStatus = 'configured' | 'invalid' | 'not_configured';
+type IntegrationConfigStatus = 'configured' | 'invalid' | 'not_configured';
 
 interface McpStatus {
-  config: McpConfigStatus;
+  config: IntegrationConfigStatus;
+}
+
+interface HooksStatus {
+  config: IntegrationConfigStatus;
 }
 
 interface IntegrationInfo {
@@ -77,7 +84,13 @@ interface IntegrationInfo {
   name: string;
   path?: string;
   mcp?: McpStatus;
+  hooks?: HooksStatus;
 }
+
+type CliUpdateInfo = {
+  latestVersion: string;
+  updateAvailable: boolean;
+};
 
 function abbreviatePath(p: string): string {
   return p.replace(homedir(), '~');
@@ -92,6 +105,7 @@ const INTEGRATION_TO_MCP_AGENT: Record<string, string> = {
   'claude-code': 'claude',
   'copilot-cli': 'copilot',
   codex: 'codex',
+  antigravity: 'antigravity',
 };
 
 // integrationId → sonar integrate subcommand
@@ -99,6 +113,7 @@ const INTEGRATION_TO_COMMAND: Record<string, string> = {
   'claude-code': 'sonar integrate claude',
   'copilot-cli': 'sonar integrate copilot',
   codex: 'sonar integrate codex',
+  antigravity: 'sonar integrate antigravity',
 };
 
 function findMcpFeatures(
@@ -123,12 +138,12 @@ function findMcpFeatures(
   return features;
 }
 
-function checkMcpConfigFile(configPath: string): McpConfigStatus {
+function checkMcpConfigFile(configPath: string): IntegrationConfigStatus {
   if (!existsSync(configPath)) return 'not_configured';
   try {
     const raw = readFileSync(configPath, 'utf-8');
     if (configPath.endsWith('.toml')) {
-      const parsed = parseToml(raw) as Record<string, unknown>;
+      const parsed = parseToml(raw);
       const mcpServers = parsed.mcp_servers as Record<string, unknown> | undefined;
       if (!mcpServers || !('sonarqube' in mcpServers)) return 'not_configured';
       const entry = mcpServers.sonarqube;
@@ -213,9 +228,42 @@ function getMcpStatusMap(state: CliState): Map<string, McpStatus> {
   return statusMap;
 }
 
+function findAntigravitySecretsHookFeatures(
+  state: CliState,
+): Array<{ scope: 'project' | 'global'; targetRoot: string }> {
+  const features: Array<{ scope: 'project' | 'global'; targetRoot: string }> = [];
+  for (const integration of state.integrations.installed) {
+    if (integration.integrationId !== 'antigravity') {
+      continue;
+    }
+    for (const feature of integration.features) {
+      if (feature.featureId === 'sonar-secrets-hooks') {
+        features.push({ scope: feature.scope, targetRoot: feature.targetRoot });
+      }
+    }
+  }
+  return features;
+}
+
+function getHooksStatusMap(state: CliState): Map<string, HooksStatus> {
+  const hookFeatures = findAntigravitySecretsHookFeatures(state);
+  if (hookFeatures.length === 0) {
+    return new Map();
+  }
+
+  const statusMap = new Map<string, HooksStatus>();
+  for (const feature of hookFeatures) {
+    const key = `antigravity:${feature.targetRoot}`;
+    const hooksPath = resolveAntigravityHooksJsonPathForScope(feature.scope, feature.targetRoot);
+    statusMap.set(key, { config: checkAntigravitySecretsHookFile(hooksPath) });
+  }
+  return statusMap;
+}
+
 function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
   const result: IntegrationInfo[] = [];
   const mcpStatusMap = getMcpStatusMap(state);
+  const hooksStatusMap = getHooksStatusMap(state);
 
   // The framework stores one InstalledIntegration per integrationId; multiple
   // project installs accumulate as separate features with distinct targetRoots.
@@ -233,6 +281,10 @@ function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
         name,
         path: pathFromFeatures(features),
         mcp: mcpStatusMap.get(`${i.integrationId}:${root}`),
+        hooks:
+          i.integrationId === 'antigravity'
+            ? hooksStatusMap.get(`${i.integrationId}:${root}`)
+            : undefined,
       });
     }
   }
@@ -280,9 +332,29 @@ function getLegacyAgentPath(agentId: string, state: CliState): string | undefine
 }
 
 function mcpStatusLine(mcp: McpStatus): string {
-  if (mcp.config === 'not_configured') return 'NOT CONFIGURED';
-  if (mcp.config === 'invalid') return 'CONFIGURED / INVALID CONFIG';
+  return integrationConfigStatusLine(mcp.config);
+}
+
+function integrationConfigStatusLine(status: IntegrationConfigStatus): string {
+  if (status === 'not_configured') return 'NOT CONFIGURED';
+  if (status === 'invalid') return 'CONFIGURED / INVALID CONFIG';
   return 'CONFIGURED';
+}
+
+async function getCliUpdateInfo(): Promise<CliUpdateInfo | null> {
+  if (!IS_STANDALONE_DISTRIBUTION) {
+    return null;
+  }
+
+  try {
+    const result = await checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL);
+    return {
+      latestVersion: result.latestVersion,
+      updateAvailable: result.updateAvailable,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function systemStatus(options: SystemStatusOptions): Promise<void> {
@@ -291,7 +363,7 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
 
   const [auth, updateResult] = await Promise.all([
     resolveAuth().catch(() => null),
-    checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL).catch(() => null),
+    getCliUpdateInfo(),
   ]);
 
   const tokenStatus: TokenStatus | null = auth
@@ -342,7 +414,9 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
   }));
 
   const hasMcpIssues = integrations.some((i) => i.mcp?.config === 'invalid');
-  const hasIssues = tokenStatus === null || tokenStatus === 'invalid' || hasMcpIssues;
+  const hasHooksIssues = integrations.some((i) => i.hooks?.config === 'invalid');
+  const hasIssues =
+    tokenStatus === null || tokenStatus === 'invalid' || hasMcpIssues || hasHooksIssues;
   const recommendations = buildRecommendations(tokenStatus, updateResult, integrations);
 
   const data: StatusData = {
@@ -406,6 +480,16 @@ function buildRecommendations(
     recommendations.push(`Run '${integrateCmd}' to reinstall MCP configuration`);
   }
 
+  const seenHooksIntegrations = new Set<string>();
+  for (const integration of integrations) {
+    if (seenHooksIntegrations.has(integration.id) || integration.hooks?.config !== 'invalid') {
+      continue;
+    }
+    seenHooksIntegrations.add(integration.id);
+    const integrateCmd = INTEGRATION_TO_COMMAND[integration.id] ?? 'sonar integrate antigravity';
+    recommendations.push(`Run '${integrateCmd}' to reinstall secrets hook configuration`);
+  }
+
   return recommendations;
 }
 
@@ -439,7 +523,7 @@ function printJsonStatus(version: string, data: StatusData): void {
           ...(updateAvailable ? { latestVersion: stripBuildNumber(latestVersion) } : {}),
         })),
         cache,
-        integrations: integrations.map(({ id, name, path, mcp }) => ({
+        integrations: integrations.map(({ id, name, path, mcp, hooks }) => ({
           id,
           name,
           ...(path ? { path } : {}),
@@ -448,6 +532,14 @@ function printJsonStatus(version: string, data: StatusData): void {
                 mcp: {
                   configured: mcp.config !== 'not_configured',
                   valid: mcp.config === 'configured',
+                },
+              }
+            : {}),
+          ...(hooks
+            ? {
+                hooks: {
+                  configured: hooks.config !== 'not_configured',
+                  valid: hooks.config === 'configured',
                 },
               }
             : {}),
@@ -509,6 +601,9 @@ function renderIntegrationsSection(integrations: IntegrationInfo[]): void {
     text(`  • ${line}`);
     if (i.mcp) {
       text(`    • MCP Server: ${mcpStatusLine(i.mcp)}`);
+    }
+    if (i.hooks) {
+      text(`    • Secrets Hook: ${integrationConfigStatusLine(i.hooks.config)}`);
     }
   }
 }

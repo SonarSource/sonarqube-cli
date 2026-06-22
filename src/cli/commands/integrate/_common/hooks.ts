@@ -45,7 +45,7 @@ export function unixTemplate(command: string): string {
 }
 
 export function windowsTemplate(command: string): string {
-  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\n`;
+  return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${command}\nexit $LASTEXITCODE\n`;
 }
 
 /**
@@ -129,20 +129,36 @@ export function shellQuotePowerShell(value: string): string {
   return "'" + value.replaceAll("'", POWERSHELL_EMBEDDED_SINGLE_QUOTE) + "'";
 }
 
-export function formatSqaaPostToolHookCommandUnix(
-  hookSubcommand: 'claude-post-tool-use' | 'codex-post-tool-use',
+export type SqaaHookSubcommand = 'claude-post-tool-use' | 'codex-post-tool-use';
+
+export function formatSqaaHookCliArgsUnix(
+  hookSubcommand: SqaaHookSubcommand,
   projectKey: string,
 ): string {
   assertSafeSonarProjectKeyForHookScript(projectKey);
-  return `sonar hook ${hookSubcommand} --project ${shellQuoteBash(projectKey)}`;
+  return `hook ${hookSubcommand} --project ${shellQuoteBash(projectKey)}`;
+}
+
+export function formatSqaaHookCliArgsWindows(
+  hookSubcommand: SqaaHookSubcommand,
+  projectKey: string,
+): string {
+  assertSafeSonarProjectKeyForHookScript(projectKey);
+  return `hook ${hookSubcommand} --project ${shellQuotePowerShell(projectKey)}`;
+}
+
+export function formatSqaaPostToolHookCommandUnix(
+  hookSubcommand: SqaaHookSubcommand,
+  projectKey: string,
+): string {
+  return `sonar ${formatSqaaHookCliArgsUnix(hookSubcommand, projectKey)}`;
 }
 
 export function formatSqaaPostToolHookCommandWindows(
-  hookSubcommand: 'claude-post-tool-use' | 'codex-post-tool-use',
+  hookSubcommand: SqaaHookSubcommand,
   projectKey: string,
 ): string {
-  assertSafeSonarProjectKeyForHookScript(projectKey);
-  return `sonar hook ${hookSubcommand} --project ${shellQuotePowerShell(projectKey)}`;
+  return `sonar ${formatSqaaHookCliArgsWindows(hookSubcommand, projectKey)}`;
 }
 
 /** Absolute path to the platform-specific hook script under `<targetRoot>/<configDir>/hooks/`. */
@@ -156,7 +172,7 @@ export function resolveAgentHookScriptPath(
 }
 
 /**
- * Hook `command` string: `powershell -NoProfile -File <path>` on Windows, raw
+ * Hook `command` string: `powershell -NoProfile -ExecutionPolicy Bypass -File <path>` on Windows, raw
  * path on Unix. Absolute path for global scope, relative path (portable when
  * the project is moved) for project scope.
  */
@@ -171,7 +187,7 @@ export function resolveAgentHookCommand(
     context.scope === 'global' ? join(context.targetRoot, relativePath) : relativePath;
 
   return process.platform === 'win32'
-    ? `powershell -NoProfile -File ${commandPath.replaceAll('\\', '/')}`
+    ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${commandPath.replaceAll('\\', '/')}`
     : commandPath;
 }
 

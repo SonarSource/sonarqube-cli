@@ -149,12 +149,15 @@ function summaryHeader(summary: SummaryVM): string {
 
 function filteringByLine(filter: RiskFilterDescription): string {
   const kept = formatStatuses(filter.effectiveStatuses);
-  if (filter.discardedStatuses.length === 0) {
-    return `Filtering by: ${kept}`;
+  let line = `Filtering by: ${kept}`;
+  if (filter.discardedStatuses.length > 0) {
+    const discarded = formatStatuses(filter.discardedStatuses);
+    line += dim(` (discarded: ${discarded})`);
   }
-  const discarded = formatStatuses(filter.discardedStatuses);
-  const discardedText = dim(`(discarded: ${discarded})`);
-  return `Filtering by: ${kept} ${discardedText}`;
+  if (filter.minimalSeverity !== undefined) {
+    line += `; severity ${filter.minimalSeverity.toLowerCase()} or above`;
+  }
+  return line;
 }
 
 function formatStatuses(statuses: readonly string[]): string {

@@ -99,12 +99,11 @@ describe('analyze dependency-risks', () => {
     { timeout: 15000 },
   );
 
-  // todo: https://sonarsource.atlassian.net/browse/CLI-452 Add end-to-end tests
   // The next two tests assert on scanner *failure* because the in-process
   // fake server does not implement the SCA-scanner backend APIs.
   // The failure surfaces during the secrets pre-scan's `discover-manifests` step.
-  // Move happy-path coverage to a real-backend e2e
-  // suite (e.g. SonarQube Cloud staging) once one exists.
+  // Happy-path coverage against a real backend lives in the credential-gated
+  // SonarQube Cloud staging suite at `tests/e2e/sca/sca-staging.test.ts`.
   it(
     'reports a scanner failure when the SCA backend is unavailable',
     async () => {
@@ -213,9 +212,26 @@ describe('analyze dependency-risks', () => {
     harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks --project demo --statuses bogus');
+    const output = result.stdout + result.stderr;
 
     expect(result.exitCode).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain("Invalid --statuses value: 'bogus'");
+    expect(output).toContain("Invalid --statuses value: 'bogus'");
+    expect(output).toContain(
+      'https://docs.sonarsource.com/sonarqube-cli/analysis/sca#filter-by-status',
+    );
+  });
+
+  it('rejects an unknown --min-severity value', async () => {
+    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run(
+      'analyze dependency-risks --project demo --min-severity bogus',
+    );
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      "error: option '--min-severity <severity>' argument 'bogus' is invalid. Allowed choices are BLOCKER, HIGH, MEDIUM, LOW, INFO.",
+    );
   });
 
   it('exits with code 1 when the SCA endpoint is absent (404)', async () => {
@@ -244,10 +260,14 @@ describe('analyze dependency-risks', () => {
     harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
     const result = await harness.run('analyze dependency-risks --project demo');
+    const output = result.stdout + result.stderr;
 
     expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain(
+    expect(output).toContain(
       'Running Software Composition Analysis from this CLI requires SonarQube Server 2026.4 or later (server is 26.3)',
+    );
+    expect(output).toContain(
+      'https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites',
     );
     // Version check runs before the SCA feature-enabled probe.
     expect(server.getRecordedRequests().some((r) => r.path.endsWith('/sca/feature-enabled'))).toBe(
@@ -283,10 +303,14 @@ describe('analyze dependency-risks', () => {
     harness.withAuth(server.baseUrl(), VALID_TOKEN);
 
     const result = await harness.run('analyze dependency-risks --project demo');
+    const output = result.stdout + result.stderr;
 
     expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain(
+    expect(output).toContain(
       'Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server 2026.4 or later.',
+    );
+    expect(output).toContain(
+      'https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites',
     );
   });
 

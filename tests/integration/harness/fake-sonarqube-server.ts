@@ -121,10 +121,7 @@ export class FakeSonarQubeServerBuilder {
     string,
     { uuid: string; eligible: boolean; enabled: boolean }
   > = new Map();
-  private readonly cagEntitlementOrgs: Map<
-    string,
-    { uuid: string; eligible: boolean; enabled: boolean }
-  > = new Map();
+  private readonly cagEntitlementOrgs: Map<string, { uuid: string; allowed: boolean }> = new Map();
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '9.9.0.00001';
@@ -137,6 +134,8 @@ export class FakeSonarQubeServerBuilder {
   private sqaaStatusBody?: string;
   private sqaaPayloadLimit?: { maxRequestSize?: number; maxFiles?: number };
   private scaEnabled?: boolean;
+  private cagEntitlementStatusCode?: number;
+  private cagEntitlementStatusBody?: string;
   private readonly projectSettings: Map<string, SettingsValue[]> = new Map();
   private agentJobErrorCode?: number;
   private agentJobErrorMessage?: string;
@@ -254,15 +253,21 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  withCagEntitlement(
-    orgKey: string,
-    options: { uuid?: string; eligible?: boolean; enabled?: boolean } = {},
-  ): this {
+  withCagEntitlement(orgKey: string, options: { uuid?: string; allowed?: boolean } = {}): this {
     this.cagEntitlementOrgs.set(orgKey, {
       uuid: options.uuid ?? `${orgKey}-uuid-v4`,
-      eligible: options.eligible ?? true,
-      enabled: options.enabled ?? true,
+      allowed: options.allowed ?? true,
     });
+    return this;
+  }
+
+  /**
+   * Force GET /a3s-analysis/cag-entitlement/{uuid} to return a specific HTTP
+   * status code. Useful for testing entitlement check failure paths.
+   */
+  withCagEntitlementStatusCode(status: number, body?: string): this {
+    this.cagEntitlementStatusCode = status;
+    this.cagEntitlementStatusBody = body;
     return this;
   }
 
@@ -305,6 +310,8 @@ export class FakeSonarQubeServerBuilder {
       sqaaEntitlementOrgs,
       cagEntitlementOrgs,
       scaEnabled,
+      cagEntitlementStatusCode,
+      cagEntitlementStatusBody,
       projectSettings,
       agentJobErrorCode,
       agentJobErrorMessage,
@@ -557,11 +564,13 @@ export class FakeSonarQubeServerBuilder {
             });
           }
           const orgKey = query.organizationKey;
-          const entitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
-          if (entitlement) {
+          const sqaaEntitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
+          const cagEntitlement = orgKey ? cagEntitlementOrgs.get(orgKey) : undefined;
+          const entitlementUuid = cagEntitlement?.uuid ?? sqaaEntitlement?.uuid;
+          if (orgKey && entitlementUuid) {
             return new Response(
               JSON.stringify([
-                { id: `id-${orgKey}`, uuidV4: entitlement.uuid, key: orgKey, name: orgKey },
+                { id: `id-${orgKey}`, uuidV4: entitlementUuid, key: orgKey, name: orgKey },
               ]),
               { headers: { 'Content-Type': 'application/json' } },
             );
@@ -577,9 +586,9 @@ export class FakeSonarQubeServerBuilder {
               { headers: { 'Content-Type': 'application/json' } },
             );
           }
-          // No organizationKey query param: sonar-context-augmentation calls
-          // /organizations/organizations with no params during open-beta
-          // entitlement resolution and expects a flat list of accessible orgs.
+          // No organizationKey query param: sonar-context-augmentation can call
+          // /organizations/organizations with no params during entitlement
+          // resolution and expects a flat list of accessible orgs.
           // Synthesize entries from the orgs that have CAG/SQAA entitlement
           // registered so the daemon can find a matching org by key.
           const knownOrgs = new Set<string>([
@@ -653,9 +662,18 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        const cagOrgConfigMatch = /^\/a3s-analysis\/cag-org-config\/(.+)$/.exec(path);
-        if (cagOrgConfigMatch) {
-          const uuid = cagOrgConfigMatch[1];
+        const cagEntitlementMatch = /^\/a3s-analysis\/cag-entitlement\/(.+)$/.exec(path);
+        if (cagEntitlementMatch) {
+          if (cagEntitlementStatusCode !== undefined) {
+            return new Response(
+              cagEntitlementStatusBody ?? JSON.stringify({ errors: [{ msg: 'CAG failed' }] }),
+              {
+                status: cagEntitlementStatusCode,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          const uuid = cagEntitlementMatch[1];
           const entitlement = [...cagEntitlementOrgs.values()].find((e) => e.uuid === uuid);
           if (!entitlement) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Not found' }] }), {
@@ -665,9 +683,7 @@ export class FakeSonarQubeServerBuilder {
           }
           return new Response(
             JSON.stringify({
-              id: uuid,
-              eligible: entitlement.eligible,
-              enabled: entitlement.enabled,
+              allowed: entitlement.allowed,
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

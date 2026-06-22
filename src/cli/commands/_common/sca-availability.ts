@@ -36,12 +36,20 @@ export async function assertScaAvailable(
     } catch (err) {
       throw new CommandFailedError(
         `Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later.`,
-        { cause: err },
+        {
+          cause: err,
+          remediationHint:
+            'Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites',
+        },
       );
     }
     if (!isAtLeast(serverVersion, MIN_SCA_SQS_VERSION)) {
       throw new CommandFailedError(
         `Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later (server is ${serverVersion}).`,
+        {
+          remediationHint:
+            'Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites',
+        },
       );
     }
   }

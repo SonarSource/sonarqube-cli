@@ -87,39 +87,22 @@ function appendIgnoredLines(lines: string[], ignored: SqaaJsonReport['ignored'])
   }
 }
 
-/**
- * Format a change-set SQAA JSON report for hook additionalContext.
- * Returns null when there is nothing useful to surface (empty change set).
- */
-export function formatSqaaJsonReportForHook(report: SqaaJsonReport): string | null {
-  if (
-    report.files.length === 0 &&
-    report.ignored.length === 0 &&
-    report.failures.length === 0 &&
-    report.skipped.length === 0
-  ) {
-    return null;
-  }
-
+function formatNoAnalyzedContent(report: SqaaJsonReport): string {
   const lines: string[] = [];
-  const totalIssues = report.summary.totalIssues;
-  const hasFileErrors = report.files.some((f) => (f.errors?.length ?? 0) > 0);
-  const hasAnalyzedContent = totalIssues > 0 || report.failures.length > 0 || hasFileErrors;
-
-  if (!hasAnalyzedContent) {
-    if (report.skipped.length > 0) {
-      lines.push(`Skipped ${report.skipped.length} file(s) (analysis not completed).`);
-    } else if (report.ignored.length > 0 && report.files.length === 0) {
-      lines.push(
-        'Agentic Analysis: no files to analyze — all change set files were excluded (binary or oversized).',
-      );
-    } else {
-      lines.push(formatSqaaRunSummaryPlain(hookSummaryFromReport(report)));
-    }
-    appendIgnoredLines(lines, report.ignored);
-    return lines.join('\n');
+  if (report.skipped.length > 0) {
+    lines.push(`Skipped ${report.skipped.length} file(s) (analysis not completed).`);
+  } else if (report.ignored.length > 0 && report.files.length === 0) {
+    lines.push(
+      'Agentic Analysis: no files to analyze — all change set files were excluded (binary or oversized).',
+    );
+  } else {
+    lines.push(formatSqaaRunSummaryPlain(hookSummaryFromReport(report)));
   }
+  appendIgnoredLines(lines, report.ignored);
+  return lines.join('\n');
+}
 
+function renderFileList(report: SqaaJsonReport, lines: string[]): void {
   const processableCount = report.files.length + report.failures.length + report.skipped.length;
   const collapseClean = processableCount > SQAA_COLLAPSE_CLEAN_THRESHOLD;
 
@@ -137,6 +120,32 @@ export function formatSqaaJsonReportForHook(report: SqaaJsonReport): string | nu
       lines.push(...renderPlainAnalyzedFileLines(file.path, file.issues, file.errors));
     }
   }
+}
+
+/**
+ * Format a change-set SQAA JSON report for hook additionalContext.
+ * Returns null when there is nothing useful to surface (empty change set).
+ */
+export function formatSqaaJsonReportForHook(report: SqaaJsonReport): string | null {
+  if (
+    report.files.length === 0 &&
+    report.ignored.length === 0 &&
+    report.failures.length === 0 &&
+    report.skipped.length === 0
+  ) {
+    return null;
+  }
+
+  const totalIssues = report.summary.totalIssues;
+  const hasFileErrors = report.files.some((f) => (f.errors?.length ?? 0) > 0);
+  const hasAnalyzedContent = totalIssues > 0 || report.failures.length > 0 || hasFileErrors;
+
+  if (!hasAnalyzedContent) {
+    return formatNoAnalyzedContent(report);
+  }
+
+  const lines: string[] = [];
+  renderFileList(report, lines);
 
   if (report.failures.length > 0) {
     lines.push('Agentic Analysis failures:');
