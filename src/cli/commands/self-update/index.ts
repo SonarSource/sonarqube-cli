@@ -20,17 +20,20 @@
 
 import { blank, info, success, text, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
+import { Version } from '../_common/version';
 import { checkForUpdate } from './update-check';
 
 export interface SelfUpdateOptions {
   status?: boolean;
   force?: boolean;
+  version?: string;
+  artifactBaseUrl?: string;
 }
 
-async function selfUpdateStatus(): Promise<void> {
+async function selfUpdateStatus(artifactBaseUrl?: string): Promise<void> {
   info('Checking for updates...');
 
-  const { currentVersion, latest, upToDate } = await checkForUpdate();
+  const { currentVersion, latest, upToDate } = await checkForUpdate({ artifactBaseUrl });
 
   text(`Current version: v${currentVersion.text}`);
   text(`Latest version:  v${latest.version.noBuild.text}`);
@@ -46,27 +49,38 @@ async function selfUpdateStatus(): Promise<void> {
 
 export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void> {
   if (options.status) {
-    await selfUpdateStatus();
+    await selfUpdateStatus(options.artifactBaseUrl);
     return;
   }
 
   info('Checking for updates...');
 
-  const { currentVersion, latest, upToDate } = await checkForUpdate();
-  const latestVersion = latest.version.noBuild.text;
+  const { currentVersion, latest, upToDate } = await checkForUpdate({
+    artifactBaseUrl: options.artifactBaseUrl,
+  });
 
-  if (upToDate && !options.force) {
+  const pinnedVersion = options.version ? new Version(options.version) : null;
+  const displayTarget = pinnedVersion ? pinnedVersion.noBuild.text : latest.version.noBuild.text;
+  const pinnedMatchesCurrent = pinnedVersion?.noBuild.text === currentVersion.noBuild.text;
+
+  if ((upToDate || pinnedMatchesCurrent) && !options.force) {
     success(`Already up to date (v${currentVersion.text})`);
     return;
   }
 
-  if (upToDate) {
-    info(`Force installing v${latestVersion}...`);
+  if (pinnedVersion) {
+    info(`Installing v${displayTarget} (current: v${currentVersion.text})...`);
+  } else if (upToDate) {
+    info(`Force installing v${displayTarget}...`);
   } else {
-    info(`Updating v${currentVersion.text} → v${latestVersion}...`);
+    info(`Updating v${currentVersion.text} → v${displayTarget}...`);
   }
 
-  const installResult = await latest.install();
+  const installResult = await latest.install({
+    version: options.version,
+    force: options.force,
+    artifactBaseUrl: options.artifactBaseUrl,
+  });
   switch (installResult.status) {
     case 'launched_in_new_terminal':
       info('Starting update in a new terminal window...');
@@ -82,6 +96,6 @@ export async function selfUpdate(options: SelfUpdateOptions = {}): Promise<void>
       });
     }
     case 'installed':
-      success(`Updated to v${latestVersion}`);
+      success(`Updated to v${displayTarget}`);
   }
 }

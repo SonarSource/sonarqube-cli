@@ -563,6 +563,11 @@ if (IS_STANDALONE_DISTRIBUTION) {
     })
     .option('--status', 'Check for a newer version without installing')
     .option('--force', 'Install the latest version even if already up to date')
+    .option('--version <version>', 'Install a specific version (enables rollback)')
+    .option(
+      '--artifact-base-url <url>',
+      'Override the artifact download base URL (for air-gapped or internal mirror deployments)',
+    )
     .anonymousAction((options: SelfUpdateOptions) => selfUpdate(options));
 }
 

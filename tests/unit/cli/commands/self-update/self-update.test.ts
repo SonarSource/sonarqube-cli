@@ -172,6 +172,70 @@ describe('selfUpdate --status', () => {
   });
 });
 
+describe('selfUpdate --version', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    spawnMock.mockClear();
+    spawnMock.mockImplementation(() => createSpawnChild());
+    spawnSyncMock.mockClear();
+    spawnSyncMock.mockImplementation((): MockSpawnSyncResult => ({ status: 0 }));
+    isWindowsMock.mockImplementation(() => false);
+    fetchSpy = spyOn(globalThis, 'fetch');
+    // First call: stable.version endpoint; second call: install script download.
+    fetchSpy.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('99.0.0') });
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve('#!/bin/bash\necho hi'),
+    });
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    setMockUi(false);
+  });
+
+  it('passes --version to the install script on Unix', async () => {
+    await selfUpdate({ version: '1.0.0' });
+
+    expect(spawnSyncMock).toHaveBeenCalledTimes(1);
+    const args = (spawnSyncMock.mock.calls as unknown as [string, string[]][]).at(0)?.[1] ?? [];
+    expect(args).toContain('--version');
+    expect(args).toContain('1.0.0');
+  });
+
+  it('passes -Version to the install script on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    await selfUpdate({ version: '1.0.0' });
+
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const command =
+      (spawnMock.mock.calls as unknown as [string, string[]][]).at(0)?.[1].join(' ') ?? '';
+    expect(command).toContain('-Version');
+    expect(command).toContain('1.0.0');
+  });
+
+  it('skips install when already at the pinned version', async () => {
+    const { version: currentVersion } = await import('../../../../../package.json');
+    const semver = realStripBuildNumber(currentVersion);
+
+    await selfUpdate({ version: semver });
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(messages.some((m) => /up to date/i.test(m))).toBe(true);
+    expect(spawnSyncMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a rollback message when pinned version is older than current', async () => {
+    await selfUpdate({ version: '0.0.1' });
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(messages.some((m) => m.includes('0.0.1') && m.includes('Installing'))).toBe(true);
+  });
+});
+
 describe('selfUpdate --force', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
@@ -291,5 +355,56 @@ describe('selfUpdate --force', () => {
     expect(messages.some((m) => m.includes('Starting update in a new terminal window...'))).toBe(
       false,
     );
+  });
+});
+
+describe('selfUpdate --artifact-base-url', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    setMockUi(true);
+    clearMockUiCalls();
+    spawnMock.mockClear();
+    spawnMock.mockImplementation(() => createSpawnChild());
+    spawnSyncMock.mockClear();
+    spawnSyncMock.mockImplementation((): MockSpawnSyncResult => ({ status: 0 }));
+    isWindowsMock.mockImplementation(() => false);
+    fetchSpy = spyOn(globalThis, 'fetch');
+    fetchSpy.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('99.0.0') });
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve('#!/bin/bash\necho hi'),
+    });
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    setMockUi(false);
+  });
+
+  it('passes --artifact-base-url to the install script on Unix', async () => {
+    await selfUpdate({ artifactBaseUrl: 'https://internal.example.com/sonarqube-cli' });
+
+    const args = (spawnSyncMock.mock.calls as unknown as [string, string[]][]).at(0)?.[1] ?? [];
+    expect(args).toContain('--artifact-base-url');
+    expect(args).toContain('https://internal.example.com/sonarqube-cli');
+  });
+
+  it('passes -ArtifactBaseUrl to the install script on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    await selfUpdate({ artifactBaseUrl: 'https://internal.example.com/sonarqube-cli' });
+
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const command =
+      (spawnMock.mock.calls as unknown as [string, string[]][]).at(0)?.[1].join(' ') ?? '';
+    expect(command).toContain('-ArtifactBaseUrl');
+    expect(command).toContain('https://internal.example.com/sonarqube-cli');
+  });
+
+  it('omits --artifact-base-url when not provided', async () => {
+    await selfUpdate({});
+
+    const args = (spawnSyncMock.mock.calls as unknown as [string, string[]][]).at(0)?.[1] ?? [];
+    expect(args).not.toContain('--artifact-base-url');
   });
 });

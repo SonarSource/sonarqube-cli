@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_DIR="$HOME/.local/share/sonarqube-cli/bin"
+INSTALL_DIR=""
 BINARY_NAME="sonar"
 TMP_DIR=""
 
@@ -101,7 +101,9 @@ download_cli_artifact() {
   local platform="$2"
   local os="$3"
   local dest="$4"
-  local base="sonarqube-cli-${version}-${platform}"
+  local dist_prefix=""
+  [[ "$DISTRIBUTION" != "standalone" ]] && dist_prefix="${DISTRIBUTION}-"
+  local base="sonarqube-cli-${version}-${dist_prefix}${platform}"
   local url_bin="$BASE_URL/$version/$os/${base}.bin"
   local url_exe="$BASE_URL/$version/$os/${base}.exe"
 
@@ -162,18 +164,26 @@ detect_profile() {
   [[ -n "$detected" ]] && echo "$detected"
 }
 
-# Appends the sonarqube-cli PATH export to the best shell profile,
-# skipping if it is already present. Uses detect_profile() to choose
-# the target file and reports the outcome on stdout.
+# Appends the sonarqube-cli PATH export to the best shell profile.
+# Skips if the install directory is already on PATH or if the export is already present.
 update_profile() {
-  local path_line='export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"'
+  if [[ "${CUSTOM_INSTALL_DIR:-false}" == true ]]; then
+    return
+  fi
+
+  if [[ ":${PATH}:" == *":${INSTALL_DIR}:"* ]]; then
+    echo "Install directory is already in PATH, skipping profile update."
+    return
+  fi
+
+  local path_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
   local detected_profile
   detected_profile="$(detect_profile || true)"
 
   if [[ -z "$detected_profile" ]]; then
     echo "No shell profile files found. Add the following line to your shell profile manually:"
     echo "  $path_line"
-  elif grep -qF 'sonarqube-cli/bin' "$detected_profile" 2>/dev/null; then
+  elif grep -qF "${INSTALL_DIR}" "$detected_profile" 2>/dev/null; then
     echo "Already present in $detected_profile, skipping."
   else
     printf '\n# Added by sonarqube-cli installer\n%s\n' "$path_line" >> "$detected_profile"
@@ -181,25 +191,121 @@ update_profile() {
   fi
 }
 
+CUSTOM_INSTALL_DIR=false
+DISTRIBUTION="standalone"
+FORCE=false
+PINNED_VERSION=""
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    local opt="$1"
+    case "$opt" in
+      --install-dir)
+        local val="${2:-}"
+        if [[ -z "$val" ]]; then
+          echo "Error: --install-dir requires a path." >&2
+          exit 1
+        fi
+        INSTALL_DIR="$val"
+        CUSTOM_INSTALL_DIR=true
+        shift 2
+        ;;
+      --distribution)
+        local val="${2:-}"
+        if [[ -z "$val" ]]; then
+          echo "Error: --distribution requires a value." >&2
+          exit 1
+        fi
+        case "$val" in
+          standalone|homebrew) ;;
+          *)
+            echo "Error: unknown distribution '$val'. Valid values: standalone, homebrew." >&2
+            exit 1
+            ;;
+        esac
+        DISTRIBUTION="$val"
+        shift 2
+        ;;
+      --force)
+        FORCE=true
+        shift
+        ;;
+      --version)
+        local val="${2:-}"
+        if [[ -z "$val" ]]; then
+          echo "Error: --version requires a value." >&2
+          exit 1
+        fi
+        PINNED_VERSION="$val"
+        shift 2
+        ;;
+      --artifact-base-url)
+        local val="${2:-}"
+        if [[ -z "$val" ]]; then
+          echo "Error: --artifact-base-url requires a URL." >&2
+          exit 1
+        fi
+        BASE_URL="$val"
+        shift 2
+        ;;
+      *)
+        echo "Unknown option: $opt" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
 main() {
+  parse_args "$@"
+
+  if [[ "$CUSTOM_INSTALL_DIR" == false ]]; then
+    INSTALL_DIR="$HOME/.local/share/sonarqube-cli/bin"
+  fi
+
   local platform
   platform="$(detect_platform)"
 
   local version
-  version="$(resolve_latest_version)"
-  echo "Latest version: $version"
+  if [[ -n "$PINNED_VERSION" ]]; then
+    version="$PINNED_VERSION"
+    echo "Target version: $version"
+  else
+    version="$(resolve_latest_version)"
+    echo "Latest version: $version"
+  fi
 
   local os
   os="$(detect_os)"
 
-  local artifact_basename="sonarqube-cli-${version}-${platform}"
   local dest="$INSTALL_DIR/$BINARY_NAME"
+
+  # Skip download if the binary at the target path is already at the latest version.
+  # Skipped when --install-dir is provided: the caller controls the target location and
+  # must get the correctly-flavored binary (e.g. MDM distribution), regardless of version.
+  if [[ "$CUSTOM_INSTALL_DIR" == false && "$FORCE" == false && -f "$dest" ]]; then
+    local target_semver installed_version
+    target_semver="$(echo "$version" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')"
+    installed_version="$("$dest" --version 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
+    if [[ -n "$installed_version" && "$installed_version" == "$target_semver" ]]; then
+      echo "Already at version $version, nothing to do."
+      update_profile
+      exit 0
+    fi
+  fi
+
+  local artifact_basename="sonarqube-cli-${version}-${platform}"
   TMP_DIR="$(mktemp -d -t 'sonarqube-cli-install.XXXXXX')"
 
   echo "Detected platform: $platform"
   echo "Downloading sonarqube-cli from:"
 
   mkdir -p "$INSTALL_DIR"
+
+  if [[ ! -w "$INSTALL_DIR" ]]; then
+    echo "Error: no write permission on $INSTALL_DIR. Re-run with sudo or trigger via JumpCloud (SYSTEM)." >&2
+    exit 1
+  fi
 
   local tmp_bin="$TMP_DIR/$artifact_basename"
 
@@ -214,23 +320,32 @@ main() {
 
   echo "Installed sonar to: $dest"
 
+  local path_was_present=false
+  if [[ ":${PATH}:" == *":${INSTALL_DIR}:"* ]]; then
+    path_was_present=true
+  fi
+
   update_profile
 
   echo ""
   echo "Installation complete!"
   echo ""
   echo "sonar has been installed to: $dest"
-  echo ""
-  echo "What happens next:"
-  echo "  - Any NEW terminal window you open will have 'sonar' available automatically."
-  echo "  - This current terminal window won't see it yet — you have two options:"
-  echo ""
-  echo "    Option 1: Open a new terminal window (recommended)"
-  echo ""
-  echo "    Option 2: Activate it in this window right now by running:"
-  echo "      export PATH=\"$INSTALL_DIR:\$PATH\""
-  echo "      (This only applies to this window — you won't need to run it again.)"
-  echo ""
+
+  if [[ "$path_was_present" == false ]]; then
+    echo ""
+    echo "What happens next:"
+    echo "  - Any NEW terminal window you open will have 'sonar' available automatically."
+    echo "  - This current terminal window won't see it yet — you have two options:"
+    echo ""
+    echo "    Option 1: Open a new terminal window (recommended)"
+    echo ""
+    echo "    Option 2: Activate it in this window right now by running:"
+    echo "      export PATH=\"$INSTALL_DIR:\$PATH\""
+    echo "      (This only applies to this window — you won't need to run it again.)"
+    echo ""
+  fi
+
   echo "Once ready, run 'sonar --help' to get started."
 }
 

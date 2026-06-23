@@ -37,11 +37,15 @@ const prereleaseScriptPath = join(
 );
 const isWindows = process.platform === 'win32';
 
-const PATH_LINE = 'export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"';
+const INSTALL_DIR_SUBPATH = '.local/share/sonarqube-cli/bin';
 const INSTALL_SH_COMPATIBILITY_VERSION_PATTERN =
   /^\s*version\s*=\s*["'](\d+\.\d+\.\d+\.\d+)["']\s*$/m;
 const INSTALL_PS1_COMPATIBILITY_VERSION_PATTERN =
   /^\s*\$SonarVersion\s*=\s*["'](\d+\.\d+\.\d+\.\d+)["']\s*$/im;
+
+function pathLine(installDir: string): string {
+  return `export PATH="${installDir}:$PATH"`;
+}
 
 /**
  * Runs the real detect_profile() + update_profile() extracted from install.sh.
@@ -57,8 +61,10 @@ function runProfileUpdate(
   env: Record<string, string>,
   opts: { unsetShell?: boolean } = {},
 ): { stdout: string; stderr: string; exitCode: number } {
+  const installDir = join(env.HOME ?? '', INSTALL_DIR_SUBPATH);
   const bashSnippet = `
 set -euo pipefail
+INSTALL_DIR="${installDir}"
 ${opts.unsetShell ? 'unset SHELL' : ''}
 eval "$(sed -n '/^detect_profile()/,/^}/p' "${scriptPath}")"
 eval "$(sed -n '/^update_profile()/,/^}/p' "${scriptPath}")"
@@ -103,7 +109,7 @@ describe.if(!isWindows)('install.sh profile update', () => {
       expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.bashrc')}`);
       const content = readProfile(join(tempHome, '.bashrc'));
       expect(content).toContain('# existing config');
-      expect(content).toContain(PATH_LINE);
+      expect(content).toContain(pathLine(join(tempHome, INSTALL_DIR_SUBPATH)));
       expect(content).toContain('# Added by sonarqube-cli installer');
     });
 
@@ -114,7 +120,9 @@ describe.if(!isWindows)('install.sh profile update', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.bash_profile')}`);
-      expect(readProfile(join(tempHome, '.bash_profile'))).toContain(PATH_LINE);
+      expect(readProfile(join(tempHome, '.bash_profile'))).toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
 
     it('prefers .bashrc over .bash_profile', () => {
@@ -124,8 +132,12 @@ describe.if(!isWindows)('install.sh profile update', () => {
       const result = runProfileUpdate({ HOME: tempHome, SHELL: '/bin/bash' });
 
       expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.bashrc')}`);
-      expect(readProfile(join(tempHome, '.bashrc'))).toContain(PATH_LINE);
-      expect(readProfile(join(tempHome, '.bash_profile'))).not.toContain(PATH_LINE);
+      expect(readProfile(join(tempHome, '.bashrc'))).toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
+      expect(readProfile(join(tempHome, '.bash_profile'))).not.toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
   });
 
@@ -137,7 +149,9 @@ describe.if(!isWindows)('install.sh profile update', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.zshrc')}`);
-      expect(readProfile(join(tempHome, '.zshrc'))).toContain(PATH_LINE);
+      expect(readProfile(join(tempHome, '.zshrc'))).toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
 
     it('appends PATH to .zprofile under ZDOTDIR (reported bug)', () => {
@@ -155,7 +169,7 @@ describe.if(!isWindows)('install.sh profile update', () => {
       expect(result.stdout).toBe(`Updated PATH in: ${join(zdotdir, '.zprofile')}`);
       const content = readProfile(join(zdotdir, '.zprofile'));
       expect(content).toContain('# zsh profile');
-      expect(content).toContain(PATH_LINE);
+      expect(content).toContain(pathLine(join(tempHome, INSTALL_DIR_SUBPATH)));
     });
 
     it('prefers ZDOTDIR/.zshrc over HOME/.zshrc', () => {
@@ -171,8 +185,12 @@ describe.if(!isWindows)('install.sh profile update', () => {
       });
 
       expect(result.stdout).toBe(`Updated PATH in: ${join(zdotdir, '.zshrc')}`);
-      expect(readProfile(join(zdotdir, '.zshrc'))).toContain(PATH_LINE);
-      expect(readProfile(join(tempHome, '.zshrc'))).not.toContain(PATH_LINE);
+      expect(readProfile(join(zdotdir, '.zshrc'))).toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
+      expect(readProfile(join(tempHome, '.zshrc'))).not.toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
   });
 
@@ -180,7 +198,7 @@ describe.if(!isWindows)('install.sh profile update', () => {
     it('skips if PATH entry already present', () => {
       touch(
         join(tempHome, '.bashrc'),
-        `existing\nexport PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"\n`,
+        `existing\n${pathLine(join(tempHome, INSTALL_DIR_SUBPATH))}\n`,
       );
 
       const result = runProfileUpdate({ HOME: tempHome, SHELL: '/bin/bash' });
@@ -210,7 +228,7 @@ describe.if(!isWindows)('install.sh profile update', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('No shell profile files found.');
-      expect(result.stdout).toContain(PATH_LINE);
+      expect(result.stdout).toContain(pathLine(join(tempHome, INSTALL_DIR_SUBPATH)));
     });
   });
 
@@ -226,7 +244,7 @@ describe.if(!isWindows)('install.sh profile update', () => {
       });
 
       expect(result.stdout).toBe(`Updated PATH in: ${custom}`);
-      expect(readProfile(custom)).toContain(PATH_LINE);
+      expect(readProfile(custom)).toContain(pathLine(join(tempHome, INSTALL_DIR_SUBPATH)));
     });
 
     it('skips profile update when PROFILE is /dev/null', () => {
@@ -239,7 +257,9 @@ describe.if(!isWindows)('install.sh profile update', () => {
       });
 
       expect(result.stdout).toContain('No shell profile files found.');
-      expect(readProfile(join(tempHome, '.bashrc'))).not.toContain(PATH_LINE);
+      expect(readProfile(join(tempHome, '.bashrc'))).not.toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
   });
 
@@ -271,7 +291,9 @@ describe.if(!isWindows)('install.sh profile update', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stderr).not.toContain('unbound variable');
       expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.profile')}`);
-      expect(readProfile(join(tempHome, '.profile'))).toContain(PATH_LINE);
+      expect(readProfile(join(tempHome, '.profile'))).toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
 
     it('falls through to generic fallback when SHELL is empty', () => {
@@ -300,7 +322,9 @@ describe.if(!isWindows)('install.sh profile update', () => {
       const result = runProfileUpdate({ HOME: tempHome, SHELL: '/bin/fish' });
 
       expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.profile')}`);
-      expect(readProfile(join(tempHome, '.profile'))).toContain(PATH_LINE);
+      expect(readProfile(join(tempHome, '.profile'))).toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
 
     it('does not leak ZDOTDIR into fallback for non-zsh shells', () => {
@@ -316,8 +340,12 @@ describe.if(!isWindows)('install.sh profile update', () => {
       });
 
       expect(result.stdout).toBe(`Updated PATH in: ${join(tempHome, '.profile')}`);
-      expect(readProfile(join(tempHome, '.profile'))).toContain(PATH_LINE);
-      expect(readProfile(join(zdotdir, '.zshrc'))).not.toContain(PATH_LINE);
+      expect(readProfile(join(tempHome, '.profile'))).toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
+      expect(readProfile(join(zdotdir, '.zshrc'))).not.toContain(
+        pathLine(join(tempHome, INSTALL_DIR_SUBPATH)),
+      );
     });
   });
 });

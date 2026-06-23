@@ -22,7 +22,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { SONARSOURCE_BINARIES_URL, UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
@@ -41,12 +41,35 @@ type UpdateInstallResult =
   | { status: 'launched_in_new_terminal' }
   | { status: 'failed'; scriptExitStatus: number | null; scriptErrorMessage?: string };
 
+export interface InstallOptions {
+  version?: string;
+  force?: boolean;
+  artifactBaseUrl?: string;
+}
+
 export class Update {
   constructor(readonly version: Version) {}
 
-  async install(): Promise<UpdateInstallResult> {
+  async install(opts: InstallOptions = {}): Promise<UpdateInstallResult> {
     const { scriptContent, scriptName } = await this.fetchUpdateScript();
     const tempPath = this.writeTempScript(scriptName, scriptContent);
+
+    const installDir = dirname(process.execPath);
+    const shArgs: string[] = ['--install-dir', installDir];
+    const ps1Args: string[] = ['-InstallDir', installDir];
+
+    if (opts.version) {
+      shArgs.push('--version', opts.version);
+      ps1Args.push('-Version', opts.version);
+    }
+    if (opts.force) {
+      shArgs.push('--force');
+      ps1Args.push('-Force');
+    }
+    if (opts.artifactBaseUrl) {
+      shArgs.push('--artifact-base-url', opts.artifactBaseUrl);
+      ps1Args.push('-ArtifactBaseUrl', opts.artifactBaseUrl);
+    }
 
     if (isWindows()) {
       // On Windows the running binary is file-locked, so the parent must exit immediately
@@ -56,8 +79,11 @@ export class Update {
       // Run the installer in a nested PowerShell process so the outer window can
       // always remove the temporary script afterwards, even if the installer exits.
       const escapedTempPath = tempPath.replaceAll("'", "''");
+      const ps1ArgsStr = ps1Args
+        .map((a) => (a.startsWith('-') ? a : `'${a.replaceAll("'", "''")}'`))
+        .join(' ');
       const cleanupCommand =
-        `& powershell -ExecutionPolicy Bypass -File '${escapedTempPath}'; ` +
+        `& powershell -ExecutionPolicy Bypass -File '${escapedTempPath}' ${ps1ArgsStr}; ` +
         `Remove-Item -Force '${escapedTempPath}' -ErrorAction SilentlyContinue`;
       // The ComSpec environment variable always points to the system cmd.exe.
       const cmdExe = process.env.ComSpec ?? String.raw`C:\Windows\System32\cmd.exe`;
@@ -104,7 +130,7 @@ export class Update {
     // On Unix the binary is not locked, so run the script synchronously and
     // stream its output directly to the terminal.
     try {
-      const result = spawnSync('/bin/bash', [tempPath], { stdio: 'inherit' });
+      const result = spawnSync('/bin/bash', [tempPath, ...shArgs], { stdio: 'inherit' });
       if (result.error) {
         return {
           status: 'failed',
@@ -144,11 +170,14 @@ export class Update {
     );
   }
 
-  private async fetchUpdateScript(): Promise<{ scriptContent: string; scriptName: string }> {
+  private async fetchUpdateScript(scriptBaseUrl?: string): Promise<{
+    scriptContent: string;
+    scriptName: string;
+  }> {
     const scriptName = isWindows() ? 'install.ps1' : 'install.sh';
-    const scriptBaseUrl =
-      process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL ?? UPDATE_SCRIPT_BASE_URL;
-    const scriptUrl = `${scriptBaseUrl}/${scriptName}`;
+    const baseUrl =
+      scriptBaseUrl ?? process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL ?? UPDATE_SCRIPT_BASE_URL;
+    const scriptUrl = `${baseUrl}/${scriptName}`;
     const scriptContent = await fetchText(scriptUrl, 'update script');
     return { scriptContent, scriptName };
   }
@@ -170,8 +199,10 @@ async function fetchText(url: string, description: string): Promise<string> {
   return response.text();
 }
 
-async function fetchLatestVersion(): Promise<string> {
-  const stableVersionUrl = `${SONARSOURCE_BINARIES_URL}/${STABLE_VERSION_PATH}`;
+async function fetchLatestVersion(artifactBaseUrl?: string): Promise<string> {
+  const stableVersionUrl = artifactBaseUrl
+    ? `${artifactBaseUrl}/stable.version`
+    : `${SONARSOURCE_BINARIES_URL}/${STABLE_VERSION_PATH}`;
   const latestVersion = (await fetchText(stableVersionUrl, 'stable version metadata')).trim();
   if (!STABLE_VERSION_PATTERN.test(latestVersion)) {
     throw new CommandFailedError('Could not determine the latest version.', {
@@ -185,9 +216,13 @@ async function fetchLatestVersion(): Promise<string> {
  * Reads the published stable.version metadata from binaries.sonarsource.com and
  * returns version comparison data for update checks.
  */
-export async function checkForUpdate(): Promise<UpdateCheckResult> {
+export interface CheckForUpdateOptions {
+  artifactBaseUrl?: string;
+}
+
+export async function checkForUpdate(opts?: CheckForUpdateOptions): Promise<UpdateCheckResult> {
   const currentVersion = new Version(CURRENT_VERSION);
-  const latest = new Update(new Version(await fetchLatestVersion()));
+  const latest = new Update(new Version(await fetchLatestVersion(opts?.artifactBaseUrl)));
   return {
     currentVersion,
     latest,
