@@ -24,12 +24,14 @@ import { type Command } from 'commander';
 
 import { version as VERSION } from '../../package.json';
 import { detectCallerAgent } from '../lib/agent-detector.js';
+import { TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../lib/config-constants.js';
 import { DISTRIBUTION } from '../lib/distribution.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.js';
 import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
+import { flushFindings } from './findings.js';
 import { getOrCreateUserId } from './user.js';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
@@ -42,9 +44,6 @@ const passthroughSubcommands = new WeakMap<Command, string | null>();
 export function setPassthroughSubcommand(command: Command, subcommand: string | null): void {
   passthroughSubcommands.set(command, subcommand);
 }
-
-const TELEMETRY_ENDPOINT = 'https://events.sonardata.io/cli';
-const TELEMETRY_API_KEY = 'hJPRohLsOsasZeOhSCSNDiL4h2yR96S5fOWJqRch';
 
 /**
  * Append one event to the pending batch and spawn a detached flush worker.
@@ -145,37 +144,40 @@ export async function flushTelemetry(): Promise<void> {
   if (!isTelemetryEnabled(state)) {
     return;
   }
-  const telemetry = state.telemetry;
-
-  if (!telemetry.events.length) return;
 
   const deadline = Date.now() + FLUSH_TIMEOUT_MS;
-  const sentIndices = new Set<number>();
+  const telemetry = state.telemetry;
 
-  for (let i = 0; i < telemetry.events.length; i++) {
-    const remainingTime = deadline - Date.now();
-    if (remainingTime <= 0) break;
-    try {
-      await fetchGuarded(
-        TELEMETRY_ENDPOINT,
-        buildFetchInit(
-          'POST',
-          { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
-          remainingTime,
-          JSON.stringify(telemetry.events[i], (_key, value) =>
-            value === null ? undefined : value,
+  if (telemetry.events.length > 0) {
+    const sentIndices = new Set<number>();
+
+    for (let i = 0; i < telemetry.events.length; i++) {
+      const remainingTime = deadline - Date.now();
+      if (remainingTime <= 0) break;
+      try {
+        await fetchGuarded(
+          TELEMETRY_ENDPOINT,
+          buildFetchInit(
+            'POST',
+            { 'Content-Type': 'application/json', 'x-api-key': TELEMETRY_API_KEY },
+            remainingTime,
+            JSON.stringify(telemetry.events[i], (_key, value) =>
+              value === null ? undefined : value,
+            ),
           ),
-        ),
-      );
+        );
 
-      sentIndices.add(i);
-    } catch {
-      // Silently fail — event remains for the next flush attempt.
+        sentIndices.add(i);
+      } catch {
+        // Silently fail — event remains for the next flush attempt.
+      }
+    }
+
+    if (sentIndices.size > 0) {
+      telemetry.events = telemetry.events.filter((_, i) => !sentIndices.has(i));
+      saveState(state);
     }
   }
 
-  if (sentIndices.size > 0) {
-    telemetry.events = telemetry.events.filter((_, i) => !sentIndices.has(i));
-    saveState(state);
-  }
+  await flushFindings(deadline);
 }
