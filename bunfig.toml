@@ -3,4 +3,7 @@ exact = true
 registry = { url = "https://repox.jfrog.io/artifactory/api/npm/npm/", token = "$ARTIFACTORY_PRIVATE_READER_PASSWORD" }
 
 [test]
-preload = ["./tests/_common/preload-isolated-env.ts"]
+preload = [
+  "./tests/coverage/preload-instrumenter.ts",
+  "./tests/_common/preload-isolated-env.ts",
+]
