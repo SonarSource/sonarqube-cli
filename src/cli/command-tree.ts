@@ -83,6 +83,7 @@ import { integrateCodex } from './commands/integrate/codex';
 import { integrateCopilot } from './commands/integrate/copilot';
 import { integrateCursor } from './commands/integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
+import { integrateAll, type IntegrateAllOptions } from './commands/integrate/integrate-all';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -232,7 +233,10 @@ const integrateCommand = COMMAND_TREE.command('integrate')
   .description('Setup SonarQube integration for AI coding agents, git and others.')
   .rootHelp({
     category: 'integrate',
-  });
+  })
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('-g, --global', 'Install integrations globally.')
+  .authenticatedAction((auth, options: IntegrateAllOptions) => integrateAll(auth, options));
 
 integrateCommand
   .command('git')
