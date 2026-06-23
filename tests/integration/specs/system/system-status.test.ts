@@ -353,7 +353,7 @@ describe('system status', () => {
       const json = JSON.parse(jsonResult.stdout) as {
         integrations: Array<{ id: string; name: string; path?: string }>;
       };
-      expect(json.integrations.length).toBe(1);
+      expect(json.integrations).toHaveLength(1);
       expect(json.integrations[0].path).toBeUndefined();
     },
     { timeout: 15000 },
@@ -371,7 +371,7 @@ describe('system status', () => {
       const json = JSON.parse(result.stdout) as {
         binaries: Array<{ name: string; version: string; path: string; updateAvailable: boolean }>;
       };
-      expect(json.binaries.length).toBe(1);
+      expect(json.binaries).toHaveLength(1);
       expect(json.binaries[0].name).toBe('Secrets Detection');
       expect(json.binaries[0].version).toBeTruthy();
       expect(json.binaries[0].path).toBeTruthy();

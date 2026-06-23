@@ -80,7 +80,7 @@ function toProjectRelativePath(projectRoot: string, absoluteFilePath: string): s
   if (!rel || rel.startsWith('..') || isAbsolute(rel)) {
     return undefined;
   }
-  return rel.split('\\').join('/');
+  return rel.replaceAll('\\', '/');
 }
 
 function isPathAlreadyIgnored(ignorePath: string, relativePath: string): boolean {
