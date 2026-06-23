@@ -455,6 +455,44 @@ export interface StoredTelemetryEvent {
 }
 
 /**
+ * Payload for a CliAnalysisFindingDetected event — one event per finding
+ * produced by sonar-secrets, SQAA, or SCA.
+ */
+export interface AnalysisFindingEventPayload {
+  cli_installation_id: string;
+  machine_id: string;
+  cli_version: string;
+  invocation_id: string;
+  os: string;
+  connection_type: 'sqc' | 'sqs' | null;
+  user_uuid: string | null;
+  organization_uuid_v4: string | null;
+  sqs_installation_id: string | null;
+  caller_agent: CallerAgent | null;
+  /** Literal CLI subcommand name (e.g. "git-pre-commit", "analyze agentic") */
+  caller_command: string;
+  analyzer: 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
+  /** Analyzer-specific rule identifier */
+  rule_key: string;
+  /** Wall-clock duration of the analyzer scan that produced this finding */
+  scan_duration_ms: number;
+}
+
+/**
+ * Full finding event written to findings.ndjson and sent to the backend.
+ */
+export interface StoredFindingEvent {
+  metadata: {
+    event_id: string;
+    source: { domain: 'CLI' };
+    event_type: 'Analytics.Cli.CliAnalysisFindingDetected';
+    /** Epoch milliseconds as a string */
+    event_timestamp: string;
+  };
+  event_payload: AnalysisFindingEventPayload;
+}
+
+/**
  * Telemetry configuration and pending event batch
  */
 export interface TelemetryState {

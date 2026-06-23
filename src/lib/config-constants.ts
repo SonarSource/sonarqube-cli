@@ -217,6 +217,11 @@ export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 /** Env var that disables telemetry when set to 1. */
 export const ENV_DO_NOT_TRACK = 'DO_NOT_TRACK';
 
+/** Directory for telemetry artefacts that are not part of state.json. */
+export function getTelemetryDir(): string {
+  return join(getCliDir(), 'telemetry');
+}
+
 // ---------------------------------------------------------------------------
 // Sentry
 // ---------------------------------------------------------------------------
