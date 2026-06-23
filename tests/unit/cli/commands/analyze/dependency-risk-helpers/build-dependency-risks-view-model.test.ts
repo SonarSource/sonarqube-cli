@@ -97,8 +97,8 @@ describe('buildDependencyRisksViewModel — orchestration', () => {
 
     buildVM(response, 'active');
 
-    expect(release.issues.length).toBe(issuesBefore);
-    expect(response.releases.length).toBe(releasesBefore);
+    expect(release.issues).toHaveLength(issuesBefore);
+    expect(response.releases).toHaveLength(releasesBefore);
   });
 });
 

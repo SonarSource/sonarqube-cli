@@ -332,7 +332,7 @@ describe('system reset --force', () => {
       expect(state.dependencies.installed).toHaveLength(0);
       if (existsSync(binDir)) {
         const remaining = readdirSync(binDir).filter((name) => name.includes('sonar'));
-        expect(remaining.length).toBe(0);
+        expect(remaining).toHaveLength(0);
       }
     },
     { timeout: 15000 },
@@ -612,7 +612,7 @@ describe('system reset --force', () => {
       const binDir = join(harness.cliHome.path, 'bin');
       if (existsSync(binDir)) {
         const remaining = readdirSync(binDir).filter((name) => name.includes('sca-scanner'));
-        expect(remaining.length).toBe(0);
+        expect(remaining).toHaveLength(0);
       }
     },
     { timeout: 15000 },

@@ -985,7 +985,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
-      expect(sqaaCalls.length).toBe(4);
+      expect(sqaaCalls).toHaveLength(4);
       expect(sqaaRequestFileCount(sqaaCalls[0]?.body)).toBe(3);
       for (const call of sqaaCalls.slice(1)) {
         expect(sqaaRequestFileCount(call.body)).toBe(1);
