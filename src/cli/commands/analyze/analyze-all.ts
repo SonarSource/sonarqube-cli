@@ -30,7 +30,7 @@ import { resolveSecretsBinaryPath } from '../_common/install/secrets';
 import { analyzeSecrets, EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from './secrets';
 import type { SecretsIssue } from './secrets-output';
 import { parseSecretsOutput } from './secrets-output';
-import type { AnalyzeSqaaOptions, OutputFormat } from './sqaa';
+import type { OutputFormat } from './sqaa';
 import { analyzeSqaa, buildSqaaJsonReport } from './sqaa';
 import { resolveChangeSet } from './sqaa-changeset';
 import { applyExitCode, makeReport, type SqaaJsonReport } from './sqaa-display';
@@ -43,7 +43,7 @@ export interface AnalyzeAllOptions {
   project?: string;
   force?: boolean;
   format?: OutputFormat;
-  depth?: AnalyzeSqaaOptions['depth'];
+  depth?: string;
 }
 
 interface SecretsReport {

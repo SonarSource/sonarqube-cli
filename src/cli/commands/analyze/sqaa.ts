@@ -22,7 +22,7 @@ import type { SqaaAnalysisDepth } from '../../../sonarqube/client';
 import { print, text, warn } from '../../../ui';
 import { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
-import type { RunContext } from './sqaa-analysis';
+import type { RunContext, RunTally } from './sqaa-analysis';
 import { runAnalyses } from './sqaa-analysis';
 import {
   callSqaaApiAndDisplay,
@@ -38,7 +38,7 @@ import {
   labelAnalysisDepth,
   parseSqaaDepthOption,
   resolveAnalysisDepth,
-  type SqaaWireAnalysisDepth,
+  type SqaaDeepWireDepth,
 } from './sqaa-depth';
 import {
   applyExitCode,
@@ -71,6 +71,25 @@ export interface AnalyzeSqaaOptions {
   forcedDepth?: SqaaAnalysisDepth;
 }
 
+interface SqaaResolvedContext {
+  cloudAuth: CloudAuth;
+  projectKey: string;
+}
+
+interface SqaaDepthResolution {
+  wireDepth: SqaaDeepWireDepth | undefined;
+  displayDepth: SqaaAnalysisDepth;
+}
+
+interface SingleFileRunOptions {
+  branch?: string;
+  explicitProject?: string;
+  format?: OutputFormat;
+  requireProject?: boolean;
+  wireDepth?: SqaaDeepWireDepth;
+  displayDepth?: SqaaAnalysisDepth;
+}
+
 /**
  * Apply the command's policy to an auth/project resolution. This is where the
  * caller (not the resolver) decides what a missing project means:
@@ -85,7 +104,7 @@ export interface AnalyzeSqaaOptions {
 function resolveSqaaContext(
   resolution: SqaaAuthResolution,
   policy: { requireProject: boolean },
-): { cloudAuth: CloudAuth; projectKey: string } | null {
+): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
       return { cloudAuth: resolution.cloudAuth, projectKey: resolution.projectKey };
@@ -108,13 +127,58 @@ function resolveSqaaContext(
   }
 }
 
+function parseOptionalDepth(rawDepth: string | undefined): SqaaAnalysisDepth | undefined {
+  return rawDepth === undefined ? undefined : parseSqaaDepthOption(rawDepth);
+}
+
+function resolveDepthForMode(
+  rawDepth: string | undefined,
+  mode: 'single-file' | 'multi-file' | 'change-set',
+  forcedDepth?: SqaaAnalysisDepth,
+): SqaaDepthResolution {
+  const explicitDepth = parseOptionalDepth(rawDepth);
+  const wireDepth = resolveAnalysisDepth(explicitDepth, mode, forcedDepth);
+  return { wireDepth, displayDepth: labelAnalysisDepth(wireDepth) };
+}
+
+async function confirmLargeRunIfNeeded(
+  fileCount: number,
+  force?: boolean,
+  format: OutputFormat = 'text',
+): Promise<boolean> {
+  if (!force && format !== 'json' && fileCount > SQAA_LARGE_CHANGESET_THRESHOLD) {
+    return await confirmLargeChangeset(fileCount);
+  }
+  return true;
+}
+
+async function runSqaaAnalysesTally(
+  files: string[],
+  allPaths: string[],
+  resolved: SqaaResolvedContext,
+  branch: string | undefined,
+  wireDepth: SqaaDeepWireDepth | undefined,
+  displayDepth: SqaaAnalysisDepth,
+): Promise<RunTally> {
+  const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
+  const ctx: RunContext = {
+    files,
+    allPaths,
+    cloudAuth: resolved.cloudAuth,
+    projectKey: resolved.projectKey,
+    branch,
+    progress: silentProgress,
+    analysisDepth: wireDepth,
+    displayAnalysisDepth: displayDepth,
+  };
+  return runAnalyses(ctx);
+}
+
 export async function analyzeSqaa(
   options: AnalyzeSqaaOptions,
   auth: ResolvedAuth,
   runOptions: { requireProject?: boolean } = {},
 ): Promise<void> {
-  // Explicit `analyze agentic` / `verify` require a project (exit 1 when missing);
-  // the bare `sonar analyze` catch-all opts out so it can still run other analyses.
   const { requireProject = true } = runOptions;
   const {
     file: rawFiles,
@@ -127,57 +191,104 @@ export async function analyzeSqaa(
     depth: rawDepth,
     forcedDepth,
   } = options;
-  const depth = rawDepth === undefined ? undefined : parseSqaaDepthOption(rawDepth);
 
   if (staged && base !== undefined) {
     throw new InvalidOptionError('--staged and --base cannot be used together');
   }
 
   if (rawFiles?.length) {
-    const entries = resolveSqaaFileArgs(rawFiles);
-    if (entries.length === 1) {
-      const wireDepth = resolveAnalysisDepth(depth, 'single-file', forcedDepth);
-      const displayDepth = labelAnalysisDepth(wireDepth);
-      await runSqaaAnalysis(
-        entries[0].absolutePath,
-        auth,
-        branch,
-        project,
-        format,
-        requireProject,
-        wireDepth,
-        displayDepth,
-      );
-      return;
-    }
-
-    const wireDepth = resolveAnalysisDepth(depth, 'multi-file', forcedDepth);
-    const displayDepth = labelAnalysisDepth(wireDepth);
-
-    const resolution = await resolveCloudAuthAndProject(auth, project);
-    const resolved = resolveSqaaContext(resolution, { requireProject });
-    if (!resolved) return;
-
-    if (!force && format !== 'json' && entries.length > SQAA_LARGE_CHANGESET_THRESHOLD) {
-      const confirmed = await confirmLargeChangeset(entries.length);
-      if (!confirmed) return;
-    }
-
-    await runSqaaAnalysisOnExplicitFiles(
-      entries,
-      resolved,
+    await analyzeSqaaExplicitFiles(rawFiles, {
+      auth,
       branch,
+      project,
+      force,
       format,
-      wireDepth,
-      displayDepth,
-    );
+      rawDepth,
+      forcedDepth,
+      requireProject,
+    });
     return;
   }
 
-  const wireDepth = resolveAnalysisDepth(depth, 'change-set', forcedDepth);
-  const displayDepth = labelAnalysisDepth(wireDepth);
+  await analyzeSqaaChangeSet({
+    auth,
+    staged,
+    base,
+    branch,
+    project,
+    force,
+    format,
+    rawDepth,
+    forcedDepth,
+    requireProject,
+  });
+}
 
-  // Change-set mode: resolve files from Git.
+async function analyzeSqaaExplicitFiles(
+  rawFiles: string[],
+  params: {
+    auth: ResolvedAuth;
+    branch?: string;
+    project?: string;
+    force?: boolean;
+    format: OutputFormat;
+    rawDepth?: string;
+    forcedDepth?: SqaaAnalysisDepth;
+    requireProject: boolean;
+  },
+): Promise<void> {
+  const entries = resolveSqaaFileArgs(rawFiles);
+  const { auth, branch, project, force, format, rawDepth, forcedDepth, requireProject } = params;
+
+  if (entries.length === 1) {
+    const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
+    await runSqaaAnalysis(entries[0].absolutePath, auth, {
+      branch,
+      explicitProject: project,
+      format,
+      requireProject,
+      wireDepth,
+      displayDepth,
+    });
+    return;
+  }
+
+  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
+  const resolution = await resolveCloudAuthAndProject(auth, project);
+  const resolved = resolveSqaaContext(resolution, { requireProject });
+  if (!resolved) return;
+
+  if (!(await confirmLargeRunIfNeeded(entries.length, force, format))) return;
+
+  await runSqaaAnalysisOnExplicitFiles(entries, resolved, branch, format, wireDepth, displayDepth);
+}
+
+async function analyzeSqaaChangeSet(params: {
+  auth: ResolvedAuth;
+  staged?: boolean;
+  base?: string;
+  branch?: string;
+  project?: string;
+  force?: boolean;
+  format: OutputFormat;
+  rawDepth?: string;
+  forcedDepth?: SqaaAnalysisDepth;
+  requireProject: boolean;
+}): Promise<void> {
+  const {
+    auth,
+    staged,
+    base,
+    branch,
+    project,
+    force,
+    format,
+    rawDepth,
+    forcedDepth,
+    requireProject,
+  } = params;
+  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
+
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
 
   if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
@@ -192,17 +303,11 @@ export async function analyzeSqaa(
     return;
   }
 
-  // Resolve cloud auth + project key BEFORE prompting.
-  // Pass repoRoot so we reuse the already-resolved root instead of spawning git again.
   const resolution = await resolveCloudAuthAndProject(auth, project, changeSet.repoRoot);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
 
-  // JSON mode is consumed by scripts/CI: never block on an interactive prompt
-  if (!force && format !== 'json' && changeSet.files.length > SQAA_LARGE_CHANGESET_THRESHOLD) {
-    const confirmed = await confirmLargeChangeset(changeSet.files.length);
-    if (!confirmed) return;
-  }
+  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, force, format))) return;
 
   await runSqaaAnalysisOnFiles(changeSet, resolved, branch, format, wireDepth, displayDepth);
 }
@@ -210,13 +315,17 @@ export async function analyzeSqaa(
 async function runSqaaAnalysis(
   file: string,
   auth: ResolvedAuth,
-  branch?: string,
-  explicitProject?: string,
-  format: OutputFormat = 'text',
-  requireProject = true,
-  wireDepth?: SqaaWireAnalysisDepth,
-  displayDepth: SqaaAnalysisDepth = 'STANDARD',
+  options: SingleFileRunOptions = {},
 ): Promise<void> {
+  const {
+    branch,
+    explicitProject,
+    format = 'text',
+    requireProject = true,
+    wireDepth,
+    displayDepth = 'STANDARD',
+  } = options;
+
   const resolution = await resolveCloudAuthAndProject(auth, explicitProject);
   const resolved = resolveSqaaContext(resolution, { requireProject });
   if (!resolved) return;
@@ -244,10 +353,10 @@ async function runSqaaAnalysis(
 
 async function runSqaaAnalysisOnExplicitFiles(
   entries: ResolvedSqaaFileEntry[],
-  resolved: { cloudAuth: CloudAuth; projectKey: string },
+  resolved: SqaaResolvedContext,
   branch?: string,
   format: OutputFormat = 'text',
-  wireDepth?: SqaaWireAnalysisDepth,
+  wireDepth?: SqaaDeepWireDepth,
   displayDepth: SqaaAnalysisDepth = 'STANDARD',
 ): Promise<void> {
   const cwd = process.cwd();
@@ -255,18 +364,14 @@ async function runSqaaAnalysisOnExplicitFiles(
   const allPaths = files.map((f) => toRelativePosixPath(f, cwd));
 
   if (format === 'json') {
-    const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
-    const ctx: RunContext = {
+    const tally = await runSqaaAnalysesTally(
       files,
       allPaths,
-      cloudAuth: resolved.cloudAuth,
-      projectKey: resolved.projectKey,
+      resolved,
       branch,
-      progress: silentProgress,
-      analysisDepth: wireDepth,
-      displayAnalysisDepth: displayDepth,
-    };
-    const tally = await runAnalyses(ctx);
+      wireDepth,
+      displayDepth,
+    );
     printJsonReport(tally, [], allPaths, cwd, displayDepth);
     applyExitCode(tally.totalIssues, tally.totalFailures);
     return;
@@ -295,10 +400,10 @@ async function runSqaaAnalysisOnExplicitFiles(
 
 async function runSqaaAnalysisOnFiles(
   changeSet: ChangeSetResult,
-  resolved: { cloudAuth: CloudAuth; projectKey: string },
+  resolved: SqaaResolvedContext,
   branch?: string,
   format: OutputFormat = 'text',
-  wireDepth?: SqaaWireAnalysisDepth,
+  wireDepth?: SqaaDeepWireDepth,
   displayDepth: SqaaAnalysisDepth = 'STANDARD',
 ): Promise<void> {
   const { files, ignored, repoRoot } = changeSet;
@@ -306,19 +411,14 @@ async function runSqaaAnalysisOnFiles(
   const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
 
   if (format === 'json') {
-    // Suppress all UI rendering at the component level (no global mock state).
-    const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
-    const ctx: RunContext = {
+    const tally = await runSqaaAnalysesTally(
       files,
       allPaths,
-      cloudAuth,
-      projectKey,
+      resolved,
       branch,
-      progress: silentProgress,
-      analysisDepth: wireDepth,
-      displayAnalysisDepth: displayDepth,
-    };
-    const tally = await runAnalyses(ctx);
+      wireDepth,
+      displayDepth,
+    );
     printJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
     applyExitCode(tally.totalIssues, tally.totalFailures);
     return;
@@ -352,100 +452,64 @@ async function fetchSingleFileReport(
   file: string,
   fileContent: string,
   branch?: string,
-  wireDepth?: SqaaWireAnalysisDepth,
+  wireDepth?: SqaaDeepWireDepth,
   displayDepth: SqaaAnalysisDepth = 'STANDARD',
 ): Promise<SqaaJsonReport> {
   const filePath = toRelativePosixPath(file);
   try {
-    const response = await fetchWithRetry(
-      cloudAuth,
-      projectKey,
-      file,
-      fileContent,
-      branch,
-      undefined,
-      undefined,
-      wireDepth,
-    );
+    const response = await fetchWithRetry(cloudAuth, projectKey, file, fileContent, branch, {
+      analysisDepth: wireDepth,
+    });
     return singleFileSuccessReport(filePath, response.issues, response.errors, displayDepth);
   } catch (err) {
     return singleFileFailureReport(filePath, (err as Error).message, displayDepth);
   }
 }
 
-/**
- * Run SQAA and return the JSON report without printing it.
- * Returns null when SQAA is not available (non-Cloud connection or no project configured).
- * Used by `analyzeAll` to build a combined JSON report.
- */
-export async function buildSqaaJsonReport(
-  options: AnalyzeSqaaOptions,
-  auth: ResolvedAuth,
-): Promise<SqaaJsonReport | null> {
-  const {
-    file: rawFiles,
-    staged,
-    base,
-    branch,
-    project,
-    force,
-    depth: rawDepth,
-    forcedDepth,
-  } = options;
-  const depth = rawDepth === undefined ? undefined : parseSqaaDepthOption(rawDepth);
-
-  if (rawFiles?.length) {
-    const entries = resolveSqaaFileArgs(rawFiles);
-    const resolution = await resolveCloudAuthAndProject(auth, project);
-    const resolved = resolveSqaaContext(resolution, { requireProject: false });
-    if (!resolved) return null;
-
-    if (entries.length === 1) {
-      const wireDepth = resolveAnalysisDepth(depth, 'single-file', forcedDepth);
-      const displayDepth = labelAnalysisDepth(wireDepth);
-      const { absolutePath } = entries[0];
-      const fileContent = readSqaaFileContent(absolutePath);
-      return fetchSingleFileReport(
-        resolved.cloudAuth,
-        resolved.projectKey,
-        absolutePath,
-        fileContent,
-        branch,
-        wireDepth,
-        displayDepth,
-      );
-    }
-
-    const wireDepth = resolveAnalysisDepth(depth, 'multi-file', forcedDepth);
-    const displayDepth = labelAnalysisDepth(wireDepth);
-
-    if (!force && options.format !== 'json' && entries.length > SQAA_LARGE_CHANGESET_THRESHOLD) {
-      const confirmed = await confirmLargeChangeset(entries.length);
-      if (!confirmed) return null;
-    }
-
-    const cwd = process.cwd();
-    const absolutePaths = entries.map((e) => e.absolutePath);
-    const allPaths = absolutePaths.map((f) => toRelativePosixPath(f, cwd));
-    const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
-    const ctx: RunContext = {
-      files: absolutePaths,
-      allPaths,
-      cloudAuth: resolved.cloudAuth,
-      projectKey: resolved.projectKey,
+async function buildSqaaJsonReportFromEntries(
+  entries: ResolvedSqaaFileEntry[],
+  resolved: SqaaResolvedContext,
+  branch: string | undefined,
+  wireDepth: SqaaDeepWireDepth | undefined,
+  displayDepth: SqaaAnalysisDepth,
+): Promise<SqaaJsonReport> {
+  if (entries.length === 1) {
+    const { absolutePath } = entries[0];
+    const fileContent = readSqaaFileContent(absolutePath);
+    return fetchSingleFileReport(
+      resolved.cloudAuth,
+      resolved.projectKey,
+      absolutePath,
+      fileContent,
       branch,
-      progress: silentProgress,
-      analysisDepth: wireDepth,
-      displayAnalysisDepth: displayDepth,
-    };
-    const tally = await runAnalyses(ctx);
-    return buildJsonReport(tally, [], allPaths, cwd, displayDepth);
+      wireDepth,
+      displayDepth,
+    );
   }
 
-  const wireDepth = resolveAnalysisDepth(depth, 'change-set', forcedDepth);
-  const displayDepth = labelAnalysisDepth(wireDepth);
+  const cwd = process.cwd();
+  const absolutePaths = entries.map((e) => e.absolutePath);
+  const allPaths = absolutePaths.map((f) => toRelativePosixPath(f, cwd));
+  const tally = await runSqaaAnalysesTally(
+    absolutePaths,
+    allPaths,
+    resolved,
+    branch,
+    wireDepth,
+    displayDepth,
+  );
+  return buildJsonReport(tally, [], allPaths, cwd, displayDepth);
+}
 
-  // Change-set mode
+async function buildSqaaJsonReportFromChangeSet(
+  options: AnalyzeSqaaOptions,
+  auth: ResolvedAuth,
+  rawDepth: string | undefined,
+  forcedDepth: SqaaAnalysisDepth | undefined,
+): Promise<SqaaJsonReport | null> {
+  const { staged, base, branch, project, force } = options;
+  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
+
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
   if (changeSet.files.length === 0) {
     return makeReport(
@@ -459,31 +523,52 @@ export async function buildSqaaJsonReport(
   const resolved = resolveSqaaContext(resolution, { requireProject: false });
   if (!resolved) return null;
 
-  // JSON mode is consumed by scripts/CI: never block on an interactive prompt
-  if (
-    !force &&
-    options.format !== 'json' &&
-    changeSet.files.length > SQAA_LARGE_CHANGESET_THRESHOLD
-  ) {
-    const confirmed = await confirmLargeChangeset(changeSet.files.length);
-    if (!confirmed) return null;
+  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, force, options.format ?? 'text'))) {
+    return null;
   }
 
   const { files, ignored, repoRoot } = changeSet;
-  const { cloudAuth, projectKey } = resolved;
   const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
-  const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
-  const ctx: RunContext = {
+  const tally = await runSqaaAnalysesTally(
     files,
     allPaths,
-    cloudAuth,
-    projectKey,
+    resolved,
     branch,
-    progress: silentProgress,
-    analysisDepth: wireDepth,
-    displayAnalysisDepth: displayDepth,
-  };
-
-  const tally = await runAnalyses(ctx);
+    wireDepth,
+    displayDepth,
+  );
   return buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
+}
+
+/**
+ * Run SQAA and return the JSON report without printing it.
+ * Returns null when SQAA is not available (non-Cloud connection or no project configured).
+ * Used by `analyzeAll` to build a combined JSON report.
+ */
+export async function buildSqaaJsonReport(
+  options: AnalyzeSqaaOptions,
+  auth: ResolvedAuth,
+): Promise<SqaaJsonReport | null> {
+  const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
+
+  if (rawFiles?.length) {
+    const entries = resolveSqaaFileArgs(rawFiles);
+    const resolution = await resolveCloudAuthAndProject(auth, project);
+    const resolved = resolveSqaaContext(resolution, { requireProject: false });
+    if (!resolved) return null;
+
+    if (entries.length === 1) {
+      const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
+      return buildSqaaJsonReportFromEntries(entries, resolved, branch, wireDepth, displayDepth);
+    }
+
+    const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
+    if (!(await confirmLargeRunIfNeeded(entries.length, force, options.format ?? 'text'))) {
+      return null;
+    }
+
+    return buildSqaaJsonReportFromEntries(entries, resolved, branch, wireDepth, displayDepth);
+  }
+
+  return buildSqaaJsonReportFromChangeSet(options, auth, rawDepth, forcedDepth);
 }

@@ -23,12 +23,10 @@
 import { basename, dirname } from 'node:path';
 
 import type { SqaaAnalysisDepth, SqaaIssue } from '../../../sonarqube/client';
-import { print, text } from '../../../ui';
+import { text } from '../../../ui';
 import { bold, dim, green, red, softBlue, yellow } from '../../../ui/colors.js';
 import { CliError } from '../_common/error.js';
-import type { FileFailure, FileResult, FileSuccess, RunTally } from './sqaa-analysis';
-import { toRelativePosixPath } from './sqaa-api';
-import type { IgnoredFile } from './sqaa-changeset';
+import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis';
 import { SQAA_FAILURE_HEADING } from './sqaa-errors.js';
 
 /** When analyzed file count exceeds this, clean files collapse to one summary row. */
@@ -71,20 +69,6 @@ export function renderFailureDetailLines(error: Error, colored: boolean): string
     lines.push(colored ? dim(line) : line);
   }
   return lines;
-}
-
-export interface SqaaJsonReport {
-  files: Array<{
-    path: string;
-    issues: SqaaIssue[];
-    errors?: Array<{ code: string; message: string }> | null;
-  }>;
-  ignored: Array<{ path: string; reason: 'binary' | 'oversized' }>;
-  failures: Array<{ path: string; message: string }>;
-  /** Files in the change set that were never sent to the API (fail-fast skipped them). */
-  skipped: string[];
-  summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
-  analysisDepth: SqaaAnalysisDepth;
 }
 
 export interface SqaaRunSummaryStats {
@@ -495,90 +479,6 @@ export function printSingleFileTextFailure(
   printSqaaTextReport({ tally, allPaths: [filePath], analysisDepth });
 }
 
-export function makeReport(
-  files: SqaaJsonReport['files'],
-  failures: SqaaJsonReport['failures'],
-  ignored: SqaaJsonReport['ignored'] = [],
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-): SqaaJsonReport {
-  return {
-    files,
-    ignored,
-    failures,
-    skipped: [],
-    summary: {
-      totalIssues: files.reduce((n, f) => n + f.issues.length, 0),
-      totalFailures: failures.length,
-      totalSkipped: 0,
-    },
-    analysisDepth,
-  };
-}
-
-export function singleFileSuccessReport(
-  filePath: string,
-  issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-): SqaaJsonReport {
-  return makeReport([{ path: filePath, issues, errors }], [], [], analysisDepth);
-}
-
-export function singleFileFailureReport(
-  filePath: string,
-  message: string,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-): SqaaJsonReport {
-  return makeReport([], [{ path: filePath, message }], [], analysisDepth);
-}
-
-export function buildJsonReport(
-  tally: RunTally,
-  ignored: IgnoredFile[],
-  allPaths: string[],
-  pathBase?: string,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-): SqaaJsonReport {
-  const files = tally.allResults
-    .filter((r): r is FileSuccess => !('failure' in r))
-    .map((r) => ({ path: r.filePath, issues: r.issues, errors: r.errors }));
-
-  const failures = tally.allResults
-    .filter((r): r is FileFailure => 'failure' in r)
-    .map((r) => ({ path: r.filePath, message: r.failure.message }));
-
-  const processedPaths = new Set<string>(tally.allResults.map((r) => r.filePath));
-  const skipped = allPaths.filter((p) => !processedPaths.has(p));
-
-  return {
-    files,
-    ignored: ignored.map((f) => ({
-      path: toRelativePosixPath(f.path, pathBase),
-      reason: f.reason,
-    })),
-    failures,
-    skipped,
-    summary: {
-      totalIssues: tally.totalIssues,
-      totalFailures: tally.totalFailures,
-      totalSkipped: skipped.length,
-    },
-    analysisDepth,
-  };
-}
-
-export function printJsonReport(
-  tally: RunTally,
-  ignored: IgnoredFile[],
-  allPaths: string[],
-  pathBase?: string,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-): void {
-  print(
-    JSON.stringify(buildJsonReport(tally, ignored, allPaths, pathBase, analysisDepth), null, 2),
-  );
-}
-
 export function applyExitCode(stats: SqaaRunSummaryStats): void;
 export function applyExitCode(totalIssues: number, totalFailures: number): void;
 export function applyExitCode(
@@ -636,3 +536,12 @@ export function displaySqaaResults(
 
   return issues.length;
 }
+
+export type { SqaaJsonReport } from './sqaa-display-json.js';
+export {
+  buildJsonReport,
+  makeReport,
+  printJsonReport,
+  singleFileFailureReport,
+  singleFileSuccessReport,
+} from './sqaa-display-json.js';

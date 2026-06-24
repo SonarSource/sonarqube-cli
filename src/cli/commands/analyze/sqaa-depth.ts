@@ -25,8 +25,8 @@ export const SQAA_DEPTH_CHOICES = ['STANDARD', 'DEEP'] as const;
 
 export type SqaaInvocationMode = 'single-file' | 'multi-file' | 'change-set';
 
-/** Wire value sent to SQAA: `undefined` omits `analysisDepth` (STANDARD). */
-export type SqaaWireAnalysisDepth = 'DEEP' | undefined;
+/** Wire value sent to SQAA when DEEP analysis is requested (STANDARD omits the field). */
+export type SqaaDeepWireDepth = 'DEEP';
 
 /**
  * Resolve analysis depth for SQAA API calls.
@@ -36,7 +36,7 @@ export function resolveAnalysisDepth(
   explicitDepth: SqaaAnalysisDepth | undefined,
   mode: SqaaInvocationMode,
   forcedDepth?: SqaaAnalysisDepth,
-): SqaaWireAnalysisDepth {
+): SqaaDeepWireDepth | undefined {
   if (forcedDepth !== undefined) {
     return forcedDepth === 'DEEP' ? 'DEEP' : undefined;
   }
@@ -50,7 +50,7 @@ export function resolveAnalysisDepth(
 }
 
 /** Label for CLI output and JSON reports (always STANDARD or DEEP). */
-export function labelAnalysisDepth(wireDepth: SqaaWireAnalysisDepth): SqaaAnalysisDepth {
+export function labelAnalysisDepth(wireDepth: SqaaDeepWireDepth | undefined): SqaaAnalysisDepth {
   return wireDepth === 'DEEP' ? 'DEEP' : 'STANDARD';
 }
 

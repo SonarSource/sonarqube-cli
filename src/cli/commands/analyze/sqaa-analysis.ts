@@ -32,7 +32,7 @@ import {
 } from './sqaa-api';
 import type { CloudAuth } from './sqaa-auth';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking';
-import type { SqaaWireAnalysisDepth } from './sqaa-depth';
+import type { SqaaDeepWireDepth } from './sqaa-depth';
 import { isPayloadTooLargeCommandError } from './sqaa-errors.js';
 
 export type FileSuccess = {
@@ -53,7 +53,7 @@ export interface RunContext {
   projectKey: string;
   branch: string | undefined;
   progress: SqaaProgress;
-  analysisDepth: SqaaWireAnalysisDepth;
+  analysisDepth?: SqaaDeepWireDepth;
   displayAnalysisDepth: SqaaAnalysisDepth;
 }
 
