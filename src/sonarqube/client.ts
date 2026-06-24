@@ -22,6 +22,7 @@
 
 import { version as VERSION } from '../../package.json';
 import { isSonarQubeCloud, resolveFromEndpoint } from '../lib/auth-resolver';
+import { buildFetchNetworkOptions } from '../lib/connectivity/network-config.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import logger from '../lib/logger';
 import { print } from '../ui';
@@ -153,7 +154,10 @@ export class SonarQubeClient {
       print(`request body: ${requestBody}`, 'stderr');
     }
 
-    const response = await fetchGuarded(url, buildFetchInit(method, headers, timeout, requestBody));
+    const response = await fetchGuarded(
+      url,
+      buildFetchInit(method, headers, timeout, requestBody, buildFetchNetworkOptions(url)),
+    );
 
     if (debug) {
       print(`response status: ${response.status}`, 'stderr');
@@ -198,9 +202,16 @@ export class SonarQubeClient {
       });
     }
 
+    const urlString = url.toString();
     const response = await fetchGuarded(
-      url.toString(),
-      buildFetchInit('GET', this.commonHeaders(), GET_REQUEST_TIMEOUT_MS),
+      urlString,
+      buildFetchInit(
+        'GET',
+        this.commonHeaders(),
+        GET_REQUEST_TIMEOUT_MS,
+        undefined,
+        buildFetchNetworkOptions(urlString),
+      ),
     );
 
     const value = response.ok ? ((await response.json()) as TValue) : undefined;
@@ -221,6 +232,7 @@ export class SonarQubeClient {
         this.commonHeaders('json'),
         POST_REQUEST_TIMEOUT_MS,
         JSON.stringify(body),
+        buildFetchNetworkOptions(url),
       ),
     );
 
@@ -239,13 +251,15 @@ export class SonarQubeClient {
     params: Record<string, string>,
     timeoutMs: number = POST_REQUEST_TIMEOUT_MS,
   ): Promise<void> {
+    const url = `${this.serverURL}${endpoint}`;
     const response = await fetchGuarded(
-      `${this.serverURL}${endpoint}`,
+      url,
       buildFetchInit(
         'POST',
         this.commonHeaders('form'),
         timeoutMs,
         new URLSearchParams(params).toString(),
+        buildFetchNetworkOptions(url),
       ),
     );
 

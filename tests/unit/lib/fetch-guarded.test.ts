@@ -22,9 +22,13 @@
 // 3xx status and Location header in this runtime, which is the assumption
 // fetchGuarded() relies on.
 
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { fetchGuarded } from '../../../src/lib/fetch-guarded.js';
+import {
+  buildFetchNetworkOptions,
+  clearNetworkConfigCache,
+} from '../../../src/lib/connectivity/network-config.js';
+import { buildFetchInit, fetchGuarded } from '../../../src/lib/fetch-guarded.js';
 
 let server: ReturnType<typeof Bun.serve>;
 let base: string;
@@ -62,6 +66,50 @@ beforeAll(() => {
 
 afterAll(async () => {
   await server.stop();
+});
+
+describe('fetchGuarded — proxy recomputation on scheme change', () => {
+  beforeEach(() => {
+    process.env.SONAR_HTTP_PROXY_URL = 'https://http-proxy:3128';
+    process.env.SONAR_HTTPS_PROXY_URL = 'https://https-proxy:8443';
+    clearNetworkConfigCache();
+  });
+
+  afterEach(() => {
+    delete process.env.SONAR_HTTP_PROXY_URL;
+    delete process.env.SONAR_HTTPS_PROXY_URL;
+    clearNetworkConfigCache();
+  });
+
+  it('switches from HTTP proxy to HTTPS proxy after HTTP→HTTPS upgrade redirect', async () => {
+    const originalUrl = 'http://sonar.internal:8080/api';
+    const init = buildFetchInit('GET', {}, 30000, undefined, buildFetchNetworkOptions(originalUrl));
+
+    const captured: Array<Record<string, unknown>> = [];
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((
+      _url: string | URL | Request,
+      options?: RequestInit,
+    ) => {
+      captured.push({ ...(options as Record<string, unknown>) });
+      if (captured.length === 1) {
+        return Promise.resolve(
+          new Response(null, {
+            status: 301,
+            headers: { Location: 'https://sonar.internal:8080/api' },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch);
+
+    try {
+      await fetchGuarded(originalUrl, init);
+      expect(captured[0]?.proxy).toBe('https://http-proxy:3128');
+      expect(captured[1]?.proxy).toBe('https://https-proxy:8443');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });
 
 describe('fetchGuarded — real Bun runtime redirect behavior', () => {

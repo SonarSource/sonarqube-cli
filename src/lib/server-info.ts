@@ -19,6 +19,7 @@
  */
 
 import { version as VERSION } from '../../package.json';
+import { buildFetchNetworkOptions } from './connectivity/network-config.js';
 import { ApiCallError } from './errors';
 import { isNewerVersion } from './version';
 
@@ -68,6 +69,7 @@ export async function fetchServerVersion(serverURL: string): Promise<string> {
       Accept: 'application/json',
     },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    ...buildFetchNetworkOptions(url),
   });
   if (!response.ok) {
     throw new ApiCallError(`Server returned HTTP ${response.status} for ${url}`);

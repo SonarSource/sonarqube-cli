@@ -1,0 +1,240 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { rootCertificates } from 'node:tls';
+
+import type { BunFile } from 'bun';
+
+import { createRedactedUrl } from '../redacted-url';
+import type {
+  ConfigSource,
+  FetchNetworkOptions,
+  ResolvedNetworkConfig,
+  SourcedValue,
+} from './types';
+
+// --- Proxy group ---
+// proxyHttps, proxyHttp, and noProxy are resolved as a unit: the highest-priority
+// entry in PROXY_CONFIGS that has at least one proxy value wins, and all three
+// fields come from it. A standalone noProxy entry cannot elevate an entry on its own.
+
+type EnvLookup = (env: NodeJS.ProcessEnv, varName: string) => string | undefined;
+
+interface ProxyEnvVars {
+  httpsVar: string;
+  httpVar: string;
+  noProxyVar: string;
+  lookup: EnvLookup;
+}
+
+/** Reads an env var preferring the lowercase form, then falling back to the exact name. */
+function getCaseVariantEnv(env: NodeJS.ProcessEnv, varName: string): string | undefined {
+  return env[varName.toLowerCase()] ?? env[varName];
+}
+
+const PROXY_CONFIGS: Array<SourcedValue<ProxyEnvVars>> = [
+  {
+    value: {
+      httpsVar: 'SONAR_HTTPS_PROXY_URL',
+      httpVar: 'SONAR_HTTP_PROXY_URL',
+      noProxyVar: 'SONAR_NO_PROXY',
+      lookup: (env, name) => env[name],
+    },
+    source: 'sonar-env',
+    explicit: true,
+  },
+  // stored-config slot added here when sonar config is wired
+  {
+    value: {
+      httpsVar: 'HTTPS_PROXY',
+      httpVar: 'HTTP_PROXY',
+      noProxyVar: 'NO_PROXY',
+      lookup: getCaseVariantEnv,
+    },
+    source: 'generic-env',
+    explicit: false,
+  },
+];
+
+function resolveProxyGroup(
+  env: NodeJS.ProcessEnv,
+): Pick<ResolvedNetworkConfig, 'proxyHttps' | 'proxyHttp' | 'noProxy'> {
+  for (const {
+    value: { httpsVar, httpVar, noProxyVar, lookup },
+    source,
+    explicit,
+  } of PROXY_CONFIGS) {
+    const httpsVal = lookup(env, httpsVar);
+    const httpVal = lookup(env, httpVar);
+    if (!httpsVal && !httpVal) {
+      continue;
+    }
+
+    const noProxyVal = lookup(env, noProxyVar);
+    return {
+      proxyHttps: httpsVal ? { value: createRedactedUrl(httpsVal), source, explicit } : null,
+      proxyHttp: httpVal ? { value: createRedactedUrl(httpVal), source, explicit } : null,
+      noProxy: noProxyVal ? { value: noProxyVal, source, explicit } : null,
+    };
+  }
+  return { proxyHttps: null, proxyHttp: null, noProxy: null };
+}
+
+// --- CA cert (resolves independently) ---
+
+function resolveCaCertPath(env: NodeJS.ProcessEnv): SourcedValue<string> | null {
+  return (
+    fromEnv(env, 'SONAR_CA_CERT', 'sonar-env') ??
+    // stored-config slot added here when sonar config is wired
+    fromEnv(env, 'NODE_EXTRA_CA_CERTS', 'generic-env')
+  );
+}
+
+function fromEnv(
+  env: NodeJS.ProcessEnv,
+  varName: string,
+  source: ConfigSource,
+): SourcedValue<string> | null {
+  const val = env[varName];
+  return val ? { value: val, source, explicit: source !== 'generic-env' } : null;
+}
+
+// --- Resolver ---
+
+export function resolveNetworkConfig(env: NodeJS.ProcessEnv = process.env): ResolvedNetworkConfig {
+  return {
+    ...resolveProxyGroup(env),
+    caCertPath: resolveCaCertPath(env),
+  };
+}
+
+// --- Singleton ---
+
+let cachedConfig: ResolvedNetworkConfig | undefined;
+
+export function getNetworkConfig(): ResolvedNetworkConfig {
+  cachedConfig ??= resolveNetworkConfig();
+  return cachedConfig;
+}
+
+/** Test seam — resets the cached singleton. */
+export function clearNetworkConfigCache(): void {
+  cachedConfig = undefined;
+}
+
+const DEFAULT_PORT_HTTPS = 443;
+const DEFAULT_PORT_HTTP = 80;
+
+// --- Fetch options builder ---
+
+export function buildFetchNetworkOptions(
+  url: string,
+  config: ResolvedNetworkConfig = getNetworkConfig(),
+): FetchNetworkOptions {
+  return {
+    ...buildProxyOption(url, config),
+    ...buildTlsOption(config),
+  };
+}
+
+function buildProxyOption(
+  url: string,
+  config: ResolvedNetworkConfig,
+): { proxy: string } | Record<string, never> {
+  const parsed = tryParseUrl(url);
+  if (!parsed) {
+    return {};
+  }
+  const proxyCandidate = parsed.protocol === 'https:' ? config.proxyHttps : config.proxyHttp;
+  if (!proxyCandidate?.explicit) {
+    return {};
+  }
+  const defaultPort = parsed.protocol === 'https:' ? DEFAULT_PORT_HTTPS : DEFAULT_PORT_HTTP;
+  const port = Number.parseInt(parsed.port) || defaultPort;
+  const bypass =
+    config.noProxy !== null && matchesNoProxy(parsed.hostname, port, config.noProxy.value);
+  return bypass ? {} : { proxy: proxyCandidate.value.getUrlWithCredentials() };
+}
+
+function buildTlsOption(
+  config: ResolvedNetworkConfig,
+): { tls: { ca: Array<string | BunFile> } } | Record<string, never> {
+  if (!config.caCertPath?.explicit) {
+    return {};
+  }
+  return { tls: { ca: [...rootCertificates, Bun.file(config.caCertPath.value)] } };
+}
+
+function tryParseUrl(url: string): URL | null {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
+function matchesNoProxy(hostname: string, port: number, noProxy: string): boolean {
+  const h = hostname.toLowerCase();
+  if (noProxy.toLowerCase() === '*') {
+    return true;
+  }
+  return noProxy
+    .toLowerCase()
+    .split(/[,\s]/)
+    .filter((entry) => entry.length > 0)
+    .some((entry) => {
+      const parsed = parseNoProxyEntry(entry);
+      if (parsed.port && parsed.port !== port) {
+        return false;
+      }
+      return hostnameMatchesPattern(h, normalizeHostPattern(parsed.host));
+    });
+}
+
+function parseNoProxyEntry(entry: string): { host: string; port: number } {
+  const withPort = /^(.+):(\d+)$/.exec(entry);
+  return {
+    host: (withPort ? withPort[1] : entry).toLowerCase(),
+    port: withPort ? Number.parseInt(withPort[2]) : 0,
+  };
+}
+
+function normalizeHostPattern(host: string): string {
+  if (host.startsWith('*')) {
+    // Strip only the wildcard, keep the leading dot so hostnameMatchesPattern
+    // can apply suffix-only matching (*.corp.com must not match corp.com itself).
+    return host.slice(1);
+  }
+  if (host.startsWith('.')) {
+    return host.slice(1);
+  }
+  return host;
+}
+
+function hostnameMatchesPattern(hostname: string, pattern: string): boolean {
+  if (!pattern) {
+    return true; // bare * → match everything
+  }
+  if (pattern.startsWith('.')) {
+    // Retained dot from *.corp.com normalization → suffix-only, no exact match
+    return hostname.endsWith(pattern);
+  }
+  return hostname === pattern || hostname.endsWith(`.${pattern}`);
+}
