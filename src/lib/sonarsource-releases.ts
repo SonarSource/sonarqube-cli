@@ -27,6 +27,7 @@ import {
   SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX,
   SONARSOURCE_BINARIES_URL,
 } from './config-constants.js';
+import { buildFetchNetworkOptions } from './connectivity/network-config.js';
 import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.js';
 import logger from './logger.js';
 
@@ -86,6 +87,7 @@ export async function downloadBinary(url: string, destinationPath: string): Prom
   const response = await fetch(url, {
     headers: { 'User-Agent': `sonarqube-cli/${VERSION}` },
     signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    ...buildFetchNetworkOptions(url),
   });
 
   if (!response.ok) {

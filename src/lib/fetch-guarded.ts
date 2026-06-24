@@ -20,13 +20,17 @@
 
 // Shared fetch utilities: request init builder and redirect guard.
 
+import { buildFetchNetworkOptions } from './connectivity/network-config.js';
+import type { FetchNetworkOptions } from './connectivity/types';
+
 export function buildFetchInit(
   method: string,
   headers: Record<string, string>,
   timeoutMs: number,
   body?: string,
+  networkOptions?: FetchNetworkOptions,
 ): RequestInit {
-  return { method, headers, body, signal: AbortSignal.timeout(timeoutMs) };
+  return { method, headers, body, signal: AbortSignal.timeout(timeoutMs), ...networkOptions };
 }
 
 // Fetch wrapper that prevents bearer token leakage via cross-origin redirects.
@@ -85,6 +89,7 @@ export async function fetchGuarded(url: string, init: RequestInit): Promise<Resp
       response.status === HTTP_307_TEMPORARY_REDIRECT ||
       response.status === HTTP_308_PERMANENT_REDIRECT;
 
+    const schemeChanged = redirectUrl.protocol !== new URL(currentUrl).protocol;
     currentUrl = redirectUrl.toString();
     if (!preservesMethod) {
       currentInit = {
@@ -93,6 +98,12 @@ export async function fetchGuarded(url: string, init: RequestInit): Promise<Resp
         body: undefined,
         headers: withoutContentType(currentInit.headers),
       };
+    }
+    if (schemeChanged) {
+      // Scheme changed (HTTP→HTTPS): stale proxy/tls options from the original
+      // protocol are no longer correct. Strip them and recompute for the new URL.
+      const { proxy: _p, tls: _t, ...rest } = currentInit as RequestInit & FetchNetworkOptions;
+      currentInit = { ...rest, ...buildFetchNetworkOptions(currentUrl) };
     }
   }
 }
