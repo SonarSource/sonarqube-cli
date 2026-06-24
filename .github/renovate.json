@@ -2,5 +2,22 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>SonarSource/renovate-config:ide-xp-team"
+  ],
+  "packageRules": [
+    {
+      "description": "Regenerate Bun lockfile after dependency updates",
+      "matchManagers": [
+        "bun"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "bun install"
+        ],
+        "fileFilters": [
+          "bun.lock"
+        ],
+        "executionMode": "branch"
+      }
+    }
   ]
 }
