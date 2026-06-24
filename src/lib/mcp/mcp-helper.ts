@@ -24,7 +24,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '../auth-resolver';
-import { ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON } from '../config-constants';
+import { ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON, MCP_DOCKER_IMAGE } from '../config-constants';
 import { normalizePath } from '../fs-utils';
 import type { ContainerRuntime } from '../tool-detector';
 
@@ -133,7 +133,7 @@ export function getMcpContainerCommand(
   args.push('-e', 'SONARQUBE_TOOLSETS');
   env.SONARQUBE_TOOLSETS = toolsets;
 
-  args.push('mcp/sonarqube');
+  args.push(MCP_DOCKER_IMAGE);
 
   return { command: runtime, args, env };
 }
