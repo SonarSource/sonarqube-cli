@@ -24,6 +24,10 @@
  * flushTelemetry (fetch calls, partial failure handling, disabled state)
  */
 
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
@@ -31,7 +35,7 @@ import * as agentDetector from '../../../src/lib/agent-detector.js';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import { DISTRIBUTION } from '../../../src/lib/distribution.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { CliState, StoredTelemetryEvent } from '../../../src/lib/state.js';
+import type { CliState, StoredFindingEvent, StoredTelemetryEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
@@ -105,8 +109,11 @@ let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
+let testDir: string;
 
 beforeEach(() => {
+  testDir = mkdtempSync(join(tmpdir(), 'telemetry-test-'));
+  process.env[ENV_SONAR_USER_HOME] = testDir;
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
@@ -120,6 +127,7 @@ afterEach(() => {
   saveStateSpy.mockRestore();
   getUserIdSpy.mockRestore();
   spawnSpy.mockRestore();
+  delete process.env[ENV_SONAR_USER_HOME];
   delete process.env[TELEMETRY_FLUSH_MODE_ENV];
   delete process.env[ENV_DO_NOT_TRACK];
   delete process.env.CLAUDECODE;
@@ -128,6 +136,7 @@ afterEach(() => {
   delete process.env.CURSOR_AGENT;
   delete process.env.CURSOR_PROJECT_DIR;
   delete process.env.CURSOR_TRACE_ID;
+  rmSync(testDir, { recursive: true, force: true });
 });
 
 // ─── storeEvent ───────────────────────────────────────────────────────────────
@@ -372,22 +381,11 @@ describe('storeEvent', () => {
     });
 
     it('inherits the parent environment and sets the flush worker flag', async () => {
-      const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
-      process.env[ENV_SONAR_USER_HOME] = '/custom/sonar-home';
+      await storeEvent(makeCommand('auth login'), true);
 
-      try {
-        await storeEvent(makeCommand('auth login'), true);
-
-        const spawnOptions = spawnSpy.mock.calls[0][1] as { env: Record<string, string> };
-        expect(spawnOptions.env[TELEMETRY_FLUSH_MODE_ENV]).toBe('1');
-        expect(spawnOptions.env[ENV_SONAR_USER_HOME]).toBe('/custom/sonar-home');
-      } finally {
-        if (previousSonarUserHome === undefined) {
-          delete process.env[ENV_SONAR_USER_HOME];
-        } else {
-          process.env[ENV_SONAR_USER_HOME] = previousSonarUserHome;
-        }
-      }
+      const spawnOptions = spawnSpy.mock.calls[0][1] as { env: Record<string, string> };
+      expect(spawnOptions.env[TELEMETRY_FLUSH_MODE_ENV]).toBe('1');
+      expect(spawnOptions.env[ENV_SONAR_USER_HOME]).toBe(testDir);
     });
   });
 });
@@ -561,6 +559,52 @@ describe('flushTelemetry', () => {
         await flushTelemetry();
         const savedState: CliState = saveStateSpy.mock.calls[0][0];
         expect(savedState.telemetry.events).toHaveLength(1);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('findings drain', () => {
+    it('drains findings.ndjson to the telemetry backend', async () => {
+      const telemetryDir = join(testDir, 'sonarqube-cli', 'telemetry');
+      mkdirSync(telemetryDir, { recursive: true });
+      const finding: StoredFindingEvent = {
+        metadata: {
+          event_id: 'finding-id',
+          source: { domain: 'CLI' },
+          event_type: 'Analytics.Cli.CliAnalysisFindingDetected',
+          event_timestamp: String(Date.now()),
+        },
+        event_payload: {
+          cli_installation_id: 'install-id',
+          machine_id: 'machine-id',
+          cli_version: '1.0.0',
+          invocation_id: 'inv-id',
+          os: 'linux',
+          connection_type: null,
+          user_uuid: null,
+          organization_uuid_v4: null,
+          sqs_installation_id: null,
+          caller_agent: null,
+          caller_command: 'analyze secrets',
+          analyzer: 'sonar-secrets',
+          rule_key: 'secrets:S6290',
+          scan_duration_ms: 123,
+        },
+      };
+      writeFileSync(join(telemetryDir, 'findings.ndjson'), JSON.stringify(finding) + '\n');
+      loadStateSpy.mockReturnValue(makeStateWithEvents([]));
+
+      const fetchSpy = mockFetch();
+      try {
+        await flushTelemetry();
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const body = JSON.parse(
+          (fetchSpy.mock.calls[0][1] as RequestInit).body as string,
+        ) as StoredFindingEvent;
+        expect(body.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
+        expect(body.event_payload.rule_key).toBe('secrets:S6290');
       } finally {
         fetchSpy.mockRestore();
       }

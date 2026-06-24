@@ -222,6 +222,12 @@ export function getTelemetryDir(): string {
   return join(getCliDir(), 'telemetry');
 }
 
+/** Telemetry ingest endpoint shared by all event types. */
+export const TELEMETRY_ENDPOINT = 'https://events.sonardata.io/cli';
+
+/** Write-only ingest API key — intentionally embedded in the binary. */
+export const TELEMETRY_API_KEY = 'hJPRohLsOsasZeOhSCSNDiL4h2yR96S5fOWJqRch';
+
 // ---------------------------------------------------------------------------
 // Sentry
 // ---------------------------------------------------------------------------
