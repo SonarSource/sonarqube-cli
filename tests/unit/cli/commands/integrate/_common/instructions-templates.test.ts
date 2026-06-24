@@ -40,9 +40,12 @@ describe('instructions-templates', () => {
 
     expect(result).toContain('# SonarQube Agentic Analysis protocol');
     expect(result).toContain('sonar analyze agentic --project my-project');
+    expect(result).toContain('**Preferred:**');
     expect(result).toContain('--file');
     expect(result).toContain('relative to the project root');
-    expect(result).toContain('DEEP cross-file analysis by default');
+    expect(result).toContain('**Fallback:**');
     expect(result).toContain('Per-edit hooks run faster STANDARD analysis');
+    // Explicit file list appears before change-set fallback in the template
+    expect(result.indexOf('--file <path/to/file1>')).toBeLessThan(result.indexOf('**Fallback:**'));
   });
 });
