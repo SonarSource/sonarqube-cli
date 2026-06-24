@@ -14,8 +14,7 @@
           "bun install"
         ],
         "fileFilters": [
-          "bun.lock",
-          "bun.lockb"
+          "bun.lock"
         ],
         "executionMode": "branch"
       }
