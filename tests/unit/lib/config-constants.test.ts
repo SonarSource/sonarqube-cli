@@ -30,6 +30,7 @@ import {
   getCliDir,
   getSonarUserHome,
   getSqaaRetry503BaseDelayMs,
+  getTelemetryDir,
   LOG_DIR,
   LOG_FILE,
 } from '../../../src/lib/config-constants';
@@ -68,6 +69,12 @@ describe('config-constants', () => {
 
     it('keeps the CLI storage dir stable', () => {
       expect(basename(getCliDir())).toBe('sonarqube-cli');
+    });
+
+    it('getTelemetryDir is nested inside the CLI dir', () => {
+      process.env[ENV_SONAR_USER_HOME] = '/tmp/sonar-home';
+
+      expect(getTelemetryDir()).toBe(join(getCliDir(), 'telemetry'));
     });
   });
 

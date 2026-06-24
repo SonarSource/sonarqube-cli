@@ -30,9 +30,8 @@
 // Using a unique output path per worker (PID + timestamp) ensures workers don't
 // race on the same file, mirroring how the integration harness generates filenames.
 //
-// Usage:
-//   COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit \
-//   bun test --preload ./tests/coverage/preload-instrumenter.ts ./tests/unit/
+// Usage (via bunfig.toml [test] preload, or manually):
+//   COVERAGE_RAW_UNIT_DIR=tests/coverage/reports/raw-unit bun test ./tests/unit/
 
 import { join } from 'node:path';
 
