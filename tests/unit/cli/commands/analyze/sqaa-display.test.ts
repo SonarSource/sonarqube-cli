@@ -89,8 +89,9 @@ describe('formatSqaaRunSummaryPlain', () => {
         totalIssues: 0,
         totalFailures: 0,
         totalErrors: 0,
+        analysisDepth: 'STANDARD',
       }),
-    ).toBe('✓ No issues found · 7 files analyzed');
+    ).toBe('✓ No issues found · 7 files analyzed · STANDARD analysis');
   });
 
   it('formats issues summary', () => {
@@ -102,8 +103,9 @@ describe('formatSqaaRunSummaryPlain', () => {
         totalIssues: 56,
         totalFailures: 0,
         totalErrors: 0,
+        analysisDepth: 'DEEP',
       }),
-    ).toBe('14 files analyzed · 7 with issues · 56 issues found');
+    ).toBe('14 files analyzed · 7 with issues · 56 issues found · DEEP analysis');
   });
 });
 
@@ -124,7 +126,7 @@ describe('printSqaaTextReport', () => {
       totalFailures: 0,
     };
 
-    printSqaaTextReport({ tally, allPaths: ['src/a.ts', 'src/b.ts'] });
+    printSqaaTextReport({ tally, allPaths: ['src/a.ts', 'src/b.ts'], analysisDepth: 'STANDARD' });
 
     const texts = getMockTextLines();
 
@@ -132,7 +134,9 @@ describe('printSqaaTextReport', () => {
     expect(texts.some((l) => l.includes('src/b.ts') && l.includes('1 issue'))).toBe(true);
     expect(texts.some((l) => l.includes('line 190'))).toBe(true);
     expect(texts.some((l) => l.includes('typescript:S3626'))).toBe(true);
-    expect(texts.at(-1)).toContain('2 files analyzed · 1 with issues · 1 issue found');
+    expect(texts.at(-1)).toContain(
+      '2 files analyzed · 1 with issues · 1 issue found · STANDARD analysis',
+    );
   });
 
   it('collapses clean files when count exceeds threshold', () => {
@@ -153,7 +157,7 @@ describe('printSqaaTextReport', () => {
       totalFailures: 0,
     };
 
-    printSqaaTextReport({ tally, allPaths });
+    printSqaaTextReport({ tally, allPaths, analysisDepth: 'DEEP' });
 
     const texts = getMockTextLines();
 
@@ -177,14 +181,18 @@ describe('printSqaaTextReport', () => {
       totalFailures: 1,
     };
 
-    printSqaaTextReport({ tally, allPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'] });
+    printSqaaTextReport({
+      tally,
+      allPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+      analysisDepth: 'STANDARD',
+    });
 
     const texts = getMockTextLines();
 
     expect(texts.some((l) => l.includes('src/b.ts'))).toBe(true);
     expect(texts.some((l) => l.includes('network error'))).toBe(true);
     expect(texts.some((l) => l.includes('[SKIPPED]') && l.includes('src/c.ts'))).toBe(true);
-    expect(texts.at(-1)).toContain('1 failure');
+    expect(texts.at(-1)).toContain('1 failure · STANDARD analysis');
   });
 
   it('renders per-file failure detail and remediation hint without redundant heading', () => {
@@ -206,7 +214,7 @@ describe('printSqaaTextReport', () => {
       totalFailures: 1,
     };
 
-    printSqaaTextReport({ tally, allPaths: ['b.ts'] });
+    printSqaaTextReport({ tally, allPaths: ['b.ts'], analysisDepth: 'STANDARD' });
 
     const texts = getMockTextLines();
     expect(texts.some((l) => l.includes('SonarQube Agentic Analysis failed'))).toBe(false);
@@ -234,12 +242,12 @@ describe('printSqaaTextReport', () => {
       totalFailures: 2,
     };
 
-    printSqaaTextReport({ tally, allPaths: ['a.ts', 'b.ts'] });
+    printSqaaTextReport({ tally, allPaths: ['a.ts', 'b.ts'], analysisDepth: 'STANDARD' });
 
     const texts = getMockTextLines();
     expect(texts.filter((l) => l.includes('a.ts') || l.includes('b.ts'))).toHaveLength(2);
     expect(texts.some((l) => l.includes('forward slashes'))).toBe(true);
-    expect(texts.at(-1)).toBe('2 files analyzed · 2 failures');
+    expect(texts.at(-1)).toBe('2 files analyzed · 2 failures · STANDARD analysis');
   });
 });
 
@@ -277,7 +285,7 @@ describe('computeRunSummaryStats', () => {
       totalFailures: 0,
     };
 
-    const stats = computeRunSummaryStats(tally, ['src/a.ts']);
+    const stats = computeRunSummaryStats(tally, ['src/a.ts'], 'STANDARD');
     expect(stats.filesWithIssues).toBe(0);
     expect(stats.filesWithErrors).toBe(1);
   });
@@ -291,8 +299,9 @@ describe('computeRunSummaryStats', () => {
         totalIssues: 0,
         totalFailures: 0,
         totalErrors: 2,
+        analysisDepth: 'STANDARD',
       }),
-    ).toBe('3 files analyzed · 1 with errors · 2 errors');
+    ).toBe('3 files analyzed · 1 with errors · 2 errors · STANDARD analysis');
   });
 
   it('includes failures and issues in the same summary', () => {
@@ -304,8 +313,9 @@ describe('computeRunSummaryStats', () => {
         totalIssues: 2,
         totalFailures: 1,
         totalErrors: 0,
+        analysisDepth: 'DEEP',
       }),
-    ).toBe('5 files analyzed · 1 failure · 2 with issues · 2 issues found');
+    ).toBe('5 files analyzed · 1 failure · 2 with issues · 2 issues found · DEEP analysis');
   });
 
   it('summarizes when every analyzed file failed', () => {
@@ -317,7 +327,8 @@ describe('computeRunSummaryStats', () => {
         totalIssues: 0,
         totalFailures: 2,
         totalErrors: 0,
+        analysisDepth: 'STANDARD',
       }),
-    ).toBe('2 files analyzed · 2 failures');
+    ).toBe('2 files analyzed · 2 failures · STANDARD analysis');
   });
 });

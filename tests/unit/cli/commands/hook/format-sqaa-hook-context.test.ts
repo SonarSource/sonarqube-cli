@@ -20,47 +20,49 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import type { SqaaJsonReport } from '../../../../../src/cli/commands/analyze/sqaa-display';
 import { formatSqaaJsonReportForHook } from '../../../../../src/cli/commands/hook/format-sqaa-hook-context';
+
+function emptyReport(overrides: Partial<SqaaJsonReport> = {}): SqaaJsonReport {
+  return {
+    files: [],
+    ignored: [],
+    failures: [],
+    skipped: [],
+    summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
+    analysisDepth: 'STANDARD',
+    ...overrides,
+  };
+}
 
 describe('formatSqaaJsonReportForHook', () => {
   it('returns null for an empty change set', () => {
-    expect(
-      formatSqaaJsonReportForHook({
-        files: [],
-        ignored: [],
-        failures: [],
-        skipped: [],
-        summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
-      }),
-    ).toBeNull();
+    expect(formatSqaaJsonReportForHook(emptyReport())).toBeNull();
   });
 
   it('surfaces skipped files when analysis did not complete any file', () => {
     expect(
-      formatSqaaJsonReportForHook({
-        files: [],
-        ignored: [],
-        failures: [],
-        skipped: ['src/a.ts', 'src/b.ts'],
-        summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 2 },
-      }),
+      formatSqaaJsonReportForHook(
+        emptyReport({
+          skipped: ['src/a.ts', 'src/b.ts'],
+          summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 2 },
+        }),
+      ),
     ).toBe('Skipped 2 file(s) (analysis not completed).');
   });
 
   it('surfaces per-file analysis errors when totalIssues is zero', () => {
-    const text = formatSqaaJsonReportForHook({
-      files: [
-        {
-          path: 'src/foo.ts',
-          issues: [],
-          errors: [{ code: 'FILE_NOT_FOUND', message: 'File not indexed' }],
-        },
-      ],
-      ignored: [],
-      failures: [],
-      skipped: [],
-      summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
-    });
+    const text = formatSqaaJsonReportForHook(
+      emptyReport({
+        files: [
+          {
+            path: 'src/foo.ts',
+            issues: [],
+            errors: [{ code: 'FILE_NOT_FOUND', message: 'File not indexed' }],
+          },
+        ],
+      }),
+    );
 
     expect(text).not.toContain('no issues found');
     expect(text).toContain('src/foo.ts');
@@ -69,13 +71,11 @@ describe('formatSqaaJsonReportForHook', () => {
   });
 
   it('surfaces ignored-only change sets without claiming no issues found', () => {
-    const text = formatSqaaJsonReportForHook({
-      files: [],
-      ignored: [{ path: 'image.png', reason: 'binary' }],
-      failures: [],
-      skipped: [],
-      summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
-    });
+    const text = formatSqaaJsonReportForHook(
+      emptyReport({
+        ignored: [{ path: 'image.png', reason: 'binary' }],
+      }),
+    );
 
     expect(text).not.toContain('no issues found');
     expect(text).toContain('excluded (binary or oversized)');
@@ -84,13 +84,12 @@ describe('formatSqaaJsonReportForHook', () => {
   });
 
   it('appends excluded files when analysis completed with no issues', () => {
-    const text = formatSqaaJsonReportForHook({
-      files: [{ path: 'src/a.ts', issues: [], errors: null }],
-      ignored: [{ path: 'large.bin', reason: 'oversized' }],
-      failures: [],
-      skipped: [],
-      summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
-    });
+    const text = formatSqaaJsonReportForHook(
+      emptyReport({
+        files: [{ path: 'src/a.ts', issues: [], errors: null }],
+        ignored: [{ path: 'large.bin', reason: 'oversized' }],
+      }),
+    );
 
     expect(text).toContain('No issues found');
     expect(text).toContain('Excluded 1 file(s)');

@@ -107,6 +107,7 @@ export async function integrateClaude(
     projectRoot: ctx.project.rootDir,
     globalSecretsHookExists: skipSecretsHooks,
     installSqaaHook: sqaaEnabled && config.projectKey !== undefined,
+    installSqaaInstructions: sqaaEnabled && config.projectKey !== undefined,
     installContextAugmentation: contextAugmentation !== null,
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;

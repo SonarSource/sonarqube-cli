@@ -68,14 +68,14 @@ describe('sonar hook codex-post-tool-use', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
-      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
-      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBe('DEEP');
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(false);
     },
     { timeout: 15000 },
   );
 
   it(
-    'sends one multi-file DEEP request when multiple files changed',
+    'sends one multi-file STANDARD request when multiple files changed',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -94,7 +94,8 @@ describe('sonar hook codex-post-tool-use', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
-      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(false);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
     },
     { timeout: 15000 },
   );

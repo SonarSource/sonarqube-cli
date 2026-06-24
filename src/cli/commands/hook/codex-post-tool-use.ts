@@ -41,7 +41,7 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
 
   try {
     const report = await buildSqaaJsonReport(
-      { project: projectKey, force: true, format: 'json' },
+      { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
       auth,
     );
     if (!report) return;

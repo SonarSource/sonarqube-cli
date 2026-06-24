@@ -434,6 +434,7 @@ describe('integrateCommand', () => {
         projectKey: 'a-project',
         globalSecretsHookExists: true,
         installSqaaHook: false,
+        installSqaaInstructions: false,
       });
       expect(runMigrationsSpy).toHaveBeenCalledWith(
         '/project/root',
@@ -465,6 +466,7 @@ describe('integrateCommand', () => {
         projectKey: 'a-project',
         globalSecretsHookExists: true,
         installSqaaHook: true,
+        installSqaaInstructions: true,
       });
     });
   });
@@ -487,6 +489,7 @@ describe('integrateCommand', () => {
         projectKey: 'a-project',
         globalSecretsHookExists: false,
         installSqaaHook: false,
+        installSqaaInstructions: false,
       });
     });
   });
@@ -524,6 +527,7 @@ describe('integrateCommand', () => {
         projectKey: 'a-project',
         globalSecretsHookExists: false,
         installSqaaHook: false,
+        installSqaaInstructions: false,
       });
       expect(runMigrationsSpy).toHaveBeenLastCalledWith(
         '/project/root',
@@ -593,6 +597,7 @@ describe('integrateCommand', () => {
       projectKey,
       globalSecretsHookExists: skipSecretsHooks,
       installSqaaHook: sqaaEnabled && projectKey !== undefined,
+      installSqaaInstructions: sqaaEnabled && projectKey !== undefined,
     });
 
     expect(updateStateAfterConfigurationSpy).toHaveBeenCalledTimes(1);
@@ -613,6 +618,7 @@ describe('integrateCommand', () => {
     projectKey,
     globalSecretsHookExists,
     installSqaaHook,
+    installSqaaInstructions,
   }: {
     targetRoot: string;
     scope: 'global' | 'project';
@@ -621,6 +627,7 @@ describe('integrateCommand', () => {
     projectKey?: string;
     globalSecretsHookExists: boolean;
     installSqaaHook: boolean;
+    installSqaaInstructions: boolean;
   }): void {
     const attrs = {
       projectKey: projectKey ?? null,
@@ -635,6 +642,7 @@ describe('integrateCommand', () => {
           projectRoot,
           globalSecretsHookExists,
           installSqaaHook,
+          installSqaaInstructions,
         }),
         scope,
         targetRoot,

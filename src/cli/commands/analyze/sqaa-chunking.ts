@@ -20,7 +20,11 @@
 
 // Pack SQAA request files into sub-chunks when splitting after a 413 response.
 
-import type { SqaaAnalysisFile, SqaaAnalysisRequest } from '../../../sonarqube/client';
+import type {
+  SqaaAnalysisDepth,
+  SqaaAnalysisFile,
+  SqaaAnalysisRequest,
+} from '../../../sonarqube/client';
 
 export interface SqaaChunkFile {
   /** Absolute path on disk (for reading / error reporting). */
@@ -40,6 +44,7 @@ export interface PackChunksLimits {
   organizationKey?: string;
   projectKey?: string;
   branchName?: string;
+  analysisDepth?: SqaaAnalysisDepth;
 }
 
 export interface EstimateRequestParams {
@@ -49,20 +54,31 @@ export interface EstimateRequestParams {
   files: SqaaAnalysisFile[];
 }
 
-/** Build the JSON body used for a DEEP multi-file SQAA request. */
-export function buildDeepAnalysisRequest(params: EstimateRequestParams): SqaaAnalysisRequest {
+/** Build the JSON body for a multi-file SQAA request at the given depth. */
+export function buildAnalysisRequest(
+  params: EstimateRequestParams,
+  analysisDepth?: SqaaAnalysisDepth,
+): SqaaAnalysisRequest {
   return {
     organizationKey: params.organizationKey,
     projectKey: params.projectKey,
     ...(params.branchName ? { branchName: params.branchName } : {}),
-    analysisDepth: 'DEEP',
+    ...(analysisDepth === 'DEEP' ? { analysisDepth: 'DEEP' } : {}),
     files: params.files,
   };
 }
 
-/** Estimated UTF-8 byte size of a DEEP analysis request body. */
-export function estimateRequestBytes(params: EstimateRequestParams): number {
-  return Buffer.byteLength(JSON.stringify(buildDeepAnalysisRequest(params)), 'utf8');
+/** Build the JSON body used for a DEEP multi-file SQAA request. */
+export function buildDeepAnalysisRequest(params: EstimateRequestParams): SqaaAnalysisRequest {
+  return buildAnalysisRequest(params, 'DEEP');
+}
+
+/** Estimated UTF-8 byte size of an analysis request body at the given depth. */
+export function estimateRequestBytes(
+  params: EstimateRequestParams,
+  analysisDepth?: SqaaAnalysisDepth,
+): number {
+  return Buffer.byteLength(JSON.stringify(buildAnalysisRequest(params, analysisDepth)), 'utf8');
 }
 
 const EMPTY_ENVELOPE_PARAMS = { organizationKey: '', projectKey: '' } as const;
@@ -76,9 +92,9 @@ function envelopeParams(limits: PackChunksLimits): EstimateRequestParams {
   };
 }
 
-/** Byte size of the DEEP request JSON wrapper with an empty `files` array. */
-function deepRequestEnvelopeBytes(limits: PackChunksLimits): number {
-  return estimateRequestBytes(envelopeParams(limits));
+/** Byte size of the request JSON wrapper with an empty `files` array. */
+function requestEnvelopeBytes(limits: PackChunksLimits): number {
+  return estimateRequestBytes(envelopeParams(limits), limits.analysisDepth);
 }
 
 function analysisFileJsonBytes(file: SqaaAnalysisFile): number {
@@ -100,7 +116,7 @@ export function packFilesIntoChunks(
     return [];
   }
 
-  const envelopeBytes = deepRequestEnvelopeBytes(limits);
+  const envelopeBytes = requestEnvelopeBytes(limits);
   const itemByteCosts = items.map((item) => analysisFileJsonBytes(toAnalysisFile(item)));
 
   const chunks: SqaaChunk[] = [];

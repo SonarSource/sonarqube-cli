@@ -626,6 +626,10 @@ describe('integrate claude — SQAA entitlement guard', () => {
           hookScriptName('posttool-sqaa'),
         ),
       ).toBe(true);
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
+        '# SonarQube Agentic Analysis protocol',
+      );
+      expect(findClaudeFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
     },
     { timeout: 30000 },
   );
@@ -2075,9 +2079,9 @@ describe('integrate claude — interactive feature selection', () => {
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
 
-      // '\r' selects project scope, then the hook + MCP + SQAA feature prompts.
+      // '\r' selects project scope, then secrets, SQAA hook, SQAA instructions, MCP, CAG prompts.
       const result = await harness.run('integrate claude --project my-project', {
-        stdinChunks: ['\r', '\r', '\r', '\r'],
+        stdinChunks: ['\r', '\r', '\r', '\r', '\r'],
         extraEnv: {
           SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
@@ -2088,7 +2092,7 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install SonarQube Agentic Analysis hook?');
 
-      // Accepting installs the PostToolUse SQAA hook script and records it.
+      // Accepting installs the PostToolUse SQAA hook script and SQAA instructions.
       expect(
         harness.cwd.exists(
           '.claude',
@@ -2099,6 +2103,10 @@ describe('integrate claude — interactive feature selection', () => {
         ),
       ).toBe(true);
       expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeDefined();
+      expect(harness.cwd.file('CLAUDE.md').asText()).toContain(
+        '# SonarQube Agentic Analysis protocol',
+      );
+      expect(findClaudeFeature(harness, 'sqaa-instructions')).toBeDefined();
     },
     { timeout: 30000 },
   );

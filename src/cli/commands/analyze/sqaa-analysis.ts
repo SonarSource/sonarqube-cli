@@ -21,7 +21,7 @@
 // Sequential chunked execution engine for SQAA change-set analysis
 
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
-import type { SqaaIssue } from '../../../sonarqube/client';
+import type { SqaaAnalysisDepth, SqaaIssue } from '../../../sonarqube/client';
 import type { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import {
   fetchChunkWith413Split,
@@ -32,6 +32,7 @@ import {
 } from './sqaa-api';
 import type { CloudAuth } from './sqaa-auth';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking';
+import type { SqaaWireAnalysisDepth } from './sqaa-depth';
 import { isPayloadTooLargeCommandError } from './sqaa-errors.js';
 
 export type FileSuccess = {
@@ -52,6 +53,8 @@ export interface RunContext {
   projectKey: string;
   branch: string | undefined;
   progress: SqaaProgress;
+  analysisDepth: SqaaWireAnalysisDepth;
+  displayAnalysisDepth: SqaaAnalysisDepth;
 }
 
 export interface RunTally {
@@ -241,6 +244,7 @@ async function processChunk(
       () => {
         ctx.progress.warnPayloadSplit();
       },
+      ctx.analysisDepth,
     );
 
     recordSuccessfulParts(ctx, tally, ctx.progress, parts, fileIndexByAbsolutePath);

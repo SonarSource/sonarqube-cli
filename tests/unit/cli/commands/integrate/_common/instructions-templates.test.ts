@@ -39,6 +39,10 @@ describe('instructions-templates', () => {
     const result = buildSqaaSectionBody('my-project');
 
     expect(result).toContain('# SonarQube Agentic Analysis protocol');
-    expect(result).toContain('sonar analyze agentic --project my-project --file');
+    expect(result).toContain('sonar analyze agentic --project my-project');
+    expect(result).toContain('--file');
+    expect(result).toContain('relative to the project root');
+    expect(result).toContain('DEEP cross-file analysis by default');
+    expect(result).toContain('Per-edit hooks run faster STANDARD analysis');
   });
 });
