@@ -21,7 +21,8 @@
 import { realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 
-export const normalizePath = (p: string): string => p.replaceAll('\\', '/');
+export const normalizePath = (p: string): string =>
+  process.platform === 'win32' ? p.replaceAll('\\', '/') : p;
 
 /**
  * POSIX-style path of `file` relative to `base` (defaults to cwd).
