@@ -34,14 +34,25 @@ import type { FeatureDeclaration, IntegrationDeclaration, PostInstallExample } f
 export function renderCompletionSummary<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   installedFeatures: InstalledIntegrationFeature[],
+  removedFeatures: FeatureDeclaration<TOptions>[],
 ): void {
-  if (installedFeatures.length === 0) {
+  if (installedFeatures.length === 0 && removedFeatures.length === 0) {
     return;
   }
 
-  renderInstalledList(integration, installedFeatures);
+  if (installedFeatures.length > 0) {
+    renderInstalledList(integration, installedFeatures);
+  }
+  if (removedFeatures.length > 0) {
+    renderRemovedList(removedFeatures);
+  }
   outro('Setup complete!', 'success');
   renderPostInstallExamples(integration, installedFeatures);
+}
+
+function renderRemovedList<TOptions>(removedFeatures: FeatureDeclaration<TOptions>[]): void {
+  const items = removedFeatures.map((feature) => phaseItem(feature.displayName, 'done'));
+  phase('Removed', items);
 }
 
 function renderInstalledList<TOptions>(

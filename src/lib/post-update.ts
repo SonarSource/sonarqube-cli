@@ -28,6 +28,7 @@ import { installSecretsBinary } from '../cli/commands/_common/install/secrets';
 import { supportedIntegrations } from '../cli/commands/integrate';
 import {
   type FeatureDeclaration,
+  findInstalledIntegration,
   integrationInstaller,
   type IntegrationRegistry,
   isFeatureContainer,
@@ -96,7 +97,7 @@ export async function migrateDeclarativeIntegrations(
   let stateChanged = false;
 
   for (const integration of registry.list()) {
-    const installedIntegration = integrationInstaller.findInstalledIntegration(state, integration);
+    const installedIntegration = findInstalledIntegration(state, integration);
     if (!installedIntegration) {
       continue;
     }

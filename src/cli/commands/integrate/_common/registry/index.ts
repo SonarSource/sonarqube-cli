@@ -35,12 +35,17 @@ export {
   type SonarSourceBinaryDependencyOptions,
   type SonarSourceBinaryDescriptor,
 } from './dependencies';
+export { buildApplications } from './feature-target';
 export {
   installIntegration,
   type InstallIntegrationOptions,
   makeContext,
 } from './install-integration';
-export { isFeatureInstalledGloballyForProject } from './installation-recorder';
+export {
+  findInstalledFeature,
+  findInstalledIntegration,
+  isFeatureInstalledGloballyForProject,
+} from './installation-recorder';
 export {
   IntegrationInstaller,
   integrationInstaller,
@@ -72,7 +77,15 @@ export {
   yamlPatchRemover,
   type YamlPatchRemoverOptions,
 } from './resources';
-export { askUser, install, type InstallDecision, isFeatureContainer, skip } from './selection';
+export {
+  askUser,
+  install,
+  type InstallDecision,
+  isFeatureContainer,
+  selectFeatures,
+  selectFeaturesForInvocation,
+  skip,
+} from './selection';
 export type {
   AppliedFeature,
   AppliedOperation,
@@ -82,6 +95,7 @@ export type {
   FeatureContainer,
   FeatureDeclaration,
   FeatureOperation,
+  FeatureSelectionResult,
   InstalledDependency,
   IntegrationContext,
   IntegrationDeclaration,

@@ -38,4 +38,5 @@ export interface DependencyDeclaration {
   version?: string;
   installOrUpdate: (context: DependencyInstallContext) => MaybePromise<InstalledDependency>;
   isInstalled: (context: IntegrationContext) => MaybePromise<boolean>;
+  remove: (context: IntegrationContext) => MaybePromise<void>;
 }
