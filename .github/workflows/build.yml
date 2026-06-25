@@ -32,11 +32,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           version: 2026.4.20
 
-      - uses: SonarSource/ci-github-actions/get-build-number@657e44543f55422ffd28b91d62fe5386f07d6030 # 1.6.0
+      - uses: SonarSource/ci-github-actions/get-build-number@de29c54be07c772c6afc381db8ae4bfcbfe4df12 # 1.8.0
         id: get-build-number
 
       - name: Update package.json version with build number
@@ -235,7 +235,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup JFrog CLI
-        uses: jfrog/setup-jfrog-cli@1641575d87647fb969c0545f0b6a76873e328b7c # v5.0.0
+        uses: jfrog/setup-jfrog-cli@deda456d982fc5e9a7a020b63eb0d2968aedd33e # v5.1.0
         with:
           version: 2.77.0
 
@@ -559,7 +559,7 @@ jobs:
       - scan
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
-      - uses: SonarSource/ci-github-actions/promote@657e44543f55422ffd28b91d62fe5386f07d6030 # 1.6.0
+      - uses: SonarSource/ci-github-actions/promote@de29c54be07c772c6afc381db8ae4bfcbfe4df12 # 1.8.0
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa

@@ -17,7 +17,7 @@ jobs:
       statuses: write
       contents: read
     steps:
-      - uses: SonarSource/gh-action_releasability/releasability-status@52f09917764eac5a80045d103bfa91e7eaf0c8d6 # 3.0.5
+      - uses: SonarSource/gh-action_releasability/releasability-status@f6c1978d7b7642e57846be4823bb28ec9e7ff39b # 3.1.0
         with:
           optional_checks: "Jira,CheckDependencies,CheckManifestValues"
         env:
