@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Get release version
         id: version
-        uses: SonarSource/release-github-actions/get-release-version@7dd4782e88df1ac018969c71a89266c0d36dd758 # 1.7.2
+        uses: SonarSource/release-github-actions/get-release-version@089cd343ba7f4f0c9283cda93627cd98d9dfe84b # 1.9.1
         with:
           branch: ${{ inputs.branch }}
 
@@ -51,7 +51,7 @@ jobs:
     name: Release
     needs:
       - check-draft-exists
-    uses: SonarSource/release-github-actions/.github/workflows/ide-automated-release.yml@7dd4782e88df1ac018969c71a89266c0d36dd758 # 1.7.2
+    uses: SonarSource/release-github-actions/.github/workflows/ide-automated-release.yml@089cd343ba7f4f0c9283cda93627cd98d9dfe84b # 1.9.1
     permissions:
       statuses: read
       id-token: write
