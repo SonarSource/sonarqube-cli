@@ -215,7 +215,7 @@ export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 // ---------------------------------------------------------------------------
 
 /** Default Docker image for `sonar run mcp`. */
-export const MCP_DOCKER_IMAGE = 'sonarsource/sonarqube-mcp';
+export const SONARQUBE_MCP_DOCKER_IMAGE_NAME = 'sonarsource/sonarqube-mcp';
 
 // ---------------------------------------------------------------------------
 // Telemetry

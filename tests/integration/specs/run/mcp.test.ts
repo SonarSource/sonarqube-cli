@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { MCP_DOCKER_IMAGE } from '../../../../src/lib/config-constants.js';
+import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../src/lib/config-constants.js';
 import { IS_WINDOWS, TestHarness } from '../../harness';
 
 const EXECUTABLE_MODE = 0o755;
@@ -122,7 +122,7 @@ describe('run mcp', () => {
       // workspace was mounted
       expect(result.stdout).toContain('/app/mcp-workspace:ro');
       // correct image
-      expect(result.stdout).toContain(MCP_DOCKER_IMAGE);
+      expect(result.stdout).toContain(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
       // env vars were injected into the docker process
       expect(result.stdout).toContain('ENV_TOKEN=test-token');
       expect(result.stdout).toContain(`ENV_URL=${server.baseUrl()}`);
@@ -149,7 +149,7 @@ describe('run mcp', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('SONARQUBE_PROJECT_KEY');
       expect(result.stdout).not.toContain('/app/mcp-workspace:ro');
-      expect(result.stdout).toContain(MCP_DOCKER_IMAGE);
+      expect(result.stdout).toContain(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
       expect(result.stdout).toContain('ENV_TOKEN=test-token');
     },
     { timeout: 15000 },

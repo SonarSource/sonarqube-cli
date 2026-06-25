@@ -29,7 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandFailedError } from '../../../../../src/cli/commands/_common/error.js';
 import { runMcp } from '../../../../../src/cli/commands/run/mcp.js';
 import type { ResolvedAuth } from '../../../../../src/lib/auth-resolver.js';
-import { MCP_DOCKER_IMAGE } from '../../../../../src/lib/config-constants.js';
+import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../../src/lib/config-constants.js';
 import * as projectInfo from '../../../../../src/lib/project-workspace/project-info.js';
 import * as toolDetector from '../../../../../src/lib/tool-detector.js';
 
@@ -83,7 +83,7 @@ describe('runMcp', () => {
 
     expect(spawnSpy).toHaveBeenCalledWith(
       'podman',
-      expect.arrayContaining(['run', MCP_DOCKER_IMAGE]),
+      expect.arrayContaining(['run', SONARQUBE_MCP_DOCKER_IMAGE_NAME]),
       expect.objectContaining({ stdio: 'inherit' }),
     );
   });
