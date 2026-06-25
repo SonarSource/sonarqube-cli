@@ -400,7 +400,7 @@ export class SonarQubeClient {
 
   async checkCagEntitlement(organizationUuid: string): Promise<CagEntitlementStatus> {
     try {
-      const endpoint = `/a3s-analysis/cag-entitlement/${organizationUuid}`;
+      const endpoint = `/cag/cag-entitlement/${organizationUuid}`;
       const result = await this.get<{ allowed: boolean; consumption?: object }>(
         endpoint,
         undefined,

@@ -923,7 +923,7 @@ describe('SonarQubeClient', () => {
       await cloudClient.hasCagEntitlement('my-org');
 
       const entitlementUrl = new URL((fetchSpy.mock.calls[1][0] as URL).toString());
-      expect(entitlementUrl.pathname).toBe(`/a3s-analysis/cag-entitlement/${targetUuid}`);
+      expect(entitlementUrl.pathname).toBe(`/cag/cag-entitlement/${targetUuid}`);
     });
   });
 
