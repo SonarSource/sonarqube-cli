@@ -211,6 +211,13 @@ export const CURSOR_IGNORE_FILE = '.cursorignore';
 export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 
 // ---------------------------------------------------------------------------
+// MCP Server
+// ---------------------------------------------------------------------------
+
+/** Default Docker image for `sonar run mcp`. */
+export const SONARQUBE_MCP_DOCKER_IMAGE_NAME = 'sonarsource/sonarqube-mcp';
+
+// ---------------------------------------------------------------------------
 // Telemetry
 // ---------------------------------------------------------------------------
 

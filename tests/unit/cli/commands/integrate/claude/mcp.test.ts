@@ -26,6 +26,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { setupMcpServer } from '../../../../../../src/cli/commands/integrate/claude/mcp';
 import type { ResolvedAuth } from '../../../../../../src/lib/auth-resolver';
+import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '../../../../../../src/lib/config-constants';
 import {
   getMcpConfigFilePath,
   getMcpContainerCommand,
@@ -79,7 +80,7 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_URL',
         '-e',
         'SONARQUBE_TOOLSETS',
-        'mcp/sonarqube',
+        SONARQUBE_MCP_DOCKER_IMAGE_NAME,
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
@@ -105,7 +106,7 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_URL',
         '-e',
         'SONARQUBE_TOOLSETS',
-        'mcp/sonarqube',
+        SONARQUBE_MCP_DOCKER_IMAGE_NAME,
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
@@ -134,7 +135,7 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_ORG',
         '-e',
         'SONARQUBE_TOOLSETS',
-        'mcp/sonarqube',
+        SONARQUBE_MCP_DOCKER_IMAGE_NAME,
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
@@ -164,7 +165,7 @@ describe('getMcpContainerConfig', () => {
         'SONARQUBE_ORG',
         '-e',
         'SONARQUBE_TOOLSETS',
-        'mcp/sonarqube',
+        SONARQUBE_MCP_DOCKER_IMAGE_NAME,
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
@@ -207,7 +208,7 @@ describe('getMcpContainerConfig', () => {
         '/fake/project:/app/mcp-workspace:ro',
         '-e',
         'SONARQUBE_TOOLSETS',
-        'mcp/sonarqube',
+        SONARQUBE_MCP_DOCKER_IMAGE_NAME,
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
@@ -238,7 +239,7 @@ describe('getMcpContainerConfig', () => {
         '/fake/project:/app/mcp-workspace:ro',
         '-e',
         'SONARQUBE_TOOLSETS',
-        'mcp/sonarqube',
+        SONARQUBE_MCP_DOCKER_IMAGE_NAME,
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
@@ -272,7 +273,7 @@ describe('getMcpContainerConfig', () => {
         '/fake/project:/app/mcp-workspace:ro',
         '-e',
         'SONARQUBE_TOOLSETS',
-        'mcp/sonarqube',
+        SONARQUBE_MCP_DOCKER_IMAGE_NAME,
       ],
       env: {
         SONARQUBE_TOKEN: 'squ_test',
