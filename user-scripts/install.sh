@@ -44,9 +44,9 @@ detect_platform() {
 resolve_latest_version() {
   local version
   if command -v curl &>/dev/null; then
-    version="$(curl -fsSL "$BASE_URL/latest-version.txt")"
+    version="$(curl -fsSL "$BASE_URL/stable.version")"
   elif command -v wget &>/dev/null; then
-    version="$(wget -qO- "$BASE_URL/latest-version.txt")"
+    version="$(wget -qO- "$BASE_URL/stable.version")"
   else
     echo "Error: neither curl nor wget is available. Please install one and retry." >&2
     exit 1
@@ -181,9 +181,7 @@ main() {
   platform="$(detect_platform)"
 
   local version
-  #echo "Fetching latest version..."
-  #version="$(resolve_latest_version)"
-  version="1.1.0.3122"
+  version="$(resolve_latest_version)"
   echo "Latest version: $version"
 
   local os

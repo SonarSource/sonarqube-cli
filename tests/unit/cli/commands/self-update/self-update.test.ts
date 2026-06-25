@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { EventEmitter } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
@@ -25,8 +27,27 @@ import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/
 // Mock node:child_process before importing self-update so that the named
 // imports (spawn, spawnSync) in self-update.ts resolve to the test doubles.
 const childProcess = await import('node:child_process');
-const spawnMock = mock(() => ({ unref: () => {} }));
-const spawnSyncMock = mock(() => ({ status: 0 }));
+type MockChildProcess = EventEmitter & { unref: () => void };
+type MockSpawnSyncResult = { status: number | null; error?: Error };
+
+function createSpawnChild(
+  outcome: 'spawn' | 'error' = 'spawn',
+  errorMessage = 'spawn failed',
+): MockChildProcess {
+  const child = new EventEmitter() as MockChildProcess;
+  child.unref = () => {};
+  queueMicrotask(() => {
+    if (outcome === 'spawn') {
+      child.emit('spawn');
+    } else {
+      child.emit('error', new Error(errorMessage));
+    }
+  });
+  return child;
+}
+
+const spawnMock = mock(() => createSpawnChild());
+const spawnSyncMock = mock((): MockSpawnSyncResult => ({ status: 0 }));
 void mock.module('node:child_process', () => ({
   ...childProcess,
   spawn: spawnMock as unknown as typeof childProcess.spawn,
@@ -41,7 +62,7 @@ void mock.module('../../../../../src/lib/platform-detector.js', () => ({
   isWindows: isWindowsMock,
 }));
 
-// Mock the version module — isNewerVersion and stripBuildNumber are tested in version.test.ts.
+// Mock the shared version helpers used by the CLI Version class.
 const { isNewerVersion: realIsNewerVersion, stripBuildNumber: realStripBuildNumber } =
   await import('../../../../../src/lib/version');
 void mock.module('../../../../../src/lib/version', () => ({
@@ -49,35 +70,8 @@ void mock.module('../../../../../src/lib/version', () => ({
   stripBuildNumber: mock(realStripBuildNumber),
 }));
 
-const { extractVersion, checkForUpdate } =
-  await import('../../../../../src/cli/commands/self-update/update-check');
-const { selfUpdate } = await import('../../../../../src/cli/commands/self-update/self-update');
-
-describe('extractVersion', () => {
-  it('extracts version from a shell script (double quotes)', () => {
-    const script = `#!/usr/bin/env bash\nversion="1.5.0"\necho "installing $version"`;
-    expect(extractVersion(script)).toBe('1.5.0');
-  });
-
-  it('extracts version from a shell script (single quotes)', () => {
-    const script = `version='2.0.1'\necho hi`;
-    expect(extractVersion(script)).toBe('2.0.1');
-  });
-
-  it('extracts $SonarVersion from a PowerShell script', () => {
-    const script = `$SonarVersion = "1.10.3"\nWrite-Host "installing $SonarVersion"`;
-    expect(extractVersion(script)).toBe('1.10.3');
-  });
-
-  it('extracts $sonarversion (case-insensitive) from a PowerShell script', () => {
-    const script = `$sonarversion = "0.9.0"\nWrite-Host $sonarversion`;
-    expect(extractVersion(script)).toBe('0.9.0');
-  });
-
-  it('returns null when no version is found', () => {
-    expect(extractVersion('#!/usr/bin/env bash\necho "hello"')).toBeNull();
-  });
-});
+const { checkForUpdate } = await import('../../../../../src/cli/commands/self-update/update-check');
+const { selfUpdate } = await import('../../../../../src/cli/commands/self-update');
 
 describe('checkForUpdate', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
@@ -90,34 +84,35 @@ describe('checkForUpdate', () => {
     fetchSpy.mockRestore();
   });
 
-  it('returns updateAvailable: true when latest > current (with build number)', async () => {
-    const scriptContent = 'version="99.0.0.241"\necho hi';
+  it('returns the latest update and marks upToDate false when stable.version is newer', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => Promise.resolve(scriptContent),
+      text: async () => Promise.resolve('99.0.0.241\n'),
     });
 
     const result = await checkForUpdate();
 
-    expect(result.updateAvailable).toBe(true);
-    expect(result.latestVersion).toBe('99.0.0.241');
-    expect(result.scriptContent).toBe(scriptContent);
-    expect(result.scriptName).toMatch(/install\.(sh|ps1)$/);
+    expect(result.latest.version.text).toBe('99.0.0.241');
+    expect(result.latest.version.noBuild.text).toBe('99.0.0');
+    expect(String(result.currentVersion)).toBe(
+      (await import('../../../../../package.json')).version,
+    );
+    expect(result.upToDate).toBe(false);
   });
 
-  it('returns updateAvailable: false when latest matches current (with build number)', async () => {
+  it('returns the latest update and marks upToDate true when the current version matches', async () => {
     // Same major.minor.patch as current; build number must be ignored.
     const [major, minor, patch] = (await import('../../../../../package.json')).version.split('.');
-    const scriptContent = `version="${major}.${minor}.${patch}.999"\necho hi`;
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => Promise.resolve(scriptContent),
+      text: async () => Promise.resolve(`${major}.${minor}.${patch}.999\n`),
     });
 
     const result = await checkForUpdate();
 
-    expect(result.updateAvailable).toBe(false);
-    expect(result.latestVersion).toMatch(/\.\d+$/); // still contains build number for display
+    expect(result.latest.version.text).toBe(`${major}.${minor}.${patch}.999`);
+    expect(result.latest.version.noBuild.text).toBe(`${major}.${minor}.${patch}`);
+    expect(result.upToDate).toBe(true);
   });
 
   it('throws on HTTP error', () => {
@@ -126,10 +121,10 @@ describe('checkForUpdate', () => {
     expect(checkForUpdate()).rejects.toThrow('HTTP 404');
   });
 
-  it('throws when version cannot be extracted from the script', () => {
+  it('throws when stable.version is not a version', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => Promise.resolve('#!/bin/bash\necho "no version here"'),
+      text: async () => Promise.resolve('not-a-version'),
     });
 
     expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
@@ -153,7 +148,7 @@ describe('selfUpdate --status', () => {
   it('reports an available update without installing', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => Promise.resolve('version="99.0.0.241"\necho hi'),
+      text: async () => Promise.resolve('99.0.0.241\n'),
     });
 
     await selfUpdate({ status: true });
@@ -167,7 +162,7 @@ describe('selfUpdate --status', () => {
   it('reports already up to date', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      text: async () => Promise.resolve('version="0.0.1"\necho hi'),
+      text: async () => Promise.resolve('0.0.1\n'),
     });
 
     await selfUpdate({ status: true });
@@ -184,6 +179,7 @@ describe('selfUpdate --force', () => {
     setMockUi(true);
     clearMockUiCalls();
     spawnMock.mockClear();
+    spawnMock.mockImplementation(() => createSpawnChild());
     spawnSyncMock.mockClear();
     isWindowsMock.mockImplementation(() => false);
     fetchSpy = spyOn(globalThis, 'fetch');
@@ -194,8 +190,15 @@ describe('selfUpdate --force', () => {
     setMockUi(false);
   });
 
-  async function runForce(scriptContent: string): Promise<void> {
-    fetchSpy.mockResolvedValue({
+  async function runForce(
+    latestVersion: string,
+    scriptContent = '#!/usr/bin/env bash\necho hi\n',
+  ): Promise<void> {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      text: async () => Promise.resolve(`${latestVersion}\n`),
+    });
+    fetchSpy.mockResolvedValueOnce({
       ok: true,
       text: async () => Promise.resolve(scriptContent),
     });
@@ -203,7 +206,8 @@ describe('selfUpdate --force', () => {
   }
 
   it('installs even when already up to date', async () => {
-    await runForce('version="0.0.1"\necho hi');
+    const [major, minor, patch] = (await import('../../../../../package.json')).version.split('.');
+    await runForce(`${major}.${minor}.${patch}.999`);
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => /up to date/i.test(m))).toBe(false);
@@ -211,24 +215,54 @@ describe('selfUpdate --force', () => {
   });
 
   it('shows the normal update message when an update is also available', async () => {
-    await runForce('version="99.0.0"\necho hi');
+    await runForce('99.0.0.241');
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
-    expect(messages.some((m) => /updating/i.test(m))).toBe(true);
+    expect(messages.some((m) => /updating/i.test(m) && m.includes('99.0.0'))).toBe(true);
+    expect(messages.some((m) => m.includes('99.0.0.241'))).toBe(false);
   });
 
   it('emits a success message after a successful Unix update', async () => {
-    await runForce('version="2.0.0"\necho hi');
+    await runForce('2.0.0.241');
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
     expect(messages.some((m) => m.includes('Updated to v2.0.0'))).toBe(true);
+    expect(messages.some((m) => m.includes('Updated to v2.0.0.241'))).toBe(false);
+  });
+
+  it('throws for non-Windows install when the update script exits with an error', async () => {
+    spawnSyncMock.mockReturnValue({ status: 12 });
+
+    try {
+      await runForce('2.0.0');
+      throw new Error('Expected selfUpdate to fail');
+    } catch (error) {
+      expect((error as Error).message).toContain('Update script exited with code 12');
+    }
+  });
+
+  it('throws the underlying spawn error when the update script cannot be started', async () => {
+    spawnSyncMock.mockReturnValue({
+      status: null,
+      error: new Error('spawnSync /bin/bash ENOENT'),
+    });
+
+    try {
+      await runForce('2.0.0');
+      throw new Error('Expected selfUpdate to fail');
+    } catch (error) {
+      expect((error as Error).message).toContain(
+        'Failed to start update script: spawnSync /bin/bash ENOENT',
+      );
+    }
   });
 
   it('confirms update launched in new terminal on Windows', async () => {
     isWindowsMock.mockImplementation(() => true);
-    await runForce('version="2.0.0"\necho hi');
+    await runForce('2.0.0', 'Write-Host hi\n');
 
     const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    const [, args] = spawnMock.mock.calls[0] as unknown as [string, string[]];
     expect(
       messages.some((m) =>
         m.includes('Check the new terminal window to confirm the update completed.'),
@@ -236,5 +270,26 @@ describe('selfUpdate --force', () => {
     ).toBe(true);
     expect(spawnMock).toHaveBeenCalled();
     expect(spawnSyncMock).not.toHaveBeenCalled();
+    expect(args).toContain('-Command');
+    expect(args.at(-1)).toContain('Remove-Item -Force');
+  });
+
+  it('throws when the Windows updater terminal cannot be launched', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnMock.mockImplementation(() => createSpawnChild('error', 'spawn cmd.exe ENOENT'));
+
+    try {
+      await runForce('2.0.0', 'Write-Host hi\n');
+      throw new Error('Expected selfUpdate to fail');
+    } catch (error) {
+      expect((error as Error).message).toContain(
+        'Failed to start update script: spawn cmd.exe ENOENT',
+      );
+    }
+
+    const messages = getMockUiCalls().map((c) => c.args.join(' '));
+    expect(messages.some((m) => m.includes('Starting update in a new terminal window...'))).toBe(
+      false,
+    );
   });
 });

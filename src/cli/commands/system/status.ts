@@ -49,7 +49,7 @@ import { checkTokenStatus } from '../_common/token';
 import { supportedIntegrations } from '../integrate';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks';
-import { checkForUpdate } from '../self-update/update-check';
+import { checkForUpdate, type UpdateCheckResult } from '../self-update/update-check';
 
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
 
@@ -87,10 +87,7 @@ interface IntegrationInfo {
   hooks?: HooksStatus;
 }
 
-type CliUpdateInfo = {
-  latestVersion: string;
-  updateAvailable: boolean;
-};
+type CliUpdateInfo = UpdateCheckResult;
 
 function abbreviatePath(p: string): string {
   return p.replace(homedir(), '~');
@@ -347,11 +344,7 @@ async function getCliUpdateInfo(): Promise<CliUpdateInfo | null> {
   }
 
   try {
-    const result = await checkForUpdate(process.env.SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL);
-    return {
-      latestVersion: result.latestVersion,
-      updateAvailable: result.updateAvailable,
-    };
+    return await checkForUpdate();
   } catch {
     return null;
   }
@@ -458,15 +451,15 @@ interface StatusData {
 
 function buildRecommendations(
   tokenStatus: TokenStatus | null,
-  updateResult: { latestVersion: string; updateAvailable: boolean } | null,
+  updateResult: UpdateCheckResult | null,
   integrations: IntegrationInfo[],
 ): string[] {
   const recommendations: string[] = [];
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
   if (tokenStatus === 'invalid') recommendations.push("Run 'sonar auth login' to reauthenticate");
-  if (updateResult?.updateAvailable) {
+  if (updateResult && !updateResult.upToDate) {
     recommendations.push(
-      `Run 'sonar self-update' to update to v${stripBuildNumber(updateResult.latestVersion)}`,
+      `Run 'sonar self-update' to update to v${updateResult.latest.version.noBuild.text}`,
     );
   }
 

@@ -92,7 +92,7 @@ import {
 import { listProjects, type ListProjectsOptions } from './commands/list/projects';
 import { remediate, type RemediateOptions } from './commands/remediate';
 import { runMcp } from './commands/run/mcp.js';
-import { selfUpdate, type SelfUpdateOptions } from './commands/self-update/self-update';
+import { selfUpdate, type SelfUpdateOptions } from './commands/self-update';
 import { systemReset, type SystemResetOptions } from './commands/system/reset';
 import { systemStatus, type SystemStatusOptions } from './commands/system/status';
 import { getBanner, getCustomRootHelp } from './root-help.js';
