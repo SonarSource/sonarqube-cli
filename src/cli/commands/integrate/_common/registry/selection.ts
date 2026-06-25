@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { confirmPrompt, discreetSuccess, info, warn } from '../../../../../ui';
+import { confirmPrompt, discreetSuccess, info, text } from '../../../../../ui';
+import { yellow } from '../../../../../ui/colors.js';
 import { CommandFailedError } from '../../../_common/error';
 import { findInstalledFeature } from './installation-recorder';
 import type {
@@ -191,12 +192,24 @@ async function shouldRemoveInstalledFeature<TOptions>(
     return false;
   }
 
-  warn(`${feature.displayName} will be removed.`);
+  warnFeatureRemoval(`${feature.displayName} will be removed.`);
   const proceed = await confirmPrompt('Proceed with removal?', true);
   if (proceed === null) {
     throw new CommandFailedError('Installation cancelled');
   }
   return proceed;
+}
+
+/**
+ * One-off, local to the keep/remove flow — not a shared `prompts.ts` primitive.
+ * The generic `warn()` writes `⚠️ <msg>` to stderr at column 0 with a
+ * double-width emoji, so it juts left of the clack prompts that bracket it
+ * (`Keep?` / `Proceed with removal?`). We instead reproduce the prompt gutter:
+ * `  <glyph>  <message>` on stdout, with a single-width `⚠` (U+26A0, no VS16 —
+ * the emoji is double-width and shifts the text a column).
+ */
+function warnFeatureRemoval(message: string): void {
+  text(`  ${yellow('⚠')}  ${message}`);
 }
 
 /**
