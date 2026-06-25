@@ -54,19 +54,19 @@ SonarQube Agentic Analysis is the final confirmation layer at the end of every t
 
 When the trigger fires, you **MUST** run SonarQube Agentic Analysis on the full set of files you modified this turn — **one command, not a per-file loop**.
 
-**Preferred:** pass every path you modified this turn in a single invocation (repeat \`--file\` for each path). Use paths **relative to the project root** (e.g. \`src/foo.ts\`). Multi-file runs use DEEP analysis by default.
+**Preferred:** pass every path you modified this turn in a single invocation (repeat \`--file\` for each path). Use paths **relative to the project root** (e.g. \`src/foo.ts\`). For end-of-turn analysis, **always** pass \`--depth DEEP\` — even when you changed only one file — so cross-file findings are included.
 
 \`\`\`bash
-sonar analyze agentic --project ${projectKey} --file <path/to/file1> --file <path/to/file2>
+sonar analyze agentic --project ${projectKey} --depth DEEP --file <path/to/file1> --file <path/to/file2>
 \`\`\`
 
-**Fallback:** when you cannot reliably list every modified path (e.g. you did not track them, or git state is the only source of truth), use the git change set instead (also DEEP by default):
+**Fallback:** when you cannot reliably list every modified path (e.g. you did not track them, or git state is the only source of truth), use the git change set with DEEP analysis:
 
 \`\`\`bash
-sonar analyze agentic --project ${projectKey}
+sonar analyze agentic --project ${projectKey} --depth DEEP
 \`\`\`
 
-Per-edit hooks run faster STANDARD analysis; end-of-turn multi-file or change-set analysis uses DEEP for cross-file findings. Use \`--depth STANDARD\` only when you need a faster pass.
+Per-edit hooks run faster STANDARD analysis. End-of-turn analysis must always use \`--depth DEEP\` (including a single \`--file\`). Use \`--depth STANDARD\` only for optional faster passes — never for the mandatory end-of-turn run.
 
 Non-negotiable rules:
 
