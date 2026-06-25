@@ -262,7 +262,7 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
-   * Force GET /a3s-analysis/cag-entitlement/{uuid} to return a specific HTTP
+   * Force GET /cag/cag-entitlement/{uuid} to return a specific HTTP
    * status code. Useful for testing entitlement check failure paths.
    */
   withCagEntitlementStatusCode(status: number, body?: string): this {
@@ -662,7 +662,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        const cagEntitlementMatch = /^\/a3s-analysis\/cag-entitlement\/(.+)$/.exec(path);
+        const cagEntitlementMatch = /^\/cag\/cag-entitlement\/(.+)$/.exec(path);
         if (cagEntitlementMatch) {
           if (cagEntitlementStatusCode !== undefined) {
             return new Response(

@@ -50,7 +50,7 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
     const uuid = orgs[0].uuidV4;
 
     // Step 2: fetch CAG entitlement using the UUID CAG received from step 1.
-    const configResp = await fetch(`${base}/a3s-analysis/cag-entitlement/${uuid}`);
+    const configResp = await fetch(`${base}/cag/cag-entitlement/${uuid}`);
 
     expect(configResp.status).toBe(HTTP_OK);
 
