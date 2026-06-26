@@ -22,6 +22,8 @@
 
 import { join } from 'node:path';
 
+import { expect } from 'bun:test';
+
 import { hookScriptName, IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import { findInstalledFeature, type InstalledIntegrationFeature } from './state-helpers';
 
@@ -50,15 +52,19 @@ export const GLOBAL_HOOKS_JSON_PATH = ['.gemini', 'config', 'hooks.json'] as con
 /** Antigravity MCP config (`Manage MCP Servers` → View raw config). */
 export const GLOBAL_MCP_CONFIG_PATH = ['.gemini', 'config', 'mcp_config.json'] as const;
 
-export const PROJECT_INSTRUCTIONS_PATH = [
+export const PROJECT_PROMPT_SECRETS_RULE_PATH = [
   '.agents',
-  'instructions',
-  'sonarqube.instructions.md',
+  'rules',
+  'sonar-prompt-secrets.md',
 ] as const;
 
-export const GLOBAL_INSTRUCTIONS_PATH = [
-  '.gemini',
-  'config',
+export const PROJECT_SQAA_RULE_PATH = ['.agents', 'rules', 'sonar-agentic-analysis.md'] as const;
+
+export const GLOBAL_GEMINI_MD_PATH = ['.gemini', 'GEMINI.md'] as const;
+
+/** @deprecated Use PROJECT_PROMPT_SECRETS_RULE_PATH — legacy instructions layout. */
+export const PROJECT_INSTRUCTIONS_PATH = [
+  '.agents',
   'instructions',
   'sonarqube.instructions.md',
 ] as const;
@@ -134,7 +140,12 @@ export function writeDisabledGlobalHook(harness: TestHarness): void {
   );
 }
 
-/** Simulates a pre-existing global instructions file. */
+/** Simulates a pre-existing global Sonar rules snippet in GEMINI.md. */
+export function writeExistingGlobalGeminiRules(harness: TestHarness): void {
+  harness.userHome.writeFile(join('.gemini', 'GEMINI.md'), '# pre-existing global rules\n');
+}
+
+/** Simulates a pre-existing legacy global instructions file. */
 export function writeExistingGlobalInstructions(harness: TestHarness): void {
   harness.userHome.writeFile(
     join('.gemini', 'config', 'instructions', 'sonarqube.instructions.md'),
@@ -153,4 +164,10 @@ export function writeOrphanedGlobalHookConfig(harness: TestHarness): void {
     join('.gemini', 'config', 'hooks.json'),
     JSON.stringify(makeAntigravitySecretsBlock(command)),
   );
+}
+
+export function expectAntigravityAlwaysOnRule(body: string): void {
+  expect(body.startsWith('---\n')).toBe(true);
+  expect(body).toContain('trigger: always_on');
+  expect(body).toContain('description:');
 }

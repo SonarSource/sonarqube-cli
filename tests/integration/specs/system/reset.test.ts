@@ -44,7 +44,7 @@ import { runCli } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
 import {
   PROJECT_HOOK_SCRIPT_PATH,
-  PROJECT_INSTRUCTIONS_PATH,
+  PROJECT_PROMPT_SECRETS_RULE_PATH,
 } from '../integrate/antigravity-test-helpers';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
@@ -889,7 +889,7 @@ describe('system reset --force', () => {
       expect(mcp.mcpServers?.other).toBeDefined();
       expect(mcp.mcpServers?.sonarqube).toBeUndefined();
 
-      expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).not.toContain(
+      expect(harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText()).not.toContain(
         '# SonarQube secrets scanning for prompts protocol',
       );
     },

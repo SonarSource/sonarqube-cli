@@ -18,16 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { describe, expect, it } from 'bun:test';
 
 import {
-  ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR,
-  ANTIGRAVITY_INSTRUCTIONS_FILENAME,
-} from '../../../../lib/config-constants';
+  buildAntigravityAlwaysOnRule,
+  PROMPT_SECRETS_RULE_DESCRIPTION,
+  PROMPT_SECRETS_RULE_MARKER,
+} from '../../../../../../src/cli/commands/integrate/antigravity/rules';
+import { PROMPT_SECRETS_BODY } from '../../../../../../src/cli/commands/integrate/copilot/instructions';
 
-export { PROMPT_SECRETS_BODY } from '../copilot/instructions';
+describe('antigravity rules', () => {
+  it('buildAntigravityAlwaysOnRule prefixes YAML frontmatter with always_on trigger', () => {
+    const rule = buildAntigravityAlwaysOnRule(PROMPT_SECRETS_RULE_DESCRIPTION, PROMPT_SECRETS_BODY);
 
-export function globalAntigravityInstructionsExist(): boolean {
-  return existsSync(join(ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR, ANTIGRAVITY_INSTRUCTIONS_FILENAME));
-}
+    expect(rule.startsWith('---\n')).toBe(true);
+    expect(rule).toContain('trigger: always_on');
+    expect(rule).toContain(`description: ${PROMPT_SECRETS_RULE_DESCRIPTION}`);
+    expect(rule).toContain(PROMPT_SECRETS_RULE_MARKER);
+  });
+});
