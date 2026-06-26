@@ -32,6 +32,7 @@ import { CommandFailedError } from '../../../_common/error';
 import type { DependencyDeclaration } from './dependencies';
 import { recordInstalledFeature } from './installation-recorder';
 import type { ResourceDeclaration } from './resources';
+import { resourceAppliesInScope } from './resources/common';
 import { isFeatureContainer, normalizeDecision } from './selection';
 import type {
   AppliedFeature,
@@ -256,6 +257,9 @@ export class IntegrationInstaller {
     installedFeature: InstalledIntegrationFeature | undefined,
     resource: ResourceDeclaration,
   ): Promise<boolean> {
+    if (!resourceAppliesInScope(context, resource)) {
+      return false;
+    }
     const installedResource = installedFeature?.resources.find((entry) => entry.id === resource.id);
     if (!installedResource) {
       return true;
@@ -371,6 +375,9 @@ export class IntegrationInstaller {
     callbacks: RemoveFeatureCallbacks = {},
   ): Promise<void> {
     for (const resource of feature.resources ?? []) {
+      if (!resourceAppliesInScope(context, resource)) {
+        continue;
+      }
       await resource.remove(context);
       callbacks.onResourceRemoved?.(resource);
     }
@@ -468,6 +475,9 @@ export class IntegrationInstaller {
     await this.cleanupRecordedLegacyInstallations(feature, featureContext);
 
     for (const resource of feature.resources ?? []) {
+      if (!resourceAppliesInScope(featureContext, resource)) {
+        continue;
+      }
       if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
         callbacks.onResourceSkipped?.(resource);
         continue;

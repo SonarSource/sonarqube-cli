@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,7 +30,11 @@ import type {
   IntegrationContext,
   IntegrationDeclaration,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
-import { getDefaultState, type InstalledIntegrationFeature } from '../../../../../../src/lib/state';
+import {
+  getDefaultState,
+  type InstalledIntegrationFeature,
+  type IntegrationScope,
+} from '../../../../../../src/lib/state';
 
 const binaryInstall = await import('../../../../../../src/cli/commands/_common/install/binary');
 await mock.module('../../../../../../src/cli/commands/_common/install/binary', () => ({
@@ -366,6 +370,47 @@ describe('declarative integration framework - resources and state recording', ()
     ]);
   });
 
+  it('applies scoped resources only when install scope matches', async () => {
+    const state = getDefaultState('test');
+    const projectPath = join(tempDir, 'project-only.txt');
+    const globalPath = join(tempDir, 'global-only.txt');
+    const feature: FeatureDeclaration = {
+      id: 'scoped-feature',
+      displayName: 'Scoped feature',
+      resources: [
+        wholeFile({
+          id: 'project-file',
+          scope: 'project',
+          targetPath: projectPath,
+          content: 'project content',
+        }),
+        wholeFile({
+          id: 'global-file',
+          scope: 'global',
+          targetPath: globalPath,
+          content: 'global content',
+        }),
+      ],
+    };
+
+    const globalContext = makeContext(state, tempDir, undefined, undefined, 'install', 'global');
+    const installed = await applyAndRecord(
+      installer,
+      globalContext,
+      makeIntegration({ features: [feature] }),
+      feature,
+    );
+
+    expect(installed.resources).toMatchObject([
+      {
+        id: 'global-file',
+        path: globalPath,
+      },
+    ]);
+    expect(existsSync(globalPath)).toBe(true);
+    expect(existsSync(projectPath)).toBe(false);
+  });
+
   it('prunes stale shared dependency state when no installed feature references it', async () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
@@ -535,11 +580,12 @@ function makeContext(
   attrs?: IntegrationContext['attrs'],
   force?: boolean,
   executionMode: IntegrationContext['executionMode'] = 'install',
+  scope: IntegrationScope = 'project',
 ): IntegrationContext {
   return {
     state,
     targetRoot,
-    scope: 'project',
+    scope,
     executionMode,
     force,
     attrs,

@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { IntegrationScope } from '../../../../../../lib/state';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
@@ -50,6 +51,7 @@ export class TextSnippet implements ResourceDeclaration {
   readonly displayName?: string;
   readonly resourceType = 'text-snippet';
   readonly version?: string;
+  readonly scope?: IntegrationScope;
 
   private readonly remover: RemovableResource;
 
@@ -57,6 +59,7 @@ export class TextSnippet implements ResourceDeclaration {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
+    this.scope = options.scope;
     this.remover = new TextSnippetRemover({
       id: options.id,
       version: options.version,

@@ -53,6 +53,7 @@ export {
   type JsonPatchRemoverOptions,
   type PlatformSpecificContent,
   type RemovableResource,
+  resourceAppliesInScope,
   type ResourceDeclaration,
   textSnippet,
   textSnippetRemover,

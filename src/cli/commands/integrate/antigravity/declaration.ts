@@ -69,7 +69,6 @@ import {
   SQAA_RULE_DESCRIPTION,
   SQAA_RULE_MARKER,
 } from './rules';
-import { scopedResource } from './scoped-resource';
 
 export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity';
 
@@ -173,28 +172,24 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
             )
           : askUser(),
       resources: [
-        scopedResource(
-          'project',
-          wholeFile({
-            id: 'prompt-secrets-rule-file',
-            displayName: 'Antigravity prompt-secrets workspace rule',
-            targetPath: resolvePromptSecretsRulePath,
-            content: () =>
-              buildAntigravityAlwaysOnRule(PROMPT_SECRETS_RULE_DESCRIPTION, PROMPT_SECRETS_BODY),
-            managedMarker: PROMPT_SECRETS_RULE_MARKER,
-          }),
-        ),
-        scopedResource(
-          'global',
-          textSnippet({
-            id: 'prompt-secrets-gemini-snippet',
-            displayName: 'Antigravity prompt-secrets global rules',
-            targetPath: () => ANTIGRAVITY_GLOBAL_GEMINI_MD,
-            startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
-            endMarker: sonarEndMarker('antigravity-prompt-secrets'),
-            content: PROMPT_SECRETS_BODY,
-          }),
-        ),
+        wholeFile({
+          id: 'prompt-secrets-rule-file',
+          displayName: 'Antigravity prompt-secrets workspace rule',
+          scope: 'project',
+          targetPath: resolvePromptSecretsRulePath,
+          content: () =>
+            buildAntigravityAlwaysOnRule(PROMPT_SECRETS_RULE_DESCRIPTION, PROMPT_SECRETS_BODY),
+          managedMarker: PROMPT_SECRETS_RULE_MARKER,
+        }),
+        textSnippet({
+          id: 'prompt-secrets-gemini-snippet',
+          displayName: 'Antigravity prompt-secrets global rules',
+          scope: 'global',
+          targetPath: () => ANTIGRAVITY_GLOBAL_GEMINI_MD,
+          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
+          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
+          content: PROMPT_SECRETS_BODY,
+        }),
       ],
       legacyCleanups: [
         wholeFileRemover({

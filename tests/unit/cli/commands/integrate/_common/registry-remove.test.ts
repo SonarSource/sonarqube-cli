@@ -154,6 +154,32 @@ describe('declarative integration framework - remove and undo', () => {
       expect(await resource.remove(context)).toBeUndefined();
     });
 
+    it('skips scoped resources when install scope does not match', async () => {
+      const state = getDefaultState('test');
+      const filePath = join(tempDir, 'project-scoped.txt');
+      const projectContext = makeContext(state, tempDir);
+      const resource = wholeFile({
+        id: 'project-file',
+        scope: 'project',
+        targetPath: filePath,
+        content: 'project content',
+      });
+      const feature: FeatureDeclaration = {
+        id: 'scoped-feature',
+        displayName: 'Scoped feature',
+        resources: [resource],
+      };
+
+      await resource.apply(projectContext);
+      expect(existsSync(filePath)).toBe(true);
+
+      await installer.removeFeature({ ...projectContext, scope: 'global' }, feature);
+      expect(existsSync(filePath)).toBe(true);
+
+      await installer.removeFeature(projectContext, feature);
+      expect(existsSync(filePath)).toBe(false);
+    });
+
     it('json-patch: removes keys added by removePatch', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);

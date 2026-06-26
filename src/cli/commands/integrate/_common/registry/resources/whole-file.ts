@@ -20,6 +20,7 @@
 
 import { rm } from 'node:fs/promises';
 
+import type { IntegrationScope } from '../../../../../../lib/state';
 import { CommandFailedError } from '../../../../_common/error';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
@@ -64,6 +65,7 @@ export class WholeFileResource implements ResourceDeclaration {
   readonly displayName?: string;
   readonly resourceType = 'whole-file';
   readonly version?: string;
+  readonly scope?: IntegrationScope;
 
   private readonly remover: RemovableResource;
 
@@ -71,6 +73,7 @@ export class WholeFileResource implements ResourceDeclaration {
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
+    this.scope = options.scope;
     this.remover = new WholeFileRemover({
       id: options.id,
       version: options.version,

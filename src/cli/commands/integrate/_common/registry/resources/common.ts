@@ -23,6 +23,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { EOL } from 'node:os';
 import { dirname } from 'node:path';
 
+import type { IntegrationScope } from '../../../../../../lib/state';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 
 const EXECUTABLE_FILE_MODE = 0o755;
@@ -33,6 +34,8 @@ export interface BaseResourceOptions {
   id: string;
   displayName?: string;
   version?: string;
+  /** When set, apply/remove/isApplied only run when {@link IntegrationContext.scope} matches. */
+  scope?: IntegrationScope;
 }
 
 export interface ResourceIdentity {
@@ -47,8 +50,17 @@ export interface RemovableResource {
 
 export interface ResourceDeclaration extends ResourceIdentity, RemovableResource {
   displayName?: string;
+  scope?: IntegrationScope;
   apply: (context: IntegrationContext) => MaybePromise<AppliedResource>;
   isApplied: (context: IntegrationContext) => MaybePromise<boolean>;
+}
+
+/** True when the resource has no scope constraint or the install scope matches. */
+export function resourceAppliesInScope(
+  context: IntegrationContext,
+  resource: ResourceDeclaration,
+): boolean {
+  return resource.scope === undefined || resource.scope === context.scope;
 }
 
 export async function resolvePath(
@@ -159,6 +171,7 @@ export abstract class PatchResource<
   readonly id: string;
   readonly displayName?: string;
   readonly version?: string;
+  readonly scope?: IntegrationScope;
   abstract readonly resourceType: string;
 
   constructor(
@@ -168,6 +181,7 @@ export abstract class PatchResource<
     this.id = options.id;
     this.displayName = options.displayName;
     this.version = options.version;
+    this.scope = options.scope;
   }
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {

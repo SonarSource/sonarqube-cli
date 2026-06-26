@@ -26,7 +26,7 @@ export type {
   ResourceDeclaration,
   ResourceIdentity,
 } from './common';
-export { RemoveablePatchResource } from './common';
+export { RemoveablePatchResource, resourceAppliesInScope } from './common';
 export {
   jsonPatch,
   type JsonPatchOptions,
