@@ -22,13 +22,11 @@
 
 import { basename, dirname } from 'node:path';
 
-import type { SqaaIssue } from '../../../sonarqube/client';
-import { print, text } from '../../../ui';
+import type { SqaaAnalysisDepth, SqaaIssue } from '../../../sonarqube/client';
+import { text } from '../../../ui';
 import { bold, dim, green, red, softBlue, yellow } from '../../../ui/colors.js';
 import { CliError } from '../_common/error.js';
-import type { FileFailure, FileResult, FileSuccess, RunTally } from './sqaa-analysis';
-import { toRelativePosixPath } from './sqaa-api';
-import type { IgnoredFile } from './sqaa-changeset';
+import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis';
 import { SQAA_FAILURE_HEADING } from './sqaa-errors.js';
 
 /** When analyzed file count exceeds this, clean files collapse to one summary row. */
@@ -73,19 +71,6 @@ export function renderFailureDetailLines(error: Error, colored: boolean): string
   return lines;
 }
 
-export interface SqaaJsonReport {
-  files: Array<{
-    path: string;
-    issues: SqaaIssue[];
-    errors?: Array<{ code: string; message: string }> | null;
-  }>;
-  ignored: Array<{ path: string; reason: 'binary' | 'oversized' }>;
-  failures: Array<{ path: string; message: string }>;
-  /** Files in the change set that were never sent to the API (fail-fast skipped them). */
-  skipped: string[];
-  summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
-}
-
 export interface SqaaRunSummaryStats {
   filesAnalyzed: number;
   filesWithIssues: number;
@@ -93,12 +78,14 @@ export interface SqaaRunSummaryStats {
   totalIssues: number;
   totalFailures: number;
   totalErrors: number;
+  analysisDepth: SqaaAnalysisDepth;
 }
 
 export interface PrintSqaaTextReportOptions {
   tally: RunTally;
   allPaths: string[];
   ignoredPaths?: string[];
+  analysisDepth: SqaaAnalysisDepth;
 }
 
 type PathParts = { dir: string; base: string };
@@ -238,7 +225,11 @@ function buildResultMap(results: FileResult[]): Map<string, FileResult> {
   return new Map(results.map((r) => [r.filePath, r]));
 }
 
-export function computeRunSummaryStats(tally: RunTally, allPaths: string[]): SqaaRunSummaryStats {
+export function computeRunSummaryStats(
+  tally: RunTally,
+  allPaths: string[],
+  analysisDepth: SqaaAnalysisDepth,
+): SqaaRunSummaryStats {
   let filesWithIssues = 0;
   let filesWithErrors = 0;
   for (const result of tally.allResults) {
@@ -257,7 +248,13 @@ export function computeRunSummaryStats(tally: RunTally, allPaths: string[]): Sqa
     totalIssues: tally.totalIssues,
     totalFailures: tally.totalFailures,
     totalErrors: tally.totalErrors,
+    analysisDepth,
   };
+}
+
+function formatAnalysisDepthSuffix(depth: SqaaAnalysisDepth, colored: boolean): string {
+  const label = ` · ${depth} analysis`;
+  return colored ? dim(label) : label;
 }
 
 function formatSqaaRunSummary(stats: SqaaRunSummaryStats, colored: boolean): string {
@@ -271,7 +268,7 @@ function formatSqaaRunSummary(stats: SqaaRunSummaryStats, colored: boolean): str
   const hasErrors = stats.totalErrors > 0;
 
   if (!hasFailures && !hasIssues && !hasErrors) {
-    return `${okIcon} ${lbl('No issues found')} · ${num(stats.filesAnalyzed)} ${lbl('files analyzed')}`;
+    return `${okIcon} ${lbl('No issues found')} · ${num(stats.filesAnalyzed)} ${lbl('files analyzed')}${formatAnalysisDepthSuffix(stats.analysisDepth, colored)}`;
   }
 
   const parts: string[] = [`${num(stats.filesAnalyzed)} ${lbl('files analyzed')}`];
@@ -295,7 +292,7 @@ function formatSqaaRunSummary(stats: SqaaRunSummaryStats, colored: boolean): str
     );
   }
 
-  return parts.join(' · ');
+  return `${parts.join(' · ')}${formatAnalysisDepthSuffix(stats.analysisDepth, colored)}`;
 }
 
 /** Plain-text run summary footer. */
@@ -455,8 +452,8 @@ function renderChangeSetReportLines(
 
 /** Unified change-set text report (file rows, inline issues, summary footer). */
 export function printSqaaTextReport(options: PrintSqaaTextReportOptions): void {
-  const { tally, allPaths, ignoredPaths = [] } = options;
-  const stats = computeRunSummaryStats(tally, allPaths);
+  const { tally, allPaths, ignoredPaths = [], analysisDepth } = options;
+  const stats = computeRunSummaryStats(tally, allPaths, analysisDepth);
 
   for (const line of renderChangeSetReportLines(tally, allPaths, ignoredPaths, true)) {
     text(line);
@@ -468,86 +465,18 @@ export function printSqaaTextReport(options: PrintSqaaTextReportOptions): void {
 }
 
 /** Single `--file` failure: same ✗ row + summary footer as change-set analysis. */
-export function printSingleFileTextFailure(filePath: string, error: Error): void {
+export function printSingleFileTextFailure(
+  filePath: string,
+  error: Error,
+  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
+): void {
   const tally: RunTally = {
     allResults: [{ file: filePath, filePath, failure: error }],
     totalIssues: 0,
     totalErrors: 0,
     totalFailures: 1,
   };
-  printSqaaTextReport({ tally, allPaths: [filePath] });
-}
-
-export function makeReport(
-  files: SqaaJsonReport['files'],
-  failures: SqaaJsonReport['failures'],
-  ignored: SqaaJsonReport['ignored'] = [],
-): SqaaJsonReport {
-  return {
-    files,
-    ignored,
-    failures,
-    skipped: [],
-    summary: {
-      totalIssues: files.reduce((n, f) => n + f.issues.length, 0),
-      totalFailures: failures.length,
-      totalSkipped: 0,
-    },
-  };
-}
-
-export function singleFileSuccessReport(
-  filePath: string,
-  issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
-): SqaaJsonReport {
-  return makeReport([{ path: filePath, issues, errors }], []);
-}
-
-export function singleFileFailureReport(filePath: string, message: string): SqaaJsonReport {
-  return makeReport([], [{ path: filePath, message }]);
-}
-
-export function buildJsonReport(
-  tally: RunTally,
-  ignored: IgnoredFile[],
-  allPaths: string[],
-  pathBase?: string,
-): SqaaJsonReport {
-  const files = tally.allResults
-    .filter((r): r is FileSuccess => !('failure' in r))
-    .map((r) => ({ path: r.filePath, issues: r.issues, errors: r.errors }));
-
-  const failures = tally.allResults
-    .filter((r): r is FileFailure => 'failure' in r)
-    .map((r) => ({ path: r.filePath, message: r.failure.message }));
-
-  const processedPaths = new Set<string>(tally.allResults.map((r) => r.filePath));
-  const skipped = allPaths.filter((p) => !processedPaths.has(p));
-
-  return {
-    files,
-    ignored: ignored.map((f) => ({
-      path: toRelativePosixPath(f.path, pathBase),
-      reason: f.reason,
-    })),
-    failures,
-    skipped,
-    summary: {
-      totalIssues: tally.totalIssues,
-      totalFailures: tally.totalFailures,
-      totalSkipped: skipped.length,
-    },
-  };
-}
-
-export function printJsonReport(
-  tally: RunTally,
-  ignored: IgnoredFile[],
-  allPaths: string[],
-  pathBase?: string,
-): void {
-  print(JSON.stringify(buildJsonReport(tally, ignored, allPaths, pathBase), null, 2));
+  printSqaaTextReport({ tally, allPaths: [filePath], analysisDepth });
 }
 
 export function applyExitCode(stats: SqaaRunSummaryStats): void;
@@ -570,6 +499,7 @@ export function displaySqaaResults(
   issues: SqaaIssue[],
   errors: Array<{ code: string; message: string }> | null | undefined,
   filePath: string,
+  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
 ): number {
   const result: FileSuccess = {
     file: filePath,
@@ -597,6 +527,7 @@ export function displaySqaaResults(
     totalIssues: issues.length,
     totalFailures: 0,
     totalErrors: errors?.length ?? 0,
+    analysisDepth,
   };
 
   text('');
@@ -605,3 +536,12 @@ export function displaySqaaResults(
 
   return issues.length;
 }
+
+export type { SqaaJsonReport } from './sqaa-display-json.js';
+export {
+  buildJsonReport,
+  makeReport,
+  printJsonReport,
+  singleFileFailureReport,
+  singleFileSuccessReport,
+} from './sqaa-display-json.js';

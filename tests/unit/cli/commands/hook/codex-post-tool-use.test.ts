@@ -43,6 +43,7 @@ describe('codexPostToolUse', () => {
       failures: [],
       skipped: [],
       summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
+      analysisDepth: 'STANDARD',
     });
   });
 
@@ -56,7 +57,7 @@ describe('codexPostToolUse', () => {
     await codexPostToolUse({ project: 'my-project' });
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
-      { project: 'my-project', force: true, format: 'json' },
+      { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
       expect.objectContaining({ connectionType: 'cloud' }),
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -78,6 +79,7 @@ describe('codexPostToolUse', () => {
       failures: [],
       skipped: [],
       summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
+      analysisDepth: 'STANDARD',
     });
 
     await codexPostToolUse({ project: 'my-project' });
@@ -106,6 +108,7 @@ describe('codexPostToolUse', () => {
       failures: [],
       skipped: [],
       summary: { totalIssues: 1, totalFailures: 0, totalSkipped: 0 },
+      analysisDepth: 'STANDARD',
     });
 
     await codexPostToolUse({ project: 'my-project' });
@@ -143,6 +146,7 @@ describe('codexPostToolUse', () => {
       failures: [],
       skipped: [],
       summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
+      analysisDepth: 'STANDARD',
     });
 
     await codexPostToolUse({ project: 'my-project' });

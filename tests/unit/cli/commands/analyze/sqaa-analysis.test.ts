@@ -176,6 +176,8 @@ describe('runAnalyses partial 413', () => {
       projectKey: 'proj',
       branch: undefined,
       progress,
+      analysisDepth: 'DEEP',
+      displayAnalysisDepth: 'DEEP',
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -206,6 +208,8 @@ describe('runAnalyses partial 413', () => {
       projectKey: 'proj',
       branch: undefined,
       progress,
+      analysisDepth: 'DEEP',
+      displayAnalysisDepth: 'DEEP',
     });
 
     expect(tally.totalFailures).toBe(1);

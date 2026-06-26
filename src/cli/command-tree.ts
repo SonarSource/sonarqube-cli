@@ -50,6 +50,8 @@ import {
   type AnalyzeSqaaOptions,
   VALID_FORMATS as SQAA_FORMATS,
 } from './commands/analyze/sqaa';
+import { SQAA_DEPTH_CHOICES } from './commands/analyze/sqaa-depth';
+import { collectSqaaFileOption } from './commands/analyze/sqaa-file-arg';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './commands/api/api';
 import { authLogin, type AuthLoginOptions } from './commands/auth/login';
 import { authLogout } from './commands/auth/logout';
@@ -380,11 +382,20 @@ const sqaaFormatOption = new Option('--format <format>', 'Output format')
   .choices(SQAA_FORMATS)
   .default('text');
 
+const sqaaDepthOption = new Option(
+  '--depth <depth>',
+  'Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.',
+).choices(SQAA_DEPTH_CHOICES);
+
 // Options shared between the bare `analyze` command and its `agentic` subcommand.
 // `--branch` is intentionally excluded from the bare command.
 function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
   return cmd
-    .option('--file <file>', 'Analyze a single file (skips change set detection)')
+    .option(
+      '--file <path>',
+      'Analyze specific file(s) instead of the git change set (repeatable)',
+      collectSqaaFileOption,
+    )
     .option('--staged', 'Analyze staged files only (git diff --cached)')
     .option('--base <ref>', 'Analyze files changed vs a branch or ref (e.g. main)')
     .option(
@@ -392,6 +403,7 @@ function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
       'SonarQube Cloud project key (overrides auto-detected project)',
     )
     .option('--force', 'Skip the large change set confirmation prompt')
+    .addOption(sqaaDepthOption)
     .addOption(sqaaFormatOption);
 }
 

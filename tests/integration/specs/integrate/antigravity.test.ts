@@ -456,7 +456,8 @@ describe('integrate antigravity', () => {
         const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).toContain('# SonarQube Agentic Analysis protocol');
-        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --file`);
+        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
+        expect(body).toContain('--file');
         expect(findAntigravityFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
       },
       { timeout: 30000 },

@@ -31,9 +31,14 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks';
+import {
+  buildSqaaSectionBody,
+  sonarBeginMarker,
+  sonarEndMarker,
+} from '../_common/instructions-templates';
 import { removeJsonMcpServer, upsertJsonMcpServer } from '../_common/mcp-config';
 import type { IntegrationContext, IntegrationDeclaration } from '../_common/registry';
-import { askUser, jsonPatch, skip, wholeFile } from '../_common/registry';
+import { askUser, jsonPatch, skip, textSnippet, wholeFile } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
 import {
   getSecretPreToolTemplateUnix,
@@ -46,6 +51,7 @@ import {
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
+const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 
@@ -55,6 +61,8 @@ export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   globalSecretsHookExists?: boolean;
   installSqaaHook?: boolean;
+  /** Write end-of-turn SQAA instructions into CLAUDE.md (project scope). */
+  installSqaaInstructions?: boolean;
   installContextAugmentation?: boolean;
 }
 
@@ -159,6 +167,27 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
     },
     {
+      id: 'sqaa-instructions',
+      displayName: 'SonarQube Agentic Analysis instructions',
+      shouldInstall: ({ options }) =>
+        options.installSqaaInstructions === true ? askUser() : skip(),
+      targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
+      scope: 'project',
+      resources: [
+        textSnippet({
+          id: 'sqaa-instructions-file',
+          displayName: 'Claude SonarQube Agentic Analysis instructions',
+          targetPath: resolveClaudeMdPath,
+          startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
+          endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
+          content: (context) =>
+            buildSqaaSectionBody(
+              getRequiredStringAttr(context, 'projectKey', claudeIntegration.displayName),
+            ),
+        }),
+      ],
+    },
+    {
       id: 'mcp-server',
       displayName: 'MCP server',
       resources: [
@@ -182,6 +211,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
 
 function resolveClaudeSettingsPath(context: IntegrationContext): string {
   return join(context.targetRoot, CLAUDE_CONFIG_DIR, SETTINGS_FILE);
+}
+
+function resolveClaudeMdPath(context: IntegrationContext): string {
+  return join(context.targetRoot, CLAUDE_MD_FILE);
 }
 
 function resolveClaudeMcpConfigPath(context: IntegrationContext): string {

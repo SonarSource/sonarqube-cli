@@ -679,6 +679,183 @@ describe('analyze agentic', () => {
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses');
       expect(sqaaCalls).toHaveLength(1);
+      expect(result.stdout + result.stderr).toContain('STANDARD analysis');
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends one multi-file DEEP request when multiple --file paths are given',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+
+      const result = await harness.run(
+        `analyze agentic --project ${TEST_PROJECT} --file a.ts --file b.ts`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
+      expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(true);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBe('DEEP');
+      expect(result.stdout + result.stderr).toContain('DEEP analysis');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses STANDARD depth when change-set is run with --depth STANDARD',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      harness.cwd.writeFile('new.ts', 'const x = 1;');
+
+      const result = await harness.run(
+        `analyze agentic --project ${TEST_PROJECT} --depth STANDARD`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
+      expect(result.stdout + result.stderr).toContain('STANDARD analysis');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses STANDARD depth for multi --file when --depth STANDARD is set',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+
+      const result = await harness.run(
+        `analyze agentic --project ${TEST_PROJECT} --file a.ts --file b.ts --depth STANDARD`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
+      expect(result.stdout + result.stderr).toContain('STANDARD analysis');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses DEEP depth for single --file when --depth DEEP is set',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run(
+        `analyze agentic --project ${TEST_PROJECT} --file src/index.ts --depth DEEP`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBe('DEEP');
+      expect(result.stdout + result.stderr).toContain('DEEP analysis');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'includes analysisDepth in JSON report output',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run(
+        `analyze agentic --project ${TEST_PROJECT} --file src/index.ts --format json`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout) as { analysisDepth: string };
+      expect(report.analysisDepth).toBe('STANDARD');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects invalid --depth values',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      const result = await harness.run(`analyze agentic --project ${TEST_PROJECT} --depth QUICK`);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Allowed choices are STANDARD, DEEP');
     },
     { timeout: 15000 },
   );

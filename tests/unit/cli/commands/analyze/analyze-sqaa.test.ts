@@ -28,7 +28,8 @@ import {
   CommandFailedError,
   InvalidOptionError,
 } from '../../../../../src/cli/commands/_common/error.js';
-import { analyzeSqaa } from '../../../../../src/cli/commands/analyze/sqaa';
+import { analyzeSqaa, buildSqaaJsonReport } from '../../../../../src/cli/commands/analyze/sqaa';
+import * as changesetModule from '../../../../../src/cli/commands/analyze/sqaa-changeset';
 import * as processLib from '../../../../../src/lib/process.js';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
@@ -53,6 +54,7 @@ const FAKE_AUTH: import('../../../../../src/lib/auth-resolver.js').ResolvedAuth 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
+let statSyncSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
 let createAnalysisSpy: ReturnType<typeof spyOn>;
 let spawnProcessSpy: ReturnType<typeof spyOn>;
@@ -88,6 +90,7 @@ beforeEach(() => {
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
 
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
+  statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
 
   createAnalysisSpy = spyOn(SonarQubeClient.prototype, 'createAnalysis').mockResolvedValue({
@@ -113,6 +116,7 @@ afterEach(() => {
   loadStateSpy.mockRestore();
   saveStateSpy.mockRestore();
   existsSpy.mockRestore();
+  statSyncSpy.mockRestore();
   readFileSpy.mockRestore();
   createAnalysisSpy.mockRestore();
   spawnProcessSpy.mockRestore();
@@ -122,10 +126,12 @@ afterEach(() => {
 
 describe('analyzeSqaa: input validation', () => {
   it('throws InvalidOptionError when file does not exist', () => {
-    existsSpy.mockReturnValue(false);
+    statSyncSpy.mockReturnValue(undefined);
 
-    expect(analyzeSqaa({ file: 'nonexistent.ts' }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
-    expect(analyzeSqaa({ file: 'nonexistent.ts' }, FAKE_AUTH)).rejects.toThrow('File not found');
+    expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow(
+      InvalidOptionError,
+    );
+    expect(analyzeSqaa({ file: ['nonexistent.ts'] }, FAKE_AUTH)).rejects.toThrow('File not found');
   });
 });
 
@@ -156,7 +162,7 @@ describe('analyzeSqaa: auth resolution', () => {
     loadStateSpy.mockReturnValue(stateWithExtensionMissingProjectKey());
 
     let thrown: unknown;
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH).catch((err: unknown) => {
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH).catch((err: unknown) => {
       thrown = err;
     });
 
@@ -170,7 +176,7 @@ describe('analyzeSqaa: auth resolution', () => {
   it('skips SQAA and warns when extension has no projectKey and requireProject is false (bare analyze)', async () => {
     loadStateSpy.mockReturnValue(stateWithExtensionMissingProjectKey());
 
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH, { requireProject: false });
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH, { requireProject: false });
 
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     const output = getMockUiCalls()
@@ -184,7 +190,7 @@ describe('analyzeSqaa: auth resolution', () => {
 
 describe('analyzeSqaa: API call and result display', () => {
   it('calls client.createAnalysis with correct parameters', async () => {
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     const request = createAnalysisSpy.mock.calls[0][0];
@@ -195,7 +201,7 @@ describe('analyzeSqaa: API call and result display', () => {
   });
 
   it('does not send branchName in request when no branch is provided', async () => {
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
 
     const request = createAnalysisSpy.mock.calls[0][0];
     // branchName: null causes a 400 from the real API — must be omitted entirely
@@ -203,7 +209,7 @@ describe('analyzeSqaa: API call and result display', () => {
   });
 
   it('passes branch to client when --branch option is provided', async () => {
-    await analyzeSqaa({ file: 'src/index.ts', branch: 'feature/my-branch' }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'], branch: 'feature/my-branch' }, FAKE_AUTH);
 
     const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.branchName).toBe('feature/my-branch');
@@ -212,7 +218,7 @@ describe('analyzeSqaa: API call and result display', () => {
   it('renders per-file failure rows when a single --file analysis fails', async () => {
     createAnalysisSpy.mockRejectedValue(new Error('Network error'));
 
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     const lines = getMockUiCalls()
@@ -226,20 +232,20 @@ describe('analyzeSqaa: API call and result display', () => {
   });
 
   it('renders file row and summary footer for a clean single-file result', async () => {
-    await analyzeSqaa({ file: 'src/index.ts' }, FAKE_AUTH);
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTH);
 
     const lines = getMockUiCalls()
       .filter((c) => c.method === 'text')
       .map((c) => String(c.args[0]));
     expect(lines.some((line) => line.includes('src/index.ts'))).toBe(true);
     expect(lines.some((line) => line.includes('No issues found'))).toBe(true);
-    expect(lines.at(-1)).toContain('1 files analyzed');
+    expect(lines.at(-1)).toContain('1 files analyzed · STANDARD analysis');
   });
 });
 
 describe('analyzeSqaa: path normalization', () => {
   it('normalizes Windows-style backslash paths to forward slashes in the API request', async () => {
-    await analyzeSqaa({ file: String.raw`python\scripts\check_md_code_blocks.py` }, FAKE_AUTH);
+    await analyzeSqaa({ file: [String.raw`python\scripts\check_md_code_blocks.py`] }, FAKE_AUTH);
 
     const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.files[0].path).toBe('python/scripts/check_md_code_blocks.py');
@@ -250,8 +256,8 @@ describe('analyzeSqaa: path normalization', () => {
         ? String.raw`D:\other-project\file.ts`
         : '/other-project/file.ts';
 
-    expect(analyzeSqaa({ file: '../outside.ts' }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
-    expect(analyzeSqaa({ file: differentDrive }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
+    expect(analyzeSqaa({ file: ['../outside.ts'] }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
+    expect(analyzeSqaa({ file: [differentDrive] }, FAKE_AUTH)).rejects.toThrow(InvalidOptionError);
   });
 });
 
@@ -267,7 +273,126 @@ describe('analyzeSqaa: explicit --project option', () => {
     };
 
     expect(
-      analyzeSqaa({ file: 'src/index.ts', project: 'my-project' }, onPremiseAuth),
+      analyzeSqaa({ file: ['src/index.ts'], project: 'my-project' }, onPremiseAuth),
     ).rejects.toThrow(CommandFailedError);
+  });
+});
+
+describe('buildSqaaJsonReport', () => {
+  it('returns a single-file JSON report with forcedDepth STANDARD', async () => {
+    const report = await buildSqaaJsonReport(
+      { file: ['src/index.ts'], forcedDepth: 'STANDARD' },
+      FAKE_AUTH,
+    );
+
+    expect(report).not.toBeNull();
+    expect(report?.analysisDepth).toBe('STANDARD');
+    expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBeUndefined();
+  });
+
+  it('defaults multi-file reports to DEEP analysisDepth', async () => {
+    const report = await buildSqaaJsonReport({ file: ['src/a.ts', 'src/b.ts'] }, FAKE_AUTH);
+
+    expect(report).not.toBeNull();
+    expect(report?.analysisDepth).toBe('DEEP');
+    expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
+  });
+
+  it('returns null when SQAA is unavailable (non-Cloud)', async () => {
+    const onPremiseAuth = {
+      token: TEST_TOKEN,
+      serverUrl: 'https://mysonar.company.com',
+      orgKey: TEST_ORG,
+      connectionType: 'on-premise' as const,
+    };
+
+    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, onPremiseAuth);
+    expect(report).toBeNull();
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns a failure entry when the API call fails', async () => {
+    createAnalysisSpy.mockRejectedValue(new Error('Network error'));
+
+    const report = await buildSqaaJsonReport({ file: ['src/index.ts'] }, FAKE_AUTH);
+
+    expect(report?.failures).toHaveLength(1);
+    expect(report?.failures[0].message).toContain('Network error');
+  });
+
+  it('throws InvalidOptionError for invalid --depth', () => {
+    expect(
+      buildSqaaJsonReport({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH),
+    ).rejects.toThrow(InvalidOptionError);
+  });
+});
+
+describe('analyzeSqaa: depth option', () => {
+  it('throws InvalidOptionError for invalid --depth', () => {
+    expect(analyzeSqaa({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTH)).rejects.toThrow(
+      InvalidOptionError,
+    );
+  });
+
+  it('sends DEEP on the wire when --depth DEEP is set for a single file', async () => {
+    await analyzeSqaa({ file: ['src/index.ts'], depth: 'DEEP' }, FAKE_AUTH);
+
+    expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
+  });
+});
+
+describe('analyzeSqaa: change-set mode', () => {
+  let resolveChangeSetSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    resolveChangeSetSpy = spyOn(changesetModule, 'resolveChangeSet');
+  });
+
+  afterEach(() => {
+    resolveChangeSetSpy.mockRestore();
+  });
+
+  it('reports when the change set is empty', async () => {
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [],
+      ignored: [],
+      repoRoot: process.cwd(),
+    });
+
+    await analyzeSqaa({ staged: true }, FAKE_AUTH);
+
+    const output = getMockUiCalls()
+      .map((c) => String(c.args[0]))
+      .join('\n');
+    expect(output).toContain('no files in the change set to analyze');
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
+  });
+
+  it('buildSqaaJsonReport returns an empty report when the change set has no analyzable files', async () => {
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [],
+      ignored: [{ path: 'large.bin', reason: 'binary' as const }],
+      repoRoot: process.cwd(),
+    });
+
+    const report = await buildSqaaJsonReport({ staged: true }, FAKE_AUTH);
+
+    expect(report?.files).toHaveLength(0);
+    expect(report?.ignored).toHaveLength(1);
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
+  });
+
+  it('analyzes files from the change set when present', async () => {
+    const filePath = `${process.cwd()}/src/index.ts`;
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [filePath],
+      ignored: [],
+      repoRoot: process.cwd(),
+    });
+
+    await analyzeSqaa({ staged: true }, FAKE_AUTH);
+
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
   });
 });
