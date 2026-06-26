@@ -384,8 +384,8 @@ const sqaaFormatOption = new Option('--format <format>', 'Output format')
 
 const sqaaDepthOption = new Option(
   '--depth <depth>',
-  `Analysis depth: ${SQAA_DEPTH_CHOICES.join(' (fast) or ')} (cross-file). Defaults depend on scope.`,
-);
+  'Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.',
+).choices(SQAA_DEPTH_CHOICES);
 
 // Options shared between the bare `analyze` command and its `agentic` subcommand.
 // `--branch` is intentionally excluded from the bare command.
