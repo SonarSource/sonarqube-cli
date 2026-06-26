@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { buildLocalBinaryName } from '../../../../src/cli/commands/_common/install/secrets.js';
+import { claudeIntegration } from '../../../../src/cli/commands/integrate/claude/declaration.js';
 import { detectPlatform } from '../../../../src/lib/platform-detector.js';
 import {
   hookScriptName,
@@ -36,7 +37,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
-import { findInstalledFeature } from './state-helpers';
+import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 function findClaudeFeature(harness: TestHarness, featureId: string, scope?: string) {
   return findInstalledFeature(harness, 'claude-code', featureId, scope);
@@ -2142,6 +2143,238 @@ describe('integrate claude — interactive feature selection', () => {
       expect(output).toContain('Could not determine SonarQube Agentic Analysis entitlement');
       expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
       expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+});
+
+// ─── Keep / remove already-installed features on re-run ───────────────────────
+
+describe('integrate claude — keep/remove already-installed features', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  function seedInstalledFeatures(): void {
+    harness
+      .state()
+      .withInstalledIntegrationFeature(
+        claudeIntegration,
+        'sonar-secrets-hooks',
+        'project',
+        harness.cwd.path,
+      )
+      .withInstalledIntegrationFeature(
+        claudeIntegration,
+        'mcp-server',
+        'project',
+        harness.cwd.path,
+      );
+  }
+
+  it(
+    'offers "Keep?" for installed features and uninstalls the one the user declines',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      seedInstalledFeatures();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      // Project scope, keep the hooks (default Yes), decline the MCP server ('n')
+      // then confirm removal (default Yes).
+      const result = await harness.run('integrate claude', {
+        stdinChunks: ['\r', '\r', 'n', '\r'],
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain('MCP server (currently installed)  Keep?');
+      expect(output).toContain('Proceed with removal?');
+      expect(output).toContain('Removing MCP server');
+      expect(output).toContain('Removed');
+
+      // MCP server is gone from state; the kept secret scanning hooks remain.
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeUndefined();
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'keeps an installed feature untouched when the user declines removal',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      seedInstalledFeatures();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      // Project scope, keep the hooks, decline MCP keep ('n') then decline removal ('n').
+      const result = await harness.run('integrate claude', {
+        stdinChunks: ['\r', '\r', 'n', 'n'],
+      });
+
+      expect(result.exitCode).toBe(0);
+      // Declining removal leaves the MCP server installed.
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'uninstalls the sonar-secrets binary when the removed feature was its last referrer',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      seedInstalledFeatures();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      // Project scope, decline keeping the secrets hooks ('n') then confirm removal
+      // (default Yes); keep the MCP server (default Yes). No other feature references
+      // sonar-secrets, so the binary is orphaned and uninstalled.
+      const result = await harness.run('integrate claude', {
+        stdinChunks: ['\r', 'n', '\r', '\r'],
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain('secret scanning hooks (currently installed)  Keep?');
+      expect(output).toContain('secret scanning hooks will be removed.');
+
+      // The feature is gone and, being the last referrer, so is the binary.
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+      const state = harness.stateJsonFile.asJson();
+      expect(
+        state.dependencies.installed.find((dep: { id: string }) => dep.id === 'sonar-secrets'),
+      ).toBeUndefined();
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        false,
+      );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'keeps the sonar-secrets binary when another project still references it',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      seedInstalledFeatures();
+      // A second project on this machine also has the secrets hooks installed, so it
+      // shares the same sonar-secrets binary.
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          claudeIntegration,
+          'sonar-secrets-hooks',
+          'project',
+          `${harness.cwd.path}-other-project`,
+        );
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      // Project scope, decline keeping this project's secrets hooks ('n') then confirm
+      // removal (default Yes); keep the MCP server (default Yes).
+      const result = await harness.run('integrate claude', {
+        stdinChunks: ['\r', 'n', '\r', '\r'],
+      });
+
+      expect(result.exitCode).toBe(0);
+
+      // This project's feature is removed, but the other project's entry survives, so
+      // the binary is neither pruned from state nor deleted from disk.
+      const state = harness.stateJsonFile.asJson();
+      const claude = state.integrations.installed.find(
+        (integration: { integrationId: string }) => integration.integrationId === 'claude-code',
+      );
+      const remainingSecretsHooks = claude.features.filter(
+        (feature: { featureId: string }) => feature.featureId === 'sonar-secrets-hooks',
+      );
+      expect(remainingSecretsHooks).toHaveLength(1);
+      expect(remainingSecretsHooks[0].targetRoot).toBe(`${harness.cwd.path}-other-project`);
+      expect(
+        state.dependencies.installed.find((dep: { id: string }) => dep.id === 'sonar-secrets'),
+      ).toBeDefined();
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        true,
+      );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'keeps installed features without prompting or removing in non-interactive mode',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      seedInstalledFeatures();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      // Non-interactive runs never offer keep/remove and never uninstall.
+      expect(output).not.toContain('Keep?');
+      expect(output).not.toContain('will be removed.');
+      expect(output).not.toContain('Removing');
+
+      // Both installed features survive untouched.
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'drops the integration entry from state when its last feature is removed',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      seedInstalledFeatures();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      // Project scope, then decline + confirm removal for both installed features
+      // (secret scanning hooks, then MCP server). No feature remains afterwards.
+      const result = await harness.run('integrate claude', {
+        stdinChunks: ['\r', 'n', '\r', 'n', '\r'],
+      });
+
+      expect(result.exitCode).toBe(0);
+
+      // With no features left, the whole claude-code integration entry is pruned,
+      // and the orphaned sonar-secrets binary is uninstalled with it.
+      expect(getInstalledIntegration(harness, 'claude-code')).toBeUndefined();
+      const state = harness.stateJsonFile.asJson();
+      expect(
+        state.dependencies.installed.find((dep: { id: string }) => dep.id === 'sonar-secrets'),
+      ).toBeUndefined();
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        false,
+      );
     },
     { timeout: 30000 },
   );

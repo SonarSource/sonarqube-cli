@@ -232,6 +232,7 @@ describe('generic integration installer', () => {
         path: '/opt/sonar/shared-binary',
       }),
       isInstalled: () => false,
+      remove: () => {},
     };
     const integration = registerIntegration(registry, 'installer-resolved-dependency', [
       {
@@ -358,6 +359,7 @@ describe('generic integration installer', () => {
         path: '/opt/sonar/unnamed-binary',
       }),
       isInstalled: () => true,
+      remove: () => {},
     };
     const integration = registerIntegration(registry, 'installer-skip-unnamed-dependency', [
       {

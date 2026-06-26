@@ -38,6 +38,7 @@ await mock.module('../../../../../../src/cli/commands/_common/install/binary', (
 }));
 
 const {
+  findInstalledFeature,
   IntegrationInstaller,
   jsonPatch,
   textSnippetRemover,
@@ -469,7 +470,7 @@ describe('declarative integration framework - resources and state recording', ()
     ).toBe(true);
 
     const installed = await applyAndRecord(installer, context, integration, feature);
-    const found = installer.findInstalledFeature(state, context, integration, feature);
+    const found = findInstalledFeature(state, context, integration, feature);
     resolveBinaryPathSpy.mockReturnValue(join(tempDir, 'bin', 'sonar-secrets'));
 
     expect(found?.featureId).toBe(installed.featureId);

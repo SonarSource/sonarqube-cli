@@ -31,6 +31,7 @@ import type {
   FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
+  IntegrationInvocation,
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import { isContainerIntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry/types.ts';
 import { getDefaultState, type InstalledIntegrationFeature } from '../../../../../../src/lib/state';
@@ -42,12 +43,15 @@ void mock.module('../../../../../../src/cli/commands/_common/install/binary', ()
 
 const {
   askUser,
+  buildApplications,
   createIntegrationRegistry,
   install,
   IntegrationInstaller,
   IntegrationRegistry,
   isFeatureContainer,
   jsonPatch,
+  selectFeatures,
+  selectFeaturesForInvocation,
   skip,
   SonarSourceBinary,
   sonarSourceBinary,
@@ -59,6 +63,23 @@ const {
 } = await import('../../../../../../src/cli/commands/integrate/_common/registry');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
+
+/** Build applications for the invocation, then run interactive selection (mirrors install-integration). */
+async function selectForInvocation<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  invocation: IntegrationInvocation<TOptions>,
+) {
+  const applications = await buildApplications(invocation, integration.features);
+  return selectFeaturesForInvocation(integration, invocation, applications);
+}
+
+/** Resolve an integration's features into applications for the by-id selectFeatures tests. */
+function applicationsFor<TOptions>(integration: IntegrationDeclaration<TOptions>) {
+  return buildApplications(
+    { options: {} as TOptions, targetRoot: '', scope: 'project', state: getDefaultState('test') },
+    integration.features,
+  );
+}
 
 const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } =
   await import('../../../../../../src/ui');
@@ -313,7 +334,7 @@ describe('declarative integration framework', () => {
     };
     const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
 
-    const withoutSca = await installer.selectFeaturesForInvocation(integration, {
+    const withoutSca = await selectForInvocation(integration, {
       options: {},
       targetRoot: '/tmp',
       scope: 'project',
@@ -321,10 +342,12 @@ describe('declarative integration framework', () => {
       state: getDefaultState('test'),
     });
     expect(
-      (withoutSca[0] as FeatureContainer<{ enableSca?: boolean }>).subfeatures.map((s) => s.id),
+      (
+        withoutSca.toInstall[0].feature as FeatureContainer<{ enableSca?: boolean }>
+      ).subfeatures.map((s) => s.id),
     ).toEqual(['mandatory']);
 
-    const withSca = await installer.selectFeaturesForInvocation(integration, {
+    const withSca = await selectForInvocation(integration, {
       options: { enableSca: true },
       targetRoot: '/tmp',
       scope: 'project',
@@ -332,7 +355,9 @@ describe('declarative integration framework', () => {
       state: getDefaultState('test'),
     });
     expect(
-      (withSca[0] as FeatureContainer<{ enableSca?: boolean }>).subfeatures.map((s) => s.id),
+      (withSca.toInstall[0].feature as FeatureContainer<{ enableSca?: boolean }>).subfeatures.map(
+        (s) => s.id,
+      ),
     ).toEqual(['mandatory', 'optional']);
   });
 
@@ -398,7 +423,7 @@ describe('declarative integration framework', () => {
     queueMockResponse(true); // accept 'opted-in'
     queueMockResponse(false); // decline 'declined'
 
-    const result = await installer.selectFeaturesForInvocation(integration, {
+    const result = await selectForInvocation(integration, {
       options: {},
       targetRoot: '/tmp',
       scope: 'project',
@@ -406,7 +431,8 @@ describe('declarative integration framework', () => {
       state: getDefaultState('test'),
     });
 
-    const selected = (result[0] as FeatureContainer<Record<string, unknown>>).subfeatures;
+    const selected = (result.toInstall[0].feature as FeatureContainer<Record<string, unknown>>)
+      .subfeatures;
     expect(selected).toHaveLength(1);
     expect(selected[0]?.id).toBe('opted-in');
     const confirmCalls = getMockUiCalls().filter((c) => c.method === 'confirmPrompt');
@@ -434,7 +460,7 @@ describe('declarative integration framework', () => {
 
     let caughtError: unknown;
     try {
-      await installer.selectFeaturesForInvocation(integration, {
+      await selectForInvocation(integration, {
         options: {},
         targetRoot: '/tmp',
         scope: 'project',
@@ -522,23 +548,26 @@ describe('declarative integration framework', () => {
     expect(registry.list()).toEqual([first, second]);
   });
 
-  it('selects declared features and rejects unknown feature ids', () => {
+  it('selects declared features and rejects unknown feature ids', async () => {
     const integration = makeIntegration({
       features: [
         { id: 'one', displayName: 'One' },
         { id: 'two', displayName: 'Two' },
       ],
     });
+    const applications = await applicationsFor(integration);
 
     expect(
-      installer.selectFeatures(integration, ['two', 'one']).map((feature) => feature.id),
+      selectFeatures(integration, applications, ['two', 'one']).toInstall.map(
+        (application) => application.feature.id,
+      ),
     ).toEqual(['two', 'one']);
-    expect(() => installer.selectFeatures(integration, ['missing'])).toThrow(
+    expect(() => selectFeatures(integration, applications, ['missing'])).toThrow(
       'Unknown feature test-integration.missing',
     );
   });
 
-  it('selectFeatures filters container subfeatures to the requested ids', () => {
+  it('selectFeatures filters container subfeatures to the requested ids', async () => {
     const container: FeatureContainer = {
       id: 'container',
       displayName: 'Container',
@@ -550,24 +579,29 @@ describe('declarative integration framework', () => {
       defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
+    const applications = await applicationsFor(integration);
 
-    const [selected] = installer.selectFeatures(integration, [
+    const [selected] = selectFeatures(integration, applications, [
       { featureId: 'container', subfeatureIds: ['sub-c', 'sub-a'] },
+    ]).toInstall;
+    expect((selected.feature as FeatureContainer).subfeatures.map((s) => s.id)).toEqual([
+      'sub-a',
+      'sub-c',
     ]);
-    expect((selected as FeatureContainer).subfeatures.map((s) => s.id)).toEqual(['sub-a', 'sub-c']);
   });
 
-  it('selectFeatures rejects subfeatureIds for a non-container feature', () => {
+  it('selectFeatures rejects subfeatureIds for a non-container feature', async () => {
     const integration = makeIntegration({
       features: [{ id: 'plain', displayName: 'Plain' }],
     });
+    const applications = await applicationsFor(integration);
 
     expect(() =>
-      installer.selectFeatures(integration, [{ featureId: 'plain', subfeatureIds: ['sub'] }]),
+      selectFeatures(integration, applications, [{ featureId: 'plain', subfeatureIds: ['sub'] }]),
     ).toThrow('Feature test-integration.plain is not a container');
   });
 
-  it('selectFeatures rejects unknown subfeature ids on a container', () => {
+  it('selectFeatures rejects unknown subfeature ids on a container', async () => {
     const container: FeatureContainer = {
       id: 'container',
       displayName: 'Container',
@@ -575,9 +609,10 @@ describe('declarative integration framework', () => {
       defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
+    const applications = await applicationsFor(integration);
 
     expect(() =>
-      installer.selectFeatures(integration, [
+      selectFeatures(integration, applications, [
         { featureId: 'container', subfeatureIds: ['valid', 'typo'] },
       ]),
     ).toThrow('Unknown subfeature(s) test-integration.container.typo');
@@ -614,23 +649,23 @@ describe('declarative integration framework', () => {
 
     expect(
       (
-        await installer.selectFeaturesForInvocation(integration, {
+        await selectForInvocation(integration, {
           options: {},
           targetRoot: tempDir,
           scope: 'project',
           state: getDefaultState('test'),
         })
-      ).map((feature) => feature.id),
+      ).toInstall.map((application) => application.feature.id),
     ).toEqual(['pre-commit', 'always']);
     expect(
       (
-        await installer.selectFeaturesForInvocation(integration, {
+        await selectForInvocation(integration, {
           options: { hook: 'pre-push' },
           targetRoot: tempDir,
           scope: 'project',
           state: getDefaultState('test'),
         })
-      ).map((feature) => feature.id),
+      ).toInstall.map((application) => application.feature.id),
     ).toEqual(['pre-push', 'always']);
   });
 
@@ -643,14 +678,14 @@ describe('declarative integration framework', () => {
       ],
     });
 
-    const selected = await installer.selectFeaturesForInvocation(integration, {
+    const selected = await selectForInvocation(integration, {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
       state: getDefaultState('test'),
     });
 
-    expect(selected).toEqual([]);
+    expect(selected.toInstall).toEqual([]);
     expect(findMockUiCall('info', 'covered')).toBeDefined();
     expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
   });
@@ -668,14 +703,17 @@ describe('declarative integration framework', () => {
       ],
     });
 
-    const selected = await installer.selectFeaturesForInvocation(integration, {
+    const selected = await selectForInvocation(integration, {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
       state: getDefaultState('test'),
     });
 
-    expect(selected.map((feature) => feature.id)).toEqual(['with-message', 'silent']);
+    expect(selected.toInstall.map((application) => application.feature.id)).toEqual([
+      'with-message',
+      'silent',
+    ]);
     expect(findMockUiCall('discreetSuccess', 'auto-configured')).toBeDefined();
     expect(getMockUiCalls().filter((call) => call.method === 'discreetSuccess')).toHaveLength(1);
   });
@@ -695,14 +733,14 @@ describe('declarative integration framework', () => {
     queueMockResponse(true);
     queueMockResponse(false);
 
-    const selected = await installer.selectFeaturesForInvocation(integration, {
+    const selected = await selectForInvocation(integration, {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
       state: getDefaultState('test'),
     });
 
-    expect(selected.map((feature) => feature.id)).toEqual(['accepted']);
+    expect(selected.toInstall.map((application) => application.feature.id)).toEqual(['accepted']);
     const confirmCalls = getMockUiCalls().filter((call) => call.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
     expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
@@ -715,14 +753,14 @@ describe('declarative integration framework', () => {
     });
     queueMockResponse(false);
 
-    const selected = await installer.selectFeaturesForInvocation(integration, {
+    const selected = await selectForInvocation(integration, {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
       state: getDefaultState('test'),
     });
 
-    expect(selected).toEqual([]);
+    expect(selected.toInstall).toEqual([]);
     expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(1);
   });
 
@@ -735,7 +773,7 @@ describe('declarative integration framework', () => {
       ],
     });
 
-    const selected = await installer.selectFeaturesForInvocation(integration, {
+    const selected = await selectForInvocation(integration, {
       options: {},
       targetRoot: tempDir,
       scope: 'project',
@@ -743,7 +781,10 @@ describe('declarative integration framework', () => {
       state: getDefaultState('test'),
     });
 
-    expect(selected.map((feature) => feature.id)).toEqual(['asked', 'defaulted']);
+    expect(selected.toInstall.map((application) => application.feature.id)).toEqual([
+      'asked',
+      'defaulted',
+    ]);
     expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(0);
   });
 
