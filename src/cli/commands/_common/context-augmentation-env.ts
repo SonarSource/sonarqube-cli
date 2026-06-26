@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { buildSubprocessNetworkEnv } from '../../../lib/connectivity/network-config.js';
 import { INVOCATION_ID } from '../../../lib/invocation-id';
 
 export interface ContextAugmentationEnvContext {
@@ -48,7 +49,7 @@ type ContextAugmentationEnvKey =
 export function buildContextAugmentationEnv(
   context?: ContextAugmentationEnvContext,
 ): NodeJS.ProcessEnv {
-  const env = { ...process.env };
+  const env = { ...process.env, ...buildSubprocessNetworkEnv() };
   env.SONAR_CONTEXT_INVOCATION_ID = INVOCATION_ID;
   if (context === undefined) {
     return env;

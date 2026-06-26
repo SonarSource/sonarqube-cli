@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildContextAugmentationEnv } from '../../../../../src/cli/commands/_common/context-augmentation-env';
+import { clearNetworkConfigCache } from '../../../../../src/lib/connectivity/network-config';
 import { INVOCATION_ID } from '../../../../../src/lib/invocation-id';
 
 const KEYS = [
@@ -136,5 +137,30 @@ describe('buildContextAugmentationEnv', () => {
     const second = buildContextAugmentationEnv({ organization: 'my-org' });
 
     expect(first.SONAR_CONTEXT_INVOCATION_ID).toBe(second.SONAR_CONTEXT_INVOCATION_ID);
+  });
+});
+
+describe('buildContextAugmentationEnv — network env propagation', () => {
+  const CERT_PATH = '/etc/ssl/corp-ca.pem';
+  const PROXY_URL = 'https://proxy.corp.com:3128';
+
+  beforeEach(() => {
+    process.env.SONAR_CA_CERT = CERT_PATH;
+    process.env.SONAR_HTTPS_PROXY_URL = PROXY_URL;
+    clearNetworkConfigCache();
+  });
+
+  afterEach(() => {
+    delete process.env.SONAR_CA_CERT;
+    delete process.env.SONAR_HTTPS_PROXY_URL;
+    clearNetworkConfigCache();
+  });
+
+  it('injects all cert and proxy env vars into the returned env', () => {
+    const env = buildContextAugmentationEnv();
+
+    expect(env.SONAR_CA_CERT).toBe(CERT_PATH);
+    expect(env.SONAR_SECRETS_AUTH_CERT_FILE).toBe(CERT_PATH);
+    expect(env.SONAR_HTTPS_PROXY_URL).toBe(PROXY_URL);
   });
 });

@@ -154,7 +154,7 @@ describe('ScaDiscoverManifestsRunner.run', () => {
     expect(spawn).toHaveBeenCalledWith(
       '/bin/sca-from-installer',
       discoverManifestsArgs(invocation),
-      { SONAR_TOKEN: invocation.sonarToken },
+      expect.objectContaining({ SONAR_TOKEN: invocation.sonarToken }),
     );
   });
 

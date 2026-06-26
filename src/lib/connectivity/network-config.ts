@@ -150,6 +150,36 @@ export function clearNetworkConfigCache(): void {
 const DEFAULT_PORT_HTTPS = 443;
 const DEFAULT_PORT_HTTP = 80;
 
+// --- Subprocess env builder ---
+
+/**
+ * Builds env vars to inject into subprocess invocations (sonar-secrets, sca-scanner-cli, CAG).
+ * Translates the resolved network config into all known env var names each binary may read,
+ * regardless of which source (sonar-env, stored-config, generic-env) the config came from.
+ */
+export function buildSubprocessNetworkEnv(
+  config: ResolvedNetworkConfig = getNetworkConfig(),
+): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  if (config.proxy?.proxyHttps) {
+    env.SONAR_HTTPS_PROXY_URL = config.proxy.proxyHttps.getUrlWithCredentials();
+  }
+  if (config.proxy?.proxyHttp) {
+    env.SONAR_HTTP_PROXY_URL = config.proxy.proxyHttp.getUrlWithCredentials();
+  }
+  if (config.proxy?.noProxy) {
+    env.SONAR_NO_PROXY = config.proxy.noProxy;
+  }
+
+  if (config.caCert) {
+    env.SONAR_CA_CERT = config.caCert.path;
+    env.SONAR_SECRETS_AUTH_CERT_FILE = config.caCert.path; // sonar-secrets
+  }
+
+  return env;
+}
+
 // --- Fetch options builder ---
 
 export function buildFetchNetworkOptions(

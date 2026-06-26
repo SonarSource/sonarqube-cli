@@ -21,6 +21,7 @@
 import { rmSync } from 'node:fs';
 
 import { LOG_FILE } from '../../../../lib/config-constants.ts';
+import { buildSubprocessNetworkEnv } from '../../../../lib/connectivity/network-config.js';
 import logger from '../../../../lib/logger.ts';
 import type { SpawnResult } from '../../../../lib/process.ts';
 import { warn, withSpinner } from '../../../../ui';
@@ -64,7 +65,7 @@ export abstract class ScaScannerRunnerBase<T> {
   async run(invocation: ScaScannerInvocation): Promise<T> {
     const args = this.buildArgs(invocation);
     logger.debug(`sca-scanner args: ${JSON.stringify(args)}`);
-    const env = { [SONAR_TOKEN_ENV]: invocation.sonarToken };
+    const env = { ...buildSubprocessNetworkEnv(), [SONAR_TOKEN_ENV]: invocation.sonarToken };
     const binaryPath = await this.installer.install();
     try {
       const result = await withSpinner(

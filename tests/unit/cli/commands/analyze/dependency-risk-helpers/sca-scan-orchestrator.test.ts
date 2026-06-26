@@ -104,7 +104,7 @@ describe('ScaScanOrchestrator', () => {
     const [, args, env] = analyzeCall!;
     expect(args).toContain('--project-key=my-project');
     expect(args.some((arg) => arg.includes('--sonar-token'))).toBe(false);
-    expect(env).toEqual({ SONAR_TOKEN: 'test-token' });
+    expect(env).toMatchObject({ SONAR_TOKEN: 'test-token' });
   });
 
   it('skips the analyze-project scan when the manifest pre-scan throws', async () => {

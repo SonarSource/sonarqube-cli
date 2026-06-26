@@ -27,6 +27,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
   buildFetchNetworkOptions,
+  buildSubprocessNetworkEnv,
   clearNetworkConfigCache,
   resolveNetworkConfig,
 } from '../../../../src/lib/connectivity/network-config';
@@ -395,5 +396,96 @@ describe('buildFetchNetworkOptions', () => {
 
     expect(opts.proxy).toBe('https://proxy:8080');
     expect(opts.tls?.ca).toBeDefined();
+  });
+});
+
+// --- buildSubprocessNetworkEnv ---
+
+describe('buildSubprocessNetworkEnv', () => {
+  it('returns empty object when no config', () => {
+    expect(buildSubprocessNetworkEnv(makeConfig({}))).toEqual({});
+  });
+
+  it('sets SONAR_HTTPS_PROXY_URL when HTTPS proxy is configured', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' }),
+    );
+    expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://proxy:8080');
+    expect(env.SONAR_HTTP_PROXY_URL).toBeUndefined();
+  });
+
+  it('sets SONAR_HTTP_PROXY_URL when HTTP proxy is configured', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' }),
+    );
+    expect(env.SONAR_HTTP_PROXY_URL).toBe('https://proxy:8080');
+    expect(env.SONAR_HTTPS_PROXY_URL).toBeUndefined();
+  });
+
+  it('sets both proxy vars when both are configured', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({
+        SONAR_HTTPS_PROXY_URL: 'https://https-proxy:8080',
+        SONAR_HTTP_PROXY_URL: 'https://http-proxy:8080',
+      }),
+    );
+    expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://https-proxy:8080');
+    expect(env.SONAR_HTTP_PROXY_URL).toBe('https://http-proxy:8080');
+  });
+
+  it('sets SONAR_NO_PROXY when noProxy is configured', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({
+        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
+        SONAR_NO_PROXY: 'internal.corp.com',
+      }),
+    );
+    expect(env.SONAR_NO_PROXY).toBe('internal.corp.com');
+  });
+
+  it('omits SONAR_NO_PROXY when noProxy is absent', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' }),
+    );
+    expect(env.SONAR_NO_PROXY).toBeUndefined();
+  });
+
+  it('propagates proxy from generic-env source (HTTPS_PROXY)', () => {
+    const env = buildSubprocessNetworkEnv(makeConfig({ HTTPS_PROXY: 'https://proxy:3128' }));
+    expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://proxy:3128');
+  });
+
+  it('uses getUrlWithCredentials — credentials are not redacted', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://user:pass@proxy:8080' }),
+    );
+    expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://user:pass@proxy:8080');
+  });
+
+  it('sets all three cert vars to the same path when CA cert is configured', () => {
+    const env = buildSubprocessNetworkEnv(makeConfig({ SONAR_CA_CERT: '/etc/ssl/corp-ca.pem' }));
+    expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
+    expect(env.SONAR_SECRETS_AUTH_CERT_FILE).toBe('/etc/ssl/corp-ca.pem');
+  });
+
+  it('propagates cert vars from generic-env source (NODE_EXTRA_CA_CERTS)', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' }),
+    );
+    expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
+    expect(env.SONAR_SECRETS_AUTH_CERT_FILE).toBe('/etc/ssl/corp-ca.pem');
+  });
+
+  it('returns all proxy and cert vars combined', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({
+        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
+        SONAR_NO_PROXY: 'localhost',
+        SONAR_CA_CERT: '/etc/ssl/corp-ca.pem',
+      }),
+    );
+    expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://proxy:8080');
+    expect(env.SONAR_NO_PROXY).toBe('localhost');
+    expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
   });
 });

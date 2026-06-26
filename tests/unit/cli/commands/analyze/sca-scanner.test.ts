@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 import { CommandFailedError } from '../../../../../src/cli/commands/_common/error.ts';
 import { ScaScannerInstaller } from '../../../../../src/cli/commands/_common/install/sca-scanner.ts';
@@ -29,6 +29,7 @@ import {
 import { ScaScannerInvocation } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-runner-base.ts';
 import { ScaScannerSpawner } from '../../../../../src/cli/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import { LOG_FILE } from '../../../../../src/lib/config-constants.ts';
+import { clearNetworkConfigCache } from '../../../../../src/lib/connectivity/network-config.ts';
 import type { SpawnResult } from '../../../../../src/lib/process.ts';
 
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
@@ -202,9 +203,11 @@ describe('ScaScannerRunner.run', () => {
     await runner.run(invocation);
 
     expect(spawn).toHaveBeenCalledTimes(1);
-    expect(spawn).toHaveBeenCalledWith('/bin/sca-from-installer', analyzeProjectArgs(invocation), {
-      SONAR_TOKEN: invocation.sonarToken,
-    });
+    expect(spawn).toHaveBeenCalledWith(
+      '/bin/sca-from-installer',
+      analyzeProjectArgs(invocation),
+      expect.objectContaining({ SONAR_TOKEN: invocation.sonarToken }),
+    );
   });
 
   it('passes the sonar token via the SONAR_TOKEN env and never in argv', async () => {
@@ -219,7 +222,7 @@ describe('ScaScannerRunner.run', () => {
     expect(args.some((arg) => arg.includes('super-secret') || arg.includes('--sonar-token'))).toBe(
       false,
     );
-    expect(env).toEqual({ SONAR_TOKEN: 'super-secret' });
+    expect(env).toMatchObject({ SONAR_TOKEN: 'super-secret' });
   });
 });
 
@@ -270,5 +273,45 @@ describe('ScaScannerRunner.buildArgs', () => {
   it('emits --debug only when the flag is true', () => {
     expect(analyzeProjectArgs(makeInvocation({ debug: false }))).not.toContain('--debug');
     expect(analyzeProjectArgs(makeInvocation({ debug: true }))).toContain('--debug');
+  });
+});
+
+describe('ScaScannerRunner — network env propagation', () => {
+  const CERT_PATH = '/etc/ssl/corp-ca.pem';
+
+  beforeEach(() => {
+    process.env.SONAR_CA_CERT = CERT_PATH;
+    clearNetworkConfigCache();
+  });
+
+  afterEach(() => {
+    delete process.env.SONAR_CA_CERT;
+    clearNetworkConfigCache();
+  });
+
+  it('injects all cert env vars into the spawn call', async () => {
+    const spawn = mock((_path: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve({ exitCode: 0, stdout: '{}', stderr: '' }),
+    );
+    const runner = new ScaScannerRunner({ install: () => Promise.resolve('/bin/sca') }, { spawn });
+    await runner.run(makeInvocation());
+
+    const [, , env] = spawn.mock.calls[0];
+    expect(env).toMatchObject({
+      SONAR_CA_CERT: CERT_PATH,
+      SONAR_SECRETS_AUTH_CERT_FILE: CERT_PATH,
+    });
+  });
+
+  it('does not override SONAR_TOKEN with network env vars', async () => {
+    const spawn = mock((_path: string, _args: string[], _env?: Record<string, string>) =>
+      Promise.resolve({ exitCode: 0, stdout: '{}', stderr: '' }),
+    );
+    const invocation = makeInvocation({ sonarToken: 'my-token' });
+    const runner = new ScaScannerRunner({ install: () => Promise.resolve('/bin/sca') }, { spawn });
+    await runner.run(invocation);
+
+    const [, , env] = spawn.mock.calls[0];
+    expect(env).toMatchObject({ SONAR_TOKEN: 'my-token' });
   });
 });
