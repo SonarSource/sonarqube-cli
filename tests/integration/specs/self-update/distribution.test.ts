@@ -28,8 +28,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { IS_WINDOWS, TestHarness } from '../../harness';
 
 const PROJECT_ROOT = join(import.meta.dir, '../../../..');
-const NEWER_VERSION = '99.0.0';
-
 function buildHomebrewBinary(): { binaryPath: string; tempDir: string } {
   const tempDir = mkdtempSync(join(tmpdir(), 'sonar-cli-homebrew-distribution-'));
   const binaryPath = join(
@@ -96,8 +94,6 @@ describe('self-update distribution gating', () => {
   it(
     'removes self-update from homebrew builds',
     async () => {
-      harness.newFakeUpdateScriptServer(NEWER_VERSION);
-
       const helpResult = await harness.run('-h', { binaryPath: homebrewBinaryPath });
       expect(helpResult.exitCode).toBe(0);
       expect(helpResult.stdout).not.toContain('self-update');

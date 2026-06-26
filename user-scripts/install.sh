@@ -11,6 +11,11 @@ cleanup() {
 trap cleanup EXIT
 
 BASE_URL="https://binaries.sonarsource.com/Distribution/sonarqube-cli"
+# Older self-update implementations scrape a literal `version="..."` from this
+# file before executing it. Keep this compatibility marker present, but unused:
+# the real version now comes from stable.version at runtime. Release automation
+# keeps this marker aligned with the latest released CLI version.
+version="1.1.0.3122"
 
 detect_os() {
   local os
@@ -44,9 +49,9 @@ detect_platform() {
 resolve_latest_version() {
   local version
   if command -v curl &>/dev/null; then
-    version="$(curl -fsSL "$BASE_URL/latest-version.txt")"
+    version="$(curl -fsSL "$BASE_URL/stable.version")"
   elif command -v wget &>/dev/null; then
-    version="$(wget -qO- "$BASE_URL/latest-version.txt")"
+    version="$(wget -qO- "$BASE_URL/stable.version")"
   else
     echo "Error: neither curl nor wget is available. Please install one and retry." >&2
     exit 1
@@ -181,9 +186,7 @@ main() {
   platform="$(detect_platform)"
 
   local version
-  #echo "Fetching latest version..."
-  #version="$(resolve_latest_version)"
-  version="1.1.0.3122"
+  version="$(resolve_latest_version)"
   echo "Latest version: $version"
 
   local os

@@ -18,33 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Minimal HTTP server that mimics the GitHub-hosted install script endpoint.
-// Used when tests need a fetchable installer script without hitting GitHub.
+import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
 
-export class FakeUpdateScriptServer {
-  private server: ReturnType<typeof Bun.serve> | null = null;
-  private readonly version: string;
+export class Version {
+  constructor(readonly text: string) {}
 
-  constructor(version: string) {
-    this.version = version;
+  get noBuild(): Version {
+    const noBuild = stripBuildNumber(this.text);
+    return noBuild === this.text ? this : new Version(noBuild);
   }
 
-  start(): this {
-    const scriptContent = `#!/usr/bin/env bash\nversion="${this.version}"\necho "fake install script"\n`;
-    this.server = Bun.serve({
-      port: 0,
-      fetch: () => new Response(scriptContent, { status: 200 }),
-    });
-    return this;
+  isNewerThan(other: Version): boolean {
+    return isNewerVersion(other.text, this.text);
   }
 
-  baseUrl(): string {
-    if (!this.server) throw new Error('Server not started');
-    return `http://localhost:${this.server.port}`;
-  }
-
-  async stop(): Promise<void> {
-    await this.server?.stop(true);
-    this.server = null;
+  toString(): string {
+    return this.text;
   }
 }

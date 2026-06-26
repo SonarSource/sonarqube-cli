@@ -177,8 +177,8 @@ export class TestHarness {
   }
 
   /**
-   * Creates a fake update script server that returns an install script pinned to `version`.
-   * Use this to exercise the CLI update check without hitting GitHub.
+   * Creates a fake update script server that returns an install script payload.
+   * Use this to exercise installer-script downloads without hitting GitHub.
    * The server is stopped automatically when dispose() is called.
    */
   newFakeUpdateScriptServer(version: string): FakeUpdateScriptServer {

@@ -12,9 +12,14 @@ $InstallDir = Join-Path $env:LOCALAPPDATA 'sonarqube-cli\bin'
 $BinaryName = 'sonar.exe'
 $BaseUrl    = 'https://binaries.sonarsource.com/Distribution/sonarqube-cli'
 $Platform   = 'windows-x86-64'
+# Older self-update implementations scrape a literal `$SonarVersion = "..."` from
+# this file before executing it. Keep this compatibility marker present, but unused:
+# the real version now comes from stable.version at runtime. Release automation
+# keeps this marker aligned with the latest released CLI version.
+$SonarVersion = "1.1.0.3122"
 
 function Resolve-LatestVersion {
-    $Version = (Invoke-WebRequest -Uri "$BaseUrl/latest-version.txt" -UseBasicParsing).Content.Trim()
+    $Version = (Invoke-WebRequest -Uri "$BaseUrl/stable.version" -UseBasicParsing).Content.Trim()
     if (-not $Version) {
         Write-Error 'Could not determine the latest version.'
         exit 1
@@ -46,10 +51,7 @@ function Add-ToUserPath {
 
 # --- Main ---
 
-#Write-Host 'Fetching latest version...'
-#$SonarVersion = Resolve-LatestVersion
-
-$SonarVersion = "1.1.0.3122"
+$SonarVersion = Resolve-LatestVersion
 Write-Host "Latest version: $SonarVersion"
 
 $Filename     = "sonarqube-cli-$SonarVersion-$Platform.exe"

@@ -49,10 +49,16 @@ function pickContentType(filename: string): string {
 export class FakeBinariesServer {
   private readonly server: ReturnType<typeof Bun.serve>;
   private readonly requests: RecordedRequest[];
+  private readonly state: { stableVersion?: string };
 
-  constructor(server: ReturnType<typeof Bun.serve>, requests: RecordedRequest[]) {
+  constructor(
+    server: ReturnType<typeof Bun.serve>,
+    requests: RecordedRequest[],
+    state: { stableVersion?: string },
+  ) {
     this.server = server;
     this.requests = requests;
+    this.state = state;
   }
 
   /** Base URL to pass as SONARQUBE_CLI_BINARIES_URL. */
@@ -64,6 +70,10 @@ export class FakeBinariesServer {
     return [...this.requests];
   }
 
+  setStableVersion(version: string): void {
+    this.state.stableVersion = version;
+  }
+
   async stop(): Promise<void> {
     await this.server.stop(true);
   }
@@ -71,6 +81,7 @@ export class FakeBinariesServer {
 
 export class FakeBinariesServerBuilder {
   private _loadArtifacts = true;
+  private _stableVersion?: string;
 
   /**
    * Makes the server return 404 for every request, simulating artifacts being
@@ -81,8 +92,14 @@ export class FakeBinariesServerBuilder {
     return this;
   }
 
+  withStableVersion(version: string): this {
+    this._stableVersion = version;
+    return this;
+  }
+
   start(): Promise<FakeBinariesServer> {
     const requests: RecordedRequest[] = [];
+    const state = { stableVersion: this._stableVersion };
 
     // Load versioned artifacts from resources (sonar-secrets and sca-scanner-cli .exe[.asc],
     // sonar-context-augmentation .tar.gz[.asc]).
@@ -119,6 +136,12 @@ export class FakeBinariesServerBuilder {
           timestamp: Date.now(),
         });
 
+        if (path === '/Distribution/sonarqube-cli/stable.version' && state.stableVersion) {
+          return new Response(state.stableVersion, {
+            headers: { 'Content-Type': 'text/plain' },
+          });
+        }
+
         // Match the requested filename against known artifacts
         const filename = path.split('/').at(-1) ?? '';
         const fileBytes = files.get(filename);
@@ -131,6 +154,6 @@ export class FakeBinariesServerBuilder {
       },
     });
 
-    return Promise.resolve(new FakeBinariesServer(server, requests));
+    return Promise.resolve(new FakeBinariesServer(server, requests, state));
   }
 }

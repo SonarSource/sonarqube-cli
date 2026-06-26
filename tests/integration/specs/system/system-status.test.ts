@@ -171,10 +171,11 @@ function antigravityStatusState(
 
 describe('system status', () => {
   let harness: TestHarness;
+  let binariesServer: { setStableVersion(version: string): void };
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.newFakeUpdateScriptServer(CLI_VERSION);
+    binariesServer = await harness.newFakeBinariesServer().withStableVersion(CLI_VERSION).start();
   });
 
   afterEach(async () => {
@@ -571,7 +572,7 @@ describe('system status', () => {
     async () => {
       const newerVersion = '99.0.0';
       const sqServer = await harness.newFakeServer().withAuthToken('my-token').start();
-      harness.newFakeUpdateScriptServer(newerVersion);
+      binariesServer.setStableVersion(newerVersion);
       harness.state().withAuth(sqServer.baseUrl(), 'my-token', 'my-org');
 
       const result = await harness.run('system status');
@@ -743,10 +744,10 @@ describe('system status', () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
       harness.state().withAuth(server.baseUrl(), 'my-token');
 
-      // Override the update script URL to an unreachable port so checkForUpdate throws
+      // Override the binaries URL to an unreachable port so checkForUpdate throws
       // and the .catch(() => null) path is exercised
       const result = await harness.run('system status', {
-        extraEnv: { SONARQUBE_CLI_UPDATE_SCRIPT_BASE_URL: 'http://127.0.0.1:1' },
+        extraEnv: { SONARQUBE_CLI_BINARIES_URL: 'http://127.0.0.1:1' },
       });
 
       expect(result.exitCode).toBe(0);
