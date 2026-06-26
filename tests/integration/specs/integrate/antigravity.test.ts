@@ -29,15 +29,18 @@ import { CLI_COMMAND } from '../../../../src/lib/config-constants';
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
 import {
   type AntigravityHooksJson,
+  expectAntigravityAlwaysOnRule,
   findAntigravityFeature,
+  GLOBAL_GEMINI_MD_PATH,
   GLOBAL_HOOK_SCRIPT_PATH,
   GLOBAL_HOOKS_JSON_PATH,
-  GLOBAL_INSTRUCTIONS_PATH,
   GLOBAL_MCP_CONFIG_PATH,
   PROJECT_HOOK_SCRIPT_PATH,
   PROJECT_HOOKS_JSON_PATH,
-  PROJECT_INSTRUCTIONS_PATH,
+  PROJECT_PROMPT_SECRETS_RULE_PATH,
+  PROJECT_SQAA_RULE_PATH,
   writeDisabledGlobalHook,
+  writeExistingGlobalGeminiRules,
   writeExistingGlobalHook,
   writeExistingGlobalInstructions,
   writeOrphanedGlobalHookConfig,
@@ -67,7 +70,7 @@ describe('integrate antigravity', () => {
 
   describe('project-level install (default)', () => {
     it(
-      'writes hook script, hooks.json, and prompt-secrets instructions',
+      'writes hook script, hooks.json, and prompt-secrets workspace rule',
       async () => {
         const result = await harness.run(
           `integrate antigravity --project ${TEST_PROJECT} --non-interactive`,
@@ -76,7 +79,7 @@ describe('integrate antigravity', () => {
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(true);
         expect(harness.cwd.exists(...PROJECT_HOOKS_JSON_PATH)).toBe(true);
-        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
+        expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(true);
 
         const hooksJson = harness.cwd
           .file(...PROJECT_HOOKS_JSON_PATH)
@@ -94,8 +97,9 @@ describe('integrate antigravity', () => {
         const scriptBody = harness.cwd.file(...PROJECT_HOOK_SCRIPT_PATH).asText();
         expect(scriptBody).toContain('sonar hook antigravity-pre-tool-use');
 
-        const instructions = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(instructions).toContain('# SonarQube secrets scanning for prompts protocol');
+        const rule = harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText();
+        expectAntigravityAlwaysOnRule(rule);
+        expect(rule).toContain('# SonarQube secrets scanning for prompts protocol');
 
         expect(harness.userHome.exists(...GLOBAL_MCP_CONFIG_PATH)).toBe(true);
         const mcp = harness.userHome.file(...GLOBAL_MCP_CONFIG_PATH).asJson() as {
@@ -110,7 +114,7 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      'records sonar-secrets-hooks and prompt-secrets-instructions in state',
+      'records sonar-secrets-hooks and prompt-secrets-project-rules in state',
       async () => {
         await harness.run(`integrate antigravity --project ${TEST_PROJECT} --non-interactive`);
 
@@ -118,8 +122,8 @@ describe('integrate antigravity', () => {
         expect(secretsFeature?.scope).toBe('project');
         expect(secretsFeature?.attrs?.projectKey).toBe(TEST_PROJECT);
 
-        const instructionsFeature = findAntigravityFeature(harness, 'prompt-secrets-instructions');
-        expect(instructionsFeature?.scope).toBe('project');
+        const projectRulesFeature = findAntigravityFeature(harness, 'prompt-secrets-project-rules');
+        expect(projectRulesFeature?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
@@ -133,9 +137,9 @@ describe('integrate antigravity', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        const instructions = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        const rule = harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText();
         const headingCount =
-          instructions.split('# SonarQube secrets scanning for prompts protocol').length - 1;
+          rule.split('# SonarQube secrets scanning for prompts protocol').length - 1;
         expect(headingCount).toBe(1);
       },
       { timeout: 60000 },
@@ -181,14 +185,16 @@ describe('integrate antigravity', () => {
 
   describe('global install (-g)', () => {
     it(
-      'writes hook script, hooks.json, and instructions under ~/.gemini/config',
+      'writes hook script, hooks.json, and prompt-secrets snippet in ~/.gemini/GEMINI.md',
       async () => {
         const result = await harness.run('integrate antigravity -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(true);
         expect(harness.userHome.exists(...GLOBAL_HOOKS_JSON_PATH)).toBe(true);
-        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(true);
+        expect(harness.userHome.exists(...GLOBAL_GEMINI_MD_PATH)).toBe(true);
+        const gemini = harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText();
+        expect(gemini).toContain('# SonarQube secrets scanning for prompts protocol');
 
         const json = harness.userHome
           .file(...GLOBAL_HOOKS_JSON_PATH)
@@ -220,7 +226,7 @@ describe('integrate antigravity', () => {
 
         expect(findAntigravityFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
         expect(
-          findAntigravityFeature(harness, 'prompt-secrets-instructions', 'global'),
+          findAntigravityFeature(harness, 'prompt-secrets-global-rules', 'global'),
         ).toBeDefined();
 
         const expectedGlobalRoot = join(harness.userHome.path, '.gemini', 'config');
@@ -232,40 +238,42 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      'preserves pre-existing global instructions and appends the managed prompt-secrets block',
+      'preserves pre-existing GEMINI.md content and appends the managed prompt-secrets block',
       async () => {
-        harness.userHome.writeFile(
-          join('.gemini', 'config', 'instructions', 'sonarqube.instructions.md'),
-          '# pre-existing\n',
-        );
+        writeExistingGlobalGeminiRules(harness);
 
         const result = await harness.run('integrate antigravity -g --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# pre-existing');
+        const body = harness.userHome.file(...GLOBAL_GEMINI_MD_PATH).asText();
+        expect(body).toContain('# pre-existing global rules');
         expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
       },
       { timeout: 30000 },
     );
   });
 
-  describe('project-level install when global Antigravity instructions already exist', () => {
+  describe('project-level install when global Antigravity rules already exist', () => {
     it(
-      'writes the project-level instructions file and leaves the global file untouched',
+      'writes the project-level rule file and leaves the legacy global instructions file untouched',
       async () => {
         writeExistingGlobalInstructions(harness);
-        const before = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
+        const before = harness.userHome
+          .file('.gemini', 'config', 'instructions', 'sonarqube.instructions.md')
+          .asText();
 
         const result = await harness.run('integrate antigravity --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
-        expect(harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText()).toContain(
-          '# SonarQube secrets scanning for prompts protocol',
+        expectAntigravityAlwaysOnRule(
+          harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText(),
         );
-        expect(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText()).toBe(before);
-        expect(findAntigravityFeature(harness, 'prompt-secrets-instructions')?.scope).toBe(
+        expect(
+          harness.userHome
+            .file('.gemini', 'config', 'instructions', 'sonarqube.instructions.md')
+            .asText(),
+        ).toBe(before);
+        expect(findAntigravityFeature(harness, 'prompt-secrets-project-rules')?.scope).toBe(
           'project',
         );
       },
@@ -273,7 +281,7 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      'auto-skips the hook (with message) and asks a custom question when a global hook and global instructions both exist',
+      'auto-skips the hook (with message) and asks a custom question when a global hook and global rules both exist',
       async () => {
         writeExistingGlobalHook(harness);
         writeExistingGlobalInstructions(harness);
@@ -289,10 +297,10 @@ describe('integrate antigravity', () => {
         expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
         expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
         expect(output).toContain(
-          'Global Antigravity instructions already exist. Do you also want to create a project-local copy for this repo?',
+          'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
         );
-        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
-        expect(findAntigravityFeature(harness, 'prompt-secrets-instructions')?.scope).toBe(
+        expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(true);
+        expect(findAntigravityFeature(harness, 'prompt-secrets-project-rules')?.scope).toBe(
           'project',
         );
       },
@@ -302,7 +310,7 @@ describe('integrate antigravity', () => {
 
   describe('project install when a global secrets hook already exists', () => {
     it(
-      'skips project-level secrets hooks but still installs prompt instructions',
+      'skips project-level secrets hooks but still installs prompt-secrets rules',
       async () => {
         writeExistingGlobalHook(harness);
 
@@ -311,9 +319,9 @@ describe('integrate antigravity', () => {
         expect(result.exitCode).toBe(0);
         expect(result.stdout + result.stderr).toContain('global secrets scanning hook');
         expect(harness.cwd.exists(...PROJECT_HOOK_SCRIPT_PATH)).toBe(false);
-        expect(harness.cwd.exists(...PROJECT_INSTRUCTIONS_PATH)).toBe(true);
+        expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(true);
         expect(findAntigravityFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
-        expect(findAntigravityFeature(harness, 'prompt-secrets-instructions')).toBeDefined();
+        expect(findAntigravityFeature(harness, 'prompt-secrets-project-rules')).toBeDefined();
       },
       { timeout: 30000 },
     );
@@ -428,9 +436,9 @@ describe('integrate antigravity', () => {
     );
   });
 
-  describe('SQAA instructions', () => {
+  describe('SQAA rules', () => {
     it(
-      'writes SQAA instructions when the org is entitled and a project key is present',
+      'writes SQAA workspace rules when the org is entitled and a project key is present',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -453,32 +461,32 @@ describe('integrate antigravity', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).toContain('# SonarQube Agentic Analysis protocol');
-        expect(body).toContain(`sonar analyze agentic --project ${TEST_PROJECT}`);
-        expect(body).toContain('--file');
+        expectAntigravityAlwaysOnRule(
+          harness.cwd.file(...PROJECT_PROMPT_SECRETS_RULE_PATH).asText(),
+        );
+        const sqaaRule = harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText();
+        expectAntigravityAlwaysOnRule(sqaaRule);
+        expect(sqaaRule).toContain('# SonarQube Agentic Analysis protocol');
+        expect(sqaaRule).toContain(`sonar analyze agentic --project ${TEST_PROJECT} --depth DEEP`);
         expect(findAntigravityFeature(harness, 'sqaa-instructions')?.scope).toBe('project');
       },
       { timeout: 30000 },
     );
 
     it(
-      'does not install SQAA instructions when the org has no entitlement',
+      'does not install SQAA rules when the org has no entitlement',
       async () => {
         const result = await harness.run('integrate antigravity --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# SonarQube Agentic Analysis protocol');
+        expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
         expect(findAntigravityFeature(harness, 'sqaa-instructions')).toBeUndefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      'does not install SQAA instructions without a project key even when entitled',
+      'does not install SQAA rules without a project key even when entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -497,8 +505,7 @@ describe('integrate antigravity', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
-        expect(body).not.toContain('# SonarQube Agentic Analysis protocol');
+        expect(harness.cwd.exists(...PROJECT_SQAA_RULE_PATH)).toBe(false);
         expect(findAntigravityFeature(harness, 'sqaa-instructions')).toBeUndefined();
       },
       { timeout: 30000 },
@@ -532,7 +539,7 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      're-running does not duplicate the SQAA instructions marker block when entitled',
+      're-running does not duplicate the SQAA rule when entitled',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -555,7 +562,7 @@ describe('integrate antigravity', () => {
           extraEnv,
         });
 
-        const body = harness.cwd.file(...PROJECT_INSTRUCTIONS_PATH).asText();
+        const body = harness.cwd.file(...PROJECT_SQAA_RULE_PATH).asText();
         expect(body.match(/# SonarQube Agentic Analysis protocol/g)?.length).toBe(1);
       },
       { timeout: 60000 },

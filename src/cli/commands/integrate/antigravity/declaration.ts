@@ -21,12 +21,13 @@
 import { join } from 'node:path';
 
 import {
-  ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR,
+  ANTIGRAVITY_GLOBAL_GEMINI_MD,
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   ANTIGRAVITY_GLOBAL_SKILLS_DIR,
-  ANTIGRAVITY_INSTRUCTIONS_FILENAME,
   ANTIGRAVITY_PROJECT_AGENTS_DIR,
-  ANTIGRAVITY_PROJECT_INSTRUCTIONS_DIR,
+  ANTIGRAVITY_PROJECT_RULES_DIR,
+  ANTIGRAVITY_PROMPT_SECRETS_RULE_FILE,
+  ANTIGRAVITY_SQAA_RULE_FILE,
   CLI_COMMAND,
 } from '../../../../lib/config-constants';
 import { getMcpConfig } from '../../../../lib/mcp/mcp-helper';
@@ -46,6 +47,7 @@ import {
   skip,
   sonarSecretsBinaryDependency,
   textSnippet,
+  textSnippetRemover,
   wholeFile,
 } from '../_common/registry';
 import type { IntegrateAgentOptions } from '../_common/types';
@@ -56,14 +58,22 @@ import {
   resolvePretoolSecretsScriptPath,
   upsertAntigravitySecretsBlock,
 } from './hooks';
-import { globalAntigravityInstructionsExist, PROMPT_SECRETS_BODY } from './instructions';
+import {
+  buildAntigravityAlwaysOnRule,
+  globalAntigravityPromptSecretsRuleExists,
+  PROMPT_SECRETS_BODY,
+  PROMPT_SECRETS_RULE_MARKER,
+  resolveLegacyGlobalInstructionsPath,
+  resolveLegacyProjectInstructionsPath,
+  SQAA_RULE_MARKER,
+} from './rules';
 
 export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity';
 
 export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
   projectRoot?: string;
   globalSecretsHookExists?: boolean;
-  /** Install SQAA instructions (project scope only). */
+  /** Install SQAA rules (project scope only). */
   installSqaaInstructions?: boolean;
   installContextAugmentation?: boolean;
 }
@@ -106,22 +116,31 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     },
     {
       id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
+      displayName: 'SonarQube Agentic Analysis rules',
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
       scope: 'project',
       resources: [
-        textSnippet({
-          id: 'sqaa-instructions-file',
-          displayName: 'SonarQube Agentic Analysis instructions for Antigravity',
-          targetPath: resolveInstructionsPath,
+        wholeFile({
+          id: 'sqaa-rule-file',
+          displayName: 'SonarQube Agentic Analysis rule for Antigravity',
+          targetPath: resolveSqaaRulePath,
+          content: (context) =>
+            buildAntigravityAlwaysOnRule(
+              buildSqaaSectionBody(
+                getRequiredStringAttr(context, 'projectKey', antigravityIntegration.displayName),
+              ),
+            ),
+          managedMarker: SQAA_RULE_MARKER,
+        }),
+      ],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'legacy-sqaa-instructions-snippet',
+          targetPath: (context) => resolveLegacyProjectInstructionsPath(context.targetRoot),
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),
-          content: (context) =>
-            buildSqaaSectionBody(
-              getRequiredStringAttr(context, 'projectKey', antigravityIntegration.displayName),
-            ),
         }),
       ],
     },
@@ -141,22 +160,56 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       ],
     },
     {
-      id: 'prompt-secrets-instructions',
-      displayName: 'Prompt-secrets instructions',
-      shouldInstall: ({ scope }) =>
-        scope === 'project' && globalAntigravityInstructionsExist()
+      id: 'prompt-secrets-project-rules',
+      displayName: 'Prompt-secrets workspace rules',
+      shouldInstall: ({ scope }) => {
+        if (scope !== 'project') {
+          return skip();
+        }
+        return globalAntigravityPromptSecretsRuleExists()
           ? askUser(
-              'Global Antigravity instructions already exist. Do you also want to create a project-local copy for this repo?',
+              'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
             )
-          : askUser(),
+          : askUser();
+      },
+      resources: [
+        wholeFile({
+          id: 'prompt-secrets-rule-file',
+          displayName: 'Antigravity prompt-secrets workspace rule',
+          targetPath: resolvePromptSecretsRulePath,
+          content: () => buildAntigravityAlwaysOnRule(PROMPT_SECRETS_BODY),
+          managedMarker: PROMPT_SECRETS_RULE_MARKER,
+        }),
+      ],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'legacy-prompt-secrets-project-instructions',
+          targetPath: (context) => resolveLegacyProjectInstructionsPath(context.targetRoot),
+          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
+          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
+        }),
+      ],
+    },
+    {
+      id: 'prompt-secrets-global-rules',
+      displayName: 'Prompt-secrets global rules',
+      shouldInstall: ({ scope }) => (scope === 'global' ? askUser() : skip()),
       resources: [
         textSnippet({
-          id: 'prompt-secrets-instructions-file',
-          displayName: 'Antigravity Prompt-secrets instructions',
-          targetPath: resolveInstructionsPath,
+          id: 'prompt-secrets-gemini-snippet',
+          displayName: 'Antigravity prompt-secrets global rules',
+          targetPath: () => ANTIGRAVITY_GLOBAL_GEMINI_MD,
           startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
           endMarker: sonarEndMarker('antigravity-prompt-secrets'),
           content: PROMPT_SECRETS_BODY,
+        }),
+      ],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'legacy-prompt-secrets-global-instructions',
+          targetPath: () => resolveLegacyGlobalInstructionsPath(),
+          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
+          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
         }),
       ],
     },
@@ -167,14 +220,16 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   ],
 };
 
-function resolveInstructionsPath(context: IntegrationContext): string {
-  return context.scope === 'global'
-    ? join(ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR, ANTIGRAVITY_INSTRUCTIONS_FILENAME)
-    : join(
-        context.targetRoot,
-        ANTIGRAVITY_PROJECT_INSTRUCTIONS_DIR,
-        ANTIGRAVITY_INSTRUCTIONS_FILENAME,
-      );
+function resolvePromptSecretsRulePath(context: IntegrationContext): string {
+  return join(
+    context.targetRoot,
+    ANTIGRAVITY_PROJECT_RULES_DIR,
+    ANTIGRAVITY_PROMPT_SECRETS_RULE_FILE,
+  );
+}
+
+function resolveSqaaRulePath(context: IntegrationContext): string {
+  return join(context.targetRoot, ANTIGRAVITY_PROJECT_RULES_DIR, ANTIGRAVITY_SQAA_RULE_FILE);
 }
 
 function resolveAntigravitySkillPath(context: IntegrationContext): string {
