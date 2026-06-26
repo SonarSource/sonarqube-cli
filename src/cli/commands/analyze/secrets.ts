@@ -20,6 +20,7 @@
 import { existsSync } from 'node:fs';
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { buildSubprocessNetworkEnv } from '../../../lib/connectivity/network-config.js';
 import logger from '../../../lib/logger';
 import type { SpawnResult, StdioMode } from '../../../lib/process';
 import { spawnProcessWithTimeout } from '../../../lib/process';
@@ -95,7 +96,11 @@ export async function runSecretsBinaryOnText(
 }
 
 function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
-  return { [BINARY_AUTH_URL_ENV]: auth.serverUrl, [BINARY_AUTH_TOKEN_ENV]: auth.token };
+  return {
+    ...buildSubprocessNetworkEnv(),
+    [BINARY_AUTH_URL_ENV]: auth.serverUrl,
+    [BINARY_AUTH_TOKEN_ENV]: auth.token,
+  };
 }
 
 async function handleCheckCommand(
