@@ -83,7 +83,7 @@ import { integrateCodex } from './commands/integrate/codex';
 import { integrateCopilot } from './commands/integrate/copilot';
 import { integrateCursor } from './commands/integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
-import { integrateAll, type IntegrateAllOptions } from './commands/integrate/integrate-all';
+import { integrateBare, type IntegrateBareOptions } from './commands/integrate/integrate-bare';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -236,7 +236,7 @@ const integrateCommand = COMMAND_TREE.command('integrate')
   })
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('-g, --global', 'Install integrations globally.')
-  .authenticatedAction((auth, options: IntegrateAllOptions) => integrateAll(auth, options));
+  .authenticatedAction((auth, options: IntegrateBareOptions) => integrateBare(auth, options));
 
 integrateCommand
   .command('git')

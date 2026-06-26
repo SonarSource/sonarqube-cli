@@ -19,7 +19,7 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { multiSelectPrompt } from '../../../ui';
+import { selectPrompt } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { integrateAntigravity } from './antigravity';
 import { antigravityIntegration } from './antigravity/declaration';
@@ -33,58 +33,49 @@ import { integrateCursor } from './cursor';
 import { cursorIntegration } from './cursor/declaration';
 import { integrateGit } from './git';
 
-export interface IntegrateAllOptions {
+export interface IntegrateBareOptions {
   project?: string;
   global?: boolean;
 }
 
-type Handler = (auth: ResolvedAuth, options: IntegrateAllOptions) => Promise<void>;
+type Handler = (auth: ResolvedAuth, options: IntegrateBareOptions) => Promise<void>;
 
-const TOOLS: { id: string; label: string; handler: Handler }[] = [
+const TOOLS: { label: string; handler: Handler }[] = [
   {
-    id: claudeIntegration.id,
     label: claudeIntegration.displayName,
     handler: (auth, opts) => integrateClaude(opts, auth),
   },
   {
-    id: copilotIntegration.id,
     label: copilotIntegration.displayName,
     handler: (auth, opts) => integrateCopilot(auth, opts),
   },
   {
-    id: codexIntegration.id,
     label: codexIntegration.displayName,
     handler: (auth, opts) => integrateCodex(opts, auth),
   },
   {
-    id: cursorIntegration.id,
     label: cursorIntegration.displayName,
     handler: (auth, opts) => integrateCursor(opts, auth),
   },
   {
-    id: antigravityIntegration.id,
     label: antigravityIntegration.displayName,
     handler: (auth, opts) => integrateAntigravity(opts, auth),
   },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
-  { id: 'git', label: 'Git', handler: (auth, opts) => integrateGit(opts, auth) },
+  { label: 'Git', handler: (auth, opts) => integrateGit(opts, auth) },
 ];
 
-export async function integrateAll(
+export async function integrateBare(
   auth: ResolvedAuth,
-  options: IntegrateAllOptions,
+  options: IntegrateBareOptions,
 ): Promise<void> {
-  const selected = await multiSelectPrompt(
-    'Select the tools you want to integrate with',
-    TOOLS.map(({ id, label }) => ({ value: id, label })),
+  const selected = await selectPrompt(
+    'Select the tool you want to integrate with',
+    TOOLS.map((tool) => ({ value: tool, label: tool.label })),
   );
 
-  if (!selected || selected.length === 0) throw new CommandFailedError('No integration selected');
+  if (!selected) throw new CommandFailedError('No integration selected');
 
-  for (const tool of TOOLS) {
-    if (selected.includes(tool.id)) {
-      await tool.handler(auth, options);
-    }
-  }
+  await selected.handler(auth, options);
 }
