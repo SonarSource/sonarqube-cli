@@ -39,29 +39,32 @@ const MAX_POST_BODY_BYTES = 4096;
 
 export type TokenStatus = 'valid' | 'invalid' | 'unreachable';
 
+export interface TokenCheckResult {
+  status: TokenStatus;
+  errorMessage?: string;
+}
+
 export interface BrowserAuthResult {
   token: string;
   tokenName?: string;
 }
 
-export async function checkTokenStatus(serverURL: string, token: string): Promise<TokenStatus> {
+export async function checkTokenStatus(
+  serverURL: string,
+  token: string,
+): Promise<TokenCheckResult> {
   try {
     const client = new SonarQubeClient(serverURL, token);
-    return await client.checkTokenValidity();
+    const status = await client.checkTokenValidity();
+    return { status };
   } catch (err) {
     // checkTokenValidity() lets HTTP errors propagate — any non-200 response or
     // network failure is treated as a connectivity issue rather than an auth failure,
     // because /api/authentication/validate always returns HTTP 200 per the SonarQube API contract.
-    logger.debug(`Token validation failed for ${serverURL}: ${(err as Error).message}`);
-    return 'unreachable';
+    const errorMessage = (err as Error).message;
+    logger.debug(`Token validation failed for ${serverURL}: ${errorMessage}`);
+    return { status: 'unreachable', errorMessage };
   }
-}
-
-/**
- * Validate token by calling SonarQube API
- */
-export async function validateToken(serverURL: string, token: string): Promise<boolean> {
-  return (await checkTokenStatus(serverURL, token)) === 'valid';
 }
 
 /**

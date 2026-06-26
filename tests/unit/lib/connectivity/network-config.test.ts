@@ -36,29 +36,27 @@ afterEach(() => {
 });
 
 describe('resolveNetworkConfig', () => {
-  it('returns all null fields when env is empty', () => {
+  it('returns null proxy and caCert when env is empty', () => {
     const config = resolveNetworkConfig({});
-    expect(config.proxyHttps).toBeNull();
-    expect(config.proxyHttp).toBeNull();
-    expect(config.noProxy).toBeNull();
-    expect(config.caCertPath).toBeNull();
+    expect(config.proxy).toBeNull();
+    expect(config.caCert).toBeNull();
   });
 
   describe('proxy group — tier selection', () => {
     it('sonar-env wins when SONAR_HTTPS_PROXY_URL is set', () => {
       const config = resolveNetworkConfig({ SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080' });
-      expect(config.proxyHttps?.source).toBe('sonar-env');
-      expect(config.proxyHttps?.explicit).toBe(true);
-      expect(config.proxyHttps?.value.getUrlWithCredentials()).toBe('https://sonar-proxy:8080');
-      expect(config.proxyHttp).toBeNull();
-      expect(config.noProxy).toBeNull();
+      expect(config.proxy?.source).toBe('sonar-env');
+      expect(config.proxy?.explicit).toBe(true);
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://sonar-proxy:8080');
+      expect(config.proxy?.proxyHttp).toBeNull();
+      expect(config.proxy?.noProxy).toBeNull();
     });
 
     it('sonar-env wins when SONAR_HTTP_PROXY_URL is set', () => {
       const config = resolveNetworkConfig({ SONAR_HTTP_PROXY_URL: 'https://sonar-proxy:8080' });
-      expect(config.proxyHttp?.source).toBe('sonar-env');
-      expect(config.proxyHttp?.explicit).toBe(true);
-      expect(config.proxyHttps).toBeNull();
+      expect(config.proxy?.source).toBe('sonar-env');
+      expect(config.proxy?.explicit).toBe(true);
+      expect(config.proxy?.proxyHttps).toBeNull();
     });
 
     it('sonar-env with both proxy types set', () => {
@@ -66,24 +64,25 @@ describe('resolveNetworkConfig', () => {
         SONAR_HTTPS_PROXY_URL: 'https://sonar-https:8080',
         SONAR_HTTP_PROXY_URL: 'https://sonar-http:8080',
       });
-      expect(config.proxyHttps?.source).toBe('sonar-env');
-      expect(config.proxyHttp?.source).toBe('sonar-env');
+      expect(config.proxy?.source).toBe('sonar-env');
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://sonar-https:8080');
+      expect(config.proxy?.proxyHttp?.getUrlWithCredentials()).toBe('https://sonar-http:8080');
     });
 
-    it('noProxy comes from same tier as proxy', () => {
+    it('noProxy comes from same group as proxy', () => {
       const config = resolveNetworkConfig({
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         SONAR_NO_PROXY: 'internal.corp.com',
       });
-      expect(config.noProxy?.source).toBe('sonar-env');
-      expect(config.noProxy?.value).toBe('internal.corp.com');
+      expect(config.proxy?.source).toBe('sonar-env');
+      expect(config.proxy?.noProxy).toBe('internal.corp.com');
     });
 
     it('generic-env used when no sonar-env proxy set', () => {
       const config = resolveNetworkConfig({ HTTPS_PROXY: 'https://proxy:3128' });
-      expect(config.proxyHttps?.source).toBe('generic-env');
-      expect(config.proxyHttps?.explicit).toBe(false);
-      expect(config.proxyHttp).toBeNull();
+      expect(config.proxy?.source).toBe('generic-env');
+      expect(config.proxy?.explicit).toBe(false);
+      expect(config.proxy?.proxyHttp).toBeNull();
     });
 
     it('generic-env with both proxy types and NO_PROXY', () => {
@@ -92,10 +91,10 @@ describe('resolveNetworkConfig', () => {
         HTTP_PROXY: 'https://proxy:3128',
         NO_PROXY: 'localhost',
       });
-      expect(config.proxyHttps?.source).toBe('generic-env');
-      expect(config.proxyHttp?.source).toBe('generic-env');
-      expect(config.noProxy?.source).toBe('generic-env');
-      expect(config.noProxy?.value).toBe('localhost');
+      expect(config.proxy?.source).toBe('generic-env');
+      expect(config.proxy?.proxyHttps).not.toBeNull();
+      expect(config.proxy?.proxyHttp).not.toBeNull();
+      expect(config.proxy?.noProxy).toBe('localhost');
     });
   });
 
@@ -105,8 +104,8 @@ describe('resolveNetworkConfig', () => {
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         HTTPS_PROXY: 'https://generic-proxy:3128',
       });
-      expect(config.proxyHttps?.source).toBe('sonar-env');
-      expect(config.proxyHttps?.value.getUrlWithCredentials()).toBe('https://sonar-proxy:8080');
+      expect(config.proxy?.source).toBe('sonar-env');
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://sonar-proxy:8080');
     });
 
     it('HTTPS_PROXY from generic-env is ignored when sonar-env tier wins', () => {
@@ -115,7 +114,7 @@ describe('resolveNetworkConfig', () => {
         HTTPS_PROXY: 'https://generic-proxy:3128',
       });
       // proxyHttp is null because sonar-env tier won but has no SONAR_HTTP_PROXY_URL
-      expect(config.proxyHttp).toBeNull();
+      expect(config.proxy?.proxyHttp).toBeNull();
     });
 
     it('NO_PROXY not picked when sonar-env tier wins', () => {
@@ -124,7 +123,7 @@ describe('resolveNetworkConfig', () => {
         NO_PROXY: 'localhost',
       });
       // noProxy is null — NO_PROXY is generic-env but sonar-env tier won
-      expect(config.noProxy).toBeNull();
+      expect(config.proxy?.noProxy).toBeNull();
     });
 
     it('standalone SONAR_NO_PROXY without sonar-env proxy falls through to generic-env', () => {
@@ -133,32 +132,30 @@ describe('resolveNetworkConfig', () => {
         HTTPS_PROXY: 'https://proxy:3128',
       });
       // sonar-env tier skipped (no proxy); generic-env wins
-      expect(config.proxyHttps?.source).toBe('generic-env');
-      // noProxy comes from generic-env NO_PROXY (not set here), not SONAR_NO_PROXY
-      expect(config.noProxy).toBeNull();
+      expect(config.proxy?.source).toBe('generic-env');
+      // noProxy is null — NO_PROXY not set; SONAR_NO_PROXY not picked (wrong tier)
+      expect(config.proxy?.noProxy).toBeNull();
     });
 
-    it('standalone SONAR_NO_PROXY alone results in all null', () => {
+    it('standalone SONAR_NO_PROXY alone results in null proxy', () => {
       const config = resolveNetworkConfig({ SONAR_NO_PROXY: 'internal.corp.com' });
-      expect(config.proxyHttps).toBeNull();
-      expect(config.proxyHttp).toBeNull();
-      expect(config.noProxy).toBeNull();
+      expect(config.proxy).toBeNull();
     });
   });
 
-  describe('caCertPath — independent resolution', () => {
+  describe('caCert — independent resolution', () => {
     it('resolves from SONAR_CA_CERT (sonar-env, explicit)', () => {
       const config = resolveNetworkConfig({ SONAR_CA_CERT: '/etc/ssl/sonar-ca.pem' });
-      expect(config.caCertPath?.source).toBe('sonar-env');
-      expect(config.caCertPath?.explicit).toBe(true);
-      expect(config.caCertPath?.value).toBe('/etc/ssl/sonar-ca.pem');
+      expect(config.caCert?.source).toBe('sonar-env');
+      expect(config.caCert?.explicit).toBe(true);
+      expect(config.caCert?.path).toBe('/etc/ssl/sonar-ca.pem');
     });
 
     it('resolves from NODE_EXTRA_CA_CERTS (generic-env, not explicit)', () => {
       const config = resolveNetworkConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' });
-      expect(config.caCertPath?.source).toBe('generic-env');
-      expect(config.caCertPath?.explicit).toBe(false);
-      expect(config.caCertPath?.value).toBe('/etc/ssl/corp-ca.pem');
+      expect(config.caCert?.source).toBe('generic-env');
+      expect(config.caCert?.explicit).toBe(false);
+      expect(config.caCert?.path).toBe('/etc/ssl/corp-ca.pem');
     });
 
     it('prefers SONAR_CA_CERT over NODE_EXTRA_CA_CERTS', () => {
@@ -166,8 +163,8 @@ describe('resolveNetworkConfig', () => {
         SONAR_CA_CERT: '/etc/ssl/sonar-ca.pem',
         NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem',
       });
-      expect(config.caCertPath?.source).toBe('sonar-env');
-      expect(config.caCertPath?.value).toBe('/etc/ssl/sonar-ca.pem');
+      expect(config.caCert?.source).toBe('sonar-env');
+      expect(config.caCert?.path).toBe('/etc/ssl/sonar-ca.pem');
     });
 
     it('resolves independently of the proxy group tier', () => {
@@ -175,16 +172,16 @@ describe('resolveNetworkConfig', () => {
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem',
       });
-      expect(config.proxyHttps?.source).toBe('sonar-env');
-      expect(config.caCertPath?.source).toBe('generic-env');
+      expect(config.proxy?.source).toBe('sonar-env');
+      expect(config.caCert?.source).toBe('generic-env');
     });
   });
 
   describe('fromEnv — support both lower and uppercase', () => {
-    it('resolves https_proxy (lowercase) as proxyHttps', () => {
+    it('resolves https_proxy (lowercase) as proxy', () => {
       const config = resolveNetworkConfig({ https_proxy: 'https://proxy:3128' });
-      expect(config.proxyHttps?.source).toBe('generic-env');
-      expect(config.proxyHttps?.value.getUrlWithCredentials()).toBe('https://proxy:3128');
+      expect(config.proxy?.source).toBe('generic-env');
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://proxy:3128');
     });
 
     it('lowercase takes precedence over uppercase when both are set', () => {
@@ -192,7 +189,7 @@ describe('resolveNetworkConfig', () => {
         HTTPS_PROXY: 'https://upper:3128',
         https_proxy: 'https://lower:3128',
       });
-      expect(config.proxyHttps?.value.getUrlWithCredentials()).toBe('https://lower:3128');
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://lower:3128');
     });
   });
 
@@ -200,8 +197,8 @@ describe('resolveNetworkConfig', () => {
     const config = resolveNetworkConfig({
       HTTPS_PROXY: 'https://alice:secret@proxy:3128',
     });
-    expect(config.proxyHttps?.value.getUrl()).toBe('https://***:***@proxy:3128/');
-    expect(config.proxyHttps?.value.getUrlWithCredentials()).toBe(
+    expect(config.proxy?.proxyHttps?.getUrl()).toBe('https://***:***@proxy:3128/');
+    expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe(
       'https://alice:secret@proxy:3128',
     );
   });
@@ -365,7 +362,7 @@ describe('buildFetchNetworkOptions', () => {
   });
 
   describe('CA cert', () => {
-    it('sets tls.ca as array of rootCertificates + BunFile when caCertPath is explicit', () => {
+    it('sets tls.ca as array of rootCertificates + BunFile when caCert is explicit', () => {
       const pemPath = join(tmpdir(), 'sonar-test-ca.pem');
       writeFileSync(pemPath, '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----');
 
@@ -379,7 +376,7 @@ describe('buildFetchNetworkOptions', () => {
       expect(bunFile?.name).toBe(pemPath);
     });
 
-    it('does not set tls.ca when caCertPath is generic-env (not explicit)', () => {
+    it('does not set tls.ca when caCert is generic-env (not explicit)', () => {
       const config = makeConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' });
       const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls).toBeUndefined();

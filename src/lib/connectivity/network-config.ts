@@ -24,8 +24,10 @@ import type { BunFile } from 'bun';
 
 import { createRedactedUrl } from '../redacted-url';
 import type {
+  CaCertConfig,
   ConfigSource,
   FetchNetworkOptions,
+  ProxyGroup,
   ResolvedNetworkConfig,
   SourcedValue,
 } from './types';
@@ -73,9 +75,7 @@ const PROXY_CONFIGS: Array<SourcedValue<ProxyEnvVars>> = [
   },
 ];
 
-function resolveProxyGroup(
-  env: NodeJS.ProcessEnv,
-): Pick<ResolvedNetworkConfig, 'proxyHttps' | 'proxyHttp' | 'noProxy'> {
+function resolveProxyGroup(env: NodeJS.ProcessEnv): ProxyGroup | null {
   for (const {
     value: { httpsVar, httpVar, noProxyVar, lookup },
     source,
@@ -87,24 +87,32 @@ function resolveProxyGroup(
       continue;
     }
 
-    const noProxyVal = lookup(env, noProxyVar);
     return {
-      proxyHttps: httpsVal ? { value: createRedactedUrl(httpsVal), source, explicit } : null,
-      proxyHttp: httpVal ? { value: createRedactedUrl(httpVal), source, explicit } : null,
-      noProxy: noProxyVal ? { value: noProxyVal, source, explicit } : null,
+      source,
+      explicit,
+      proxyHttps: httpsVal ? createRedactedUrl(httpsVal) : null,
+      proxyHttp: httpVal ? createRedactedUrl(httpVal) : null,
+      noProxy: lookup(env, noProxyVar) ?? null,
     };
   }
-  return { proxyHttps: null, proxyHttp: null, noProxy: null };
+  return null;
 }
 
 // --- CA cert (resolves independently) ---
 
-function resolveCaCertPath(env: NodeJS.ProcessEnv): SourcedValue<string> | null {
-  return (
+function resolveCaCert(env: NodeJS.ProcessEnv): CaCertConfig | null {
+  const resolved =
     fromEnv(env, 'SONAR_CA_CERT', 'sonar-env') ??
     // stored-config slot added here when sonar config is wired
-    fromEnv(env, 'NODE_EXTRA_CA_CERTS', 'generic-env')
-  );
+    fromEnv(env, 'NODE_EXTRA_CA_CERTS', 'generic-env');
+  if (!resolved) {
+    return null;
+  }
+  return {
+    source: resolved.source,
+    explicit: resolved.explicit,
+    path: resolved.value,
+  };
 }
 
 function fromEnv(
@@ -120,8 +128,8 @@ function fromEnv(
 
 export function resolveNetworkConfig(env: NodeJS.ProcessEnv = process.env): ResolvedNetworkConfig {
   return {
-    ...resolveProxyGroup(env),
-    caCertPath: resolveCaCertPath(env),
+    proxy: resolveProxyGroup(env),
+    caCert: resolveCaCert(env),
   };
 }
 
@@ -158,28 +166,32 @@ function buildProxyOption(
   url: string,
   config: ResolvedNetworkConfig,
 ): { proxy: string } | Record<string, never> {
+  if (!config.proxy?.explicit) {
+    return {};
+  }
   const parsed = tryParseUrl(url);
   if (!parsed) {
     return {};
   }
-  const proxyCandidate = parsed.protocol === 'https:' ? config.proxyHttps : config.proxyHttp;
-  if (!proxyCandidate?.explicit) {
+  const proxyCandidate =
+    parsed.protocol === 'https:' ? config.proxy.proxyHttps : config.proxy.proxyHttp;
+  if (!proxyCandidate) {
     return {};
   }
   const defaultPort = parsed.protocol === 'https:' ? DEFAULT_PORT_HTTPS : DEFAULT_PORT_HTTP;
   const port = Number.parseInt(parsed.port) || defaultPort;
   const bypass =
-    config.noProxy !== null && matchesNoProxy(parsed.hostname, port, config.noProxy.value);
-  return bypass ? {} : { proxy: proxyCandidate.value.getUrlWithCredentials() };
+    config.proxy.noProxy !== null && matchesNoProxy(parsed.hostname, port, config.proxy.noProxy);
+  return bypass ? {} : { proxy: proxyCandidate.getUrlWithCredentials() };
 }
 
 function buildTlsOption(
   config: ResolvedNetworkConfig,
 ): { tls: { ca: Array<string | BunFile> } } | Record<string, never> {
-  if (!config.caCertPath?.explicit) {
+  if (!config.caCert?.explicit) {
     return {};
   }
-  return { tls: { ca: [...rootCertificates, Bun.file(config.caCertPath.value)] } };
+  return { tls: { ca: [...rootCertificates, Bun.file(config.caCert.path)] } };
 }
 
 function tryParseUrl(url: string): URL | null {
