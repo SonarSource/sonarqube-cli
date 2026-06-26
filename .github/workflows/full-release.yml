@@ -91,6 +91,13 @@ jobs:
           artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
+      - name: Update install script compatibility version
+        env:
+          RELEASED_VERSION: ${{ needs.release.outputs.released-version }}
+        run: |
+          sed -i "s/version=\"[0-9][^\"]*\"/version=\"${RELEASED_VERSION}\"/" user-scripts/install.sh
+          sed -i "s/\$SonarVersion = \"[^\"]*\"/\$SonarVersion = \"${RELEASED_VERSION}\"/" user-scripts/install.ps1
+
       - name: bump-version
         env:
           NEW_VERSION: ${{ needs.release.outputs.new-version }}

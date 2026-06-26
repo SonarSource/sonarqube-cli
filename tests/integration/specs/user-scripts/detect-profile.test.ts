@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 const scriptPath = join(import.meta.dir, '../../../../user-scripts/install.sh');
+const windowsScriptPath = join(import.meta.dir, '../../../../user-scripts/install.ps1');
 const prereleaseScriptPath = join(
   import.meta.dir,
   '../../../../user-scripts/install-prerelease.sh',
@@ -37,6 +38,10 @@ const prereleaseScriptPath = join(
 const isWindows = process.platform === 'win32';
 
 const PATH_LINE = 'export PATH="$HOME/.local/share/sonarqube-cli/bin:$PATH"';
+const INSTALL_SH_COMPATIBILITY_VERSION_PATTERN =
+  /^\s*version\s*=\s*["'](\d+\.\d+\.\d+\.\d+)["']\s*$/m;
+const INSTALL_PS1_COMPATIBILITY_VERSION_PATTERN =
+  /^\s*\$SonarVersion\s*=\s*["'](\d+\.\d+\.\d+\.\d+)["']\s*$/im;
 
 /**
  * Runs the real detect_profile() + update_profile() extracted from install.sh.
@@ -314,5 +319,36 @@ describe.if(!isWindows)('install.sh profile update', () => {
       expect(readProfile(join(tempHome, '.profile'))).toContain(PATH_LINE);
       expect(readProfile(join(zdotdir, '.zshrc'))).not.toContain(PATH_LINE);
     });
+  });
+});
+
+describe('install script self-update compatibility markers', () => {
+  it('keeps the legacy version marker in install.sh', () => {
+    const scriptContent = readFileSync(scriptPath, 'utf-8');
+    const match = scriptContent.match(INSTALL_SH_COMPATIBILITY_VERSION_PATTERN);
+
+    expect(scriptContent).toContain('Older self-update implementations');
+    expect(scriptContent).toContain('stable.version at runtime');
+    expect(match?.[1]).toBeDefined();
+  });
+
+  it('keeps the legacy version marker in install.ps1', () => {
+    const scriptContent = readFileSync(windowsScriptPath, 'utf-8');
+    const match = scriptContent.match(INSTALL_PS1_COMPATIBILITY_VERSION_PATTERN);
+
+    expect(scriptContent).toContain('Older self-update implementations');
+    expect(scriptContent).toContain('stable.version at runtime');
+    expect(match?.[1]).toBeDefined();
+  });
+
+  it('keeps the same compatibility version in both install scripts', () => {
+    const installSh = readFileSync(scriptPath, 'utf-8');
+    const installPs1 = readFileSync(windowsScriptPath, 'utf-8');
+    const installShVersion = installSh.match(INSTALL_SH_COMPATIBILITY_VERSION_PATTERN)?.[1];
+    const installPs1Version = installPs1.match(INSTALL_PS1_COMPATIBILITY_VERSION_PATTERN)?.[1];
+
+    expect(installShVersion).toBeDefined();
+    expect(installPs1Version).toBeDefined();
+    expect(installShVersion).toBe(installPs1Version);
   });
 });
