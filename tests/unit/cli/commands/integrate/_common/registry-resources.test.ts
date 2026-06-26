@@ -47,6 +47,8 @@ const {
   textSnippet,
   wholeFile,
 } = await import('../../../../../../src/cli/commands/integrate/_common/registry');
+const { removeInstalledFeature } =
+  await import('../../../../../../src/cli/commands/integrate/_common/registry/installation-recorder');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
 
@@ -516,6 +518,34 @@ describe('declarative integration framework - resources and state recording', ()
     expect(
       installer.operationNeedsApply(installed, { ...feature.operations![0], version: '2' }),
     ).toBe(true);
+  });
+
+  it('removeInstalledFeature returns [] without mutation when the integration is not recorded', () => {
+    const integration = makeIntegration();
+    const state = getDefaultState('test');
+
+    const removed = removeInstalledFeature(
+      state,
+      { scope: 'project', targetRoot: tempDir },
+      integration,
+      integration.features[0],
+    );
+
+    expect(removed).toEqual([]);
+    expect(state.integrations.installed).toEqual([]);
+  });
+
+  it('removeInstalledFeature returns [] and leaves other features intact when the target feature is not recorded', async () => {
+    const integration = makeIntegration();
+    const state = getDefaultState('test');
+    const context = makeContext(state, tempDir);
+    // Record a different feature; the one we ask to remove was never installed.
+    await applyAndRecord(installer, context, integration, { id: 'other', displayName: 'Other' });
+
+    const removed = removeInstalledFeature(state, context, integration, integration.features[0]);
+
+    expect(removed).toEqual([]);
+    expect(state.integrations.installed[0]?.features.map((f) => f.featureId)).toEqual(['other']);
   });
 });
 

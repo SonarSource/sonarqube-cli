@@ -474,6 +474,58 @@ describe('declarative integration framework', () => {
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });
 
+  it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at the Keep? prompt', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
+    const state = getDefaultState('test');
+    // Seed the feature as already installed so the keep/remove flow kicks in.
+    await installer.applyAndRecordFeatures(state, integration, [
+      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
+    ]);
+    queueMockResponse(null); // Ctrl+C at "Keep?"
+
+    let caughtError: unknown;
+    try {
+      await selectForInvocation(integration, {
+        options: {},
+        targetRoot: tempDir,
+        scope: 'project',
+        nonInteractive: false,
+        state,
+      });
+    } catch (err) {
+      caughtError = err;
+    }
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error).message).toContain('Installation cancelled');
+  });
+
+  it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at the removal confirmation', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
+    const state = getDefaultState('test');
+    await installer.applyAndRecordFeatures(state, integration, [
+      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
+    ]);
+    queueMockResponse(false); // decline "Keep?"
+    queueMockResponse(null); // Ctrl+C at "Proceed with removal?"
+
+    let caughtError: unknown;
+    try {
+      await selectForInvocation(integration, {
+        options: {},
+        targetRoot: tempDir,
+        scope: 'project',
+        nonInteractive: false,
+        state,
+      });
+    } catch (err) {
+      caughtError = err;
+    }
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error).message).toContain('Installation cancelled');
+  });
+
   it('records active subfeatures nested under the container feature in state', async () => {
     const dep = sonarSourceBinary({ id: 'sub-dep', binary: SonarSourceBinary.SonarSecrets });
     const container: FeatureContainer = {
