@@ -854,8 +854,8 @@ describe('analyze agentic', () => {
 
       const result = await harness.run(`analyze agentic --project ${TEST_PROJECT} --depth QUICK`);
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain('Invalid --depth');
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Allowed choices are STANDARD, DEEP');
     },
     { timeout: 15000 },
   );
