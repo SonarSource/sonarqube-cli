@@ -104,19 +104,19 @@ describe('integrateCopilot', () => {
   it('aborts when token is invalid', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
-    expect(integrateCopilot(SERVER_AUTH, {})).rejects.toThrow('Token is invalid.');
+    expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('aborts when server is unreachable', () => {
     checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
-    expect(integrateCopilot(SERVER_AUTH, {})).rejects.toThrow('Server is unreachable.');
+    expect(integrateCopilot({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('validates token against the auth server URL before installing', async () => {
-    await integrateCopilot(SERVER_AUTH, {});
+    await integrateCopilot({}, SERVER_AUTH);
 
     expect(checkTokenStatusSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, SERVER_AUTH.token);
   });

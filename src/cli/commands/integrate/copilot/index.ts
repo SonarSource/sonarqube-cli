@@ -26,7 +26,7 @@ import type { IntegrateAgentOptions } from '../_common/types';
 import { COPILOT_INTEGRATION_ID, type CopilotIntegrationOptions } from './declaration';
 import { detectGlobalSecretsHook } from './hooks';
 
-export async function integrateCopilot(auth: ResolvedAuth, options: IntegrateAgentOptions) {
+export async function integrateCopilot(options: IntegrateAgentOptions, auth: ResolvedAuth) {
   const ctx = await displayAgentIntegratePrelude('Copilot', 'copilot', options, auth);
 
   // SQAA is always project-scoped. resolveSqaaSetup owns the user-facing

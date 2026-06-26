@@ -295,7 +295,7 @@ integrateCommand
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
-  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(auth, options));
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(options, auth));
 
 // `sonar context` — passthrough wrapper for sonar-context-augmentation.
 // Forwards arguments verbatim to the locally-installed CAG binary; install via

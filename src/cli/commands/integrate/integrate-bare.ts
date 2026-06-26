@@ -39,32 +39,17 @@ export interface IntegrateBareOptions {
   global?: boolean;
 }
 
-type Handler = (auth: ResolvedAuth, options: IntegrateBareOptions) => Promise<void>;
+type Handler = (options: IntegrateBareOptions, auth: ResolvedAuth) => Promise<void>;
 
 const TOOLS: { label: string; handler: Handler }[] = [
-  {
-    label: claudeIntegration.displayName,
-    handler: (auth, opts) => integrateClaude(opts, auth),
-  },
-  {
-    label: copilotIntegration.displayName,
-    handler: (auth, opts) => integrateCopilot(auth, opts),
-  },
-  {
-    label: codexIntegration.displayName,
-    handler: (auth, opts) => integrateCodex(opts, auth),
-  },
-  {
-    label: cursorIntegration.displayName,
-    handler: (auth, opts) => integrateCursor(opts, auth),
-  },
-  {
-    label: antigravityIntegration.displayName,
-    handler: (auth, opts) => integrateAntigravity(opts, auth),
-  },
+  { label: claudeIntegration.displayName, handler: integrateClaude },
+  { label: copilotIntegration.displayName, handler: integrateCopilot },
+  { label: codexIntegration.displayName, handler: integrateCodex },
+  { label: cursorIntegration.displayName, handler: integrateCursor },
+  { label: antigravityIntegration.displayName, handler: integrateAntigravity },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
-  { label: 'Git', handler: (auth, opts) => integrateGit(opts, auth) },
+  { label: 'Git', handler: integrateGit },
 ];
 
 export async function integrateBare(
@@ -80,5 +65,5 @@ export async function integrateBare(
 
   if (!selected) throw new CommandFailedError('No integration selected');
 
-  await selected.handler(auth, options);
+  await selected.handler(options, auth);
 }
