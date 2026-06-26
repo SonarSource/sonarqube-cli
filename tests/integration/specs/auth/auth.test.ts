@@ -1191,7 +1191,7 @@ describe('auth status', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('Cannot reach server');
-      expect(result.stderr).toContain('Connection check failed.');
+      expect(result.stderr).toContain('Connection check failed');
       expect(result.stderr).toContain(
         '  → Check the server URL and network connectivity, then retry.',
       );

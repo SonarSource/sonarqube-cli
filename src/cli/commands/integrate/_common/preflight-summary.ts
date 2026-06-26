@@ -26,7 +26,7 @@ import type { PhaseItem, StepStatus } from '../../../../ui';
 import { info, outro, phase, phaseItem, text } from '../../../../ui';
 import { CommandFailedError } from '../../_common/error';
 import { GitRepo } from '../../_common/git-repo';
-import { checkTokenStatus, type TokenStatus } from '../../_common/token';
+import { checkTokenStatus, type TokenCheckResult, type TokenStatus } from '../../_common/token';
 
 export interface AgentPreflightSummaryOptions {
   serverUrl: string;
@@ -41,13 +41,17 @@ export interface AgentPreflightSummaryOptions {
 export async function printAgentPreflightSummary(
   options: AgentPreflightSummaryOptions,
 ): Promise<void> {
-  const tokenStatus = await checkTokenStatus(options.serverUrl, options.token);
+  const tokenResult: TokenCheckResult = await checkTokenStatus(options.serverUrl, options.token);
+  const tokenStatus: TokenStatus = tokenResult.status;
   phase('Connection', await buildConnectionItems(options, tokenStatus));
   phase('Project', await buildProjectItems(options, tokenStatus));
 
   if (tokenStatus === 'unreachable') {
     reportUnreachableServerFailure();
-    throw new CommandFailedError('Server is unreachable.');
+    const message = tokenResult.errorMessage
+      ? `Server is unreachable: ${tokenResult.errorMessage}`
+      : 'Server is unreachable.';
+    throw new CommandFailedError(message);
   }
   if (tokenStatus === 'invalid') {
     throw new CommandFailedError('Token is invalid.', {

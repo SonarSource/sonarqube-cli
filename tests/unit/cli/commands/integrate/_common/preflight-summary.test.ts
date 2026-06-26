@@ -45,7 +45,7 @@ describe('printAgentPreflightSummary', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue('valid');
+    checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     checkOrganizationSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
       true,
@@ -79,7 +79,7 @@ describe('printAgentPreflightSummary', () => {
   });
 
   it('shows setup failed guidance when the server is unreachable', async () => {
-    checkTokenStatusSpy.mockResolvedValue('unreachable');
+    checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     const error = await captureRejection(
       printAgentPreflightSummary({

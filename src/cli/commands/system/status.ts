@@ -28,6 +28,8 @@ import { version as VERSION } from '../../../../package.json';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../../lib/config-constants';
+import { getNetworkConfig } from '../../../lib/connectivity/network-config.js';
+import type { ConfigSource, ResolvedNetworkConfig } from '../../../lib/connectivity/types';
 import { IS_STANDALONE_DISTRIBUTION } from '../../../lib/distribution';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
@@ -44,7 +46,7 @@ import { isNewerVersion, stripBuildNumber } from '../../../lib/version';
 import { blank, print, success, text, warn } from '../../../ui';
 import { getBanner } from '../../root-help';
 import { SECRETS_SPEC } from '../_common/install/secrets';
-import type { TokenStatus } from '../_common/token';
+import type { TokenCheckResult } from '../_common/token';
 import { checkTokenStatus } from '../_common/token';
 import { supportedIntegrations } from '../integrate';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health';
@@ -52,6 +54,18 @@ import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravit
 import { checkForUpdate, type UpdateCheckResult } from '../self-update/update-check';
 
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
+
+const PROXY_SOURCE_LABELS: Record<ConfigSource, string> = {
+  'sonar-env': 'SONAR_HTTPS_PROXY_URL, SONAR_HTTP_PROXY_URL, SONAR_NO_PROXY environment variables',
+  'stored-config': 'sonar config',
+  'generic-env': 'HTTPS_PROXY, HTTP_PROXY, NO_PROXY environment variables',
+};
+
+const CA_CERT_SOURCE_LABELS: Record<ConfigSource, string> = {
+  'sonar-env': 'SONAR_CA_CERT environment variable',
+  'stored-config': 'sonar config',
+  'generic-env': 'NODE_EXTRA_CA_CERTS environment variable',
+};
 
 const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SECRETS_SPEC.name]: SECRETS_SPEC.version,
@@ -359,8 +373,8 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     getCliUpdateInfo(),
   ]);
 
-  const tokenStatus: TokenStatus | null = auth
-    ? await checkTokenStatus(auth.serverUrl, auth.token).catch(() => 'unreachable' as const)
+  const tokenStatus: TokenCheckResult | null = auth
+    ? await checkTokenStatus(auth.serverUrl, auth.token)
     : null;
 
   const legacyBinaries = (state.tools?.installed ?? []).map((t) => {
@@ -409,8 +423,9 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
   const hasMcpIssues = integrations.some((i) => i.mcp?.config === 'invalid');
   const hasHooksIssues = integrations.some((i) => i.hooks?.config === 'invalid');
   const hasIssues =
-    tokenStatus === null || tokenStatus === 'invalid' || hasMcpIssues || hasHooksIssues;
+    tokenStatus === null || tokenStatus.status === 'invalid' || hasMcpIssues || hasHooksIssues;
   const recommendations = buildRecommendations(tokenStatus, updateResult, integrations);
+  const network = getNetworkConfig();
 
   const data: StatusData = {
     auth,
@@ -418,6 +433,7 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
     binaries,
     cache,
     integrations,
+    network,
     hasIssues,
     recommendations,
   };
@@ -441,22 +457,24 @@ type CacheInfo = { id: string; name: string; path: string; present: boolean };
 
 interface StatusData {
   auth: ResolvedAuth | null;
-  tokenStatus: TokenStatus | null;
+  tokenStatus: TokenCheckResult | null;
   binaries: BinaryInfo[];
   cache: CacheInfo[];
   integrations: IntegrationInfo[];
+  network: ResolvedNetworkConfig;
   hasIssues: boolean;
   recommendations: string[];
 }
 
 function buildRecommendations(
-  tokenStatus: TokenStatus | null,
+  tokenStatus: TokenCheckResult | null,
   updateResult: UpdateCheckResult | null,
   integrations: IntegrationInfo[],
 ): string[] {
   const recommendations: string[] = [];
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
-  if (tokenStatus === 'invalid') recommendations.push("Run 'sonar auth login' to reauthenticate");
+  if (tokenStatus?.status === 'invalid')
+    recommendations.push("Run 'sonar auth login' to reauthenticate");
   if (updateResult && !updateResult.upToDate) {
     recommendations.push(
       `Run 'sonar self-update' to update to v${updateResult.latest.version.noBuild.text}`,
@@ -486,15 +504,16 @@ function buildRecommendations(
   return recommendations;
 }
 
-function tokenStatusLabel(tokenStatus: TokenStatus | null): string {
+function tokenStatusLabel(tokenStatus: TokenCheckResult | null): string {
   if (tokenStatus === null) return 'not_set';
-  if (tokenStatus === 'valid') return 'active';
-  if (tokenStatus === 'invalid') return 'invalid';
+  if (tokenStatus.status === 'valid') return 'active';
+  if (tokenStatus.status === 'invalid') return 'invalid';
   return 'set_unverified';
 }
 
 function printJsonStatus(version: string, data: StatusData): void {
-  const { auth, tokenStatus, binaries, cache, integrations, hasIssues, recommendations } = data;
+  const { auth, tokenStatus, binaries, cache, integrations, network, hasIssues, recommendations } =
+    data;
   print(
     JSON.stringify(
       {
@@ -505,6 +524,7 @@ function printJsonStatus(version: string, data: StatusData): void {
               server: auth.serverUrl,
               ...(auth.orgKey ? { org: auth.orgKey } : {}),
               token: tokenStatusLabel(tokenStatus),
+              ...(tokenStatus?.errorMessage ? { tokenError: tokenStatus.errorMessage } : {}),
             }
           : { status: 'unauthenticated', token: 'not_set' },
         binaries: binaries.map(({ name, version, path, updateAvailable, latestVersion }) => ({
@@ -537,6 +557,22 @@ function printJsonStatus(version: string, data: StatusData): void {
               }
             : {}),
         })),
+        network: {
+          proxy: network.proxy
+            ? {
+                source: PROXY_SOURCE_LABELS[network.proxy.source],
+                proxyHttps: network.proxy.proxyHttps?.getUrl() ?? null,
+                proxyHttp: network.proxy.proxyHttp?.getUrl() ?? null,
+                noProxy: network.proxy.noProxy,
+              }
+            : null,
+          caCert: network.caCert
+            ? {
+                source: CA_CERT_SOURCE_LABELS[network.caCert.source],
+                path: network.caCert.path,
+              }
+            : null,
+        },
         healthy: !hasIssues,
         recommendations,
       },
@@ -546,14 +582,20 @@ function printJsonStatus(version: string, data: StatusData): void {
   );
 }
 
-function renderTokenLine(tokenStatus: TokenStatus | null, serverUrl?: string): void {
-  if (tokenStatus === null) text('  • Token:   Not Set');
-  else if (tokenStatus === 'valid') text('  • Token:   Active');
-  else if (tokenStatus === 'invalid') text('  • Token:   Invalid');
-  else text(`  • Token:   Set, Unverified (${serverUrl} is unreachable)`);
+function renderTokenLine(tokenStatus: TokenCheckResult | null, serverUrl?: string): void {
+  if (tokenStatus === null) {
+    text('  • Token:   Not Set');
+  } else if (tokenStatus.status === 'valid') {
+    text('  • Token:   Active');
+  } else if (tokenStatus.status === 'invalid') {
+    text('  • Token:   Invalid');
+  } else {
+    const detail = tokenStatus.errorMessage ? `: ${tokenStatus.errorMessage}` : '';
+    text(`  • Token:   Set, Unverified (${serverUrl} is unreachable${detail})`);
+  }
 }
 
-function renderAuthSection(auth: ResolvedAuth | null, tokenStatus: TokenStatus | null): void {
+function renderAuthSection(auth: ResolvedAuth | null, tokenStatus: TokenCheckResult | null): void {
   text('AUTHENTICATION');
   if (auth) {
     text(`  • Server:  ${auth.serverUrl}`);
@@ -610,8 +652,40 @@ function renderRecommendationsSection(recommendations: string[]): void {
   }
 }
 
+function renderNetworkSection(network: ResolvedNetworkConfig): void {
+  blank();
+  text('NETWORK');
+  if (!network.proxy && !network.caCert) {
+    text('  No advanced network configuration detected.');
+    return;
+  }
+  text(
+    '  Note: Not all CLI features currently support proxy and certificate configuration. ' +
+      'Secrets hook, Context Augmentation and Software Composition Analysis might currently not pick up the network configuration.',
+  );
+  if (network.proxy) {
+    blank();
+    text(`  Proxy (${PROXY_SOURCE_LABELS[network.proxy.source]}):`);
+    if (network.proxy.proxyHttps) {
+      text(`    • HTTPS:     ${network.proxy.proxyHttps.getUrl()}`);
+    }
+    if (network.proxy.proxyHttp) {
+      text(`    • HTTP:      ${network.proxy.proxyHttp.getUrl()}`);
+    }
+    if (network.proxy.noProxy) {
+      text(`    • No Proxy:  ${network.proxy.noProxy}`);
+    }
+  }
+  if (network.caCert) {
+    blank();
+    text(`  CA Certificate (${CA_CERT_SOURCE_LABELS[network.caCert.source]}):`);
+    text(`    • ${network.caCert.path}`);
+  }
+}
+
 function renderTextStatus(version: string, data: StatusData): void {
-  const { auth, tokenStatus, binaries, cache, integrations, hasIssues, recommendations } = data;
+  const { auth, tokenStatus, binaries, cache, integrations, network, hasIssues, recommendations } =
+    data;
   print(getBanner(version));
   blank();
 
@@ -623,6 +697,7 @@ function renderTextStatus(version: string, data: StatusData): void {
   blank();
 
   renderAuthSection(auth, tokenStatus);
+  renderNetworkSection(network);
   renderBinariesSection(binaries);
   renderCacheSection(cache);
   renderIntegrationsSection(integrations);

@@ -24,7 +24,7 @@ import { loadState } from '../../../lib/repository/state-repository';
 import { blank, note, print, withSpinner } from '../../../ui';
 import { NOTE_STYLES } from '../../../ui/colors';
 import { CommandFailedError } from '../_common/error';
-import type { TokenStatus } from '../_common/token';
+import type { TokenCheckResult } from '../_common/token';
 import { checkTokenStatus } from '../_common/token';
 
 function connectionLines(serverUrl: string, orgKey: string | undefined): string[] {
@@ -38,20 +38,19 @@ function displayTokenMissing(serverUrl: string, orgKey: string | undefined): voi
 function displayTokenStatus(
   serverUrl: string,
   orgKey: string | undefined,
-  status: TokenStatus,
+  result: TokenCheckResult,
 ): void {
   const lines = connectionLines(serverUrl, orgKey);
 
-  if (status === 'valid') {
+  if (result.status === 'valid') {
     printConnected(serverUrl, 'OS Keychain', orgKey);
-  } else if (status === 'invalid') {
+  } else if (result.status === 'invalid') {
     note(lines, '✗ Token invalid', NOTE_STYLES.error);
   } else {
-    note(
-      [...lines, '', 'Could not connect to the server to verify the token'],
-      '⚠ Cannot reach server',
-      NOTE_STYLES.warn,
-    );
+    const detail = result.errorMessage
+      ? `Could not connect to the server to verify the token: ${result.errorMessage}`
+      : 'Could not connect to the server to verify the token';
+    note([...lines, '', detail], '⚠ Cannot reach server', NOTE_STYLES.warn);
   }
 }
 
@@ -96,12 +95,15 @@ export async function authStatus(): Promise<void> {
 
   displayTokenStatus(conn.serverUrl, conn.orgKey, status);
 
-  if (status === 'unreachable') {
-    throw new CommandFailedError('Connection check failed.', {
+  if (status.status === 'unreachable') {
+    const message = status.errorMessage
+      ? `Connection check failed: ${status.errorMessage}`
+      : 'Connection check failed.';
+    throw new CommandFailedError(message, {
       remediationHint: 'Check the server URL and network connectivity, then retry.',
     });
   }
-  if (status !== 'valid') {
+  if (status.status !== 'valid') {
     throw new CommandFailedError('Authentication check failed.', {
       remediationHint: "Run 'sonar auth login' to reauthenticate.",
     });

@@ -35,9 +35,21 @@ export interface FetchNetworkOptions {
   tls?: { ca: Array<string | BunFile> };
 }
 
+export interface ProxyGroup {
+  readonly source: ConfigSource;
+  readonly explicit: boolean;
+  readonly proxyHttps: RedactedUrl | null;
+  readonly proxyHttp: RedactedUrl | null;
+  readonly noProxy: string | null;
+}
+
+export interface CaCertConfig {
+  readonly source: ConfigSource;
+  readonly explicit: boolean;
+  readonly path: string;
+}
+
 export interface ResolvedNetworkConfig {
-  readonly proxyHttps: SourcedValue<RedactedUrl> | null;
-  readonly proxyHttp: SourcedValue<RedactedUrl> | null;
-  readonly noProxy: SourcedValue<string> | null;
-  readonly caCertPath: SourcedValue<string> | null;
+  readonly proxy: ProxyGroup | null;
+  readonly caCert: CaCertConfig | null;
 }

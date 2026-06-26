@@ -1224,4 +1224,30 @@ describe('system status', () => {
     },
     { timeout: 15000 },
   );
+
+  it('shows NETWORK section with proxy and note when HTTPS_PROXY is set', async () => {
+    const server = await harness.newFakeServer().withAuthToken('my-token').start();
+    harness.state().withAuth(server.baseUrl(), 'my-token');
+
+    const result = await harness.run('system status', {
+      extraEnv: { HTTPS_PROXY: 'https://user:pass@proxy.corp.com:3128' },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('NETWORK');
+    expect(result.stdout).toContain('HTTPS_PROXY, HTTP_PROXY, NO_PROXY environment variables');
+    expect(result.stdout).toContain('***:***@proxy.corp.com');
+    expect(result.stdout).toContain('Not all CLI features currently support');
+  });
+
+  it('shows NETWORK section with no-config message when no network env vars are set', async () => {
+    const server = await harness.newFakeServer().withAuthToken('my-token').start();
+    harness.state().withAuth(server.baseUrl(), 'my-token');
+
+    const result = await harness.run('system status');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('NETWORK');
+    expect(result.stdout).toContain('No advanced network configuration detected.');
+  });
 });

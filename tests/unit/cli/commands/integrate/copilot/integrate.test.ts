@@ -72,7 +72,7 @@ describe('integrateCopilot', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue('valid');
+    checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(BASE_PROJECT);
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
     hasSqaaEntitlementSpy = spyOn(
@@ -102,14 +102,14 @@ describe('integrateCopilot', () => {
   });
 
   it('aborts when token is invalid', () => {
-    checkTokenStatusSpy.mockResolvedValue('invalid');
+    checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
     expect(integrateCopilot(SERVER_AUTH, {})).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('aborts when server is unreachable', () => {
-    checkTokenStatusSpy.mockResolvedValue('unreachable');
+    checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     expect(integrateCopilot(SERVER_AUTH, {})).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();

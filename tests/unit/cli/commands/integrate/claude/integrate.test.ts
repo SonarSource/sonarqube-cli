@@ -110,7 +110,7 @@ describe('integrateCommand', () => {
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
 
-    checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue('valid');
+    checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     checkComponentSpy = spyOn(SonarQubeClient.prototype, 'checkComponent').mockResolvedValue(true);
     checkOrganizationSpy = spyOn(SonarQubeClient.prototype, 'checkOrganization').mockResolvedValue(
       true,
@@ -266,14 +266,14 @@ describe('integrateCommand', () => {
   });
 
   it('aborts when token is invalid', () => {
-    checkTokenStatusSpy.mockResolvedValue('invalid');
+    checkTokenStatusSpy.mockResolvedValue({ status: 'invalid' });
 
     expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Token is invalid.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
   });
 
   it('aborts when server is unreachable', () => {
-    checkTokenStatusSpy.mockResolvedValue('unreachable');
+    checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
 
     expect(integrateClaude({}, SERVER_AUTH)).rejects.toThrow('Server is unreachable.');
     expect(installIntegrationSpy).not.toHaveBeenCalled();
