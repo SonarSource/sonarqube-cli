@@ -21,6 +21,7 @@
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { selectPrompt } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
+import { assertIntegrateScopeOptions } from './_common/agent-integrate-prelude';
 import { integrateAntigravity } from './antigravity';
 import { antigravityIntegration } from './antigravity/declaration';
 import { integrateClaude } from './claude';
@@ -70,6 +71,8 @@ export async function integrateBare(
   auth: ResolvedAuth,
   options: IntegrateBareOptions,
 ): Promise<void> {
+  assertIntegrateScopeOptions(options);
+
   const selected = await selectPrompt(
     'Select the tool you want to integrate with',
     TOOLS.map((tool) => ({ value: tool, label: tool.label })),

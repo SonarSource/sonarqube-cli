@@ -54,6 +54,23 @@ describe('integrate (bare command)', () => {
   );
 
   it(
+    'rejects conflicting --project and --global before prompting',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run('integrate --project foo --global');
+
+      expect(result.exitCode).toBe(2);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('--global and --project are mutually exclusive');
+      // The conflict is caught up front, before the tool-selection prompt renders.
+      expect(output).not.toContain('Select the tool you want to integrate with');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'runs only the single selected integration',
     async () => {
       const server = await harness
