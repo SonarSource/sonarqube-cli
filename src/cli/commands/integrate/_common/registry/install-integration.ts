@@ -92,22 +92,6 @@ export async function installIntegration<TOptions>({
   text('');
 
   try {
-    const removedFeatures = await integrationInstaller.removeAndRecordFeatures(
-      state,
-      integration,
-      toRemove,
-      {
-        callbacks: {
-          onFeatureRemoveStart: (feature) => {
-            text(`     Removing ${feature.displayName}...`);
-          },
-          onDependencyRemoved: (dependency) => {
-            text(`     ${dependency.displayName ?? dependency.id} removed`);
-          },
-        },
-      },
-    );
-
     const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
       state,
       integration,
@@ -130,6 +114,22 @@ export async function installIntegration<TOptions>({
           },
         },
         executionMode: 'install',
+      },
+    );
+
+    const removedFeatures = await integrationInstaller.removeAndRecordFeatures(
+      state,
+      integration,
+      toRemove,
+      {
+        callbacks: {
+          onFeatureRemoveStart: (feature) => {
+            text(`     Removing ${feature.displayName}...`);
+          },
+          onDependencyRemoved: (dependency) => {
+            text(`     ${dependency.displayName ?? dependency.id} removed`);
+          },
+        },
       },
     );
 
