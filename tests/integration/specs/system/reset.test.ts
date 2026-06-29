@@ -46,6 +46,11 @@ import {
   PROJECT_HOOK_SCRIPT_PATH,
   PROJECT_PROMPT_SECRETS_RULE_PATH,
 } from '../integrate/antigravity-test-helpers';
+import {
+  PROJECT_HOOK_SCRIPT_PATH as COPILOT_HOOK_SCRIPT_PATH,
+  PROJECT_HOOKS_JSON_PATH as COPILOT_HOOKS_JSON_PATH,
+  PROJECT_INSTRUCTIONS_PATH as COPILOT_INSTRUCTIONS_PATH,
+} from '../integrate/copilot-test-helpers';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
 const CURSOR_PROMPT_SCRIPT_DIRS = ['.cursor', 'hooks', 'sonar-secrets', 'build-scripts'];
@@ -890,6 +895,44 @@ describe('system reset --force', () => {
       expect(mcp.mcpServers?.sonarqube).toBeUndefined();
 
       expect(harness.cwd.exists(...PROJECT_PROMPT_SECRETS_RULE_PATH)).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'undoes a Copilot project integration and deletes the files it emptied',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(server.baseUrl(), 'tok');
+
+      const integrateResult = await harness.run('integrate copilot --non-interactive');
+
+      expect(integrateResult.exitCode).toBe(0);
+      // The integration owns each of these files end-to-end (no pre-existing
+      // user content), so removal should leave nothing behind to delete.
+      expect(harness.cwd.exists('.mcp.json')).toBe(true);
+      expect(harness.cwd.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(true);
+      expect(harness.cwd.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(true);
+      expect(harness.cwd.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(true);
+
+      // harness.run() re-seeds state.json from the env builder before each subprocess;
+      // preserve the post-integrate snapshot so reset sees the installed features.
+      const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
+      harness.state().withRawState(stateAfterIntegrate);
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Integrations:.*Removed/);
+      expect(readState(harness.stateJsonFile.path).integrations.installed).toHaveLength(0);
+
+      // Each file held only Sonar-managed content, so removal deletes the file
+      // outright rather than leaving an empty husk behind.
+      expect(harness.cwd.exists('.mcp.json')).toBe(false);
+      expect(harness.cwd.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(false);
+      expect(harness.cwd.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(false);
+      expect(harness.cwd.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(false);
     },
     { timeout: 30000 },
   );

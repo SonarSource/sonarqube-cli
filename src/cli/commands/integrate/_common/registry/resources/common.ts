@@ -19,9 +19,10 @@
  */
 
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { EOL } from 'node:os';
 import { dirname } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 
@@ -119,6 +120,54 @@ export interface RemoveablePatchResourceOptions<TDoc = unknown> {
   version?: string;
   targetPath: PathResolver;
   removePatch: (document: TDoc, context: IntegrationContext) => MaybePromise<unknown>;
+  /**
+   * When removal reduces the file to nothing but this
+   * default, the file is deleted instead of rewritten.
+   */
+  defaultValue?: TDoc;
+}
+
+export function pruneEmptyContainers(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(pruneEmptyContainers).filter((entry) => !isEmptyContainer(entry));
+  }
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const pruned = pruneEmptyContainers(entry);
+      if (!isEmptyContainer(pruned)) {
+        result[key] = pruned;
+      }
+    }
+    return result;
+  }
+  return value;
+}
+
+function isEmptyContainer(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value).length === 0;
+  }
+  return false;
+}
+
+/**
+ * True when `document`, after pruning empty containers, carries no data beyond the empty baseline
+ * (`defaultValue`, also pruned — the document the patch reads back when the file is absent). Such a
+ * file holds only leftover structure and is safe to delete; any real user or other-feature content
+ * survives pruning and keeps the file.
+ */
+export function isRemovableEmptyDocument(document: unknown, defaultValue: unknown): boolean {
+  return isDeepStrictEqual(
+    pruneEmptyContainers(document),
+    pruneEmptyContainers(defaultValue ?? {}),
+  );
 }
 
 /** Base class for format-specific patch removers. Subclasses supply `readDocument` and `serializeDocument`. */
@@ -138,8 +187,12 @@ export abstract class RemoveablePatchResource<TDoc = unknown> implements Removab
       return;
     }
     const document = await this.readDocument(path);
-    const updatedDocument = await this.options.removePatch(document, context);
-    await writeFileIfChanged(path, this.serializeDocument(updatedDocument ?? document));
+    const updatedDocument = (await this.options.removePatch(document, context)) ?? document;
+    if (isRemovableEmptyDocument(updatedDocument, this.options.defaultValue)) {
+      await rm(path);
+    } else {
+      await writeFileIfChanged(path, this.serializeDocument(updatedDocument));
+    }
   }
 
   protected abstract readDocument(path: string): Promise<TDoc>;

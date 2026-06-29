@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { rm } from 'node:fs/promises';
+
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../types';
 import {
   type BaseResourceOptions,
@@ -217,7 +219,11 @@ class TextSnippetRemover implements RemovableResource {
       eol,
     );
     if (updated !== existing) {
-      await writeFileIfChanged(path, updated);
+      if (updated.trim().length === 0) {
+        await rm(path);
+      } else {
+        await writeFileIfChanged(path, updated);
+      }
     }
   }
 }

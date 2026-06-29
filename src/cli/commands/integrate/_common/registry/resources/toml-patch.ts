@@ -53,6 +53,7 @@ export class TomlPatch extends PatchResource<TomlPatchOptions, Record<string, un
         version: options.version,
         targetPath: options.targetPath,
         removePatch: options.removePatch,
+        defaultValue: options.defaultValue,
       }),
     );
   }

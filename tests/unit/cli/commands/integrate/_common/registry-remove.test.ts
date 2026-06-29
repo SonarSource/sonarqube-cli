@@ -204,6 +204,148 @@ describe('declarative integration framework - remove and undo', () => {
       expect(await resource.remove(context)).toBeUndefined();
     });
 
+    it('json-patch: deletes the file when removal leaves only the default baseline', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const jsonPath = join(tempDir, 'hooks.json');
+      const resource = jsonPatch({
+        id: 'r',
+        targetPath: jsonPath,
+        defaultValue: { version: 1, hooks: {} },
+        patch: (doc) => ({ ...(doc as object), hooks: { preToolUse: [{ sonar: true }] } }),
+        removePatch: () => ({ version: 1, hooks: {} }),
+      });
+      await writeFile(
+        jsonPath,
+        JSON.stringify({ version: 1, hooks: { preToolUse: [{ sonar: true }] } }, null, 2) + '\n',
+      );
+
+      await resource.remove(context);
+
+      expect(existsSync(jsonPath)).toBe(false);
+    });
+
+    it('json-patch: deletes the file when removal prunes to the empty default', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const jsonPath = join(tempDir, '.mcp.json');
+      const resource = jsonPatch({
+        id: 'r',
+        targetPath: jsonPath,
+        defaultValue: {},
+        patch: (doc) => ({ ...doc, mcpServers: { sonarqube: {} } }),
+        removePatch: () => ({ mcpServers: {} }),
+      });
+      await writeFile(jsonPath, JSON.stringify({ mcpServers: { sonarqube: {} } }, null, 2) + '\n');
+
+      await resource.remove(context);
+
+      expect(existsSync(jsonPath)).toBe(false);
+    });
+
+    it('json-patch: keeps the file when other content survives pruning', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const jsonPath = join(tempDir, '.mcp.json');
+      const resource = jsonPatch({
+        id: 'r',
+        targetPath: jsonPath,
+        defaultValue: {},
+        patch: (doc) => doc,
+        removePatch: () => ({ mcpServers: { other: { command: 'x' } } }),
+      });
+      await writeFile(
+        jsonPath,
+        JSON.stringify({ mcpServers: { sonarqube: {}, other: { command: 'x' } } }, null, 2) + '\n',
+      );
+
+      await resource.remove(context);
+
+      expect(existsSync(jsonPath)).toBe(true);
+      expect(JSON.parse(await readFile(jsonPath, 'utf-8'))).toEqual({
+        mcpServers: { other: { command: 'x' } },
+      });
+    });
+
+    it('toml-patch: deletes the file when removal leaves only the default baseline', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const tomlPath = join(tempDir, 'config.toml');
+      const resource = tomlPatch({
+        id: 'r',
+        targetPath: tomlPath,
+        defaultValue: {},
+        patch: (doc) => doc,
+        removePatch: () => ({ mcp_servers: {} }),
+      });
+      await writeFile(tomlPath, '[mcp_servers.sonarqube]\ncommand = "sonar"\n');
+
+      await resource.remove(context);
+
+      expect(existsSync(tomlPath)).toBe(false);
+    });
+
+    it('toml-patch: keeps the file when other content survives pruning', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const tomlPath = join(tempDir, 'config.toml');
+      const resource = tomlPatch({
+        id: 'r',
+        targetPath: tomlPath,
+        defaultValue: {},
+        patch: (doc) => doc,
+        removePatch: () => ({ mcp_servers: { other: { command: 'x' } } }),
+      });
+      await writeFile(
+        tomlPath,
+        '[mcp_servers.sonarqube]\ncommand = "sonar"\n\n[mcp_servers.other]\ncommand = "x"\n',
+      );
+
+      await resource.remove(context);
+
+      expect(existsSync(tomlPath)).toBe(true);
+      const content = await readFile(tomlPath, 'utf-8');
+      expect(content).toContain('other');
+      expect(content).not.toContain('sonarqube');
+    });
+
+    it('yaml-patch: deletes the file when removal prunes it empty', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const yamlPath = join(tempDir, 'config.yml');
+      const resource = yamlPatch({
+        id: 'r',
+        targetPath: yamlPath,
+        patch: (doc) => doc,
+        removePatch: () => ({ sonar: {} }),
+      });
+      await writeFile(yamlPath, 'sonar:\n  enabled: true\n');
+
+      await resource.remove(context);
+
+      expect(existsSync(yamlPath)).toBe(false);
+    });
+
+    it('yaml-patch: keeps the file when other content survives pruning', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const yamlPath = join(tempDir, 'config.yml');
+      const resource = yamlPatch({
+        id: 'r',
+        targetPath: yamlPath,
+        patch: (doc) => doc,
+        removePatch: () => ({ other: { enabled: true } }),
+      });
+      await writeFile(yamlPath, 'sonar:\n  enabled: true\nother:\n  enabled: true\n');
+
+      await resource.remove(context);
+
+      expect(existsSync(yamlPath)).toBe(true);
+      const content = await readFile(yamlPath, 'utf-8');
+      expect(content).toContain('other');
+      expect(content).not.toContain('sonar');
+    });
+
     it('yaml-patch: removes entries added by removePatch', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);
@@ -280,7 +422,7 @@ describe('declarative integration framework - remove and undo', () => {
       expect(await readFile(tomlPath, 'utf-8')).toBe(original);
     });
 
-    it('text-snippet: removes the managed block', async () => {
+    it('text-snippet: deletes the file when the managed block was its only content', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);
       const filePath = join(tempDir, 'pre-commit-config.yaml');
@@ -294,9 +436,7 @@ describe('declarative integration framework - remove and undo', () => {
 
       await resource.remove(context);
 
-      const content = await readFile(filePath, 'utf-8');
-      expect(content).not.toContain('# sonar:begin');
-      expect(content).not.toContain('repos: []');
+      expect(existsSync(filePath)).toBe(false);
     });
 
     it('text-snippet: removes block from a file with surrounding content', async () => {
@@ -316,6 +456,7 @@ describe('declarative integration framework - remove and undo', () => {
 
       await resource.remove(context);
 
+      expect(existsSync(filePath)).toBe(true);
       expect(await readFile(filePath, 'utf-8')).toBe('before: 1\n\nafter: 2\n');
     });
 
