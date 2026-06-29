@@ -83,6 +83,7 @@ import { integrateCodex } from './commands/integrate/codex';
 import { integrateCopilot } from './commands/integrate/copilot';
 import { integrateCursor } from './commands/integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './commands/integrate/git';
+import { integrateBare, type IntegrateBareOptions } from './commands/integrate/integrate-bare';
 import {
   listIssues,
   type ListIssuesOptions,
@@ -232,7 +233,21 @@ const integrateCommand = COMMAND_TREE.command('integrate')
   .description('Setup SonarQube integration for AI coding agents, git and others.')
   .rootHelp({
     category: 'integrate',
-  });
+  })
+  .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
+  .option('-g, --global', 'Install integrations globally.')
+  // allowExcessArguments + preAction: when a parent command has both an action and subcommands,
+  // Commander v15 (allowExcessArguments defaults to false) emits "too many arguments" for unknown
+  // subcommands instead of "unknown command 'X'" with a "Did you mean?" suggestion. Allow excess
+  // args so Commander doesn't error early, then re-raise as unknownCommand in the hook.
+  .allowExcessArguments(true)
+  .hook('preAction', (thisCommand, actionCommand) => {
+    if (actionCommand.name() === thisCommand.name() && thisCommand.args.length > 0) {
+      // unknownCommand() is public in Commander 15 but absent from its typings.
+      (thisCommand as Command & { unknownCommand(): void }).unknownCommand();
+    }
+  })
+  .authenticatedAction((auth, options: IntegrateBareOptions) => integrateBare(auth, options));
 
 integrateCommand
   .command('git')
@@ -291,7 +306,7 @@ integrateCommand
   .option('--non-interactive', 'Non-interactive mode (no prompts)')
   .option('--skip-context', 'Skip the sonar-context-augmentation install/init/skill step')
   .addHelpText('after', projectKeyExtraHelp)
-  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(auth, options));
+  .authenticatedAction((auth, options: IntegrateAgentOptions) => integrateCopilot(options, auth));
 
 // `sonar context` — passthrough wrapper for sonar-context-augmentation.
 // Forwards arguments verbatim to the locally-installed CAG binary; install via
