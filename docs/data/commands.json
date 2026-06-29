@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "commands": [
     {
       "id": "sonar",
@@ -741,9 +741,9 @@
       "arguments": [],
       "options": [
         {
-          "flags": "--file <file>",
+          "flags": "--file <path>",
           "long": "--file",
-          "description": "Analyze a single file (skips change set detection)",
+          "description": "Analyze specific file(s) instead of the git change set (repeatable)",
           "type": "string",
           "required": false
         },
@@ -775,6 +775,17 @@
           "description": "Skip the large change set confirmation prompt",
           "type": "boolean",
           "required": false
+        },
+        {
+          "flags": "--depth <depth>",
+          "long": "--depth",
+          "description": "Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "STANDARD",
+            "DEEP"
+          ]
         },
         {
           "flags": "--format <format>",
@@ -904,9 +915,9 @@
       "arguments": [],
       "options": [
         {
-          "flags": "--file <file>",
+          "flags": "--file <path>",
           "long": "--file",
-          "description": "Analyze a single file (skips change set detection)",
+          "description": "Analyze specific file(s) instead of the git change set (repeatable)",
           "type": "string",
           "required": false
         },
@@ -938,6 +949,17 @@
           "description": "Skip the large change set confirmation prompt",
           "type": "boolean",
           "required": false
+        },
+        {
+          "flags": "--depth <depth>",
+          "long": "--depth",
+          "description": "Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "STANDARD",
+            "DEEP"
+          ]
         },
         {
           "flags": "--format <format>",
