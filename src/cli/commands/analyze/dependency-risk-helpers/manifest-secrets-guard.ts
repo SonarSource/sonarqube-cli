@@ -28,8 +28,13 @@ import { CommandFailedError } from '../../_common/error';
 import { formatSpawnOutput } from '../../_common/install/install-utils';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
 import type { SecretsInstaller } from '../../_common/install/secrets';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../secrets';
-import { parseSecretsOutput, type SecretsIssue } from '../secrets-output';
+import type { SecretsJsonIssue } from '../secrets';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  parseSecretsJson,
+  runSecretsBinary,
+  warnScanErrors,
+} from '../secrets';
 import { ScaDiscoverManifestsRunner } from './sca-discover-manifests';
 import type { ScaScannerInvocation } from './sca-scanner-runner-base';
 import type { ScaScannerSpawner } from './sca-scanner-spawner';
@@ -85,16 +90,18 @@ async function scanManifestsForSecrets(
     'stderr',
   );
   const exitCode = result.exitCode ?? 1;
+  const { issues, errors } = parseSecretsJson(result.stdout);
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-    const findings = formatSecretFindings(parseSecretsOutput(result.stdout));
-    throw new CommandFailedError(
-      `Secrets detected in dependency manifest files. Dependency risks analysis aborted.\n\n${findings}`,
-      {
-        remediationHint:
-          "Remove the reported secret from the manifest file, then rerun 'sonar analyze dependency-risks'.",
-      },
-    );
+    const findings = formatSecretFindings(issues);
+    const message = findings
+      ? `Secrets detected in dependency manifest files. Dependency risks analysis aborted.\n\n${findings}`
+      : `Secrets detected in dependency manifest files. Dependency risks analysis aborted.`;
+    warnScanErrors(errors);
+    throw new CommandFailedError(message, {
+      remediationHint:
+        "Remove the reported secret from the manifest file, then rerun 'sonar analyze dependency-risks'.",
+    });
   }
 
   if (exitCode !== 0) {
@@ -103,19 +110,21 @@ async function scanManifestsForSecrets(
         formatSpawnOutput(result.stdout, result.stderr),
     );
   }
+
+  warnScanErrors(errors);
 }
 
 /**
  * Renders one line per detected secret, e.g.:
  *   • package.json:12 — AWS Access Key detected (secret: AKIA****)
  */
-function formatSecretFindings(issues: SecretsIssue[]): string {
+function formatSecretFindings(issues: SecretsJsonIssue[]): string {
   return issues
     .map((issue) => {
       const location = issue.location ? `:${String(issue.location.startLine)}` : '';
-      const message = issue.message ? ` — ${issue.message}` : '';
-      const secret = issue.secret ? ` (secret: ${issue.secret})` : '';
-      return `  • ${issue.file}${location}${message}${secret}`;
+      const message = issue.description ? ` — ${issue.description}` : '';
+      const secret = issue.maskedSecret ? ` (secret: ${issue.maskedSecret})` : '';
+      return `  • ${issue.file ?? '(unknown)'}${location}${message}${secret}`;
     })
     .join('\n');
 }

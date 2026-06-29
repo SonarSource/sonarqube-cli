@@ -22,7 +22,12 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { print } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  parseSecretsJson,
+  runSecretsBinary,
+  warnScanErrors,
+} from '../analyze/secrets';
 import { handleScanError } from './hook-dependencies';
 
 export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
@@ -37,9 +42,20 @@ export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth)
     return;
   }
 
+  const { issues, errors } = parseSecretsJson(result.stdout);
+  warnScanErrors(errors);
+
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
-    const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
-    if (output) print(output);
+    if (issues.length > 0) {
+      const lines = issues.map((issue) => {
+        const location = issue.location ? `:${String(issue.location.startLine)}` : '';
+        const secret = issue.maskedSecret ? ` (secret: ${issue.maskedSecret})` : '';
+        return `  • ${issue.file ?? '(unknown)'}${location} — ${issue.description}${secret}`;
+      });
+      print(lines.join('\n'));
+    } else if (result.stderr) {
+      print(result.stderr);
+    }
     throw new CommandFailedError('Secrets detected in staged files.', {
       remediationHint: 'Remove the reported secret, then retry the commit.',
     });

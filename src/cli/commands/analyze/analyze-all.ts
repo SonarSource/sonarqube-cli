@@ -27,9 +27,13 @@ import {
   text,
 } from '../../../ui';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
-import { analyzeSecrets, EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from './secrets';
-import type { SecretsIssue } from './secrets-output';
-import { parseSecretsOutput } from './secrets-output';
+import type { SecretsJsonIssue } from './secrets';
+import {
+  analyzeSecrets,
+  EXIT_CODE_SECRETS_FOUND,
+  parseSecretsJson,
+  runSecretsBinary,
+} from './secrets';
 import type { OutputFormat } from './sqaa';
 import { analyzeSqaa, buildSqaaJsonReport } from './sqaa';
 import { resolveChangeSet } from './sqaa-changeset';
@@ -47,13 +51,19 @@ export interface AnalyzeAllOptions {
 }
 
 interface SecretsReport {
-  issues: SecretsIssue[];
+  issues: SecretsJsonIssue[];
   summary: { totalIssues: number };
+  warnings?: string[];
   error?: string;
 }
 
-function secretsReport(issues: SecretsIssue[], error?: string): SecretsReport {
+function secretsReport(
+  issues: SecretsJsonIssue[],
+  warnings?: string[],
+  error?: string,
+): SecretsReport {
   const report: SecretsReport = { issues, summary: { totalIssues: issues.length } };
+  if (warnings?.length) report.warnings = warnings;
   if (error !== undefined) report.error = error;
   return report;
 }
@@ -162,13 +172,14 @@ async function runSecretsScan(
 
   const result = await runSecretsBinary(binaryPath, files, auth);
   const exitCode = result.exitCode ?? EXIT_CODE_SECRETS_FOUND;
-  const issues = parseSecretsOutput(result.stdout);
-  // When the binary crashes (not EXIT_CODE_SECRETS_FOUND), parseSecretsOutput returns []
-  // — surface an explicit error so the consumer can distinguish crash from "found secrets".
+  const { issues, errors } = parseSecretsJson(result.stdout);
+  // Exit 0 (clean) and EXIT_CODE_SECRETS_FOUND (secrets found) are both expected outcomes. Any
+  // other exit code is a crash — parseSecretsJson returns [] there, so surface an explicit error
+  // to distinguish a crash from a genuine "no findings" result.
   const error =
-    exitCode === EXIT_CODE_SECRETS_FOUND
+    exitCode === 0 || exitCode === EXIT_CODE_SECRETS_FOUND
       ? undefined
       : `secrets binary exited with unexpected code ${String(exitCode)}`;
 
-  return { report: secretsReport(issues, error), exitCode };
+  return { report: secretsReport(issues, errors, error), exitCode };
 }

@@ -19,9 +19,9 @@
  */
 
 /**
- * E2E tests for parseSecretsOutput against the real sonar-secrets binary.
+ * E2E tests for parseSecretsJson against the real sonar-secrets binary.
  *
- * Verify that our plain-text stdout parser correctly handles the actual binary
+ * Verify that our JSON stdout parser correctly handles the actual binary
  * output format. If the binary changes its output format, these tests catch it.
  *
  * Skipped when the binary is not installed.
@@ -34,8 +34,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { resolveSecretsBinaryPath } from '../../src/cli/commands/_common/install/secrets';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../../src/cli/commands/analyze/secrets';
-import { parseSecretsOutput } from '../../src/cli/commands/analyze/secrets-output';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  parseSecretsJson,
+  runSecretsBinary,
+} from '../../src/cli/commands/analyze/secrets';
 import type { ResolvedAuth } from '../../src/lib/auth-resolver';
 import { FakeSonarQubeServerBuilder } from '../integration/harness';
 
@@ -49,7 +52,7 @@ const binaryPath = resolveSecretsBinaryPath();
 // Non-null path used in tests: safe because describe.skipIf guards against null.
 const installedBinaryPath = binaryPath ?? '';
 
-describe.skipIf(binaryPath === null)('parseSecretsOutput — real binary', () => {
+describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
   let tempDir: string;
   let auth: ResolvedAuth;
   let server: Awaited<ReturnType<InstanceType<typeof FakeSonarQubeServerBuilder>['start']>>;
@@ -85,14 +88,14 @@ describe.skipIf(binaryPath === null)('parseSecretsOutput — real binary', () =>
 
     expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
-    const issues = parseSecretsOutput(result.stdout);
+    const { issues } = parseSecretsJson(result.stdout);
 
     expect(issues).toHaveLength(1);
-    expect(issues[0].message).toBeTruthy();
+    expect(issues[0].description).toBeTruthy();
     expect(issues[0].file).toContain('leaked.ts');
-    expect(issues[0].location).not.toBeNull();
+    expect(issues[0].location).toBeDefined();
     expect(issues[0].location?.startLine).toBeGreaterThan(0);
-    expect(issues[0].secret).toBeTruthy();
+    expect(issues[0].maskedSecret).toBeTruthy();
   });
 
   it('returns empty array for a clean file', async () => {
@@ -103,7 +106,7 @@ describe.skipIf(binaryPath === null)('parseSecretsOutput — real binary', () =>
 
     expect(result.exitCode).toBe(0);
 
-    const issues = parseSecretsOutput(result.stdout);
+    const { issues } = parseSecretsJson(result.stdout);
     expect(issues).toHaveLength(0);
   });
 
@@ -117,11 +120,11 @@ describe.skipIf(binaryPath === null)('parseSecretsOutput — real binary', () =>
 
     expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
-    const issues = parseSecretsOutput(result.stdout);
+    const { issues } = parseSecretsJson(result.stdout);
 
     expect(issues.length).toBeGreaterThanOrEqual(2);
     const files = issues.map((i) => i.file);
-    expect(files.some((f) => f.includes('file1.ts'))).toBe(true);
-    expect(files.some((f) => f.includes('file2.ts'))).toBe(true);
+    expect(files.some((f) => f?.includes('file1.ts'))).toBe(true);
+    expect(files.some((f) => f?.includes('file2.ts'))).toBe(true);
   });
 });

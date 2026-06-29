@@ -23,13 +23,72 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import type { SpawnResult, StdioMode } from '../../../lib/process';
 import { spawnProcessWithTimeout } from '../../../lib/process';
-import { blank, error, print, success, text } from '../../../ui';
+import { blank, print, success, warn } from '../../../ui';
+import { green, yellow } from '../../../ui/colors.js';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { installSecretsBinary } from '../_common/install/secrets';
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
   stdin?: boolean;
+}
+
+/** A single finding from sonar-secrets `--json` output. */
+export interface SecretsJsonIssue {
+  ruleKey: string;
+  description: string;
+  file?: string;
+  location?: {
+    startLine: number;
+    startColumn: number;
+    endLine: number;
+    endColumn: number;
+  };
+  maskedSecret?: string;
+}
+
+/** Top-level structure of sonar-secrets `--json` stdout. */
+export interface SecretsJsonOutput {
+  issues: SecretsJsonIssue[];
+  errors?: string[];
+}
+
+/**
+ * Safely parses sonar-secrets `--json` stdout. Returns an empty issue list on
+ * parse failure so callers never have to guard against corrupt output.
+ *
+ * The binary emits errors[] as objects ({ message: string }), not plain strings.
+ * We normalise them to strings at the parse boundary so callers don't care.
+ */
+export function parseSecretsJson(stdout: string): SecretsJsonOutput {
+  try {
+    const parsed = JSON.parse(stdout) as {
+      issues?: unknown;
+      errors?: Array<{ message?: string } | string | null>;
+    };
+    const errors = Array.isArray(parsed.errors)
+      ? parsed.errors
+          .map((e) => (typeof e === 'string' ? e : e?.message))
+          .filter((m): m is string => typeof m === 'string' && m.length > 0)
+      : undefined;
+    const issues = Array.isArray(parsed.issues)
+      ? (parsed.issues as unknown[]).filter(
+          (i): i is SecretsJsonIssue =>
+            typeof i === 'object' &&
+            i !== null &&
+            typeof (i as Record<string, unknown>).description === 'string' &&
+            typeof (i as Record<string, unknown>).ruleKey === 'string',
+        )
+      : [];
+    return { issues, errors };
+  } catch (err) {
+    logger.debug(`parseSecretsJson: failed to parse stdout: ${(err as Error).message}`);
+    return { issues: [] };
+  }
+}
+
+interface ScanDisplayContext {
+  paths: string[]; // empty = stdin mode
 }
 
 export async function analyzeSecrets(
@@ -59,7 +118,7 @@ export async function runSecretsBinary(
 ): Promise<SpawnResult> {
   return spawnProcessWithTimeout(
     binaryPath,
-    ['--non-interactive', ...files],
+    ['--non-interactive', '--json', ...files],
     {
       stdin,
       stdout: 'pipe',
@@ -81,7 +140,7 @@ export async function runSecretsBinaryOnText(
 ): Promise<SpawnResult> {
   return spawnProcessWithTimeout(
     binaryPath,
-    ['--input'],
+    ['--input', '--json'],
     {
       stdin: 'pipe',
       stdinData: text,
@@ -110,6 +169,7 @@ async function handleCheckCommand(
     reportScanResult(
       await runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
       scanStartTime,
+      { paths: [] },
     );
   } else {
     await performPathsScan(binaryPath, options.paths ?? [], auth, scanStartTime);
@@ -144,56 +204,79 @@ async function performPathsScan(
   }
 
   const result = await runSecretsBinary(binaryPath, paths, auth);
-  reportScanResult(result, scanStartTime);
+  reportScanResult(result, scanStartTime, { paths });
 }
 
-function reportScanResult(result: SpawnResult, scanStartTime: number): void {
+function reportScanResult(
+  result: SpawnResult,
+  scanStartTime: number,
+  context: ScanDisplayContext,
+): void {
   const scanDurationMs = Date.now() - scanStartTime;
   const exitCode = result.exitCode ?? 1;
   if (exitCode === 0) {
-    handleScanSuccess(result, scanDurationMs);
+    handleScanSuccess(result, scanDurationMs, context);
   } else {
     handleScanFailure(result, scanDurationMs, exitCode);
   }
 }
 
-function handleScanSuccess(result: { stdout: string }, scanDurationMs: number): void {
+function handleScanSuccess(
+  result: { stdout: string },
+  scanDurationMs: number,
+  context: ScanDisplayContext,
+): void {
   blank();
-  success('Secrets scan completed successfully');
-  try {
-    const scanResult = JSON.parse(result.stdout);
-    text(`  Duration: ${scanDurationMs}ms`);
-    displayScanResults(scanResult);
-  } catch (parseError) {
-    logger.debug(`Failed to parse JSON output: ${(parseError as Error).message}`);
-    blank();
-    print(result.stdout);
+  const { errors } = parseSecretsJson(result.stdout);
+  const displayPaths = context.paths.length > 0 ? context.paths : ['(stdin)'];
+  for (const p of displayPaths) {
+    print(`  ${green('✓')}  ${p}`);
+  }
+  warnScanErrors(errors);
+  blank();
+  success(`No issues found · ${scanDurationMs}ms`);
+}
+
+function displaySecretsFindings(issues: SecretsJsonIssue[]): void {
+  const groups = new Map<string, SecretsJsonIssue[]>();
+  for (const issue of issues) {
+    const key = issue.file ?? '(stdin)';
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(issue);
+    } else {
+      groups.set(key, [issue]);
+    }
+  }
+
+  let first = true;
+  for (const [file, fileIssues] of groups) {
+    if (!first) blank();
+    first = false;
+    print(`  ${yellow('!')}  ${file}`);
+    fileIssues.forEach((issue, idx) => {
+      print(formatSecretsIssueLine(issue, idx + 1));
+    });
   }
 }
 
-function displayScanResults(scanResult: {
-  issues?: Array<{ message?: string; line?: number; severity?: string }>;
-}): void {
-  if (!scanResult.issues || !Array.isArray(scanResult.issues)) {
-    text('  No issues detected');
-    return;
-  }
+function formatSecretsIssueLine(issue: SecretsJsonIssue, index: number): string {
+  const linePart = issue.location ? `line ${issue.location.startLine}` : '';
+  const parts = [
+    `[${index}]`,
+    linePart,
+    issue.description,
+    issue.maskedSecret,
+    issue.ruleKey,
+  ].filter(Boolean);
+  return `     ${parts.join('  ')}`;
+}
 
-  text(`  Issues found: ${scanResult.issues.length}`);
-  if (scanResult.issues.length === 0) {
-    return;
+export function warnScanErrors(errors?: string[]): void {
+  if (!errors?.length) return;
+  for (const msg of errors) {
+    warn(`  Scan warning: ${msg}`);
   }
-
-  blank();
-  scanResult.issues.forEach((issue, idx) => {
-    error(`  [${idx + 1}] ${issue.message ?? 'Unknown issue'}`);
-    if (issue.line) {
-      text(`      Line: ${issue.line}`);
-    }
-    if (issue.severity) {
-      text(`      Severity: ${issue.severity}`);
-    }
-  });
 }
 
 function handleScanFailure(
@@ -203,17 +286,34 @@ function handleScanFailure(
 ): void {
   blank();
 
+  if (exitCode === EXIT_CODE_SECRETS_FOUND) {
+    const { issues, errors } = parseSecretsJson(result.stdout);
+    if (issues.length > 0) {
+      displaySecretsFindings(issues);
+      blank();
+    } else if (result.stderr) {
+      print(result.stderr);
+      blank();
+    }
+    warnScanErrors(errors);
+    const count = issues.length;
+    const secretWord = count === 1 ? 'secret' : 'secrets';
+    // count === 0 means exit 51 but no parseable issues — report generically.
+    const message =
+      count === 0
+        ? `Secrets found · ${scanDurationMs}ms`
+        : `${count} ${secretWord} found · ${scanDurationMs}ms`;
+    const hintWord = count === 0 ? 'secret(s)' : secretWord;
+    throw new CommandFailedError(message, {
+      exitCode,
+      remediationHint: `Remove the reported ${hintWord}, then rerun the scan.`,
+    });
+  }
+
   const output = [result.stderr, result.stdout].filter(Boolean).join('\n');
   if (output) {
     print(output);
     blank();
-  }
-
-  if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-    throw new CommandFailedError(`Secrets found (${scanDurationMs}ms)`, {
-      exitCode,
-      remediationHint: 'Remove the reported secret, then rerun the scan.',
-    });
   }
 
   throw new CommandFailedError(`Scan error (exit code ${exitCode})`, {

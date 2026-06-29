@@ -66,6 +66,21 @@ describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
     runSecretsBinaryOnTextSpy.mockRestore();
   });
 
+  it('writes a block decision with generic reason when secrets are found', async () => {
+    runSecretsBinaryOnTextSpy.mockResolvedValue({
+      exitCode: 51,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
+
+    await agentPromptSubmit();
+
+    const written = String((stdoutSpy.mock.calls[0] as unknown[])[0]);
+    const payload = JSON.parse(written) as { decision: string; reason: string };
+    expect(payload.decision).toBe('block');
+    expect(payload.reason).toBe('Sonar detected secrets in prompt');
+  });
+
   it('outputs nothing and does not throw when scan throws an error', async () => {
     runSecretsBinaryOnTextSpy.mockRejectedValue(new Error('scan process crashed'));
 
