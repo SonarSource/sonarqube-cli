@@ -51,6 +51,7 @@ export class JsonPatch<TDoc = unknown> extends PatchResource<JsonPatchOptions<TD
         version: options.version,
         targetPath: options.targetPath,
         removePatch: options.removePatch,
+        defaultValue: options.defaultValue,
       }),
     );
   }

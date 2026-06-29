@@ -33,7 +33,9 @@ import {
   type ResourceIdentity,
 } from './common';
 
-export type YamlPatchOptions<TDoc = unknown> = PatchResourceOptions<TDoc>;
+export interface YamlPatchOptions<TDoc = unknown> extends PatchResourceOptions<TDoc> {
+  defaultValue?: TDoc;
+}
 
 export function yamlPatch<TDoc = unknown>(options: YamlPatchOptions<TDoc>): ResourceDeclaration {
   return new YamlPatch(options);
@@ -50,6 +52,7 @@ export class YamlPatch<TDoc = unknown> extends PatchResource<YamlPatchOptions<TD
         version: options.version,
         targetPath: options.targetPath,
         removePatch: options.removePatch,
+        defaultValue: options.defaultValue,
       }),
     );
   }
