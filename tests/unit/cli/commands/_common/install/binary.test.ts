@@ -18,12 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
   type BinarySpec,
   buildLocalBinaryName,
+  removeBinary,
 } from '../../../../../../src/cli/commands/_common/install/binary.js';
+import { detectPlatform } from '../../../../../../src/lib/platform-detector.js';
 
 const baseSpec: Omit<BinarySpec, 'name' | 'version'> = {
   distPrefix: 'CommercialDistribution/whatever',
@@ -46,5 +52,30 @@ describe('buildLocalBinaryName', () => {
       { os: 'windows', arch: 'x86-64', extension: '.exe' },
     );
     expect(name).toBe('sonar-secrets-1.2.3-windows-x86-64.exe');
+  });
+});
+
+describe('removeBinary', () => {
+  const spec: BinarySpec = { ...baseSpec, name: 'sonar-secrets', version: '1.2.3' };
+  let binDir: string;
+
+  beforeEach(() => {
+    binDir = mkdtempSync(join(tmpdir(), 'sonar-cli-bin-'));
+  });
+
+  afterEach(() => {
+    rmSync(binDir, { recursive: true, force: true });
+  });
+
+  it('deletes the cached binary and reports it removed', () => {
+    const binaryPath = join(binDir, buildLocalBinaryName(spec, detectPlatform()));
+    writeFileSync(binaryPath, 'binary');
+
+    expect(removeBinary(spec, binDir)).toBe(true);
+    expect(existsSync(binaryPath)).toBe(false);
+  });
+
+  it('is a no-op when the binary is absent', () => {
+    expect(removeBinary(spec, binDir)).toBe(false);
   });
 });

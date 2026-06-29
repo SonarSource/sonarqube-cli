@@ -58,19 +58,23 @@ function renderWithResourcePath(path: string): string[] {
     features: [{ id: 'a', displayName: 'Feature A' }],
   };
 
-  renderCompletionSummary(integration, [
-    installedFeature('a', {
-      resources: [
-        {
-          id: 'r1',
-          resourceType: 'whole-file',
-          path,
-          updatedByCliVersion: 'test',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-      ],
-    }),
-  ]);
+  renderCompletionSummary(
+    integration,
+    [
+      installedFeature('a', {
+        resources: [
+          {
+            id: 'r1',
+            resourceType: 'whole-file',
+            path,
+            updatedByCliVersion: 'test',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    ],
+    [],
+  );
 
   const phaseCall = getMockUiCalls().find((c) => c.method === 'phase' && c.args[0] === 'Installed');
   const items = (phaseCall?.args[1] ?? []) as PhaseItem[];
@@ -94,7 +98,7 @@ describe('renderCompletionSummary', () => {
       features: [{ id: 'a', displayName: 'Feature A' }],
     };
 
-    renderCompletionSummary(integration, []);
+    renderCompletionSummary(integration, [], []);
 
     expect(getMockUiCalls()).toHaveLength(0);
   });
@@ -109,20 +113,24 @@ describe('renderCompletionSummary', () => {
       ],
     };
 
-    renderCompletionSummary(integration, [
-      installedFeature('a', {
-        resources: [
-          {
-            id: 'r1',
-            resourceType: 'whole-file',
-            path: '/tmp/project/.sonar/hook.sh',
-            updatedByCliVersion: 'test',
-            updatedAt: '2026-01-01T00:00:00.000Z',
-          },
-        ],
-      }),
-      installedFeature('b'),
-    ]);
+    renderCompletionSummary(
+      integration,
+      [
+        installedFeature('a', {
+          resources: [
+            {
+              id: 'r1',
+              resourceType: 'whole-file',
+              path: '/tmp/project/.sonar/hook.sh',
+              updatedByCliVersion: 'test',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        }),
+        installedFeature('b'),
+      ],
+      [],
+    );
 
     const phaseCall = getMockUiCalls().find(
       (c) => c.method === 'phase' && c.args[0] === 'Installed',
@@ -135,6 +143,26 @@ describe('renderCompletionSummary', () => {
     const outroCall = getMockUiCalls().find((c) => c.method === 'outro');
     expect(outroCall?.args[0]).toBe('Setup complete!');
     expect(outroCall?.args[1]).toBe('success');
+  });
+
+  it('renders a Removed list for uninstalled features', () => {
+    const integration: IntegrationDeclaration = {
+      id: 'test',
+      displayName: 'Test',
+      features: [
+        { id: 'a', displayName: 'Feature A' },
+        { id: 'b', displayName: 'Feature B' },
+      ],
+    };
+
+    renderCompletionSummary(integration, [installedFeature('a')], [integration.features[1]]);
+
+    const removedPhase = getMockUiCalls().find(
+      (c) => c.method === 'phase' && c.args[0] === 'Removed',
+    );
+    const items = (removedPhase?.args[1] ?? []) as PhaseItem[];
+    expect(items.map((item) => item.text)).toEqual(['Feature B']);
+    expect(getMockUiCalls().find((c) => c.method === 'outro')?.args[0]).toBe('Setup complete!');
   });
 
   it('abbreviates the home directory with ~ only on a path boundary', () => {
@@ -159,7 +187,7 @@ describe('renderCompletionSummary', () => {
       features: [],
     };
 
-    expect(() => renderCompletionSummary(integration, [installedFeature('orphan')])).toThrow(
+    expect(() => renderCompletionSummary(integration, [installedFeature('orphan')], [])).toThrow(
       'No declaration found for installed feature test.orphan',
     );
   });
@@ -182,7 +210,7 @@ describe('renderCompletionSummary', () => {
       ],
     };
 
-    renderCompletionSummary(integration, [installedFeature('a')]);
+    renderCompletionSummary(integration, [installedFeature('a')], []);
 
     const calls = getMockUiCalls();
     expect(
@@ -207,7 +235,7 @@ describe('renderCompletionSummary', () => {
           : undefined,
     };
 
-    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')]);
+    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')], []);
 
     const notes = getMockUiCalls().filter((c) => c.method === 'note');
     expect(notes).toHaveLength(1);
@@ -226,7 +254,7 @@ describe('renderCompletionSummary', () => {
       combinedPostInstallExample: () => undefined,
     };
 
-    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')]);
+    renderCompletionSummary(integration, [installedFeature('a'), installedFeature('b')], []);
 
     const noteBodies = getMockUiCalls()
       .filter((c) => c.method === 'note')

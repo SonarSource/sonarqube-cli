@@ -75,6 +75,19 @@ export function resolveBinaryPath(spec: BinarySpec, binDir?: string): string | n
 }
 
 /**
+ * Delete the local cached binary from disk if present.
+ * No-op when absent. Returns true when a file was removed.
+ */
+export function removeBinary(spec: BinarySpec, binDir?: string): boolean {
+  const path = resolveBinaryPath(spec, binDir);
+  if (path === null) {
+    return false;
+  }
+  rmSync(path, { force: true });
+  return true;
+}
+
+/**
  * Download, verify, and install a binary into BIN_DIR (or a custom binDir).
  * No-op when the same version is already present unless `force` is set.
  */

@@ -33,11 +33,10 @@ import { text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import { renderCompletionSummary } from './completion-summary';
 import type { IntegrationRegistry } from './core';
-import type { FeatureApplication } from './installer';
+import { buildApplications } from './feature-target';
 import { integrationInstaller } from './installer';
-import { isFeatureContainer } from './selection';
+import { isFeatureContainer, selectFeaturesForInvocation } from './selection';
 import type {
-  FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationExecutionMode,
@@ -53,7 +52,6 @@ export interface InstallIntegrationOptions<TOptions> {
   auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
-  featureIds?: string[];
   nonInteractive?: boolean;
 }
 
@@ -66,7 +64,6 @@ export async function installIntegration<TOptions>({
   auth,
   force,
   attrs,
-  featureIds,
   nonInteractive,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
@@ -81,33 +78,23 @@ export async function installIntegration<TOptions>({
     nonInteractive,
     state,
   };
-  const features =
-    featureIds === undefined
-      ? await integrationInstaller.selectFeaturesForInvocation(integration, invocation)
-      : integrationInstaller.selectFeatures(integration, featureIds);
-  if (features.length === 0) {
+  const applications = await buildApplications(invocation, integration.features);
+  const { toInstall, toRemove } = await selectFeaturesForInvocation(
+    integration,
+    invocation,
+    applications,
+  );
+  if (toInstall.length === 0 && toRemove.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
 
-  const applications: FeatureApplication<TOptions>[] = [];
   text('');
-  for (const feature of features) {
-    const context = await resolveFeatureContext(state, invocation, feature, 'install');
-    applications.push({
-      feature,
-      targetRoot: context.targetRoot,
-      scope: context.scope,
-      auth: context.auth,
-      force: context.force,
-      attrs: context.attrs,
-    });
-  }
 
   try {
     const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
       state,
       integration,
-      applications,
+      toInstall,
       {
         callbacks: {
           onFeatureApplyStart: (feature) => {
@@ -129,7 +116,23 @@ export async function installIntegration<TOptions>({
       },
     );
 
-    renderCompletionSummary(integration, installedFeatures);
+    const removedFeatures = await integrationInstaller.removeAndRecordFeatures(
+      state,
+      integration,
+      toRemove,
+      {
+        callbacks: {
+          onFeatureRemoveStart: (feature) => {
+            text(`     Removing ${feature.displayName}...`);
+          },
+          onDependencyRemoved: (dependency) => {
+            text(`     ${dependency.displayName ?? dependency.id} removed`);
+          },
+        },
+      },
+    );
+
+    renderCompletionSummary(integration, installedFeatures, removedFeatures);
 
     return saveInstalledFeatures(state) ? installedFeatures : [];
   } catch (error) {
@@ -196,43 +199,4 @@ function loadStateForInstallation(): CliState {
     logger.warn(`Failed to read configuration state: ${msg}`);
     return getDefaultState(VERSION);
   }
-}
-
-async function resolveFeatureContext<TOptions>(
-  state: CliState,
-  invocation: IntegrationInvocation<TOptions>,
-  feature: FeatureDeclaration<TOptions>,
-  executionMode: IntegrationExecutionMode,
-): Promise<IntegrationContext> {
-  return makeContext(
-    state,
-    await resolveFeatureTargetRoot(invocation, feature),
-    await resolveFeatureScope(invocation, feature),
-    executionMode,
-    invocation.auth,
-    invocation.force,
-    invocation.attrs,
-  );
-}
-
-async function resolveFeatureTargetRoot<TOptions>(
-  invocation: IntegrationInvocation<TOptions>,
-  feature: FeatureDeclaration<TOptions>,
-): Promise<string> {
-  const { targetRoot } = feature;
-  if (typeof targetRoot === 'function') {
-    return targetRoot(invocation);
-  }
-  return targetRoot ?? invocation.targetRoot;
-}
-
-async function resolveFeatureScope<TOptions>(
-  invocation: IntegrationInvocation<TOptions>,
-  feature: FeatureDeclaration<TOptions>,
-): Promise<IntegrationScope> {
-  const { scope } = feature;
-  if (typeof scope === 'function') {
-    return scope(invocation);
-  }
-  return scope ?? invocation.scope;
 }

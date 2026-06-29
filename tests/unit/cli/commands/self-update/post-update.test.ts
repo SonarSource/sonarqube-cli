@@ -382,6 +382,7 @@ describe('migrateDeclarativeIntegrations', () => {
         };
       },
       isInstalled: () => true,
+      remove: () => {},
     };
 
     const state = makeState();

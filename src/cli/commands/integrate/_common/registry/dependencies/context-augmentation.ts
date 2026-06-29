@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { rmSync } from 'node:fs';
+
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '../../../../../../lib/install-types';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../../lib/signatures';
 import {
@@ -60,6 +62,15 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
 
   isInstalled(_context: IntegrationContext): boolean {
     return resolveContextAugmentationBinaryPath() !== null;
+  }
+
+  async remove(_context: IntegrationContext): Promise<void> {
+    const binaryPath = resolveContextAugmentationBinaryPath();
+    if (binaryPath === null) {
+      return;
+    }
+    await stopAllContextAugmentationTools(binaryPath);
+    rmSync(binaryPath, { force: true });
   }
 }
 

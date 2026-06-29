@@ -33,6 +33,7 @@ import {
 import {
   type BinarySpec,
   installBinary,
+  removeBinary,
   resolveBinaryPath,
 } from '../../../../_common/install/binary';
 import type { DependencyInstallContext, InstalledDependency, IntegrationContext } from '../types';
@@ -100,6 +101,10 @@ export class SonarSourceBinaryDependency implements DependencyDeclaration {
 
   isInstalled(_context: IntegrationContext): boolean {
     return resolveBinaryPath(this.options.binary.spec) !== null;
+  }
+
+  remove(_context: IntegrationContext): void {
+    removeBinary(this.options.binary.spec);
   }
 }
 

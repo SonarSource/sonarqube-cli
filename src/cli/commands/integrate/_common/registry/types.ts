@@ -90,6 +90,24 @@ export interface PostInstallExample {
   footer?: string;
 }
 
+/**
+ * A feature paired with its resolved per-invocation execution context (target
+ * root, scope, auth, …).
+ */
+export interface FeatureApplication<TOptions = Record<string, unknown>> {
+  feature: FeatureDeclaration<TOptions>;
+  targetRoot: string;
+  scope: IntegrationScope;
+  auth?: ResolvedAuth;
+  force?: boolean;
+  attrs?: Record<string, IntegrationStateAttribute>;
+}
+
+export interface FeatureSelectionResult<TOptions = Record<string, unknown>> {
+  toInstall: FeatureApplication<TOptions>[];
+  toRemove: FeatureApplication<TOptions>[];
+}
+
 export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;

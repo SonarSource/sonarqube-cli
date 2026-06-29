@@ -43,6 +43,19 @@ import type {
   SubfeatureDeclaration,
 } from './types';
 
+/** Match a recorded feature entry by its id + scope + targetRoot key. */
+function matchesFeatureKey<TOptions>(
+  entry: InstalledIntegrationFeature,
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
+  feature: FeatureDeclaration<TOptions>,
+): boolean {
+  return (
+    entry.featureId === feature.id &&
+    entry.scope === context.scope &&
+    entry.targetRoot === context.targetRoot
+  );
+}
+
 export function recordInstalledFeature<TOptions>(
   state: CliState,
   context: Omit<IntegrationContext, 'state'>,
@@ -53,11 +66,8 @@ export function recordInstalledFeature<TOptions>(
 ): InstalledIntegrationFeature {
   const now = new Date().toISOString();
   const installedIntegration = upsertInstalledIntegration(state, integration, now);
-  const existing = installedIntegration.features.find(
-    (entry) =>
-      entry.featureId === feature.id &&
-      entry.scope === context.scope &&
-      entry.targetRoot === context.targetRoot,
+  const existing = installedIntegration.features.find((entry) =>
+    matchesFeatureKey(entry, context, feature),
   );
   const next: InstalledIntegrationFeature = {
     featureId: feature.id,
@@ -113,6 +123,56 @@ export function recordInstalledFeature<TOptions>(
   return existing ?? next;
 }
 
+/**
+ * Remove a recorded feature from state, matching by id + scope + targetRoot
+ * (same key as {@link recordInstalledFeature}), and drop the owning integration
+ * entry when no features remain. Prunes dependencies of the removed feature from
+ * state and returns the orphaned ones so the caller can delete their binaries.
+ */
+export function removeInstalledFeature<TOptions>(
+  state: CliState,
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
+  integration: IntegrationDeclaration<TOptions>,
+  feature: FeatureDeclaration<TOptions>,
+): InstalledIntegrationDependency[] {
+  const installedIntegration = state.integrations.installed.find(
+    (entry) => entry.integrationId === integration.id,
+  );
+  if (!installedIntegration) {
+    return [];
+  }
+
+  const featureIndex = installedIntegration.features.findIndex((entry) =>
+    matchesFeatureKey(entry, context, feature),
+  );
+  if (featureIndex < 0) {
+    return [];
+  }
+
+  const [removedFeature] = installedIntegration.features.splice(featureIndex, 1);
+  const removedDependencyIds = new Set(featureDependencyIds(removedFeature));
+
+  if (installedIntegration.features.length === 0) {
+    state.integrations.installed = state.integrations.installed.filter(
+      (entry) => entry !== installedIntegration,
+    );
+  }
+
+  const stillReferenced = collectReferencedDependencyIds(state);
+  const orphanedIds = new Set([...removedDependencyIds].filter((id) => !stillReferenced.has(id)));
+  if (orphanedIds.size === 0) {
+    return [];
+  }
+
+  const orphanedDependencies = state.dependencies.installed.filter((dependency) =>
+    orphanedIds.has(dependency.id),
+  );
+  state.dependencies.installed = state.dependencies.installed.filter(
+    (dependency) => !orphanedIds.has(dependency.id),
+  );
+  return orphanedDependencies;
+}
+
 function featureDependencyIds(feature: InstalledIntegrationFeature): string[] {
   return [
     ...feature.dependencies.map((d) => d.id),
@@ -125,6 +185,26 @@ export function collectReferencedDependencyIds(state: CliState): Set<string> {
     state.integrations.installed.flatMap((integration) =>
       integration.features.flatMap(featureDependencyIds),
     ),
+  );
+}
+
+/** Find the recorded integration entry, or `undefined` if the integration has none. */
+export function findInstalledIntegration<TOptions>(
+  state: CliState,
+  integration: IntegrationDeclaration<TOptions>,
+): InstalledIntegration | undefined {
+  return state.integrations.installed.find((entry) => entry.integrationId === integration.id);
+}
+
+/** Find a recorded feature by id + scope + targetRoot, or `undefined` if not installed. */
+export function findInstalledFeature<TOptions>(
+  state: CliState,
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
+  integration: IntegrationDeclaration<TOptions>,
+  feature: FeatureDeclaration<TOptions>,
+): InstalledIntegrationFeature | undefined {
+  return findInstalledIntegration(state, integration)?.features.find((entry) =>
+    matchesFeatureKey(entry, context, feature),
   );
 }
 
