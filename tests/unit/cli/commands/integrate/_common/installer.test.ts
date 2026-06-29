@@ -170,54 +170,6 @@ describe('generic integration installer', () => {
     expect(await readFile(join(projectRoot, 'project.txt'), 'utf-8')).toBe('project\n');
   });
 
-  it('supports explicit feature selection independently of the feature predicates', async () => {
-    const integration = registerIntegration<{ installMain?: boolean }>(
-      registry,
-      'installer-feature-selection',
-      [
-        {
-          id: 'main',
-          displayName: 'Main feature',
-          shouldInstall: ({ options }) => options.installMain === true,
-          resources: [
-            wholeFile({
-              id: 'main-file',
-              displayName: 'Main file',
-              targetPath: join(tempDir, 'main.txt'),
-              content: 'main\n',
-            }),
-          ],
-        },
-        {
-          id: 'context-skill',
-          displayName: 'Context skill',
-          shouldInstall: () => false,
-          resources: [
-            wholeFile({
-              id: 'skill-file',
-              displayName: 'Skill file',
-              targetPath: join(tempDir, 'skill.txt'),
-              content: 'skill\n',
-            }),
-          ],
-        },
-      ],
-    );
-
-    const installed = await installIntegration({
-      registry,
-      integrationId: integration.id,
-      options: {},
-      targetRoot: tempDir,
-      scope: 'project',
-      featureIds: ['context-skill'],
-    });
-
-    expect(installed).toMatchObject([{ featureId: 'context-skill' }]);
-    expect(await readFile(join(tempDir, 'skill.txt'), 'utf-8')).toBe('skill\n');
-    expect(await Bun.file(join(tempDir, 'main.txt')).exists()).toBe(false);
-  });
-
   it('passes resolved dependency metadata to feature resources after dependency installation', async () => {
     const state = getDefaultState('test');
     loadStateSpy.mockReturnValue(state);

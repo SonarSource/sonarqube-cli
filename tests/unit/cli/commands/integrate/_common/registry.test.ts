@@ -50,7 +50,6 @@ const {
   IntegrationRegistry,
   isFeatureContainer,
   jsonPatch,
-  selectFeatures,
   selectFeaturesForInvocation,
   skip,
   SonarSourceBinary,
@@ -71,14 +70,6 @@ async function selectForInvocation<TOptions>(
 ) {
   const applications = await buildApplications(invocation, integration.features);
   return selectFeaturesForInvocation(integration, invocation, applications);
-}
-
-/** Resolve an integration's features into applications for the by-id selectFeatures tests. */
-function applicationsFor<TOptions>(integration: IntegrationDeclaration<TOptions>) {
-  return buildApplications(
-    { options: {} as TOptions, targetRoot: '', scope: 'project', state: getDefaultState('test') },
-    integration.features,
-  );
 }
 
 const { findMockUiCall, getMockUiCalls, queueMockResponse, setMockUi } =
@@ -598,76 +589,6 @@ describe('declarative integration framework', () => {
     expect(registry.get('first')).toBe(first);
     expect(registry.get('missing')).toBeUndefined();
     expect(registry.list()).toEqual([first, second]);
-  });
-
-  it('selects declared features and rejects unknown feature ids', async () => {
-    const integration = makeIntegration({
-      features: [
-        { id: 'one', displayName: 'One' },
-        { id: 'two', displayName: 'Two' },
-      ],
-    });
-    const applications = await applicationsFor(integration);
-
-    expect(
-      selectFeatures(integration, applications, ['two', 'one']).toInstall.map(
-        (application) => application.feature.id,
-      ),
-    ).toEqual(['two', 'one']);
-    expect(() => selectFeatures(integration, applications, ['missing'])).toThrow(
-      'Unknown feature test-integration.missing',
-    );
-  });
-
-  it('selectFeatures filters container subfeatures to the requested ids', async () => {
-    const container: FeatureContainer = {
-      id: 'container',
-      displayName: 'Container',
-      subfeatures: [
-        { id: 'sub-a', displayName: 'Sub A' },
-        { id: 'sub-b', displayName: 'Sub B' },
-        { id: 'sub-c', displayName: 'Sub C' },
-      ],
-      defaultInstallSubfeatureIds: [],
-    };
-    const integration = makeIntegration({ features: [container] });
-    const applications = await applicationsFor(integration);
-
-    const [selected] = selectFeatures(integration, applications, [
-      { featureId: 'container', subfeatureIds: ['sub-c', 'sub-a'] },
-    ]).toInstall;
-    expect((selected.feature as FeatureContainer).subfeatures.map((s) => s.id)).toEqual([
-      'sub-a',
-      'sub-c',
-    ]);
-  });
-
-  it('selectFeatures rejects subfeatureIds for a non-container feature', async () => {
-    const integration = makeIntegration({
-      features: [{ id: 'plain', displayName: 'Plain' }],
-    });
-    const applications = await applicationsFor(integration);
-
-    expect(() =>
-      selectFeatures(integration, applications, [{ featureId: 'plain', subfeatureIds: ['sub'] }]),
-    ).toThrow('Feature test-integration.plain is not a container');
-  });
-
-  it('selectFeatures rejects unknown subfeature ids on a container', async () => {
-    const container: FeatureContainer = {
-      id: 'container',
-      displayName: 'Container',
-      subfeatures: [{ id: 'valid', displayName: 'Valid' }],
-      defaultInstallSubfeatureIds: [],
-    };
-    const integration = makeIntegration({ features: [container] });
-    const applications = await applicationsFor(integration);
-
-    expect(() =>
-      selectFeatures(integration, applications, [
-        { featureId: 'container', subfeatureIds: ['valid', 'typo'] },
-      ]),
-    ).toThrow('Unknown subfeature(s) test-integration.container.typo');
   });
 
   it('selects features matching an invocation, honoring boolean and decision results', async () => {

@@ -84,56 +84,6 @@ export function isFeatureContainer<TOptions>(
 }
 
 /**
- * Explicit feature selection by id (non-interactive path), picking from the
- * pre-resolved `applications`.
- *
- * This path is currently unused.
- */
-export function selectFeatures<TOptions>(
-  integration: IntegrationDeclaration<TOptions>,
-  applications: FeatureApplication<TOptions>[],
-  featureIds: (string | { featureId: string; subfeatureIds: string[] })[],
-): FeatureSelectionResult<TOptions> {
-  const applicationsById = new Map(applications.map((app) => [app.feature.id, app]));
-
-  const toInstall = featureIds.map((entry) => {
-    const featureId = typeof entry === 'string' ? entry : entry.featureId;
-    const subfeatureIds = typeof entry === 'string' ? undefined : entry.subfeatureIds;
-
-    const application = applicationsById.get(featureId);
-    if (!application) {
-      throw new Error(`Unknown feature ${integration.id}.${featureId}`);
-    }
-
-    if (subfeatureIds !== undefined) {
-      const feature = application.feature;
-      if (!isFeatureContainer(feature)) {
-        throw new Error(
-          `Feature ${integration.id}.${featureId} is not a container and does not support subfeature selection`,
-        );
-      }
-      const validIds = new Set(feature.subfeatures.map((s) => s.id));
-      const unknown = subfeatureIds.filter((id) => !validIds.has(id));
-      if (unknown.length > 0) {
-        const prefix = `${integration.id}.${featureId}.`;
-        throw new Error(`Unknown subfeature(s) ${unknown.map((id) => prefix + id).join(', ')}`);
-      }
-      return {
-        ...application,
-        feature: {
-          ...feature,
-          subfeatures: feature.subfeatures.filter((s) => subfeatureIds.includes(s.id)),
-        },
-      };
-    }
-
-    return application;
-  });
-
-  return { toInstall, toRemove: [] };
-}
-
-/**
  * Interactive feature selection over the pre-resolved `applications`.
  */
 export async function selectFeaturesForInvocation<TOptions>(

@@ -35,7 +35,7 @@ import { renderCompletionSummary } from './completion-summary';
 import type { IntegrationRegistry } from './core';
 import { buildApplications } from './feature-target';
 import { integrationInstaller } from './installer';
-import { isFeatureContainer, selectFeatures, selectFeaturesForInvocation } from './selection';
+import { isFeatureContainer, selectFeaturesForInvocation } from './selection';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
@@ -52,7 +52,6 @@ export interface InstallIntegrationOptions<TOptions> {
   auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
-  featureIds?: string[];
   nonInteractive?: boolean;
 }
 
@@ -65,7 +64,6 @@ export async function installIntegration<TOptions>({
   auth,
   force,
   attrs,
-  featureIds,
   nonInteractive,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
@@ -81,10 +79,11 @@ export async function installIntegration<TOptions>({
     state,
   };
   const applications = await buildApplications(invocation, integration.features);
-  const { toInstall, toRemove } =
-    featureIds === undefined
-      ? await selectFeaturesForInvocation(integration, invocation, applications)
-      : selectFeatures(integration, applications, featureIds);
+  const { toInstall, toRemove } = await selectFeaturesForInvocation(
+    integration,
+    invocation,
+    applications,
+  );
   if (toInstall.length === 0 && toRemove.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }

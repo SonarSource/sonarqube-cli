@@ -82,7 +82,6 @@ export {
   install,
   type InstallDecision,
   isFeatureContainer,
-  selectFeatures,
   selectFeaturesForInvocation,
   skip,
 } from './selection';
