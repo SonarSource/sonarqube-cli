@@ -1744,9 +1744,7 @@ describe('integrate — argument validation', () => {
       const result = await harness.run('integrate gemini');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
-        "❌ error: too many arguments for 'integrate'. Expected 0 arguments but got 1: gemini.",
-      );
+      expect(result.stdout + result.stderr).toContain("❌ error: unknown command 'gemini'");
     },
     { timeout: 15000 },
   );

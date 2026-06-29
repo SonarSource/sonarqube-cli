@@ -236,6 +236,17 @@ const integrateCommand = COMMAND_TREE.command('integrate')
   })
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('-g, --global', 'Install integrations globally.')
+  // allowExcessArguments + preAction: when a parent command has both an action and subcommands,
+  // Commander v15 (allowExcessArguments defaults to false) emits "too many arguments" for unknown
+  // subcommands instead of "unknown command 'X'" with a "Did you mean?" suggestion. Allow excess
+  // args so Commander doesn't error early, then re-raise as unknownCommand in the hook.
+  .allowExcessArguments(true)
+  .hook('preAction', (thisCommand, actionCommand) => {
+    if (actionCommand.name() === thisCommand.name() && thisCommand.args.length > 0) {
+      // unknownCommand() is public in Commander 15 but absent from its typings.
+      (thisCommand as Command & { unknownCommand(): void }).unknownCommand();
+    }
+  })
   .authenticatedAction((auth, options: IntegrateBareOptions) => integrateBare(auth, options));
 
 integrateCommand
