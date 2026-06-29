@@ -128,19 +128,29 @@ export const ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR = join(
 /** Global Antigravity skills directory (`sonar integrate antigravity --global` CAG skill). */
 export const ANTIGRAVITY_GLOBAL_SKILLS_DIR = join(ANTIGRAVITY_GLOBAL_CONFIG_DIR, 'skills');
 
-/** Antigravity managed instructions filename. */
-export const ANTIGRAVITY_INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
+/** Antigravity global rules file (`sonar integrate antigravity --global`). */
+export const ANTIGRAVITY_GLOBAL_GEMINI_MD = join(homedir(), '.gemini', 'GEMINI.md');
 
-/** Project Antigravity instructions directory (relative to the project root). */
-export const ANTIGRAVITY_PROJECT_INSTRUCTIONS_DIR = join(
+/** Project Antigravity rules directory (relative to the project root). */
+export const ANTIGRAVITY_PROJECT_RULES_DIR = join(ANTIGRAVITY_PROJECT_AGENTS_DIR, 'rules');
+
+/** Workspace rule: prompt-secrets protocol (`.agents/rules/sonar-prompt-secrets.md`). */
+export const ANTIGRAVITY_PROMPT_SECRETS_RULE_FILE = 'sonar-prompt-secrets.md';
+
+/** Workspace rule: SQAA protocol (`.agents/rules/sonar-agentic-analysis.md`). */
+export const ANTIGRAVITY_SQAA_RULE_FILE = 'sonar-agentic-analysis.md';
+
+/** Legacy instructions paths (pre-Rules); removed on re-integrate when Sonar-managed. */
+export const ANTIGRAVITY_LEGACY_PROJECT_INSTRUCTIONS_PATH = join(
   ANTIGRAVITY_PROJECT_AGENTS_DIR,
   'instructions',
+  'sonarqube.instructions.md',
 );
 
-/** Global Antigravity instructions directory (`sonar integrate antigravity --global`). */
-export const ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR = join(
+export const ANTIGRAVITY_LEGACY_GLOBAL_INSTRUCTIONS_PATH = join(
   ANTIGRAVITY_GLOBAL_CONFIG_DIR,
   'instructions',
+  'sonarqube.instructions.md',
 );
 
 // ---------------------------------------------------------------------------

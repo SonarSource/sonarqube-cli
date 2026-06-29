@@ -18,16 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { describe, expect, it } from 'bun:test';
 
-import {
-  ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR,
-  ANTIGRAVITY_INSTRUCTIONS_FILENAME,
-} from '../../../../lib/config-constants';
+import { buildAntigravityAlwaysOnRule } from '../../../../../../src/cli/commands/integrate/antigravity/rules';
 
-export { PROMPT_SECRETS_BODY } from '../copilot/instructions';
+describe('antigravity rules', () => {
+  it('buildAntigravityAlwaysOnRule prefixes YAML frontmatter with always_on trigger', () => {
+    const rule = buildAntigravityAlwaysOnRule('# SonarQube secrets scanning for prompts protocol');
 
-export function globalAntigravityInstructionsExist(): boolean {
-  return existsSync(join(ANTIGRAVITY_GLOBAL_INSTRUCTIONS_DIR, ANTIGRAVITY_INSTRUCTIONS_FILENAME));
-}
+    expect(rule).toBe(
+      '---\ntrigger: always_on\n---\n\n# SonarQube secrets scanning for prompts protocol\n',
+    );
+  });
+});
