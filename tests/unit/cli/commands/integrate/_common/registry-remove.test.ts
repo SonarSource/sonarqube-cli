@@ -267,6 +267,31 @@ describe('declarative integration framework - remove and undo', () => {
       });
     });
 
+    it('json-patch: keeps the file when only null or empty-valued user keys remain', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const jsonPath = join(tempDir, '.mcp.json');
+      const resource = jsonPatch({
+        id: 'r',
+        targetPath: jsonPath,
+        defaultValue: {},
+        patch: (doc) => doc,
+        removePatch: () => ({ mcpServers: {}, userKey: null }),
+      });
+      await writeFile(
+        jsonPath,
+        JSON.stringify({ mcpServers: { sonarqube: {} }, userKey: null }, null, 2) + '\n',
+      );
+
+      await resource.remove(context);
+
+      expect(existsSync(jsonPath)).toBe(true);
+      expect(JSON.parse(await readFile(jsonPath, 'utf-8'))).toEqual({
+        mcpServers: {},
+        userKey: null,
+      });
+    });
+
     it('toml-patch: deletes the file when removal leaves only the default baseline', async () => {
       const state = getDefaultState('test');
       const context = makeContext(state, tempDir);
@@ -320,6 +345,24 @@ describe('declarative integration framework - remove and undo', () => {
         removePatch: () => ({ sonar: {} }),
       });
       await writeFile(yamlPath, 'sonar:\n  enabled: true\n');
+
+      await resource.remove(context);
+
+      expect(existsSync(yamlPath)).toBe(false);
+    });
+
+    it('yaml-patch: deletes the file when removal prunes to the declared default baseline', async () => {
+      const state = getDefaultState('test');
+      const context = makeContext(state, tempDir);
+      const yamlPath = join(tempDir, 'config.yml');
+      const resource = yamlPatch({
+        id: 'r',
+        targetPath: yamlPath,
+        defaultValue: { version: 1 },
+        patch: (doc) => doc,
+        removePatch: () => ({ version: 1, sonar: {} }),
+      });
+      await writeFile(yamlPath, 'version: 1\nsonar:\n  enabled: true\n');
 
       await resource.remove(context);
 

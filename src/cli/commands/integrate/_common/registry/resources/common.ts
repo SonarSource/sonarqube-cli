@@ -146,7 +146,7 @@ export function pruneEmptyContainers(value: unknown): unknown {
 
 function isEmptyContainer(value: unknown): boolean {
   if (value === null || value === undefined) {
-    return true;
+    return false;
   }
   if (Array.isArray(value)) {
     return value.length === 0;
@@ -161,7 +161,7 @@ function isEmptyContainer(value: unknown): boolean {
  * True when `document`, after pruning empty containers, carries no data beyond the empty baseline
  * (`defaultValue`, also pruned — the document the patch reads back when the file is absent). Such a
  * file holds only leftover structure and is safe to delete; any real user or other-feature content
- * survives pruning and keeps the file.
+ * survives pruning and keeps the file, including keys whose value is `null` or an empty container.
  */
 export function isRemovableEmptyDocument(document: unknown, defaultValue: unknown): boolean {
   return isDeepStrictEqual(
