@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.1.0
+- Version: 1.2.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -221,14 +221,15 @@ Examples:
 
 ### sonar analyze agentic *
 Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.
-Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [-p <value>] [--force] [--format <value>] [--branch <value>]
+Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [-p <value>] [--force] [--depth <value>] [--format <value>] [--branch <value>]
 
 Options:
-  --file  <string>   Analyze a single file (skips change set detection)
+  --file  <string>   Analyze specific file(s) instead of the git change set (repeatable)
   --staged   Analyze staged files only (git diff --cached)
   --base  <string>   Analyze files changed vs a branch or ref (e.g. main)
   --project, -p  <string>   SonarQube Cloud project key (overrides auto-detected project)
   --force   Skip the large change set confirmation prompt
+  --depth  <string>   Analysis depth: STANDARD (fast) or DEEP (cross-file). Default: STANDARD for one --file; DEEP otherwise.
   --format  <string>   Output format
   --branch  <string>   Branch name for analysis context
 
