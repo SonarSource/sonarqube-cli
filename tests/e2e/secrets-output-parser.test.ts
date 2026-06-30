@@ -127,4 +127,33 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
     expect(files.some((f) => f?.includes('file1.ts'))).toBe(true);
     expect(files.some((f) => f?.includes('file2.ts'))).toBe(true);
   });
+
+  it('binary --json stdout matches the expected schema', async () => {
+    const filePath = join(tempDir, 'schema-check.ts');
+    writeFileSync(filePath, `const token = "${GITHUB_TEST_TOKEN}";`);
+
+    const result = await runSecretsBinary(installedBinaryPath, [filePath], auth, 'pipe');
+
+    expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+    // Parse raw binary output — no defensive wrapper — so any schema change fails loudly here
+    const raw = JSON.parse(result.stdout) as Record<string, unknown>;
+
+    expect(Array.isArray(raw['issues'])).toBe(true);
+    expect((raw['issues'] as unknown[]).length).toBeGreaterThan(0);
+
+    const issue = (raw['issues'] as unknown[])[0] as Record<string, unknown>;
+
+    expect(typeof issue['ruleKey']).toBe('string');
+    expect(typeof issue['description']).toBe('string');
+    expect(typeof issue['file']).toBe('string');
+    expect(typeof issue['maskedSecret']).toBe('string');
+
+    expect(typeof issue['location']).toBe('object');
+    const loc = issue['location'] as Record<string, unknown>;
+    expect(typeof loc['startLine']).toBe('number');
+    expect(typeof loc['startColumn']).toBe('number');
+    expect(typeof loc['endLine']).toBe('number');
+    expect(typeof loc['endColumn']).toBe('number');
+  });
 });
