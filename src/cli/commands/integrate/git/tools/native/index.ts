@@ -33,7 +33,11 @@ import type {
   IntegrationDeclaration,
 } from '../../../_common/registry/types';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { createDepRisksSubfeature, createSecretsSubfeature } from '../git-integration-subfeatures';
+import {
+  createDepRisksSubfeature,
+  createSecretsSubfeature,
+  gitHookPreview,
+} from '../git-integration-subfeatures';
 import {
   gitCombinedHookExample,
   gitHookExample,
@@ -61,6 +65,7 @@ function createNativeGitFeature(
   const base: FeatureDeclaration<IntegrateGitOptions> = {
     id: `${hook}-hook`,
     displayName: `${hook} code scanning hook`,
+    previewDescription: gitHookPreview(hook),
     shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
     resources: [

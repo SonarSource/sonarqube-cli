@@ -141,3 +141,27 @@ export function blank(): void {
   if (_formattedOutputMode) return;
   if (isTTY) process.stdout.write('\n');
 }
+
+/**
+ * Greedy word wrap: packs whitespace-separated words into lines no longer than
+ * `width`. A single word longer than `width` is left on its own over-long line
+ * rather than split mid-word.
+ */
+export function wrapText(content: string, width: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of content.split(/\s+/)) {
+    if (current === '') {
+      current = word;
+    } else if (`${current} ${word}`.length <= width) {
+      current = `${current} ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current !== '') {
+    lines.push(current);
+  }
+  return lines;
+}

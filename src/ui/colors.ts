@@ -27,6 +27,18 @@ import type { ColorFn, NoteOptions, StepStatus } from './types.js';
 // When stdout is not a TTY (piped), all color functions become identity
 export const isTTY = process.stdout.isTTY;
 
+// Matches SGR (color/style) escape sequences emitted by picocolors so callers
+// can measure the visible width of a styled string.
+const ANSI_SGR_PATTERN = /\x1b\[[0-9;]*m/g;
+
+export function stripAnsi(s: string): string {
+  return s.replace(ANSI_SGR_PATTERN, '');
+}
+
+export function visibleLength(s: string): number {
+  return stripAnsi(s).length;
+}
+
 function c(fn: (s: string) => string): ColorFn {
   return (s: string) => (isTTY ? fn(s) : s);
 }

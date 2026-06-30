@@ -20,6 +20,7 @@
 
 // Public API for the UI module
 
+export { bold, dim, stripAnsi, visibleLength } from './colors.js';
 export { note } from './components/note.js';
 export type { PhaseItem, StepStatus } from './components/phase.js';
 export { phase, phaseItem } from './components/phase.js';
@@ -45,6 +46,7 @@ export {
   success,
   text,
   warn,
+  wrapText,
 } from './messages.js';
 export type { UiCall, UiMethod } from './mock.js';
 export {
