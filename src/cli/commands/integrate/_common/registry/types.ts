@@ -111,6 +111,7 @@ export interface FeatureSelectionResult<TOptions = Record<string, unknown>> {
 export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
+  benefitDescription?: string;
   shouldInstall?: (
     invocation: IntegrationInvocation<TOptions>,
   ) => MaybePromise<boolean | InstallDecision>;

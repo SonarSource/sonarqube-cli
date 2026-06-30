@@ -21,6 +21,7 @@
 import { join } from 'node:path';
 
 import type { CliState, IntegrationScope } from '../../../../../lib/state';
+import { SECRETS_FEATURE_DESCRIPTION } from '../feature-constants';
 import {
   createAgentHookEntry,
   removeAgentHooks,
@@ -148,6 +149,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
   return {
     id: featureId,
     displayName: config.displayName ?? 'secret scanning hooks',
+    benefitDescription: SECRETS_FEATURE_DESCRIPTION,
     shouldInstall: ({ options, scope, state }) =>
       globalSecretsHookAlreadyConfigured(config.integrationId, featureId, options, scope, state)
         ? skip(

@@ -23,6 +23,11 @@ import { join } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import {
+  AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
+  MCP_SERVER_FEATURE_DESCRIPTION,
+} from '../_common/feature-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
 import {
@@ -116,6 +121,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
+      benefitDescription: AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
       shouldInstall: ({ options }) => {
         if (options.installSqaaHook === true) {
           return askUser();
@@ -169,6 +175,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
+      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
@@ -190,6 +197,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     {
       id: 'mcp-server',
       displayName: 'MCP server',
+      benefitDescription: MCP_SERVER_FEATURE_DESCRIPTION,
       resources: [
         jsonPatch({
           id: 'claude-mcp-config',
@@ -203,7 +211,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       ],
     },
     createContextAugmentationFeature<ClaudeIntegrationOptions>({
-      agentDisplayName: 'Claude Code',
       targetPath: resolveClaudeSkillPath,
     }),
   ],

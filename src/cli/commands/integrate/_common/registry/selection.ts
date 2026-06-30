@@ -210,10 +210,10 @@ async function shouldInstallFeature<TOptions>(
       if (invocation.nonInteractive) {
         return true;
       }
-      const confirmed = await confirmPrompt(
-        decision.question ?? `Install ${feature.displayName}?`,
-        true,
-      );
+      const defaultQuestion = feature.benefitDescription
+        ? `Install ${feature.displayName}? (${feature.benefitDescription})`
+        : `Install ${feature.displayName}?`;
+      const confirmed = await confirmPrompt(decision.question ?? defaultQuestion, true);
       if (confirmed === null) {
         throw new CommandFailedError('Installation cancelled');
       }

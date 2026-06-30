@@ -719,6 +719,39 @@ describe('declarative integration framework', () => {
     expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
   });
 
+  it('appends the feature description to the default prompt but not to a custom one', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({
+      features: [
+        {
+          id: 'default-prompt',
+          displayName: 'Some feature',
+          benefitDescription: 'some benefit',
+          shouldInstall: () => askUser(),
+        },
+        {
+          id: 'custom-prompt',
+          displayName: 'Other',
+          benefitDescription: 'ignored hint',
+          shouldInstall: () => askUser('Install the thing?'),
+        },
+      ],
+    });
+    queueMockResponse(true);
+    queueMockResponse(true);
+
+    await selectForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      state: getDefaultState('test'),
+    });
+
+    const confirmCalls = getMockUiCalls().filter((call) => call.method === 'confirmPrompt');
+    expect(confirmCalls[0]?.args[0]).toBe('Install Some feature? (some benefit)');
+    expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
+  });
+
   it('defaults to asking the user when a feature omits shouldInstall', async () => {
     setMockUi(true);
     const integration = makeIntegration({
