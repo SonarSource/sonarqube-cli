@@ -108,10 +108,13 @@ export interface FeatureSelectionResult<TOptions = Record<string, unknown>> {
   toRemove: FeatureApplication<TOptions>[];
 }
 
+export type FeaturePreview = string | ((activeSubfeatureIds: readonly string[]) => string);
+
 export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
   benefitDescription?: string;
+  previewDescription?: FeaturePreview;
   shouldInstall?: (
     invocation: IntegrationInvocation<TOptions>,
   ) => MaybePromise<boolean | InstallDecision>;

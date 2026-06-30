@@ -31,7 +31,11 @@ import {
   yamlPatchRemover,
 } from '../../../_common/registry';
 import type { GitHookType, IntegrateGitOptions } from '../../options';
-import { createDepRisksSubfeature, createSecretsSubfeature } from '../git-integration-subfeatures';
+import {
+  createDepRisksSubfeature,
+  createSecretsSubfeature,
+  gitHookPreview,
+} from '../git-integration-subfeatures';
 import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared';
 import {
   activatePreCommitFramework,
@@ -59,6 +63,7 @@ function createPreCommitFeature(
   const base: FeatureDeclaration<IntegrateGitOptions> = {
     id: `${hook}-hook`,
     displayName: `${hook} code scanning hook`,
+    previewDescription: gitHookPreview(hook),
     shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
     resources: [

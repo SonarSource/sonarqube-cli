@@ -27,10 +27,21 @@ import {
   sonarSecretsBinaryDependency,
 } from '../../_common/registry/dependencies';
 import { askUser, install, skip } from '../../_common/registry/selection';
-import type { SubfeatureDeclaration } from '../../_common/registry/types';
-import type { IntegrateGitOptions } from '../options';
+import type { FeaturePreview, SubfeatureDeclaration } from '../../_common/registry/types';
+import type { GitHookType, IntegrateGitOptions } from '../options';
 
 export const PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID = 'pre-commit-dependency-risks';
+
+export function gitHookPreview(hook: GitHookType): FeaturePreview {
+  return (activeSubfeatureIds) => {
+    const event = hook === 'pre-push' ? 'push' : 'commit';
+    const scansDependencies = activeSubfeatureIds.includes(PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID);
+    const target = scansDependencies
+      ? 'files for secrets and checks dependencies for known vulnerabilities (SCA)'
+      : 'files for secrets';
+    return `Scans ${target} before each ${event}. Works independently of any AI agent.`;
+  };
+}
 
 async function scaSkipReason(auth: ResolvedAuth) {
   const client = new SonarQubeClient(auth.serverUrl, auth.token);

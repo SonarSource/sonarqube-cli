@@ -25,8 +25,12 @@ import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-help
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import {
   AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_FEATURE_PREVIEW,
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
   MCP_SERVER_FEATURE_DESCRIPTION,
+  MCP_SERVER_FEATURE_PREVIEW,
+  SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature';
@@ -75,53 +79,53 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: 'Claude Code',
   features: [
-    {
-      ...createSonarSecretsHooksFeature({
-        agentDisplayName: 'Claude',
-        integrationId: CLAUDE_INTEGRATION_ID,
-        configDir: CLAUDE_CONFIG_DIR,
-        hooksConfigFileName: SETTINGS_FILE,
-        hooksPatchId: 'claude-settings-secrets-hooks',
-        scripts: [
-          {
-            id: 'pretool-secrets-script',
-            displayName: 'Claude PreToolUse hook script',
-            scriptPath: PRETOOL_SCRIPT_REL,
-            content: {
-              unix: getSecretPreToolTemplateUnix(),
-              windows: getSecretPreToolTemplateWindows(),
-            },
+    createSonarSecretsHooksFeature({
+      agentDisplayName: 'Claude',
+      integrationId: CLAUDE_INTEGRATION_ID,
+      configDir: CLAUDE_CONFIG_DIR,
+      hooksConfigFileName: SETTINGS_FILE,
+      hooksPatchId: 'claude-settings-secrets-hooks',
+      previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
+      scripts: [
+        {
+          id: 'pretool-secrets-script',
+          displayName: 'Claude PreToolUse hook script',
+          scriptPath: PRETOOL_SCRIPT_REL,
+          content: {
+            unix: getSecretPreToolTemplateUnix(),
+            windows: getSecretPreToolTemplateWindows(),
           },
-          {
-            id: 'prompt-secrets-script',
-            displayName: 'Claude UserPromptSubmit hook script',
-            scriptPath: PROMPT_SCRIPT_REL,
-            content: {
-              unix: getSecretPromptTemplateUnix(),
-              windows: getSecretPromptTemplateWindows(),
-            },
+        },
+        {
+          id: 'prompt-secrets-script',
+          displayName: 'Claude UserPromptSubmit hook script',
+          scriptPath: PROMPT_SCRIPT_REL,
+          content: {
+            unix: getSecretPromptTemplateUnix(),
+            windows: getSecretPromptTemplateWindows(),
           },
-        ],
-        hookEntries: [
-          {
-            eventType: 'PreToolUse',
-            matcher: 'Read',
-            marker: 'sonar-secrets',
-            scriptPath: PRETOOL_SCRIPT_REL,
-          },
-          {
-            eventType: 'UserPromptSubmit',
-            matcher: '*',
-            marker: 'sonar-secrets',
-            scriptPath: PROMPT_SCRIPT_REL,
-          },
-        ],
-      }),
-    },
+        },
+      ],
+      hookEntries: [
+        {
+          eventType: 'PreToolUse',
+          matcher: 'Read',
+          marker: 'sonar-secrets',
+          scriptPath: PRETOOL_SCRIPT_REL,
+        },
+        {
+          eventType: 'UserPromptSubmit',
+          matcher: '*',
+          marker: 'sonar-secrets',
+          scriptPath: PROMPT_SCRIPT_REL,
+        },
+      ],
+    }),
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
       benefitDescription: AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+      previewDescription: AGENTIC_ANALYSIS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) => {
         if (options.installSqaaHook === true) {
           return askUser();
@@ -176,6 +180,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
       benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
+      previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
@@ -198,6 +203,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       id: 'mcp-server',
       displayName: 'MCP server',
       benefitDescription: MCP_SERVER_FEATURE_DESCRIPTION,
+      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
       resources: [
         jsonPatch({
           id: 'claude-mcp-config',

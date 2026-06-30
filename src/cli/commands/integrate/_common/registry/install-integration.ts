@@ -34,6 +34,7 @@ import { CommandFailedError } from '../../../_common/error';
 import { renderCompletionSummary } from './completion-summary';
 import type { IntegrationRegistry } from './core';
 import { buildApplications } from './feature-target';
+import { renderInstallPreviewAndConfirm } from './install-preview';
 import { integrationInstaller } from './installer';
 import { isFeatureContainer, selectFeaturesForInvocation } from './selection';
 import type {
@@ -88,6 +89,8 @@ export async function installIntegration<TOptions>({
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
 
+  text('');
+  await renderInstallPreviewAndConfirm(toInstall, nonInteractive);
   text('');
 
   try {

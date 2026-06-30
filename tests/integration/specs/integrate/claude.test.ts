@@ -85,6 +85,9 @@ describe('integrate claude', () => {
         ),
       ).toBe(true);
 
+      // Pre-install "What will be installed" summary box
+      expect(result.stdout).toContain('What will be installed');
+
       // Completion summary
       expect(result.stdout).toContain('Installed');
       expect(result.stdout).toContain('Setup complete!');
