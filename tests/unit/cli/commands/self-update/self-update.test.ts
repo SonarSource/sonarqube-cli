@@ -22,6 +22,7 @@ import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
+import { clearNetworkConfigCache } from '../../../../../src/lib/connectivity/network-config';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../src/ui';
 
 // Mock node:child_process before importing self-update so that the named
@@ -128,6 +129,36 @@ describe('checkForUpdate', () => {
     });
 
     expect(checkForUpdate()).rejects.toThrow('Could not determine the latest version');
+  });
+
+  describe('with SONAR_HTTPS_PROXY_URL set', () => {
+    let originalProxyUrl: string | undefined;
+
+    beforeEach(() => {
+      originalProxyUrl = process.env.SONAR_HTTPS_PROXY_URL;
+      process.env.SONAR_HTTPS_PROXY_URL = 'http://proxy.corp.com:3128';
+      clearNetworkConfigCache();
+    });
+
+    afterEach(() => {
+      if (originalProxyUrl === undefined) {
+        delete process.env.SONAR_HTTPS_PROXY_URL;
+      } else {
+        process.env.SONAR_HTTPS_PROXY_URL = originalProxyUrl;
+      }
+      clearNetworkConfigCache();
+    });
+
+    it('passes proxy option to fetch', async () => {
+      fetchSpy.mockResolvedValue({ ok: true, text: async () => Promise.resolve('1.0.0\n') });
+
+      await checkForUpdate();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ proxy: 'http://proxy.corp.com:3128' }),
+      );
+    });
   });
 });
 
