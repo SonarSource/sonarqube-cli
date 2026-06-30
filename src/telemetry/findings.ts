@@ -110,6 +110,8 @@ export function emitAnalysisCompleted(auth: ResolvedAuth, fields: AnalysisComple
 
 /**
  * Emits one CliAnalysisFindingsDetected event when telemetry is enabled.
+ * Callers should emit only when the paired CliAnalysisCompleted run reported
+ * findings; this helper does not enforce findings_count > 0.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
  */
 export function emitAnalysisFindingsDetected(

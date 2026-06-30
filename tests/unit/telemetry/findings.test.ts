@@ -263,6 +263,56 @@ describe('emitAnalysisCompleted()', () => {
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 
+  it('does not append when installationId is absent', () => {
+    const stateWithoutId = makeTelemetryState();
+    stateWithoutId.telemetry.installationId = undefined;
+    loadStateSpy.mockReturnValue(stateWithoutId);
+
+    emitAnalysisCompleted(AUTH, makeCompletedFields());
+
+    expect(readLines(testSonarUserHome)).toHaveLength(0);
+  });
+
+  it('sets connection_type to sqc for cloud connections', () => {
+    emitAnalysisCompleted({ ...AUTH, connectionType: 'cloud' }, makeCompletedFields());
+
+    const [event] = readLines(testSonarUserHome);
+    expect((event as StoredAnalysisCompletedEvent).event_payload.connection_type).toBe('sqc');
+  });
+
+  it('sets connection_type to sqs for server connections', () => {
+    emitAnalysisCompleted({ ...AUTH, connectionType: 'on-premise' }, makeCompletedFields());
+
+    const [event] = readLines(testSonarUserHome);
+    expect((event as StoredAnalysisCompletedEvent).event_payload.connection_type).toBe('sqs');
+  });
+
+  it('includes connection identity fields from the active connection', () => {
+    getConnectionSpy.mockReturnValue({
+      serverUrl: 'https://sonarcloud.io',
+      authenticatedAt: '2026-01-01T00:00:00.000Z',
+      userUuid: 'user-uuid-abc',
+      organizationUuidV4: 'org-uuid-xyz',
+      sqsInstallationId: 'sqs-install-id-123',
+    });
+
+    emitAnalysisCompleted(AUTH, makeCompletedFields());
+
+    const payload = (readLines(testSonarUserHome)[0] as StoredAnalysisCompletedEvent).event_payload;
+    expect(payload.user_uuid).toBe('user-uuid-abc');
+    expect(payload.organization_uuid_v4).toBe('org-uuid-xyz');
+    expect(payload.sqs_installation_id).toBe('sqs-install-id-123');
+  });
+
+  it('sets caller_agent from detectCallerAgent', () => {
+    detectAgentSpy.mockReturnValue('cursor');
+
+    emitAnalysisCompleted(AUTH, makeCompletedFields());
+
+    const payload = (readLines(testSonarUserHome)[0] as StoredAnalysisCompletedEvent).event_payload;
+    expect(payload.caller_agent).toBe('cursor');
+  });
+
   it('creates the telemetry directory if it does not exist', () => {
     const telemetryDir = join(testSonarUserHome, 'sonarqube-cli', 'telemetry');
     expect(existsSync(telemetryDir)).toBe(false);
@@ -328,26 +378,7 @@ describe('flushFindings()', () => {
     }
   });
 
-  it('POSTs CliAnalysisCompleted and CliAnalysisFindingsDetected events', async () => {
-    writeStoredEvent(makeStoredCompletedEvent());
-    writeStoredEvent(makeStoredFindingsDetectedEvent());
-
-    const fetchSpy = mockFetch();
-    try {
-      await flushFindings(Date.now() + 60_000);
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
-      const types = fetchSpy.mock.calls.map((call: unknown[]) => {
-        const body = JSON.parse((call[1] as RequestInit).body as string) as StoredAnalysisEvent;
-        return body.metadata.event_type;
-      });
-      expect(types).toContain('Analytics.Cli.CliAnalysisCompleted');
-      expect(types).toContain('Analytics.Cli.CliAnalysisFindingsDetected');
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
-
-  it('POSTs both analysis event types from the same ndjson file', async () => {
+  it('POSTs CliAnalysisCompleted and CliAnalysisFindingsDetected events from the same ndjson file', async () => {
     writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-1' }));
     writeStoredEvent(makeStoredFindingsDetectedEvent({ analysis_id: 'run-1' }));
 
@@ -355,6 +386,13 @@ describe('flushFindings()', () => {
     try {
       await flushFindings(Date.now() + 60_000);
       expect(fetchSpy).toHaveBeenCalledTimes(2);
+      const types = fetchSpy.mock.calls.map((call: unknown[]) => {
+        const body = JSON.parse((call[1] as RequestInit).body as string) as StoredAnalysisEvent;
+        expect(body.event_payload.analysis_id).toBe('run-1');
+        return body.metadata.event_type;
+      });
+      expect(types).toContain('Analytics.Cli.CliAnalysisCompleted');
+      expect(types).toContain('Analytics.Cli.CliAnalysisFindingsDetected');
     } finally {
       fetchSpy.mockRestore();
     }

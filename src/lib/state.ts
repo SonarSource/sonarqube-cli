@@ -491,8 +491,9 @@ export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayl
 }
 
 /**
- * Payload for a CliAnalysisFindingsDetected event — one event per run when
- * findings_count > 0, carrying a versioned per-rule details blob.
+ * Payload for a CliAnalysisFindingsDetected event — intended for runs that
+ * reported findings, carrying a versioned per-rule details blob joined to
+ * CliAnalysisCompleted via analysis_id.
  */
 export interface AnalysisFindingsDetectedEventPayload extends AnalysisEventIdentityPayload {
   caller_command: string;
