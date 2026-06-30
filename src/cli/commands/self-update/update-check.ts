@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { SONARSOURCE_BINARIES_URL, UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
+import { buildFetchNetworkOptions } from '../../../lib/connectivity/network-config';
 import { isWindows } from '../../../lib/platform-detector';
 import { CommandFailedError } from '../_common/error';
 import { Version } from '../_common/version';
@@ -161,7 +162,10 @@ export interface UpdateCheckResult {
 }
 
 async function fetchText(url: string, description: string): Promise<string> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS) });
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS),
+    ...buildFetchNetworkOptions(url),
+  });
   if (!response.ok) {
     throw new CommandFailedError(`Failed to fetch ${description}: HTTP ${response.status}`, {
       remediationHint: 'Check network access and retry.',
