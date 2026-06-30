@@ -35,7 +35,11 @@ import * as agentDetector from '../../../src/lib/agent-detector.js';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import { DISTRIBUTION } from '../../../src/lib/distribution.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { CliState, StoredFindingEvent, StoredTelemetryEvent } from '../../../src/lib/state.js';
+import type {
+  CliState,
+  StoredAnalysisCompletedEvent,
+  StoredTelemetryEvent,
+} from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
@@ -569,11 +573,11 @@ describe('flushTelemetry', () => {
     it('drains findings.ndjson to the telemetry backend', async () => {
       const telemetryDir = join(testDir, 'sonarqube-cli', 'telemetry');
       mkdirSync(telemetryDir, { recursive: true });
-      const finding: StoredFindingEvent = {
+      const finding: StoredAnalysisCompletedEvent = {
         metadata: {
           event_id: 'finding-id',
           source: { domain: 'CLI' },
-          event_type: 'Analytics.Cli.CliAnalysisFindingDetected',
+          event_type: 'Analytics.Cli.CliAnalysisCompleted',
           event_timestamp: String(Date.now()),
         },
         event_payload: {
@@ -589,7 +593,11 @@ describe('flushTelemetry', () => {
           caller_agent: null,
           caller_command: 'analyze secrets',
           analyzer: 'sonar-secrets',
-          rule_key: 'secrets:S6290',
+          analysis_id: 'analysis-id',
+          findings_count: 1,
+          status: 'findings',
+          exit_code: 51,
+          error_count: 0,
           scan_duration_ms: 123,
         },
       };
@@ -602,9 +610,9 @@ describe('flushTelemetry', () => {
         expect(fetchSpy).toHaveBeenCalledTimes(1);
         const body = JSON.parse(
           (fetchSpy.mock.calls[0][1] as RequestInit).body as string,
-        ) as StoredFindingEvent;
-        expect(body.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
-        expect(body.event_payload.rule_key).toBe('secrets:S6290');
+        ) as StoredAnalysisCompletedEvent;
+        expect(body.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
+        expect(body.event_payload.findings_count).toBe(1);
       } finally {
         fetchSpy.mockRestore();
       }

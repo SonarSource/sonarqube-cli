@@ -477,7 +477,7 @@ export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-
  * (clean, findings, or error).
  */
 export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayload {
-  /** Literal CLI subcommand name (e.g. "analyze-agentic", "git-pre-commit") */
+  /** Literal CLI subcommand path (e.g. "analyze agentic", "hook git-pre-commit") */
   caller_command: string;
   analyzer: AnalysisTelemetryAnalyzer;
   /** UUID minted once per run; join key with CliAnalysisFindingsDetected */
@@ -503,35 +503,11 @@ export interface AnalysisFindingsDetectedEventPayload extends AnalysisEventIdent
   details: string;
 }
 
-/**
- * Payload for a CliAnalysisFindingDetected event — one event per finding
- * produced by sonar-secrets, SQAA, or SCA (legacy per-issue schema).
- */
-export interface AnalysisFindingEventPayload extends AnalysisEventIdentityPayload {
-  /** Literal CLI subcommand name (e.g. "git-pre-commit", "analyze secrets") */
-  caller_command: string;
-  analyzer: AnalysisTelemetryAnalyzer;
-  /** Analyzer-specific rule identifier */
-  rule_key: string;
-  /** Wall-clock duration of the analyzer scan that produced this finding */
-  scan_duration_ms: number;
-}
-
 interface AnalysisEventMetadataBase {
   event_id: string;
   source: { domain: 'CLI' };
   /** Epoch milliseconds as a string */
   event_timestamp: string;
-}
-
-/**
- * Full finding event written to findings.ndjson and sent to the backend (legacy).
- */
-export interface StoredFindingEvent {
-  metadata: AnalysisEventMetadataBase & {
-    event_type: 'Analytics.Cli.CliAnalysisFindingDetected';
-  };
-  event_payload: AnalysisFindingEventPayload;
 }
 
 /** Full CliAnalysisCompleted event written to findings.ndjson. */
@@ -552,7 +528,6 @@ export interface StoredAnalysisFindingsDetectedEvent {
 
 /** Any event stored in findings.ndjson and drained by flushFindings. */
 export type StoredAnalysisEvent =
-  | StoredFindingEvent
   | StoredAnalysisCompletedEvent
   | StoredAnalysisFindingsDetectedEvent;
 

@@ -31,7 +31,6 @@ import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type {
   AnalysisCompletedEventPayload,
   AnalysisEventIdentityPayload,
-  AnalysisFindingEventPayload,
   AnalysisFindingsDetectedEventPayload,
   StoredAnalysisEvent,
 } from '../lib/state.js';
@@ -81,10 +80,23 @@ export function buildAnalysisIdentityBase(auth: ResolvedAuth): AnalysisEventIden
   };
 }
 
+export type AnalysisCompletedFields = Omit<
+  AnalysisCompletedEventPayload,
+  keyof AnalysisEventIdentityPayload
+>;
+
+export type AnalysisFindingsDetectedFields = Omit<
+  AnalysisFindingsDetectedEventPayload,
+  keyof AnalysisEventIdentityPayload
+>;
+
 /**
- * Appends one CliAnalysisCompleted event to findings.ndjson. Fire-and-forget.
+ * Emits one CliAnalysisCompleted event when telemetry is enabled.
+ * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
  */
-export function appendAnalysisCompleted(payload: AnalysisCompletedEventPayload): void {
+export function emitAnalysisCompleted(auth: ResolvedAuth, fields: AnalysisCompletedFields): void {
+  const base = buildAnalysisIdentityBase(auth);
+  if (!base) return;
   appendAnalysisEvent({
     metadata: {
       event_id: randomUUID(),
@@ -92,16 +104,20 @@ export function appendAnalysisCompleted(payload: AnalysisCompletedEventPayload):
       event_type: 'Analytics.Cli.CliAnalysisCompleted',
       event_timestamp: String(Date.now()),
     },
-    event_payload: payload,
+    event_payload: { ...base, ...fields },
   });
 }
 
 /**
- * Appends one CliAnalysisFindingsDetected event to findings.ndjson. Fire-and-forget.
+ * Emits one CliAnalysisFindingsDetected event when telemetry is enabled.
+ * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
  */
-export function appendAnalysisFindingsDetected(
-  payload: AnalysisFindingsDetectedEventPayload,
+export function emitAnalysisFindingsDetected(
+  auth: ResolvedAuth,
+  fields: AnalysisFindingsDetectedFields,
 ): void {
+  const base = buildAnalysisIdentityBase(auth);
+  if (!base) return;
   appendAnalysisEvent({
     metadata: {
       event_id: randomUUID(),
@@ -109,50 +125,8 @@ export function appendAnalysisFindingsDetected(
       event_type: 'Analytics.Cli.CliAnalysisFindingsDetected',
       event_timestamp: String(Date.now()),
     },
-    event_payload: payload,
+    event_payload: { ...base, ...fields },
   });
-}
-
-/**
- * Appends one CliAnalysisFindingDetected event to findings.ndjson. Fire-and-forget:
- * creates the directory if missing and silently swallows all I/O errors.
- */
-export function appendFinding(payload: AnalysisFindingEventPayload): void {
-  appendAnalysisEvent({
-    metadata: {
-      event_id: randomUUID(),
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliAnalysisFindingDetected',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: payload,
-  });
-}
-
-/**
- * Emits one CliAnalysisFindingDetected event per issue from a sonar-secrets scan.
- * No-ops on clean scans (empty issues) and when telemetry is disabled.
- * Identity fields are resolved from state + auth on each call.
- */
-export function emitSecretsFindings(
-  callerCommand: string,
-  auth: ResolvedAuth,
-  issues: ReadonlyArray<{ ruleKey: string }>,
-  durationMs: number,
-): void {
-  if (issues.length === 0) return;
-  const base = buildAnalysisIdentityBase(auth);
-  if (!base) return;
-
-  for (const issue of issues) {
-    appendFinding({
-      ...base,
-      caller_command: callerCommand,
-      analyzer: 'sonar-secrets',
-      rule_key: issue.ruleKey,
-      scan_duration_ms: durationMs,
-    });
-  }
 }
 
 function parseValidEvents(content: string, now: number): StoredAnalysisEvent[] {
