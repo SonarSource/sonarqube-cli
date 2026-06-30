@@ -23,6 +23,12 @@ import { join, relative } from 'node:path';
 import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
+import {
+  AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+  MCP_SERVER_FEATURE_DESCRIPTION,
+  SECRETS_FEATURE_DESCRIPTION,
+  SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
+} from '../_common/feature-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
 import {
@@ -76,6 +82,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
+      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
       shouldInstall: ({ options }) =>
         options.globalSecretsHookExists === true
           ? skip(
@@ -108,6 +115,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'prompt-secrets-instructions',
       displayName: 'prompt-secrets instructions',
+      benefitDescription: SECRETS_FEATURE_DESCRIPTION,
       shouldInstall: ({ scope }) =>
         scope === 'project' && globalCopilotInstructionsExist()
           ? askUser(
@@ -128,6 +136,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
+      benefitDescription: AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
@@ -149,6 +158,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'mcp-server',
       displayName: 'MCP server',
+      benefitDescription: MCP_SERVER_FEATURE_DESCRIPTION,
       resources: [
         jsonPatch({
           id: 'copilot-mcp-config',
@@ -162,7 +172,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       ],
     },
     createContextAugmentationFeature<CopilotIntegrationOptions>({
-      agentDisplayName: 'Copilot',
       targetPath: resolveCopilotSkillPath,
     }),
   ],

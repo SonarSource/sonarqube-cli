@@ -23,6 +23,7 @@ import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../lib/signature
 import { CommandFailedError } from '../../../_common/error';
 import { getOptionalStringAttr } from '../attrs';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation';
+import { CONTEXT_AUGMENTATION_FEATURE_DESCRIPTION } from '../feature-constants';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
 import { wholeFile } from '../registry/resources';
 import { askUser, skip } from '../registry/selection';
@@ -34,7 +35,6 @@ export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
   'context-augmentation-tool-integrate';
 
 export interface ContextAugmentationSkillFeatureOptions {
-  agentDisplayName: string;
   targetPath: (context: IntegrationContext) => string;
 }
 
@@ -43,14 +43,15 @@ export function createContextAugmentationFeature<
 >(options: ContextAugmentationSkillFeatureOptions): FeatureDeclaration<TOptions> {
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
-    displayName: `${options.agentDisplayName} Context Augmentation`,
+    displayName: 'Context Augmentation',
+    benefitDescription: CONTEXT_AUGMENTATION_FEATURE_DESCRIPTION,
     shouldInstall: ({ options: integrationOptions }) =>
       integrationOptions.installContextAugmentation === true ? askUser() : skip(),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
       wholeFile({
         id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-        displayName: `${options.agentDisplayName} Context Augmentation skill file`,
+        displayName: 'Context Augmentation skill file',
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         targetPath: options.targetPath,
         content: async (context) =>
@@ -64,7 +65,7 @@ export function createContextAugmentationFeature<
     operations: [
       {
         id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-        displayName: `${options.agentDisplayName} Context Augmentation tool integration`,
+        displayName: 'Context Augmentation tool integration',
         shouldApply: (context) => context.executionMode === 'install',
         apply: async (context) =>
           runToolIntegrateCommand({
