@@ -20,138 +20,85 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { parseSecretsOutput } from '../../../../../src/cli/commands/analyze/secrets-output.js';
+import { parseSecretsJson } from '../../../../../src/cli/commands/analyze/secrets.js';
 
-describe('parseSecretsOutput', () => {
-  it('returns empty array for empty string', () => {
-    expect(parseSecretsOutput('')).toEqual([]);
+describe('parseSecretsJson', () => {
+  it('returns empty issues for empty string', () => {
+    expect(parseSecretsJson('')).toEqual({ issues: [] });
   });
 
-  it('returns empty array for whitespace-only string', () => {
-    expect(parseSecretsOutput('   \n  \n  ')).toEqual([]);
+  it('returns empty issues for non-JSON string', () => {
+    expect(parseSecretsJson('not json')).toEqual({ issues: [] });
+  });
+
+  it('returns empty issues when issues field is absent', () => {
+    expect(parseSecretsJson(JSON.stringify({}))).toEqual({ issues: [] });
   });
 
   it('parses a single issue with all fields', () => {
-    const stdout = [
-      'Hard-coded credential detected',
-      'File: src/config.ts',
-      'Location: [3:14-3:48]',
-      'Secret: s3cr3t_value',
-    ].join('\n');
+    const stdout = JSON.stringify({
+      issues: [
+        {
+          ruleKey: 'secrets:S6290',
+          description: 'AWS Access Key detected',
+          file: 'src/config.ts',
+          location: { startLine: 3, startColumn: 14, endLine: 3, endColumn: 48 },
+          maskedSecret: 'AKIA****',
+        },
+      ],
+    });
 
-    const issues = parseSecretsOutput(stdout);
+    const { issues } = parseSecretsJson(stdout);
 
     expect(issues).toHaveLength(1);
-    expect(issues[0].message).toBe('Hard-coded credential detected');
+    expect(issues[0].ruleKey).toBe('secrets:S6290');
+    expect(issues[0].description).toBe('AWS Access Key detected');
     expect(issues[0].file).toBe('src/config.ts');
     expect(issues[0].location).toEqual({
       startLine: 3,
-      startOffset: 14,
+      startColumn: 14,
       endLine: 3,
-      endOffset: 48,
+      endColumn: 48,
     });
-    expect(issues[0].secret).toBe('s3cr3t_value');
+    expect(issues[0].maskedSecret).toBe('AKIA****');
   });
 
-  it('parses an issue with message and file only (no location, no secret)', () => {
-    const stdout = ['Hard-coded credential detected', 'File: src/config.ts'].join('\n');
+  it('parses an issue without optional fields', () => {
+    const stdout = JSON.stringify({
+      issues: [{ ruleKey: 'secrets:S6290', description: 'Credential', file: 'a.ts' }],
+    });
 
-    const issues = parseSecretsOutput(stdout);
+    const { issues } = parseSecretsJson(stdout);
 
     expect(issues).toHaveLength(1);
-    expect(issues[0].message).toBe('Hard-coded credential detected');
-    expect(issues[0].file).toBe('src/config.ts');
-    expect(issues[0].location).toBeNull();
-    expect(issues[0].secret).toBeNull();
+    expect(issues[0].location).toBeUndefined();
+    expect(issues[0].maskedSecret).toBeUndefined();
   });
 
-  it('parses multiple issues separated by blank lines', () => {
-    const stdout = [
-      'First secret found',
-      'File: a.ts',
-      'Location: [1:0-1:10]',
-      'Secret: abc',
-      '',
-      'Second secret found',
-      'File: b.ts',
-      'Location: [5:2-5:12]',
-      'Secret: xyz',
-    ].join('\n');
+  it('parses multiple issues', () => {
+    const stdout = JSON.stringify({
+      issues: [
+        { ruleKey: 'secrets:S1', description: 'First', file: 'a.ts' },
+        { ruleKey: 'secrets:S2', description: 'Second', file: 'b.ts' },
+      ],
+    });
 
-    const issues = parseSecretsOutput(stdout);
+    const { issues } = parseSecretsJson(stdout);
 
     expect(issues).toHaveLength(2);
     expect(issues[0].file).toBe('a.ts');
     expect(issues[1].file).toBe('b.ts');
   });
 
-  it('normalizes Windows line endings (CRLF)', () => {
-    const stdout = [
-      'Hard-coded credential detected',
-      'File: src/config.ts',
-      'Location: [3:14-3:48]',
-      'Secret: s3cr3t_value',
-    ]
-      .join('\r\n')
-      .concat('\r\n\r\n');
-
-    const issues = parseSecretsOutput(stdout);
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0].message).toBe('Hard-coded credential detected');
-    expect(issues[0].file).toBe('src/config.ts');
-    expect(issues[0].location?.startLine).toBe(3);
+  it('returns errors field when present', () => {
+    const stdout = JSON.stringify({ issues: [], errors: ['scan failed'] });
+    const result = parseSecretsJson(stdout);
+    expect(result.errors).toEqual(['scan failed']);
   });
 
-  it('skips blocks with fewer than 2 lines', () => {
-    const stdout = 'OnlyOneLine\n\nValid message\nFile: good.ts';
-
-    const issues = parseSecretsOutput(stdout);
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0].file).toBe('good.ts');
-  });
-
-  it('skips blocks with empty message', () => {
-    const stdout = '\nFile: config.ts\n\nReal message\nFile: real.ts';
-
-    const issues = parseSecretsOutput(stdout);
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0].file).toBe('real.ts');
-  });
-
-  it('skips blocks with empty file', () => {
-    const stdout = 'Message without file\nFile:\n\nValid message\nFile: valid.ts';
-
-    const issues = parseSecretsOutput(stdout);
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0].file).toBe('valid.ts');
-  });
-
-  it('handles location with malformed pattern gracefully', () => {
-    const stdout = [
-      'Found a secret',
-      'File: config.ts',
-      'Location: [bad-format]',
-      'Secret: value',
-    ].join('\n');
-
-    const issues = parseSecretsOutput(stdout);
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0].location).toBeNull();
-    expect(issues[0].secret).toBe('value');
-  });
-
-  it('ignores leading and trailing blank lines around output', () => {
-    const stdout = '\n\nHard-coded credential\nFile: src/app.ts\n\n';
-
-    const issues = parseSecretsOutput(stdout);
-
-    expect(issues).toHaveLength(1);
-    expect(issues[0].message).toBe('Hard-coded credential');
-    expect(issues[0].file).toBe('src/app.ts');
+  it('returns empty issues for JSON without issues field', () => {
+    expect(parseSecretsJson(JSON.stringify({ errors: ['something went wrong'] }))).toMatchObject({
+      issues: [],
+    });
   });
 });

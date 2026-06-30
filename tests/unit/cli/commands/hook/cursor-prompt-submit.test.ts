@@ -66,6 +66,21 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
     runSecretsBinaryOnTextSpy.mockRestore();
   });
 
+  it('writes a block decision with generic user_message when secrets are found', async () => {
+    runSecretsBinaryOnTextSpy.mockResolvedValue({
+      exitCode: 51,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
+
+    await cursorPromptSubmit();
+
+    const written = String((stdoutSpy.mock.calls[0] as unknown[])[0]);
+    const payload = JSON.parse(written) as { continue: boolean; user_message: string };
+    expect(payload.continue).toBe(false);
+    expect(payload.user_message).toBe('Sonar detected secrets in prompt');
+  });
+
   it('outputs nothing and does not throw when scan throws an error', async () => {
     runSecretsBinaryOnTextSpy.mockRejectedValue(new Error('scan process crashed'));
 

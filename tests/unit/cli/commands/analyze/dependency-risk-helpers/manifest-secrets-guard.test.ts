@@ -147,12 +147,17 @@ describe('preScanManifestsForSecrets', () => {
   });
 
   it('throws a CommandFailedError with formatted findings when secrets are detected', async () => {
-    const stdout = [
-      'AWS access key detected',
-      'File: package.json',
-      'Location: [12:5-12:40]',
-      'Secret: AKIA****',
-    ].join('\n');
+    const stdout = JSON.stringify({
+      issues: [
+        {
+          ruleKey: 'secrets:S6290',
+          description: 'AWS access key detected',
+          file: 'package.json',
+          location: { startLine: 12, startColumn: 5, endLine: 12, endColumn: 40 },
+          maskedSecret: 'AKIA****',
+        },
+      ],
+    });
     stubRunSecretsBinary({ exitCode: EXIT_CODE_SECRETS_FOUND, stdout, stderr: '' });
 
     const error = await captureError(
@@ -171,7 +176,11 @@ describe('preScanManifestsForSecrets', () => {
   });
 
   it('omits the location and secret details when the finding has none', async () => {
-    const stdout = ['Hardcoded password', 'File: package.json'].join('\n');
+    const stdout = JSON.stringify({
+      issues: [
+        { ruleKey: 'secrets:S2068', description: 'Hardcoded password', file: 'package.json' },
+      ],
+    });
     stubRunSecretsBinary({ exitCode: EXIT_CODE_SECRETS_FOUND, stdout, stderr: '' });
 
     const error = await captureError(

@@ -286,7 +286,7 @@ describe('analyze (no subcommand)', () => {
 
       const output = result.stdout + result.stderr;
       expect(result.exitCode).toBe(0);
-      expect(output).toContain('Secrets scan completed successfully');
+      expect(output).toContain('No issues found');
       expect(output).toContain('SonarQube Agentic Analysis skipped: no project configured');
       expect(output).not.toContain('Usage: sonar analyze');
       const sqaaCalls = server

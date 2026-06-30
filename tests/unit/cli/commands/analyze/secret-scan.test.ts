@@ -157,7 +157,12 @@ describe('secretCheckCommand: auth forwarding', () => {
     }
 
     const spawnCall = spawnSpy.mock.calls[0];
-    expect(spawnCall[1]).toEqual(['--non-interactive', 'src/index.ts', 'src/lib/auth.ts']);
+    expect(spawnCall[1]).toEqual([
+      '--non-interactive',
+      '--json',
+      'src/index.ts',
+      'src/lib/auth.ts',
+    ]);
   });
 });
 
@@ -178,49 +183,16 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
+    const successes = getMockUiCalls()
+      .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('Issues found: 0'))).toBe(true);
+    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
   });
 
-  it('succeeds and displays issue details when scan returns issues with line and severity', async () => {
+  it('succeeds and shows clean file row when scan returns no issues', async () => {
     spawnSpy.mockResolvedValue({
       exitCode: 0,
-      stdout: JSON.stringify({
-        issues: [
-          { message: 'Exposed API key', line: 42, severity: 'HIGH' },
-          { message: 'Hardcoded password', line: 7, severity: 'CRITICAL' },
-        ],
-      }),
-      stderr: '',
-    });
-
-    const existsSpy = mockBinaryExists(true);
-    try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
-    } finally {
-      existsSpy.mockRestore();
-    }
-
-    const errors = getMockUiCalls()
-      .filter((c) => c.method === 'error')
-      .map((c) => String(c.args[0]));
-    expect(errors.some((m) => m.includes('Exposed API key'))).toBe(true);
-    expect(errors.some((m) => m.includes('Hardcoded password'))).toBe(true);
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
-      .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('Line: 42'))).toBe(true);
-    expect(texts.some((m) => m.includes('Severity: HIGH'))).toBe(true);
-    expect(texts.some((m) => m.includes('Issues found: 2'))).toBe(true);
-  });
-
-  it('succeeds and prints raw stdout when scan output is not valid JSON', async () => {
-    const rawOutput = 'No issues found (plain text output)';
-    spawnSpy.mockResolvedValue({
-      exitCode: 0,
-      stdout: rawOutput,
+      stdout: JSON.stringify({ issues: [] }),
       stderr: '',
     });
 
@@ -234,10 +206,30 @@ describe('secretCheckCommand: successful scan', () => {
     const prints = getMockUiCalls()
       .filter((c) => c.method === 'print')
       .map((c) => String(c.args[0]));
-    expect(prints.some((m) => m.includes(rawOutput))).toBe(true);
+    expect(prints.some((m) => m.includes('src/index.ts'))).toBe(true);
   });
 
-  it('succeeds and shows "No issues detected" when JSON has no issues field', async () => {
+  it('succeeds and shows clean file row when scan output is not valid JSON', async () => {
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: 'not valid json',
+      stderr: '',
+    });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    const successes = getMockUiCalls()
+      .filter((c) => c.method === 'success')
+      .map((c) => String(c.args[0]));
+    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
+  });
+
+  it('succeeds and shows clean file row when JSON has no issues field', async () => {
     spawnSpy.mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({ status: 'clean' }),
@@ -251,10 +243,31 @@ describe('secretCheckCommand: successful scan', () => {
       existsSpy.mockRestore();
     }
 
-    const texts = getMockUiCalls()
-      .filter((c) => c.method === 'text')
+    const successes = getMockUiCalls()
+      .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
-    expect(texts.some((m) => m.includes('No issues detected'))).toBe(true);
+    expect(successes.some((m) => m.includes('No issues found'))).toBe(true);
+  });
+
+  it('emits a warning for each entry in the errors field when exit code is 0', async () => {
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [], errors: ['auth failed', 'partial scan'] }),
+      stderr: '',
+    });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    const warns = getMockUiCalls()
+      .filter((c) => c.method === 'warn')
+      .map((c) => String(c.args[0]));
+    expect(warns.some((m) => m.includes('auth failed'))).toBe(true);
+    expect(warns.some((m) => m.includes('partial scan'))).toBe(true);
   });
 });
 
@@ -272,18 +285,94 @@ describe('secretCheckCommand: input validation', () => {
 
 describe('secretCheckCommand: scan failures', () => {
   it('throws when binary exits 51 (secrets found)', async () => {
-    spawnSpy.mockResolvedValue({ exitCode: 51, stdout: '', stderr: '' });
+    spawnSpy.mockResolvedValue({
+      exitCode: 51,
+      stdout: JSON.stringify({
+        issues: [
+          { ruleKey: 'secrets:S6290', description: 'Exposed API key', file: 'src/index.ts' },
+        ],
+      }),
+      stderr: '',
+    });
 
     const existsSpy = mockBinaryExists(true);
     try {
       await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
     } catch (e) {
       expect(e).toBeInstanceOf(CommandFailedError);
-      expect((e as CommandFailedError).message).toContain('Secrets found');
+      expect((e as CommandFailedError).message).toContain('secret');
       expect((e as CommandFailedError).exitCode).toBe(51);
     } finally {
       existsSpy.mockRestore();
     }
+  });
+
+  it('displays grouped file row and issue line when binary exits 51', async () => {
+    spawnSpy.mockResolvedValue({
+      exitCode: 51,
+      stdout: JSON.stringify({
+        issues: [
+          {
+            ruleKey: 'secrets:S6290',
+            description: 'Exposed API key',
+            file: 'src/index.ts',
+            location: { startLine: 42, startColumn: 0, endLine: 42, endColumn: 10 },
+            maskedSecret: 'sk_****',
+          },
+        ],
+      }),
+      stderr: '',
+    });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } catch {
+      // expected
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    const prints = getMockUiCalls()
+      .filter((c) => c.method === 'print')
+      .map((c) => String(c.args[0]));
+    expect(prints.some((m) => m.includes('src/index.ts'))).toBe(true);
+    expect(
+      prints.some(
+        (m) =>
+          m.includes('[1]') &&
+          m.includes('line 42') &&
+          m.includes('Exposed API key') &&
+          m.includes('sk_****'),
+      ),
+    ).toBe(true);
+  });
+
+  it('emits warnings from the errors field when binary exits 51', async () => {
+    spawnSpy.mockResolvedValue({
+      exitCode: 51,
+      stdout: JSON.stringify({
+        issues: [
+          { ruleKey: 'secrets:S6290', description: 'Exposed API key', file: 'src/index.ts' },
+        ],
+        errors: ['scan was incomplete'],
+      }),
+      stderr: '',
+    });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTH);
+    } catch {
+      // expected CommandFailedError
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    const warns = getMockUiCalls()
+      .filter((c) => c.method === 'warn')
+      .map((c) => String(c.args[0]));
+    expect(warns.some((m) => m.includes('scan was incomplete'))).toBe(true);
   });
 
   it('throws when binary exits 1 (error, not secrets found)', async () => {
@@ -486,10 +575,10 @@ describe('secretCheckCommand: stdin scan', () => {
 // ─── runSecretsBinaryOnText ───────────────────────────────────────────────────
 
 describe('runSecretsBinaryOnText', () => {
-  it('calls spawnProcess with --input as the only arg', async () => {
+  it('calls spawnProcess with --input and --json args', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
     await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'prompt text', FAKE_AUTH);
-    expect(spawnSpy.mock.calls[0][1]).toEqual(['--input']);
+    expect(spawnSpy.mock.calls[0][1]).toEqual(['--input', '--json']);
   });
 
   it('passes text as stdinData', async () => {
