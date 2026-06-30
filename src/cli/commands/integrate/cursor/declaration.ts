@@ -24,7 +24,7 @@ import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '../../../../lib/config-constants
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import {
-  AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
   MCP_SERVER_FEATURE_DESCRIPTION,
   SECRETS_FEATURE_DESCRIPTION,
 } from '../_common/feature-constants';
@@ -217,7 +217,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      benefitDescription: AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       scope: 'project',

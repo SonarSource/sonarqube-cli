@@ -33,7 +33,7 @@ import {
 import { getMcpConfig } from '../../../../lib/mcp/mcp-helper';
 import { getRequiredStringAttr } from '../_common/attrs';
 import {
-  AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
   MCP_SERVER_FEATURE_DESCRIPTION,
   SECRETS_FEATURE_DESCRIPTION,
   SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
@@ -124,7 +124,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis rules',
-      benefitDescription: AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,

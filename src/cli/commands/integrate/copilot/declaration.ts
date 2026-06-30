@@ -24,7 +24,7 @@ import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import {
-  AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
   MCP_SERVER_FEATURE_DESCRIPTION,
   SECRETS_FEATURE_DESCRIPTION,
   SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
@@ -136,7 +136,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      benefitDescription: AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
