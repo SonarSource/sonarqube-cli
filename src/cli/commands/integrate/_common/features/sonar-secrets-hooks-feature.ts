@@ -32,7 +32,12 @@ import { sonarSecretsBinaryDependency } from '../registry/dependencies';
 import { isFeatureInstalledGloballyForProject } from '../registry/installation-recorder';
 import { jsonPatch, type PlatformSpecificContent, wholeFile } from '../registry/resources';
 import { askUser, skip } from '../registry/selection';
-import type { FeatureDeclaration, IntegrationContext, PostInstallExample } from '../registry/types';
+import type {
+  FeatureDeclaration,
+  FeaturePreview,
+  IntegrationContext,
+  PostInstallExample,
+} from '../registry/types';
 
 const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
@@ -126,6 +131,7 @@ export interface SonarSecretsHooksFeatureConfig {
   featureId?: string;
   /** Feature display name shown during install. Defaults to `secret scanning hooks`. */
   displayName?: string;
+  previewDescription?: FeaturePreview;
   /** Hook-config serializer. Defaults to the Claude/Codex schema; agents like Cursor inject their own. */
   hookWriter?: SonarSecretsHooksWriter;
 }
@@ -150,6 +156,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
     id: featureId,
     displayName: config.displayName ?? 'secret scanning hooks',
     benefitDescription: SECRETS_FEATURE_DESCRIPTION,
+    previewDescription: config.previewDescription,
     shouldInstall: ({ options, scope, state }) =>
       globalSecretsHookAlreadyConfigured(config.integrationId, featureId, options, scope, state)
         ? skip(
