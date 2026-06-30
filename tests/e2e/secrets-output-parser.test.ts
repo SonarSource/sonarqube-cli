@@ -136,24 +136,30 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
 
     expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
-    // Parse raw binary output — no defensive wrapper — so any schema change fails loudly here
-    const raw = JSON.parse(result.stdout) as Record<string, unknown>;
+    // Parse raw binary output — no defensive wrapper — so any schema change fails loudly here.
+    // toEqual with asymmetric matchers checks both structure and value contracts in one assertion.
+    const raw = JSON.parse(result.stdout);
 
-    expect(Array.isArray(raw['issues'])).toBe(true);
-    expect((raw['issues'] as unknown[]).length).toBeGreaterThan(0);
-
-    const issue = (raw['issues'] as unknown[])[0] as Record<string, unknown>;
-
-    expect(typeof issue['ruleKey']).toBe('string');
-    expect(typeof issue['description']).toBe('string');
-    expect(typeof issue['file']).toBe('string');
-    expect(typeof issue['maskedSecret']).toBe('string');
-
-    expect(typeof issue['location']).toBe('object');
-    const loc = issue['location'] as Record<string, unknown>;
-    expect(typeof loc['startLine']).toBe('number');
-    expect(typeof loc['startColumn']).toBe('number');
-    expect(typeof loc['endLine']).toBe('number');
-    expect(typeof loc['endColumn']).toBe('number');
+    expect(raw).toEqual({
+      version: expect.any(String),
+      issues: [
+        {
+          ruleKey: expect.stringMatching(/^secrets:/),
+          description: expect.any(String),
+          file: expect.stringContaining('schema-check.ts'),
+          maskedSecret: expect.any(String),
+          location: {
+            startLine: expect.any(Number),
+            startColumn: expect.any(Number),
+            endLine: expect.any(Number),
+            endColumn: expect.any(Number),
+          },
+        },
+      ],
+      errors: [],
+      configuration: {
+        skippedFilters: expect.any(Array),
+      },
+    });
   });
 });
