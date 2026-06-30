@@ -20,9 +20,11 @@
 
 /**
  * Tests for telemetry/findings.ts:
- *   appendFinding        — NDJSON append, directory creation, fire-and-forget
- *   emitSecretsFindings  — telemetry gate, identity resolution, per-issue append
- *   flushFindings        — atomic rename, retention cap, send, re-queue, concurrent safety
+ *   appendFinding                 — NDJSON append, directory creation, fire-and-forget
+ *   appendAnalysisCompleted         — CliAnalysisCompleted envelope
+ *   appendAnalysisFindingsDetected  — CliAnalysisFindingsDetected envelope
+ *   emitSecretsFindings             — telemetry gate, identity resolution, per-issue append
+ *   flushFindings                   — atomic rename, retention cap, send, re-queue, concurrent safety
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -37,10 +39,20 @@ import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
 import type { CliState } from '../../../src/lib/state.js';
-import type { AnalysisFindingEventPayload, StoredFindingEvent } from '../../../src/lib/state.js';
+import type {
+  AnalysisCompletedEventPayload,
+  AnalysisFindingEventPayload,
+  AnalysisFindingsDetectedEventPayload,
+  StoredAnalysisCompletedEvent,
+  StoredAnalysisEvent,
+  StoredAnalysisFindingsDetectedEvent,
+  StoredFindingEvent,
+} from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
+  appendAnalysisCompleted,
+  appendAnalysisFindingsDetected,
   appendFinding,
   emitSecretsFindings,
   flushFindings,
@@ -49,9 +61,7 @@ import * as userModule from '../../../src/telemetry/user.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function makePayload(
-  overrides: Partial<AnalysisFindingEventPayload> = {},
-): AnalysisFindingEventPayload {
+function makeIdentityPayload() {
   return {
     cli_installation_id: 'install-id',
     machine_id: 'machine-id',
@@ -63,6 +73,14 @@ function makePayload(
     organization_uuid_v4: null,
     sqs_installation_id: null,
     caller_agent: null,
+  } as const;
+}
+
+function makePayload(
+  overrides: Partial<AnalysisFindingEventPayload> = {},
+): AnalysisFindingEventPayload {
+  return {
+    ...makeIdentityPayload(),
     caller_command: 'git-pre-commit',
     analyzer: 'sonar-secrets',
     rule_key: 'secrets:S6290',
@@ -71,17 +89,51 @@ function makePayload(
   };
 }
 
+function makeCompletedPayload(
+  overrides: Partial<AnalysisCompletedEventPayload> = {},
+): AnalysisCompletedEventPayload {
+  return {
+    ...makeIdentityPayload(),
+    caller_command: 'analyze-agentic',
+    analyzer: 'sqaa',
+    analysis_id: 'analysis-id-123',
+    findings_count: 0,
+    status: 'clean',
+    exit_code: null,
+    error_count: 0,
+    scan_duration_ms: 456,
+    ...overrides,
+  };
+}
+
+function makeFindingsDetectedPayload(
+  overrides: Partial<AnalysisFindingsDetectedEventPayload> = {},
+): AnalysisFindingsDetectedEventPayload {
+  return {
+    ...makeIdentityPayload(),
+    caller_command: 'analyze-agentic',
+    analyzer: 'sqaa',
+    analysis_id: 'analysis-id-123',
+    details_schema_version: 1,
+    details: JSON.stringify({
+      rule_keys: ['sqaa:S1234'],
+      counts_by_rule: { 'sqaa:S1234': 1 },
+    }),
+    ...overrides,
+  };
+}
+
 function findingsPath(sonarUserHome: string): string {
   return join(sonarUserHome, 'sonarqube-cli', 'telemetry', 'findings.ndjson');
 }
 
-function readLines(sonarUserHome: string): StoredFindingEvent[] {
+function readLines(sonarUserHome: string): StoredAnalysisEvent[] {
   const path = findingsPath(sonarUserHome);
   if (!existsSync(path)) return [];
   return readFileSync(path, 'utf-8')
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as StoredFindingEvent);
+    .map((line) => JSON.parse(line) as StoredAnalysisEvent);
 }
 
 function mockFetch(ok = true): ReturnType<typeof spyOn> {
@@ -120,6 +172,42 @@ afterEach(async () => {
   }
 });
 
+// ─── appendAnalysisCompleted ───────────────────────────────────────────────────
+
+describe('appendAnalysisCompleted()', () => {
+  it('writes a valid CliAnalysisCompleted envelope', () => {
+    appendAnalysisCompleted(makeCompletedPayload({ findings_count: 2, status: 'findings' }));
+
+    const [event] = readLines(testSonarUserHome);
+    expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
+    const completedEvent = event as StoredAnalysisCompletedEvent;
+    expect(completedEvent.event_payload.analyzer).toBe('sqaa');
+    expect(completedEvent.event_payload.findings_count).toBe(2);
+    expect(completedEvent.event_payload.status).toBe('findings');
+    expect(completedEvent.event_payload.exit_code).toBeNull();
+  });
+});
+
+// ─── appendAnalysisFindingsDetected ────────────────────────────────────────────
+
+describe('appendAnalysisFindingsDetected()', () => {
+  it('writes a valid CliAnalysisFindingsDetected envelope', () => {
+    appendAnalysisFindingsDetected(
+      makeFindingsDetectedPayload({ analysis_id: 'abc-123', details_schema_version: 1 }),
+    );
+
+    const [event] = readLines(testSonarUserHome);
+    expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingsDetected');
+    const findingsEvent = event as StoredAnalysisFindingsDetectedEvent;
+    expect(findingsEvent.event_payload.analysis_id).toBe('abc-123');
+    expect(findingsEvent.event_payload.details_schema_version).toBe(1);
+    expect(JSON.parse(findingsEvent.event_payload.details)).toEqual({
+      rule_keys: ['sqaa:S1234'],
+      counts_by_rule: { 'sqaa:S1234': 1 },
+    });
+  });
+});
+
 // ─── appendFinding ─────────────────────────────────────────────────────────────
 
 describe('appendFinding()', () => {
@@ -135,11 +223,12 @@ describe('appendFinding()', () => {
 
     const [event] = readLines(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
-    expect(event.metadata.source.domain).toBe('CLI');
-    expect(event.metadata.event_id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(typeof event.metadata.event_timestamp).toBe('string');
-    expect(event.event_payload.rule_key).toBe('secrets:S1234');
-    expect(event.event_payload.scan_duration_ms).toBe(999);
+    const findingEvent = event as StoredFindingEvent;
+    expect(findingEvent.metadata.source.domain).toBe('CLI');
+    expect(findingEvent.metadata.event_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(typeof findingEvent.metadata.event_timestamp).toBe('string');
+    expect(findingEvent.event_payload.rule_key).toBe('secrets:S1234');
+    expect(findingEvent.event_payload.scan_duration_ms).toBe(999);
   });
 
   it('appends one line per invocation', () => {
@@ -149,11 +238,12 @@ describe('appendFinding()', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(3);
-    expect(lines.map((e) => e.event_payload.rule_key)).toEqual([
-      'secrets:A',
-      'secrets:B',
-      'secrets:C',
-    ]);
+    expect(
+      lines.map((e) => {
+        if (e.metadata.event_type !== 'Analytics.Cli.CliAnalysisFindingDetected') return undefined;
+        return (e as StoredFindingEvent).event_payload.rule_key;
+      }),
+    ).toEqual(['secrets:A', 'secrets:B', 'secrets:C']);
   });
 
   it('creates the telemetry directory if it does not exist', () => {
@@ -249,8 +339,10 @@ describe('emitSecretsFindings()', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(2);
-    expect(lines[0].event_payload.rule_key).toBe('secrets:S6290');
-    expect(lines[1].event_payload.rule_key).toBe('secrets:S6691');
+    expect(lines[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
+    expect(lines[1].metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
+    expect((lines[0] as StoredFindingEvent).event_payload.rule_key).toBe('secrets:S6290');
+    expect((lines[1] as StoredFindingEvent).event_payload.rule_key).toBe('secrets:S6691');
   });
 
   it('sets connection_type to sqc for cloud connections', () => {
@@ -262,7 +354,8 @@ describe('emitSecretsFindings()', () => {
     );
 
     const [event] = readLines(testSonarUserHome);
-    expect(event.event_payload.connection_type).toBe('sqc');
+    expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
+    expect((event as StoredFindingEvent).event_payload.connection_type).toBe('sqc');
   });
 
   it('sets connection_type to sqs for server connections', () => {
@@ -274,16 +367,19 @@ describe('emitSecretsFindings()', () => {
     );
 
     const [event] = readLines(testSonarUserHome);
-    expect(event.event_payload.connection_type).toBe('sqs');
+    expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
+    expect((event as StoredFindingEvent).event_payload.connection_type).toBe('sqs');
   });
 
   it('records caller_command, analyzer, and scan_duration_ms', () => {
     emitSecretsFindings('git-pre-commit', AUTH, [{ ruleKey: 'secrets:S1' }], 456);
 
     const [event] = readLines(testSonarUserHome);
-    expect(event.event_payload.caller_command).toBe('git-pre-commit');
-    expect(event.event_payload.analyzer).toBe('sonar-secrets');
-    expect(event.event_payload.scan_duration_ms).toBe(456);
+    expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
+    const findingEvent = event as StoredFindingEvent;
+    expect(findingEvent.event_payload.caller_command).toBe('git-pre-commit');
+    expect(findingEvent.event_payload.analyzer).toBe('sonar-secrets');
+    expect(findingEvent.event_payload.scan_duration_ms).toBe(456);
   });
 });
 
@@ -308,6 +404,39 @@ describe('flushFindings()', () => {
     try {
       await flushFindings(Date.now() + 60_000);
       expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('POSTs CliAnalysisCompleted and CliAnalysisFindingsDetected events', async () => {
+    appendAnalysisCompleted(makeCompletedPayload());
+    appendAnalysisFindingsDetected(makeFindingsDetectedPayload());
+
+    const fetchSpy = mockFetch();
+    try {
+      await flushFindings(Date.now() + 60_000);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      const types = fetchSpy.mock.calls.map((call: unknown[]) => {
+        const body = JSON.parse((call[1] as RequestInit).body as string) as StoredAnalysisEvent;
+        return body.metadata.event_type;
+      });
+      expect(types).toContain('Analytics.Cli.CliAnalysisCompleted');
+      expect(types).toContain('Analytics.Cli.CliAnalysisFindingsDetected');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('POSTs a mixed ndjson file with legacy and new event types', async () => {
+    appendFinding(makePayload({ rule_key: 'secrets:LEGACY' }));
+    appendAnalysisCompleted(makeCompletedPayload({ analysis_id: 'run-1' }));
+    appendAnalysisFindingsDetected(makeFindingsDetectedPayload({ analysis_id: 'run-1' }));
+
+    const fetchSpy = mockFetch();
+    try {
+      await flushFindings(Date.now() + 60_000);
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
     } finally {
       fetchSpy.mockRestore();
     }
@@ -473,7 +602,8 @@ describe('flushFindings()', () => {
       await flushFindings(Date.now() + 60_000);
       const requeued = readLines(testSonarUserHome);
       expect(requeued).toHaveLength(1);
-      expect(requeued[0].event_payload.rule_key).toBe('secrets:A');
+      expect(requeued[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingDetected');
+      expect((requeued[0] as StoredFindingEvent).event_payload.rule_key).toBe('secrets:A');
     } finally {
       fetchSpy.mockRestore();
     }

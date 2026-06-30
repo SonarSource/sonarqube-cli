@@ -28,7 +28,13 @@ import type { ResolvedAuth } from '../lib/auth-resolver.js';
 import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../lib/config-constants.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import { INVOCATION_ID } from '../lib/invocation-id.js';
-import type { AnalysisFindingEventPayload, StoredFindingEvent } from '../lib/state.js';
+import type {
+  AnalysisCompletedEventPayload,
+  AnalysisEventIdentityPayload,
+  AnalysisFindingEventPayload,
+  AnalysisFindingsDetectedEventPayload,
+  StoredAnalysisEvent,
+} from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
 import { getOrCreateUserId } from './user.js';
@@ -41,26 +47,86 @@ function getFindingsPath(): string {
   return join(getTelemetryDir(), FINDINGS_FILENAME);
 }
 
-/**
- * Appends one CliAnalysisFindingDetected event to findings.ndjson. Fire-and-forget:
- * creates the directory if missing and silently swallows all I/O errors.
- */
-export function appendFinding(payload: AnalysisFindingEventPayload): void {
+function appendAnalysisEvent(event: StoredAnalysisEvent): void {
   try {
-    const event: StoredFindingEvent = {
-      metadata: {
-        event_id: randomUUID(),
-        source: { domain: 'CLI' },
-        event_type: 'Analytics.Cli.CliAnalysisFindingDetected',
-        event_timestamp: String(Date.now()),
-      },
-      event_payload: payload,
-    };
     mkdirSync(getTelemetryDir(), { recursive: true });
     appendFileSync(getFindingsPath(), JSON.stringify(event) + '\n');
   } catch {
     // fire-and-forget
   }
+}
+
+/**
+ * Resolves shared identity fields for analysis telemetry events.
+ * Returns null when telemetry is disabled or installationId is absent.
+ */
+export function buildAnalysisIdentityBase(auth: ResolvedAuth): AnalysisEventIdentityPayload | null {
+  const state = loadState();
+  if (!isTelemetryEnabled(state)) return null;
+  const installationId = state.telemetry.installationId;
+  if (!installationId) return null;
+
+  const conn = getActiveConnection(state);
+  return {
+    cli_installation_id: installationId,
+    machine_id: getOrCreateUserId(),
+    cli_version: VERSION,
+    invocation_id: INVOCATION_ID,
+    os: process.platform,
+    connection_type: auth.connectionType === 'cloud' ? 'sqc' : 'sqs',
+    user_uuid: conn?.userUuid ?? null,
+    organization_uuid_v4: conn?.organizationUuidV4 ?? null,
+    sqs_installation_id: conn?.sqsInstallationId ?? null,
+    caller_agent: detectCallerAgent(),
+  };
+}
+
+/**
+ * Appends one CliAnalysisCompleted event to findings.ndjson. Fire-and-forget.
+ */
+export function appendAnalysisCompleted(payload: AnalysisCompletedEventPayload): void {
+  appendAnalysisEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliAnalysisCompleted',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: payload,
+  });
+}
+
+/**
+ * Appends one CliAnalysisFindingsDetected event to findings.ndjson. Fire-and-forget.
+ */
+export function appendAnalysisFindingsDetected(
+  payload: AnalysisFindingsDetectedEventPayload,
+): void {
+  appendAnalysisEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliAnalysisFindingsDetected',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: payload,
+  });
+}
+
+/**
+ * Appends one CliAnalysisFindingDetected event to findings.ndjson. Fire-and-forget:
+ * creates the directory if missing and silently swallows all I/O errors.
+ */
+export function appendFinding(payload: AnalysisFindingEventPayload): void {
+  appendAnalysisEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliAnalysisFindingDetected',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: payload,
+  });
 }
 
 /**
@@ -75,27 +141,8 @@ export function emitSecretsFindings(
   durationMs: number,
 ): void {
   if (issues.length === 0) return;
-  const state = loadState();
-  if (!isTelemetryEnabled(state)) return;
-  const installationId = state.telemetry.installationId;
-  if (!installationId) return;
-
-  const conn = getActiveConnection(state);
-  const base: Omit<
-    AnalysisFindingEventPayload,
-    'caller_command' | 'analyzer' | 'rule_key' | 'scan_duration_ms'
-  > = {
-    cli_installation_id: installationId,
-    machine_id: getOrCreateUserId(),
-    cli_version: VERSION,
-    invocation_id: INVOCATION_ID,
-    os: process.platform,
-    connection_type: auth.connectionType === 'cloud' ? 'sqc' : 'sqs',
-    user_uuid: conn?.userUuid ?? null,
-    organization_uuid_v4: conn?.organizationUuidV4 ?? null,
-    sqs_installation_id: conn?.sqsInstallationId ?? null,
-    caller_agent: detectCallerAgent(),
-  };
+  const base = buildAnalysisIdentityBase(auth);
+  if (!base) return;
 
   for (const issue of issues) {
     appendFinding({
@@ -108,12 +155,12 @@ export function emitSecretsFindings(
   }
 }
 
-function parseValidEvents(content: string, now: number): StoredFindingEvent[] {
-  const events: StoredFindingEvent[] = [];
+function parseValidEvents(content: string, now: number): StoredAnalysisEvent[] {
+  const events: StoredAnalysisEvent[] = [];
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
-      const event = JSON.parse(line) as StoredFindingEvent;
+      const event = JSON.parse(line) as StoredAnalysisEvent;
       const ts = Number(event.metadata.event_timestamp);
       if (!Number.isNaN(ts) && now - ts <= FINDINGS_RETENTION_MS) {
         events.push(event);
@@ -146,7 +193,7 @@ export async function flushFindings(deadline: number): Promise<void> {
     return;
   }
 
-  const unsent: StoredFindingEvent[] = [];
+  const unsent: StoredAnalysisEvent[] = [];
 
   try {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
