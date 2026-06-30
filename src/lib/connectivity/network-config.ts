@@ -18,18 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { readFileSync } from 'node:fs';
 import { rootCertificates } from 'node:tls';
 
-import type { BunFile } from 'bun';
-
+import { NetworkConfigError } from '../errors';
 import { createRedactedUrl } from '../redacted-url';
 import type {
   CaCertConfig,
+  ClientCertConfig,
   ConfigSource,
   FetchNetworkOptions,
   ProxyGroup,
   ResolvedNetworkConfig,
   SourcedValue,
+  TlsConfig,
 } from './types';
 
 // --- Proxy group ---
@@ -124,13 +126,63 @@ function fromEnv(
   return val ? { value: val, source, explicit: source !== 'generic-env' } : null;
 }
 
+// --- Client cert (sonar-env only, no generic-env fallback) ---
+
+function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
+  const certPath = env.SONAR_MTLS_CERT;
+  if (!certPath) {
+    return null;
+  }
+
+  const keyPath = env.SONAR_MTLS_KEY_FILE;
+  if (!keyPath) {
+    throw new NetworkConfigError('SONAR_MTLS_KEY_FILE is required when SONAR_MTLS_CERT is set');
+  }
+
+  const passphrase = env.SONAR_MTLS_PASSPHRASE;
+
+  let resolvedCertPem: string;
+  try {
+    resolvedCertPem = readFileSync(certPath, 'utf-8');
+  } catch (err) {
+    throw new NetworkConfigError(
+      `Failed to read mTLS certificate file "${certPath}": ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  let resolvedKeyPem: string;
+  try {
+    resolvedKeyPem = readFileSync(keyPath, 'utf-8');
+  } catch (err) {
+    throw new NetworkConfigError(
+      `Failed to read mTLS key file "${keyPath}": ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  return {
+    source: 'sonar-env',
+    explicit: true,
+    certPath,
+    keyPath,
+    passphrase,
+    resolvedCertPem,
+    resolvedKeyPem,
+  };
+}
+
 // --- Resolver ---
 
 export function resolveNetworkConfig(env: NodeJS.ProcessEnv = process.env): ResolvedNetworkConfig {
-  return {
-    proxy: resolveProxyGroup(env),
-    caCert: resolveCaCert(env),
-  };
+  const proxy = resolveProxyGroup(env);
+  const caCert = resolveCaCert(env);
+  let clientCert: ClientCertConfig | null = null;
+  let error: string | undefined;
+  try {
+    clientCert = resolveClientCert(env);
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  }
+  return { proxy, caCert, clientCert, error };
 }
 
 // --- Singleton ---
@@ -140,6 +192,14 @@ let cachedConfig: ResolvedNetworkConfig | undefined;
 export function getNetworkConfig(): ResolvedNetworkConfig {
   cachedConfig ??= resolveNetworkConfig();
   return cachedConfig;
+}
+
+export function getNetworkConfigOrThrow(): ResolvedNetworkConfig {
+  const config = getNetworkConfig();
+  if (config.error !== undefined) {
+    throw new NetworkConfigError(config.error);
+  }
+  return config;
 }
 
 /** Test seam — resets the cached singleton. */
@@ -154,7 +214,7 @@ const DEFAULT_PORT_HTTP = 80;
 
 export function buildFetchNetworkOptions(
   url: string,
-  config: ResolvedNetworkConfig = getNetworkConfig(),
+  config: ResolvedNetworkConfig = getNetworkConfigOrThrow(),
 ): FetchNetworkOptions {
   return {
     ...buildProxyOption(url, config),
@@ -185,13 +245,24 @@ function buildProxyOption(
   return bypass ? {} : { proxy: proxyCandidate.getUrlWithCredentials() };
 }
 
-function buildTlsOption(
-  config: ResolvedNetworkConfig,
-): { tls: { ca: Array<string | BunFile> } } | Record<string, never> {
-  if (!config.caCert?.explicit) {
+function buildTlsOption(config: ResolvedNetworkConfig) {
+  if (!config.caCert?.explicit && !config.clientCert?.explicit) {
     return {};
   }
-  return { tls: { ca: [...rootCertificates, Bun.file(config.caCert.path)] } };
+
+  const tls: TlsConfig = {};
+
+  if (config.caCert?.explicit) {
+    tls.ca = [...rootCertificates, Bun.file(config.caCert.path)];
+  }
+
+  if (config.clientCert?.explicit) {
+    tls.cert = config.clientCert.resolvedCertPem;
+    tls.key = config.clientCert.resolvedKeyPem;
+    tls.passphrase = config.clientCert.passphrase;
+  }
+
+  return { tls };
 }
 
 function tryParseUrl(url: string): URL | null {

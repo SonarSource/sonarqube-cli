@@ -18,13 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { NetworkConfigError } from '../../../lib/errors.js';
 import { RateLimitError, ServiceUnavailableError } from '../../../sonarqube/errors.js';
 
-function hintFromCause(cause: unknown): string | undefined {
-  if (cause instanceof RateLimitError) {
+export function remediationHintFor(err: unknown): string | undefined {
+  if (err instanceof CliError) {
+    return err.remediationHint;
+  }
+  if (err instanceof NetworkConfigError) {
+    return 'You can also check current network configuration and errors using `sonar system status`.';
+  }
+  if (err instanceof RateLimitError) {
     return 'Wait a moment and try again.';
   }
-  if (cause instanceof ServiceUnavailableError) {
+  if (err instanceof ServiceUnavailableError) {
     return 'Check your network connection and try again later.';
   }
   return undefined;
@@ -40,7 +47,7 @@ export abstract class CliError extends Error {
 
   protected constructor(message: string, options?: CliErrorOptions) {
     super(message, { cause: options?.cause });
-    this.remediationHint = hintFromCause(options?.cause) ?? options?.remediationHint;
+    this.remediationHint = remediationHintFor(options?.cause) ?? options?.remediationHint;
   }
 }
 
