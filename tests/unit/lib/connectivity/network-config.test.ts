@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rootCertificates } from 'node:tls';
@@ -32,15 +32,20 @@ import {
   resolveNetworkConfig,
 } from '../../../../src/lib/connectivity/network-config';
 
+const MTLS_FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/mtls');
+const CERT_PATH = join(MTLS_FIXTURE_DIR, 'client-cert.pem');
+const KEY_PATH = join(MTLS_FIXTURE_DIR, 'client-key.pem');
+
 afterEach(() => {
   clearNetworkConfigCache();
 });
 
 describe('resolveNetworkConfig', () => {
-  it('returns null proxy and caCert when env is empty', () => {
+  it('returns null proxy, caCert, and clientCert when env is empty', () => {
     const config = resolveNetworkConfig({});
     expect(config.proxy).toBeNull();
     expect(config.caCert).toBeNull();
+    expect(config.clientCert).toBeNull();
   });
 
   describe('proxy group — tier selection', () => {
@@ -202,6 +207,73 @@ describe('resolveNetworkConfig', () => {
     expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe(
       'https://alice:secret@proxy:3128',
     );
+  });
+
+  describe('clientCert', () => {
+    it('returns null when SONAR_MTLS_CERT is not set', () => {
+      expect(resolveNetworkConfig({}).clientCert).toBeNull();
+    });
+
+    it('resolves certPath, keyPath, source, and explicit flag', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+      });
+      expect(config.clientCert?.certPath).toBe(CERT_PATH);
+      expect(config.clientCert?.keyPath).toBe(KEY_PATH);
+      expect(config.clientCert?.source).toBe('sonar-env');
+      expect(config.clientCert?.explicit).toBe(true);
+    });
+
+    it('reads and stores resolved PEM content eagerly', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+      });
+      expect(config.clientCert?.resolvedCertPem).toBe(readFileSync(CERT_PATH, 'utf-8'));
+      expect(config.clientCert?.resolvedKeyPem).toBe(readFileSync(KEY_PATH, 'utf-8'));
+    });
+
+    it('captures passphrase when SONAR_MTLS_PASSPHRASE is set', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_MTLS_PASSPHRASE: 'secret',
+      });
+      expect(config.clientCert?.passphrase).toBe('secret');
+    });
+
+    it('passphrase is undefined when SONAR_MTLS_PASSPHRASE is not set', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+      });
+      expect(config.clientCert?.passphrase).toBeUndefined();
+    });
+
+    it('sets error when SONAR_MTLS_KEY_FILE is missing', () => {
+      const config = resolveNetworkConfig({ SONAR_MTLS_CERT: CERT_PATH });
+      expect(config.clientCert).toBeNull();
+      expect(config.error).toBeDefined();
+    });
+
+    it('sets error when cert file does not exist', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: '/nonexistent/cert.pem',
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+      });
+      expect(config.clientCert).toBeNull();
+      expect(config.error).toBeDefined();
+    });
+
+    it('sets error when key file does not exist', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: '/nonexistent/key.pem',
+      });
+      expect(config.clientCert).toBeNull();
+      expect(config.error).toBeDefined();
+    });
   });
 });
 
@@ -396,6 +468,48 @@ describe('buildFetchNetworkOptions', () => {
 
     expect(opts.proxy).toBe('https://proxy:8080');
     expect(opts.tls?.ca).toBeDefined();
+  });
+
+  describe('client cert', () => {
+    it('sets tls.cert and tls.key as resolved PEM strings', () => {
+      const config = makeConfig({ SONAR_MTLS_CERT: CERT_PATH, SONAR_MTLS_KEY_FILE: KEY_PATH });
+      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      expect(opts.tls?.cert).toBe(readFileSync(CERT_PATH, 'utf-8'));
+      expect(opts.tls?.key).toBe(readFileSync(KEY_PATH, 'utf-8'));
+    });
+
+    it('does not set tls.cert or tls.key when clientCert is null', () => {
+      const config = makeConfig({});
+      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      expect(opts.tls?.cert).toBeUndefined();
+      expect(opts.tls?.key).toBeUndefined();
+    });
+
+    it('sets tls.passphrase when SONAR_MTLS_PASSPHRASE is provided', () => {
+      const config = makeConfig({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_MTLS_PASSPHRASE: 'supersecret',
+      });
+      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      expect(opts.tls?.passphrase).toBe('supersecret');
+    });
+
+    it('sets ca, cert, and key together when both CA cert and client cert are configured', () => {
+      const caPath = join(tmpdir(), 'sonar-test-ca-mtls.pem');
+      writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----');
+
+      const config = makeConfig({
+        SONAR_CA_CERT: caPath,
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+      });
+      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+
+      expect(opts.tls?.ca).toBeDefined();
+      expect(opts.tls?.cert).toBeDefined();
+      expect(opts.tls?.key).toBeDefined();
+    });
   });
 });
 

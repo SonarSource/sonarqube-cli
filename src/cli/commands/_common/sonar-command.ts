@@ -26,7 +26,7 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import { resolveAuth } from '../../../lib/auth-resolver.js';
 import logger from '../../../lib/logger.js';
 import { blank, error, print } from '../../../ui';
-import { CliError, CommandFailedError } from './error.js';
+import { CliError, CommandFailedError, remediationHintFor } from './error.js';
 
 export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
@@ -142,8 +142,9 @@ export class SonarCommand extends Command {
 
       blank();
       error(thrownError.message);
-      if (cliError?.remediationHint) {
-        print(`  → ${cliError.remediationHint}`, 'stderr');
+      const hint = remediationHintFor(err);
+      if (hint) {
+        print(`  → ${hint}`, 'stderr');
       }
       logger.error(thrownError.message);
       process.exitCode = cliError?.exitCode ?? 1;

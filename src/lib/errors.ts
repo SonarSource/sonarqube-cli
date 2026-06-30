@@ -24,3 +24,10 @@ export class ApiCallError extends Error {
     this.name = 'ApiCallError';
   }
 }
+
+export class NetworkConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkConfigError';
+  }
+}

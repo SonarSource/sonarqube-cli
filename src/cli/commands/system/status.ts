@@ -67,6 +67,9 @@ const CA_CERT_SOURCE_LABELS: Record<ConfigSource, string> = {
   'generic-env': 'NODE_EXTRA_CA_CERTS environment variable',
 };
 
+const MTLS_SOURCE_LABEL =
+  'SONAR_MTLS_CERT, SONAR_MTLS_KEY_FILE, SONAR_MTLS_PASSPHRASE environment variables';
+
 const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SECRETS_SPEC.name]: SECRETS_SPEC.version,
   [CONTEXT_AUGMENTATION_BINARY_NAME]: SONAR_CONTEXT_AUGMENTATION_VERSION,
@@ -422,10 +425,16 @@ export async function systemStatus(options: SystemStatusOptions): Promise<void> 
 
   const hasMcpIssues = integrations.some((i) => i.mcp?.config === 'invalid');
   const hasHooksIssues = integrations.some((i) => i.hooks?.config === 'invalid');
-  const hasIssues =
-    tokenStatus === null || tokenStatus.status === 'invalid' || hasMcpIssues || hasHooksIssues;
-  const recommendations = buildRecommendations(tokenStatus, updateResult, integrations);
+
   const network = getNetworkConfig();
+
+  const hasIssues =
+    tokenStatus === null ||
+    tokenStatus.status === 'invalid' ||
+    hasMcpIssues ||
+    hasHooksIssues ||
+    network.error !== undefined;
+  const recommendations = buildRecommendations(tokenStatus, updateResult, integrations, network);
 
   const data: StatusData = {
     auth,
@@ -470,11 +479,13 @@ function buildRecommendations(
   tokenStatus: TokenCheckResult | null,
   updateResult: UpdateCheckResult | null,
   integrations: IntegrationInfo[],
+  network: ResolvedNetworkConfig,
 ): string[] {
   const recommendations: string[] = [];
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
   if (tokenStatus?.status === 'invalid')
     recommendations.push("Run 'sonar auth login' to reauthenticate");
+  if (network.error !== undefined) recommendations.push(`Fix mTLS configuration: ${network.error}`);
   if (updateResult && !updateResult.upToDate) {
     recommendations.push(
       `Run 'sonar self-update' to update to v${updateResult.latest.version.noBuild.text}`,
@@ -509,6 +520,20 @@ function tokenStatusLabel(tokenStatus: TokenCheckResult | null): string {
   if (tokenStatus.status === 'valid') return 'active';
   if (tokenStatus.status === 'invalid') return 'invalid';
   return 'set_unverified';
+}
+
+function buildMtlsJson(network: ResolvedNetworkConfig) {
+  if (network.clientCert) {
+    return {
+      source: MTLS_SOURCE_LABEL,
+      certPath: network.clientCert.certPath,
+      keyPath: network.clientCert.keyPath,
+    };
+  }
+  if (network.error !== undefined) {
+    return { error: network.error };
+  }
+  return null;
 }
 
 function printJsonStatus(version: string, data: StatusData): void {
@@ -572,6 +597,7 @@ function printJsonStatus(version: string, data: StatusData): void {
                 path: network.caCert.path,
               }
             : null,
+          mtls: buildMtlsJson(network),
         },
         healthy: !hasIssues,
         recommendations,
@@ -655,7 +681,7 @@ function renderRecommendationsSection(recommendations: string[]): void {
 function renderNetworkSection(network: ResolvedNetworkConfig): void {
   blank();
   text('NETWORK');
-  if (!network.proxy && !network.caCert) {
+  if (!network.proxy && !network.caCert && !network.clientCert && !network.error) {
     text('  No advanced network configuration detected.');
     return;
   }
@@ -680,6 +706,16 @@ function renderNetworkSection(network: ResolvedNetworkConfig): void {
     blank();
     text(`  CA Certificate (${CA_CERT_SOURCE_LABELS[network.caCert.source]}):`);
     text(`    • ${network.caCert.path}`);
+  }
+  if (network.clientCert) {
+    blank();
+    text(`  mTLS Certificate (${MTLS_SOURCE_LABEL}):`);
+    text(`    • Certificate: ${network.clientCert.certPath}`);
+    text(`    • Key:         ${network.clientCert.keyPath}`);
+  } else if (network.error) {
+    blank();
+    text(`  mTLS Certificate (${MTLS_SOURCE_LABEL}):`);
+    warn(`    ✗ ${network.error}`);
   }
 }
 

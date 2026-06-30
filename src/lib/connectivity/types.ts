@@ -30,9 +30,26 @@ export interface SourcedValue<T> {
   readonly explicit: boolean;
 }
 
+export interface TlsConfig {
+  ca?: Array<string | BunFile>;
+  cert?: string;
+  key?: string;
+  passphrase?: string;
+}
+
 export interface FetchNetworkOptions {
   proxy?: string;
-  tls?: { ca: Array<string | BunFile> };
+  tls?: TlsConfig;
+}
+
+export interface ClientCertConfig {
+  readonly source: ConfigSource;
+  readonly explicit: boolean;
+  readonly certPath: string;
+  readonly keyPath: string;
+  readonly passphrase: string | undefined;
+  readonly resolvedCertPem: string;
+  readonly resolvedKeyPem: string;
 }
 
 export interface ProxyGroup {
@@ -52,4 +69,6 @@ export interface CaCertConfig {
 export interface ResolvedNetworkConfig {
   readonly proxy: ProxyGroup | null;
   readonly caCert: CaCertConfig | null;
+  readonly clientCert: ClientCertConfig | null;
+  readonly error?: string;
 }
