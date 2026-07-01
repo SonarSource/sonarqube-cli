@@ -260,4 +260,58 @@ describe('analyze secrets', () => {
     },
     { timeout: 30000 },
   );
+
+  it(
+    'writes CliAnalysisCompleted + CliAnalysisFindingsDetected to findings.ndjson from a real scan',
+    async () => {
+      harness.state().withSecretsBinaryInstalled().withTelemetryEnabled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+      // Run in flush-worker mode so storeEvent() never spawns the detached flush worker:
+      // findings.ndjson is written but nothing is POSTed to the telemetry endpoint.
+      harness.withExtraEnv({ __SQ_CLI_TELEMETRY_FLUSH__: '1' });
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const result = await harness.run('analyze secrets secrets.js');
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+      const findingsFile = harness.cliHome.file('telemetry', 'findings.ndjson');
+      expect(findingsFile.exists()).toBe(true);
+
+      interface AnalysisEvent {
+        metadata: { event_type: string };
+        event_payload: Record<string, unknown>;
+      }
+      const events = findingsFile
+        .asText()
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as AnalysisEvent);
+
+      // One completed event (always) + one findings-detected event (findings present).
+      expect(events).toHaveLength(2);
+      const completed = events[0];
+      const detected = events[1];
+      expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
+      expect(detected.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingsDetected');
+
+      expect(completed.event_payload.analyzer).toBe('sonar-secrets');
+      expect(completed.event_payload.caller_command).toBe('analyze secrets');
+      expect(completed.event_payload.failures_count).toBe(0);
+      expect(completed.event_payload.exit_code).toBe(EXIT_CODE_SECRETS_FOUND);
+      expect(completed.event_payload.findings_count as number).toBeGreaterThanOrEqual(1);
+
+      const details = JSON.parse(detected.event_payload.details as string) as {
+        counts_by_rule: Record<string, number>;
+        files_with_findings_count: number;
+        source: string;
+      };
+      expect(Object.keys(details.counts_by_rule).length).toBeGreaterThanOrEqual(1);
+      expect(details.source).toBe('files');
+
+      // The two events are joinable on a shared analysis_id.
+      expect(completed.event_payload.analysis_id).toBe(detected.event_payload.analysis_id);
+    },
+    { timeout: 30000 },
+  );
 });

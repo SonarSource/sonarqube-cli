@@ -144,6 +144,7 @@ export class EnvironmentBuilder {
   private _cagStderrLine?: string;
   private _installScaScannerBinary = false;
   private _rawStateJson?: string;
+  private _telemetryEnabled = false;
   private _dockerMockRunning?: boolean;
   private _dockerMockBinDir?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
@@ -282,6 +283,10 @@ export class EnvironmentBuilder {
     return this._dockerMockBinDir;
   }
 
+  get telemetryEnabled(): boolean {
+    return this._telemetryEnabled;
+  }
+
   /**
    * Stores a token in the file-based keychain when writeTo() is called.
    */
@@ -296,6 +301,17 @@ export class EnvironmentBuilder {
    */
   withRawState(json: string): this {
     this._rawStateJson = json;
+    return this;
+  }
+
+  /**
+   * Enables telemetry in the generated state (off by default for integration tests).
+   * Use when a test needs to assert telemetry side effects such as findings.ndjson.
+   * Pair with extraEnv `__SQ_CLI_TELEMETRY_FLUSH__=1` so the sink is written but the
+   * detached flush worker never spawns, and nothing is POSTed to the telemetry endpoint.
+   */
+  withTelemetryEnabled(): this {
+    this._telemetryEnabled = true;
     return this;
   }
 
@@ -378,8 +394,8 @@ export class EnvironmentBuilder {
     // withRawState().
     const state = getDefaultState(CURRENT_CLI_VERSION);
 
-    // disable telemetry for integration tests
-    state.telemetry.enabled = false;
+    // Telemetry is off by default for integration tests; opt in via withTelemetryEnabled().
+    state.telemetry.enabled = this._telemetryEnabled;
 
     if (this.activeConnectionUrl) {
       const connectionId = 'test-connection-id';
