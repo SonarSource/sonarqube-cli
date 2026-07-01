@@ -109,7 +109,7 @@ async function analyzeSqaaExplicitFiles(
     rawDepth?: string;
     forcedDepth?: SqaaAnalysisDepth;
     requireProject: boolean;
-    telemetryCallerCommand?: SqaaBatchRunOptions['telemetryCallerCommand'];
+    telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
   },
 ): Promise<void> {
   const entries = resolveSqaaFileArgs(rawFiles);
@@ -168,7 +168,7 @@ async function analyzeSqaaChangeSet(params: {
   rawDepth?: string;
   forcedDepth?: SqaaAnalysisDepth;
   requireProject: boolean;
-  telemetryCallerCommand?: SqaaBatchRunOptions['telemetryCallerCommand'];
+  telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
 }): Promise<void> {
   const {
     auth,
