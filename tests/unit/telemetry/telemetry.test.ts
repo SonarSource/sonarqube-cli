@@ -595,9 +595,9 @@ describe('flushTelemetry', () => {
           analyzer: 'sonar-secrets',
           analysis_id: 'analysis-id',
           findings_count: 1,
-          status: 'findings',
           exit_code: 51,
-          error_count: 0,
+          errors_count: 0,
+          failures_count: 0,
           scan_duration_ms: 123,
         },
       };

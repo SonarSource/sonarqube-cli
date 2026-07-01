@@ -53,6 +53,7 @@ import {
   emitAnalysisFindingsDetected,
   flushFindings,
 } from '../../../src/telemetry/findings.js';
+import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -76,13 +77,13 @@ function makeCompletedFields(
   overrides: Partial<AnalysisCompletedFields> = {},
 ): AnalysisCompletedFields {
   return {
-    caller_command: 'analyze agentic',
+    caller_command: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
     analyzer: 'sqaa',
     analysis_id: 'analysis-id-123',
     findings_count: 0,
-    status: 'clean',
     exit_code: null,
-    error_count: 0,
+    errors_count: 0,
+    failures_count: 0,
     scan_duration_ms: 456,
     ...overrides,
   };
@@ -102,7 +103,7 @@ function makeFindingsDetectedFields(
   overrides: Partial<AnalysisFindingsDetectedFields> = {},
 ): AnalysisFindingsDetectedFields {
   return {
-    caller_command: 'analyze agentic',
+    caller_command: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
     analyzer: 'sqaa',
     analysis_id: 'analysis-id-123',
     details_schema_version: 1,
@@ -243,16 +244,15 @@ afterEach(async () => {
 
 describe('emitAnalysisCompleted()', () => {
   it('writes a valid CliAnalysisCompleted envelope', () => {
-    emitAnalysisCompleted(AUTH, makeCompletedFields({ findings_count: 2, status: 'findings' }));
+    emitAnalysisCompleted(AUTH, makeCompletedFields({ findings_count: 2, exit_code: 51 }));
 
     const [event] = readLines(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     const completedEvent = event as StoredAnalysisCompletedEvent;
     expect(completedEvent.event_payload.analyzer).toBe('sqaa');
     expect(completedEvent.event_payload.findings_count).toBe(2);
-    expect(completedEvent.event_payload.status).toBe('findings');
-    expect(completedEvent.event_payload.exit_code).toBeNull();
-    expect(completedEvent.event_payload.caller_command).toBe('analyze agentic');
+    expect(completedEvent.event_payload.exit_code).toBe(51);
+    expect(completedEvent.event_payload.caller_command).toBe(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND);
   });
 
   it('does not append when telemetry is disabled', () => {
@@ -426,7 +426,7 @@ describe('flushFindings()', () => {
   });
 
   it('serialises the analysis event in the request body', async () => {
-    writeStoredEvent(makeStoredCompletedEvent({ findings_count: 3, status: 'findings' }));
+    writeStoredEvent(makeStoredCompletedEvent({ findings_count: 3, exit_code: 51 }));
 
     const fetchSpy = mockFetch();
     try {

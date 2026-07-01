@@ -60,7 +60,9 @@ export interface RunContext {
 export interface RunTally {
   allResults: FileResult[];
   totalIssues: number;
+  /** API `errors[]` warnings on successfully analyzed files (not HTTP failures). */
   totalErrors: number;
+  /** Files that could not be analyzed (HTTP 4xx/5xx, fetch errors, etc.). */
   totalFailures: number;
 }
 

@@ -468,13 +468,10 @@ export interface AnalysisEventIdentityPayload {
   caller_agent: CallerAgent | null;
 }
 
-export type AnalysisRunStatus = 'clean' | 'findings' | 'error';
-
 export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
 /**
- * Payload for a CliAnalysisCompleted event — one event per analyzer run
- * (clean, findings, or error).
+ * Payload for a CliAnalysisCompleted event — one event per analyzer run.
  */
 export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayload {
   /** Literal CLI subcommand path (e.g. "analyze agentic", "hook git-pre-commit") */
@@ -483,10 +480,23 @@ export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayl
   /** UUID minted once per run; join key with CliAnalysisFindingsDetected */
   analysis_id: string;
   findings_count: number;
-  status: AnalysisRunStatus;
-  /** Subprocess exit code for binary analyzers; null for API-based analyzers */
+  /**
+   * Command exit code when the handler sets one (SQAA: 0/51/1/2 via `applyExitCode` or
+   * `CliError`). Null when the run has no command exit semantics or the code is unknown.
+   */
   exit_code: number | null;
-  error_count: number;
+  /**
+   * Analyzer-reported errors during the run (not transport failures). SQAA:
+   * {@link RunTally.totalErrors} — API `errors[]` on successfully analyzed files.
+   * sonar-secrets: parsed `errors[]` from `--json` output.
+   */
+  errors_count: number;
+  /**
+   * Files that could not be analyzed (SQAA: {@link RunTally.totalFailures} — HTTP errors,
+   * read failures, validation rejections; counted per file, so one batch error may increment
+   * multiple times). Other analyzers: 0 unless applicable.
+   */
+  failures_count: number;
   scan_duration_ms: number;
 }
 
