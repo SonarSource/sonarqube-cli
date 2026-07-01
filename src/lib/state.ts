@@ -454,11 +454,8 @@ export interface StoredTelemetryEvent {
   event_payload: TelemetryEventPayload;
 }
 
-/**
- * Payload for a CliAnalysisFindingDetected event — one event per finding
- * produced by sonar-secrets, SQAA, or SCA.
- */
-export interface AnalysisFindingEventPayload {
+/** Shared identity fields on every analysis telemetry event. */
+export interface AnalysisEventIdentityPayload {
   cli_installation_id: string;
   machine_id: string;
   cli_version: string;
@@ -469,28 +466,71 @@ export interface AnalysisFindingEventPayload {
   organization_uuid_v4: string | null;
   sqs_installation_id: string | null;
   caller_agent: CallerAgent | null;
-  /** Literal CLI subcommand name (e.g. "git-pre-commit", "analyze agentic") */
+}
+
+export type AnalysisRunStatus = 'clean' | 'findings' | 'error';
+
+export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
+
+/**
+ * Payload for a CliAnalysisCompleted event — one event per analyzer run
+ * (clean, findings, or error).
+ */
+export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayload {
+  /** Literal CLI subcommand path (e.g. "analyze agentic", "hook git-pre-commit") */
   caller_command: string;
-  analyzer: 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
-  /** Analyzer-specific rule identifier */
-  rule_key: string;
-  /** Wall-clock duration of the analyzer scan that produced this finding */
+  analyzer: AnalysisTelemetryAnalyzer;
+  /** UUID minted once per run; join key with CliAnalysisFindingsDetected */
+  analysis_id: string;
+  findings_count: number;
+  status: AnalysisRunStatus;
+  /** Subprocess exit code for binary analyzers; null for API-based analyzers */
+  exit_code: number | null;
+  error_count: number;
   scan_duration_ms: number;
 }
 
 /**
- * Full finding event written to findings.ndjson and sent to the backend.
+ * Payload for a CliAnalysisFindingsDetected event — intended for runs that
+ * reported findings, carrying a versioned per-rule details blob joined to
+ * CliAnalysisCompleted via analysis_id.
  */
-export interface StoredFindingEvent {
-  metadata: {
-    event_id: string;
-    source: { domain: 'CLI' };
-    event_type: 'Analytics.Cli.CliAnalysisFindingDetected';
-    /** Epoch milliseconds as a string */
-    event_timestamp: string;
-  };
-  event_payload: AnalysisFindingEventPayload;
+export interface AnalysisFindingsDetectedEventPayload extends AnalysisEventIdentityPayload {
+  caller_command: string;
+  analyzer: AnalysisTelemetryAnalyzer;
+  analysis_id: string;
+  details_schema_version: number;
+  /** JSON-encoded allowlist blob (rule keys and per-rule counts only) */
+  details: string;
 }
+
+interface AnalysisEventMetadataBase {
+  event_id: string;
+  source: { domain: 'CLI' };
+  /** Epoch milliseconds as a string */
+  event_timestamp: string;
+}
+
+/** Full CliAnalysisCompleted event written to findings.ndjson. */
+export interface StoredAnalysisCompletedEvent {
+  metadata: AnalysisEventMetadataBase & {
+    event_type: 'Analytics.Cli.CliAnalysisCompleted';
+  };
+  event_payload: AnalysisCompletedEventPayload;
+}
+
+/** Full CliAnalysisFindingsDetected event written to findings.ndjson. */
+export interface StoredAnalysisFindingsDetectedEvent {
+  metadata: AnalysisEventMetadataBase & {
+    event_type: 'Analytics.Cli.CliAnalysisFindingsDetected';
+  };
+  event_payload: AnalysisFindingsDetectedEventPayload;
+}
+
+/** Any event stored in findings.ndjson and drained by flushFindings. */
+export type StoredAnalysisEvent =
+  | StoredAnalysisCompletedEvent
+  | StoredAnalysisFindingsDetectedEvent;
 
 /**
  * Telemetry configuration and pending event batch

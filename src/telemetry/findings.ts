@@ -28,7 +28,12 @@ import type { ResolvedAuth } from '../lib/auth-resolver.js';
 import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../lib/config-constants.js';
 import { buildFetchInit, fetchGuarded } from '../lib/fetch-guarded.js';
 import { INVOCATION_ID } from '../lib/invocation-id.js';
-import type { AnalysisFindingEventPayload, StoredFindingEvent } from '../lib/state.js';
+import type {
+  AnalysisCompletedEventPayload,
+  AnalysisEventIdentityPayload,
+  AnalysisFindingsDetectedEventPayload,
+  StoredAnalysisEvent,
+} from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
 import { getOrCreateUserId } from './user.js';
@@ -41,21 +46,8 @@ function getFindingsPath(): string {
   return join(getTelemetryDir(), FINDINGS_FILENAME);
 }
 
-/**
- * Appends one CliAnalysisFindingDetected event to findings.ndjson. Fire-and-forget:
- * creates the directory if missing and silently swallows all I/O errors.
- */
-export function appendFinding(payload: AnalysisFindingEventPayload): void {
+function appendAnalysisEvent(event: StoredAnalysisEvent): void {
   try {
-    const event: StoredFindingEvent = {
-      metadata: {
-        event_id: randomUUID(),
-        source: { domain: 'CLI' },
-        event_type: 'Analytics.Cli.CliAnalysisFindingDetected',
-        event_timestamp: String(Date.now()),
-      },
-      event_payload: payload,
-    };
     mkdirSync(getTelemetryDir(), { recursive: true });
     appendFileSync(getFindingsPath(), JSON.stringify(event) + '\n');
   } catch {
@@ -64,27 +56,17 @@ export function appendFinding(payload: AnalysisFindingEventPayload): void {
 }
 
 /**
- * Emits one CliAnalysisFindingDetected event per issue from a sonar-secrets scan.
- * No-ops on clean scans (empty issues) and when telemetry is disabled.
- * Identity fields are resolved from state + auth on each call.
+ * Resolves shared identity fields for analysis telemetry events.
+ * Returns null when telemetry is disabled or installationId is absent.
  */
-export function emitSecretsFindings(
-  callerCommand: string,
-  auth: ResolvedAuth,
-  issues: ReadonlyArray<{ ruleKey: string }>,
-  durationMs: number,
-): void {
-  if (issues.length === 0) return;
+export function buildAnalysisIdentityBase(auth: ResolvedAuth): AnalysisEventIdentityPayload | null {
   const state = loadState();
-  if (!isTelemetryEnabled(state)) return;
+  if (!isTelemetryEnabled(state)) return null;
   const installationId = state.telemetry.installationId;
-  if (!installationId) return;
+  if (!installationId) return null;
 
   const conn = getActiveConnection(state);
-  const base: Omit<
-    AnalysisFindingEventPayload,
-    'caller_command' | 'analyzer' | 'rule_key' | 'scan_duration_ms'
-  > = {
+  return {
     cli_installation_id: installationId,
     machine_id: getOrCreateUserId(),
     cli_version: VERSION,
@@ -96,24 +78,65 @@ export function emitSecretsFindings(
     sqs_installation_id: conn?.sqsInstallationId ?? null,
     caller_agent: detectCallerAgent(),
   };
-
-  for (const issue of issues) {
-    appendFinding({
-      ...base,
-      caller_command: callerCommand,
-      analyzer: 'sonar-secrets',
-      rule_key: issue.ruleKey,
-      scan_duration_ms: durationMs,
-    });
-  }
 }
 
-function parseValidEvents(content: string, now: number): StoredFindingEvent[] {
-  const events: StoredFindingEvent[] = [];
+export type AnalysisCompletedFields = Omit<
+  AnalysisCompletedEventPayload,
+  keyof AnalysisEventIdentityPayload
+>;
+
+export type AnalysisFindingsDetectedFields = Omit<
+  AnalysisFindingsDetectedEventPayload,
+  keyof AnalysisEventIdentityPayload
+>;
+
+/**
+ * Emits one CliAnalysisCompleted event when telemetry is enabled.
+ * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
+ */
+export function emitAnalysisCompleted(auth: ResolvedAuth, fields: AnalysisCompletedFields): void {
+  const base = buildAnalysisIdentityBase(auth);
+  if (!base) return;
+  appendAnalysisEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliAnalysisCompleted',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: { ...base, ...fields },
+  });
+}
+
+/**
+ * Emits one CliAnalysisFindingsDetected event when telemetry is enabled.
+ * Callers should emit only when the paired CliAnalysisCompleted run reported
+ * findings; this helper does not enforce findings_count > 0.
+ * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
+ */
+export function emitAnalysisFindingsDetected(
+  auth: ResolvedAuth,
+  fields: AnalysisFindingsDetectedFields,
+): void {
+  const base = buildAnalysisIdentityBase(auth);
+  if (!base) return;
+  appendAnalysisEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliAnalysisFindingsDetected',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: { ...base, ...fields },
+  });
+}
+
+function parseValidEvents(content: string, now: number): StoredAnalysisEvent[] {
+  const events: StoredAnalysisEvent[] = [];
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
-      const event = JSON.parse(line) as StoredFindingEvent;
+      const event = JSON.parse(line) as StoredAnalysisEvent;
       const ts = Number(event.metadata.event_timestamp);
       if (!Number.isNaN(ts) && now - ts <= FINDINGS_RETENTION_MS) {
         events.push(event);
@@ -146,7 +169,7 @@ export async function flushFindings(deadline: number): Promise<void> {
     return;
   }
 
-  const unsent: StoredFindingEvent[] = [];
+  const unsent: StoredAnalysisEvent[] = [];
 
   try {
     const events = parseValidEvents(readFileSync(sendingPath, 'utf-8'), Date.now());
