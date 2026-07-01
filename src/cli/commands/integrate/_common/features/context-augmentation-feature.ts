@@ -23,7 +23,10 @@ import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../../lib/signature
 import { CommandFailedError } from '../../../_common/error';
 import { getOptionalStringAttr } from '../attrs';
 import { printContextAugmentationSkill, runToolIntegrateCommand } from '../context-augmentation';
-import { CONTEXT_AUGMENTATION_FEATURE_DESCRIPTION } from '../feature-constants';
+import {
+  CONTEXT_AUGMENTATION_FEATURE_BENEFIT,
+  CONTEXT_AUGMENTATION_FEATURE_PREVIEW,
+} from '../feature-constants';
 import { contextAugmentationBinaryDependency } from '../registry/dependencies';
 import { wholeFile } from '../registry/resources';
 import { askUser, skip } from '../registry/selection';
@@ -44,7 +47,8 @@ export function createContextAugmentationFeature<
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'Context Augmentation',
-    benefitDescription: CONTEXT_AUGMENTATION_FEATURE_DESCRIPTION,
+    benefitDescription: CONTEXT_AUGMENTATION_FEATURE_BENEFIT,
+    previewDescription: CONTEXT_AUGMENTATION_FEATURE_PREVIEW,
     shouldInstall: ({ options: integrationOptions }) =>
       integrationOptions.installContextAugmentation === true ? askUser() : skip(),
     dependencies: [contextAugmentationBinaryDependency],

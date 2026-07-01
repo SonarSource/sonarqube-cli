@@ -24,10 +24,14 @@ import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import {
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
-  MCP_SERVER_FEATURE_DESCRIPTION,
-  SECRETS_FEATURE_DESCRIPTION,
-  SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
+  MCP_SERVER_FEATURE_BENEFIT,
+  MCP_SERVER_FEATURE_PREVIEW,
+  SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
+  SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
+  SECRETS_PROMPT_FEATURE_BENEFIT,
+  SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
@@ -82,7 +86,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
-      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
+      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
+      previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.globalSecretsHookExists === true
           ? skip(
@@ -115,7 +120,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'prompt-secrets-instructions',
       displayName: 'prompt-secrets instructions',
-      benefitDescription: SECRETS_FEATURE_DESCRIPTION,
+      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
+      previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       shouldInstall: ({ scope }) =>
         scope === 'project' && globalCopilotInstructionsExist()
           ? askUser(
@@ -136,7 +142,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
+      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
+      previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
@@ -158,7 +165,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_DESCRIPTION,
+      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
+      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
       resources: [
         jsonPatch({
           id: 'copilot-mcp-config',

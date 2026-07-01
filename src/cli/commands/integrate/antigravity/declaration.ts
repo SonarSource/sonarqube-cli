@@ -33,10 +33,14 @@ import {
 import { getMcpConfig } from '../../../../lib/mcp/mcp-helper';
 import { getRequiredStringAttr } from '../_common/attrs';
 import {
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
-  MCP_SERVER_FEATURE_DESCRIPTION,
-  SECRETS_FEATURE_DESCRIPTION,
-  SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
+  MCP_SERVER_FEATURE_BENEFIT,
+  MCP_SERVER_FEATURE_PREVIEW,
+  SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
+  SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
+  SECRETS_PROMPT_FEATURE_BENEFIT,
+  SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature';
@@ -91,7 +95,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'sonar-secrets-hooks',
       displayName: 'Secret scanning hooks',
-      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
+      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
+      previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.globalSecretsHookExists === true
           ? skip(
@@ -124,7 +129,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis rules',
-      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
+      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
+      previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
       targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
@@ -155,7 +161,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_DESCRIPTION,
+      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
+      previewDescription: MCP_SERVER_FEATURE_PREVIEW,
       resources: [
         jsonPatch({
           id: 'antigravity-mcp-config',
@@ -171,7 +178,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'prompt-secrets-project-rules',
       displayName: 'Prompt-secrets workspace rules',
-      benefitDescription: SECRETS_FEATURE_DESCRIPTION,
+      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
+      previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       shouldInstall: ({ scope }) => {
         if (scope !== 'project') {
           return skip();
@@ -203,7 +211,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'prompt-secrets-global-rules',
       displayName: 'Prompt-secrets global rules',
-      benefitDescription: SECRETS_FEATURE_DESCRIPTION,
+      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
+      previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       shouldInstall: ({ scope }) => (scope === 'global' ? askUser() : skip()),
       resources: [
         textSnippet({

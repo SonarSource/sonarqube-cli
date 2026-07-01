@@ -37,10 +37,11 @@ void mock.module('../../../src/ui/colors.js', () => ({
   cyan: (s: string) => s,
   gray: (s: string) => s,
   white: (s: string) => s,
+  stripAnsi: (s: string) => s.replace(/\x1b\[[0-9;]*m/g, ''),
+  visibleLength: (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '').length,
 }));
 
-import { note } from '../../../src/ui';
-import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
+import { clearMockUiCalls, getMockUiCalls, note, setMockUi, stripAnsi } from '../../../src/ui';
 
 // ─── Mock mode ────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,49 @@ describe('note(): TTY box rendering (renderTTY)', () => {
       expect(rendered).toContain('only content');
       // No title → plain top border starting with '┌─'
       expect(rendered).toContain('┌');
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('aligns the right border when content contains ANSI escape codes', () => {
+    const render = (content: string[]): string => {
+      const output: string[] = [];
+      const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+        output.push(String(s));
+        return true;
+      });
+      try {
+        note(content);
+        return output.join('');
+      } finally {
+        writeSpy.mockRestore();
+      }
+    };
+
+    const plain = render(['hello world']);
+    const styled = render([`\x1b[31mhello world\x1b[39m`]);
+
+    // Once the escape codes are stripped, the styled box must be byte-identical
+    // to the plain box — i.e. padding was computed from visible width.
+    expect(stripAnsi(styled)).toBe(plain);
+  });
+
+  it('truncates a styled overflow line without leaving a dangling escape', () => {
+    const output: string[] = [];
+    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      // A dim-styled line far wider than the box.
+      const styled = `\x1b[2m${'x'.repeat(200)}\x1b[22m`;
+      note([styled]);
+      const rendered = output.join('');
+      // The overflow cut strips styling entirely.
+      expect(rendered).not.toContain('\x1b[2m');
+      expect(rendered).not.toContain('\x1b[22m');
+      expect(rendered).toContain('...');
     } finally {
       writeSpy.mockRestore();
     }
