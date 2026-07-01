@@ -21,6 +21,7 @@
 import { readFileSync } from 'node:fs';
 import { rootCertificates } from 'node:tls';
 
+import { isPkcs12Path, pkcs12ToPem } from '../crypto/pkcs12';
 import { NetworkConfigError } from '../errors';
 import { createRedactedUrl } from '../redacted-url';
 import type {
@@ -128,34 +129,45 @@ function fromEnv(
 
 // --- Client cert (sonar-env only, no generic-env fallback) ---
 
+function readMtlsFile(filePath: string, label: string): Buffer;
+function readMtlsFile(filePath: string, label: string, encoding: BufferEncoding): string;
+function readMtlsFile(filePath: string, label: string, encoding?: BufferEncoding): Buffer | string {
+  try {
+    return readFileSync(filePath, encoding);
+  } catch (err) {
+    throw new NetworkConfigError(
+      `Failed to read mTLS ${label} "${filePath}": ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
+}
+
 function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
   const certPath = env.SONAR_MTLS_CERT;
   if (!certPath) {
     return null;
   }
 
-  const keyPath = env.SONAR_MTLS_KEY_FILE;
-  if (!keyPath) {
-    throw new NetworkConfigError('SONAR_MTLS_KEY_FILE is required when SONAR_MTLS_CERT is set');
-  }
-
   const passphrase = env.SONAR_MTLS_PASSPHRASE;
 
-  let resolvedCertPem: string;
-  try {
-    resolvedCertPem = readFileSync(certPath, 'utf-8');
-  } catch (err) {
-    throw new NetworkConfigError(
-      `Failed to read mTLS certificate file "${certPath}": ${err instanceof Error ? err.message : String(err)}`,
-    );
+  if (isPkcs12Path(certPath)) {
+    const p12Buffer = readMtlsFile(certPath, 'certificate file');
+    const { cert: resolvedCertPem, key: resolvedKeyPem } = pkcs12ToPem(p12Buffer, passphrase);
+    return {
+      source: 'sonar-env',
+      explicit: true,
+      certPath,
+      keyPath: null,
+      passphrase,
+      resolvedCertPem,
+      resolvedKeyPem,
+    };
   }
 
-  let resolvedKeyPem: string;
-  try {
-    resolvedKeyPem = readFileSync(keyPath, 'utf-8');
-  } catch (err) {
+  const keyPath = env.SONAR_MTLS_KEY_FILE;
+  if (!keyPath) {
     throw new NetworkConfigError(
-      `Failed to read mTLS key file "${keyPath}": ${err instanceof Error ? err.message : String(err)}`,
+      'SONAR_MTLS_KEY_FILE is required when SONAR_MTLS_CERT is not a .p12 or .pfx file',
     );
   }
 
@@ -165,8 +177,8 @@ function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
     certPath,
     keyPath,
     passphrase,
-    resolvedCertPem,
-    resolvedKeyPem,
+    resolvedCertPem: readMtlsFile(certPath, 'certificate file', 'utf-8'),
+    resolvedKeyPem: readMtlsFile(keyPath, 'key file', 'utf-8'),
   };
 }
 

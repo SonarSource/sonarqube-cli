@@ -26,8 +26,15 @@ export class ApiCallError extends Error {
 }
 
 export class NetworkConfigError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'NetworkConfigError';
+  }
+}
+
+export class CryptographicError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'CryptographicError';
   }
 }

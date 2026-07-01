@@ -1250,4 +1250,140 @@ describe('system status', () => {
     expect(result.stdout).toContain('NETWORK');
     expect(result.stdout).toContain('No advanced network configuration detected.');
   });
+
+  describe('mTLS certificate display', () => {
+    const FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/mtls');
+    const CERT_PATH = join(FIXTURE_DIR, 'client-cert.pem');
+    const KEY_PATH = join(FIXTURE_DIR, 'client-key.pem');
+    const P12_PATH = join(FIXTURE_DIR, 'client-cert.p12');
+    const P12_NO_PASSPHRASE_PATH = join(FIXTURE_DIR, 'client-cert-no-passphrase.p12');
+
+    async function runStatus(extraEnv: Record<string, string>) {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      harness.state().withAuth(server.baseUrl(), 'my-token');
+      return harness.run('system status', { extraEnv });
+    }
+
+    it('does not show mTLS section when no cert env vars are set', async () => {
+      const result = await runStatus({});
+
+      expect(result.stdout).not.toContain('mTLS Certificate');
+    });
+
+    it('shows Certificate and Key lines and Passphrase: Not set for PEM cert without passphrase', async () => {
+      const result = await runStatus({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+      });
+
+      expect(result.stdout).toContain('mTLS Certificate');
+      expect(result.stdout).toContain(`Certificate: ${CERT_PATH}`);
+      expect(result.stdout).toContain(`Key:         ${KEY_PATH}`);
+      expect(result.stdout).toContain('Passphrase:  Not set');
+    });
+
+    it('shows Passphrase: Set for PEM cert with passphrase', async () => {
+      const result = await runStatus({
+        SONAR_MTLS_CERT: CERT_PATH,
+        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_MTLS_PASSPHRASE: 'secret',
+      });
+
+      expect(result.stdout).toContain(`Key:         ${KEY_PATH}`);
+      expect(result.stdout).toContain('Passphrase:  Set');
+    });
+
+    it('omits Key line and shows Passphrase: Set for PKCS12 cert', async () => {
+      const result = await runStatus({
+        SONAR_MTLS_CERT: P12_PATH,
+        SONAR_MTLS_PASSPHRASE: 'testpassword',
+      });
+
+      expect(result.stdout).toContain('mTLS Certificate');
+      expect(result.stdout).toContain(`Certificate: ${P12_PATH}`);
+      expect(result.stdout).not.toContain('Key:');
+      expect(result.stdout).toContain('Passphrase:  Set');
+    });
+
+    it('shows error line in NETWORK section when mTLS configuration is invalid', async () => {
+      // PEM cert without key file triggers a config error
+      const result = await runStatus({ SONAR_MTLS_CERT: CERT_PATH });
+
+      expect(result.stdout).toContain('mTLS Certificate');
+      expect(result.stderr).toContain('✗');
+    });
+
+    it('shows Fix mTLS recommendation when mTLS configuration is invalid', async () => {
+      const result = await runStatus({ SONAR_MTLS_CERT: CERT_PATH });
+
+      expect(result.stdout).toContain('RECOMMENDATIONS');
+      expect(result.stdout).toContain('Fix mTLS configuration');
+    });
+
+    describe('JSON output (buildMtlsJson)', () => {
+      async function runStatusJson(extraEnv: Record<string, string>) {
+        const server = await harness.newFakeServer().withAuthToken('my-token').start();
+        harness.state().withAuth(server.baseUrl(), 'my-token');
+        const result = await harness.run('system status --json', { extraEnv });
+        return (JSON.parse(result.stdout) as { network: { mtls: unknown } }).network.mtls;
+      }
+
+      it('returns null when no mTLS env vars are set', async () => {
+        expect(await runStatusJson({})).toBeNull();
+      });
+
+      it('includes certPath, keyPath, and passphraseSet: false for PEM cert without passphrase', async () => {
+        const mtls = await runStatusJson({
+          SONAR_MTLS_CERT: CERT_PATH,
+          SONAR_MTLS_KEY_FILE: KEY_PATH,
+        });
+        expect(mtls).toMatchObject({
+          certPath: CERT_PATH,
+          keyPath: KEY_PATH,
+          passphraseSet: false,
+        });
+      });
+
+      it('sets passphraseSet: true for PEM cert with passphrase', async () => {
+        const mtls = await runStatusJson({
+          SONAR_MTLS_CERT: CERT_PATH,
+          SONAR_MTLS_KEY_FILE: KEY_PATH,
+          SONAR_MTLS_PASSPHRASE: 'secret',
+        });
+        expect(mtls).toMatchObject({ passphraseSet: true });
+      });
+
+      it('sets passphraseSet: false for empty-string passphrase', async () => {
+        const mtls = await runStatusJson({
+          SONAR_MTLS_CERT: CERT_PATH,
+          SONAR_MTLS_KEY_FILE: KEY_PATH,
+          SONAR_MTLS_PASSPHRASE: '',
+        });
+        expect(mtls).toMatchObject({ passphraseSet: false });
+      });
+
+      it('omits keyPath for PKCS12 cert and sets passphraseSet: true', async () => {
+        const mtls = (await runStatusJson({
+          SONAR_MTLS_CERT: P12_PATH,
+          SONAR_MTLS_PASSPHRASE: 'testpassword',
+        })) as Record<string, unknown>;
+        expect(mtls).toMatchObject({ certPath: P12_PATH, passphraseSet: true });
+        expect(mtls).not.toHaveProperty('keyPath');
+      });
+
+      it('omits keyPath for PKCS12 cert and sets passphraseSet: false when no passphrase', async () => {
+        const mtls = (await runStatusJson({
+          SONAR_MTLS_CERT: P12_NO_PASSPHRASE_PATH,
+        })) as Record<string, unknown>;
+        expect(mtls).toMatchObject({ certPath: P12_NO_PASSPHRASE_PATH, passphraseSet: false });
+        expect(mtls).not.toHaveProperty('keyPath');
+      });
+
+      it('returns error object when mTLS configuration is invalid', async () => {
+        // PEM cert without key file triggers a config error
+        const mtls = await runStatusJson({ SONAR_MTLS_CERT: CERT_PATH });
+        expect(mtls).toMatchObject({ error: expect.any(String) });
+      });
+    });
+  });
 });

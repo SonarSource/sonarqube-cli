@@ -29,7 +29,13 @@ import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '../../../lib/config-constants';
 import { getNetworkConfig } from '../../../lib/connectivity/network-config.js';
-import type { ConfigSource, ResolvedNetworkConfig } from '../../../lib/connectivity/types';
+import type {
+  CaCertConfig,
+  ClientCertConfig,
+  ConfigSource,
+  ProxyGroup,
+  ResolvedNetworkConfig,
+} from '../../../lib/connectivity/types';
 import { IS_STANDALONE_DISTRIBUTION } from '../../../lib/distribution';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
@@ -527,7 +533,8 @@ function buildMtlsJson(network: ResolvedNetworkConfig) {
     return {
       source: MTLS_SOURCE_LABEL,
       certPath: network.clientCert.certPath,
-      keyPath: network.clientCert.keyPath,
+      ...(network.clientCert.keyPath !== null && { keyPath: network.clientCert.keyPath }),
+      passphraseSet: Boolean(network.clientCert.passphrase),
     };
   }
   if (network.error !== undefined) {
@@ -678,6 +685,43 @@ function renderRecommendationsSection(recommendations: string[]): void {
   }
 }
 
+function renderProxySubsection(proxy: ProxyGroup): void {
+  blank();
+  text(`  Proxy (${PROXY_SOURCE_LABELS[proxy.source]}):`);
+  if (proxy.proxyHttps) {
+    text(`    • HTTPS:     ${proxy.proxyHttps.getUrl()}`);
+  }
+  if (proxy.proxyHttp) {
+    text(`    • HTTP:      ${proxy.proxyHttp.getUrl()}`);
+  }
+  if (proxy.noProxy) {
+    text(`    • No Proxy:  ${proxy.noProxy}`);
+  }
+}
+
+function renderCaCertSubsection(caCert: CaCertConfig): void {
+  blank();
+  text(`  CA Certificate (${CA_CERT_SOURCE_LABELS[caCert.source]}):`);
+  text(`    • ${caCert.path}`);
+}
+
+function renderMtlsSubsection(
+  clientCert: ClientCertConfig | null,
+  error: string | undefined,
+): void {
+  blank();
+  text(`  mTLS Certificate (${MTLS_SOURCE_LABEL}):`);
+  if (clientCert) {
+    text(`    • Certificate: ${clientCert.certPath}`);
+    if (clientCert.keyPath !== null) {
+      text(`    • Key:         ${clientCert.keyPath}`);
+    }
+    text(`    • Passphrase:  ${clientCert.passphrase ? 'Set' : 'Not set'}`);
+  } else {
+    warn(`    ✗ ${error}`);
+  }
+}
+
 function renderNetworkSection(network: ResolvedNetworkConfig): void {
   blank();
   text('NETWORK');
@@ -690,32 +734,13 @@ function renderNetworkSection(network: ResolvedNetworkConfig): void {
       'Secrets hook, Context Augmentation and Software Composition Analysis might currently not pick up the network configuration.',
   );
   if (network.proxy) {
-    blank();
-    text(`  Proxy (${PROXY_SOURCE_LABELS[network.proxy.source]}):`);
-    if (network.proxy.proxyHttps) {
-      text(`    • HTTPS:     ${network.proxy.proxyHttps.getUrl()}`);
-    }
-    if (network.proxy.proxyHttp) {
-      text(`    • HTTP:      ${network.proxy.proxyHttp.getUrl()}`);
-    }
-    if (network.proxy.noProxy) {
-      text(`    • No Proxy:  ${network.proxy.noProxy}`);
-    }
+    renderProxySubsection(network.proxy);
   }
   if (network.caCert) {
-    blank();
-    text(`  CA Certificate (${CA_CERT_SOURCE_LABELS[network.caCert.source]}):`);
-    text(`    • ${network.caCert.path}`);
+    renderCaCertSubsection(network.caCert);
   }
-  if (network.clientCert) {
-    blank();
-    text(`  mTLS Certificate (${MTLS_SOURCE_LABEL}):`);
-    text(`    • Certificate: ${network.clientCert.certPath}`);
-    text(`    • Key:         ${network.clientCert.keyPath}`);
-  } else if (network.error) {
-    blank();
-    text(`  mTLS Certificate (${MTLS_SOURCE_LABEL}):`);
-    warn(`    ✗ ${network.error}`);
+  if (network.clientCert ?? network.error) {
+    renderMtlsSubsection(network.clientCert, network.error);
   }
 }
 
