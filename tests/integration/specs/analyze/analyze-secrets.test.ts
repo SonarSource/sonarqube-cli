@@ -289,11 +289,17 @@ describe('analyze secrets', () => {
         .map((line) => JSON.parse(line) as AnalysisEvent);
 
       // One completed event (always) + one findings-detected event (findings present).
+      // Select by event_type rather than position so the assertions don't depend on emit order.
       expect(events).toHaveLength(2);
-      const completed = events[0];
-      const detected = events[1];
-      expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-      expect(detected.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingsDetected');
+      const completed = events.find(
+        (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
+      );
+      const detected = events.find(
+        (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
+      );
+      expect(completed).toBeDefined();
+      expect(detected).toBeDefined();
+      if (!completed || !detected) throw new Error('expected both analysis events');
 
       expect(completed.event_payload.analyzer).toBe('sonar-secrets');
       expect(completed.event_payload.caller_command).toBe('analyze secrets');
