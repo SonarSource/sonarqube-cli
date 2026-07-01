@@ -46,7 +46,7 @@ export interface ClientCertConfig {
   readonly source: ConfigSource;
   readonly explicit: boolean;
   readonly certPath: string;
-  readonly keyPath: string;
+  readonly keyPath: string | null;
   readonly passphrase: string | undefined;
   readonly resolvedCertPem: string;
   readonly resolvedKeyPem: string;

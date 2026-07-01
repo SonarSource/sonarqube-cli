@@ -35,6 +35,7 @@ import {
 const MTLS_FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/mtls');
 const CERT_PATH = join(MTLS_FIXTURE_DIR, 'client-cert.pem');
 const KEY_PATH = join(MTLS_FIXTURE_DIR, 'client-key.pem');
+const P12_PATH = join(MTLS_FIXTURE_DIR, 'client-cert.p12');
 
 afterEach(() => {
   clearNetworkConfigCache();
@@ -251,8 +252,28 @@ describe('resolveNetworkConfig', () => {
       expect(config.clientCert?.passphrase).toBeUndefined();
     });
 
-    it('sets error when SONAR_MTLS_KEY_FILE is missing', () => {
+    it('sets error when SONAR_MTLS_KEY_FILE is missing for a PEM cert', () => {
       const config = resolveNetworkConfig({ SONAR_MTLS_CERT: CERT_PATH });
+      expect(config.clientCert).toBeNull();
+      expect(config.error).toBeDefined();
+    });
+
+    it('resolves PKCS12 path without SONAR_MTLS_KEY_FILE', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: P12_PATH,
+        SONAR_MTLS_PASSPHRASE: 'testpassword',
+      });
+      expect(config.clientCert?.certPath).toBe(P12_PATH);
+      expect(config.clientCert?.keyPath).toBeNull();
+      expect(config.clientCert?.resolvedCertPem).toContain('-----BEGIN CERTIFICATE-----');
+      expect(config.clientCert?.resolvedKeyPem).toContain('PRIVATE KEY');
+    });
+
+    it('sets error when PKCS12 passphrase is wrong', () => {
+      const config = resolveNetworkConfig({
+        SONAR_MTLS_CERT: P12_PATH,
+        SONAR_MTLS_PASSPHRASE: 'wrongpassword',
+      });
       expect(config.clientCert).toBeNull();
       expect(config.error).toBeDefined();
     });
@@ -483,6 +504,16 @@ describe('buildFetchNetworkOptions', () => {
       const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.cert).toBeUndefined();
       expect(opts.tls?.key).toBeUndefined();
+    });
+
+    it('sets tls.cert and tls.key as PEM strings for PKCS12 source', () => {
+      const config = makeConfig({
+        SONAR_MTLS_CERT: P12_PATH,
+        SONAR_MTLS_PASSPHRASE: 'testpassword',
+      });
+      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      expect(opts.tls?.cert).toContain('-----BEGIN CERTIFICATE-----');
+      expect(opts.tls?.key).toContain('PRIVATE KEY');
     });
 
     it('sets tls.passphrase when SONAR_MTLS_PASSPHRASE is provided', () => {
