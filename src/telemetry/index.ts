@@ -32,6 +32,7 @@ import type { StoredTelemetryEvent, TelemetryEventPayload } from '../lib/state.j
 import { getActiveConnection, loadState, saveState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
 import { flushFindings } from './findings.js';
+import { resolveStoreEventTelemetryIdentitySafely } from './identity.js';
 import { getOrCreateUserId } from './user.js';
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
@@ -49,13 +50,13 @@ export function setPassthroughSubcommand(command: Command, subcommand: string | 
  * Append one event to the pending batch and spawn a detached flush worker.
  * No-ops when called from within a flush worker to prevent infinite recursion.
  */
-export function storeEvent(command: Command, success: boolean): Promise<void> {
-  if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return Promise.resolve();
+export async function storeEvent(command: Command, success: boolean): Promise<void> {
+  if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
 
   const state = loadState();
 
   if (!isTelemetryEnabled(state)) {
-    return Promise.resolve();
+    return;
   }
   const commandNames: string[] = [];
   let current: Command = command;
@@ -74,8 +75,7 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
   }
 
   const conn = getActiveConnection(state);
-  const connectionType: 'sqc' | 'sqs' | null =
-    conn?.type === 'cloud' ? 'sqc' : conn?.type === 'on-premise' ? 'sqs' : null;
+  const { connectionType, identity } = await resolveStoreEventTelemetryIdentitySafely(conn);
 
   const eventPayload: TelemetryEventPayload = {
     cli_installation_id: state.telemetry.installationId!,
@@ -87,9 +87,9 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
     result: success ? 'success' : 'failure',
     os: process.platform,
     connection_type: connectionType,
-    user_uuid: conn?.userUuid ?? null,
-    organization_uuid_v4: conn?.organizationUuidV4 ?? null,
-    sqs_installation_id: conn?.sqsInstallationId ?? null,
+    user_uuid: identity.user_uuid,
+    organization_uuid_v4: identity.organization_uuid_v4,
+    sqs_installation_id: identity.sqs_installation_id,
     distribution: DISTRIBUTION,
     caller_agent: detectCallerAgent(),
   };
@@ -110,7 +110,6 @@ export function storeEvent(command: Command, success: boolean): Promise<void> {
   saveState(state);
 
   spawnFlushWorker();
-  return Promise.resolve();
 }
 
 /**

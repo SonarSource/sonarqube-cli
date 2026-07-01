@@ -32,6 +32,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
 
 import * as agentDetector from '../../../src/lib/agent-detector.js';
+import * as authResolver from '../../../src/lib/auth-resolver.js';
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '../../../src/lib/auth-resolver.js';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import { DISTRIBUTION } from '../../../src/lib/distribution.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
@@ -48,7 +50,10 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '../../../src/telemetry';
+import { resolveTelemetryIdentity } from '../../../src/telemetry/identity.js';
 import * as userModule from '../../../src/telemetry/user.js';
+import * as ui from '../../../src/ui';
+import { mockIdentityGetSafe } from './identity-api-mock.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -140,6 +145,10 @@ afterEach(() => {
   delete process.env.CURSOR_AGENT;
   delete process.env.CURSOR_PROJECT_DIR;
   delete process.env.CURSOR_TRACE_ID;
+  delete process.env[ENV_TOKEN];
+  delete process.env[ENV_ORG];
+  delete process.env[ENV_SERVER];
+  delete process.env.SONARQUBE_CLI_SERVER;
   rmSync(testDir, { recursive: true, force: true });
 });
 
@@ -360,6 +369,43 @@ describe('storeEvent', () => {
       expect(event.event_payload.organization_uuid_v4).toBe('org-uuid-xyz');
     });
 
+    it('does not resolve auth from state when the active connection already has UUIDs', async () => {
+      const resolveFromStateSpy = spyOn(authResolver, 'resolveFromState');
+      const state = getDefaultState('1.0.0');
+      const conn = stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+        orgKey: 'my-org',
+      });
+      conn.userUuid = 'user-uuid-abc';
+      conn.organizationUuidV4 = 'org-uuid-xyz';
+      loadStateSpy.mockReturnValue(state);
+
+      await storeEvent(makeCommand('auth login'), true);
+
+      expect(resolveFromStateSpy).not.toHaveBeenCalled();
+      resolveFromStateSpy.mockRestore();
+    });
+
+    it('still stores an event when identity enrichment throws', async () => {
+      const resolveFromStateSpy = spyOn(authResolver, 'resolveFromState').mockRejectedValue(
+        new Error('keychain locked'),
+      );
+      const state = getDefaultState('1.0.0');
+      stateManager.addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
+        orgKey: 'my-org',
+      });
+      loadStateSpy.mockReturnValue(state);
+
+      await storeEvent(makeCommand('auth login'), true);
+
+      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(event.event_payload.connection_type).toBe('sqc');
+      expect(event.event_payload.user_uuid).toBeNull();
+      expect(event.event_payload.organization_uuid_v4).toBeNull();
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+
+      resolveFromStateSpy.mockRestore();
+    });
+
     it('includes sqs_installation_id from an on-premise connection', async () => {
       const state = getDefaultState('1.0.0');
       const conn = stateManager.addOrUpdateConnection(
@@ -375,6 +421,143 @@ describe('storeEvent', () => {
 
       const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
       expect(event.event_payload.sqs_installation_id).toBe('sqs-install-id-123');
+    });
+  });
+
+  describe('environment-variable authentication identity', () => {
+    it('does not warn about partial env vars during storeEvent', async () => {
+      const warnSpy = spyOn(ui, 'warn').mockImplementation(() => undefined);
+      process.env[ENV_TOKEN] = 'partial-env-token';
+
+      await storeEvent(makeCommand('auth login'), true);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('resolves user_uuid and organization_uuid_v4 via API on first env-auth invocation', async () => {
+      process.env[ENV_TOKEN] = 'env-auth-token-2';
+      process.env[ENV_ORG] = 'my-org';
+
+      const getSafeSpy = mockIdentityGetSafe({
+        user: [{ ok: true, id: 'user-from-api' }],
+        org: [{ ok: true, uuidV4: 'org-from-api' }],
+      });
+
+      await storeEvent(makeCommand('context'), true);
+
+      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(event.event_payload.user_uuid).toBe('user-from-api');
+      expect(event.event_payload.organization_uuid_v4).toBe('org-from-api');
+      expect(
+        getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
+      ).toHaveLength(1);
+
+      getSafeSpy.mockRestore();
+    });
+
+    it('does not re-fetch organization_uuid when the API confirms absence', async () => {
+      process.env[ENV_TOKEN] = 'env-auth-token-null-org';
+      process.env[ENV_ORG] = 'my-org';
+
+      const getSafeSpy = mockIdentityGetSafe({
+        user: [{ ok: true, id: 'cached-user' }],
+        org: [{ ok: true }],
+      });
+
+      await storeEvent(makeCommand('context'), true);
+      await storeEvent(makeCommand('analyze'), true);
+
+      expect(
+        getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
+      ).toHaveLength(1);
+      expect(
+        getSafeSpy.mock.calls.filter(
+          (call: [string]) => call[0] === '/organizations/organizations',
+        ),
+      ).toHaveLength(1);
+
+      const secondEvent = saveStateSpy.mock.calls[1][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(secondEvent.event_payload.user_uuid).toBe('cached-user');
+      expect(secondEvent.event_payload.organization_uuid_v4).toBeNull();
+
+      getSafeSpy.mockRestore();
+    });
+
+    it('retries user_uuid fetch after a transient API failure', async () => {
+      const auth = {
+        token: 'env-auth-token-retry-user',
+        serverUrl: 'https://sonarcloud.io',
+        orgKey: 'my-org',
+        connectionType: 'cloud' as const,
+      };
+      const getSafeSpy = mockIdentityGetSafe({
+        user: [{ ok: false }, { ok: true, id: 'user-after-retry' }],
+        org: [{ ok: true, uuidV4: 'cached-org' }],
+      });
+
+      const first = await resolveTelemetryIdentity(auth);
+      const second = await resolveTelemetryIdentity(auth);
+
+      expect(first.user_uuid).toBeNull();
+      expect(second.user_uuid).toBe('user-after-retry');
+      expect(
+        getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
+      ).toHaveLength(2);
+      expect(
+        getSafeSpy.mock.calls.filter(
+          (call: [string]) => call[0] === '/organizations/organizations',
+        ),
+      ).toHaveLength(1);
+
+      getSafeSpy.mockRestore();
+    });
+
+    it('resolves user_uuid and sqs_installation_id via API for env-auth on-premise', async () => {
+      process.env[ENV_TOKEN] = 'env-auth-server-token';
+      process.env[ENV_SERVER] = 'https://sonarqube.example.com';
+
+      const getSafeSpy = mockIdentityGetSafe({
+        user: [{ ok: true, id: 'server-user-from-api' }],
+        status: [{ ok: true, id: 'sqs-from-api' }],
+      });
+
+      await storeEvent(makeCommand('context'), true);
+
+      const event = saveStateSpy.mock.calls[0][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(event.event_payload.connection_type).toBe('sqs');
+      expect(event.event_payload.user_uuid).toBe('server-user-from-api');
+      expect(event.event_payload.sqs_installation_id).toBe('sqs-from-api');
+
+      getSafeSpy.mockRestore();
+    });
+
+    it('reuses the disk identity cache on subsequent invocations with the same token', async () => {
+      process.env[ENV_TOKEN] = 'env-auth-token-3';
+      process.env[ENV_ORG] = 'my-org';
+
+      const getSafeSpy = mockIdentityGetSafe({
+        user: [{ ok: true, id: 'cached-user' }],
+        org: [{ ok: true, uuidV4: 'cached-org' }],
+      });
+
+      await storeEvent(makeCommand('context'), true);
+      await storeEvent(makeCommand('analyze'), true);
+
+      expect(
+        getSafeSpy.mock.calls.filter((call: [string]) => call[0] === '/api/users/current'),
+      ).toHaveLength(1);
+      expect(
+        getSafeSpy.mock.calls.filter(
+          (call: [string]) => call[0] === '/organizations/organizations',
+        ),
+      ).toHaveLength(1);
+
+      const secondEvent = saveStateSpy.mock.calls[1][0].telemetry.events[0] as StoredTelemetryEvent;
+      expect(secondEvent.event_payload.user_uuid).toBe('cached-user');
+      expect(secondEvent.event_payload.organization_uuid_v4).toBe('cached-org');
+
+      getSafeSpy.mockRestore();
     });
   });
 

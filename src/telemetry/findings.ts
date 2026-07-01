@@ -36,6 +36,7 @@ import type {
 } from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
 import { isTelemetryEnabled } from './enabled.js';
+import { resolveCommandTelemetryIdentity } from './identity.js';
 import { getOrCreateUserId } from './user.js';
 
 const FINDINGS_FILENAME = 'findings.ndjson';
@@ -59,23 +60,27 @@ function appendAnalysisEvent(event: StoredAnalysisEvent): void {
  * Resolves shared identity fields for analysis telemetry events.
  * Returns null when telemetry is disabled or installationId is absent.
  */
-export function buildAnalysisIdentityBase(auth: ResolvedAuth): AnalysisEventIdentityPayload | null {
+export async function buildAnalysisIdentityBase(
+  auth: ResolvedAuth,
+): Promise<AnalysisEventIdentityPayload | null> {
   const state = loadState();
   if (!isTelemetryEnabled(state)) return null;
   const installationId = state.telemetry.installationId;
   if (!installationId) return null;
 
   const conn = getActiveConnection(state);
+  const { connectionType, identity } = await resolveCommandTelemetryIdentity(conn, auth);
+
   return {
     cli_installation_id: installationId,
     machine_id: getOrCreateUserId(),
     cli_version: VERSION,
     invocation_id: INVOCATION_ID,
     os: process.platform,
-    connection_type: auth.connectionType === 'cloud' ? 'sqc' : 'sqs',
-    user_uuid: conn?.userUuid ?? null,
-    organization_uuid_v4: conn?.organizationUuidV4 ?? null,
-    sqs_installation_id: conn?.sqsInstallationId ?? null,
+    connection_type: connectionType,
+    user_uuid: identity.user_uuid,
+    organization_uuid_v4: identity.organization_uuid_v4,
+    sqs_installation_id: identity.sqs_installation_id,
     caller_agent: detectCallerAgent(),
   };
 }
@@ -94,8 +99,11 @@ export type AnalysisFindingsDetectedFields = Omit<
  * Emits one CliAnalysisCompleted event when telemetry is enabled.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
  */
-export function emitAnalysisCompleted(auth: ResolvedAuth, fields: AnalysisCompletedFields): void {
-  const base = buildAnalysisIdentityBase(auth);
+export async function emitAnalysisCompleted(
+  auth: ResolvedAuth,
+  fields: AnalysisCompletedFields,
+): Promise<void> {
+  const base = await buildAnalysisIdentityBase(auth);
   if (!base) return;
   appendAnalysisEvent({
     metadata: {
@@ -114,11 +122,11 @@ export function emitAnalysisCompleted(auth: ResolvedAuth, fields: AnalysisComple
  * findings; this helper does not enforce findings_count > 0.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
  */
-export function emitAnalysisFindingsDetected(
+export async function emitAnalysisFindingsDetected(
   auth: ResolvedAuth,
   fields: AnalysisFindingsDetectedFields,
-): void {
-  const base = buildAnalysisIdentityBase(auth);
+): Promise<void> {
+  const base = await buildAnalysisIdentityBase(auth);
   if (!base) return;
   appendAnalysisEvent({
     metadata: {
