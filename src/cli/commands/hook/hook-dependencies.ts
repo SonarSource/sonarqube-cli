@@ -23,6 +23,7 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { isEnvBasedAuth, resolveAuth } from '../../../lib/auth-resolver';
+import type { SecretsCallerCommand } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
@@ -60,7 +61,7 @@ export async function resolveAuthAndSecrets(): Promise<HookDependencies | null> 
 }
 
 export async function runAndEmitFileSecretsScan(
-  callerCommand: string,
+  callerCommand: SecretsCallerCommand,
   deps: HookDependencies,
   filePath: string,
 ): Promise<number> {
@@ -71,7 +72,7 @@ export async function runAndEmitFileSecretsScan(
 }
 
 export async function runAndEmitTextSecretsScan(
-  callerCommand: string,
+  callerCommand: SecretsCallerCommand,
   deps: HookDependencies,
   text: string,
 ): Promise<number> {

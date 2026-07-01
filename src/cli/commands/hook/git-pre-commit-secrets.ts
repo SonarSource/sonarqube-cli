@@ -19,6 +19,7 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { print } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
@@ -36,7 +37,7 @@ export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth)
 
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
-    scan = await scanAndEmitSecrets('git-pre-commit', auth, () =>
+    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPreCommit, auth, () =>
       runSecretsBinary(binaryPath, files, auth),
     );
   } catch (err) {

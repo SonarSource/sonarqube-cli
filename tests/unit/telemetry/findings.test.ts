@@ -32,10 +32,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  emitSecretsRunTelemetry,
-  scanAndEmitSecrets,
-} from '../../../src/cli/commands/analyze/secrets.js';
+import { scanAndEmitSecrets } from '../../../src/cli/commands/analyze/secrets.js';
 import * as agentDetector from '../../../src/lib/agent-detector.js';
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
@@ -629,19 +626,23 @@ describe('flushFindings()', () => {
 
 // ─── emitSecretsRunTelemetry ───────────────────────────────────────────────────
 
-describe('emitSecretsRunTelemetry()', () => {
-  it('does nothing when telemetry is disabled', () => {
+// Resolves a spawn as if sonar-secrets ran to completion with the given exit code / stdout.
+function resolvedRun(exitCode: number | null, stdout: string): () => Promise<SpawnResult> {
+  return () => Promise.resolve({ exitCode, stdout, stderr: '' });
+}
+
+describe('scanAndEmitSecrets() — emitted event fields', () => {
+  it('does nothing when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
-    emitSecretsRunTelemetry('analyze secrets', AUTH, { exitCode: 0, stdout: '{}' }, 100);
+    await scanAndEmitSecrets('analyze secrets', AUTH, resolvedRun(0, '{}'));
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 
-  it('emits only CliAnalysisCompleted on a clean scan (exit 0, no issues)', () => {
-    emitSecretsRunTelemetry(
+  it('emits only CliAnalysisCompleted on a clean scan (exit 0, no issues)', async () => {
+    await scanAndEmitSecrets(
       'analyze secrets',
       AUTH,
-      { exitCode: 0, stdout: JSON.stringify({ issues: [] }) },
-      200,
+      resolvedRun(0, JSON.stringify({ issues: [] })),
     );
 
     const lines = readLines(testSonarUserHome);
@@ -651,12 +652,13 @@ describe('emitSecretsRunTelemetry()', () => {
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(0);
     expect(completed.event_payload.findings_count).toBe(0);
-    expect(completed.event_payload.scan_duration_ms).toBe(200);
+    expect(typeof completed.event_payload.scan_duration_ms).toBe('number');
+    expect(completed.event_payload.scan_duration_ms).toBeGreaterThanOrEqual(0);
     expect(completed.event_payload.caller_command).toBe('analyze secrets');
     expect(completed.event_payload.analyzer).toBe('sonar-secrets');
   });
 
-  it('emits CliAnalysisCompleted + CliAnalysisFindingsDetected when secrets found (exit 51)', () => {
+  it('emits CliAnalysisCompleted + CliAnalysisFindingsDetected when secrets found (exit 51)', async () => {
     const stdout = JSON.stringify({
       issues: [
         { ruleKey: 'secrets:S6290', description: 'AWS key', file: 'src/config.ts' },
@@ -664,7 +666,7 @@ describe('emitSecretsRunTelemetry()', () => {
         { ruleKey: 'secrets:S1234', description: 'Other', file: 'src/other.ts' },
       ],
     });
-    emitSecretsRunTelemetry('git-pre-commit', AUTH, { exitCode: 51, stdout }, 300);
+    await scanAndEmitSecrets('git-pre-commit', AUTH, resolvedRun(51, stdout));
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(2);
@@ -691,11 +693,11 @@ describe('emitSecretsRunTelemetry()', () => {
     expect(completed.event_payload.analysis_id).toBe(detected.event_payload.analysis_id);
   });
 
-  it('sets source to stdin and files_with_findings_count to 0 when no file paths in issues', () => {
+  it('sets source to stdin and files_with_findings_count to 0 when no file paths in issues', async () => {
     const stdout = JSON.stringify({
       issues: [{ ruleKey: 'secrets:S6290', description: 'AWS key in prompt' }],
     });
-    emitSecretsRunTelemetry('agent-prompt-submit', AUTH, { exitCode: 51, stdout }, 100);
+    await scanAndEmitSecrets('agent-prompt-submit', AUTH, resolvedRun(51, stdout));
 
     const lines = readLines(testSonarUserHome);
     const detected = lines[1] as StoredAnalysisFindingsDetectedEvent;
@@ -707,8 +709,8 @@ describe('emitSecretsRunTelemetry()', () => {
     expect(details.source).toBe('stdin');
   });
 
-  it('emits only CliAnalysisCompleted with failures_count 1 for a non-clean, non-findings exit code', () => {
-    emitSecretsRunTelemetry('copilot-pre-tool-use', AUTH, { exitCode: 2, stdout: '{}' }, 50);
+  it('emits only CliAnalysisCompleted with failures_count 1 for a non-clean, non-findings exit code', async () => {
+    await scanAndEmitSecrets('copilot-pre-tool-use', AUTH, resolvedRun(2, '{}'));
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -718,8 +720,8 @@ describe('emitSecretsRunTelemetry()', () => {
     expect(completed.event_payload.exit_code).toBe(2);
   });
 
-  it('reports a null exitCode as exit_code null with failures_count 1 (no coercion)', () => {
-    emitSecretsRunTelemetry('agent-prompt-submit', AUTH, { exitCode: null, stdout: '{}' }, 50);
+  it('reports a resolved null exitCode as exit_code null with failures_count 1 (no coercion)', async () => {
+    await scanAndEmitSecrets('agent-prompt-submit', AUTH, resolvedRun(null, '{}'));
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -728,24 +730,10 @@ describe('emitSecretsRunTelemetry()', () => {
     expect(completed.event_payload.exit_code).toBeNull();
   });
 
-  it('emits a failed-to-run event (failures_count 1, exit_code null) when result is null', () => {
-    emitSecretsRunTelemetry('git-pre-commit', AUTH, null, 30000);
-
-    const lines = readLines(testSonarUserHome);
-    expect(lines).toHaveLength(1);
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
-    expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-    expect(completed.event_payload.failures_count).toBe(1);
-    expect(completed.event_payload.exit_code).toBeNull();
-    expect(completed.event_payload.findings_count).toBe(0);
-    expect(completed.event_payload.errors_count).toBe(0);
-    expect(completed.event_payload.scan_duration_ms).toBe(30000);
-  });
-
-  it('records errors_count from the errors field in stdout, independent of failures_count', () => {
+  it('records errors_count from the errors field in stdout, independent of failures_count', async () => {
     const stdout = JSON.stringify({ issues: [], errors: ['auth failed', 'partial scan'] });
     // exit 2: run failed (failures_count 1) AND reported errors[] (errors_count 2) — not mutually exclusive
-    emitSecretsRunTelemetry('analyze secrets', AUTH, { exitCode: 2, stdout }, 100);
+    await scanAndEmitSecrets('analyze secrets', AUTH, resolvedRun(2, stdout));
 
     const lines = readLines(testSonarUserHome);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
@@ -754,7 +742,7 @@ describe('emitSecretsRunTelemetry()', () => {
   });
 });
 
-describe('scanAndEmitSecrets()', () => {
+describe('scanAndEmitSecrets() — wrapper behavior', () => {
   it('emits a completed event and returns the spawn result + parsed output on success', async () => {
     const result: SpawnResult = {
       exitCode: 51,

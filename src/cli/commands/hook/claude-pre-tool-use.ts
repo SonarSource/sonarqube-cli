@@ -24,6 +24,7 @@
 import { existsSync } from 'node:fs';
 
 import logger from '../../../lib/logger';
+import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
 import { resolveAuthAndSecrets, runAndEmitFileSecretsScan } from './hook-dependencies';
 import { readStdinJson } from './stdin';
@@ -50,7 +51,11 @@ export async function claudePreToolUse(): Promise<void> {
   if (!deps) return;
 
   try {
-    const exitCode = await runAndEmitFileSecretsScan('claude-pre-tool-use', deps, filePath);
+    const exitCode = await runAndEmitFileSecretsScan(
+      SECRETS_CALLER_COMMANDS.claudePreToolUse,
+      deps,
+      filePath,
+    );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       process.stdout.write(
         JSON.stringify({
