@@ -406,6 +406,12 @@ export interface IntegrationsState {
 }
 
 /**
+ * Product code sent on telemetry events: SonarQube Cloud or SonarQube Server.
+ * Distinct from {@link ServerType} (`cloud` / `on-premise`), which the CLI uses for auth routing.
+ */
+export type TelemetryConnectionType = 'sqc' | 'sqs' | null;
+
+/**
  * Metadata envelope for a telemetry event.
  */
 export interface TelemetryEventMetadata {
@@ -432,8 +438,8 @@ export interface TelemetryEventPayload {
   invocation_id: string;
   result: 'success' | 'failure';
   os: string;
-  /** "sqc" for SonarQube Cloud, "sqs" for SonarQube Server, null when not authenticated */
-  connection_type: 'sqc' | 'sqs' | null;
+  /** {@link TelemetryConnectionType} — null when not authenticated */
+  connection_type: TelemetryConnectionType;
   /** UUID of the user on SonarQube Cloud or Server, null when not authenticated or on older SQS versions */
   user_uuid: string | null;
   /** UUID of the SonarQube Cloud organization, null when not authenticated or SQS */
@@ -461,7 +467,7 @@ export interface AnalysisEventIdentityPayload {
   cli_version: string;
   invocation_id: string;
   os: string;
-  connection_type: 'sqc' | 'sqs' | null;
+  connection_type: TelemetryConnectionType;
   user_uuid: string | null;
   organization_uuid_v4: string | null;
   sqs_installation_id: string | null;

@@ -123,7 +123,7 @@ export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
  * `errors_count` is {@link RunTally.totalErrors} only (API `errors[]` on successful analyses).
  * `failures_count` is {@link RunTally.totalFailures} (per-file analysis failures).
  */
-export function emitSqaaAnalysisTelemetry(
+export async function emitSqaaAnalysisTelemetry(
   callerCommand:
     | typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND
     | typeof SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND
@@ -132,11 +132,11 @@ export function emitSqaaAnalysisTelemetry(
   tally: RunTally,
   durationMs: number,
   exitCode?: number | null,
-): void {
+): Promise<void> {
   const analysisId = randomUUID();
   const findingsCount = tally.totalIssues;
 
-  emitAnalysisCompleted(auth, {
+  await emitAnalysisCompleted(auth, {
     caller_command: callerCommand,
     analyzer: 'sqaa',
     analysis_id: analysisId,
@@ -149,7 +149,7 @@ export function emitSqaaAnalysisTelemetry(
 
   if (findingsCount === 0) return;
 
-  emitAnalysisFindingsDetected(auth, {
+  await emitAnalysisFindingsDetected(auth, {
     caller_command: callerCommand,
     analyzer: 'sqaa',
     analysis_id: analysisId,

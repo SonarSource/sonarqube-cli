@@ -243,8 +243,8 @@ afterEach(async () => {
 // ─── emitAnalysisCompleted ─────────────────────────────────────────────────────
 
 describe('emitAnalysisCompleted()', () => {
-  it('writes a valid CliAnalysisCompleted envelope', () => {
-    emitAnalysisCompleted(AUTH, makeCompletedFields({ findings_count: 2, exit_code: 51 }));
+  it('writes a valid CliAnalysisCompleted envelope', async () => {
+    await emitAnalysisCompleted(AUTH, makeCompletedFields({ findings_count: 2, exit_code: 51 }));
 
     const [event] = readLines(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
@@ -255,48 +255,51 @@ describe('emitAnalysisCompleted()', () => {
     expect(completedEvent.event_payload.caller_command).toBe(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND);
   });
 
-  it('does not append when telemetry is disabled', () => {
+  it('does not append when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
 
-    emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 
-  it('does not append when installationId is absent', () => {
+  it('does not append when installationId is absent', async () => {
     const stateWithoutId = makeTelemetryState();
     stateWithoutId.telemetry.installationId = undefined;
     loadStateSpy.mockReturnValue(stateWithoutId);
 
-    emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 
-  it('sets connection_type to sqc for cloud connections', () => {
-    emitAnalysisCompleted({ ...AUTH, connectionType: 'cloud' }, makeCompletedFields());
+  it('sets connection_type to sqc for cloud connections', async () => {
+    await emitAnalysisCompleted({ ...AUTH, connectionType: 'cloud' }, makeCompletedFields());
 
     const [event] = readLines(testSonarUserHome);
     expect((event as StoredAnalysisCompletedEvent).event_payload.connection_type).toBe('sqc');
   });
 
-  it('sets connection_type to sqs for server connections', () => {
-    emitAnalysisCompleted({ ...AUTH, connectionType: 'on-premise' }, makeCompletedFields());
+  it('sets connection_type to sqs for server connections', async () => {
+    await emitAnalysisCompleted({ ...AUTH, connectionType: 'on-premise' }, makeCompletedFields());
 
     const [event] = readLines(testSonarUserHome);
     expect((event as StoredAnalysisCompletedEvent).event_payload.connection_type).toBe('sqs');
   });
 
-  it('includes connection identity fields from the active connection', () => {
+  it('includes connection identity fields from the active connection', async () => {
     getConnectionSpy.mockReturnValue({
+      id: 'conn-id',
+      type: 'cloud',
       serverUrl: 'https://sonarcloud.io',
+      orgKey: 'my-org',
       authenticatedAt: '2026-01-01T00:00:00.000Z',
       userUuid: 'user-uuid-abc',
       organizationUuidV4: 'org-uuid-xyz',
       sqsInstallationId: 'sqs-install-id-123',
     });
 
-    emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     const payload = (readLines(testSonarUserHome)[0] as StoredAnalysisCompletedEvent).event_payload;
     expect(payload.user_uuid).toBe('user-uuid-abc');
@@ -304,20 +307,20 @@ describe('emitAnalysisCompleted()', () => {
     expect(payload.sqs_installation_id).toBe('sqs-install-id-123');
   });
 
-  it('sets caller_agent from detectCallerAgent', () => {
+  it('sets caller_agent from detectCallerAgent', async () => {
     detectAgentSpy.mockReturnValue('cursor');
 
-    emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     const payload = (readLines(testSonarUserHome)[0] as StoredAnalysisCompletedEvent).event_payload;
     expect(payload.caller_agent).toBe('cursor');
   });
 
-  it('creates the telemetry directory if it does not exist', () => {
+  it('creates the telemetry directory if it does not exist', async () => {
     const telemetryDir = join(testSonarUserHome, 'sonarqube-cli', 'telemetry');
     expect(existsSync(telemetryDir)).toBe(false);
 
-    emitAnalysisCompleted(AUTH, makeCompletedFields());
+    await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     expect(existsSync(telemetryDir)).toBe(true);
   });
@@ -326,8 +329,8 @@ describe('emitAnalysisCompleted()', () => {
 // ─── emitAnalysisFindingsDetected ──────────────────────────────────────────────
 
 describe('emitAnalysisFindingsDetected()', () => {
-  it('writes a valid CliAnalysisFindingsDetected envelope', () => {
-    emitAnalysisFindingsDetected(
+  it('writes a valid CliAnalysisFindingsDetected envelope', async () => {
+    await emitAnalysisFindingsDetected(
       AUTH,
       makeFindingsDetectedFields({ analysis_id: 'abc-123', details_schema_version: 1 }),
     );
@@ -343,10 +346,10 @@ describe('emitAnalysisFindingsDetected()', () => {
     });
   });
 
-  it('does not append when telemetry is disabled', () => {
+  it('does not append when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
 
-    emitAnalysisFindingsDetected(AUTH, makeFindingsDetectedFields());
+    await emitAnalysisFindingsDetected(AUTH, makeFindingsDetectedFields());
 
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });

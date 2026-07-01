@@ -192,8 +192,8 @@ describe('tallyFromSqaaJsonReport()', () => {
 });
 
 describe('emitSqaaAnalysisTelemetry()', () => {
-  it('writes CliAnalysisCompleted only on a clean run', () => {
-    emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 123, 0);
+  it('writes CliAnalysisCompleted only on a clean run', async () => {
+    await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 123, 0);
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
@@ -209,15 +209,20 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     expect(completed.event_payload.analysis_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('emits null exit_code when the handler does not pass one', () => {
-    emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, makeTally(), 123);
+  it('emits null exit_code when the handler does not pass one', async () => {
+    await emitSqaaAnalysisTelemetry(
+      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      AUTH,
+      makeTally(),
+      123,
+    );
 
     const completed = readEvents(testSonarUserHome)[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.exit_code).toBeNull();
     expect(completed.event_payload.failures_count).toBe(0);
   });
 
-  it('emits failures_count when files fail even without exit_code', () => {
+  it('emits failures_count when files fail even without exit_code', async () => {
     const tally = makeTally({
       totalFailures: 1,
       allResults: [
@@ -229,14 +234,14 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       ],
     });
 
-    emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, tally, 123);
+    await emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, tally, 123);
 
     const completed = readEvents(testSonarUserHome)[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.exit_code).toBeNull();
     expect(completed.event_payload.failures_count).toBe(1);
   });
 
-  it('writes Completed and FindingsDetected with matching analysis_id when issues exist', () => {
+  it('writes Completed and FindingsDetected with matching analysis_id when issues exist', async () => {
     const tally = makeTally({
       totalIssues: 2,
       allResults: [
@@ -249,7 +254,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       ],
     });
 
-    emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 456, 51);
+    await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 456, 51);
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(2);
@@ -271,7 +276,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     });
   });
 
-  it('writes exit code 1 when failures exist without issues', () => {
+  it('writes exit code 1 when failures exist without issues', async () => {
     const tally = makeTally({
       totalFailures: 1,
       allResults: [
@@ -283,7 +288,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       ],
     });
 
-    emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, tally, 789, 1);
+    await emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, tally, 789, 1);
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
@@ -295,7 +300,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     expect(completed.event_payload.findings_count).toBe(0);
   });
 
-  it('counts API errors from successful analyses in errors_count', () => {
+  it('counts API errors from successful analyses in errors_count', async () => {
     const tally = makeTally({
       totalIssues: 1,
       totalErrors: 2,
@@ -312,14 +317,14 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       ],
     });
 
-    emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 51);
+    await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 51);
 
     const completed = readEvents(testSonarUserHome)[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.exit_code).toBe(51);
     expect(completed.event_payload.errors_count).toBe(2);
   });
 
-  it('uses exit code 1 when failures coexist with findings', () => {
+  it('uses exit code 1 when failures coexist with findings', async () => {
     const tally = makeTally({
       totalIssues: 2,
       totalFailures: 1,
@@ -338,7 +343,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       ],
     });
 
-    emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 1);
+    await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 1);
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(2);
@@ -349,10 +354,10 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     expect(completed.event_payload.failures_count).toBe(1);
   });
 
-  it('does not write when telemetry is disabled', () => {
+  it('does not write when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
 
-    emitSqaaAnalysisTelemetry(
+    await emitSqaaAnalysisTelemetry(
       SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
       AUTH,
       makeTally({ totalIssues: 1, allResults: [] }),
@@ -362,12 +367,12 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     expect(readEvents(testSonarUserHome)).toHaveLength(0);
   });
 
-  it('does not write when installationId is absent', () => {
+  it('does not write when installationId is absent', async () => {
     const stateWithoutId = makeTelemetryState();
     stateWithoutId.telemetry.installationId = undefined;
     loadStateSpy.mockReturnValue(stateWithoutId);
 
-    emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 100);
+    await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 100);
 
     expect(readEvents(testSonarUserHome)).toHaveLength(0);
   });

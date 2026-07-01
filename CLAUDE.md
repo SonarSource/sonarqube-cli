@@ -88,6 +88,30 @@ The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) h
 
 `sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Implementation is split across `src/cli/commands/system/reset.ts` (orchestration), `reset-auth.ts`, `reset-binaries.ts`, `reset-integrations.ts`, `reset-filesystem.ts`, and `safe-path.ts`. Integration teardown is declarative-only: `integrations.installed` features are removed via `removeFeature()`; legacy `agentExtensions` entries are cleared from state in `clearLegacyState()` but are not used for on-disk cleanup (1.0 does not guarantee removal of pre-declarative artifacts). Binary cleanup removes paths from both `dependencies.installed` and legacy `tools.installed` under `BIN_DIR`. Partial reset (step warnings) exits `0`.
 
+### Telemetry
+
+Command telemetry (`storeEvent` in `src/telemetry/index.ts`) and analysis telemetry (`emitAnalysisCompleted` / `emitAnalysisFindingsDetected` in `src/telemetry/findings.ts`) share a tiered identity resolver in `src/telemetry/identity.ts`. It fills `connection_type`, `user_uuid`, `organization_uuid_v4`, and `sqs_installation_id` on every event — including env-var auth (`SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG` or `SONARQUBE_CLI_SERVER`) where those fields were previously always null.
+
+**Resolution order** (per auth token, keyed by connection type + server URL + org key + token fingerprint):
+
+1. **Connection seed** — `identityFromConnection()` maps `AuthConnection.userUuid`, `organizationUuidV4`, and `sqsInstallationId` (populated at `sonar auth login` via `getCurrentUser()`, `getOrganizationId()`, and `getSystemStatus()`).
+2. **Disk cache** — `{SONAR_USER_HOME}/sonarqube-cli/telemetry/identity-cache.json`, one entry per auth fingerprint. Avoids repeat API calls across CLI invocations.
+3. **API enrichment** — `SonarQubeClient.getSafe()` fetches only missing fields: `/api/users/current` (cloud and server), `/organizations/organizations` (cloud only, when `orgKey` is set), `/api/system/status` (server only).
+
+**Fast paths** (skip keychain / `resolveFromState()`):
+
+- Env-var auth when `isEnvBasedAuth()` is true — uses `resolveFromEnv()` directly; partial env (token only) does not warn during silent `storeEvent`.
+- Logged-in user when the active connection already satisfies `needsIdentityEnrichment()` — complete required fields plus `user_uuid` resolved (present, or login persisted `userUuid: null`).
+
+**Field completeness** (`isIdentityCompleteForConnection`):
+
+- **Cloud** — requires `user_uuid` and `organization_uuid_v4`.
+- **Server** — requires `sqs_installation_id` only; `user_uuid` is optional on older SonarQube Server versions that do not return it (see `TelemetryEventPayload`).
+
+**`user_uuid` policy** — always attempted for cloud and server (login and env-var auth) whenever not already known. Login stores `userUuid` on the connection (`string` or explicit `null` after a successful login-time fetch). Telemetry skips re-fetch when `conn.userUuid !== undefined`. Legacy connections without that field, and all env-var sessions, resolve via the API path. A successful API response with no user id is cached as confirmed-absent (`userUuid: null` in the disk entry) so old servers do not cause infinite re-fetch; transient API failures are not cached and retry on the next command.
+
+**Caching rules** — disk entries are written only when the API call succeeded (`response.ok`). Non-null values and confirmed-absent nulls are persisted; failed/transient responses are omitted so the next run retries. The `'fieldName' in entry` check in `planFieldsToFetch()` distinguishes “not yet tried” from “confirmed absent”.
+
 ## Error handling
 
 Please use the exception types defined in `src/cli/commands/_common/error.ts` for production code. If you need to throw an error from a mock in test code, it's fine to use the generic `Error` type.
