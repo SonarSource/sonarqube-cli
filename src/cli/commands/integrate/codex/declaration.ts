@@ -24,12 +24,13 @@ import { CLI_COMMAND } from '../../../../lib/config-constants';
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import {
-  AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_FEATURE_BENEFIT,
   AGENTIC_ANALYSIS_FEATURE_PREVIEW,
-  MCP_SERVER_FEATURE_DESCRIPTION,
+  MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
-  SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
+  SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
+  SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
@@ -86,6 +87,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       configDir: CODEX_CONFIG_DIR,
       hooksConfigFileName: HOOKS_FILE,
       hooksPatchId: 'codex-hooks-secrets-hook',
+      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       scripts: [
         {
@@ -110,7 +112,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'sonar-sqaa-hook',
       displayName: 'SonarQube Agentic Analysis hook',
-      benefitDescription: AGENTIC_ANALYSIS_FEATURE_DESCRIPTION,
+      benefitDescription: AGENTIC_ANALYSIS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) => {
         if (options.installSqaaHook === true) {
@@ -160,7 +162,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'secrets-instructions',
       displayName: 'secrets-on-read instructions',
-      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_DESCRIPTION,
+      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
       shouldInstall: ({ scope, state }) =>
         isFeatureInstalledGloballyForProject(
@@ -187,7 +189,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_DESCRIPTION,
+      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
       previewDescription: MCP_SERVER_FEATURE_PREVIEW,
       resources: [
         tomlPatch({

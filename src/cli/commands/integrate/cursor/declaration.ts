@@ -24,12 +24,12 @@ import { CLI_COMMAND, CURSOR_CONFIG_DIR } from '../../../../lib/config-constants
 import { getMcpConfig, getMcpConfigFilePath } from '../../../../lib/mcp/mcp-helper';
 import { getOptionalStringAttr, getRequiredStringAttr } from '../_common/attrs';
 import {
-  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
+  AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
   AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
-  MCP_SERVER_FEATURE_DESCRIPTION,
+  MCP_SERVER_FEATURE_BENEFIT,
   MCP_SERVER_FEATURE_PREVIEW,
+  SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
-  SECRETS_FEATURE_DESCRIPTION,
 } from '../_common/feature-constants';
 import { createContextAugmentationFeature } from '../_common/features/context-augmentation-feature';
 import {
@@ -140,7 +140,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     {
       id: 'sonar-secrets-hooks',
       displayName: 'secret scanning hooks',
-      benefitDescription: SECRETS_FEATURE_DESCRIPTION,
+      benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
       shouldInstall: ({ options, scope, state }) => {
         const globalHookExists =
@@ -221,7 +221,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     {
       id: 'sqaa-instructions',
       displayName: 'SonarQube Agentic Analysis instructions',
-      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_DESCRIPTION,
+      benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
         options.installSqaaInstructions === true ? askUser() : skip(),
@@ -239,7 +239,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     {
       id: 'mcp-server',
       displayName: 'MCP server',
-      benefitDescription: MCP_SERVER_FEATURE_DESCRIPTION,
+      benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
       previewDescription: MCP_SERVER_FEATURE_PREVIEW,
       resources: [
         jsonPatch({
