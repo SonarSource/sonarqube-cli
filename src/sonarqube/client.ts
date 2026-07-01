@@ -55,6 +55,13 @@ export type CagEntitlementStatus = 'allowed' | 'not_allowed' | 'check_failed';
 
 export type SqaaEntitlementStatus = 'enabled' | 'not_enabled' | 'check_failed';
 
+export interface Organization {
+  key: string;
+  name: string;
+  alm?: { key: string };
+  actions?: { admin: boolean };
+}
+
 export class SonarQubeClient {
   private readonly serverURL: string;
   private readonly token: string;
@@ -464,19 +471,42 @@ export class SonarQubeClient {
     }
   }
 
-  async listUserOrganizations(): Promise<{
-    organizations: Array<{ key: string; name: string }>;
-    total: number;
-  }> {
+  async listUserOrganizations(
+    page = 1,
+    ps = 10,
+  ): Promise<{ organizations: Organization[]; total: number }> {
     try {
-      const result = await this.get<{
-        organizations: Array<{ key: string; name: string }>;
-        paging: { total: number };
-      }>('/api/organizations/search', { member: true, ps: 10 });
-      return { organizations: result.organizations, total: result.paging.total };
+      return await this.fetchUserOrganizationsPage(page, ps);
     } catch {
       return { organizations: [], total: 0 };
     }
+  }
+
+  private async fetchUserOrganizationsPage(
+    page: number,
+    ps: number,
+  ): Promise<{ organizations: Organization[]; total: number }> {
+    const result = await this.get<{
+      organizations: Organization[];
+      paging: { total: number };
+    }>('/api/organizations/search', { member: true, ps, p: page });
+    return { organizations: result.organizations, total: result.paging.total };
+  }
+
+  async fetchAllUserOrganizations(): Promise<Organization[]> {
+    const PAGE_SIZE = 500;
+    let page = 1;
+    const all: Organization[] = [];
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    while (true) {
+      const { organizations, total } = await this.fetchUserOrganizationsPage(page, PAGE_SIZE);
+      all.push(...organizations);
+      if (all.length >= total || organizations.length === 0) break;
+      page++;
+    }
+
+    return all;
   }
 
   /**

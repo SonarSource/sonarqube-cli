@@ -21,6 +21,7 @@
 // Lightweight in-process mock SonarQube HTTP server (Bun.serve)
 
 import type { SonarQubeIssue } from '../../../src/lib/types.js';
+import type { Organization } from '../../../src/sonarqube/client.js';
 import type { SettingsValue } from '../../../src/sonarqube/settings-value.js';
 import type { RecordedRequest } from './types.js';
 
@@ -125,7 +126,7 @@ export class FakeSonarQubeServerBuilder {
   private validToken?: string;
   private systemStatusCode = 200;
   private systemVersion = '9.9.0.00001';
-  private memberOrganizations: Array<{ key: string; name: string }> = [];
+  private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
@@ -171,7 +172,7 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  withOrganizations(orgs: Array<{ key: string; name: string }>): this {
+  withOrganizations(orgs: Organization[]): this {
     this.memberOrganizations = orgs;
     return this;
   }
