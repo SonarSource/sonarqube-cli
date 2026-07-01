@@ -178,6 +178,26 @@ describe('note(): TTY box rendering (renderTTY)', () => {
     expect(stripAnsi(styled)).toBe(plain);
   });
 
+  it('truncates a styled overflow line without leaving a dangling escape', () => {
+    const output: string[] = [];
+    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      // A dim-styled line far wider than the box.
+      const styled = `\x1b[2m${'x'.repeat(200)}\x1b[22m`;
+      note([styled]);
+      const rendered = output.join('');
+      // The overflow cut strips styling entirely.
+      expect(rendered).not.toContain('\x1b[2m');
+      expect(rendered).not.toContain('\x1b[22m');
+      expect(rendered).toContain('...');
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
   it('appends newline at the end', () => {
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {

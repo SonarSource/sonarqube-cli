@@ -22,7 +22,7 @@
 
 import { getColumns } from '@clack/core';
 
-import { bold, dim, isTTY, visibleLength } from '../colors.js';
+import { bold, dim, isTTY, stripAnsi, visibleLength } from '../colors.js';
 import { isMockActive, recordCall } from '../mock.js';
 import type { ColorFn, NoteOptions } from '../types.js';
 
@@ -53,7 +53,10 @@ function renderTTY(lines: string[], title: string | undefined, opts: NoteOptions
   const bottom = borderColor('└' + '─'.repeat(width) + '┘');
 
   const contentLines = lines.map((line) => {
-    const truncated = visibleLength(line) > width - 1 ? line.slice(0, width - 4) + '...' : line;
+    // Truncate on visible text so a cut never leaves a dangling "style on"
+    // escape that bleeds into the border. Styling is dropped on cut lines.
+    const truncated =
+      visibleLength(line) > width - 1 ? stripAnsi(line).slice(0, width - 4) + '...' : line;
     const padded = truncated + ' '.repeat(Math.max(0, width - 1 - visibleLength(truncated)));
     return borderColor('│') + ' ' + contentColor(padded) + borderColor('│');
   });
