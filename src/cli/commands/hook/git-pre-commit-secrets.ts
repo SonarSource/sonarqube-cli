@@ -1,4 +1,4 @@
-﻿/*
+/*
  * SonarQube CLI
  * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
@@ -24,8 +24,8 @@ import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
 import {
   EXIT_CODE_SECRETS_FOUND,
-  parseSecretsJson,
   runSecretsBinary,
+  scanAndEmitSecrets,
   warnScanErrors,
 } from '../analyze/secrets';
 import { handleScanError } from './hook-dependencies';
@@ -34,15 +34,18 @@ export async function runCommitSecretsStage(files: string[], auth: ResolvedAuth)
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) return;
 
-  let result;
+  let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
-    result = await runSecretsBinary(binaryPath, files, auth);
+    scan = await scanAndEmitSecrets('git-pre-commit', auth, () =>
+      runSecretsBinary(binaryPath, files, auth),
+    );
   } catch (err) {
     handleScanError('Commit', err as Error);
     return;
   }
 
-  const { issues, errors } = parseSecretsJson(result.stdout);
+  const { result, parsed } = scan;
+  const { issues, errors } = parsed;
   warnScanErrors(errors);
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {

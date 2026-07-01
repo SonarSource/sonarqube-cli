@@ -31,8 +31,8 @@ import type { SecretsInstaller } from '../../_common/install/secrets';
 import type { SecretsJsonIssue } from '../secrets';
 import {
   EXIT_CODE_SECRETS_FOUND,
-  parseSecretsJson,
   runSecretsBinary,
+  scanAndEmitSecrets,
   warnScanErrors,
 } from '../secrets';
 import { ScaDiscoverManifestsRunner } from './sca-discover-manifests';
@@ -84,13 +84,16 @@ async function scanManifestsForSecrets(
 
   // Spawn error propagate so the callers decide what it means
   // (the command aborts; the hook's wrapper turns it into a non-blocking warning).
-  const result = await withSpinner(
-    'Scanning manifests for secrets',
-    () => runSecretsBinary(binaryPath, files, auth),
-    'stderr',
+  // scanAndEmitSecrets emits a failures_count:1 event before re-throwing on a failed run.
+  const { result, parsed } = await scanAndEmitSecrets('analyze dependency-risks', auth, () =>
+    withSpinner(
+      'Scanning manifests for secrets',
+      () => runSecretsBinary(binaryPath, files, auth),
+      'stderr',
+    ),
   );
+  const { issues, errors } = parsed;
   const exitCode = result.exitCode ?? 1;
-  const { issues, errors } = parseSecretsJson(result.stdout);
 
   if (exitCode === EXIT_CODE_SECRETS_FOUND) {
     const findings = formatSecretFindings(issues);

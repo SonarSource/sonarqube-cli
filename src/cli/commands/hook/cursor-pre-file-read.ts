@@ -27,6 +27,8 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import logger from '../../../lib/logger';
+import { timed } from '../../../lib/timed.js';
+import { emitSecretsRunTelemetry } from '../analyze/secrets';
 import {
   denyCursorFileAccess,
   scanTextForSecrets,
@@ -56,7 +58,8 @@ export async function cursorPreFileRead(): Promise<void> {
   if (!deps) return;
 
   try {
-    const result = await scanTextForSecrets(deps, content);
+    const { result, durationMs } = await timed(() => scanTextForSecrets(deps, content));
+    emitSecretsRunTelemetry('cursor-pre-file-read', deps.auth, result, durationMs);
     if (secretsFoundInScan(result)) {
       await denyCursorFileAccess(filePath);
     }

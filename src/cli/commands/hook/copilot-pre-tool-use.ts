@@ -34,8 +34,8 @@
 import { existsSync } from 'node:fs';
 
 import logger from '../../../lib/logger';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
-import { resolveAuthAndSecrets } from './hook-dependencies';
+import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
+import { resolveAuthAndSecrets, runAndEmitFileSecretsScan } from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface CopilotPreToolUsePayload {
@@ -66,8 +66,7 @@ export async function copilotPreToolUse(): Promise<void> {
   if (!deps) return;
 
   try {
-    const result = await runSecretsBinary(deps.binaryPath, [filePath], deps.auth);
-    const exitCode = result.exitCode ?? 1;
+    const exitCode = await runAndEmitFileSecretsScan('copilot-pre-tool-use', deps, filePath);
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       process.stdout.write(
         JSON.stringify({
