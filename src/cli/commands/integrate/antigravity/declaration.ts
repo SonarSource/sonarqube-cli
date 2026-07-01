@@ -94,7 +94,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   features: [
     {
       id: 'sonar-secrets-hooks',
-      displayName: 'Secret scanning hooks',
+      displayName: 'secret scanning hooks',
       benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
@@ -177,7 +177,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     },
     {
       id: 'prompt-secrets-project-rules',
-      displayName: 'Prompt-secrets workspace rules',
+      displayName: 'prompt-secrets workspace rules',
       benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       shouldInstall: ({ scope }) => {
@@ -210,7 +210,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     },
     {
       id: 'prompt-secrets-global-rules',
-      displayName: 'Prompt-secrets global rules',
+      displayName: 'prompt-secrets global rules',
       benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       shouldInstall: ({ scope }) => (scope === 'global' ? askUser() : skip()),
