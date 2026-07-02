@@ -75,7 +75,11 @@ export function summarizeScaFindings(response: AnalyzeProjectResponse): {
 
 /**
  * Emits CliAnalysisCompleted (always) and CliAnalysisFindingsDetected (when findings > 0)
- * for one SCA run. Fire-and-forget — telemetry failures are swallowed downstream.
+ * for one SCA run. Strictly fire-and-forget: the entire body is guarded, so no telemetry
+ * failure — identity resolution (`getOrCreateUserId`) or the file write — can ever propagate
+ * to the caller. This matters because the analyze call site emits *after* `process.exitCode`
+ * is set, and the hook call site must keep failing open; a thrown error here would otherwise
+ * turn a successful scan into a failure.
  *
  * Pass `response: null` for a run that failed to execute (scanner spawn/parse error or a
  * non-zero exit that threw): the completed event is emitted with `exit_code` as supplied
@@ -92,42 +96,46 @@ export async function emitScaAnalysisTelemetry(
   durationMs: number,
   exitCode: number | null,
 ): Promise<void> {
-  const analysisId = randomUUID();
+  try {
+    const analysisId = randomUUID();
 
-  if (!response) {
+    if (!response) {
+      await emitAnalysisCompleted(auth, {
+        caller_command: callerCommand,
+        analyzer: 'sca-scanner-cli',
+        analysis_id: analysisId,
+        findings_count: 0,
+        exit_code: exitCode,
+        errors_count: 0,
+        failures_count: 1,
+        scan_duration_ms: durationMs,
+      });
+      return;
+    }
+
+    const { findingsCount, details } = summarizeScaFindings(response);
+
     await emitAnalysisCompleted(auth, {
       caller_command: callerCommand,
       analyzer: 'sca-scanner-cli',
       analysis_id: analysisId,
-      findings_count: 0,
+      findings_count: findingsCount,
       exit_code: exitCode,
-      errors_count: 0,
-      failures_count: 1,
+      errors_count: response.errors.length,
+      failures_count: 0,
       scan_duration_ms: durationMs,
     });
-    return;
+
+    if (findingsCount === 0) return;
+
+    await emitAnalysisFindingsDetected(auth, {
+      caller_command: callerCommand,
+      analyzer: 'sca-scanner-cli',
+      analysis_id: analysisId,
+      details_schema_version: SCA_DETAILS_SCHEMA_VERSION,
+      details: JSON.stringify(details),
+    });
+  } catch {
+    // Telemetry is strictly fire-and-forget; never surface to the command handler.
   }
-
-  const { findingsCount, details } = summarizeScaFindings(response);
-
-  await emitAnalysisCompleted(auth, {
-    caller_command: callerCommand,
-    analyzer: 'sca-scanner-cli',
-    analysis_id: analysisId,
-    findings_count: findingsCount,
-    exit_code: exitCode,
-    errors_count: response.errors.length,
-    failures_count: 0,
-    scan_duration_ms: durationMs,
-  });
-
-  if (findingsCount === 0) return;
-
-  await emitAnalysisFindingsDetected(auth, {
-    caller_command: callerCommand,
-    analyzer: 'sca-scanner-cli',
-    analysis_id: analysisId,
-    details_schema_version: SCA_DETAILS_SCHEMA_VERSION,
-    details: JSON.stringify(details),
-  });
 }

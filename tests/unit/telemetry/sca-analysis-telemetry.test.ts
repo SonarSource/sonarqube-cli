@@ -338,4 +338,23 @@ describe('emitScaAnalysisTelemetry()', () => {
 
     expect(readEvents(testSonarUserHome)).toHaveLength(0);
   });
+
+  it('never throws when identity resolution fails (strictly fire-and-forget)', async () => {
+    // getOrCreateUserId does mkdirSync/openSync and can throw on permission/disk errors.
+    getUserIdSpy.mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    const response = makeResponse([makeRelease(true, [makeIssue('VULNERABILITY', 'HIGH')])]);
+
+    // Must resolve, not reject — a telemetry failure must never reach the command handler.
+    await emitScaAnalysisTelemetry(
+      SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+      AUTH,
+      response,
+      100,
+      51,
+    );
+
+    expect(readEvents(testSonarUserHome)).toHaveLength(0);
+  });
 });
