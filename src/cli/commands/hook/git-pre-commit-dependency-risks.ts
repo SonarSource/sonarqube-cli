@@ -27,6 +27,10 @@
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { SonarQubeClient } from '../../../sonarqube/client';
+import {
+  emitScaAnalysisTelemetry,
+  SCA_CALLER_COMMANDS,
+} from '../../../telemetry/sca-analysis-telemetry';
 import { discreetSuccess, success, warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import {
@@ -38,7 +42,10 @@ import { countSelectedRisks } from '../analyze/dependency-risk-helpers/count-sel
 import { DefaultScaScannerSpawner } from '../analyze/dependency-risk-helpers/default-sca-scanner-spawner';
 import { pluralize } from '../analyze/dependency-risk-helpers/pluralize';
 import { buildRiskFilter } from '../analyze/dependency-risk-helpers/risk-filter';
-import { ScaScanOrchestrator } from '../analyze/dependency-risk-helpers/sca-scan-orchestrator';
+import {
+  ScaScanOrchestrator,
+  type ScaScanResult,
+} from '../analyze/dependency-risk-helpers/sca-scan-orchestrator';
 import type { Severity } from '../analyze/dependency-risk-helpers/sca-scanner';
 import {
   anyFileMatches,
@@ -76,20 +83,39 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     return;
   }
 
-  let viewModel;
+  let scan: ScaScanResult;
+  let viewModel: DependencyRisksViewModel;
+  const scanStart = performance.now();
   try {
     const client = new SonarQubeClient(options.auth.serverUrl, options.auth.token);
-    const result = await new ScaScanOrchestrator(
+    scan = await new ScaScanOrchestrator(
       client,
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
       new ResolveOnlySecretsInstaller(),
     ).run(options.auth, options.project);
-    viewModel = buildDependencyRisksViewModel(result, filter);
+    viewModel = buildDependencyRisksViewModel(scan.response, filter);
   } catch (err) {
+    // Record the failed-to-run scan even though the hook fails open (commit proceeds).
+    await emitScaAnalysisTelemetry(
+      SCA_CALLER_COMMANDS.gitPreCommit,
+      options.auth,
+      null,
+      Math.round(performance.now() - scanStart),
+      null,
+    );
     warn(`Dependency-risks scan failed; commit not blocked. Reason: ${(err as Error).message}`);
     return;
   }
+
+  // Hook has no analyze-style 0/1/51 exit code, so exit_code is null.
+  await emitScaAnalysisTelemetry(
+    SCA_CALLER_COMMANDS.gitPreCommit,
+    options.auth,
+    scan.response,
+    scan.scanDurationMs,
+    null,
+  );
 
   const matchedCount = countSelectedRisks(viewModel);
   if (matchedCount === 0) {

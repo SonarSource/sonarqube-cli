@@ -143,6 +143,11 @@ const SCAN_RESULT_MULTI_SEVERITY: AnalyzeProjectResponse = {
   errors: [],
 };
 
+// Wraps a scanner response in the orchestrator's { response, scanDurationMs } return shape.
+function asScan(response: AnalyzeProjectResponse) {
+  return { response, scanDurationMs: 0 };
+}
+
 // Derives a scan result from the SCAN_RESULT_WITH_RISK template, replacing its single
 // issue with one NEW VULNERABILITY issue per requested severity.
 function withSeverities(...severities: Severity[]): AnalyzeProjectResponse {
@@ -179,7 +184,7 @@ describe('runDepRisksStage', () => {
       'package.json',
     ]);
     orchestratorRunSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue(
-      SCAN_RESULT_WITH_RISK,
+      asScan(SCAN_RESULT_WITH_RISK),
     );
   });
 
@@ -208,7 +213,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('reports the severity breakdown highest-first when multiple risks are found', async () => {
-    orchestratorRunSpy.mockResolvedValue(SCAN_RESULT_MULTI_SEVERITY);
+    orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_MULTI_SEVERITY));
 
     let thrown: unknown;
     try {
@@ -224,7 +229,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('does not block when all risks are below MEDIUM severity', async () => {
-    orchestratorRunSpy.mockResolvedValue(withSeverities('LOW', 'INFO'));
+    orchestratorRunSpy.mockResolvedValue(asScan(withSeverities('LOW', 'INFO')));
 
     await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
 
@@ -233,7 +238,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('blocks on MEDIUM-and-above risks while excluding lower severities from the count', async () => {
-    orchestratorRunSpy.mockResolvedValue(withSeverities('HIGH', 'MEDIUM', 'LOW'));
+    orchestratorRunSpy.mockResolvedValue(asScan(withSeverities('HIGH', 'MEDIUM', 'LOW')));
 
     let thrown: unknown;
     try {
@@ -249,7 +254,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('reports success and does not throw when the scan finds no risks', async () => {
-    orchestratorRunSpy.mockResolvedValue(SCAN_RESULT_EMPTY);
+    orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
 
     await runDepRisksStage({ project: 'demo', changedFiles: ['package.json'], auth: FAKE_AUTH });
 

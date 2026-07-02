@@ -21,6 +21,10 @@
 import { type ResolvedAuth } from '../../../lib/auth-resolver';
 import { discoverProject } from '../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../sonarqube/client';
+import {
+  emitScaAnalysisTelemetry,
+  SCA_CALLER_COMMANDS,
+} from '../../../telemetry/sca-analysis-telemetry';
 import { error, print, warn } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
@@ -31,7 +35,10 @@ import { formatDependencyRisksJson } from './dependency-risk-helpers/format-depe
 import { formatDependencyRisksToon } from './dependency-risk-helpers/format-dependency-risks-toon.ts';
 import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
-import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
+import {
+  ScaScanOrchestrator,
+  type ScaScanResult,
+} from './dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { Severity } from './dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
@@ -66,14 +73,30 @@ export async function analyzeDependencyRisks(
   const projectKey = await resolveProjectKey(options.project, auth);
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
-  const result = await new ScaScanOrchestrator(
+  const orchestrator = new ScaScanOrchestrator(
     client,
     new DefaultScaScannerInstaller(),
     new DefaultScaScannerSpawner(),
     new DefaultSecretsInstaller(),
-  ).run(auth, projectKey);
+  );
 
-  const viewModel = buildDependencyRisksViewModel(result, filter);
+  const scanStart = performance.now();
+  let scan: ScaScanResult;
+  try {
+    scan = await orchestrator.run(auth, projectKey);
+  } catch (err) {
+    // Record the failed-to-run scan (best-effort duration) before the error propagates.
+    await emitScaAnalysisTelemetry(
+      SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+      auth,
+      null,
+      Math.round(performance.now() - scanStart),
+      null,
+    );
+    throw err;
+  }
+
+  const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   switch (options.format) {
     case 'json':
       print(formatDependencyRisksJson(projectKey, viewModel));
@@ -85,7 +108,16 @@ export async function analyzeDependencyRisks(
       print(formatDependencyRisksTable(viewModel));
   }
 
-  handleResult(countUnresolvedIssues(viewModel), result.errors.length);
+  handleResult(countUnresolvedIssues(viewModel), scan.response.errors.length);
+
+  // Emit after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
+  await emitScaAnalysisTelemetry(
+    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+    auth,
+    scan.response,
+    scan.scanDurationMs,
+    typeof process.exitCode === 'number' ? process.exitCode : null,
+  );
 }
 
 async function resolveProjectKey(

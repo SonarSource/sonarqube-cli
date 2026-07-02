@@ -74,7 +74,8 @@ describe('ScaScanOrchestrator', () => {
 
     const result = await orchestrator.run(CLOUD_AUTH, 'my-project');
 
-    expect(result).toEqual(EMPTY_RESPONSE);
+    expect(result.response).toEqual(EMPTY_RESPONSE);
+    expect(result.scanDurationMs).toBeGreaterThanOrEqual(0);
   });
 
   it('throws when SCA is not available for the connection', () => {

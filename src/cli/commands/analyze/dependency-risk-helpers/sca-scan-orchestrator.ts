@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { SCA_SCANNER_CACHE_DIR } from '../../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../../lib/logger';
+import { timed } from '../../../../lib/timed';
 import { type SonarQubeClient } from '../../../../sonarqube/client';
 import type { SettingsValue } from '../../../../sonarqube/settings-value';
 import { withSpinner } from '../../../../ui';
@@ -37,6 +38,12 @@ import type { ScaScannerInvocation } from './sca-scanner-runner-base';
 import type { ScaScannerSpawner } from './sca-scanner-spawner';
 import { buildScaUrls } from './sca-urls';
 
+/** SCA scan result plus the wall-clock duration of the scan itself (excludes settings sync and the secrets pre-scan), for `scan_duration_ms` telemetry. */
+export interface ScaScanResult {
+  response: AnalyzeProjectResponse;
+  scanDurationMs: number;
+}
+
 export class ScaScanOrchestrator {
   constructor(
     private readonly client: SonarQubeClient,
@@ -45,7 +52,7 @@ export class ScaScanOrchestrator {
     private readonly secretsInstaller: SecretsInstaller,
   ) {}
 
-  async run(auth: ResolvedAuth, projectKey: string): Promise<AnalyzeProjectResponse> {
+  async run(auth: ResolvedAuth, projectKey: string): Promise<ScaScanResult> {
     const settings = await this.synchronizeSettings(auth, projectKey);
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
@@ -74,7 +81,8 @@ export class ScaScanOrchestrator {
       secretsInstaller: this.secretsInstaller,
     });
 
-    return this.analyzeDependencyRisks(invocation);
+    const { result, durationMs } = await timed(() => this.analyzeDependencyRisks(invocation));
+    return { response: result, scanDurationMs: durationMs };
   }
 
   private synchronizeSettings(auth: ResolvedAuth, projectKey: string): Promise<SettingsValue[]> {
