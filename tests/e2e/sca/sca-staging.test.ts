@@ -191,7 +191,7 @@ for (const region of STAGING_REGIONS) {
       );
 
       it(
-        'writes CliAnalysisCompleted + CliAnalysisFindingsDetected to findings.ndjson',
+        'writes a single CliAnalysisCompleted with populated details to findings.ndjson',
         async () => {
           harness.state().withTelemetryEnabled();
 
@@ -224,29 +224,22 @@ for (const region of STAGING_REGIONS) {
             .map((line) => JSON.parse(line) as AnalysisEvent);
 
           // The command also runs the secrets pre-scan, which emits its own sonar-secrets
-          // events into the same file — select the SCA ones by analyzer.
+          // event into the same file — select the SCA one by analyzer.
           const completed = events.find(
             (e) =>
               e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
               e.event_payload.analyzer === 'sca-scanner-cli',
           );
-          const detected = events.find(
-            (e) =>
-              e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected' &&
-              e.event_payload.analyzer === 'sca-scanner-cli',
-          );
           expect(completed).toBeDefined();
-          expect(detected).toBeDefined();
-          if (!completed || !detected) throw new Error('expected both SCA analysis events');
+          if (!completed) throw new Error('expected a SCA CliAnalysisCompleted event');
 
           expect(completed.event_payload.analyzer).toBe('sca-scanner-cli');
           expect(completed.event_payload.caller_command).toBe('analyze dependency-risks');
           expect(completed.event_payload.failures_count).toBe(0);
           expect(completed.event_payload.exit_code).toBe(EXIT_UNRESOLVED_RISKS);
           expect(completed.event_payload.findings_count as number).toBeGreaterThanOrEqual(1);
-          expect(completed.event_payload.analysis_id).toBe(detected.event_payload.analysis_id);
 
-          const details = JSON.parse(detected.event_payload.details as string) as {
+          const details = JSON.parse(completed.event_payload.details as string) as {
             counts_by_rule: Record<string, number>;
           };
           const ruleKeys = Object.keys(details.counts_by_rule);

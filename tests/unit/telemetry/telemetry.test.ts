@@ -782,6 +782,7 @@ describe('flushTelemetry', () => {
           errors_count: 0,
           failures_count: 0,
           scan_duration_ms: 123,
+          details: '',
         },
       };
       writeFileSync(join(telemetryDir, 'findings.ndjson'), JSON.stringify(finding) + '\n');

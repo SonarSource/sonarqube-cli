@@ -30,11 +30,7 @@ import type { SqaaJsonReport } from '../../../src/cli/commands/analyze/sqaa-disp
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type {
-  StoredAnalysisCompletedEvent,
-  StoredAnalysisEvent,
-  StoredAnalysisFindingsDetectedEvent,
-} from '../../../src/lib/state.js';
+import type { StoredAnalysisEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import type { SqaaIssue } from '../../../src/sonarqube/client.js';
@@ -43,7 +39,6 @@ import {
   emitSqaaAnalysisTelemetry,
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-  SQAA_DETAILS_SCHEMA_VERSION,
   tallyFromSqaaJsonReport,
 } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
@@ -172,13 +167,13 @@ describe('tallyFromSqaaJsonReport()', () => {
 });
 
 describe('emitSqaaAnalysisTelemetry()', () => {
-  it('writes CliAnalysisCompleted only on a clean run', async () => {
+  it('writes a single CliAnalysisCompleted with details "" on a clean run', async () => {
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, makeTally(), 123, 0);
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
     expect(events[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-    const completed = events[0] as StoredAnalysisCompletedEvent;
+    const completed = events[0];
     expect(completed.event_payload.caller_command).toBe(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND);
     expect(completed.event_payload.analyzer).toBe('sqaa');
     expect(completed.event_payload.findings_count).toBe(0);
@@ -186,6 +181,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     expect(completed.event_payload.errors_count).toBe(0);
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.scan_duration_ms).toBe(123);
+    expect(completed.event_payload.details).toBe('');
     expect(completed.event_payload.analysis_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -197,7 +193,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
       123,
     );
 
-    const completed = readEvents(testSonarUserHome)[0] as StoredAnalysisCompletedEvent;
+    const completed = readEvents(testSonarUserHome)[0];
     expect(completed.event_payload.exit_code).toBeNull();
     expect(completed.event_payload.failures_count).toBe(0);
   });
@@ -216,12 +212,12 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, AUTH, tally, 123);
 
-    const completed = readEvents(testSonarUserHome)[0] as StoredAnalysisCompletedEvent;
+    const completed = readEvents(testSonarUserHome)[0];
     expect(completed.event_payload.exit_code).toBeNull();
     expect(completed.event_payload.failures_count).toBe(1);
   });
 
-  it('writes Completed and FindingsDetected with matching analysis_id when issues exist', async () => {
+  it('writes a single CliAnalysisCompleted with populated details when issues exist', async () => {
     const tally = makeTally({
       totalIssues: 2,
       allResults: [
@@ -237,20 +233,12 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 456, 51);
 
     const events = readEvents(testSonarUserHome);
-    expect(events).toHaveLength(2);
-    const completed = events.find(
-      (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
-    ) as StoredAnalysisCompletedEvent | undefined;
-    const findings = events.find(
-      (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
-    ) as StoredAnalysisFindingsDetectedEvent | undefined;
-    expect(completed).toBeDefined();
-    expect(findings).toBeDefined();
-    expect(completed!.event_payload.analysis_id).toBe(findings!.event_payload.analysis_id);
-    expect(completed!.event_payload.findings_count).toBe(2);
-    expect(completed!.event_payload.exit_code).toBe(51);
-    expect(findings!.event_payload.details_schema_version).toBe(SQAA_DETAILS_SCHEMA_VERSION);
-    expect(JSON.parse(findings!.event_payload.details)).toEqual({
+    expect(events).toHaveLength(1);
+    const completed = events[0];
+    expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
+    expect(completed.event_payload.findings_count).toBe(2);
+    expect(completed.event_payload.exit_code).toBe(51);
+    expect(JSON.parse(completed.event_payload.details)).toEqual({
       rule_keys: ['sqaa:S1234'],
       counts_by_rule: { 'sqaa:S1234': 2 },
     });
@@ -272,7 +260,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
-    const completed = events[0] as StoredAnalysisCompletedEvent;
+    const completed = events[0];
     expect(completed.event_payload.caller_command).toBe(SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND);
     expect(completed.event_payload.exit_code).toBe(1);
     expect(completed.event_payload.errors_count).toBe(0);
@@ -299,7 +287,7 @@ describe('emitSqaaAnalysisTelemetry()', () => {
 
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 51);
 
-    const completed = readEvents(testSonarUserHome)[0] as StoredAnalysisCompletedEvent;
+    const completed = readEvents(testSonarUserHome)[0];
     expect(completed.event_payload.exit_code).toBe(51);
     expect(completed.event_payload.errors_count).toBe(2);
   });
@@ -326,8 +314,8 @@ describe('emitSqaaAnalysisTelemetry()', () => {
     await emitSqaaAnalysisTelemetry(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, AUTH, tally, 100, 1);
 
     const events = readEvents(testSonarUserHome);
-    expect(events).toHaveLength(2);
-    const completed = events[0] as StoredAnalysisCompletedEvent;
+    expect(events).toHaveLength(1);
+    const completed = events[0];
     expect(completed.event_payload.exit_code).toBe(1);
     expect(completed.event_payload.findings_count).toBe(2);
     expect(completed.event_payload.errors_count).toBe(0);
