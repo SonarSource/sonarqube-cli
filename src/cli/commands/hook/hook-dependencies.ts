@@ -23,9 +23,15 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { isEnvBasedAuth, resolveAuth } from '../../../lib/auth-resolver';
+import type { SecretsCallerCommand } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { warn } from '../../../ui';
 import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
+import {
+  runSecretsBinary,
+  runSecretsBinaryOnText,
+  scanAndEmitSecrets,
+} from '../analyze/secrets.js';
 
 export interface HookDependencies {
   auth: ResolvedAuth;
@@ -52,4 +58,26 @@ export async function resolveAuthAndSecrets(): Promise<HookDependencies | null> 
   if (!binaryPath) return null; // binary not installed — allow gracefully
 
   return { auth, binaryPath };
+}
+
+export async function runAndEmitFileSecretsScan(
+  callerCommand: SecretsCallerCommand,
+  deps: HookDependencies,
+  filePath: string,
+): Promise<number> {
+  const { result } = await scanAndEmitSecrets(callerCommand, deps.auth, () =>
+    runSecretsBinary(deps.binaryPath, [filePath], deps.auth),
+  );
+  return result.exitCode ?? 1;
+}
+
+export async function runAndEmitTextSecretsScan(
+  callerCommand: SecretsCallerCommand,
+  deps: HookDependencies,
+  text: string,
+): Promise<number> {
+  const { result } = await scanAndEmitSecrets(callerCommand, deps.auth, () =>
+    runSecretsBinaryOnText(deps.binaryPath, text, deps.auth),
+  );
+  return result.exitCode ?? 1;
 }

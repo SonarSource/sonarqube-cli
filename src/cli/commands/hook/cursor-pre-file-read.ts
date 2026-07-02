@@ -27,6 +27,8 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import logger from '../../../lib/logger';
+import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
+import { scanAndEmitSecrets } from '../analyze/secrets';
 import {
   denyCursorFileAccess,
   scanTextForSecrets,
@@ -55,13 +57,18 @@ export async function cursorPreFileRead(): Promise<void> {
   const deps = await resolveAuthAndSecrets();
   if (!deps) return;
 
+  let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
-    const result = await scanTextForSecrets(deps, content);
-    if (secretsFoundInScan(result)) {
-      await denyCursorFileAccess(filePath);
-    }
+    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.cursorPreFileRead, deps.auth, () =>
+      scanTextForSecrets(deps, content),
+    );
   } catch (err) {
     logger.debug(`cursorPreFileRead secrets scan failed: ${(err as Error).message}`);
+    return;
+  }
+
+  if (secretsFoundInScan(scan.result)) {
+    await denyCursorFileAccess(filePath);
   }
 }
 

@@ -19,9 +19,15 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { CommandFailedError } from '../_common/error';
 import { resolveSecretsBinaryPath } from '../_common/install/secrets';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinary } from '../analyze/secrets';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  runSecretsBinary,
+  scanAndEmitSecrets,
+  warnScanErrors,
+} from '../analyze/secrets';
 import { handleScanError } from './hook-dependencies';
 
 export async function runSecretsStage(files: string[], auth: ResolvedAuth): Promise<void> {
@@ -29,13 +35,18 @@ export async function runSecretsStage(files: string[], auth: ResolvedAuth): Prom
   if (!binaryPath) return;
   if (files.length === 0) return;
 
-  let result;
+  let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
-    result = await runSecretsBinary(binaryPath, files, auth);
+    scan = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPrePush, auth, () =>
+      runSecretsBinary(binaryPath, files, auth),
+    );
   } catch (err) {
     handleScanError('Push', err as Error);
     return;
   }
+
+  const { result, parsed } = scan;
+  warnScanErrors(parsed.errors);
 
   if ((result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND) {
     throw new CommandFailedError('Secrets detected in pushed commits.', {

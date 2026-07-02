@@ -23,6 +23,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
 import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import { IS_WINDOWS } from './platform';
@@ -74,6 +75,11 @@ export async function runCli(
   mkdirSync(options.cwd, { recursive: true });
 
   const spawnEnv: Record<string, string> = { ...env, ...ISOLATED_CLI_SPAWN_ENV };
+  // ISOLATED_CLI_SPAWN_ENV force-disables telemetry (DO_NOT_TRACK=1). Let an explicit
+  // DO_NOT_TRACK from the caller's env win, so telemetry-opted tests can exercise the sink.
+  if (ENV_DO_NOT_TRACK in env) {
+    spawnEnv[ENV_DO_NOT_TRACK] = env[ENV_DO_NOT_TRACK];
+  }
   if (coverageMode) {
     mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
     const unique = `${Date.now()}-${crypto.randomUUID()}`;

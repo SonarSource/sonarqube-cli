@@ -27,8 +27,9 @@
 // `agentPromptSubmit`.
 
 import logger from '../../../lib/logger';
-import { EXIT_CODE_SECRETS_FOUND, runSecretsBinaryOnText } from '../analyze/secrets';
-import { resolveAuthAndSecrets } from './hook-dependencies';
+import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
+import { EXIT_CODE_SECRETS_FOUND } from '../analyze/secrets';
+import { resolveAuthAndSecrets, runAndEmitTextSecretsScan } from './hook-dependencies';
 import { readStdinJson } from './stdin';
 
 interface CursorPromptSubmitPayload {
@@ -51,8 +52,11 @@ export async function cursorPromptSubmit(): Promise<void> {
   if (!deps) return;
 
   try {
-    const result = await runSecretsBinaryOnText(deps.binaryPath, prompt, deps.auth);
-    const exitCode = result.exitCode ?? 1;
+    const exitCode = await runAndEmitTextSecretsScan(
+      SECRETS_CALLER_COMMANDS.cursorPromptSubmit,
+      deps,
+      prompt,
+    );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       process.stdout.write(
         JSON.stringify({ continue: false, user_message: 'Sonar detected secrets in prompt' }) +
