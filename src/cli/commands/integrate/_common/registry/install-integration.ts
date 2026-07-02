@@ -85,7 +85,7 @@ export async function installIntegration<TOptions>({
     state,
   };
   const applications = await buildApplications(invocation, integration.features);
-  const { toInstall, toRemove } = await selectFeaturesForInvocation(
+  const { toInstall, toRemove, declined } = await selectFeaturesForInvocation(
     integration,
     invocation,
     applications,
@@ -151,7 +151,7 @@ export async function installIntegration<TOptions>({
       nonInteractive: nonInteractive ?? false,
       isFromRouter: isFromRouter ?? false,
       installedFeatures,
-      declaredFeatureIds: collectDeclaredFeatureIds(integration),
+      featuresSkipped: [...declined, ...toRemove.map((application) => application.feature.id)],
       repoRoot: resolveRepoRootForScope(scope, targetRoot),
     });
 
@@ -181,26 +181,6 @@ export function makeContext(
     attrs,
     resolvedDependencies: new Map(),
   };
-}
-
-/**
- * All feature ids an integration declares, including the subfeatures nested in
- * container features. Telemetry derives `features_skipped` as this set minus the
- * features actually installed.
- */
-function collectDeclaredFeatureIds<TOptions>(
-  integration: IntegrationDeclaration<TOptions>,
-): string[] {
-  const ids: string[] = [];
-  for (const feature of integration.features) {
-    ids.push(feature.id);
-    if (isFeatureContainer(feature)) {
-      for (const subfeature of feature.subfeatures) {
-        ids.push(subfeature.id);
-      }
-    }
-  }
-  return ids;
 }
 
 /**

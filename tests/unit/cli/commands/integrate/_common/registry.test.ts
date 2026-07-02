@@ -426,6 +426,7 @@ describe('declarative integration framework', () => {
       .subfeatures;
     expect(selected).toHaveLength(1);
     expect(selected[0]?.id).toBe('opted-in');
+    expect(result.declined).toEqual(['declined']);
     const confirmCalls = getMockUiCalls().filter((c) => c.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
     expect(confirmCalls[0]?.args[0]).toBe('Enable it?');
@@ -515,6 +516,29 @@ describe('declarative integration framework', () => {
     }
     expect(caughtError).toBeInstanceOf(Error);
     expect((caughtError as Error).message).toContain('Installation cancelled');
+  });
+
+  it('routes a user-confirmed uninstall to toRemove, not declined', async () => {
+    setMockUi(true);
+    const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
+    const state = getDefaultState('test');
+    await installer.applyAndRecordFeatures(state, integration, [
+      { feature: integration.features[0], targetRoot: tempDir, scope: 'project' },
+    ]);
+    queueMockResponse(false); // decline "Keep?"
+    queueMockResponse(true); // confirm "Proceed with removal?"
+
+    const selected = await selectForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      nonInteractive: false,
+      state,
+    });
+
+    expect(selected.toRemove.map((application) => application.feature.id)).toEqual(['feature']);
+    expect(selected.toInstall).toEqual([]);
+    expect(selected.declined).toEqual([]);
   });
 
   it('records active subfeatures nested under the container feature in state', async () => {
@@ -659,6 +683,7 @@ describe('declarative integration framework', () => {
     });
 
     expect(selected.toInstall).toEqual([]);
+    expect(selected.declined).toEqual([]);
     expect(findMockUiCall('info', 'covered')).toBeDefined();
     expect(getMockUiCalls().filter((call) => call.method === 'info')).toHaveLength(1);
   });
@@ -714,6 +739,8 @@ describe('declarative integration framework', () => {
     });
 
     expect(selected.toInstall.map((application) => application.feature.id)).toEqual(['accepted']);
+    expect(selected.declined).toEqual(['declined']);
+    expect(selected.toRemove).toEqual([]);
     const confirmCalls = getMockUiCalls().filter((call) => call.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
     expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
@@ -791,6 +818,7 @@ describe('declarative integration framework', () => {
       'asked',
       'defaulted',
     ]);
+    expect(selected.declined).toEqual([]);
     expect(getMockUiCalls().filter((call) => call.method === 'confirmPrompt')).toHaveLength(0);
   });
 

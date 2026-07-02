@@ -34,8 +34,11 @@ export interface IntegrationConfiguredTelemetryParams {
   isFromRouter: boolean;
   /** Features actually installed by this run (including active subfeatures). */
   installedFeatures: InstalledIntegrationFeature[];
-  /** Every feature id the integration declares (including subfeatures). */
-  declaredFeatureIds: string[];
+  /**
+   * Feature ids the user deliberately skipped: those offered (`ask`) and declined,
+   * plus already-installed features the user chose to uninstall this run.
+   */
+  featuresSkipped: string[];
   /** Repo root path when known (project scope, inside a git repo); null otherwise. */
   repoRoot: string | null;
 }
@@ -49,14 +52,12 @@ export function emitIntegrationConfiguredTelemetry(
 ): void {
   try {
     const featuresInstalled = collectInstalledFeatureIds(params.installedFeatures);
-    const installedSet = new Set(featuresInstalled);
-    const featuresSkipped = params.declaredFeatureIds.filter((id) => !installedSet.has(id));
 
     emitIntegrationConfigured(params.auth, {
       integration_id: params.integrationId,
       repo_id: hashRepoRoot(params.repoRoot),
       features_installed: featuresInstalled,
-      features_skipped: featuresSkipped,
+      features_skipped: params.featuresSkipped,
       is_global: params.scope === 'global',
       is_interactive: !params.nonInteractive,
       is_from_router: params.isFromRouter,

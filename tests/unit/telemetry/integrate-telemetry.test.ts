@@ -78,13 +78,7 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
           'pre-commit-dependency-risks',
         ]),
       ],
-      // 'sqaa-hooks' is declared by the integration but not installed this run.
-      declaredFeatureIds: [
-        'pre-commit-hook',
-        'pre-commit-secrets',
-        'pre-commit-dependency-risks',
-        'sqaa-hooks',
-      ],
+      featuresSkipped: ['sqaa-hooks'],
       repoRoot: '/some/repo',
     });
 
@@ -95,7 +89,6 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       'pre-commit-secrets',
       'pre-commit-dependency-risks',
     ]);
-    // features_skipped is declared minus installed.
     expect(fields.features_skipped).toEqual(['sqaa-hooks']);
     // repo_id is the SHA-256 hex of the canonical repo root.
     const expected = createHash('sha256').update(canonicalizePath('/some/repo')).digest('hex');
@@ -112,7 +105,7 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       nonInteractive: false,
       isFromRouter: true,
       installedFeatures: [makeInstalledFeature('sonar-secrets-hooks')],
-      declaredFeatureIds: ['sonar-secrets-hooks'],
+      featuresSkipped: [],
       repoRoot: null,
     });
 
@@ -130,7 +123,7 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       nonInteractive: false,
       isFromRouter: false,
       installedFeatures: [makeInstalledFeature('sonar-secrets-hooks')],
-      declaredFeatureIds: ['sonar-secrets-hooks'],
+      featuresSkipped: [],
       repoRoot: null,
     });
 
