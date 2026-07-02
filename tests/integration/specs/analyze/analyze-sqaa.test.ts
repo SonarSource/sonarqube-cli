@@ -20,11 +20,22 @@
 
 // Integration tests for `analyze agentic` and `verify` commands.
 
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type {
+  StoredAnalysisCompletedEvent,
+  StoredAnalysisEvent,
+  StoredAnalysisFindingsDetectedEvent,
+} from '../../../../src/lib/state.js';
+import { TELEMETRY_FLUSH_MODE_ENV } from '../../../../src/telemetry/index.js';
+import { SECRETS_CALLER_COMMANDS } from '../../../../src/telemetry/secrets-analysis-telemetry.js';
+import {
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_ANALYZE_CALLER_COMMAND,
+} from '../../../../src/telemetry/sqaa-analysis-telemetry.js';
 import { TestHarness } from '../../harness';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {
@@ -921,6 +932,221 @@ describe('analyze agentic', () => {
       expect(output).not.toContain('No issues found');
     },
     { timeout: 15000 },
+  );
+});
+
+describe('analyze agentic — analysis telemetry', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  function findingsPath(): string {
+    return join(harness.cliHome.path, 'telemetry', 'findings.ndjson');
+  }
+
+  function readAnalysisEvents(): StoredAnalysisEvent[] {
+    const path = findingsPath();
+    if (!existsSync(path)) return [];
+    return readFileSync(path, 'utf-8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as StoredAnalysisEvent);
+  }
+
+  function enableFlushTelemetry(): void {
+    harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
+  }
+
+  it(
+    'writes CliAnalysisCompleted to findings.ndjson on a clean run',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      enableFlushTelemetry();
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(0);
+      const events = readAnalysisEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
+      const completed = events[0] as StoredAnalysisCompletedEvent;
+      expect(completed.event_payload.caller_command).toBe(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND);
+      expect(completed.event_payload.analyzer).toBe('sqaa');
+      expect(completed.event_payload.findings_count).toBe(0);
+      expect(completed.event_payload.exit_code).toBe(0);
+      expect(completed.event_payload.errors_count).toBe(0);
+      expect(completed.event_payload.failures_count).toBe(0);
+      expect(completed.event_payload.scan_duration_ms).toBeGreaterThanOrEqual(0);
+      expect(completed.event_payload.analysis_id).toMatch(/^[0-9a-f-]{36}$/);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'writes CliAnalysisCompleted and CliAnalysisFindingsDetected when issues are found',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({
+          issues: [
+            { rule: 'typescript:S1234', message: 'Fix this', startLine: 1 },
+            { rule: 'typescript:S1234', message: 'Fix that', startLine: 2 },
+          ],
+        })
+        .start();
+
+      enableFlushTelemetry();
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;\nconst y = 2;\n');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+      const events = readAnalysisEvents();
+      expect(events).toHaveLength(2);
+      const completed = events.find(
+        (event) => event.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
+      ) as StoredAnalysisCompletedEvent | undefined;
+      const findings = events.find(
+        (event) => event.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
+      ) as StoredAnalysisFindingsDetectedEvent | undefined;
+      expect(completed).toBeDefined();
+      expect(findings).toBeDefined();
+      expect(completed!.event_payload.analysis_id).toBe(findings!.event_payload.analysis_id);
+      expect(completed!.event_payload.findings_count).toBe(2);
+      expect(completed!.event_payload.exit_code).toBe(EXIT_CODE_SECRETS_FOUND);
+      expect(JSON.parse(findings!.event_payload.details)).toEqual({
+        rule_keys: ['typescript:S1234'],
+        counts_by_rule: { 'typescript:S1234': 2 },
+      });
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('sonar analyze — analysis telemetry', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  function findingsPath(): string {
+    return join(harness.cliHome.path, 'telemetry', 'findings.ndjson');
+  }
+
+  function enableFlushTelemetry(): void {
+    harness.withExtraEnv({ [TELEMETRY_FLUSH_MODE_ENV]: '1' });
+  }
+
+  function readCompletedEventsForAnalyzer(
+    analyzer: 'sqaa' | 'sonar-secrets',
+  ): StoredAnalysisCompletedEvent[] {
+    const path = findingsPath();
+    if (!existsSync(path)) return [];
+    return readFileSync(path, 'utf-8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as StoredAnalysisEvent)
+      .filter(
+        (event): event is StoredAnalysisCompletedEvent =>
+          event.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
+          (event as StoredAnalysisCompletedEvent).event_payload.analyzer === analyzer,
+      );
+  }
+
+  it(
+    'writes separate CliAnalysisCompleted events for secrets and sqaa on bare analyze --file (text)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      enableFlushTelemetry();
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze --file src/index.ts');
+
+      expect(result.exitCode).toBe(0);
+      const secretsEvents = readCompletedEventsForAnalyzer('sonar-secrets');
+      const sqaaEvents = readCompletedEventsForAnalyzer('sqaa');
+      expect(secretsEvents).toHaveLength(1);
+      expect(sqaaEvents).toHaveLength(1);
+      expect(secretsEvents[0].event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.analyze);
+      expect(sqaaEvents[0].event_payload.caller_command).toBe(SQAA_ANALYZE_CALLER_COMMAND);
+      expect(secretsEvents[0].event_payload.findings_count).toBe(0);
+      expect(sqaaEvents[0].event_payload.findings_count).toBe(0);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'writes CliAnalysisCompleted with caller_command analyze on bare analyze --format json --file',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      enableFlushTelemetry();
+      harness
+        .state()
+        .withTelemetryEnabled()
+        .withSecretsBinaryInstalled()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze --format json --file src/index.ts');
+
+      expect(result.exitCode).toBe(0);
+      const secretsEvents = readCompletedEventsForAnalyzer('sonar-secrets');
+      const sqaaEvents = readCompletedEventsForAnalyzer('sqaa');
+      expect(secretsEvents).toHaveLength(1);
+      expect(sqaaEvents).toHaveLength(1);
+      expect(secretsEvents[0].event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.analyze);
+      expect(sqaaEvents[0].event_payload.caller_command).toBe(SQAA_ANALYZE_CALLER_COMMAND);
+    },
+    { timeout: 30000 },
   );
 });
 

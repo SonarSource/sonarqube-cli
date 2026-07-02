@@ -32,6 +32,10 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '../telemetry';
+import {
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_VERIFY_CALLER_COMMAND,
+} from '../telemetry/sqaa-analysis-telemetry.js';
 import { blank, error, warn } from '../ui';
 import { CommandFailedError } from './commands/_common/error';
 import { parseInteger } from './commands/_common/parsing';
@@ -48,6 +52,7 @@ import { analyzeSecrets, type AnalyzeSecretsOptions } from './commands/analyze/s
 import {
   analyzeSqaa,
   type AnalyzeSqaaOptions,
+  type AnalyzeSqaaRunOptions,
   VALID_FORMATS as SQAA_FORMATS,
 } from './commands/analyze/sqaa';
 import { SQAA_DEPTH_CHOICES } from './commands/analyze/sqaa-depth';
@@ -422,10 +427,12 @@ function applyBaseAgenticOptions(cmd: SonarCommand): SonarCommand {
     .addOption(sqaaFormatOption);
 }
 
-function applySqaaOptions(cmd: SonarCommand): SonarCommand {
+function applySqaaOptions(cmd: SonarCommand, runOptions: AnalyzeSqaaRunOptions = {}): SonarCommand {
   return applyBaseAgenticOptions(cmd)
     .option('--branch <branch>', 'Branch name for analysis context')
-    .authenticatedAction((auth, options: AnalyzeSqaaOptions) => analyzeSqaa(options, auth));
+    .authenticatedAction((auth, options: AnalyzeSqaaOptions) =>
+      analyzeSqaa(options, auth, runOptions),
+    );
 }
 
 // Default action for `sonar analyze` (no subcommand): run all analyses (secrets + agentic).
@@ -489,6 +496,7 @@ applySqaaOptions(
   analyze
     .command('agentic')
     .description('Run server-side Agentic Analysis (SonarQube Cloud only). Limitations apply.'),
+  { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
 );
 
 // `verify` is deprecated in favour of `sonar analyze`.
@@ -496,6 +504,7 @@ const verifyCmd = applySqaaOptions(
   COMMAND_TREE.command('verify', { hidden: true }).description(
     "Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)",
   ),
+  { telemetryCallerCommand: SQAA_VERIFY_CALLER_COMMAND },
 );
 verifyCmd.hook('preAction', () => {
   warn(

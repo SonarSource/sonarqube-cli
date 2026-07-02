@@ -26,7 +26,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolveAuth } from '../../../lib/auth-resolver';
 import { canonicalizePath, toRelativePosixPath } from '../../../lib/fs-utils';
 import logger from '../../../lib/logger';
-import { submitValidatedSqaaAnalysis } from '../analyze/sqaa-api';
+import { timed } from '../../../lib/timed.js';
+import {
+  emitSqaaHookFailureTelemetry,
+  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '../../../telemetry/sqaa-analysis-telemetry.js';
+import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.js';
 import { formatSqaaIssuesForHook, writePostToolUseHookOutput } from './format-sqaa-hook-context';
 import { readStdinJson } from './stdin';
 
@@ -38,6 +44,11 @@ interface PostToolUsePayload {
 export interface AgentPostToolUseOptions {
   project?: string;
 }
+
+const CLAUDE_HOOK_TELEMETRY_OPTIONS = {
+  telemetryCallerCommand: SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} as const;
 
 export async function agentPostToolUse(options: AgentPostToolUseOptions): Promise<void> {
   let payload: PostToolUsePayload;
@@ -54,7 +65,10 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
   if (!filePath || !existsSync(filePath)) return;
 
   const auth = await resolveAuth().catch(() => null);
-  if (auth?.connectionType !== 'cloud' || !auth.orgKey) return;
+  if (auth?.connectionType !== 'cloud') return;
+
+  const orgKey = auth.orgKey;
+  if (!orgKey) return;
 
   const projectKey = options.project;
   if (!projectKey) return;
@@ -66,18 +80,51 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
     return;
   }
 
+  const runStart = performance.now();
+  let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
   try {
     const fileContent = readFileSync(canonicalPath, 'utf-8');
+    const cloudAuth = { serverUrl: auth.serverUrl, token: auth.token, orgKey };
 
-    const response = await submitValidatedSqaaAnalysis(
-      { serverUrl: auth.serverUrl, token: auth.token, orgKey: auth.orgKey },
-      projectKey,
-      [{ path: normalizedPath, content: fileContent }],
+    const timedFetch = await timed(() =>
+      fetchSingleFileReport(
+        cloudAuth,
+        projectKey,
+        canonicalPath,
+        fileContent,
+        undefined,
+        undefined,
+        'STANDARD',
+      ),
     );
+    fetchResult = timedFetch.result;
 
-    const text = formatSqaaIssuesForHook(response.issues, response.errors, normalizedPath);
+    await finishSqaaTelemetryFromReport(
+      fetchResult.report,
+      auth,
+      CLAUDE_HOOK_TELEMETRY_OPTIONS,
+      timedFetch.durationMs,
+    ).catch(() => undefined);
+  } catch (err) {
+    await emitSqaaHookFailureTelemetry(
+      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      auth,
+      Math.round(performance.now() - runStart),
+    ).catch(() => undefined);
+    logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
+    return;
+  }
+
+  if (fetchResult.error) {
+    logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);
+    return;
+  }
+
+  try {
+    const file = fetchResult.report.files[0];
+    const text = formatSqaaIssuesForHook(file.issues, file.errors, normalizedPath);
     writePostToolUseHookOutput(text);
   } catch (err) {
-    logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
+    logger.debug(`PostToolUse SQAA hook output failed: ${(err as Error).message}`);
   }
 }

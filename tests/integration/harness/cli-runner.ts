@@ -74,11 +74,11 @@ export async function runCli(
   const startTime = Date.now();
   mkdirSync(options.cwd, { recursive: true });
 
+  // Isolation vars win over caller env. Telemetry tests opt in by setting DO_NOT_TRACK=0
+  // in harness.env() when withTelemetryEnabled() is used — re-apply that single override.
   const spawnEnv: Record<string, string> = { ...env, ...ISOLATED_CLI_SPAWN_ENV };
-  // ISOLATED_CLI_SPAWN_ENV force-disables telemetry (DO_NOT_TRACK=1). Let an explicit
-  // DO_NOT_TRACK from the caller's env win, so telemetry-opted tests can exercise the sink.
-  if (ENV_DO_NOT_TRACK in env) {
-    spawnEnv[ENV_DO_NOT_TRACK] = env[ENV_DO_NOT_TRACK];
+  if (env[ENV_DO_NOT_TRACK] === '0') {
+    spawnEnv[ENV_DO_NOT_TRACK] = '0';
   }
   if (coverageMode) {
     mkdirSync(COVERAGE_RAW_DIR, { recursive: true });

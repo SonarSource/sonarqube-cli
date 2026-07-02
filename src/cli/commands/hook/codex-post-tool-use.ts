@@ -22,7 +22,13 @@
 
 import { resolveAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
+import {
+  emitSqaaHookFailureTelemetry,
+  SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '../../../telemetry/sqaa-analysis-telemetry.js';
 import { buildSqaaJsonReport } from '../analyze/sqaa';
+import type { SqaaJsonReport } from '../analyze/sqaa-display.js';
 import {
   formatSqaaJsonReportForHook,
   writePostToolUseHookOutput,
@@ -32,6 +38,11 @@ export interface CodexPostToolUseOptions {
   project?: string;
 }
 
+const CODEX_HOOK_TELEMETRY_OPTIONS = {
+  telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+  telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} as const;
+
 export async function codexPostToolUse(options: CodexPostToolUseOptions): Promise<void> {
   const projectKey = options.project;
   if (!projectKey) return;
@@ -39,18 +50,32 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
   const auth = await resolveAuth().catch(() => null);
   if (auth?.connectionType !== 'cloud' || !auth.orgKey) return;
 
+  const runStart = performance.now();
+  let report: SqaaJsonReport | null;
   try {
-    const report = await buildSqaaJsonReport(
+    report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
       auth,
+      CODEX_HOOK_TELEMETRY_OPTIONS,
     );
-    if (!report) return;
+  } catch (err) {
+    await emitSqaaHookFailureTelemetry(
+      SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+      auth,
+      Math.round(performance.now() - runStart),
+    ).catch(() => undefined);
+    logger.debug(`Codex PostToolUse SQAA analysis failed: ${(err as Error).message}`);
+    return;
+  }
 
+  if (!report) return;
+
+  try {
     const text = formatSqaaJsonReportForHook(report);
     if (text) {
       writePostToolUseHookOutput(text);
     }
   } catch (err) {
-    logger.debug(`Codex PostToolUse SQAA analysis failed: ${(err as Error).message}`);
+    logger.debug(`Codex PostToolUse SQAA hook output failed: ${(err as Error).message}`);
   }
 }

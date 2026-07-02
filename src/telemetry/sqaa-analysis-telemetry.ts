@@ -28,11 +28,48 @@ import { emitAnalysisCompleted, emitAnalysisFindingsDetected } from './findings.
 
 export const SQAA_DETAILS_SCHEMA_VERSION = 1;
 
+export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
+
 export const SQAA_ANALYZE_AGENTIC_CALLER_COMMAND = 'analyze agentic';
+
+export const SQAA_VERIFY_CALLER_COMMAND = 'verify';
 
 export const SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND = 'claude-post-tool-use';
 
 export const SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND = 'codex-post-tool-use';
+
+export type SqaaTelemetryCallerCommand =
+  | typeof SQAA_ANALYZE_CALLER_COMMAND
+  | typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND
+  | typeof SQAA_VERIFY_CALLER_COMMAND
+  | typeof SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND
+  | typeof SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND;
+
+/**
+ * PostToolUse SQAA hooks are non-blocking (process always exits 0). Telemetry should
+ * record that real exit, not the would-be CLI exit. Use findings_count, errors_count,
+ * and failures_count for analysis outcomes.
+ */
+export const SQAA_HOOK_TELEMETRY_EXIT_CODE = 0;
+
+/**
+ * Emits CliAnalysisCompleted for a hook run that failed before or during analysis
+ * (e.g. buildSqaaJsonReport threw). Uses {@link SQAA_HOOK_TELEMETRY_EXIT_CODE} because
+ * hooks never block the agent process.
+ */
+export async function emitSqaaHookFailureTelemetry(
+  callerCommand: SqaaTelemetryCallerCommand,
+  auth: ResolvedAuth,
+  durationMs: number,
+): Promise<void> {
+  await emitSqaaAnalysisTelemetry(
+    callerCommand,
+    auth,
+    { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
+    durationMs,
+    SQAA_HOOK_TELEMETRY_EXIT_CODE,
+  );
+}
 
 export interface SqaaRuleCountsDetails {
   rule_keys: string[];
@@ -59,28 +96,6 @@ function collectIssuesFromTally(tally: RunTally): SqaaIssue[] {
     issues.push(...result.issues);
   }
   return issues;
-}
-
-/** Builds a RunTally from a single-file SQAA API response (PostToolUse hook path). */
-export function tallyFromSqaaResponse(
-  filePath: string,
-  issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
-): RunTally {
-  const allResults: FileResult[] = [
-    {
-      file: filePath,
-      filePath,
-      issues,
-      errors,
-    },
-  ];
-  return {
-    allResults,
-    totalIssues: issues.length,
-    totalErrors: errors?.length ?? 0,
-    totalFailures: 0,
-  };
 }
 
 /** Builds a RunTally from a SQAA JSON report (change-set / Codex hook path). */
@@ -119,15 +134,14 @@ export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
  * for one SQAA run. No-ops when telemetry is disabled.
  *
  * Pass `exitCode` from the command handler. Omit or pass `null` when the invocation has no exit.
+ * PostToolUse hooks pass {@link SQAA_HOOK_TELEMETRY_EXIT_CODE} (always 0) because they never
+ * set `process.exitCode`; use counts fields for analysis outcomes.
  *
  * `errors_count` is {@link RunTally.totalErrors} only (API `errors[]` on successful analyses).
  * `failures_count` is {@link RunTally.totalFailures} (per-file analysis failures).
  */
 export async function emitSqaaAnalysisTelemetry(
-  callerCommand:
-    | typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND
-    | typeof SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND
-    | typeof SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+  callerCommand: SqaaTelemetryCallerCommand,
   auth: ResolvedAuth,
   tally: RunTally,
   durationMs: number,

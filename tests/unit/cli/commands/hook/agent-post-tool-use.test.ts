@@ -24,9 +24,15 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { agentPostToolUse } from '../../../../../src/cli/commands/hook/agent-post-tool-use';
+import * as hookOutput from '../../../../../src/cli/commands/hook/format-sqaa-hook-context';
 import * as stdinModule from '../../../../../src/cli/commands/hook/stdin';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
 import * as clientModule from '../../../../../src/sonarqube/client';
+import * as sqaaTelemetry from '../../../../../src/telemetry/sqaa-analysis-telemetry.js';
+import {
+  SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '../../../../../src/telemetry/sqaa-analysis-telemetry.js';
 
 // Real path inside cwd so realpathSync resolves consistently for file and cwd.
 const TEST_FILE = join(process.cwd(), 'src/index.ts');
@@ -38,6 +44,7 @@ describe('agentPostToolUse', () => {
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSyncSpy: ReturnType<typeof spyOn>;
   let createAnalysisSpy: ReturnType<typeof spyOn>;
+  let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -57,6 +64,10 @@ describe('agentPostToolUse', () => {
       clientModule.SonarQubeClient.prototype,
       'createAnalysis',
     ).mockResolvedValue({ id: 'analysis-id', issues: [], errors: null });
+    emitSqaaAnalysisTelemetrySpy = spyOn(
+      sqaaTelemetry,
+      'emitSqaaAnalysisTelemetry',
+    ).mockImplementation(() => Promise.resolve());
   });
 
   afterEach(() => {
@@ -66,6 +77,43 @@ describe('agentPostToolUse', () => {
     existsSyncSpy.mockRestore();
     readFileSyncSpy.mockRestore();
     createAnalysisSpy.mockRestore();
+    emitSqaaAnalysisTelemetrySpy.mockRestore();
+  });
+
+  it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {
+    await agentPostToolUse({ project: 'my-project' });
+
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      expect.objectContaining({ connectionType: 'cloud' }),
+      expect.objectContaining({ totalIssues: 0, totalFailures: 0 }),
+      expect.any(Number),
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
+  });
+
+  it('records hook exit_code 0 in telemetry even when issues are found', async () => {
+    createAnalysisSpy.mockResolvedValue({
+      id: 'analysis-id',
+      issues: [
+        {
+          rule: 'java:S1234',
+          message: 'Fix this',
+          textRange: { startLine: 10, endLine: 10, startOffset: 0, endOffset: 5 },
+        },
+      ],
+      errors: null,
+    });
+
+    await agentPostToolUse({ project: 'my-project' });
+
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      expect.objectContaining({ connectionType: 'cloud' }),
+      expect.objectContaining({ totalIssues: 1, totalFailures: 0 }),
+      expect.any(Number),
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
   });
 
   it('writes additionalContext JSON when analysis returns no issues', async () => {
@@ -187,6 +235,67 @@ describe('agentPostToolUse', () => {
     await agentPostToolUse({ project: 'my-project' });
 
     expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      expect.objectContaining({ connectionType: 'cloud' }),
+      expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
+      expect.any(Number),
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
+  });
+
+  it('emits failure telemetry when readFileSync throws', async () => {
+    readFileSyncSpy.mockImplementation(() => {
+      throw new Error('EACCES');
+    });
+
+    await agentPostToolUse({ project: 'my-project' });
+
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      expect.objectContaining({ connectionType: 'cloud' }),
+      expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
+      expect.any(Number),
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
+  });
+
+  it('emits failure telemetry when analysis API returns an error result', async () => {
+    createAnalysisSpy.mockRejectedValue(new Error('API unavailable'));
+
+    await agentPostToolUse({ project: 'my-project' });
+
+    expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      expect.objectContaining({ connectionType: 'cloud' }),
+      expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
+      expect.any(Number),
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
+  });
+
+  it('does not emit failure telemetry when hook output fails after analysis telemetry', async () => {
+    const emitSqaaHookFailureTelemetrySpy = spyOn(
+      sqaaTelemetry,
+      'emitSqaaHookFailureTelemetry',
+    ).mockImplementation(() => Promise.resolve());
+    const writeHookOutputSpy = spyOn(hookOutput, 'writePostToolUseHookOutput').mockImplementation(
+      () => {
+        throw new Error('stdout closed');
+      },
+    );
+
+    await agentPostToolUse({ project: 'my-project' });
+
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledTimes(1);
+    expect(emitSqaaHookFailureTelemetrySpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+
+    emitSqaaHookFailureTelemetrySpy.mockRestore();
+    writeHookOutputSpy.mockRestore();
   });
 
   it('includes errors in additionalContext when analysis returns errors', async () => {
