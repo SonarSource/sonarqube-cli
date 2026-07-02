@@ -45,7 +45,6 @@ import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_DETAILS_SCHEMA_VERSION,
   tallyFromSqaaJsonReport,
-  tallyFromSqaaResponse,
 } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
 
@@ -144,25 +143,6 @@ describe('collectRuleCounts()', () => {
       rule_keys: ['sqaa:S1234', 'sqaa:S5678'],
       counts_by_rule: { 'sqaa:S1234': 2, 'sqaa:S5678': 1 },
     });
-  });
-});
-
-describe('tallyFromSqaaResponse()', () => {
-  it('builds a RunTally from a single-file API response', () => {
-    const tally = tallyFromSqaaResponse(
-      'src/a.ts',
-      [makeIssue('sqaa:S1234')],
-      [{ code: 'E1', message: 'API warning' }],
-    );
-
-    expect(tally.totalIssues).toBe(1);
-    expect(tally.totalErrors).toBe(1);
-    expect(tally.totalFailures).toBe(0);
-    expect(tally.allResults).toHaveLength(1);
-    if ('issues' in tally.allResults[0]) {
-      expect(tally.allResults[0].filePath).toBe('src/a.ts');
-      expect(tally.allResults[0].issues).toHaveLength(1);
-    }
   });
 });
 

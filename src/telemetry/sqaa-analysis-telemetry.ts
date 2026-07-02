@@ -98,28 +98,6 @@ function collectIssuesFromTally(tally: RunTally): SqaaIssue[] {
   return issues;
 }
 
-/** Builds a RunTally from a single-file SQAA API response (PostToolUse hook path). */
-export function tallyFromSqaaResponse(
-  filePath: string,
-  issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
-): RunTally {
-  const allResults: FileResult[] = [
-    {
-      file: filePath,
-      filePath,
-      issues,
-      errors,
-    },
-  ];
-  return {
-    allResults,
-    totalIssues: issues.length,
-    totalErrors: errors?.length ?? 0,
-    totalFailures: 0,
-  };
-}
-
 /** Builds a RunTally from a SQAA JSON report (change-set / Codex hook path). */
 export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
   const allResults: FileResult[] = [];
