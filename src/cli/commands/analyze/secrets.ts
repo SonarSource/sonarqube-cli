@@ -26,7 +26,6 @@ import logger from '../../../lib/logger';
 import type { SpawnResult, StdioMode } from '../../../lib/process';
 import { spawnProcessWithTimeout } from '../../../lib/process';
 import {
-  buildAnalysisIdentityBase,
   emitAnalysisCompleted,
   emitAnalysisFindingsDetected,
 } from '../../../telemetry/findings.js';
@@ -43,6 +42,8 @@ import { installSecretsBinary } from '../_common/install/secrets';
 export interface AnalyzeSecretsOptions {
   paths?: string[];
   stdin?: boolean;
+  /** Defaults to {@link SECRETS_CALLER_COMMANDS.analyzeSecrets}. Bare `analyze` passes `analyze`. */
+  telemetryCallerCommand?: SecretsCallerCommand;
 }
 
 /** A single finding from sonar-secrets `--json` output. */
@@ -101,7 +102,7 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
 
 /**
  * Emits CliAnalysisCompleted (always) and CliAnalysisFindingsDetected (when findings > 0)
- * for one sonar-secrets run. Fire-and-forget — telemetry failures are swallowed.
+ * for one sonar-secrets run. Telemetry write failures are swallowed by the emit helpers.
  *
  * Pass `result: null` for a run that failed to execute (spawn error or timeout): the completed
  * event is emitted with `exit_code: null` and `failures_count: 1` so failed-to-run scans are
@@ -114,9 +115,6 @@ async function emitSecretsRunTelemetry(
   durationMs: number,
 ): Promise<SecretsJsonOutput> {
   const parsed = result ? parseSecretsJson(result.stdout) : { issues: [] };
-
-  const base = await buildAnalysisIdentityBase(auth);
-  if (!base) return parsed;
 
   const { issues, errors } = parsed;
   const exitCode = result?.exitCode ?? null;
@@ -272,16 +270,15 @@ async function handleCheckCommand(
   validateScanOptions(options);
   const binaryPath = await installSecretsBinary();
   const scanStartTime = Date.now();
+  const callerCommand = options.telemetryCallerCommand ?? SECRETS_CALLER_COMMANDS.analyzeSecrets;
 
   if (options.stdin) {
-    const { result, parsed } = await scanAndEmitSecrets(
-      SECRETS_CALLER_COMMANDS.analyzeSecrets,
-      auth,
-      () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+    const { result, parsed } = await scanAndEmitSecrets(callerCommand, auth, () =>
+      runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
     );
     reportScanResult(result, parsed, scanStartTime, { paths: [] });
   } else {
-    await performPathsScan(binaryPath, options.paths ?? [], auth, scanStartTime);
+    await performPathsScan(binaryPath, options.paths ?? [], auth, scanStartTime, callerCommand);
   }
 }
 
@@ -301,6 +298,7 @@ async function performPathsScan(
   paths: string[],
   auth: ResolvedAuth,
   scanStartTime: number,
+  callerCommand: SecretsCallerCommand,
 ): Promise<void> {
   if (paths.length === 0) {
     throw new InvalidOptionError('At least one path is required');
@@ -312,10 +310,8 @@ async function performPathsScan(
     }
   }
 
-  const { result, parsed } = await scanAndEmitSecrets(
-    SECRETS_CALLER_COMMANDS.analyzeSecrets,
-    auth,
-    () => runSecretsBinary(binaryPath, paths, auth),
+  const { result, parsed } = await scanAndEmitSecrets(callerCommand, auth, () =>
+    runSecretsBinary(binaryPath, paths, auth),
   );
   reportScanResult(result, parsed, scanStartTime, { paths });
 }

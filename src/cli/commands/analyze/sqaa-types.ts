@@ -20,7 +20,7 @@
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver.js';
 import type { SqaaAnalysisDepth } from '../../../sonarqube/client.js';
-import type { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '../../../telemetry/sqaa-analysis-telemetry.js';
+import type { SqaaTelemetryCallerCommand } from '../../../telemetry/sqaa-analysis-telemetry.js';
 import type { CloudAuth } from './sqaa-auth.js';
 import type { SqaaDeepWireDepth } from './sqaa-depth.js';
 
@@ -29,7 +29,9 @@ export type OutputFormat = (typeof VALID_FORMATS)[number];
 
 export interface AnalyzeSqaaRunOptions {
   requireProject?: boolean;
-  telemetryCallerCommand?: typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND;
+  telemetryCallerCommand?: SqaaTelemetryCallerCommand;
+  /** Overrides computed CLI exit for telemetry only (e.g. non-blocking hooks always exit 0). */
+  telemetryProcessExitCode?: number | null;
 }
 
 export interface AnalyzeSqaaOptions {
@@ -57,7 +59,7 @@ export interface SqaaBatchRunOptions {
   format?: OutputFormat;
   wireDepth?: SqaaDeepWireDepth;
   displayDepth?: SqaaAnalysisDepth;
-  telemetryCallerCommand?: typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND;
+  telemetryCallerCommand?: SqaaTelemetryCallerCommand;
 }
 
 export interface SingleFileRunOptions {
@@ -67,5 +69,5 @@ export interface SingleFileRunOptions {
   requireProject?: boolean;
   wireDepth?: SqaaDeepWireDepth;
   displayDepth?: SqaaAnalysisDepth;
-  telemetryCallerCommand?: typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND;
+  telemetryCallerCommand?: SqaaTelemetryCallerCommand;
 }

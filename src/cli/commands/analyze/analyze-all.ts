@@ -19,6 +19,8 @@
  */
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
+import { SECRETS_CALLER_COMMANDS } from '../../../telemetry/secrets-analysis-telemetry.js';
+import { SQAA_ANALYZE_CALLER_COMMAND } from '../../../telemetry/sqaa-analysis-telemetry.js';
 import {
   blank,
   getMessagesForFormattedOutput,
@@ -33,6 +35,7 @@ import {
   EXIT_CODE_SECRETS_FOUND,
   parseSecretsJson,
   runSecretsBinary,
+  scanAndEmitSecrets,
 } from './secrets';
 import type { OutputFormat } from './sqaa';
 import { analyzeSqaa, buildSqaaJsonReport } from './sqaa';
@@ -89,9 +92,10 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const paths = entries.map((e) => e.absolutePath);
-    await analyzeSecrets({ paths }, auth);
+    await analyzeSecrets({ paths, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze }, auth);
     await analyzeSqaa({ file: paths, project, force, format, depth }, auth, {
       requireProject: false,
+      telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
     });
     return;
   }
@@ -107,13 +111,17 @@ export async function analyzeAll(options: AnalyzeAllOptions, auth: ResolvedAuth)
     return;
   }
 
-  await analyzeSecrets({ paths: changeSet.files }, auth);
+  await analyzeSecrets(
+    { paths: changeSet.files, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze },
+    auth,
+  );
   // analyzeSqaa resolves the change set again internally. The two resolutions may
   // cover slightly different sets if the working tree changes between calls — this
   // is acceptable since the analyses are independent and best-effort.
   // requireProject: false → bare `analyze` skips agentic gracefully when unconfigured.
   await analyzeSqaa({ staged, base, project, force, format, depth }, auth, {
     requireProject: false,
+    telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
   });
 }
 
@@ -152,7 +160,11 @@ async function runSecretsAndAgentic(
 ): Promise<void> {
   const secrets = await runSecretsScan(files, auth);
   const secretsFailed = secrets !== null && secrets.exitCode !== 0;
-  const agentic = secretsFailed ? null : await buildSqaaJsonReport(options, auth);
+  const agentic = secretsFailed
+    ? null
+    : await buildSqaaJsonReport(options, auth, {
+        telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
+      });
 
   printCombinedReport(secrets?.report ?? null, agentic);
 
@@ -170,7 +182,9 @@ async function runSecretsScan(
   const binaryPath = resolveSecretsBinaryPath();
   if (binaryPath === null) return null;
 
-  const result = await runSecretsBinary(binaryPath, files, auth);
+  const { result } = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyze, auth, () =>
+    runSecretsBinary(binaryPath, files, auth),
+  );
   const exitCode = result.exitCode ?? EXIT_CODE_SECRETS_FOUND;
   const { issues, errors } = parseSecretsJson(result.stdout);
   // Exit 0 (clean) and EXIT_CODE_SECRETS_FOUND (secrets found) are both expected outcomes. Any

@@ -22,12 +22,19 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import * as sqaaModule from '../../../../../src/cli/commands/analyze/sqaa';
 import { codexPostToolUse } from '../../../../../src/cli/commands/hook/codex-post-tool-use';
+import * as hookOutput from '../../../../../src/cli/commands/hook/format-sqaa-hook-context';
 import * as authResolver from '../../../../../src/lib/auth-resolver';
+import * as sqaaTelemetry from '../../../../../src/telemetry/sqaa-analysis-telemetry.js';
+import {
+  SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_HOOK_TELEMETRY_EXIT_CODE,
+} from '../../../../../src/telemetry/sqaa-analysis-telemetry.js';
 
 describe('codexPostToolUse', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let buildSqaaJsonReportSpy: ReturnType<typeof spyOn>;
+  let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -45,12 +52,17 @@ describe('codexPostToolUse', () => {
       summary: { totalIssues: 0, totalFailures: 0, totalSkipped: 0 },
       analysisDepth: 'STANDARD',
     });
+    emitSqaaAnalysisTelemetrySpy = spyOn(
+      sqaaTelemetry,
+      'emitSqaaAnalysisTelemetry',
+    ).mockImplementation(() => Promise.resolve());
   });
 
   afterEach(() => {
     stdoutSpy.mockRestore();
     resolveAuthSpy.mockRestore();
     buildSqaaJsonReportSpy.mockRestore();
+    emitSqaaAnalysisTelemetrySpy.mockRestore();
   });
 
   it('writes additionalContext when change-set analysis finds no issues', async () => {
@@ -59,6 +71,10 @@ describe('codexPostToolUse', () => {
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
       { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
       expect.objectContaining({ connectionType: 'cloud' }),
+      {
+        telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+        telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+      },
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
@@ -160,6 +176,33 @@ describe('codexPostToolUse', () => {
     await codexPostToolUse({ project: 'my-project' });
 
     expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+      SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+      expect.objectContaining({ connectionType: 'cloud' }),
+      expect.objectContaining({ totalIssues: 0, totalFailures: 1 }),
+      expect.any(Number),
+      SQAA_HOOK_TELEMETRY_EXIT_CODE,
+    );
+  });
+
+  it('does not emit failure telemetry when hook output fails after analysis telemetry', async () => {
+    const emitSqaaHookFailureTelemetrySpy = spyOn(
+      sqaaTelemetry,
+      'emitSqaaHookFailureTelemetry',
+    ).mockImplementation(() => undefined);
+    const writeHookOutputSpy = spyOn(hookOutput, 'writePostToolUseHookOutput').mockImplementation(
+      () => {
+        throw new Error('stdout closed');
+      },
+    );
+
+    await codexPostToolUse({ project: 'my-project' });
+
+    expect(emitSqaaHookFailureTelemetrySpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+
+    emitSqaaHookFailureTelemetrySpy.mockRestore();
+    writeHookOutputSpy.mockRestore();
   });
 
   it('skips output when buildSqaaJsonReport returns null', async () => {

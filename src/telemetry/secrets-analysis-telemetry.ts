@@ -21,6 +21,8 @@
 // Telemetry constants for the sonar-secrets analyzer's CliAnalysisCompleted /
 // CliAnalysisFindingsDetected events. Versioned independently of other analyzers
 // (e.g. SQAA) because each analyzer owns the shape of its own `details` blob.
+// Bare `sonar analyze` uses caller_command `analyze` (same as SQAA); the dedicated
+// `analyze secrets` subcommand uses `analyze secrets`.
 
 /**
  * Schema version of the sonar-secrets CliAnalysisFindingsDetected `details` blob
@@ -35,6 +37,7 @@ export const SECRETS_DETAILS_SCHEMA_VERSION = 1;
  * (they are distinguished by `caller_agent`, not `caller_command`).
  */
 export const SECRETS_CALLER_COMMANDS = {
+  analyze: 'analyze',
   analyzeSecrets: 'analyze secrets',
   analyzeDependencyRisks: 'analyze dependency-risks',
   gitPreCommit: 'git-pre-commit',

@@ -32,7 +32,10 @@ import {
   storeEvent,
   TELEMETRY_FLUSH_MODE_ENV,
 } from '../telemetry';
-import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '../telemetry/sqaa-analysis-telemetry.js';
+import {
+  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  SQAA_VERIFY_CALLER_COMMAND,
+} from '../telemetry/sqaa-analysis-telemetry.js';
 import { blank, error, warn } from '../ui';
 import { CommandFailedError } from './commands/_common/error';
 import { parseInteger } from './commands/_common/parsing';
@@ -501,6 +504,7 @@ const verifyCmd = applySqaaOptions(
   COMMAND_TREE.command('verify', { hidden: true }).description(
     "Run server-side SonarQube Agentic Analysis (deprecated — use 'sonar analyze' instead)",
   ),
+  { telemetryCallerCommand: SQAA_VERIFY_CALLER_COMMAND },
 );
 verifyCmd.hook('preAction', () => {
   warn(

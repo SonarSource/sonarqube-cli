@@ -487,8 +487,11 @@ export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayl
   analysis_id: string;
   findings_count: number;
   /**
-   * Command exit code when the handler sets one (SQAA: 0/51/1/2 via `applyExitCode` or
-   * `CliError`). Null when the run has no command exit semantics or the code is unknown.
+   * Per-analyzer outcome exit code, not the combined command's final `process.exitCode`
+   * when multiple analyzers run (e.g. bare `analyze` may emit secrets exit 51 and sqaa exit 0).
+   *
+   * sonar-secrets: spawn exit (0 clean, 51 findings, null when the scan failed to run).
+   * SQAA CLI paths: 0 / 51 / 1 from issue and failure counts. SQAA PostToolUse hooks: always 0.
    */
   exit_code: number | null;
   /**

@@ -23,7 +23,7 @@ import { timed } from '../../../lib/timed.js';
 import type { SqaaAnalysisDepth } from '../../../sonarqube/client.js';
 import {
   emitSqaaAnalysisTelemetry,
-  type SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
+  type SqaaTelemetryCallerCommand,
   tallyFromSqaaJsonReport,
 } from '../../../telemetry/sqaa-analysis-telemetry.js';
 import { print } from '../../../ui';
@@ -49,6 +49,7 @@ import {
 } from './sqaa-display.js';
 import type { ResolvedSqaaFileEntry } from './sqaa-file-arg.js';
 import type {
+  AnalyzeSqaaRunOptions,
   SingleFileRunOptions,
   SqaaBatchRunOptions,
   SqaaResolvedContext,
@@ -60,21 +61,44 @@ function resolveSqaaCommandExitCode(totalIssues: number, totalFailures: number):
   return 0;
 }
 
-function emitSqaaTelemetryIfRequested(
-  telemetryCallerCommand: typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND | undefined,
+async function emitSqaaTelemetryIfRequested(
+  telemetryCallerCommand: SqaaTelemetryCallerCommand | undefined,
   auth: ResolvedAuth,
   tally: RunTally,
   durationMs: number,
   exitCode: number,
-): void {
+): Promise<void> {
   if (!telemetryCallerCommand) return;
-  emitSqaaAnalysisTelemetry(telemetryCallerCommand, auth, tally, durationMs, exitCode);
+  await emitSqaaAnalysisTelemetry(telemetryCallerCommand, auth, tally, durationMs, exitCode);
 }
 
-function finishSqaaRun(tally: RunTally, durationMs: number, options: SqaaBatchRunOptions): void {
+export async function finishSqaaTelemetryFromReport(
+  report: SqaaJsonReport,
+  auth: ResolvedAuth,
+  runOptions: AnalyzeSqaaRunOptions,
+  durationMs: number,
+): Promise<void> {
+  if (!runOptions.telemetryCallerCommand) return;
+  const exitCode =
+    runOptions.telemetryProcessExitCode ??
+    resolveSqaaCommandExitCode(report.summary.totalIssues, report.summary.totalFailures);
+  await emitSqaaTelemetryIfRequested(
+    runOptions.telemetryCallerCommand,
+    auth,
+    tallyFromSqaaJsonReport(report),
+    durationMs,
+    exitCode,
+  );
+}
+
+async function finishSqaaRun(
+  tally: RunTally,
+  durationMs: number,
+  options: SqaaBatchRunOptions,
+): Promise<void> {
   const exitCode = resolveSqaaCommandExitCode(tally.totalIssues, tally.totalFailures);
   applyExitCode(tally.totalIssues, tally.totalFailures);
-  emitSqaaTelemetryIfRequested(
+  await emitSqaaTelemetryIfRequested(
     options.telemetryCallerCommand,
     options.auth,
     tally,
@@ -185,7 +209,7 @@ export async function runSqaaAnalysis(
     report.summary.totalFailures,
   );
   applyExitCode(report.summary.totalIssues, report.summary.totalFailures);
-  emitSqaaTelemetryIfRequested(
+  await emitSqaaTelemetryIfRequested(
     telemetryCallerCommand,
     auth,
     tallyFromSqaaJsonReport(report),
@@ -208,7 +232,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
       runSqaaAnalysesTallyForResolved(files, allPaths, resolved, branch, wireDepth, displayDepth),
     );
     printJsonReport(tally, [], allPaths, cwd, displayDepth);
-    finishSqaaRun(tally, durationMs, options);
+    await finishSqaaRun(tally, durationMs, options);
     return;
   }
 
@@ -227,7 +251,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
     const { result: tally, durationMs } = await timed(() => runAnalyses(ctx));
     progress.finish();
     printSqaaTextReport({ tally, allPaths, ignoredPaths: [], analysisDepth: displayDepth });
-    finishSqaaRun(tally, durationMs, options);
+    await finishSqaaRun(tally, durationMs, options);
   } catch (err) {
     progress.finish();
     throw err;
@@ -248,7 +272,7 @@ export async function runSqaaAnalysisOnFiles(
       runSqaaAnalysesTallyForResolved(files, allPaths, resolved, branch, wireDepth, displayDepth),
     );
     printJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
-    finishSqaaRun(tally, durationMs, options);
+    await finishSqaaRun(tally, durationMs, options);
     return;
   }
 
@@ -268,7 +292,7 @@ export async function runSqaaAnalysisOnFiles(
     const { result: tally, durationMs } = await timed(() => runAnalyses(ctx));
     progress.finish();
     printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth });
-    finishSqaaRun(tally, durationMs, options);
+    await finishSqaaRun(tally, durationMs, options);
   } catch (err) {
     progress.finish();
     throw err;
