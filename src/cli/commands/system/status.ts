@@ -73,8 +73,8 @@ const CA_CERT_SOURCE_LABELS: Record<ConfigSource, string> = {
   'generic-env': 'NODE_EXTRA_CA_CERTS environment variable',
 };
 
-const MTLS_SOURCE_LABEL =
-  'SONAR_MTLS_CERT, SONAR_MTLS_KEY_FILE, SONAR_MTLS_PASSPHRASE environment variables';
+const CLIENT_CERT_SOURCE_LABEL =
+  'SONAR_TLS_CLIENT_CERT, SONAR_TLS_CLIENT_KEY_FILE, SONAR_TLS_CLIENT_PASSPHRASE environment variables';
 
 const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SECRETS_SPEC.name]: SECRETS_SPEC.version,
@@ -491,7 +491,8 @@ function buildRecommendations(
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
   if (tokenStatus?.status === 'invalid')
     recommendations.push("Run 'sonar auth login' to reauthenticate");
-  if (network.error !== undefined) recommendations.push(`Fix mTLS configuration: ${network.error}`);
+  if (network.error !== undefined)
+    recommendations.push(`Fix client certificate configuration: ${network.error}`);
   if (updateResult && !updateResult.upToDate) {
     recommendations.push(
       `Run 'sonar self-update' to update to v${updateResult.latest.version.noBuild.text}`,
@@ -528,10 +529,10 @@ function tokenStatusLabel(tokenStatus: TokenCheckResult | null): string {
   return 'set_unverified';
 }
 
-function buildMtlsJson(network: ResolvedNetworkConfig) {
+function buildClientCertJson(network: ResolvedNetworkConfig) {
   if (network.clientCert) {
     return {
-      source: MTLS_SOURCE_LABEL,
+      source: CLIENT_CERT_SOURCE_LABEL,
       certPath: network.clientCert.certPath,
       ...(network.clientCert.keyPath !== null && { keyPath: network.clientCert.keyPath }),
       passphraseSet: Boolean(network.clientCert.passphrase),
@@ -604,7 +605,7 @@ function printJsonStatus(version: string, data: StatusData): void {
                 path: network.caCert.path,
               }
             : null,
-          mtls: buildMtlsJson(network),
+          clientCertificate: buildClientCertJson(network),
         },
         healthy: !hasIssues,
         recommendations,
@@ -705,12 +706,12 @@ function renderCaCertSubsection(caCert: CaCertConfig): void {
   text(`    • ${caCert.path}`);
 }
 
-function renderMtlsSubsection(
+function renderClientCertSubsection(
   clientCert: ClientCertConfig | null,
   error: string | undefined,
 ): void {
   blank();
-  text(`  mTLS Certificate (${MTLS_SOURCE_LABEL}):`);
+  text(`  Client Certificate (${CLIENT_CERT_SOURCE_LABEL}):`);
   if (clientCert) {
     text(`    • Certificate: ${clientCert.certPath}`);
     if (clientCert.keyPath !== null) {
@@ -740,7 +741,7 @@ function renderNetworkSection(network: ResolvedNetworkConfig): void {
     renderCaCertSubsection(network.caCert);
   }
   if (network.clientCert ?? network.error) {
-    renderMtlsSubsection(network.clientCert, network.error);
+    renderClientCertSubsection(network.clientCert, network.error);
   }
 }
 

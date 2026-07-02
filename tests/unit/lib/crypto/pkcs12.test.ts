@@ -27,7 +27,7 @@ import forge from 'node-forge';
 import { isPkcs12Path, pkcs12ToPem } from '../../../../src/lib/crypto/pkcs12';
 import { CryptographicError } from '../../../../src/lib/errors';
 
-const FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/mtls');
+const FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/client-cert');
 const P12_PATH = join(FIXTURE_DIR, 'client-cert.p12');
 const P12_UNENCRYPTED_KEY_PATH = join(FIXTURE_DIR, 'client-cert-unencrypted-key.p12');
 const CERT_PEM_PATH = join(FIXTURE_DIR, 'client-cert.pem');
