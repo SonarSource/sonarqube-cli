@@ -167,6 +167,7 @@ export const SCA_SCANNER_CLI_DIST_PREFIX = 'CommercialDistribution/sca-scanner-c
  * path embeds the platform: `${SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX}-${platform}/...`.
  */
 export const SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX = 'Distribution/sonar-context-augmentation';
+export const CLI_STABLE_VERSION_PATH = 'Distribution/sonarqube-cli/stable.version';
 export const UPDATE_SCRIPT_BASE_URL =
   'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
 

@@ -41,6 +41,7 @@ export {
   error,
   getMessagesForFormattedOutput,
   info,
+  isFormattedOutputMode,
   print,
   setFormattedOutputMode,
   success,

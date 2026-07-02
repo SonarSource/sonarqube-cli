@@ -37,6 +37,9 @@ export interface RootHelpMetadata {
   label?: string;
 }
 
+/** When to show the post-command update notice for a opted-in command. */
+export type UpdateNotificationCondition = (opts: Record<string, unknown>) => boolean;
+
 type CommandArgs = unknown[];
 type CommandResult = void | Promise<void>;
 
@@ -55,6 +58,7 @@ type CommandResult = void | Promise<void>;
 export class SonarCommand extends Command {
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
+  private _updateNotification?: true | UpdateNotificationCondition;
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
@@ -68,6 +72,16 @@ export class SonarCommand extends Command {
    */
   rootHelp(metadata: RootHelpMetadata): this {
     this._rootHelp = { ...this._rootHelp, ...metadata };
+    return this;
+  }
+
+  /**
+   * Opt in to the post-command "new version available" stderr notice.
+   * Pass a condition to show the notice only when it returns true for the
+   * merged action-command options (parsed by Commander).
+   */
+  updateNotification(when?: UpdateNotificationCondition): this {
+    this._updateNotification = when ?? true;
     return this;
   }
 
@@ -131,6 +145,11 @@ export class SonarCommand extends Command {
   /** Metadata used by the custom root help menu. */
   get rootHelpMetadata(): RootHelpMetadata {
     return this._rootHelp;
+  }
+
+  /** Update-notification opt-in and optional show condition for this command. */
+  get updateNotificationWhen(): true | UpdateNotificationCondition | undefined {
+    return this._updateNotification;
   }
 
   async runCommand(fn: () => Promise<void>): Promise<void> {
