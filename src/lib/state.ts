@@ -543,8 +543,38 @@ export interface StoredAnalysisCompletedEvent {
   event_payload: AnalysisCompletedEventPayload;
 }
 
+/**
+ * Payload for a CliIntegrationConfigured event.
+ * One event per successful `sonar integrate` run.
+ */
+export interface IntegrationConfiguredEventPayload extends AnalysisEventIdentityPayload {
+  /** Integration id, e.g. "claude", "codex", "git". */
+  integration_id: string;
+  /**
+   * SHA-256 hex (full 64 chars) of the canonical repo root path. Null when the
+   * run is `--global` or not inside a git repository.
+   */
+  repo_id: string | null;
+  /** Installed feature ids, including active subfeature ids. */
+  features_installed: string[];
+  /** Non-installed feature ids, including non-installed subfeature ids. */
+  features_skipped: string[];
+  is_global: boolean;
+  is_interactive: boolean;
+  /** True when invoked via the bare `sonar integrate` router, not `sonar integrate <tool>`. */
+  is_from_router: boolean;
+}
+
+/** Full CliIntegrationConfigured event written to findings.ndjson. */
+export interface StoredIntegrationConfiguredEvent {
+  metadata: AnalysisEventMetadataBase & {
+    event_type: 'Analytics.Cli.CliIntegrationConfigured';
+  };
+  event_payload: IntegrationConfiguredEventPayload;
+}
+
 /** Any event stored in findings.ndjson and drained by flushFindings. */
-export type StoredAnalysisEvent = StoredAnalysisCompletedEvent;
+export type StoredAnalysisEvent = StoredAnalysisCompletedEvent | StoredIntegrationConfiguredEvent;
 
 /**
  * Telemetry configuration and pending event batch

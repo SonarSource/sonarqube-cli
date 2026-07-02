@@ -121,6 +121,7 @@ export async function integrateClaude(
       auth: { ...auth, token: config.token },
       attrs: featureAttrs,
       nonInteractive: options.nonInteractive,
+      isFromRouter: options.isFromRouter,
     });
   } catch (error) {
     installError = error instanceof Error ? error : new Error(String(error));

@@ -93,6 +93,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     scope: installScope,
     auth,
     nonInteractive: options.nonInteractive,
+    isFromRouter: options.isFromRouter,
     attrs,
   });
 }

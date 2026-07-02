@@ -37,18 +37,21 @@ import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import type { SpawnResult } from '../../../src/lib/process.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { CliState } from '../../../src/lib/state.js';
 import type {
   AnalysisCompletedEventPayload,
+  CliState,
   StoredAnalysisCompletedEvent,
   StoredAnalysisEvent,
+  StoredIntegrationConfiguredEvent,
 } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
   type AnalysisCompletedFields,
   emitAnalysisCompleted,
+  emitIntegrationConfigured,
   flushFindings,
+  type IntegrationConfiguredFields,
 } from '../../../src/telemetry/findings.js';
 import { SECRETS_CALLER_COMMANDS } from '../../../src/telemetry/secrets-analysis-telemetry.js';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
@@ -282,6 +285,58 @@ describe('emitAnalysisCompleted()', () => {
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     expect(existsSync(telemetryDir)).toBe(true);
+  });
+});
+
+// ─── emitIntegrationConfigured ─────────────────────────────────────────────────
+
+function makeIntegrationConfiguredFields(
+  overrides: Partial<IntegrationConfiguredFields> = {},
+): IntegrationConfiguredFields {
+  return {
+    integration_id: 'claude',
+    repo_id: 'a'.repeat(64),
+    features_installed: ['sonar-secrets-hooks'],
+    features_skipped: ['sqaa-hooks'],
+    is_global: false,
+    is_interactive: true,
+    is_from_router: false,
+    ...overrides,
+  };
+}
+
+describe('emitIntegrationConfigured()', () => {
+  it('writes a valid CliIntegrationConfigured envelope', () => {
+    emitIntegrationConfigured(
+      AUTH,
+      makeIntegrationConfiguredFields({
+        integration_id: 'git',
+        features_installed: ['pre-commit-hook', 'pre-commit-secrets'],
+        features_skipped: ['pre-commit-dependency-risks'],
+        is_from_router: true,
+      }),
+    );
+
+    const [event] = readLines(testSonarUserHome);
+    expect(event.metadata.event_type).toBe('Analytics.Cli.CliIntegrationConfigured');
+    const configured = event as StoredIntegrationConfiguredEvent;
+    expect(configured.event_payload.integration_id).toBe('git');
+    expect(configured.event_payload.features_installed).toEqual([
+      'pre-commit-hook',
+      'pre-commit-secrets',
+    ]);
+    expect(configured.event_payload.features_skipped).toEqual(['pre-commit-dependency-risks']);
+    expect(configured.event_payload.is_from_router).toBe(true);
+    // Identity base is merged in.
+    expect(configured.event_payload.cli_installation_id).toBe('install-id');
+  });
+
+  it('does not append when telemetry is disabled', () => {
+    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+
+    emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
+
+    expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 });
 

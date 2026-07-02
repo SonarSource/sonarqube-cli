@@ -31,6 +31,7 @@ import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type {
   AnalysisCompletedEventPayload,
   AnalysisEventIdentityPayload,
+  IntegrationConfiguredEventPayload,
   StoredAnalysisEvent,
 } from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
@@ -89,6 +90,11 @@ export type AnalysisCompletedFields = Omit<
   keyof AnalysisEventIdentityPayload
 >;
 
+export type IntegrationConfiguredFields = Omit<
+  IntegrationConfiguredEventPayload,
+  keyof AnalysisEventIdentityPayload
+>;
+
 /**
  * Emits one CliAnalysisCompleted event when telemetry is enabled.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
@@ -104,6 +110,27 @@ export async function emitAnalysisCompleted(
       event_id: randomUUID(),
       source: { domain: 'CLI' },
       event_type: 'Analytics.Cli.CliAnalysisCompleted',
+      event_timestamp: String(Date.now()),
+    },
+    event_payload: { ...base, ...fields },
+  });
+}
+
+/**
+ * Emits one CliIntegrationConfigured event when telemetry is enabled.
+ * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
+ */
+export function emitIntegrationConfigured(
+  auth: ResolvedAuth,
+  fields: IntegrationConfiguredFields,
+): void {
+  const base = buildAnalysisIdentityBase(auth);
+  if (!base) return;
+  appendAnalysisEvent({
+    metadata: {
+      event_id: randomUUID(),
+      source: { domain: 'CLI' },
+      event_type: 'Analytics.Cli.CliIntegrationConfigured',
       event_timestamp: String(Date.now()),
     },
     event_payload: { ...base, ...fields },

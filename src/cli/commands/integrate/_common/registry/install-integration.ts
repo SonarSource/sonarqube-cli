@@ -21,6 +21,7 @@
 import { version as VERSION } from '../../../../../../package.json';
 import type { ResolvedAuth } from '../../../../../lib/auth-resolver';
 import logger from '../../../../../lib/logger';
+import { findGitRoot } from '../../../../../lib/project-workspace/project-info';
 import { loadState, saveState } from '../../../../../lib/repository/state-repository';
 import type {
   CliState,
@@ -29,6 +30,7 @@ import type {
   IntegrationStateAttribute,
 } from '../../../../../lib/state';
 import { getDefaultState } from '../../../../../lib/state';
+import { emitIntegrationConfiguredTelemetry } from '../../../../../telemetry/integrate-telemetry';
 import { text, warn } from '../../../../../ui';
 import { CommandFailedError } from '../../../_common/error';
 import { renderCompletionSummary } from './completion-summary';
@@ -54,6 +56,8 @@ export interface InstallIntegrationOptions<TOptions> {
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   nonInteractive?: boolean;
+  /** True when invoked via the bare `sonar integrate` router (telemetry only). */
+  isFromRouter?: boolean;
 }
 
 export async function installIntegration<TOptions>({
@@ -66,6 +70,7 @@ export async function installIntegration<TOptions>({
   force,
   attrs,
   nonInteractive,
+  isFromRouter,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
   const state = loadStateForInstallation();
@@ -137,6 +142,19 @@ export async function installIntegration<TOptions>({
 
     renderCompletionSummary(integration, installedFeatures, removedFeatures);
 
+    emitIntegrationConfiguredTelemetry({
+      // `integrate` is an authenticatedAction, so auth is always present here.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      auth: auth!,
+      integrationId,
+      scope,
+      nonInteractive: nonInteractive ?? false,
+      isFromRouter: isFromRouter ?? false,
+      installedFeatures,
+      declaredFeatureIds: collectDeclaredFeatureIds(integration),
+      repoRoot: resolveRepoRootForScope(scope, targetRoot),
+    });
+
     return saveInstalledFeatures(state) ? installedFeatures : [];
   } catch (error) {
     saveInstalledFeatures(state);
@@ -163,6 +181,36 @@ export function makeContext(
     attrs,
     resolvedDependencies: new Map(),
   };
+}
+
+/**
+ * All feature ids an integration declares, including the subfeatures nested in
+ * container features. Telemetry derives `features_skipped` as this set minus the
+ * features actually installed.
+ */
+function collectDeclaredFeatureIds<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+): string[] {
+  const ids: string[] = [];
+  for (const feature of integration.features) {
+    ids.push(feature.id);
+    if (isFeatureContainer(feature)) {
+      for (const subfeature of feature.subfeatures) {
+        ids.push(subfeature.id);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * Repo root for telemetry `repo_id`: the git root for
+ * project-scope installs, or null for global scope / non-git targets.
+ */
+function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): string | null {
+  if (scope === 'global') return null;
+  const { gitRoot, isGit } = findGitRoot(targetRoot);
+  return isGit ? gitRoot : null;
 }
 
 function saveInstalledFeatures(state: CliState): boolean {

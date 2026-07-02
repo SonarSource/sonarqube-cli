@@ -83,6 +83,7 @@ export async function integrateAntigravity(
     scope,
     auth,
     nonInteractive: options.nonInteractive,
+    isFromRouter: options.isFromRouter,
     attrs: {
       ...buildIntegrationAttrs(ctx),
       ...(contextAugmentation

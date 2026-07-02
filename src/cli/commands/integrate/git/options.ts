@@ -29,4 +29,6 @@ export interface IntegrateGitOptions {
   dependencyRisks?: boolean;
   /** Project key baked into the dependency-risks hook. Required when `dependencyRisks` is set. */
   project?: string;
+  /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
+  isFromRouter?: boolean;
 }
