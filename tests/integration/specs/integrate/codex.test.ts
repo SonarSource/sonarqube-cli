@@ -28,7 +28,13 @@ import { isAbsolute } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { codexIntegration } from '../../../../src/cli/commands/integrate/codex/declaration';
-import { hookScriptName, hookScriptPath, normalizePath, TestHarness } from '../../harness';
+import {
+  hookScriptName,
+  hookScriptPath,
+  IS_WINDOWS,
+  normalizePath,
+  TestHarness,
+} from '../../harness';
 import { findInstalledFeature } from './state-helpers';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
@@ -113,6 +119,32 @@ describe('integrate codex', () => {
         );
         expect(isAbsolute(command)).toBe(false);
         expect(command.startsWith('.codex/')).toBe(true);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'quotes the hook command so it survives a project directory containing a space',
+      async () => {
+        const spacedDir = harness.cwd.dir('dir with space', 'myproj');
+        spacedDir.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
+
+        const result = await harness.run('integrate codex --non-interactive', {
+          cwd: spacedDir.path,
+        });
+
+        expect(result.exitCode).toBe(0);
+        const hooks: CodexHooksFile = spacedDir.file(...HOOKS_JSON_DIRS).asJson();
+        const command = String(hooks.hooks?.UserPromptSubmit?.[0]?.hooks?.[0]?.command);
+        // Project scope emits a relative, fully-quoted path (double quotes on
+        // Windows, single quotes on Unix) — deterministic regardless of the
+        // spaced project directory, so assert the exact command.
+        const scriptRel = '.codex/hooks/sonar-secrets/build-scripts/prompt-secrets';
+        expect(command).toBe(
+          IS_WINDOWS
+            ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptRel}.ps1"`
+            : `'${scriptRel}.sh'`,
+        );
       },
       { timeout: 30000 },
     );

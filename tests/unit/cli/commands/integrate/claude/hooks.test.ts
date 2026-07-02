@@ -203,12 +203,12 @@ describe('installHooks', () => {
   // so platform-specific assertions branch on the real
   // host platform.
   const IS_WINDOWS = process.platform === 'win32';
-  // On Windows the registered command is `powershell -NoProfile -ExecutionPolicy Bypass -File .claude/...`
-  // (forward slashes via replaceAll); on Unix it is the bare `.claude/...` path.
+  // On Windows the registered command is `powershell -NoProfile -ExecutionPolicy Bypass -File ".claude/..."`
+  // (forward slashes via replaceAll, path double-quoted); on Unix it is the single-quoted `'.claude/...'` path.
   const isProjectScopedCommand = (command: string): boolean =>
     IS_WINDOWS
-      ? command.includes('powershell -NoProfile -ExecutionPolicy Bypass -File .claude/')
-      : command.startsWith('.claude/');
+      ? command.includes('powershell -NoProfile -ExecutionPolicy Bypass -File ".claude/')
+      : command.startsWith("'.claude/");
 
   let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
   let mkdirSyncSpy: Mock<Extract<(typeof nodeFs)['mkdirSync'], (...args: any[]) => any>>;
@@ -314,6 +314,39 @@ describe('installHooks', () => {
     const command = settings?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
     expect(normPath(String(command))).toContain(GLOBAL_DIR);
   });
+
+  it('quotes a global command path containing a space so the shell keeps it one argument', async () => {
+    await installHooks(PROJECT_ROOT, '/fake/global dir');
+
+    const command = String(
+      getSettingsWriteFor('PreToolUse')?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command,
+    );
+    if (IS_WINDOWS) {
+      expect(command).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File "');
+      expect(normPath(command)).toContain('/fake/global dir/');
+      expect(command.endsWith('.ps1"')).toBe(true);
+    } else {
+      expect(command).toBe(
+        "'/fake/global dir/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+      );
+    }
+    // Marker preserved so re-running still finds and replaces the entry.
+    expect(command).toContain('sonar-secrets');
+  });
+
+  it.skipIf(IS_WINDOWS)(
+    'escapes an embedded apostrophe in a global command path (Unix)',
+    async () => {
+      await installHooks(PROJECT_ROOT, "/fake/o'brien");
+
+      const command = String(
+        getSettingsWriteFor('PreToolUse')?.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command,
+      );
+      expect(command).toBe(
+        "'/fake/o'\\''brien/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+      );
+    },
+  );
 
   it('uses a relative command path for the SQAA hook regardless of globalDir', async () => {
     await installHooks(PROJECT_ROOT, GLOBAL_DIR, true, PROJECT_KEY);

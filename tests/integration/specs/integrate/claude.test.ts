@@ -505,6 +505,44 @@ describe('integrate claude', () => {
   );
 
   it(
+    'quotes the hook command so it survives a project directory containing a space',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('my-project')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.state().withSecretsBinaryInstalled();
+
+      const spacedDir = harness.cwd.dir('dir with space', 'myproj');
+      spacedDir.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=my-project'].join('\n'),
+      );
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        cwd: spacedDir.path,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const command = String(
+        spacedDir.file('.claude', 'settings.json').asJson().hooks.PreToolUse[0].hooks[0].command,
+      );
+      // Project scope emits a relative, fully-quoted path (double quotes on
+      // Windows, single quotes on Unix) — deterministic regardless of the
+      // spaced project directory, so assert the exact command.
+      const scriptRel = '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets';
+      expect(command).toBe(
+        IS_WINDOWS
+          ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptRel}.ps1"`
+          : `'${scriptRel}.sh'`,
+      );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'pretool-secrets script exists and is executable after integration',
     async () => {
       const server = await harness
@@ -1325,17 +1363,18 @@ describe.skipIf(IS_WINDOWS)('integrate claude — legacy state without agentExte
       const preToolEntry = settings.hooks?.PreToolUse?.[0];
       const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
       expect(preToolEntry?.matcher).toBe('Read');
-      expect(preToolEntry?.hooks?.[0]).toEqual({
-        type: 'command',
-        command: '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
-        timeout: 60,
-      });
+      expect(preToolEntry?.hooks?.[0]?.type).toBe('command');
+      expect(preToolEntry?.hooks?.[0]?.timeout).toBe(60);
+      // Command is shell-quoted; compare the unquoted path.
+      expect(hookScriptPath(String(preToolEntry?.hooks?.[0]?.command))).toBe(
+        '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
+      );
       expect(promptEntry?.matcher).toBe('*');
-      expect(promptEntry?.hooks?.[0]).toEqual({
-        type: 'command',
-        command: '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
-        timeout: 60,
-      });
+      expect(promptEntry?.hooks?.[0]?.type).toBe('command');
+      expect(promptEntry?.hooks?.[0]?.timeout).toBe(60);
+      expect(hookScriptPath(String(promptEntry?.hooks?.[0]?.command))).toBe(
+        '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh',
+      );
     },
     { timeout: 30000 },
   );
@@ -1426,17 +1465,18 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
       const preToolEntry = settings.hooks?.PreToolUse?.[0];
       const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
       expect(preToolEntry?.matcher).toBe('Read');
-      expect(preToolEntry?.hooks?.[0]).toEqual({
-        type: 'command',
-        command: harness.userHome.file(pretoolScriptRel).path,
-        timeout: 60,
-      });
+      expect(preToolEntry?.hooks?.[0]?.type).toBe('command');
+      expect(preToolEntry?.hooks?.[0]?.timeout).toBe(60);
+      // Command is shell-quoted; compare the unquoted, normalized path.
+      expect(hookScriptPath(String(preToolEntry?.hooks?.[0]?.command))).toBe(
+        normalizePath(harness.userHome.file(pretoolScriptRel).path),
+      );
       expect(promptEntry?.matcher).toBe('*');
-      expect(promptEntry?.hooks?.[0]).toEqual({
-        type: 'command',
-        command: harness.userHome.file(promptScriptRel).path,
-        timeout: 60,
-      });
+      expect(promptEntry?.hooks?.[0]?.type).toBe('command');
+      expect(promptEntry?.hooks?.[0]?.timeout).toBe(60);
+      expect(hookScriptPath(String(promptEntry?.hooks?.[0]?.command))).toBe(
+        normalizePath(harness.userHome.file(promptScriptRel).path),
+      );
     },
     { timeout: 30000 },
   );

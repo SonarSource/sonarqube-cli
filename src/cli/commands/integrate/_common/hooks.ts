@@ -129,6 +129,22 @@ export function shellQuotePowerShell(value: string): string {
   return "'" + value.replaceAll("'", POWERSHELL_EMBEDDED_SINGLE_QUOTE) + "'";
 }
 
+/**
+ * Quote a path for PowerShell's `-File` argument on Windows so it stays a single
+ * argument when it contains **spaces**. Double quotes are used because Windows
+ * paths cannot contain `"` (so no escaping is needed) and both cmd.exe and
+ * PowerShell honor them.
+ *
+ * The guarantee is space-safety only. It does NOT neutralize shell-level
+ * expansion of a path segment literally named e.g. `%TEMP%`: when the agent
+ * launches the stored command through cmd.exe, cmd expands `%VAR%` even inside
+ * double quotes, and no argument-level quoting (single or double) prevents that.
+ * Such directory names are rare, and this mirrors the pre-existing behavior.
+ */
+export function quoteWindowsHookScriptPath(path: string): string {
+  return `"${path}"`;
+}
+
 export type SqaaHookSubcommand = 'claude-post-tool-use' | 'codex-post-tool-use';
 
 export function formatSqaaHookCliArgsUnix(
@@ -172,9 +188,12 @@ export function resolveAgentHookScriptPath(
 }
 
 /**
- * Hook `command` string: `powershell -NoProfile -ExecutionPolicy Bypass -File <path>` on Windows, raw
- * path on Unix. Absolute path for global scope, relative path (portable when
- * the project is moved) for project scope.
+ * Hook `command` string: `powershell -NoProfile -ExecutionPolicy Bypass -File "<path>"` on
+ * Windows, single-quoted path on Unix. The path is quoted so it stays a single
+ * argument when the agent runs the command through a shell, even when the
+ * project root or `$HOME` contains spaces or (on Unix) other shell
+ * metacharacters (`$`, backticks, apostrophes, globs). Absolute path for global
+ * scope, relative path (portable when the project is moved) for project scope.
  */
 export function resolveAgentHookCommand(
   context: IntegrationContext,
@@ -187,8 +206,8 @@ export function resolveAgentHookCommand(
     context.scope === 'global' ? join(context.targetRoot, relativePath) : relativePath;
 
   return process.platform === 'win32'
-    ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${commandPath.replaceAll('\\', '/')}`
-    : commandPath;
+    ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${quoteWindowsHookScriptPath(commandPath.replaceAll('\\', '/'))}`
+    : shellQuoteBash(commandPath);
 }
 
 export function createAgentHookEntry(

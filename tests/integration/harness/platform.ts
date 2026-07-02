@@ -52,13 +52,27 @@ export function hookScriptName(name: string): string {
 
 /**
  * Extract the script path from a hook command string.
- * On Windows commands are wrapped as `powershell -NoProfile -ExecutionPolicy Bypass -File <path>`;
- * this strips that prefix. Always normalizes to forward slashes.
+ * On Windows commands are wrapped as `powershell -NoProfile -ExecutionPolicy Bypass -File "<path>"`;
+ * this strips that prefix. The path is quoted (single quotes on Unix, double
+ * quotes on Windows) so spaces survive the agent's shell; this unquotes it.
+ * Always normalizes to forward slashes.
  */
 export function hookScriptPath(command: string): string {
   const powershellPrefix = 'powershell -NoProfile -ExecutionPolicy Bypass -File ';
-  const path = command.startsWith(powershellPrefix)
+  const raw = command.startsWith(powershellPrefix)
     ? command.slice(powershellPrefix.length)
     : command;
-  return normalizePath(path);
+  return normalizePath(unquoteHookScriptPath(raw));
+}
+
+/** Reverse the shell quoting applied by resolveAgentHookCommand. */
+function unquoteHookScriptPath(value: string): string {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1);
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    // Bash embeds a literal single quote as '\'' — collapse it back.
+    return value.slice(1, -1).replaceAll(String.raw`'\''`, "'");
+  }
+  return value;
 }

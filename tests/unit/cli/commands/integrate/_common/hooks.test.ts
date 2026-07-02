@@ -18,7 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -26,15 +35,20 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
   assertSafeSonarProjectKeyForHookScript,
+  createAgentHookEntry,
   formatSqaaPostToolHookCommandUnix,
+  quoteWindowsHookScriptPath,
   readOrInitJson,
+  resolveAgentHookCommand,
   shellQuoteBash,
   UNIX_SONAR_COMMAND_GUARD,
   unixTemplate,
+  upsertAgentHooks,
   WINDOWS_SONAR_COMMAND_GUARD,
   windowsTemplate,
   writeHookScript,
 } from '../../../../../../src/cli/commands/integrate/_common/hooks';
+import type { IntegrationContext } from '../../../../../../src/cli/commands/integrate/_common/registry';
 
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -125,6 +139,175 @@ describe('formatSqaaPostToolHookCommandUnix', () => {
 describe('shellQuoteBash', () => {
   it('wraps values in single quotes', () => {
     expect(shellQuoteBash('a:b')).toBe("'a:b'");
+  });
+});
+
+describe('quoteWindowsHookScriptPath', () => {
+  it('wraps the path in double quotes so spaces survive PowerShell -File parsing', () => {
+    expect(quoteWindowsHookScriptPath('C:/Users/Jane Doe/.claude/hooks/x.ps1')).toBe(
+      '"C:/Users/Jane Doe/.claude/hooks/x.ps1"',
+    );
+  });
+});
+
+describe('resolveAgentHookCommand', () => {
+  const fakeContext = (targetRoot: string, scope: 'global' | 'project'): IntegrationContext =>
+    ({
+      targetRoot,
+      scope,
+      attrs: {},
+      state: {} as never,
+      executionMode: 'install',
+      resolvedDependencies: new Map(),
+    }) as unknown as IntegrationContext;
+
+  const SCRIPT = 'sonar-secrets/build-scripts/pretool-secrets';
+
+  it.skipIf(IS_WINDOWS)(
+    'single-quotes an absolute global path that contains a space (Unix)',
+    () => {
+      const command = resolveAgentHookCommand(
+        fakeContext('/Users/Jane Doe/proj', 'global'),
+        '.claude',
+        SCRIPT,
+      );
+      expect(command).toBe(
+        "'/Users/Jane Doe/proj/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+      );
+    },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'escapes an embedded apostrophe in targetRoot so the path stays a single Bash argument (Unix)',
+    () => {
+      const command = resolveAgentHookCommand(
+        fakeContext("/Users/O'Brien/proj", 'global'),
+        '.claude',
+        SCRIPT,
+      );
+      // Close quote, escaped literal apostrophe, reopen quote: 'O'\''Brien'
+      expect(command).toBe(
+        "'/Users/O'\\''Brien/proj/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'",
+      );
+      // Marker still present for idempotency matching.
+      expect(command).toContain('sonar-secrets');
+    },
+  );
+
+  it.skipIf(IS_WINDOWS)('single-quotes the relative project-scope path (Unix)', () => {
+    const command = resolveAgentHookCommand(fakeContext('/tmp/proj', 'project'), '.claude', SCRIPT);
+    expect(command).toBe("'.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh'");
+  });
+
+  it.skipIf(!IS_WINDOWS)(
+    'double-quotes an absolute global path that contains a space (Windows)',
+    () => {
+      const command = resolveAgentHookCommand(
+        fakeContext('C:/Users/Jane Doe/proj', 'global'),
+        '.claude',
+        SCRIPT,
+      );
+      expect(command).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File "');
+      expect(command).toContain('/Jane Doe/');
+      expect(command.endsWith('pretool-secrets.ps1"')).toBe(true);
+    },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'the generated command executes through /bin/sh when the path contains a space and an apostrophe',
+    () => {
+      const base = mkdtempSync(join(tmpdir(), 'sonar-hook-exec-'));
+      try {
+        // A global-scope absolute path is what carries the space into the command.
+        const targetRoot = join(base, "o'brien project dir");
+        const scriptDir = join(targetRoot, '.claude', 'hooks', 'sonar-secrets', 'build-scripts');
+        mkdirSync(scriptDir, { recursive: true });
+        const scriptFile = join(scriptDir, 'pretool-secrets.sh');
+        writeFileSync(scriptFile, '#!/bin/sh\necho HOOK_RAN\n');
+        chmodSync(scriptFile, 0o755);
+
+        const command = resolveAgentHookCommand(
+          fakeContext(targetRoot, 'global'),
+          '.claude',
+          SCRIPT,
+        );
+        // Precondition: this is the bug scenario — the command really contains a space.
+        expect(command).toContain(' ');
+
+        // The agent runs the stored command through a shell; the quoting must let it execute.
+        expect(execFileSync('/bin/sh', ['-c', command], { encoding: 'utf-8' }).trim()).toBe(
+          'HOOK_RAN',
+        );
+
+        // Negative control: the same path unquoted is split / mis-parsed by the shell and fails.
+        // (stdio: 'ignore' keeps the expected shell error off the test log.)
+        expect(() => execFileSync('/bin/sh', ['-c', scriptFile], { stdio: 'ignore' })).toThrow();
+      } finally {
+        rmSync(base, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+describe('upsertAgentHooks idempotency', () => {
+  const fakeContext = {
+    targetRoot: '/Users/Jane Doe/proj',
+    scope: 'global',
+    attrs: {},
+    state: {} as never,
+    executionMode: 'install',
+    resolvedDependencies: new Map(),
+  } as unknown as IntegrationContext;
+
+  it('does not duplicate the entry when re-run with a quoted path', () => {
+    const entry = createAgentHookEntry(
+      fakeContext,
+      '.claude',
+      'PreToolUse',
+      'Read',
+      'sonar-secrets',
+      'sonar-secrets/build-scripts/pretool-secrets',
+    );
+
+    const first = upsertAgentHooks(null, [entry]);
+    const second = upsertAgentHooks(first, [entry]);
+
+    expect(second.hooks?.PreToolUse).toHaveLength(1);
+  });
+
+  it('replaces a previously-unquoted entry (upgrade path) instead of shadowing it', () => {
+    // Simulate a settings.json written by an older CLI: bare, unquoted path.
+    const legacy = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Read',
+            hooks: [
+              {
+                type: 'command',
+                command:
+                  '/Users/Jane Doe/proj/.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh',
+                timeout: 60,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const entry = createAgentHookEntry(
+      fakeContext,
+      '.claude',
+      'PreToolUse',
+      'Read',
+      'sonar-secrets',
+      'sonar-secrets/build-scripts/pretool-secrets',
+    );
+
+    const result = upsertAgentHooks(legacy, [entry]);
+
+    expect(result.hooks?.PreToolUse).toHaveLength(1);
+    // The retained entry is the freshly-quoted one.
+    expect(result.hooks?.PreToolUse?.[0].hooks[0].command).toBe(entry.hookConfig.hooks[0].command);
   });
 });
 
