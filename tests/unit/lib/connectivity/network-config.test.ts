@@ -32,10 +32,10 @@ import {
   resolveNetworkConfig,
 } from '../../../../src/lib/connectivity/network-config';
 
-const MTLS_FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/mtls');
-const CERT_PATH = join(MTLS_FIXTURE_DIR, 'client-cert.pem');
-const KEY_PATH = join(MTLS_FIXTURE_DIR, 'client-key.pem');
-const P12_PATH = join(MTLS_FIXTURE_DIR, 'client-cert.p12');
+const CLIENT_CERT_FIXTURE_DIR = join(import.meta.dir, '../../../fixtures/client-cert');
+const CERT_PATH = join(CLIENT_CERT_FIXTURE_DIR, 'client-cert.pem');
+const KEY_PATH = join(CLIENT_CERT_FIXTURE_DIR, 'client-key.pem');
+const P12_PATH = join(CLIENT_CERT_FIXTURE_DIR, 'client-cert.p12');
 
 afterEach(() => {
   clearNetworkConfigCache();
@@ -211,14 +211,14 @@ describe('resolveNetworkConfig', () => {
   });
 
   describe('clientCert', () => {
-    it('returns null when SONAR_MTLS_CERT is not set', () => {
+    it('returns null when SONAR_TLS_CLIENT_CERT is not set', () => {
       expect(resolveNetworkConfig({}).clientCert).toBeNull();
     });
 
     it('resolves certPath, keyPath, source, and explicit flag', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: CERT_PATH,
-        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
       expect(config.clientCert?.certPath).toBe(CERT_PATH);
       expect(config.clientCert?.keyPath).toBe(KEY_PATH);
@@ -228,40 +228,40 @@ describe('resolveNetworkConfig', () => {
 
     it('reads and stores resolved PEM content eagerly', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: CERT_PATH,
-        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
       expect(config.clientCert?.resolvedCertPem).toBe(readFileSync(CERT_PATH, 'utf-8'));
       expect(config.clientCert?.resolvedKeyPem).toBe(readFileSync(KEY_PATH, 'utf-8'));
     });
 
-    it('captures passphrase when SONAR_MTLS_PASSPHRASE is set', () => {
+    it('captures passphrase when SONAR_TLS_CLIENT_PASSPHRASE is set', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: CERT_PATH,
-        SONAR_MTLS_KEY_FILE: KEY_PATH,
-        SONAR_MTLS_PASSPHRASE: 'secret',
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
       });
       expect(config.clientCert?.passphrase).toBe('secret');
     });
 
-    it('passphrase is undefined when SONAR_MTLS_PASSPHRASE is not set', () => {
+    it('passphrase is undefined when SONAR_TLS_CLIENT_PASSPHRASE is not set', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: CERT_PATH,
-        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
       expect(config.clientCert?.passphrase).toBeUndefined();
     });
 
-    it('sets error when SONAR_MTLS_KEY_FILE is missing for a PEM cert', () => {
-      const config = resolveNetworkConfig({ SONAR_MTLS_CERT: CERT_PATH });
+    it('sets error when SONAR_TLS_CLIENT_KEY_FILE is missing for a PEM cert', () => {
+      const config = resolveNetworkConfig({ SONAR_TLS_CLIENT_CERT: CERT_PATH });
       expect(config.clientCert).toBeNull();
       expect(config.error).toBeDefined();
     });
 
-    it('resolves PKCS12 path without SONAR_MTLS_KEY_FILE', () => {
+    it('resolves PKCS12 path without SONAR_TLS_CLIENT_KEY_FILE', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: P12_PATH,
-        SONAR_MTLS_PASSPHRASE: 'testpassword',
+        SONAR_TLS_CLIENT_CERT: P12_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword',
       });
       expect(config.clientCert?.certPath).toBe(P12_PATH);
       expect(config.clientCert?.keyPath).toBeNull();
@@ -271,8 +271,8 @@ describe('resolveNetworkConfig', () => {
 
     it('sets error when PKCS12 passphrase is wrong', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: P12_PATH,
-        SONAR_MTLS_PASSPHRASE: 'wrongpassword',
+        SONAR_TLS_CLIENT_CERT: P12_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'wrongpassword',
       });
       expect(config.clientCert).toBeNull();
       expect(config.error).toBeDefined();
@@ -280,8 +280,8 @@ describe('resolveNetworkConfig', () => {
 
     it('sets error when cert file does not exist', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: '/nonexistent/cert.pem',
-        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_CERT: '/nonexistent/cert.pem',
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
       expect(config.clientCert).toBeNull();
       expect(config.error).toBeDefined();
@@ -289,8 +289,8 @@ describe('resolveNetworkConfig', () => {
 
     it('sets error when key file does not exist', () => {
       const config = resolveNetworkConfig({
-        SONAR_MTLS_CERT: CERT_PATH,
-        SONAR_MTLS_KEY_FILE: '/nonexistent/key.pem',
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: '/nonexistent/key.pem',
       });
       expect(config.clientCert).toBeNull();
       expect(config.error).toBeDefined();
@@ -493,7 +493,10 @@ describe('buildFetchNetworkOptions', () => {
 
   describe('client cert', () => {
     it('sets tls.cert and tls.key as resolved PEM strings', () => {
-      const config = makeConfig({ SONAR_MTLS_CERT: CERT_PATH, SONAR_MTLS_KEY_FILE: KEY_PATH });
+      const config = makeConfig({
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
+      });
       const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.cert).toBe(readFileSync(CERT_PATH, 'utf-8'));
       expect(opts.tls?.key).toBe(readFileSync(KEY_PATH, 'utf-8'));
@@ -508,32 +511,32 @@ describe('buildFetchNetworkOptions', () => {
 
     it('sets tls.cert and tls.key as PEM strings for PKCS12 source', () => {
       const config = makeConfig({
-        SONAR_MTLS_CERT: P12_PATH,
-        SONAR_MTLS_PASSPHRASE: 'testpassword',
+        SONAR_TLS_CLIENT_CERT: P12_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword',
       });
       const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.cert).toContain('-----BEGIN CERTIFICATE-----');
       expect(opts.tls?.key).toContain('PRIVATE KEY');
     });
 
-    it('sets tls.passphrase when SONAR_MTLS_PASSPHRASE is provided', () => {
+    it('sets tls.passphrase when SONAR_TLS_CLIENT_PASSPHRASE is provided', () => {
       const config = makeConfig({
-        SONAR_MTLS_CERT: CERT_PATH,
-        SONAR_MTLS_KEY_FILE: KEY_PATH,
-        SONAR_MTLS_PASSPHRASE: 'supersecret',
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'supersecret',
       });
       const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.passphrase).toBe('supersecret');
     });
 
     it('sets ca, cert, and key together when both CA cert and client cert are configured', () => {
-      const caPath = join(tmpdir(), 'sonar-test-ca-mtls.pem');
+      const caPath = join(tmpdir(), 'sonar-test-ca-client-cert.pem');
       writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----');
 
       const config = makeConfig({
         SONAR_CA_CERT: caPath,
-        SONAR_MTLS_CERT: CERT_PATH,
-        SONAR_MTLS_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
       const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
 
@@ -632,5 +635,45 @@ describe('buildSubprocessNetworkEnv', () => {
     expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://proxy:8080');
     expect(env.SONAR_NO_PROXY).toBe('localhost');
     expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
+  });
+
+  it('sets SONAR_TLS_CLIENT_CERT and SONAR_TLS_CLIENT_KEY_FILE for PEM cert without passphrase', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({ SONAR_TLS_CLIENT_CERT: CERT_PATH, SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH }),
+    );
+    expect(env.SONAR_TLS_CLIENT_CERT).toBe(CERT_PATH);
+    expect(env.SONAR_TLS_CLIENT_KEY_FILE).toBe(KEY_PATH);
+    expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBeUndefined();
+  });
+
+  it('sets SONAR_TLS_CLIENT_PASSPHRASE when passphrase is provided', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
+      }),
+    );
+    expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBe('secret');
+  });
+
+  it('omits SONAR_TLS_CLIENT_PASSPHRASE for empty-string passphrase', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: '',
+      }),
+    );
+    expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBeUndefined();
+  });
+
+  it('omits SONAR_TLS_CLIENT_KEY_FILE for PKCS12 cert', () => {
+    const env = buildSubprocessNetworkEnv(
+      makeConfig({ SONAR_TLS_CLIENT_CERT: P12_PATH, SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword' }),
+    );
+    expect(env.SONAR_TLS_CLIENT_CERT).toBe(P12_PATH);
+    expect(env.SONAR_TLS_CLIENT_KEY_FILE).toBeUndefined();
+    expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBe('testpassword');
   });
 });

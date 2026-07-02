@@ -129,29 +129,33 @@ function fromEnv(
 
 // --- Client cert (sonar-env only, no generic-env fallback) ---
 
-function readMtlsFile(filePath: string, label: string): Buffer;
-function readMtlsFile(filePath: string, label: string, encoding: BufferEncoding): string;
-function readMtlsFile(filePath: string, label: string, encoding?: BufferEncoding): Buffer | string {
+function readClientCertFile(filePath: string, label: string): Buffer;
+function readClientCertFile(filePath: string, label: string, encoding: BufferEncoding): string;
+function readClientCertFile(
+  filePath: string,
+  label: string,
+  encoding?: BufferEncoding,
+): Buffer | string {
   try {
     return readFileSync(filePath, encoding);
   } catch (err) {
     throw new NetworkConfigError(
-      `Failed to read mTLS ${label} "${filePath}": ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to read ${label} "${filePath}": ${err instanceof Error ? err.message : String(err)}`,
       { cause: err },
     );
   }
 }
 
 function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
-  const certPath = env.SONAR_MTLS_CERT;
+  const certPath = env.SONAR_TLS_CLIENT_CERT;
   if (!certPath) {
     return null;
   }
 
-  const passphrase = env.SONAR_MTLS_PASSPHRASE;
+  const passphrase = env.SONAR_TLS_CLIENT_PASSPHRASE;
 
   if (isPkcs12Path(certPath)) {
-    const p12Buffer = readMtlsFile(certPath, 'certificate file');
+    const p12Buffer = readClientCertFile(certPath, 'client certificate');
     const { cert: resolvedCertPem, key: resolvedKeyPem } = pkcs12ToPem(p12Buffer, passphrase);
     return {
       source: 'sonar-env',
@@ -164,10 +168,10 @@ function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
     };
   }
 
-  const keyPath = env.SONAR_MTLS_KEY_FILE;
+  const keyPath = env.SONAR_TLS_CLIENT_KEY_FILE;
   if (!keyPath) {
     throw new NetworkConfigError(
-      'SONAR_MTLS_KEY_FILE is required when SONAR_MTLS_CERT is not a .p12 or .pfx file',
+      'SONAR_TLS_CLIENT_KEY_FILE is required when SONAR_TLS_CLIENT_CERT is not a .p12 or .pfx file',
     );
   }
 
@@ -177,8 +181,8 @@ function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
     certPath,
     keyPath,
     passphrase,
-    resolvedCertPem: readMtlsFile(certPath, 'certificate file', 'utf-8'),
-    resolvedKeyPem: readMtlsFile(keyPath, 'key file', 'utf-8'),
+    resolvedCertPem: readClientCertFile(certPath, 'client certificate', 'utf-8'),
+    resolvedKeyPem: readClientCertFile(keyPath, 'client certificate key', 'utf-8'),
   };
 }
 
@@ -247,6 +251,16 @@ export function buildSubprocessNetworkEnv(
   if (config.caCert) {
     env.SONAR_CA_CERT = config.caCert.path;
     env.SONAR_SECRETS_AUTH_CERT_FILE = config.caCert.path; // sonar-secrets
+  }
+
+  if (config.clientCert) {
+    env.SONAR_TLS_CLIENT_CERT = config.clientCert.certPath;
+    if (config.clientCert.keyPath !== null) {
+      env.SONAR_TLS_CLIENT_KEY_FILE = config.clientCert.keyPath;
+    }
+    if (config.clientCert.passphrase) {
+      env.SONAR_TLS_CLIENT_PASSPHRASE = config.clientCert.passphrase;
+    }
   }
 
   return env;
