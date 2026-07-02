@@ -58,7 +58,7 @@ type CommandResult = void | Promise<void>;
 export class SonarCommand extends Command {
   private _requiresAuth = false;
   private _rootHelp: RootHelpMetadata = {};
-  private _updateNotification?: true | UpdateNotificationCondition;
+  private _showUpdateNotification?: true | UpdateNotificationCondition;
 
   /** Ensures subcommands created via .command() are also SonarCommand instances. */
   createCommand(name?: string): SonarCommand {
@@ -80,8 +80,8 @@ export class SonarCommand extends Command {
    * Pass a condition to show the notice only when it returns true for the
    * merged action-command options (parsed by Commander).
    */
-  updateNotification(when?: UpdateNotificationCondition): this {
-    this._updateNotification = when ?? true;
+  showUpdateNotification(when?: UpdateNotificationCondition): this {
+    this._showUpdateNotification = when ?? true;
     return this;
   }
 
@@ -148,8 +148,8 @@ export class SonarCommand extends Command {
   }
 
   /** Update-notification opt-in and optional show condition for this command. */
-  get updateNotificationWhen(): true | UpdateNotificationCondition | undefined {
-    return this._updateNotification;
+  get showUpdateNotificationWhen(): true | UpdateNotificationCondition | undefined {
+    return this._showUpdateNotification;
   }
 
   async runCommand(fn: () => Promise<void>): Promise<void> {

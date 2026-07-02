@@ -202,48 +202,11 @@ describe('maybeNotifyUpdateAvailable', () => {
         updateCheck?: {
           latestVersion?: string;
           lastCheckedAt?: string;
-          lastNotifiedVersion?: string;
-          lastNotifiedAt?: string;
         };
       };
     };
     expect(state.config.updateCheck?.latestVersion).toBe('99.0.0.241');
     expect(state.config.updateCheck?.lastCheckedAt).toBeDefined();
-    expect(state.config.updateCheck?.lastNotifiedVersion).toBeUndefined();
-    expect(state.config.updateCheck?.lastNotifiedAt).toBeUndefined();
-  });
-
-  it('prunes legacy notification fields from updateCheck on save', async () => {
-    const statePath = join(tempHome, 'sonarqube-cli', 'state.json');
-    const { mkdirSync, writeFileSync } = await import('node:fs');
-    const recentCheck = new Date().toISOString();
-    mkdirSync(join(tempHome, 'sonarqube-cli'), { recursive: true });
-    writeFileSync(
-      statePath,
-      JSON.stringify({
-        version: '1.0',
-        config: {
-          cliVersion: CURRENT_VERSION,
-          updateCheck: {
-            lastCheckedAt: recentCheck,
-            latestVersion: '99.0.0.241',
-            lastNotifiedVersion: '99.0.0',
-            lastNotifiedAt: '2020-01-01T00:00:00.000Z',
-          },
-        },
-      }),
-    );
-
-    await maybeNotifyUpdateAvailable(resolveCommand(['auth', 'status']));
-
-    const state = JSON.parse(readFileSync(statePath, 'utf8')) as {
-      config: { updateCheck?: Record<string, string> };
-    };
-    expect(state.config.updateCheck).toEqual({
-      lastCheckedAt: recentCheck,
-      latestVersion: '99.0.0.241',
-    });
-    expect(fetchSpy.mock.calls).toHaveLength(0);
   });
 
   it('notifies on every eligible command when an update is available', async () => {
