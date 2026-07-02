@@ -36,6 +36,8 @@ import { CommandFailedError } from '../_common/error';
 import { Version } from '../_common/version';
 
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
+/** Best-effort background fetch after eligible commands — fail fast to avoid blocking UX. */
+export const BACKGROUND_UPDATE_CHECK_TIMEOUT_MS = 1500;
 const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:\.\d+)?$/;
 const TEMP_SCRIPT_PREFIX = 'sonar-update-';
 const TEMP_SCRIPT_CREATE_ATTEMPTS = 5;
@@ -164,9 +166,13 @@ export interface UpdateCheckResult {
   upToDate: boolean;
 }
 
-async function fetchText(url: string, description: string): Promise<string> {
+async function fetchText(
+  url: string,
+  description: string,
+  timeoutMs = UPDATE_CHECK_TIMEOUT_MS,
+): Promise<string> {
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     ...buildFetchNetworkOptions(url),
   });
   if (!response.ok) {
@@ -185,9 +191,9 @@ function parseStableVersion(raw: string): string | null {
 /**
  * Reads the published stable.version string from binaries.sonarsource.com.
  */
-export async function fetchLatestVersion(): Promise<string> {
+export async function fetchLatestVersion(timeoutMs = UPDATE_CHECK_TIMEOUT_MS): Promise<string> {
   const stableVersionUrl = `${SONARSOURCE_BINARIES_URL}/${CLI_STABLE_VERSION_PATH}`;
-  const body = await fetchText(stableVersionUrl, 'stable version');
+  const body = await fetchText(stableVersionUrl, 'stable version', timeoutMs);
   const version = parseStableVersion(body);
   if (!version) {
     throw new CommandFailedError('Could not determine the latest version.', {

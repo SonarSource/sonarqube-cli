@@ -144,7 +144,7 @@ const auth = COMMAND_TREE.command('auth')
   .rootHelp({
     category: 'cli-management',
   })
-  .updateNotification();
+  .showUpdateNotification();
 
 auth
   .command('login')
@@ -187,7 +187,7 @@ const listIssuesFormatOption = new Option('--format <format>', 'Output format')
 list
   .command('issues')
   .description('Search for issues in SonarQube')
-  .updateNotification((opts) => {
+  .showUpdateNotification((opts) => {
     const format = typeof opts.format === 'string' ? opts.format : 'json';
     return format.toLowerCase() === 'table';
   })
@@ -210,7 +210,7 @@ list
 list
   .command('projects')
   .description('Search for projects in SonarQube')
-  .updateNotification()
+  .showUpdateNotification()
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
   .addOption(pageOption)
   .addOption(pageSizeOption)
@@ -246,7 +246,7 @@ const integrateCommand = COMMAND_TREE.command('integrate')
   .rootHelp({
     category: 'integrate',
   })
-  .updateNotification((opts) => !opts.nonInteractive)
+  .showUpdateNotification((opts) => !opts.nonInteractive)
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('-g, --global', 'Install integrations globally.')
   // allowExcessArguments + preAction: when a parent command has both an action and subcommands,
@@ -394,7 +394,7 @@ const analyze = COMMAND_TREE.command('analyze')
     category: 'core',
     expandSubcommands: true,
   })
-  .updateNotification()
+  .showUpdateNotification()
   .enablePositionalOptions();
 
 analyze
@@ -560,7 +560,7 @@ const system = COMMAND_TREE.command('system')
 system
   .command('status')
   .description('Show overall system status: authentication, installed binaries, and integrations')
-  .updateNotification((opts) => !opts.json)
+  .showUpdateNotification((opts) => !opts.json)
   .option('--json', 'Output as JSON for machine consumption')
   .anonymousAction((options: SystemStatusOptions) => systemStatus(options));
 

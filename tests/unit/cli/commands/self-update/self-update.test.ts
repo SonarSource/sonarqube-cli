@@ -127,6 +127,26 @@ describe('checkForUpdate', () => {
     expect(result).toBe('88.1.2.300');
   });
 
+  it('uses the default 5s fetch timeout for self-update checks', async () => {
+    const timeoutSpy = spyOn(AbortSignal, 'timeout');
+    fetchSpy.mockResolvedValue(stableVersionResponse('88.1.2.300'));
+
+    await fetchLatestVersion();
+
+    expect(timeoutSpy).toHaveBeenCalledWith(5000);
+    timeoutSpy.mockRestore();
+  });
+
+  it('accepts a custom fetch timeout', async () => {
+    const timeoutSpy = spyOn(AbortSignal, 'timeout');
+    fetchSpy.mockResolvedValue(stableVersionResponse('88.1.2.300'));
+
+    await fetchLatestVersion(1500);
+
+    expect(timeoutSpy).toHaveBeenCalledWith(1500);
+    timeoutSpy.mockRestore();
+  });
+
   it('throws on HTTP error', () => {
     fetchSpy.mockResolvedValue({ ok: false, status: 404 });
 

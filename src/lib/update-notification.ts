@@ -26,7 +26,10 @@ import {
   type UpdateNotificationCondition,
 } from '../cli/commands/_common/sonar-command.js';
 import { Version } from '../cli/commands/_common/version.js';
-import { fetchLatestVersion } from '../cli/commands/self-update/update-check.js';
+import {
+  BACKGROUND_UPDATE_CHECK_TIMEOUT_MS,
+  fetchLatestVersion,
+} from '../cli/commands/self-update/update-check.js';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../telemetry/index.js';
 import { cyan } from '../ui/colors.js';
 import { isFormattedOutputMode, text } from '../ui/index.js';
@@ -34,22 +37,6 @@ import type { CliUpdateCheckState } from './state.js';
 import { loadState, saveState } from './state-manager.js';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Persist only canonical fields so legacy notification keys are pruned from state.json. */
-function toPersistedUpdateCheck(
-  updateCheck: CliUpdateCheckState | undefined,
-  overrides: Partial<CliUpdateCheckState> = {},
-): CliUpdateCheckState {
-  const merged = { ...updateCheck, ...overrides };
-  const persisted: CliUpdateCheckState = {};
-  if (merged.lastCheckedAt !== undefined) {
-    persisted.lastCheckedAt = merged.lastCheckedAt;
-  }
-  if (merged.latestVersion !== undefined) {
-    persisted.latestVersion = merged.latestVersion;
-  }
-  return persisted;
-}
 
 function collectCommandOpts(command: Command): Record<string, unknown> {
   const names: Command[] = [];
@@ -72,7 +59,7 @@ function resolveUpdateNotification(
   let current: Command | null = command;
   while (current !== null) {
     if (current instanceof SonarCommand) {
-      const when = current.updateNotificationWhen;
+      const when = current.showUpdateNotificationWhen;
       if (when !== undefined) {
         return when;
       }
@@ -124,16 +111,16 @@ async function resolveLatestVersion(
     // when the previous check failed) instead of hitting the network again.
     return {
       latestVersion: updateCheck?.latestVersion,
-      updateCheck: toPersistedUpdateCheck(updateCheck),
+      updateCheck: { ...updateCheck },
     };
   }
 
   const lastCheckedAt = new Date().toISOString();
   try {
-    const latestVersion = await fetchLatestVersion();
+    const latestVersion = await fetchLatestVersion(BACKGROUND_UPDATE_CHECK_TIMEOUT_MS);
     return {
       latestVersion,
-      updateCheck: toPersistedUpdateCheck(updateCheck, { lastCheckedAt, latestVersion }),
+      updateCheck: { ...updateCheck, lastCheckedAt, latestVersion },
     };
   } catch {
     // Record the attempt so a failing check does not re-hit the network — and
@@ -141,7 +128,7 @@ async function resolveLatestVersion(
     // Any previously cached version is preserved so we can still notify from it.
     return {
       latestVersion: updateCheck?.latestVersion,
-      updateCheck: toPersistedUpdateCheck(updateCheck, { lastCheckedAt }),
+      updateCheck: { ...updateCheck, lastCheckedAt },
     };
   }
 }
