@@ -63,7 +63,7 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
       SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
       auth,
       Math.round(performance.now() - runStart),
-    );
+    ).catch(() => undefined);
     logger.debug(`Codex PostToolUse SQAA analysis failed: ${(err as Error).message}`);
     return;
   }

@@ -184,7 +184,12 @@ export async function scanAndEmitSecrets(
     );
     return { result, parsed };
   } catch (err) {
-    await emitSecretsRunTelemetry(callerCommand, auth, null, Math.round(performance.now() - start));
+    await emitSecretsRunTelemetry(
+      callerCommand,
+      auth,
+      null,
+      Math.round(performance.now() - start),
+    ).catch(() => undefined);
     throw err;
   }
 }

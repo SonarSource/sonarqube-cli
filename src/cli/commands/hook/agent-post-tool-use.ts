@@ -104,13 +104,13 @@ export async function agentPostToolUse(options: AgentPostToolUseOptions): Promis
       auth,
       CLAUDE_HOOK_TELEMETRY_OPTIONS,
       timedFetch.durationMs,
-    );
+    ).catch(() => undefined);
   } catch (err) {
     await emitSqaaHookFailureTelemetry(
       SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
       auth,
       Math.round(performance.now() - runStart),
-    );
+    ).catch(() => undefined);
     logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
     return;
   }
