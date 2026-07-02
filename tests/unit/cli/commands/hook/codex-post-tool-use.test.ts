@@ -189,7 +189,7 @@ describe('codexPostToolUse', () => {
     const emitSqaaHookFailureTelemetrySpy = spyOn(
       sqaaTelemetry,
       'emitSqaaHookFailureTelemetry',
-    ).mockImplementation(() => undefined);
+    ).mockImplementation(() => Promise.resolve());
     const writeHookOutputSpy = spyOn(hookOutput, 'writePostToolUseHookOutput').mockImplementation(
       () => {
         throw new Error('stdout closed');
