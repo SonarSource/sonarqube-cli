@@ -97,7 +97,7 @@ export async function resolveContextAugmentationSetup(
 ): Promise<ResolvedContextAugmentationSetup | null> {
   const isCloud = isSonarQubeCloud(p.auth.serverUrl);
   if (!isCloud) {
-    text('Skipping Context Augmentation: not available on SonarQube Server.');
+    text('Skipping Vortex context augmentation: not available on SonarQube Server.');
     return null;
   }
 
@@ -109,7 +109,7 @@ export async function resolveContextAugmentationSetup(
       const client = new SonarQubeClient(p.auth.serverUrl, p.auth.token);
       if ((await client.hasCagEntitlement(p.auth.orgKey)) === 'allowed') {
         warn(
-          'Skipping Context Augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
+          'Skipping Vortex context augmentation: not supported with --global. Re-run without --global from a project directory to install it there.',
         );
       }
     }
@@ -118,7 +118,7 @@ export async function resolveContextAugmentationSetup(
 
   if (!p.projectKey || !p.auth.orgKey) {
     warn(
-      'Skipping Context Augmentation: a project key and organization are required (configure your project or pass --project).',
+      'Skipping Vortex context augmentation: a project key and organization are required (configure your project or pass --project).',
     );
     return null;
   }
@@ -127,13 +127,13 @@ export async function resolveContextAugmentationSetup(
   const entitlement = await client.hasCagEntitlement(p.auth.orgKey);
   if (entitlement === 'check_failed') {
     warn(
-      'Skipping Context Augmentation: could not verify entitlement (server unreachable or returned an error).',
+      'Skipping Vortex context augmentation: could not verify entitlement (server unreachable or returned an error).',
     );
     return null;
   }
   if (entitlement === 'not_allowed') {
     warn(
-      'Skipping Context Augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
+      'Skipping Vortex context augmentation: not available for your organization. Access requires an eligible SonarQube Cloud plan.',
     );
     return null;
   }
@@ -151,7 +151,7 @@ export async function resolveContextAugmentationSetup(
 export async function runToolIntegrateCommand(
   p: ApplyContextAugmentationToolIntegrationParams,
 ): Promise<void> {
-  text('     Installing SonarQube Context Augmentation...');
+  text('     Installing Vortex context augmentation...');
 
   const initEnv = buildContextAugmentationEnv({
     organization: p.auth.orgKey,
@@ -162,13 +162,13 @@ export async function runToolIntegrateCommand(
 
   await runCagStepOrThrow(
     `sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
-    'Context Augmentation tool integration failed.',
+    'Vortex context augmentation tool integration failed.',
     p.binaryPath,
     ['tool', 'integrate', '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
     p.projectRoot,
     initEnv,
   );
-  discreetSuccess('SonarQube Context Augmentation configured');
+  discreetSuccess('Vortex context augmentation configured');
 }
 
 export async function printContextAugmentationSkill({

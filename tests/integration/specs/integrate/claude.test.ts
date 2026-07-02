@@ -2021,8 +2021,8 @@ describe('integrate claude — interactive feature selection', () => {
       expect(output).toContain('Install MCP server?');
       // SQAA is not eligible, so it is skipped without a prompt but the shared
       // promotion message is surfaced.
-      expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
-      expect(output).toContain('SonarQube Agentic Analysis is available on SonarQube Cloud');
+      expect(output).not.toContain('Install Vortex agentic analysis hook?');
+      expect(output).toContain('Vortex agentic analysis is available on SonarQube Cloud');
 
       // Accepted features are installed on disk.
       expect(
@@ -2094,7 +2094,7 @@ describe('integrate claude — interactive feature selection', () => {
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Install SonarQube Agentic Analysis hook?');
+      expect(output).toContain('Install Vortex agentic analysis hook?');
 
       // Accepting installs the PostToolUse SQAA hook script and SQAA instructions.
       expect(
@@ -2143,8 +2143,8 @@ describe('integrate claude — interactive feature selection', () => {
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Could not determine SonarQube Agentic Analysis entitlement');
-      expect(output).not.toContain('Install SonarQube Agentic Analysis hook?');
+      expect(output).toContain('Could not determine Vortex agentic analysis entitlement');
+      expect(output).not.toContain('Install Vortex agentic analysis hook?');
       expect(findClaudeFeature(harness, 'sonar-sqaa-hook')).toBeUndefined();
     },
     { timeout: 30000 },

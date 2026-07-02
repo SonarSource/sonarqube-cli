@@ -111,7 +111,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     }),
     {
       id: 'sonar-sqaa-hook',
-      displayName: 'SonarQube Agentic Analysis hook',
+      displayName: 'Vortex agentic analysis hook',
       benefitDescription: AGENTIC_ANALYSIS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) => {
@@ -141,7 +141,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         }),
         jsonPatch({
           id: 'codex-hooks-sqaa-hook',
-          displayName: 'Codex SonarQube Agentic Analysis hook configuration',
+          displayName: 'Codex Vortex agentic analysis hook configuration',
           targetPath: resolveCodexHooksPath,
           defaultValue: { hooks: {} },
           patch: (document, context) =>

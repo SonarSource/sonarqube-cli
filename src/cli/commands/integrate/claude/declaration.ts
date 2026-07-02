@@ -125,7 +125,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     }),
     {
       id: 'sonar-sqaa-hook',
-      displayName: 'SonarQube Agentic Analysis hook',
+      displayName: 'Vortex agentic analysis hook',
       benefitDescription: AGENTIC_ANALYSIS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) => {
@@ -160,7 +160,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
         }),
         jsonPatch({
           id: 'claude-settings-sqaa-hook',
-          displayName: 'Claude SonarQube Agentic Analysis hook configuration',
+          displayName: 'Claude Vortex agentic analysis hook configuration',
           targetPath: resolveClaudeSettingsPath,
           defaultValue: { hooks: {} },
           patch: (document, context) =>
@@ -180,7 +180,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
     },
     {
       id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
+      displayName: 'Vortex agentic analysis instructions',
       benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
@@ -190,7 +190,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       resources: [
         textSnippet({
           id: 'sqaa-instructions-file',
-          displayName: 'Claude SonarQube Agentic Analysis instructions',
+          displayName: 'Claude Vortex agentic analysis instructions',
           targetPath: resolveClaudeMdPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),

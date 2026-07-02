@@ -525,7 +525,7 @@ describe('integrate claude — Context Augmentation', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('  cag-stdout-diagnostic');
       expect(result.stderr).toContain('  cag-stderr-diagnostic');
-      expect(result.stderr).toContain('Context Augmentation tool integration failed.');
+      expect(result.stderr).toContain('Vortex context augmentation tool integration failed.');
     },
     { timeout: 30000 },
   );
@@ -565,7 +565,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expectSkillFile(harness, CLAUDE_SKILL_PATH, false);
-      expect(result.stderr).toContain('Context Augmentation tool integration failed.');
+      expect(result.stderr).toContain('Vortex context augmentation tool integration failed.');
     },
     { timeout: 30000 },
   );
@@ -921,7 +921,9 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       expect(harness.cwd.file(CLAUDE_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(COPILOT_SKILL_PATH).exists()).toBe(false);
       expect(harness.cwd.file(CODEX_SKILL_PATH).exists()).toBe(false);
-      expect(result.stderr).toContain('Skipping Context Augmentation: not supported with --global');
+      expect(result.stderr).toContain(
+        'Skipping Vortex context augmentation: not supported with --global',
+      );
     },
     { timeout: 30000 },
   );
@@ -951,7 +953,7 @@ describe('integrate <agent> --global — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expect(`${result.stdout}\n${result.stderr}`).not.toContain(
-        'Skipping Context Augmentation: not supported with --global',
+        'Skipping Vortex context augmentation: not supported with --global',
       );
     },
     { timeout: 30000 },

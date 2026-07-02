@@ -62,7 +62,7 @@ export function resolveSqaaContext(
     case 'no-project':
       if (policy.requireProject) {
         throw new CommandFailedError(
-          'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
+          'Vortex agentic analysis requires a project, but none is configured for this directory.',
           {
             remediationHint:
               "Specify one with --project, or run 'sonar integrate' to configure this project.",
@@ -70,7 +70,7 @@ export function resolveSqaaContext(
         );
       }
       warn(
-        'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
+        'Vortex agentic analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
       );
       return null;
   }

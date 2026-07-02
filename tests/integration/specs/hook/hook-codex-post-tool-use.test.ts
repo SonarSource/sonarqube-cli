@@ -101,6 +101,28 @@ describe('sonar hook codex-post-tool-use', () => {
   );
 
   it(
+    'exits 0 and outputs nudge message when SQAA returns 403 (entitlement revoked)',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+
+      const result = await harness.run(`hook codex-post-tool-use --project ${TEST_PROJECT}`);
+
+      expect(result.exitCode).toBe(0);
+      const output = JSON.parse(result.stdout.trim());
+      expect(output.hookSpecificOutput.additionalContext).toContain(
+        'Run `sonar integrate` to uninstall unavailable hooks. See https://www.sonarsource.com/products/agent-essentials/',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits 0 and outputs no hook response when not authenticated',
     async () => {
       harness.cwd.writeFile('src/main.ts', 'const x = 1;');

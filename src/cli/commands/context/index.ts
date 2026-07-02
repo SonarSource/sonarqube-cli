@@ -140,7 +140,7 @@ function resolveRecordedContextAugmentationConfig(cwd: string): RecordedContextA
     };
   } catch (err) {
     logger.debug(
-      `Failed to resolve recorded Context Augmentation config: ${(err as Error).message}`,
+      `Failed to resolve recorded context augmentation config: ${(err as Error).message}`,
     );
     return {};
   }
@@ -167,7 +167,7 @@ async function resolveContextToken(
 
   const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   throw new CommandFailedError(
-    `Not authenticated for the recorded Context Augmentation connection: ${connection}.`,
+    `Not authenticated for the recorded Vortex context augmentation connection: ${connection}.`,
     {
       remediationHint:
         'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
@@ -213,7 +213,7 @@ export async function runContextPassthrough(
     child.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
         reject(
-          new CommandFailedError('Context Augmentation is not installed.', {
+          new CommandFailedError('Vortex context augmentation is not installed.', {
             remediationHint:
               'Run "sonar integrate claude" or "sonar integrate copilot" to install it.',
           }),

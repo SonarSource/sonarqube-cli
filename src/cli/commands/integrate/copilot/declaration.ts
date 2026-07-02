@@ -141,7 +141,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
     },
     {
       id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
+      displayName: 'Vortex agentic analysis instructions',
       benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
@@ -151,7 +151,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       resources: [
         textSnippet({
           id: 'sqaa-instructions-file',
-          displayName: 'Copilot SonarQube Agentic Analysis instructions',
+          displayName: 'Copilot Vortex agentic analysis instructions',
           targetPath: resolveInstructionsPath,
           startMarker: sonarBeginMarker('sonarqube-agentic-analysis-protocol'),
           endMarker: sonarEndMarker('sonarqube-agentic-analysis-protocol'),

@@ -54,6 +54,22 @@ export interface RequestPayloadTooLargeMeta {
   maxFiles?: number;
 }
 
+/** Thrown by the API client on any HTTP 403 (Forbidden) POST response. */
+export class ForbiddenApiError extends Error {
+  constructor(body: string) {
+    super(body);
+    this.name = 'ForbiddenApiError';
+  }
+}
+
+/** Thrown when the SQAA analysis endpoint returns 403 — Agentic Pack entitlement revoked. */
+export class SqaaForbiddenError extends Error {
+  constructor() {
+    super('Vortex agentic analysis is not available for this organization (403 Forbidden).');
+    this.name = 'SqaaForbiddenError';
+  }
+}
+
 /** Thrown by the API client on HTTP 413 (Payload Too Large) for SQAA requests. */
 export class RequestPayloadTooLargeError extends Error {
   readonly code?: RequestPayloadTooLargeCode;

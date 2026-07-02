@@ -128,7 +128,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     },
     {
       id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis rules',
+      displayName: 'Vortex agentic analysis rules',
       benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
@@ -138,7 +138,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       resources: [
         wholeFile({
           id: 'sqaa-rule-file',
-          displayName: 'SonarQube Agentic Analysis rule for Antigravity',
+          displayName: 'Vortex agentic analysis rule for Antigravity',
           targetPath: resolveSqaaRulePath,
           content: (context) =>
             buildAntigravityAlwaysOnRule(

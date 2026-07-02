@@ -22,6 +22,7 @@
 
 import { getSqaaRetry503BaseDelayMs } from '../../../lib/config-constants';
 import type { SqaaAnalysisDepth, SqaaIssue } from '../../../sonarqube/client';
+import { SqaaForbiddenError } from '../../../sonarqube/errors.js';
 import type { SqaaProgress } from '../../../ui/components/sqaa-progress.js';
 import {
   fetchChunkWith413Split,
@@ -255,6 +256,10 @@ async function processChunk(
     ctx.progress.updateChunk(chunkIndex, 'done');
     return shouldContinueAfterChunk(parts, groupErrors);
   } catch (err) {
+    // Propagate so hook handlers (codex-post-tool-use) can show the nudge message.
+    if (err instanceof SqaaForbiddenError) {
+      throw err;
+    }
     recordChunkFailure(ctx.progress, tally, chunkIndex, fileIndices, chunkPaths, err as Error);
     return false;
   }

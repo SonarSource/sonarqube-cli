@@ -201,6 +201,7 @@ export const SERVER_API_DOCS_URL =
 export const SUPPORT_URL = 'https://community.sonarsource.com';
 export const AGENTIC_ANALYSIS_DOCS_URL =
   'https://docs.sonarsource.com/agent-centric-development-cycle/features/agentic-analysis';
+export const AGENTIC_PACK_URL = 'https://www.sonarsource.com/products/agent-essentials/';
 
 // ---------------------------------------------------------------------------
 // Application paths

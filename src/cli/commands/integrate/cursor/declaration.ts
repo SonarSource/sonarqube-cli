@@ -80,7 +80,7 @@ const SQAA_RULE_MARKER = '# SonarQube Agentic Analysis protocol';
 export interface CursorIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
   /**
-   * Write the SonarQube Agentic Analysis rule (`.cursor/rules`) instructing the
+   * Write the Vortex agentic analysis rule (`.cursor/rules`) instructing the
    * agent to run `sonar analyze agentic` after edits. Cursor's `afterFileEdit`
    * hook cannot inject analysis results back into the conversation, so SQAA is
    * delivered as an always-applied rule rather than a hook (project scope).
@@ -111,7 +111,7 @@ function resolveCursorSqaaRulePath(context: IntegrationContext): string {
 }
 
 /**
- * Render the SonarQube Agentic Analysis rule as a Cursor `.mdc` file. The
+ * Render the Vortex agentic analysis rule as a Cursor `.mdc` file. The
  * `alwaysApply: true` front-matter makes Cursor inject the protocol into every
  * session without the user attaching it manually.
  */
@@ -220,7 +220,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     },
     {
       id: 'sqaa-instructions',
-      displayName: 'SonarQube Agentic Analysis instructions',
+      displayName: 'Vortex agentic analysis instructions',
       benefitDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_BENEFIT,
       previewDescription: AGENTIC_ANALYSIS_INSTRUCTIONS_FEATURE_PREVIEW,
       shouldInstall: ({ options }) =>
@@ -229,7 +229,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
       resources: [
         wholeFile({
           id: 'sqaa-instructions-rule',
-          displayName: 'Cursor SonarQube Agentic Analysis rule',
+          displayName: 'Cursor Vortex agentic analysis rule',
           targetPath: resolveCursorSqaaRulePath,
           content: buildCursorSqaaRule,
           managedMarker: SQAA_RULE_MARKER,

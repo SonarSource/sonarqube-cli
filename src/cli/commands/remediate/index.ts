@@ -21,7 +21,11 @@
 // Remediate command - triggers AI agent remediation for eligible issues
 
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
-import { AGENT_ACTIVITY_PATH, AI_REMEDIATION_DOCS_URL } from '../../../lib/config-constants';
+import {
+  AGENT_ACTIVITY_PATH,
+  AGENTIC_PACK_URL,
+  AI_REMEDIATION_DOCS_URL,
+} from '../../../lib/config-constants';
 import logger from '../../../lib/logger';
 import { discoverProject } from '../../../lib/project-workspace';
 import type { SonarQubeIssue } from '../../../lib/types';
@@ -82,14 +86,16 @@ export async function remediate(options: RemediateOptions, auth: ResolvedAuth): 
 
   const { status: entitlement } = await client.checkAiRemediationEntitlement(orgKey);
   if (entitlement === 'not_eligible') {
-    throw new CommandFailedError('Remediation Agent unavailable.', {
-      remediationHint: `Ask an organization administrator to check eligibility and enable the feature. Learn more: ${AI_REMEDIATION_DOCS_URL}`,
-    });
+    blank();
+    info(`The Remediation Agent is not available for your organisation. See ${AGENTIC_PACK_URL}`);
+    return;
   }
   if (entitlement === 'not_enabled') {
-    throw new CommandFailedError('Remediation Agent unavailable.', {
-      remediationHint: `Ask an organization administrator to enable the feature. Learn more: ${AI_REMEDIATION_DOCS_URL}`,
-    });
+    blank();
+    info(
+      `The Remediation Agent is not enabled for your organisation. Contact your admin to enable it.`,
+    );
+    return;
   }
   if (entitlement === 'unknown') {
     throw new CommandFailedError('Remediation Agent unavailable.', {

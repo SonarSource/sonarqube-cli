@@ -28,10 +28,12 @@ import logger from '../lib/logger';
 import { print } from '../ui';
 import {
   BadRequestError,
+  ForbiddenApiError,
   RateLimitError,
   RequestPayloadTooLargeError,
   type RequestPayloadTooLargeMeta,
   ServiceUnavailableError,
+  SqaaForbiddenError,
 } from './errors';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url';
 import type { SettingsValue } from './settings-value';
@@ -98,6 +100,9 @@ export class SonarQubeClient {
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       throw await parseRequestPayloadTooLargeError(response);
+    }
+    if (method === 'POST' && response.status === HTTP_STATUS_FORBIDDEN) {
+      throw new ForbiddenApiError(await response.text());
     }
 
     if (method === 'GET') {
@@ -651,11 +656,19 @@ export class SonarQubeClient {
    */
   async createAnalysis(request: SqaaAnalysisRequest): Promise<SqaaAnalysisResponse> {
     const endpoint = '/a3s-analysis/analyses';
-    return await this.post<SqaaAnalysisResponse>(
-      endpoint,
-      request,
-      resolveFromEndpoint(this.serverURL, endpoint),
-    );
+    try {
+      return await this.post<SqaaAnalysisResponse>(
+        endpoint,
+        request,
+        resolveFromEndpoint(this.serverURL, endpoint),
+      );
+    } catch (err) {
+      // 403 on this endpoint means Agentic Pack entitlement was revoked.
+      if (err instanceof ForbiddenApiError) {
+        throw new SqaaForbiddenError();
+      }
+      throw err;
+    }
   }
 }
 

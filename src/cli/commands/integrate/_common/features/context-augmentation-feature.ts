@@ -46,7 +46,7 @@ export function createContextAugmentationFeature<
 >(options: ContextAugmentationSkillFeatureOptions): FeatureDeclaration<TOptions> {
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
-    displayName: 'Context Augmentation',
+    displayName: 'context augmentation',
     benefitDescription: CONTEXT_AUGMENTATION_FEATURE_BENEFIT,
     previewDescription: CONTEXT_AUGMENTATION_FEATURE_PREVIEW,
     shouldInstall: ({ options: integrationOptions }) =>
@@ -55,7 +55,7 @@ export function createContextAugmentationFeature<
     resources: [
       wholeFile({
         id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-        displayName: 'Context Augmentation skill file',
+        displayName: 'context augmentation skill file',
         version: SONAR_CONTEXT_AUGMENTATION_VERSION,
         targetPath: options.targetPath,
         content: async (context) =>
@@ -69,7 +69,7 @@ export function createContextAugmentationFeature<
     operations: [
       {
         id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-        displayName: 'Context Augmentation tool integration',
+        displayName: 'context augmentation tool integration',
         shouldApply: (context) => context.executionMode === 'install',
         apply: async (context) =>
           runToolIntegrateCommand({
@@ -87,14 +87,14 @@ export function createContextAugmentationFeature<
 function resolveContextAugmentationBinaryPath(context: IntegrationContext): string {
   const binaryPath = context.resolvedDependencies.get(CONTEXT_AUGMENTATION_BINARY_NAME)?.path;
   if (!binaryPath) {
-    throw new CommandFailedError('Context Augmentation binary path is unavailable.');
+    throw new CommandFailedError('Vortex context augmentation binary path is unavailable.');
   }
   return binaryPath;
 }
 
 function getRequiredAuth(context: IntegrationContext) {
   if (!context.auth) {
-    throw new CommandFailedError('Authentication is unavailable for Context Augmentation.');
+    throw new CommandFailedError('Authentication is unavailable for Vortex context augmentation.');
   }
   return context.auth;
 }

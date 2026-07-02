@@ -168,7 +168,7 @@ describe('analyzeSqaa: auth resolution', () => {
 
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as Error).message).toContain(
-      'SonarQube Agentic Analysis requires a project, but none is configured for this directory.',
+      'Vortex agentic analysis requires a project, but none is configured for this directory.',
     );
     expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
@@ -183,7 +183,7 @@ describe('analyzeSqaa: auth resolution', () => {
       .map((c) => String(c.args[0]))
       .join('\n');
     expect(output).toContain(
-      'SonarQube Agentic Analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
+      'Vortex agentic analysis skipped: no project configured. Specify one with --project or run: sonar integrate',
     );
   });
 });

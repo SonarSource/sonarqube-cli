@@ -29,6 +29,7 @@ import {
 } from '../../../src/lib/config-constants.js';
 import { fetchGuarded } from '../../../src/lib/fetch-guarded.js';
 import { SonarQubeClient } from '../../../src/sonarqube/client.js';
+import { ForbiddenApiError } from '../../../src/sonarqube/errors.js';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../src/ui';
 
 // ---------------------------------------------------------------------------
@@ -1359,7 +1360,7 @@ describe('SonarQubeClient', () => {
       expect(result.taskId).toBe('task-xyz-789');
     });
 
-    it('throws on non-OK response', () => {
+    it('throws ForbiddenApiError on 403 response', () => {
       const cloudClient = new SonarQubeClient(SONARCLOUD_URL, TOKEN);
       fetchSpy = mockFetch({ message: 'Insufficient privileges' }, false, 403);
       expect(
@@ -1368,7 +1369,7 @@ describe('SonarQubeClient', () => {
           issueKeys: ['KEY-1'],
           triggerSource: 'CLI',
         }),
-      ).rejects.toThrow('403');
+      ).rejects.toBeInstanceOf(ForbiddenApiError);
     });
   });
 
