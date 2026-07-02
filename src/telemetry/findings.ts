@@ -120,11 +120,11 @@ export async function emitAnalysisCompleted(
  * Emits one CliIntegrationConfigured event when telemetry is enabled.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
  */
-export function emitIntegrationConfigured(
+export async function emitIntegrationConfigured(
   auth: ResolvedAuth,
   fields: IntegrationConfiguredFields,
-): void {
-  const base = buildAnalysisIdentityBase(auth);
+): Promise<void> {
+  const base = await buildAnalysisIdentityBase(auth);
   if (!base) return;
   appendAnalysisEvent({
     metadata: {

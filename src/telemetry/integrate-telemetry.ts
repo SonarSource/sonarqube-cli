@@ -47,13 +47,13 @@ export interface IntegrationConfiguredTelemetryParams {
  * Assembles and emits a single CliIntegrationConfigured
  * event for a successful `sonar integrate` run.
  */
-export function emitIntegrationConfiguredTelemetry(
+export async function emitIntegrationConfiguredTelemetry(
   params: IntegrationConfiguredTelemetryParams,
-): void {
+): Promise<void> {
   try {
     const featuresInstalled = collectInstalledFeatureIds(params.installedFeatures);
 
-    emitIntegrationConfigured(params.auth, {
+    await emitIntegrationConfigured(params.auth, {
       integration_id: params.integrationId,
       repo_id: hashRepoRoot(params.repoRoot),
       features_installed: featuresInstalled,

@@ -144,7 +144,7 @@ export async function installIntegration<TOptions>({
 
     const stateSaved = saveInstalledFeatures(state);
     if (stateSaved) {
-      emitIntegrationConfiguredTelemetry({
+      await emitIntegrationConfiguredTelemetry({
         // `integrate` is an authenticatedAction, so auth is always present here.
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         auth: auth!,

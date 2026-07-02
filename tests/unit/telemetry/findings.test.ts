@@ -306,8 +306,8 @@ function makeIntegrationConfiguredFields(
 }
 
 describe('emitIntegrationConfigured()', () => {
-  it('writes a valid CliIntegrationConfigured envelope', () => {
-    emitIntegrationConfigured(
+  it('writes a valid CliIntegrationConfigured envelope', async () => {
+    await emitIntegrationConfigured(
       AUTH,
       makeIntegrationConfiguredFields({
         integration_id: 'git',
@@ -331,10 +331,10 @@ describe('emitIntegrationConfigured()', () => {
     expect(configured.event_payload.cli_installation_id).toBe('install-id');
   });
 
-  it('does not append when telemetry is disabled', () => {
+  it('does not append when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
 
-    emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
+    await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredFields());
 
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });

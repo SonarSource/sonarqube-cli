@@ -67,7 +67,7 @@ beforeEach(() => {
   emitIntegrationConfiguredTelemetrySpy = spyOn(
     integrateTelemetry,
     'emitIntegrationConfiguredTelemetry',
-  ).mockImplementation(() => undefined);
+  ).mockResolvedValue(undefined);
 });
 
 afterEach(() => {

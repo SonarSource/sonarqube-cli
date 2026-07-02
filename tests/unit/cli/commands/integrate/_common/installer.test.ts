@@ -57,7 +57,7 @@ describe('generic integration installer', () => {
     emitIntegrationConfiguredTelemetrySpy = spyOn(
       integrateTelemetry,
       'emitIntegrationConfiguredTelemetry',
-    ).mockImplementation(() => undefined);
+    ).mockResolvedValue(undefined);
   });
 
   afterEach(() => {

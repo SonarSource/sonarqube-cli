@@ -57,7 +57,7 @@ function makeInstalledFeature(
 let emitSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  emitSpy = spyOn(findings, 'emitIntegrationConfigured').mockImplementation(() => {});
+  emitSpy = spyOn(findings, 'emitIntegrationConfigured').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -65,8 +65,8 @@ afterEach(() => {
 });
 
 describe('emitIntegrationConfiguredTelemetry()', () => {
-  it('assembles the full payload for a project-scope run', () => {
-    emitIntegrationConfiguredTelemetry({
+  it('assembles the full payload for a project-scope run', async () => {
+    await emitIntegrationConfiguredTelemetry({
       auth: AUTH,
       integrationId: 'git',
       scope: 'project',
@@ -97,8 +97,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
     expect(fields.is_interactive).toBe(false);
   });
 
-  it('sets repo_id to null for global scope', () => {
-    emitIntegrationConfiguredTelemetry({
+  it('sets repo_id to null for global scope', async () => {
+    await emitIntegrationConfiguredTelemetry({
       auth: AUTH,
       integrationId: 'claude',
       scope: 'global',
@@ -115,8 +115,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
     expect(fields.is_from_router).toBe(true);
   });
 
-  it('sets repo_id to null when repoRoot is null on project scope', () => {
-    emitIntegrationConfiguredTelemetry({
+  it('sets repo_id to null when repoRoot is null on project scope', async () => {
+    await emitIntegrationConfiguredTelemetry({
       auth: AUTH,
       integrationId: 'claude',
       scope: 'project',
