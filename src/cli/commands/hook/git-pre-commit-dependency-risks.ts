@@ -85,7 +85,6 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
 
   let scan: ScaScanResult;
   let viewModel: DependencyRisksViewModel;
-  const scanStart = performance.now();
   try {
     const client = new SonarQubeClient(options.auth.serverUrl, options.auth.token);
     scan = await new ScaScanOrchestrator(
@@ -93,17 +92,11 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
       new ResolveOnlySecretsInstaller(),
-    ).run(options.auth, options.project);
+    ).run(options.auth, options.project, SCA_CALLER_COMMANDS.gitPreCommit);
     viewModel = buildDependencyRisksViewModel(scan.response, filter);
   } catch (err) {
-    // Record the failed-to-run scan even though the hook fails open (commit proceeds).
-    await emitScaAnalysisTelemetry(
-      SCA_CALLER_COMMANDS.gitPreCommit,
-      options.auth,
-      null,
-      Math.round(performance.now() - scanStart),
-      null,
-    );
+    // The orchestrator already emitted a failures_count:1 event if the SCA scan itself failed;
+    // a secrets pre-scan abort also lands here and must NOT be recorded as an SCA failure.
     warn(`Dependency-risks scan failed; commit not blocked. Reason: ${(err as Error).message}`);
     return;
   }

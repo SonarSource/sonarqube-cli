@@ -35,10 +35,7 @@ import { formatDependencyRisksJson } from './dependency-risk-helpers/format-depe
 import { formatDependencyRisksToon } from './dependency-risk-helpers/format-dependency-risks-toon.ts';
 import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
-import {
-  ScaScanOrchestrator,
-  type ScaScanResult,
-} from './dependency-risk-helpers/sca-scan-orchestrator.ts';
+import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type { Severity } from './dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
@@ -80,21 +77,9 @@ export async function analyzeDependencyRisks(
     new DefaultSecretsInstaller(),
   );
 
-  const scanStart = performance.now();
-  let scan: ScaScanResult;
-  try {
-    scan = await orchestrator.run(auth, projectKey);
-  } catch (err) {
-    // Record the failed-to-run scan (best-effort duration) before the error propagates.
-    await emitScaAnalysisTelemetry(
-      SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-      auth,
-      null,
-      Math.round(performance.now() - scanStart),
-      null,
-    );
-    throw err;
-  }
+  // The orchestrator emits the failures_count:1 event itself if the SCA scan throws (scoped so a
+  // secrets pre-scan abort never counts as an SCA failure); any throw here just propagates.
+  const scan = await orchestrator.run(auth, projectKey, SCA_CALLER_COMMANDS.analyzeDependencyRisks);
 
   const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   switch (options.format) {

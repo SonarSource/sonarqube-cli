@@ -24,9 +24,12 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { SCA_SCANNER_CACHE_DIR } from '../../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../../lib/logger';
-import { timed } from '../../../../lib/timed';
 import { type SonarQubeClient } from '../../../../sonarqube/client';
 import type { SettingsValue } from '../../../../sonarqube/settings-value';
+import {
+  emitScaAnalysisTelemetry,
+  type ScaCallerCommand,
+} from '../../../../telemetry/sca-analysis-telemetry';
 import { withSpinner } from '../../../../ui';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
 import type { SecretsInstaller } from '../../_common/install/secrets';
@@ -52,7 +55,11 @@ export class ScaScanOrchestrator {
     private readonly secretsInstaller: SecretsInstaller,
   ) {}
 
-  async run(auth: ResolvedAuth, projectKey: string): Promise<ScaScanResult> {
+  async run(
+    auth: ResolvedAuth,
+    projectKey: string,
+    callerCommand: ScaCallerCommand,
+  ): Promise<ScaScanResult> {
     const settings = await this.synchronizeSettings(auth, projectKey);
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
@@ -72,6 +79,8 @@ export class ScaScanOrchestrator {
       debug: getLogLevelConfig() === 'DEBUG',
     };
 
+    // A secret found here throws before the SCA scanner ever spawns; that throw propagates
+    // WITHOUT emitting an SCA event (the secrets analyzer owns its own telemetry).
     await preScanManifestsForSecrets({
       invocation,
       baseDir,
@@ -81,8 +90,22 @@ export class ScaScanOrchestrator {
       secretsInstaller: this.secretsInstaller,
     });
 
-    const { result, durationMs } = await timed(() => this.analyzeDependencyRisks(invocation));
-    return { response: result, scanDurationMs: durationMs };
+    // Time and telemeter only the SCA scan, so scan_duration_ms and a failures_count:1 event
+    // reflect the sca-scanner alone — never the settings sync or the secrets pre-scan above.
+    const scanStart = performance.now();
+    try {
+      const response = await this.analyzeDependencyRisks(invocation);
+      return { response, scanDurationMs: Math.round(performance.now() - scanStart) };
+    } catch (err) {
+      await emitScaAnalysisTelemetry(
+        callerCommand,
+        auth,
+        null,
+        Math.round(performance.now() - scanStart),
+        null,
+      );
+      throw err;
+    }
   }
 
   private synchronizeSettings(auth: ResolvedAuth, projectKey: string): Promise<SettingsValue[]> {
