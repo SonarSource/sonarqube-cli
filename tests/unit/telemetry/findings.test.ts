@@ -55,6 +55,7 @@ import {
   emitAnalysisFindingsDetected,
   flushFindings,
 } from '../../../src/telemetry/findings.js';
+import { SECRETS_CALLER_COMMANDS } from '../../../src/telemetry/secrets-analysis-telemetry.js';
 import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND } from '../../../src/telemetry/sqaa-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
 
@@ -624,7 +625,7 @@ describe('flushFindings()', () => {
   });
 });
 
-// ─── emitSecretsRunTelemetry ───────────────────────────────────────────────────
+// ─── scanAndEmitSecrets ────────────────────────────────────────────────────────
 
 // Resolves a spawn as if sonar-secrets ran to completion with the given exit code / stdout.
 function resolvedRun(exitCode: number | null, stdout: string): () => Promise<SpawnResult> {
@@ -634,13 +635,13 @@ function resolvedRun(exitCode: number | null, stdout: string): () => Promise<Spa
 describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('does nothing when telemetry is disabled', async () => {
     loadStateSpy.mockReturnValue(makeTelemetryState(false));
-    await scanAndEmitSecrets('analyze secrets', AUTH, resolvedRun(0, '{}'));
+    await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyzeSecrets, AUTH, resolvedRun(0, '{}'));
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 
   it('emits only CliAnalysisCompleted on a clean scan (exit 0, no issues)', async () => {
     await scanAndEmitSecrets(
-      'analyze secrets',
+      SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
       resolvedRun(0, JSON.stringify({ issues: [] })),
     );
@@ -654,7 +655,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     expect(completed.event_payload.findings_count).toBe(0);
     expect(typeof completed.event_payload.scan_duration_ms).toBe('number');
     expect(completed.event_payload.scan_duration_ms).toBeGreaterThanOrEqual(0);
-    expect(completed.event_payload.caller_command).toBe('analyze secrets');
+    expect(completed.event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.analyzeSecrets);
     expect(completed.event_payload.analyzer).toBe('sonar-secrets');
   });
 
@@ -666,7 +667,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
         { ruleKey: 'secrets:S1234', description: 'Other', file: 'src/other.ts' },
       ],
     });
-    await scanAndEmitSecrets('git-pre-commit', AUTH, resolvedRun(51, stdout));
+    await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPreCommit, AUTH, resolvedRun(51, stdout));
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(2);
@@ -676,7 +677,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(51);
     expect(completed.event_payload.findings_count).toBe(3);
-    expect(completed.event_payload.caller_command).toBe('git-pre-commit');
+    expect(completed.event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.gitPreCommit);
 
     const detected = lines[1] as StoredAnalysisFindingsDetectedEvent;
     expect(detected.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingsDetected');
@@ -697,7 +698,11 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     const stdout = JSON.stringify({
       issues: [{ ruleKey: 'secrets:S6290', description: 'AWS key in prompt' }],
     });
-    await scanAndEmitSecrets('agent-prompt-submit', AUTH, resolvedRun(51, stdout));
+    await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.agentPromptSubmit,
+      AUTH,
+      resolvedRun(51, stdout),
+    );
 
     const lines = readLines(testSonarUserHome);
     const detected = lines[1] as StoredAnalysisFindingsDetectedEvent;
@@ -710,7 +715,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   });
 
   it('emits only CliAnalysisCompleted with failures_count 1 for a non-clean, non-findings exit code', async () => {
-    await scanAndEmitSecrets('copilot-pre-tool-use', AUTH, resolvedRun(2, '{}'));
+    await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.copilotPreToolUse, AUTH, resolvedRun(2, '{}'));
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -721,7 +726,11 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   });
 
   it('reports a resolved null exitCode as exit_code null with failures_count 1 (no coercion)', async () => {
-    await scanAndEmitSecrets('agent-prompt-submit', AUTH, resolvedRun(null, '{}'));
+    await scanAndEmitSecrets(
+      SECRETS_CALLER_COMMANDS.agentPromptSubmit,
+      AUTH,
+      resolvedRun(null, '{}'),
+    );
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
@@ -733,7 +742,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('records errors_count from the errors field in stdout, independent of failures_count', async () => {
     const stdout = JSON.stringify({ issues: [], errors: ['auth failed', 'partial scan'] });
     // exit 2: run failed (failures_count 1) AND reported errors[] (errors_count 2) — not mutually exclusive
-    await scanAndEmitSecrets('analyze secrets', AUTH, resolvedRun(2, stdout));
+    await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyzeSecrets, AUTH, resolvedRun(2, stdout));
 
     const lines = readLines(testSonarUserHome);
     const completed = lines[0] as StoredAnalysisCompletedEvent;
@@ -749,7 +758,9 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
       stdout: JSON.stringify({ issues: [{ ruleKey: 'secrets:S6290', description: 'AWS key' }] }),
       stderr: '',
     };
-    const out = await scanAndEmitSecrets('git-pre-commit', AUTH, () => Promise.resolve(result));
+    const out = await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPreCommit, AUTH, () =>
+      Promise.resolve(result),
+    );
 
     expect(out.result).toBe(result);
     expect(out.parsed.issues).toHaveLength(1);
@@ -766,7 +777,9 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
     const boom = new Error('Scan timed out after 30000ms');
 
     let thrown: unknown;
-    await scanAndEmitSecrets('git-pre-commit', AUTH, () => Promise.reject(boom)).catch((err) => {
+    await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPreCommit, AUTH, () =>
+      Promise.reject(boom),
+    ).catch((err) => {
       thrown = err;
     });
     expect(thrown).toBe(boom);
