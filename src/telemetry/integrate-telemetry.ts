@@ -34,10 +34,7 @@ export interface IntegrationConfiguredTelemetryParams {
   isFromRouter: boolean;
   /** Features actually installed by this run (including active subfeatures). */
   installedFeatures: InstalledIntegrationFeature[];
-  /**
-   * Feature ids the user deliberately skipped: those offered (`ask`) and declined,
-   * plus already-installed features the user chose to uninstall this run.
-   */
+  /** Feature ids the user declined (offered via `ask`) or chose to uninstall this run. */
   featuresSkipped: string[];
   /** Repo root path when known (project scope, inside a git repo); null otherwise. */
   repoRoot: string | null;
