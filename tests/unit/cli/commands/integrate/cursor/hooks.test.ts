@@ -307,7 +307,8 @@ describe('buildCursorHookEntry', () => {
       /^powershell -NoProfile -ExecutionPolicy Bypass -File /,
       '',
     );
-    expect(commandPath).toMatch(/^[/\\]/);
+    // The path is quoted (single quotes on Unix, double quotes on Windows); allow a leading quote.
+    expect(commandPath).toMatch(/^['"]?[/\\]/);
   });
 
   it('sets failClosed to false by default', () => {

@@ -233,12 +233,14 @@ describe('post-update migration', () => {
       const pretoolScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('pretool-secrets')}`;
       const promptScriptRel = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('prompt-secrets')}`;
       const settingsRel = '.claude/settings.json';
+      // The path is shell-quoted so it survives spaces/metacharacters:
+      // double-quoted on Windows, single-quoted on Unix.
       const expectedPretoolCommand = IS_WINDOWS
-        ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${pretoolScriptRel}`
-        : pretoolScriptRel;
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${pretoolScriptRel}"`
+        : `'${pretoolScriptRel}'`;
       const expectedPromptCommand = IS_WINDOWS
-        ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${promptScriptRel}`
-        : promptScriptRel;
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${promptScriptRel}"`
+        : `'${promptScriptRel}'`;
 
       harness.cwd.writeFile(
         pretoolScriptRel,

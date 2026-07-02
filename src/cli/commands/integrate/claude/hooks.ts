@@ -26,7 +26,13 @@ import { basename, dirname, join } from 'node:path';
 
 import logger from '../../../../lib/logger';
 import { warn } from '../../../../ui';
-import { readOrInitJson, SONAR_SECRETS_MARKER, writeHookScript } from '../_common/hooks';
+import {
+  readOrInitJson,
+  resolveAgentHookCommand,
+  SONAR_SECRETS_MARKER,
+  writeHookScript,
+} from '../_common/hooks';
+import type { IntegrationContext } from '../_common/registry';
 import {
   getSecretPreToolTemplateUnix,
   getSecretPreToolTemplateWindows,
@@ -100,24 +106,18 @@ async function installHook(params: HookInstallParams): Promise<void> {
     timeout = 60,
   } = params;
 
-  const isWindows = process.platform === 'win32';
   const configDir = AGENT_CONFIG_DIR[agent];
 
   const fullScriptDir = join(installDir, configDir, HOOKS_DIR, dirname(scriptPath));
-  const fullScriptPath = await writeHookScript(
+  await writeHookScript(
     fullScriptDir,
     basename(scriptPath),
     scriptContentUnix,
     scriptContentWindows,
   );
-  const scriptExt = isWindows ? '.ps1' : '.sh';
 
-  // Global: absolute path; project: relative to installDir (portable when project is moved)
-  const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${scriptExt}`);
-  const commandPath = scope === 'global' ? fullScriptPath : relativePath;
-  const command = isWindows
-    ? `powershell -NoProfile -ExecutionPolicy Bypass -File ${commandPath.replaceAll('\\', '/')}`
-    : commandPath;
+  const hookContext = { targetRoot: installDir, scope } as IntegrationContext;
+  const command = resolveAgentHookCommand(hookContext, configDir, scriptPath);
 
   // Marker derived from first path segment (e.g. 'sonar-secrets' from 'sonar-secrets/build-scripts/pretool-secrets')
   const marker = scriptPath.split('/')[0];
