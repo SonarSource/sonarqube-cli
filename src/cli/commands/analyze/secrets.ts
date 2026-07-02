@@ -107,15 +107,15 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
  * event is emitted with `exit_code: null` and `failures_count: 1` so failed-to-run scans are
  * still counted. Prefer {@link scanAndEmitSecrets}, which handles both outcomes for callers.
  */
-function emitSecretsRunTelemetry(
+async function emitSecretsRunTelemetry(
   callerCommand: SecretsCallerCommand,
   auth: ResolvedAuth,
   result: { exitCode: number | null; stdout: string } | null,
   durationMs: number,
-): SecretsJsonOutput {
+): Promise<SecretsJsonOutput> {
   const parsed = result ? parseSecretsJson(result.stdout) : { issues: [] };
 
-  const base = buildAnalysisIdentityBase(auth);
+  const base = await buildAnalysisIdentityBase(auth);
   if (!base) return parsed;
 
   const { issues, errors } = parsed;
@@ -125,7 +125,7 @@ function emitSecretsRunTelemetry(
   const failuresCount = exitCode === 0 || exitCode === EXIT_CODE_SECRETS_FOUND ? 0 : 1;
   const analysisId = randomUUID();
 
-  emitAnalysisCompleted(auth, {
+  await emitAnalysisCompleted(auth, {
     caller_command: callerCommand,
     analyzer: 'sonar-secrets',
     analysis_id: analysisId,
@@ -144,7 +144,7 @@ function emitSecretsRunTelemetry(
       if (issue.file) filesWithFindings.add(issue.file);
     }
     const source: 'files' | 'stdin' = filesWithFindings.size > 0 ? 'files' : 'stdin';
-    emitAnalysisFindingsDetected(auth, {
+    await emitAnalysisFindingsDetected(auth, {
       caller_command: callerCommand,
       analyzer: 'sonar-secrets',
       analysis_id: analysisId,
@@ -178,7 +178,7 @@ export async function scanAndEmitSecrets(
   const start = performance.now();
   try {
     const result = await run();
-    const parsed = emitSecretsRunTelemetry(
+    const parsed = await emitSecretsRunTelemetry(
       callerCommand,
       auth,
       result,
@@ -186,7 +186,7 @@ export async function scanAndEmitSecrets(
     );
     return { result, parsed };
   } catch (err) {
-    emitSecretsRunTelemetry(callerCommand, auth, null, Math.round(performance.now() - start));
+    await emitSecretsRunTelemetry(callerCommand, auth, null, Math.round(performance.now() - start));
     throw err;
   }
 }
