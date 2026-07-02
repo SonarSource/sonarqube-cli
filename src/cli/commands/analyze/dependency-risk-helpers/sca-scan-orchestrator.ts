@@ -60,6 +60,10 @@ export class ScaScanOrchestrator {
     projectKey: string,
     callerCommand: ScaCallerCommand,
   ): Promise<ScaScanResult> {
+    // Only the SCA scan itself is telemetered (below). Pre-flight failures — settings sync,
+    // `assertScaAvailable`, and the secrets pre-scan — intentionally emit no SCA event: they
+    // mean the scanner never ran (mirroring the secrets/SQAA producers, which likewise only
+    // measure the analyzer run). Command-level failures remain visible via CliCommandExecuted.
     const settings = await this.synchronizeSettings(auth, projectKey);
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
