@@ -21,6 +21,10 @@
 import { type ResolvedAuth } from '../../../lib/auth-resolver';
 import { discoverProject } from '../../../lib/project-workspace';
 import { SonarQubeClient } from '../../../sonarqube/client';
+import {
+  emitScaAnalysisTelemetry,
+  SCA_CALLER_COMMANDS,
+} from '../../../telemetry/sca-analysis-telemetry';
 import { error, print, warn } from '../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../_common/error.js';
 import { DefaultScaScannerInstaller } from '../_common/install/sca-scanner.ts';
@@ -66,14 +70,18 @@ export async function analyzeDependencyRisks(
   const projectKey = await resolveProjectKey(options.project, auth);
 
   const client = new SonarQubeClient(auth.serverUrl, auth.token);
-  const result = await new ScaScanOrchestrator(
+  const orchestrator = new ScaScanOrchestrator(
     client,
     new DefaultScaScannerInstaller(),
     new DefaultScaScannerSpawner(),
     new DefaultSecretsInstaller(),
-  ).run(auth, projectKey);
+  );
 
-  const viewModel = buildDependencyRisksViewModel(result, filter);
+  // The orchestrator emits the failures_count:1 event itself if the SCA scan throws (scoped so a
+  // secrets pre-scan abort never counts as an SCA failure); any throw here just propagates.
+  const scan = await orchestrator.run(auth, projectKey, SCA_CALLER_COMMANDS.analyzeDependencyRisks);
+
+  const viewModel = buildDependencyRisksViewModel(scan.response, filter);
   switch (options.format) {
     case 'json':
       print(formatDependencyRisksJson(projectKey, viewModel));
@@ -85,7 +93,16 @@ export async function analyzeDependencyRisks(
       print(formatDependencyRisksTable(viewModel));
   }
 
-  handleResult(countUnresolvedIssues(viewModel), result.errors.length);
+  handleResult(countUnresolvedIssues(viewModel), scan.response.errors.length);
+
+  // Emit after handleResult so exit_code carries the CLI's final process.exitCode (0/1/51).
+  await emitScaAnalysisTelemetry(
+    SCA_CALLER_COMMANDS.analyzeDependencyRisks,
+    auth,
+    scan.response,
+    scan.scanDurationMs,
+    typeof process.exitCode === 'number' ? process.exitCode : null,
+  );
 }
 
 async function resolveProjectKey(

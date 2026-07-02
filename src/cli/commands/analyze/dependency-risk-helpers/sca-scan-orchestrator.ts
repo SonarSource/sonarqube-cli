@@ -26,6 +26,10 @@ import { SCA_SCANNER_CACHE_DIR } from '../../../../lib/config-constants';
 import logger, { getLogLevelConfig } from '../../../../lib/logger';
 import { type SonarQubeClient } from '../../../../sonarqube/client';
 import type { SettingsValue } from '../../../../sonarqube/settings-value';
+import {
+  emitScaAnalysisTelemetry,
+  type ScaCallerCommand,
+} from '../../../../telemetry/sca-analysis-telemetry';
 import { withSpinner } from '../../../../ui';
 import type { ScaScannerInstaller } from '../../_common/install/sca-scanner';
 import type { SecretsInstaller } from '../../_common/install/secrets';
@@ -37,6 +41,12 @@ import type { ScaScannerInvocation } from './sca-scanner-runner-base';
 import type { ScaScannerSpawner } from './sca-scanner-spawner';
 import { buildScaUrls } from './sca-urls';
 
+/** SCA scan result plus the wall-clock duration of the scan itself (excludes settings sync and the secrets pre-scan), for `scan_duration_ms` telemetry. */
+export interface ScaScanResult {
+  response: AnalyzeProjectResponse;
+  scanDurationMs: number;
+}
+
 export class ScaScanOrchestrator {
   constructor(
     private readonly client: SonarQubeClient,
@@ -45,7 +55,15 @@ export class ScaScanOrchestrator {
     private readonly secretsInstaller: SecretsInstaller,
   ) {}
 
-  async run(auth: ResolvedAuth, projectKey: string): Promise<AnalyzeProjectResponse> {
+  async run(
+    auth: ResolvedAuth,
+    projectKey: string,
+    callerCommand: ScaCallerCommand,
+  ): Promise<ScaScanResult> {
+    // Only the SCA scan itself is telemetered (below). Pre-flight failures — settings sync,
+    // `assertScaAvailable`, and the secrets pre-scan — intentionally emit no SCA event: they
+    // mean the scanner never ran (mirroring the secrets/SQAA producers, which likewise only
+    // measure the analyzer run). Command-level failures remain visible via CliCommandExecuted.
     const settings = await this.synchronizeSettings(auth, projectKey);
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
@@ -65,6 +83,8 @@ export class ScaScanOrchestrator {
       debug: getLogLevelConfig() === 'DEBUG',
     };
 
+    // A secret found here throws before the SCA scanner ever spawns; that throw propagates
+    // WITHOUT emitting an SCA event (the secrets analyzer owns its own telemetry).
     await preScanManifestsForSecrets({
       invocation,
       baseDir,
@@ -74,7 +94,22 @@ export class ScaScanOrchestrator {
       secretsInstaller: this.secretsInstaller,
     });
 
-    return this.analyzeDependencyRisks(invocation);
+    // Time and telemeter only the SCA scan, so scan_duration_ms and a failures_count:1 event
+    // reflect the sca-scanner alone — never the settings sync or the secrets pre-scan above.
+    const scanStart = performance.now();
+    try {
+      const response = await this.analyzeDependencyRisks(invocation);
+      return { response, scanDurationMs: Math.round(performance.now() - scanStart) };
+    } catch (err) {
+      await emitScaAnalysisTelemetry(
+        callerCommand,
+        auth,
+        null,
+        Math.round(performance.now() - scanStart),
+        null,
+      );
+      throw err;
+    }
   }
 
   private synchronizeSettings(auth: ResolvedAuth, projectKey: string): Promise<SettingsValue[]> {

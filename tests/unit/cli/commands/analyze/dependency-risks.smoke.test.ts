@@ -238,7 +238,10 @@ describe('analyzeDependencyRisks - output format', () => {
 
   beforeEach(() => {
     setMockUi(true);
-    runSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue(SCAN_RESULT_STUB);
+    runSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue({
+      response: SCAN_RESULT_STUB,
+      scanDurationMs: 0,
+    });
   });
 
   afterEach(() => {

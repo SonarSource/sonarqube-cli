@@ -189,6 +189,73 @@ for (const region of STAGING_REGIONS) {
         },
         SCAN_TIMEOUT_MS,
       );
+
+      it(
+        'writes CliAnalysisCompleted + CliAnalysisFindingsDetected to findings.ndjson',
+        async () => {
+          harness.state().withTelemetryEnabled();
+
+          const result = await harness.run(
+            `analyze dependency-risks --project ${projectKey} --format json`,
+            // __SQ_CLI_TELEMETRY_FLUSH__=1 writes the findings.ndjson sink without POSTing.
+            {
+              extraEnv: { ...cfg.cliEnv, __SQ_CLI_TELEMETRY_FLUSH__: '1' },
+              timeoutMs: SCAN_TIMEOUT_MS,
+            },
+          );
+
+          expect(
+            result.exitCode,
+            `expected exit ${EXIT_UNRESOLVED_RISKS} (unresolved risks found)\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+          ).toBe(EXIT_UNRESOLVED_RISKS);
+
+          const findingsFile = harness.cliHome.file('telemetry', 'findings.ndjson');
+          expect(findingsFile.exists()).toBe(true);
+
+          interface AnalysisEvent {
+            metadata: { event_type: string };
+            event_payload: Record<string, unknown>;
+          }
+          const events = findingsFile
+            .asText()
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as AnalysisEvent);
+
+          // The command also runs the secrets pre-scan, which emits its own sonar-secrets
+          // events into the same file — select the SCA ones by analyzer.
+          const completed = events.find(
+            (e) =>
+              e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
+              e.event_payload.analyzer === 'sca-scanner-cli',
+          );
+          const detected = events.find(
+            (e) =>
+              e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected' &&
+              e.event_payload.analyzer === 'sca-scanner-cli',
+          );
+          expect(completed).toBeDefined();
+          expect(detected).toBeDefined();
+          if (!completed || !detected) throw new Error('expected both SCA analysis events');
+
+          expect(completed.event_payload.analyzer).toBe('sca-scanner-cli');
+          expect(completed.event_payload.caller_command).toBe('analyze dependency-risks');
+          expect(completed.event_payload.failures_count).toBe(0);
+          expect(completed.event_payload.exit_code).toBe(EXIT_UNRESOLVED_RISKS);
+          expect(completed.event_payload.findings_count as number).toBeGreaterThanOrEqual(1);
+          expect(completed.event_payload.analysis_id).toBe(detected.event_payload.analysis_id);
+
+          const details = JSON.parse(detected.event_payload.details as string) as {
+            counts_by_rule: Record<string, number>;
+          };
+          const ruleKeys = Object.keys(details.counts_by_rule);
+          expect(ruleKeys.length).toBeGreaterThanOrEqual(1);
+          // Raw-enum <ScaIssueType>:<Severity> keys; the fixture's lodash CVE is a VULNERABILITY.
+          expect(ruleKeys.some((k) => k.startsWith('VULNERABILITY:'))).toBe(true);
+        },
+        SCAN_TIMEOUT_MS,
+      );
     },
   );
 }
