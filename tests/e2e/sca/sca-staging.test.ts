@@ -223,15 +223,21 @@ for (const region of STAGING_REGIONS) {
             .filter(Boolean)
             .map((line) => JSON.parse(line) as AnalysisEvent);
 
+          // The command also runs the secrets pre-scan, which emits its own sonar-secrets
+          // events into the same file — select the SCA ones by analyzer.
           const completed = events.find(
-            (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
+            (e) =>
+              e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
+              e.event_payload.analyzer === 'sca-scanner-cli',
           );
           const detected = events.find(
-            (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
+            (e) =>
+              e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected' &&
+              e.event_payload.analyzer === 'sca-scanner-cli',
           );
           expect(completed).toBeDefined();
           expect(detected).toBeDefined();
-          if (!completed || !detected) throw new Error('expected both analysis events');
+          if (!completed || !detected) throw new Error('expected both SCA analysis events');
 
           expect(completed.event_payload.analyzer).toBe('sca-scanner-cli');
           expect(completed.event_payload.caller_command).toBe('analyze dependency-risks');
