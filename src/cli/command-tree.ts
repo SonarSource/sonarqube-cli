@@ -24,6 +24,7 @@ import { version as VERSION } from '../../package.json';
 import { IS_STANDALONE_DISTRIBUTION } from '../lib/distribution';
 import { loadState } from '../lib/repository/state-repository';
 import { initSentry } from '../lib/sentry';
+import { maybeNotifyUpdateAvailable } from '../lib/update-notification';
 import { GENERIC_HTTP_METHODS } from '../sonarqube/client';
 import { MAX_PAGE_SIZE } from '../sonarqube/projects';
 import {
@@ -137,7 +138,8 @@ const auth = COMMAND_TREE.command('auth')
   .description('Manage authentication tokens and credentials')
   .rootHelp({
     category: 'cli-management',
-  });
+  })
+  .updateNotification();
 
 auth
   .command('login')
@@ -180,6 +182,10 @@ const listIssuesFormatOption = new Option('--format <format>', 'Output format')
 list
   .command('issues')
   .description('Search for issues in SonarQube')
+  .updateNotification((opts) => {
+    const format = typeof opts.format === 'string' ? opts.format : 'json';
+    return format.toLowerCase() === 'table';
+  })
   .requiredOption('-p, --project <project>', 'Project key')
   .option(
     '--statuses <statuses>',
@@ -199,6 +205,7 @@ list
 list
   .command('projects')
   .description('Search for projects in SonarQube')
+  .updateNotification()
   .option('-q, --query <query>', 'Search query to filter projects by name or key')
   .addOption(pageOption)
   .addOption(pageSizeOption)
@@ -234,6 +241,7 @@ const integrateCommand = COMMAND_TREE.command('integrate')
   .rootHelp({
     category: 'integrate',
   })
+  .updateNotification((opts) => !opts.nonInteractive)
   .option('-p, --project <project>', 'Project key. Mutually exclusive with --global.')
   .option('-g, --global', 'Install integrations globally.')
   // allowExcessArguments + preAction: when a parent command has both an action and subcommands,
@@ -381,6 +389,7 @@ const analyze = COMMAND_TREE.command('analyze')
     category: 'core',
     expandSubcommands: true,
   })
+  .updateNotification()
   .enablePositionalOptions();
 
 analyze
@@ -542,6 +551,7 @@ const system = COMMAND_TREE.command('system')
 system
   .command('status')
   .description('Show overall system status: authentication, installed binaries, and integrations')
+  .updateNotification((opts) => !opts.json)
   .option('--json', 'Output as JSON for machine consumption')
   .anonymousAction((options: SystemStatusOptions) => systemStatus(options));
 
@@ -687,4 +697,5 @@ COMMAND_TREE.hook('preAction', () => {
 // Collect a telemetry event after every command action.
 COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
   await storeEvent(actionCommand, (process.exitCode ?? 0) === 0);
+  await maybeNotifyUpdateAvailable(actionCommand);
 });

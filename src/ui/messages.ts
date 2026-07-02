@@ -40,6 +40,11 @@ export function setFormattedOutputMode(active: boolean): void {
   }
 }
 
+/** True when stdout messages are buffered for machine-readable command output. */
+export function isFormattedOutputMode(): boolean {
+  return _formattedOutputMode;
+}
+
 /** Returns messages collected since the last setFormattedOutputMode(true) call. */
 export function getMessagesForFormattedOutput(): string[] {
   return [..._collectedMessages];

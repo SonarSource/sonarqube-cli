@@ -25,14 +25,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
-import { SONARSOURCE_BINARIES_URL, UPDATE_SCRIPT_BASE_URL } from '../../../lib/config-constants';
+import {
+  CLI_STABLE_VERSION_PATH,
+  SONARSOURCE_BINARIES_URL,
+  UPDATE_SCRIPT_BASE_URL,
+} from '../../../lib/config-constants';
 import { buildFetchNetworkOptions } from '../../../lib/connectivity/network-config';
 import { isWindows } from '../../../lib/platform-detector';
 import { CommandFailedError } from '../_common/error';
 import { Version } from '../_common/version';
 
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
-const STABLE_VERSION_PATH = 'Distribution/sonarqube-cli/stable.version';
 const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:\.\d+)?$/;
 const TEMP_SCRIPT_PREFIX = 'sonar-update-';
 const TEMP_SCRIPT_CREATE_ATTEMPTS = 5;
@@ -174,19 +177,28 @@ async function fetchText(url: string, description: string): Promise<string> {
   return response.text();
 }
 
-async function fetchLatestVersion(): Promise<string> {
-  const stableVersionUrl = `${SONARSOURCE_BINARIES_URL}/${STABLE_VERSION_PATH}`;
-  const latestVersion = (await fetchText(stableVersionUrl, 'stable version metadata')).trim();
-  if (!STABLE_VERSION_PATTERN.test(latestVersion)) {
+function parseStableVersion(raw: string): string | null {
+  const latestVersion = raw.trim();
+  return STABLE_VERSION_PATTERN.test(latestVersion) ? latestVersion : null;
+}
+
+/**
+ * Reads the published stable.version string from binaries.sonarsource.com.
+ */
+export async function fetchLatestVersion(): Promise<string> {
+  const stableVersionUrl = `${SONARSOURCE_BINARIES_URL}/${CLI_STABLE_VERSION_PATH}`;
+  const body = await fetchText(stableVersionUrl, 'stable version');
+  const version = parseStableVersion(body);
+  if (!version) {
     throw new CommandFailedError('Could not determine the latest version.', {
       remediationHint: 'Retry later or update manually using the installer script.',
     });
   }
-  return latestVersion;
+  return version;
 }
 
 /**
- * Reads the published stable.version metadata from binaries.sonarsource.com and
+ * Reads the published stable version from binaries.sonarsource.com and
  * returns version comparison data for update checks.
  */
 export async function checkForUpdate(): Promise<UpdateCheckResult> {

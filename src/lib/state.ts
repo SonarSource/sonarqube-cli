@@ -230,11 +230,23 @@ export interface AgentsState {
 }
 
 /**
+ * Cached CLI update-check metadata for throttled background version fetches.
+ */
+export interface CliUpdateCheckState {
+  /** ISO timestamp of the last remote stable-version fetch */
+  lastCheckedAt?: string;
+  /** Latest stable version string returned by the last fetch */
+  latestVersion?: string;
+}
+
+/**
  * CLI configuration
  */
 export interface CliConfig {
   /** Current CLI version */
   cliVersion: string;
+  /** Throttled update-check cache (remote fetch at most once per day) */
+  updateCheck?: CliUpdateCheckState;
 }
 
 /**

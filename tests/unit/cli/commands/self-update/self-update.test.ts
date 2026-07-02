@@ -71,8 +71,16 @@ void mock.module('../../../../../src/lib/version', () => ({
   stripBuildNumber: mock(realStripBuildNumber),
 }));
 
-const { checkForUpdate } = await import('../../../../../src/cli/commands/self-update/update-check');
+const { checkForUpdate, fetchLatestVersion } =
+  await import('../../../../../src/cli/commands/self-update/update-check');
 const { selfUpdate } = await import('../../../../../src/cli/commands/self-update');
+
+function stableVersionResponse(version: string) {
+  return {
+    ok: true,
+    text: async () => Promise.resolve(`${version}\n`),
+  };
+}
 
 describe('checkForUpdate', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
@@ -86,10 +94,7 @@ describe('checkForUpdate', () => {
   });
 
   it('returns the latest update and marks upToDate false when stable.version is newer', async () => {
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      text: async () => Promise.resolve('99.0.0.241\n'),
-    });
+    fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0.241'));
 
     const result = await checkForUpdate();
 
@@ -99,15 +104,13 @@ describe('checkForUpdate', () => {
       (await import('../../../../../package.json')).version,
     );
     expect(result.upToDate).toBe(false);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('stable.version');
   });
 
   it('returns the latest update and marks upToDate true when the current version matches', async () => {
     // Same major.minor.patch as current; build number must be ignored.
     const [major, minor, patch] = (await import('../../../../../package.json')).version.split('.');
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      text: async () => Promise.resolve(`${major}.${minor}.${patch}.999\n`),
-    });
+    fetchSpy.mockResolvedValue(stableVersionResponse(`${major}.${minor}.${patch}.999`));
 
     const result = await checkForUpdate();
 
@@ -116,13 +119,21 @@ describe('checkForUpdate', () => {
     expect(result.upToDate).toBe(true);
   });
 
+  it('reads the version from stable.version', async () => {
+    fetchSpy.mockResolvedValue(stableVersionResponse('88.1.2.300'));
+
+    const result = await fetchLatestVersion();
+
+    expect(result).toBe('88.1.2.300');
+  });
+
   it('throws on HTTP error', () => {
     fetchSpy.mockResolvedValue({ ok: false, status: 404 });
 
     expect(checkForUpdate()).rejects.toThrow('HTTP 404');
   });
 
-  it('throws when stable.version is not a version', () => {
+  it('throws when stable.version is invalid', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       text: async () => Promise.resolve('not-a-version'),
@@ -150,7 +161,7 @@ describe('checkForUpdate', () => {
     });
 
     it('passes proxy option to fetch', async () => {
-      fetchSpy.mockResolvedValue({ ok: true, text: async () => Promise.resolve('1.0.0\n') });
+      fetchSpy.mockResolvedValue(stableVersionResponse('1.0.0'));
 
       await checkForUpdate();
 
@@ -177,10 +188,7 @@ describe('selfUpdate --status', () => {
   });
 
   it('reports an available update without installing', async () => {
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      text: async () => Promise.resolve('99.0.0.241\n'),
-    });
+    fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0.241'));
 
     await selfUpdate({ status: true });
 
@@ -191,10 +199,7 @@ describe('selfUpdate --status', () => {
   });
 
   it('reports already up to date', async () => {
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      text: async () => Promise.resolve('0.0.1\n'),
-    });
+    fetchSpy.mockResolvedValue(stableVersionResponse('0.0.1'));
 
     await selfUpdate({ status: true });
 
@@ -225,13 +230,17 @@ describe('selfUpdate --force', () => {
     latestVersion: string,
     scriptContent = '#!/usr/bin/env bash\necho hi\n',
   ): Promise<void> {
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      text: async () => Promise.resolve(`${latestVersion}\n`),
-    });
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      text: async () => Promise.resolve(scriptContent),
+    fetchSpy.mockImplementation((url: string) => {
+      if (String(url).endsWith('stable.version')) {
+        return Promise.resolve(stableVersionResponse(latestVersion));
+      }
+      if (String(url).includes('install.')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () => Promise.resolve(scriptContent),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
     await selfUpdate({ force: true });
   }
