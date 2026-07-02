@@ -22,15 +22,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { AnalyzeProjectResponse } from '../cli/commands/analyze/dependency-risk-helpers/sca-scanner.js';
 import type { ResolvedAuth } from '../lib/auth-resolver.js';
-import { emitAnalysisCompleted, emitAnalysisFindingsDetected } from './findings.js';
-
-/**
- * Schema version of the sca-scanner-cli CliAnalysisFindingsDetected `details` blob
- * ({ counts_by_rule } keyed by `<ScaIssueType>:<Severity>`). Bump when that shape changes;
- * independent of SQAA_DETAILS_SCHEMA_VERSION / SECRETS_DETAILS_SCHEMA_VERSION because each
- * analyzer owns the shape of its own `details`.
- */
-export const SCA_DETAILS_SCHEMA_VERSION = 1;
+import { emitAnalysisCompleted } from './findings.js';
 
 /**
  * The `caller_command` value recorded on every SCA analysis event, one per call site.
@@ -74,16 +66,17 @@ export function summarizeScaFindings(response: AnalyzeProjectResponse): {
 }
 
 /**
- * Emits CliAnalysisCompleted (always) and CliAnalysisFindingsDetected (when findings > 0)
- * for one SCA run. Strictly fire-and-forget: the entire body is guarded, so no telemetry
- * failure — identity resolution (`getOrCreateUserId`) or the file write — can ever propagate
- * to the caller. This matters because the analyze call site emits *after* `process.exitCode`
- * is set, and the hook call site must keep failing open; a thrown error here would otherwise
- * turn a successful scan into a failure.
+ * Emits a single CliAnalysisCompleted event for one SCA run, carrying `details`
+ * (JSON-encoded blob when findings were reported, `""` otherwise). Strictly fire-and-forget:
+ * the entire body is guarded, so no telemetry failure — identity resolution
+ * (`getOrCreateUserId`) or the file write — can ever propagate to the caller. This matters
+ * because the analyze call site emits *after* `process.exitCode` is set, and the hook call
+ * site must keep failing open; a thrown error here would otherwise turn a successful scan
+ * into a failure.
  *
  * Pass `response: null` for a run that failed to execute (scanner spawn/parse error or a
  * non-zero exit that threw): the completed event is emitted with `exit_code` as supplied
- * (callers pass `null` on the throw path) and `failures_count: 1`, and no findings event.
+ * (callers pass `null` on the throw path), `failures_count: 1`, and `details: ""`.
  *
  * `exitCode` is the CLI command's final `process.exitCode` (0/1/51 for `analyze`), not the
  * sca-scanner subprocess code; pass `null` when there is no analyze-style exit (hook) or the
@@ -109,6 +102,7 @@ export async function emitScaAnalysisTelemetry(
         errors_count: 0,
         failures_count: 1,
         scan_duration_ms: durationMs,
+        details: '',
       });
       return;
     }
@@ -124,16 +118,7 @@ export async function emitScaAnalysisTelemetry(
       errors_count: response.errors.length,
       failures_count: 0,
       scan_duration_ms: durationMs,
-    });
-
-    if (findingsCount === 0) return;
-
-    await emitAnalysisFindingsDetected(auth, {
-      caller_command: callerCommand,
-      analyzer: 'sca-scanner-cli',
-      analysis_id: analysisId,
-      details_schema_version: SCA_DETAILS_SCHEMA_VERSION,
-      details: JSON.stringify(details),
+      details: findingsCount > 0 ? JSON.stringify(details) : '',
     });
   } catch {
     // Telemetry is strictly fire-and-forget; never surface to the command handler.

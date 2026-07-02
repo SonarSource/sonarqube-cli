@@ -25,13 +25,9 @@ import { buildSubprocessNetworkEnv } from '../../../lib/connectivity/network-con
 import logger from '../../../lib/logger';
 import type { SpawnResult, StdioMode } from '../../../lib/process';
 import { spawnProcessWithTimeout } from '../../../lib/process';
-import {
-  emitAnalysisCompleted,
-  emitAnalysisFindingsDetected,
-} from '../../../telemetry/findings.js';
+import { emitAnalysisCompleted } from '../../../telemetry/findings.js';
 import {
   SECRETS_CALLER_COMMANDS,
-  SECRETS_DETAILS_SCHEMA_VERSION,
   type SecretsCallerCommand,
 } from '../../../telemetry/secrets-analysis-telemetry.js';
 import { blank, print, success, warn } from '../../../ui';
@@ -101,8 +97,9 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
 }
 
 /**
- * Emits CliAnalysisCompleted (always) and CliAnalysisFindingsDetected (when findings > 0)
- * for one sonar-secrets run. Telemetry write failures are swallowed by the emit helpers.
+ * Emits a single CliAnalysisCompleted event for one sonar-secrets run, carrying `details`
+ * (JSON-encoded blob when findings were reported, `""` otherwise). Telemetry write failures
+ * are swallowed by the emit helper.
  *
  * Pass `result: null` for a run that failed to execute (spawn error or timeout): the completed
  * event is emitted with `exit_code: null` and `failures_count: 1` so failed-to-run scans are
@@ -123,6 +120,22 @@ async function emitSecretsRunTelemetry(
   const failuresCount = exitCode === 0 || exitCode === EXIT_CODE_SECRETS_FOUND ? 0 : 1;
   const analysisId = randomUUID();
 
+  let details = '';
+  if (issues.length > 0) {
+    const countsByRule: Record<string, number> = {};
+    const filesWithFindings = new Set<string>();
+    for (const issue of issues) {
+      countsByRule[issue.ruleKey] = (countsByRule[issue.ruleKey] ?? 0) + 1;
+      if (issue.file) filesWithFindings.add(issue.file);
+    }
+    const source: 'files' | 'stdin' = filesWithFindings.size > 0 ? 'files' : 'stdin';
+    details = JSON.stringify({
+      counts_by_rule: countsByRule,
+      files_with_findings_count: filesWithFindings.size,
+      source,
+    });
+  }
+
   await emitAnalysisCompleted(auth, {
     caller_command: callerCommand,
     analyzer: 'sonar-secrets',
@@ -132,28 +145,8 @@ async function emitSecretsRunTelemetry(
     errors_count: errors?.length ?? 0,
     failures_count: failuresCount,
     scan_duration_ms: durationMs,
+    details,
   });
-
-  if (issues.length > 0) {
-    const countsByRule: Record<string, number> = {};
-    const filesWithFindings = new Set<string>();
-    for (const issue of issues) {
-      countsByRule[issue.ruleKey] = (countsByRule[issue.ruleKey] ?? 0) + 1;
-      if (issue.file) filesWithFindings.add(issue.file);
-    }
-    const source: 'files' | 'stdin' = filesWithFindings.size > 0 ? 'files' : 'stdin';
-    await emitAnalysisFindingsDetected(auth, {
-      caller_command: callerCommand,
-      analyzer: 'sonar-secrets',
-      analysis_id: analysisId,
-      details_schema_version: SECRETS_DETAILS_SCHEMA_VERSION,
-      details: JSON.stringify({
-        counts_by_rule: countsByRule,
-        files_with_findings_count: filesWithFindings.size,
-        source,
-      }),
-    });
-  }
 
   return parsed;
 }
