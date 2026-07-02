@@ -90,7 +90,7 @@ The CAG installer (`src/cli/commands/_common/install/context-augmentation.ts`) h
 
 ### Telemetry
 
-Command telemetry (`storeEvent` in `src/telemetry/index.ts`) and analysis telemetry (`emitAnalysisCompleted` / `emitAnalysisFindingsDetected` in `src/telemetry/findings.ts`) share a tiered identity resolver in `src/telemetry/identity.ts`. It fills `connection_type`, `user_uuid`, `organization_uuid_v4`, and `sqs_installation_id` on every event — including env-var auth (`SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG` or `SONARQUBE_CLI_SERVER`) where those fields were previously always null.
+Command telemetry (`storeEvent` in `src/telemetry/index.ts`) and analysis telemetry (`emitAnalysisCompleted` in `src/telemetry/findings.ts`) share a tiered identity resolver in `src/telemetry/identity.ts`. Each analyzer run (sonar-secrets, SQAA, SCA) emits exactly one `CliAnalysisCompleted` event; its required `details` field carries a JSON-encoded, analyzer-specific per-rule blob when `findings_count > 0` and is `""` (empty string, never `null`, so `flushFindings`'s null-stripping replacer keeps the column) otherwise. Each analyzer helper builds its own `details`; the shared emitter stays analyzer-agnostic. It fills `connection_type`, `user_uuid`, `organization_uuid_v4`, and `sqs_installation_id` on every event — including env-var auth (`SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG` or `SONARQUBE_CLI_SERVER`) where those fields were previously always null.
 
 **Resolution order** (per auth token, keyed by connection type + server URL + org key + token fingerprint):
 
