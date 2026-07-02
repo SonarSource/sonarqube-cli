@@ -25,6 +25,7 @@ import { resolve } from 'node:path';
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import logger from '../../../lib/logger';
 import { spawnProcess } from '../../../lib/process';
+import { resolveWorktreeEquivalentPaths } from '../../../lib/project-workspace/git-worktree';
 import { loadState } from '../../../lib/repository/state-repository';
 import { canonicalProjectRoot } from '../../../lib/state-manager';
 import { blank, confirmPrompt, text, warn } from '../../../ui';
@@ -114,24 +115,31 @@ export function resolveCloudAuth(
  * passed to `sonar integrate claude`), so when the user runs SQAA from a
  * subdirectory we resolve the git repository top-level first — otherwise
  * `process.cwd()` is a non-match against the recorded root and we incorrectly
- * skip with "no project configured".
+ * skip with "no project configured". We also try the root's equivalent in the
+ * repository's main working tree, so a linked worktree still resolves state
+ * recorded in the main checkout.
  *
  * Falls back to `process.cwd()` when not inside a git repository so the
  * single-file path still works outside git.
  */
 export async function resolveSqaaProjectKey(projectRoot?: string): Promise<string | null> {
   try {
-    const root = canonicalProjectRoot(projectRoot ?? (await tryResolveRepoRoot(process.cwd())));
+    const root = projectRoot ?? (await tryResolveRepoRoot(process.cwd()));
     const state = loadState();
 
     const claude = state.integrations.installed.find(
       (integration) => integration.integrationId === CLAUDE_INTEGRATION_ID,
     );
+    // Try the repo root, then its equivalent in the main working tree, so a
+    // linked worktree still resolves state recorded in the main checkout.
+    const candidates = new Set(
+      (await resolveWorktreeEquivalentPaths(root)).map(canonicalProjectRoot),
+    );
     const sqaaFeature = claude?.features.find(
       (feature) =>
         feature.featureId === SQAA_HOOK_FEATURE_ID &&
         feature.scope === 'project' &&
-        canonicalProjectRoot(feature.targetRoot) === root,
+        candidates.has(canonicalProjectRoot(feature.targetRoot)),
     );
 
     const projectKey = sqaaFeature?.attrs?.projectKey;

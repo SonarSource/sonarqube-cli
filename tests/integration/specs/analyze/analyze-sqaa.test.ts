@@ -21,7 +21,7 @@
 // Integration tests for `analyze agentic` and `verify` commands.
 
 import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -689,6 +689,42 @@ describe('analyze agentic', () => {
       expect(sqaaCalls).toHaveLength(1);
       expect(result.stdout + result.stderr).toContain('STANDARD analysis');
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'resolves the project key from a linked git worktree using the main checkout registry entry',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+
+      // Register the SQAA extension against the main checkout, as `sonar integrate` would.
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaExtension(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      // Make the main checkout a git repo and add a linked worktree beside it.
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/x'], harness.cwd.path);
+      writeFileSync(join(worktreePath, 'index.ts'), 'const x = 1;');
+
+      // Run from the worktree, whose repo root never matches the registered projectRoot.
+      const result = await harness.run('analyze agentic --file index.ts', { cwd: worktreePath });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('No issues found');
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
     },
     { timeout: 15000 },
   );

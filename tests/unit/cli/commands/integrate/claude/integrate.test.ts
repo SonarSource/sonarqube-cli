@@ -301,6 +301,8 @@ describe('integrateCommand', () => {
           projectKey: 'a-project',
           scaEnabled: true,
           serverUrl: 'https://sonarcloud.io',
+          // Not a git worktree in this unit test, so repoRoot falls back to the project root.
+          repoRoot: '/project/root',
         },
       }),
     );

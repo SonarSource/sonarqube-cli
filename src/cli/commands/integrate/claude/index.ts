@@ -81,10 +81,11 @@ export async function integrateClaude(
   const featureAttrs = {
     ...buildIntegrationAttrs(config),
     ...(contextAugmentation
-      ? buildContextAugmentationAttrs(
+      ? await buildContextAugmentationAttrs(
           config.serverURL,
           config.organization,
           contextAugmentation.scaEnabled,
+          ctx.project.rootDir,
         )
       : {}),
   };

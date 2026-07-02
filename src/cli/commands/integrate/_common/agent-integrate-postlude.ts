@@ -74,10 +74,11 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
   const attrs: Record<string, IntegrationStateAttribute> = {
     projectKey: context.projectKey ?? null,
     ...(contextAugmentation
-      ? buildContextAugmentationAttrs(
+      ? await buildContextAugmentationAttrs(
           context.serverUrl,
           context.organization,
           contextAugmentation.scaEnabled,
+          context.project.rootDir,
         )
       : {}),
   };

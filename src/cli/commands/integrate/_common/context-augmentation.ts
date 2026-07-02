@@ -24,6 +24,7 @@ import type { ResolvedAuth } from '../../../../lib/auth-resolver';
 import { isSonarQubeCloud } from '../../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../../lib/config-constants';
 import logger from '../../../../lib/logger';
+import { resolveMainWorktreeRoot } from '../../../../lib/project-workspace/git-worktree';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '../../../../lib/signatures';
 import type { IntegrationStateAttribute } from '../../../../lib/state';
 import { SonarQubeClient } from '../../../../sonarqube/client';
@@ -48,15 +49,23 @@ export interface ResolvedContextAugmentationSetup {
   scaEnabled: boolean;
 }
 
-export function buildContextAugmentationAttrs(
+/**
+ * Build the persisted Context Augmentation attrs. `repoRoot` records the
+ * repository's main working tree (resolved from `projectRoot`) so `sonar context`
+ * can match the recorded connection from any linked worktree — including ones
+ * created after integrate ran. Falls back to `projectRoot` outside a git repo.
+ */
+export async function buildContextAugmentationAttrs(
   serverUrl: string,
   orgKey: string | undefined,
   scaEnabled: boolean,
-): Record<string, IntegrationStateAttribute> {
+  projectRoot: string,
+): Promise<Record<string, IntegrationStateAttribute>> {
   return {
     orgKey: orgKey ?? null,
     scaEnabled,
     serverUrl,
+    repoRoot: (await resolveMainWorktreeRoot(projectRoot)) ?? projectRoot,
   };
 }
 

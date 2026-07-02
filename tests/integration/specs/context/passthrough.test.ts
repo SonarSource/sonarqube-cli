@@ -21,6 +21,8 @@
 // Integration tests for `sonar context <action>` — the passthrough wrapper to
 // the locally-installed sonar-context-augmentation binary.
 
+import { dirname, join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/cli/commands/integrate/_common/features/context-augmentation-feature';
@@ -32,6 +34,7 @@ import {
   type CagInvocation,
   readCagInvocations as readInvocations,
 } from '../../harness/cag-invocations';
+import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
 
 // CAG stub spawn + temp-dir teardown on Windows can exceed Bun's default hook timeout.
 setDefaultTimeout(30_000);
@@ -55,6 +58,7 @@ function appendRecordedCagFeature(
     projectKey: string;
     orgKey: string;
     serverUrl: string;
+    repoRoot?: string;
   },
 ): void {
   let integration = state.integrations.installed.find(
@@ -89,6 +93,7 @@ function appendRecordedCagFeature(
       projectKey: args.projectKey,
       scaEnabled: false,
       serverUrl: args.serverUrl,
+      ...(args.repoRoot ? { repoRoot: args.repoRoot } : {}),
     },
   };
   integration.features.push(feature);
@@ -165,6 +170,72 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'resolves the recorded project CAG connection from inside a linked git worktree',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'project-token', ORG_KEY);
+      // Record the CAG feature against the main checkout, as `sonar integrate` would.
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
+
+      // Make the main checkout a git repo and add a linked worktree beside it.
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/x'], harness.cwd.path);
+
+      // Run from the worktree, whose path never matches the recorded targetRoot.
+      const result = await harness.run('context status', { cwd: worktreePath });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('project-token');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'matches on the recorded repoRoot when targetRoot points at a different worktree',
+    async () => {
+      // Simulates integrate having run inside worktree-A (targetRoot = that worktree),
+      // while repoRoot records the stable main working tree. Running from the main
+      // tree must still resolve via repoRoot even though cwd is not inside targetRoot.
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      const stateBuilder = harness
+        .state()
+        .withAuth(serverUrl, 'main-token', ORG_KEY)
+        .withContextAugmentationBinaryInstalled();
+      const state = stateBuilder.build();
+      appendRecordedCagFeature(state, {
+        integrationId: CLAUDE_INTEGRATION_ID,
+        targetRoot: join(dirname(harness.cwd.path), 'some-other-worktree'),
+        repoRoot: harness.cwd.path,
+        updatedAt: '2026-03-01T00:00:00.000Z',
+        projectKey: PROJECT_KEY,
+        orgKey: ORG_KEY,
+        serverUrl,
+      });
+      stateBuilder.withRawState(JSON.stringify(state, null, 2));
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+      expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
     },
     { timeout: 30000 },
   );

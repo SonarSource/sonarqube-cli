@@ -26,6 +26,7 @@ import { resolveAuth, type ResolvedAuth } from '../../../lib/auth-resolver';
 import { SONAR_CONTEXT_INVOCATION } from '../../../lib/config-constants';
 import { getToken } from '../../../lib/keychain';
 import logger from '../../../lib/logger';
+import { resolveWorktreeEquivalentPaths } from '../../../lib/project-workspace/git-worktree';
 import type { InstalledIntegrationFeature, IntegrationStateAttribute } from '../../../lib/state';
 import { loadState } from '../../../lib/state-manager';
 import { buildContextAugmentationEnv } from '../_common/context-augmentation-env';
@@ -113,17 +114,25 @@ function getOptionalStringAttr(
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function resolveRecordedContextAugmentationConfig(cwd: string): RecordedContextAugmentationConfig {
+async function resolveRecordedContextAugmentationConfig(
+  cwd: string,
+): Promise<RecordedContextAugmentationConfig> {
   try {
-    const current = canonicalPath(cwd);
+    // Consult cwd, then its equivalent in the main working tree, so a linked
+    // worktree still matches state recorded in the main checkout.
+    const candidates = (await resolveWorktreeEquivalentPaths(cwd)).map(canonicalPath);
     const matches = loadState()
       .integrations.installed.flatMap((integration) =>
         integration.features.filter(isProjectContextAugmentationFeature).map((feature) => ({
           feature,
-          projectRoot: canonicalPath(feature.targetRoot),
+          // Prefer the stable main-working-tree key recorded at integrate time;
+          // fall back to targetRoot for state written by older CLI versions.
+          projectRoot: canonicalPath(
+            getOptionalStringAttr(feature.attrs, 'repoRoot') ?? feature.targetRoot,
+          ),
         })),
       )
-      .filter(({ projectRoot }) => isPathInside(projectRoot, current))
+      .filter(({ projectRoot }) => candidates.some((path) => isPathInside(projectRoot, path)))
       .sort(
         (a, b) =>
           b.projectRoot.length - a.projectRoot.length ||
@@ -192,7 +201,7 @@ export async function runContextPassthrough(
         remediationHint: 'Run: sonar auth login',
       });
     }
-    const recordedConfig = resolveRecordedContextAugmentationConfig(process.cwd());
+    const recordedConfig = await resolveRecordedContextAugmentationConfig(process.cwd());
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
     env = buildContextAugmentationEnv({

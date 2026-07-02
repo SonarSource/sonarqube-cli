@@ -21,6 +21,9 @@
 // Integration tests for the Context Augmentation step inside `sonar integrate
 // claude`, `sonar integrate copilot`, and `sonar integrate codex`.
 
+import { realpathSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { buildLocalCagBinaryName } from '../../../../src/cli/commands/_common/install/context-augmentation.js';
@@ -36,6 +39,23 @@ import {
   type CagInvocation,
   readCagInvocations as readInvocations,
 } from '../../harness/cag-invocations';
+import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
+
+// Canonicalize a path to its real on-disk form for stable full-path assertions
+// across 8.3 short vs long path forms. Uses realpathSync.native like production
+// (git-worktree canonicalize); the extra lowercase on Windows is a test-only
+// normalization — production does not lowercase, it relies on realpathSync.native
+// returning canonical drive-letter casing. Lowercasing here is strictly more
+// tolerant, so assertions never fail on casing alone.
+function canonical(path: string): string {
+  let resolved: string;
+  try {
+    resolved = realpathSync.native(path);
+  } catch {
+    resolved = resolve(path);
+  }
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
 
 function findToolInvocation(invocations: CagInvocation[], subcommand: string): CagInvocation {
   const match = invocations.find((i) => i.argv[0] === 'tool' && i.argv[1] === subcommand);
@@ -210,6 +230,64 @@ describe('integrate claude — Context Augmentation', () => {
         scaEnabled: true,
         serverUrl,
       });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'keys CAG state on the main working tree when integrate runs inside a linked worktree',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(PROJECT_KEY)
+        .withCagEntitlement(ORG_KEY)
+        .withScaEnabled(true)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+
+      // Main checkout = harness.cwd; add a linked worktree beside it and run
+      // integrate from there.
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'README.md', '# test\n');
+      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
+      git(['worktree', 'add', worktreePath, '-b', 'feature/x'], harness.cwd.path);
+      writeFileSync(
+        join(worktreePath, 'sonar-project.properties'),
+        [
+          `sonar.host.url=${serverUrl}`,
+          `sonar.projectKey=${PROJECT_KEY}`,
+          `sonar.organization=${ORG_KEY}`,
+        ].join('\n'),
+      );
+
+      const integrateResult = await harness.run('integrate claude --non-interactive', {
+        cwd: worktreePath,
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+      expect(integrateResult.exitCode).toBe(0);
+
+      // targetRoot stays the physical worktree (so teardown deletes the files it
+      // wrote there); repoRoot records the stable main working tree, which is the
+      // key `sonar context` matches against from any worktree. (The read side is
+      // covered deterministically in the context passthrough spec — the harness
+      // re-applies its state builder on every run, so an integrate-then-context
+      // flow in one test cannot share state here.)
+      const entry = findRecordedCagFeature(loadState(harness), CLAUDE_INTEGRATION_ID);
+      expect(entry).toBeDefined();
+      const targetRoot = entry?.feature.targetRoot ?? '';
+      const repoRoot = entry?.feature.attrs?.repoRoot;
+      expect(typeof repoRoot).toBe('string');
+      // Compare full canonical paths (not just basenames): targetRoot resolves to
+      // the physical worktree, repoRoot to the main working tree.
+      expect(canonical(targetRoot)).toBe(canonical(worktreePath));
+      expect(canonical(repoRoot as string)).toBe(canonical(harness.cwd.path));
+      expect(repoRoot).not.toBe(targetRoot);
     },
     { timeout: 30000 },
   );

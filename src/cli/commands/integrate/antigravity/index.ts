@@ -75,6 +75,18 @@ export async function integrateAntigravity(
     installContextAugmentation: contextAugmentation !== null,
   };
 
+  const attrs = {
+    ...buildIntegrationAttrs(ctx),
+    ...(contextAugmentation
+      ? await buildContextAugmentationAttrs(
+          ctx.serverUrl,
+          ctx.organization,
+          contextAugmentation.scaEnabled,
+          ctx.project.rootDir,
+        )
+      : {}),
+  };
+
   await installIntegration({
     registry: supportedIntegrations,
     integrationId: ANTIGRAVITY_INTEGRATION_ID,
@@ -84,16 +96,7 @@ export async function integrateAntigravity(
     auth,
     nonInteractive: options.nonInteractive,
     isFromRouter: options.isFromRouter,
-    attrs: {
-      ...buildIntegrationAttrs(ctx),
-      ...(contextAugmentation
-        ? buildContextAugmentationAttrs(
-            ctx.serverUrl,
-            ctx.organization,
-            contextAugmentation.scaEnabled,
-          )
-        : {}),
-    },
+    attrs,
   });
 }
 
