@@ -142,20 +142,23 @@ export async function installIntegration<TOptions>({
 
     renderCompletionSummary(integration, installedFeatures, removedFeatures);
 
-    emitIntegrationConfiguredTelemetry({
-      // `integrate` is an authenticatedAction, so auth is always present here.
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      auth: auth!,
-      integrationId,
-      scope,
-      nonInteractive: nonInteractive ?? false,
-      isFromRouter: isFromRouter ?? false,
-      installedFeatures,
-      featuresSkipped: [...declined, ...toRemove.map((application) => application.feature.id)],
-      repoRoot: resolveRepoRootForScope(scope, targetRoot),
-    });
+    const stateSaved = saveInstalledFeatures(state);
+    if (stateSaved) {
+      emitIntegrationConfiguredTelemetry({
+        // `integrate` is an authenticatedAction, so auth is always present here.
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        auth: auth!,
+        integrationId,
+        scope,
+        nonInteractive: nonInteractive ?? false,
+        isFromRouter: isFromRouter ?? false,
+        installedFeatures,
+        featuresSkipped: [...declined, ...toRemove.map((application) => application.feature.id)],
+        repoRoot: resolveRepoRootForScope(scope, targetRoot),
+      });
+    }
 
-    return saveInstalledFeatures(state) ? installedFeatures : [];
+    return stateSaved ? installedFeatures : [];
   } catch (error) {
     saveInstalledFeatures(state);
     throw error;
