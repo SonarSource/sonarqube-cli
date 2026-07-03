@@ -48,7 +48,6 @@ import * as processLib from '../../../../../../src/lib/process.js';
 import * as discovery from '../../../../../../src/lib/project-workspace';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
 import { type CliState, getDefaultState } from '../../../../../../src/lib/state';
-import * as integrateTelemetry from '../../../../../../src/telemetry/integrate-telemetry';
 import {
   clearMockUiCalls,
   getMockUiCalls,
@@ -60,19 +59,6 @@ const TEMP_DIR = join(process.cwd(), 'tests', 'unit', '.integrate-git-tmp');
 
 /** Simulate `git config core.hooksPath` returning "not set" (exit code 1). */
 const NO_HOOKS_PATH = { exitCode: 1, stdout: '', stderr: '' };
-
-let emitIntegrationConfiguredTelemetrySpy: ReturnType<typeof spyOn>;
-
-beforeEach(() => {
-  emitIntegrationConfiguredTelemetrySpy = spyOn(
-    integrateTelemetry,
-    'emitIntegrationConfiguredTelemetry',
-  ).mockResolvedValue(undefined);
-});
-
-afterEach(() => {
-  emitIntegrationConfiguredTelemetrySpy.mockRestore();
-});
 
 describe('isGitHookType', () => {
   it('returns true for valid hook types and false otherwise', () => {

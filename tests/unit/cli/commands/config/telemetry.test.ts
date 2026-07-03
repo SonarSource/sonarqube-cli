@@ -25,12 +25,18 @@ import { ENV_DO_NOT_TRACK } from '../../../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../../../src/lib/repository/state-repository.js';
 import { getDefaultState } from '../../../../../src/lib/state.js';
 import { clearMockUiCalls, findMockUiCall, getMockUiCalls, setMockUi } from '../../../../../src/ui';
+import { restoreEnv } from '../../../../_common/isolated-cli-env.js';
 
 let loadStateSpy: ReturnType<typeof spyOn>;
 let saveStateSpy: ReturnType<typeof spyOn>;
 
+// Each test runs from an unset baseline; restore the preload's DO_NOT_TRACK afterwards
+// so we don't leak a cleared value that would re-enable telemetry for later tests.
+const PRELOAD_DO_NOT_TRACK = process.env[ENV_DO_NOT_TRACK];
+
 beforeEach(() => {
   setMockUi(true);
+  delete process.env[ENV_DO_NOT_TRACK];
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
 });
@@ -39,7 +45,7 @@ afterEach(() => {
   setMockUi(false);
   loadStateSpy.mockRestore();
   saveStateSpy.mockRestore();
-  delete process.env[ENV_DO_NOT_TRACK];
+  restoreEnv(ENV_DO_NOT_TRACK, PRELOAD_DO_NOT_TRACK);
 });
 
 describe('configureTelemetry', () => {

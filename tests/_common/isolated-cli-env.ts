@@ -25,3 +25,12 @@ import { ENV_DO_NOT_TRACK } from '../../src/lib/config-constants.js';
 export const ISOLATED_CLI_SPAWN_ENV: Record<string, string> = {
   [ENV_DO_NOT_TRACK]: '1',
 };
+
+/** Restore an env var to a captured value, deleting it when the value was unset. */
+export function restoreEnv(key: string, previous: string | undefined): void {
+  if (previous === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = previous;
+  }
+}

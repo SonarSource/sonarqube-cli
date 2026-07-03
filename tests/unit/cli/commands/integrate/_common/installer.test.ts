@@ -37,7 +37,6 @@ import {
 } from '../../../../../../src/cli/commands/integrate/_common/registry';
 import * as stateRepository from '../../../../../../src/lib/repository/state-repository';
 import { getDefaultState } from '../../../../../../src/lib/state';
-import * as integrateTelemetry from '../../../../../../src/telemetry/integrate-telemetry';
 import { clearMockUiCalls, getMockUiCalls, setMockUi } from '../../../../../../src/ui';
 
 describe('generic integration installer', () => {
@@ -45,7 +44,6 @@ describe('generic integration installer', () => {
   let registry: IntegrationRegistry;
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
-  let emitIntegrationConfiguredTelemetrySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'sonar-cli-installer-'));
@@ -54,17 +52,12 @@ describe('generic integration installer', () => {
     clearMockUiCalls();
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
-    emitIntegrationConfiguredTelemetrySpy = spyOn(
-      integrateTelemetry,
-      'emitIntegrationConfiguredTelemetry',
-    ).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     setMockUi(false);
     loadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
-    emitIntegrationConfiguredTelemetrySpy.mockRestore();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
