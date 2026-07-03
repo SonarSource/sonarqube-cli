@@ -56,6 +56,7 @@ export interface RunContext {
   progress: SqaaProgress;
   analysisDepth?: SqaaDeepWireDepth;
   displayAnalysisDepth: SqaaAnalysisDepth;
+  propagateForbiddenError?: boolean;
 }
 
 export interface RunTally {
@@ -256,8 +257,7 @@ async function processChunk(
     ctx.progress.updateChunk(chunkIndex, 'done');
     return shouldContinueAfterChunk(parts, groupErrors);
   } catch (err) {
-    // Propagate so hook handlers (codex-post-tool-use) can show the nudge message.
-    if (err instanceof SqaaForbiddenError) {
+    if (err instanceof SqaaForbiddenError && ctx.propagateForbiddenError) {
       throw err;
     }
     recordChunkFailure(ctx.progress, tally, chunkIndex, fileIndices, chunkPaths, err as Error);

@@ -81,6 +81,7 @@ async function buildSqaaJsonReportFromEntries(
       branch,
       wireDepth,
       displayDepth,
+      runOptions.propagateForbiddenError,
     ),
   );
   const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
@@ -118,7 +119,15 @@ async function buildSqaaJsonReportFromChangeSet(
   const { files, ignored, repoRoot } = changeSet;
   const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
   const { result: tally, durationMs } = await timed(() =>
-    runSqaaAnalysesTallyForResolved(files, allPaths, resolved, branch, wireDepth, displayDepth),
+    runSqaaAnalysesTallyForResolved(
+      files,
+      allPaths,
+      resolved,
+      branch,
+      wireDepth,
+      displayDepth,
+      runOptions.propagateForbiddenError,
+    ),
   );
   const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
   await finishSqaaTelemetryFromReport(report, auth, runOptions, durationMs);

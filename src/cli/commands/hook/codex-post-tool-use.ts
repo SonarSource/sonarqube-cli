@@ -58,7 +58,7 @@ export async function codexPostToolUse(options: CodexPostToolUseOptions): Promis
     report = await buildSqaaJsonReport(
       { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
       auth,
-      CODEX_HOOK_TELEMETRY_OPTIONS,
+      { ...CODEX_HOOK_TELEMETRY_OPTIONS, propagateForbiddenError: true },
     );
   } catch (err) {
     if (err instanceof SqaaForbiddenError) {

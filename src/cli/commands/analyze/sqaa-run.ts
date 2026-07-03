@@ -119,6 +119,7 @@ export async function runSqaaAnalysesTallyForResolved(
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
+  propagateForbiddenError?: boolean,
 ): Promise<RunTally> {
   const silentProgress = new SqaaProgress({ files: allPaths, silent: true });
   const ctx: RunContext = {
@@ -130,6 +131,7 @@ export async function runSqaaAnalysesTallyForResolved(
     progress: silentProgress,
     analysisDepth: wireDepth,
     displayAnalysisDepth: displayDepth,
+    propagateForbiddenError,
   };
   return runAnalyses(ctx);
 }

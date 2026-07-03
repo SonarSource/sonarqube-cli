@@ -74,6 +74,7 @@ describe('codexPostToolUse', () => {
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
+        propagateForbiddenError: true,
       },
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
