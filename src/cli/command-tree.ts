@@ -308,7 +308,7 @@ integrateCommand
 integrateCommand
   .command('copilot')
   .description(
-    'Setup SonarQube integration for Copilot. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.',
+    'Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex agentic analysis and MCP Server.',
   )
   .option(
     '-g, --global',
@@ -636,7 +636,9 @@ hookCommand
 
 hookCommand
   .command('copilot-pre-tool-use')
-  .description('PreToolUse handler for Copilot: scan files for secrets before agent reads them')
+  .description(
+    'PreToolUse handler for GitHub Copilot CLI: scan files for secrets before agent reads them',
+  )
   .anonymousAction(() => copilotPreToolUse());
 
 hookCommand
