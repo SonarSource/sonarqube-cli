@@ -18,18 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Telemetry constants for the sonar-secrets analyzer's CliAnalysisCompleted /
-// CliAnalysisFindingsDetected events. Versioned independently of other analyzers
-// (e.g. SQAA) because each analyzer owns the shape of its own `details` blob.
+// Telemetry constants for the sonar-secrets analyzer's CliAnalysisCompleted event.
+// Each analyzer owns the shape of its own `details` blob
+// ({ counts_by_rule, files_with_findings_count, source }).
 // Bare `sonar analyze` uses caller_command `analyze` (same as SQAA); the dedicated
 // `analyze secrets` subcommand uses `analyze secrets`.
-
-/**
- * Schema version of the sonar-secrets CliAnalysisFindingsDetected `details` blob
- * ({ counts_by_rule, files_with_findings_count, source }). Bump when that shape changes;
- * independent of SQAA_DETAILS_SCHEMA_VERSION.
- */
-export const SECRETS_DETAILS_SCHEMA_VERSION = 1;
 
 /**
  * The `caller_command` value recorded on every sonar-secrets analysis event, one per

@@ -24,9 +24,7 @@ import type { FileResult, RunTally } from '../cli/commands/analyze/sqaa-analysis
 import type { SqaaJsonReport } from '../cli/commands/analyze/sqaa-display-json.js';
 import type { ResolvedAuth } from '../lib/auth-resolver.js';
 import type { SqaaIssue } from '../sonarqube/client.js';
-import { emitAnalysisCompleted, emitAnalysisFindingsDetected } from './findings.js';
-
-export const SQAA_DETAILS_SCHEMA_VERSION = 1;
+import { emitAnalysisCompleted } from './findings.js';
 
 export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
 
@@ -130,8 +128,8 @@ export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
 }
 
 /**
- * Emits CliAnalysisCompleted (always) and CliAnalysisFindingsDetected (when issues exist)
- * for one SQAA run. No-ops when telemetry is disabled.
+ * Emits a single CliAnalysisCompleted event for one SQAA run, carrying `details`
+ * (JSON-encoded blob when issues exist, `""` otherwise). No-ops when telemetry is disabled.
  *
  * Pass `exitCode` from the command handler. Omit or pass `null` when the invocation has no exit.
  * PostToolUse hooks pass {@link SQAA_HOOK_TELEMETRY_EXIT_CODE} (always 0) because they never
@@ -149,6 +147,8 @@ export async function emitSqaaAnalysisTelemetry(
 ): Promise<void> {
   const analysisId = randomUUID();
   const findingsCount = tally.totalIssues;
+  const details =
+    findingsCount > 0 ? JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))) : '';
 
   await emitAnalysisCompleted(auth, {
     caller_command: callerCommand,
@@ -159,15 +159,6 @@ export async function emitSqaaAnalysisTelemetry(
     errors_count: tally.totalErrors,
     failures_count: tally.totalFailures,
     scan_duration_ms: durationMs,
-  });
-
-  if (findingsCount === 0) return;
-
-  await emitAnalysisFindingsDetected(auth, {
-    caller_command: callerCommand,
-    analyzer: 'sqaa',
-    analysis_id: analysisId,
-    details_schema_version: SQAA_DETAILS_SCHEMA_VERSION,
-    details: JSON.stringify(collectRuleCounts(collectIssuesFromTally(tally))),
+    details,
   });
 }

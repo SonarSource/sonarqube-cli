@@ -20,9 +20,8 @@
 
 /**
  * Tests for telemetry/findings.ts:
- *   emitAnalysisCompleted         — CliAnalysisCompleted envelope + telemetry gate
- *   emitAnalysisFindingsDetected  — CliAnalysisFindingsDetected envelope + telemetry gate
- *   flushFindings                 — atomic rename, retention cap, send, re-queue, concurrent safety
+ *   emitAnalysisCompleted — CliAnalysisCompleted envelope + telemetry gate
+ *   flushFindings         — atomic rename, retention cap, send, re-queue, concurrent safety
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -41,18 +40,14 @@ import * as stateRepository from '../../../src/lib/repository/state-repository.j
 import type { CliState } from '../../../src/lib/state.js';
 import type {
   AnalysisCompletedEventPayload,
-  AnalysisFindingsDetectedEventPayload,
   StoredAnalysisCompletedEvent,
   StoredAnalysisEvent,
-  StoredAnalysisFindingsDetectedEvent,
 } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
   type AnalysisCompletedFields,
-  type AnalysisFindingsDetectedFields,
   emitAnalysisCompleted,
-  emitAnalysisFindingsDetected,
   flushFindings,
 } from '../../../src/telemetry/findings.js';
 import { SECRETS_CALLER_COMMANDS } from '../../../src/telemetry/secrets-analysis-telemetry.js';
@@ -88,6 +83,7 @@ function makeCompletedFields(
     errors_count: 0,
     failures_count: 0,
     scan_duration_ms: 456,
+    details: '',
     ...overrides,
   };
 }
@@ -98,32 +94,6 @@ function makeCompletedPayload(
   return {
     ...makeIdentityPayload(),
     ...makeCompletedFields(),
-    ...overrides,
-  };
-}
-
-function makeFindingsDetectedFields(
-  overrides: Partial<AnalysisFindingsDetectedFields> = {},
-): AnalysisFindingsDetectedFields {
-  return {
-    caller_command: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
-    analyzer: 'sqaa',
-    analysis_id: 'analysis-id-123',
-    details_schema_version: 1,
-    details: JSON.stringify({
-      rule_keys: ['sqaa:S1234'],
-      counts_by_rule: { 'sqaa:S1234': 1 },
-    }),
-    ...overrides,
-  };
-}
-
-function makeFindingsDetectedPayload(
-  overrides: Partial<AnalysisFindingsDetectedEventPayload> = {},
-): AnalysisFindingsDetectedEventPayload {
-  return {
-    ...makeIdentityPayload(),
-    ...makeFindingsDetectedFields(),
     ...overrides,
   };
 }
@@ -139,20 +109,6 @@ function makeStoredCompletedEvent(
       event_timestamp: String(Date.now()),
     },
     event_payload: makeCompletedPayload(overrides),
-  };
-}
-
-function makeStoredFindingsDetectedEvent(
-  overrides: Partial<AnalysisFindingsDetectedEventPayload> = {},
-): StoredAnalysisFindingsDetectedEvent {
-  return {
-    metadata: {
-      event_id: 'findings-id',
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliAnalysisFindingsDetected',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: makeFindingsDetectedPayload(overrides),
   };
 }
 
@@ -251,7 +207,7 @@ describe('emitAnalysisCompleted()', () => {
 
     const [event] = readLines(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-    const completedEvent = event as StoredAnalysisCompletedEvent;
+    const completedEvent = event;
     expect(completedEvent.event_payload.analyzer).toBe('sqaa');
     expect(completedEvent.event_payload.findings_count).toBe(2);
     expect(completedEvent.event_payload.exit_code).toBe(51);
@@ -280,14 +236,14 @@ describe('emitAnalysisCompleted()', () => {
     await emitAnalysisCompleted({ ...AUTH, connectionType: 'cloud' }, makeCompletedFields());
 
     const [event] = readLines(testSonarUserHome);
-    expect((event as StoredAnalysisCompletedEvent).event_payload.connection_type).toBe('sqc');
+    expect(event.event_payload.connection_type).toBe('sqc');
   });
 
   it('sets connection_type to sqs for server connections', async () => {
     await emitAnalysisCompleted({ ...AUTH, connectionType: 'on-premise' }, makeCompletedFields());
 
     const [event] = readLines(testSonarUserHome);
-    expect((event as StoredAnalysisCompletedEvent).event_payload.connection_type).toBe('sqs');
+    expect(event.event_payload.connection_type).toBe('sqs');
   });
 
   it('includes connection identity fields from the active connection', async () => {
@@ -304,7 +260,7 @@ describe('emitAnalysisCompleted()', () => {
 
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
-    const payload = (readLines(testSonarUserHome)[0] as StoredAnalysisCompletedEvent).event_payload;
+    const payload = readLines(testSonarUserHome)[0].event_payload;
     expect(payload.user_uuid).toBe('user-uuid-abc');
     expect(payload.organization_uuid_v4).toBe('org-uuid-xyz');
     expect(payload.sqs_installation_id).toBe('sqs-install-id-123');
@@ -315,7 +271,7 @@ describe('emitAnalysisCompleted()', () => {
 
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
-    const payload = (readLines(testSonarUserHome)[0] as StoredAnalysisCompletedEvent).event_payload;
+    const payload = readLines(testSonarUserHome)[0].event_payload;
     expect(payload.caller_agent).toBe('cursor');
   });
 
@@ -326,35 +282,6 @@ describe('emitAnalysisCompleted()', () => {
     await emitAnalysisCompleted(AUTH, makeCompletedFields());
 
     expect(existsSync(telemetryDir)).toBe(true);
-  });
-});
-
-// ─── emitAnalysisFindingsDetected ──────────────────────────────────────────────
-
-describe('emitAnalysisFindingsDetected()', () => {
-  it('writes a valid CliAnalysisFindingsDetected envelope', async () => {
-    await emitAnalysisFindingsDetected(
-      AUTH,
-      makeFindingsDetectedFields({ analysis_id: 'abc-123', details_schema_version: 1 }),
-    );
-
-    const [event] = readLines(testSonarUserHome);
-    expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingsDetected');
-    const findingsEvent = event as StoredAnalysisFindingsDetectedEvent;
-    expect(findingsEvent.event_payload.analysis_id).toBe('abc-123');
-    expect(findingsEvent.event_payload.details_schema_version).toBe(1);
-    expect(JSON.parse(findingsEvent.event_payload.details)).toEqual({
-      rule_keys: ['sqaa:S1234'],
-      counts_by_rule: { 'sqaa:S1234': 1 },
-    });
-  });
-
-  it('does not append when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
-
-    await emitAnalysisFindingsDetected(AUTH, makeFindingsDetectedFields());
-
-    expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 });
 
@@ -379,26 +306,6 @@ describe('flushFindings()', () => {
     try {
       await flushFindings(Date.now() + 60_000);
       expect(fetchSpy).toHaveBeenCalledTimes(2);
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
-
-  it('POSTs CliAnalysisCompleted and CliAnalysisFindingsDetected events from the same ndjson file', async () => {
-    writeStoredEvent(makeStoredCompletedEvent({ analysis_id: 'run-1' }));
-    writeStoredEvent(makeStoredFindingsDetectedEvent({ analysis_id: 'run-1' }));
-
-    const fetchSpy = mockFetch();
-    try {
-      await flushFindings(Date.now() + 60_000);
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
-      const types = fetchSpy.mock.calls.map((call: unknown[]) => {
-        const body = JSON.parse((call[1] as RequestInit).body as string) as StoredAnalysisEvent;
-        expect(body.event_payload.analysis_id).toBe('run-1');
-        return body.metadata.event_type;
-      });
-      expect(types).toContain('Analytics.Cli.CliAnalysisCompleted');
-      expect(types).toContain('Analytics.Cli.CliAnalysisFindingsDetected');
     } finally {
       fetchSpy.mockRestore();
     }
@@ -556,7 +463,7 @@ describe('flushFindings()', () => {
       const requeued = readLines(testSonarUserHome);
       expect(requeued).toHaveLength(1);
       expect(requeued[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-      expect((requeued[0] as StoredAnalysisCompletedEvent).event_payload.analysis_id).toBe('run-a');
+      expect(requeued[0].event_payload.analysis_id).toBe('run-a');
     } finally {
       fetchSpy.mockRestore();
     }
@@ -642,7 +549,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     expect(readLines(testSonarUserHome)).toHaveLength(0);
   });
 
-  it('emits only CliAnalysisCompleted on a clean scan (exit 0, no issues)', async () => {
+  it('emits a single CliAnalysisCompleted with details "" on a clean scan (exit 0, no issues)', async () => {
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,
       AUTH,
@@ -652,17 +559,18 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
     expect(lines[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
+    const completed = lines[0];
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(0);
     expect(completed.event_payload.findings_count).toBe(0);
+    expect(completed.event_payload.details).toBe('');
     expect(typeof completed.event_payload.scan_duration_ms).toBe('number');
     expect(completed.event_payload.scan_duration_ms).toBeGreaterThanOrEqual(0);
     expect(completed.event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.analyzeSecrets);
     expect(completed.event_payload.analyzer).toBe('sonar-secrets');
   });
 
-  it('emits CliAnalysisCompleted + CliAnalysisFindingsDetected when secrets found (exit 51)', async () => {
+  it('emits a single CliAnalysisCompleted with populated details when secrets found (exit 51)', async () => {
     const stdout = JSON.stringify({
       issues: [
         { ruleKey: 'secrets:S6290', description: 'AWS key', file: 'src/config.ts' },
@@ -673,18 +581,16 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.gitPreCommit, AUTH, resolvedRun(51, stdout));
 
     const lines = readLines(testSonarUserHome);
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(1);
 
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
+    const completed = lines[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(51);
     expect(completed.event_payload.findings_count).toBe(3);
     expect(completed.event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.gitPreCommit);
 
-    const detected = lines[1] as StoredAnalysisFindingsDetectedEvent;
-    expect(detected.metadata.event_type).toBe('Analytics.Cli.CliAnalysisFindingsDetected');
-    const details = JSON.parse(detected.event_payload.details) as {
+    const details = JSON.parse(completed.event_payload.details) as {
       counts_by_rule: Record<string, number>;
       files_with_findings_count: number;
       source: string;
@@ -693,8 +599,6 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     expect(details.counts_by_rule['secrets:S1234']).toBe(1);
     expect(details.files_with_findings_count).toBe(2);
     expect(details.source).toBe('files');
-
-    expect(completed.event_payload.analysis_id).toBe(detected.event_payload.analysis_id);
   });
 
   it('sets source to stdin and files_with_findings_count to 0 when no file paths in issues', async () => {
@@ -708,8 +612,8 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     );
 
     const lines = readLines(testSonarUserHome);
-    const detected = lines[1] as StoredAnalysisFindingsDetectedEvent;
-    const details = JSON.parse(detected.event_payload.details) as {
+    const completed = lines[0];
+    const details = JSON.parse(completed.event_payload.details) as {
       files_with_findings_count: number;
       source: string;
     };
@@ -722,7 +626,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
+    const completed = lines[0];
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.findings_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(2);
@@ -737,7 +641,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
+    const completed = lines[0];
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.exit_code).toBeNull();
   });
@@ -748,7 +652,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyzeSecrets, AUTH, resolvedRun(2, stdout));
 
     const lines = readLines(testSonarUserHome);
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
+    const completed = lines[0];
     expect(completed.event_payload.errors_count).toBe(2);
     expect(completed.event_payload.failures_count).toBe(1);
   });
@@ -769,11 +673,12 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
     expect(out.parsed.issues).toHaveLength(1);
 
     const lines = readLines(testSonarUserHome);
-    // one Completed + one FindingsDetected (findings present)
-    expect(lines).toHaveLength(2);
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
+    // a single Completed event carrying details (findings present)
+    expect(lines).toHaveLength(1);
+    const completed = lines[0];
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(51);
+    expect(completed.event_payload.details).not.toBe('');
   });
 
   it('emits a failures_count:1 event and re-throws when the scan fails to run', async () => {
@@ -789,7 +694,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
-    const completed = lines[0] as StoredAnalysisCompletedEvent;
+    const completed = lines[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.exit_code).toBeNull();

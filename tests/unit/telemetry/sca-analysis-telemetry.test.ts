@@ -36,17 +36,12 @@ import type {
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type {
-  StoredAnalysisCompletedEvent,
-  StoredAnalysisEvent,
-  StoredAnalysisFindingsDetectedEvent,
-} from '../../../src/lib/state.js';
+import type { StoredAnalysisEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
   emitScaAnalysisTelemetry,
   SCA_CALLER_COMMANDS,
-  SCA_DETAILS_SCHEMA_VERSION,
   summarizeScaFindings,
 } from '../../../src/telemetry/sca-analysis-telemetry.js';
 import * as userModule from '../../../src/telemetry/user.js';
@@ -215,7 +210,7 @@ describe('summarizeScaFindings()', () => {
 });
 
 describe('emitScaAnalysisTelemetry()', () => {
-  it('writes only CliAnalysisCompleted on a clean run (no new findings)', async () => {
+  it('writes a single CliAnalysisCompleted with details "" on a clean run (no new findings)', async () => {
     const response = makeResponse([makeRelease(false, [makeIssue('VULNERABILITY', 'HIGH')])]);
 
     await emitScaAnalysisTelemetry(
@@ -228,7 +223,7 @@ describe('emitScaAnalysisTelemetry()', () => {
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
-    const completed = events[0] as StoredAnalysisCompletedEvent;
+    const completed = events[0];
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     expect(completed.event_payload.caller_command).toBe('analyze dependency-risks');
     expect(completed.event_payload.analyzer).toBe('sca-scanner-cli');
@@ -237,10 +232,11 @@ describe('emitScaAnalysisTelemetry()', () => {
     expect(completed.event_payload.errors_count).toBe(0);
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.scan_duration_ms).toBe(123);
+    expect(completed.event_payload.details).toBe('');
     expect(completed.event_payload.analysis_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('writes Completed and FindingsDetected with matching analysis_id when new findings exist', async () => {
+  it('writes a single CliAnalysisCompleted with populated details when new findings exist', async () => {
     const response = makeResponse(
       [makeRelease(true, [makeIssue('VULNERABILITY', 'HIGH'), makeIssue('VULNERABILITY', 'HIGH')])],
       [makeError()],
@@ -255,34 +251,25 @@ describe('emitScaAnalysisTelemetry()', () => {
     );
 
     const events = readEvents(testSonarUserHome);
-    expect(events).toHaveLength(2);
-    const completed = events.find(
-      (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
-    ) as StoredAnalysisCompletedEvent | undefined;
-    const findings = events.find(
-      (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
-    ) as StoredAnalysisFindingsDetectedEvent | undefined;
-
-    expect(completed).toBeDefined();
-    expect(findings).toBeDefined();
-    expect(completed!.event_payload.analysis_id).toBe(findings!.event_payload.analysis_id);
-    expect(completed!.event_payload.findings_count).toBe(2);
-    expect(completed!.event_payload.exit_code).toBe(51);
-    expect(completed!.event_payload.errors_count).toBe(1);
-    expect(completed!.event_payload.failures_count).toBe(0);
-    expect(findings!.event_payload.analyzer).toBe('sca-scanner-cli');
-    expect(findings!.event_payload.details_schema_version).toBe(SCA_DETAILS_SCHEMA_VERSION);
-    expect(JSON.parse(findings!.event_payload.details)).toEqual({
+    expect(events).toHaveLength(1);
+    const completed = events[0];
+    expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
+    expect(completed.event_payload.findings_count).toBe(2);
+    expect(completed.event_payload.exit_code).toBe(51);
+    expect(completed.event_payload.errors_count).toBe(1);
+    expect(completed.event_payload.failures_count).toBe(0);
+    expect(completed.event_payload.analyzer).toBe('sca-scanner-cli');
+    expect(JSON.parse(completed.event_payload.details)).toEqual({
       counts_by_rule: { 'VULNERABILITY:HIGH': 2 },
     });
   });
 
-  it('records a failed-to-run scan (response null) as failures_count 1 with no findings event', async () => {
+  it('records a failed-to-run scan (response null) as failures_count 1 with details ""', async () => {
     await emitScaAnalysisTelemetry(SCA_CALLER_COMMANDS.gitPreCommit, AUTH, null, 77, null);
 
     const events = readEvents(testSonarUserHome);
     expect(events).toHaveLength(1);
-    const completed = events[0] as StoredAnalysisCompletedEvent;
+    const completed = events[0];
     expect(completed.event_payload.caller_command).toBe('git-pre-commit');
     expect(completed.event_payload.analyzer).toBe('sca-scanner-cli');
     expect(completed.event_payload.findings_count).toBe(0);
@@ -290,21 +277,20 @@ describe('emitScaAnalysisTelemetry()', () => {
     expect(completed.event_payload.errors_count).toBe(0);
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.scan_duration_ms).toBe(77);
+    expect(completed.event_payload.details).toBe('');
   });
 
-  it('emits FindingsDetected for the git-pre-commit caller too (Model B)', async () => {
+  it('populates details for the git-pre-commit caller too', async () => {
     const response = makeResponse([makeRelease(true, [makeIssue('MALWARE', 'BLOCKER')])]);
 
     await emitScaAnalysisTelemetry(SCA_CALLER_COMMANDS.gitPreCommit, AUTH, response, 10, null);
 
     const events = readEvents(testSonarUserHome);
-    expect(events).toHaveLength(2);
-    const findings = events.find(
-      (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
-    ) as StoredAnalysisFindingsDetectedEvent | undefined;
-    expect(findings).toBeDefined();
-    expect(findings!.event_payload.caller_command).toBe('git-pre-commit');
-    expect(JSON.parse(findings!.event_payload.details)).toEqual({
+    expect(events).toHaveLength(1);
+    const completed = events[0];
+    expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
+    expect(completed.event_payload.caller_command).toBe('git-pre-commit');
+    expect(JSON.parse(completed.event_payload.details)).toEqual({
       counts_by_rule: { 'MALWARE:BLOCKER': 1 },
     });
   });

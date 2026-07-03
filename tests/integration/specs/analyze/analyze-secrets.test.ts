@@ -262,7 +262,7 @@ describe('analyze secrets', () => {
   );
 
   it(
-    'writes CliAnalysisCompleted + CliAnalysisFindingsDetected to findings.ndjson from a real scan',
+    'writes a single CliAnalysisCompleted with populated details to findings.ndjson from a real scan',
     async () => {
       harness.state().withSecretsBinaryInstalled().withTelemetryEnabled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
@@ -288,18 +288,13 @@ describe('analyze secrets', () => {
         .filter(Boolean)
         .map((line) => JSON.parse(line) as AnalysisEvent);
 
-      // One completed event (always) + one findings-detected event (findings present).
-      // Select by event_type rather than position so the assertions don't depend on emit order.
-      expect(events).toHaveLength(2);
+      // Exactly one completed event, carrying the details blob when findings are present.
+      expect(events).toHaveLength(1);
       const completed = events.find(
         (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
       );
-      const detected = events.find(
-        (e) => e.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
-      );
       expect(completed).toBeDefined();
-      expect(detected).toBeDefined();
-      if (!completed || !detected) throw new Error('expected both analysis events');
+      if (!completed) throw new Error('expected a CliAnalysisCompleted event');
 
       expect(completed.event_payload.analyzer).toBe('sonar-secrets');
       expect(completed.event_payload.caller_command).toBe('analyze secrets');
@@ -307,16 +302,13 @@ describe('analyze secrets', () => {
       expect(completed.event_payload.exit_code).toBe(EXIT_CODE_SECRETS_FOUND);
       expect(completed.event_payload.findings_count as number).toBeGreaterThanOrEqual(1);
 
-      const details = JSON.parse(detected.event_payload.details as string) as {
+      const details = JSON.parse(completed.event_payload.details as string) as {
         counts_by_rule: Record<string, number>;
         files_with_findings_count: number;
         source: string;
       };
       expect(Object.keys(details.counts_by_rule).length).toBeGreaterThanOrEqual(1);
       expect(details.source).toBe('files');
-
-      // The two events are joinable on a shared analysis_id.
-      expect(completed.event_payload.analysis_id).toBe(detected.event_payload.analysis_id);
     },
     { timeout: 30000 },
   );

@@ -495,7 +495,7 @@ export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayl
   /** Literal CLI subcommand path (e.g. "analyze agentic", "hook git-pre-commit") */
   caller_command: string;
   analyzer: AnalysisTelemetryAnalyzer;
-  /** UUID minted once per run; join key with CliAnalysisFindingsDetected */
+  /** Per-run UUID; foreign key for a future per-finding child event. */
   analysis_id: string;
   findings_count: number;
   /**
@@ -519,19 +519,12 @@ export interface AnalysisCompletedEventPayload extends AnalysisEventIdentityPayl
    */
   failures_count: number;
   scan_duration_ms: number;
-}
-
-/**
- * Payload for a CliAnalysisFindingsDetected event — intended for runs that
- * reported findings, carrying a versioned per-rule details blob joined to
- * CliAnalysisCompleted via analysis_id.
- */
-export interface AnalysisFindingsDetectedEventPayload extends AnalysisEventIdentityPayload {
-  caller_command: string;
-  analyzer: AnalysisTelemetryAnalyzer;
-  analysis_id: string;
-  details_schema_version: number;
-  /** JSON-encoded allowlist blob (rule keys and per-rule counts only) */
+  /**
+   * JSON-encoded, analyzer-specific allowlist blob (rule keys and per-rule counts only) when
+   * `findings_count > 0`; empty string otherwise. Always a flat JSON-encoded string, never a
+   * nested object — the ingestion endpoint requires flat event payloads. Empty string (not
+   * `null`) so the field survives the `flushFindings` replacer, which strips `null` values.
+   */
   details: string;
 }
 
@@ -550,18 +543,8 @@ export interface StoredAnalysisCompletedEvent {
   event_payload: AnalysisCompletedEventPayload;
 }
 
-/** Full CliAnalysisFindingsDetected event written to findings.ndjson. */
-export interface StoredAnalysisFindingsDetectedEvent {
-  metadata: AnalysisEventMetadataBase & {
-    event_type: 'Analytics.Cli.CliAnalysisFindingsDetected';
-  };
-  event_payload: AnalysisFindingsDetectedEventPayload;
-}
-
 /** Any event stored in findings.ndjson and drained by flushFindings. */
-export type StoredAnalysisEvent =
-  | StoredAnalysisCompletedEvent
-  | StoredAnalysisFindingsDetectedEvent;
+export type StoredAnalysisEvent = StoredAnalysisCompletedEvent;
 
 /**
  * Telemetry configuration and pending event batch

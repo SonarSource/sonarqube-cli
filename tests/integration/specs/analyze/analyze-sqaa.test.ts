@@ -28,7 +28,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type {
   StoredAnalysisCompletedEvent,
   StoredAnalysisEvent,
-  StoredAnalysisFindingsDetectedEvent,
 } from '../../../../src/lib/state.js';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../../../../src/telemetry/index.js';
 import { SECRETS_CALLER_COMMANDS } from '../../../../src/telemetry/secrets-analysis-telemetry.js';
@@ -987,7 +986,7 @@ describe('analyze agentic — analysis telemetry', () => {
       const events = readAnalysisEvents();
       expect(events).toHaveLength(1);
       expect(events[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-      const completed = events[0] as StoredAnalysisCompletedEvent;
+      const completed = events[0];
       expect(completed.event_payload.caller_command).toBe(SQAA_ANALYZE_AGENTIC_CALLER_COMMAND);
       expect(completed.event_payload.analyzer).toBe('sqaa');
       expect(completed.event_payload.findings_count).toBe(0);
@@ -1001,7 +1000,7 @@ describe('analyze agentic — analysis telemetry', () => {
   );
 
   it(
-    'writes CliAnalysisCompleted and CliAnalysisFindingsDetected when issues are found',
+    'writes a single CliAnalysisCompleted with populated details when issues are found',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -1027,19 +1026,14 @@ describe('analyze agentic — analysis telemetry', () => {
 
       expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
       const events = readAnalysisEvents();
-      expect(events).toHaveLength(2);
+      expect(events).toHaveLength(1);
       const completed = events.find(
         (event) => event.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted',
-      ) as StoredAnalysisCompletedEvent | undefined;
-      const findings = events.find(
-        (event) => event.metadata.event_type === 'Analytics.Cli.CliAnalysisFindingsDetected',
-      ) as StoredAnalysisFindingsDetectedEvent | undefined;
+      );
       expect(completed).toBeDefined();
-      expect(findings).toBeDefined();
-      expect(completed!.event_payload.analysis_id).toBe(findings!.event_payload.analysis_id);
       expect(completed!.event_payload.findings_count).toBe(2);
       expect(completed!.event_payload.exit_code).toBe(EXIT_CODE_SECRETS_FOUND);
-      expect(JSON.parse(findings!.event_payload.details)).toEqual({
+      expect(JSON.parse(completed!.event_payload.details)).toEqual({
         rule_keys: ['typescript:S1234'],
         counts_by_rule: { 'typescript:S1234': 2 },
       });
@@ -1079,7 +1073,7 @@ describe('sonar analyze — analysis telemetry', () => {
       .filter(
         (event): event is StoredAnalysisCompletedEvent =>
           event.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
-          (event as StoredAnalysisCompletedEvent).event_payload.analyzer === analyzer,
+          event.event_payload.analyzer === analyzer,
       );
   }
 

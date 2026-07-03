@@ -31,7 +31,6 @@ import { INVOCATION_ID } from '../lib/invocation-id.js';
 import type {
   AnalysisCompletedEventPayload,
   AnalysisEventIdentityPayload,
-  AnalysisFindingsDetectedEventPayload,
   StoredAnalysisEvent,
 } from '../lib/state.js';
 import { getActiveConnection, loadState } from '../lib/state-manager.js';
@@ -90,11 +89,6 @@ export type AnalysisCompletedFields = Omit<
   keyof AnalysisEventIdentityPayload
 >;
 
-export type AnalysisFindingsDetectedFields = Omit<
-  AnalysisFindingsDetectedEventPayload,
-  keyof AnalysisEventIdentityPayload
->;
-
 /**
  * Emits one CliAnalysisCompleted event when telemetry is enabled.
  * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
@@ -110,29 +104,6 @@ export async function emitAnalysisCompleted(
       event_id: randomUUID(),
       source: { domain: 'CLI' },
       event_type: 'Analytics.Cli.CliAnalysisCompleted',
-      event_timestamp: String(Date.now()),
-    },
-    event_payload: { ...base, ...fields },
-  });
-}
-
-/**
- * Emits one CliAnalysisFindingsDetected event when telemetry is enabled.
- * Callers should emit only when the paired CliAnalysisCompleted run reported
- * findings; this helper does not enforce findings_count > 0.
- * Resolves identity from state + auth; no-ops on opt-out or missing installationId.
- */
-export async function emitAnalysisFindingsDetected(
-  auth: ResolvedAuth,
-  fields: AnalysisFindingsDetectedFields,
-): Promise<void> {
-  const base = await buildAnalysisIdentityBase(auth);
-  if (!base) return;
-  appendAnalysisEvent({
-    metadata: {
-      event_id: randomUUID(),
-      source: { domain: 'CLI' },
-      event_type: 'Analytics.Cli.CliAnalysisFindingsDetected',
       event_timestamp: String(Date.now()),
     },
     event_payload: { ...base, ...fields },
