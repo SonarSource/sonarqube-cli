@@ -62,11 +62,21 @@ export interface Organization {
   actions?: { admin: boolean };
 }
 
+export interface DopRepository {
+  id: string;
+  name: string;
+  slug: string;
+  private: boolean;
+  archived: boolean;
+  boundProjectIds: string[];
+  importedInCurrentOrg: boolean;
+}
+
 export class SonarQubeClient {
   private readonly serverURL: string;
   private readonly token: string;
   public readonly isCloud: boolean;
-  private readonly orgIdCache = new Map<string, Promise<string | null>>();
+  private readonly orgInfoCache = new Map<string, Promise<{ id: string; uuidV4: string } | null>>();
 
   constructor(serverURL: string, token: string) {
     this.serverURL = serverURL.replace(/\/$/, ''); // Remove trailing slash
@@ -113,6 +123,8 @@ export class SonarQubeClient {
           `Access denied (HTTP ${response.status}). Check that the supplied token and organization are valid.`,
         );
       }
+      const errorText = await response.text();
+      logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
       throw new Error(`SonarQube API error: ${response.status} ${response.statusText}`);
     }
 
@@ -327,15 +339,34 @@ export class SonarQubeClient {
    * Uses the region-specific Cloud API host (SonarQube Cloud only).
    */
   async getOrganizationId(organizationKey: string): Promise<string | null> {
-    let pending = this.orgIdCache.get(organizationKey);
+    const info = await this.getOrganizationInfo(organizationKey);
+    return info?.uuidV4 ?? null;
+  }
+
+  /**
+   * Get an organization by key and return its legacy alphanumeric ID (not the
+   * uuidV4). Some APIs, like dop-translation, key off this legacy ID rather
+   * than the uuidV4 (SonarQube Cloud only).
+   */
+  async getOrganizationLegacyId(organizationKey: string): Promise<string | null> {
+    const info = await this.getOrganizationInfo(organizationKey);
+    return info?.id ?? null;
+  }
+
+  private async getOrganizationInfo(
+    organizationKey: string,
+  ): Promise<{ id: string; uuidV4: string } | null> {
+    let pending = this.orgInfoCache.get(organizationKey);
     if (!pending) {
-      pending = this.fetchOrganizationId(organizationKey);
-      this.orgIdCache.set(organizationKey, pending);
+      pending = this.fetchOrganizationInfo(organizationKey);
+      this.orgInfoCache.set(organizationKey, pending);
     }
     return pending;
   }
 
-  private async fetchOrganizationId(organizationKey: string): Promise<string | null> {
+  private async fetchOrganizationInfo(
+    organizationKey: string,
+  ): Promise<{ id: string; uuidV4: string } | null> {
     try {
       const endpoint = '/organizations/organizations';
       const result = await this.get<Array<{ id: string; uuidV4: string }>>(
@@ -343,7 +374,7 @@ export class SonarQubeClient {
         { organizationKey, excludeEligibility: 'true' },
         resolveFromEndpoint(this.serverURL, endpoint),
       );
-      return result[0]?.uuidV4 ?? null;
+      return result[0] ?? null;
     } catch {
       return null;
     }
@@ -507,6 +538,30 @@ export class SonarQubeClient {
     }
 
     return all;
+  }
+
+  /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
+  static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
+
+  /**
+   * Fetch one page of repositories visible to an organization's bound DevOps platform via
+   * `/dop-translation/dop-repositories` (SonarQube Cloud only, region-specific API host).
+   */
+  async fetchDopRepositoriesPage(
+    organizationId: string,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<{ repositories: DopRepository[]; total: number }> {
+    const endpoint = '/dop-translation/dop-repositories';
+    const result = await this.get<{
+      repositories: DopRepository[];
+      page: { total: number };
+    }>(
+      endpoint,
+      { organizationId, pageIndex, pageSize },
+      resolveFromEndpoint(this.serverURL, endpoint),
+    );
+    return { repositories: result.repositories, total: result.page.total };
   }
 
   /**
