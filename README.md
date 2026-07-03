@@ -10,10 +10,10 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 - **🔒 Secret Detection** — Scan code for hardcoded credentials and prevent secrets from being sent to LLM providers
 - **⚡ Fast Feedback Loop** — Get server-side issue detection on your local changes without waiting for CI/CD
 - **🤖 AI-Assisted Fixes** — Generate remediation suggestions for security vulnerabilities (SonarQube Cloud)
-- **🔗 Agent Integration** — Seamless hooks for Claude Code, GitHub Copilot, and other AI coding tools
+- **🔗 Agent Integration** — Seamless hooks for Claude Code, GitHub Copilot CLI, and other AI coding tools
 - **📊 Scriptable** — Query and manage SonarQube issues programmatically with JSON output
 
-**Use it standalone or integrate with:** Git hooks, Claude Code, GitHub Copilot, CI/CD pipelines, custom automation
+**Use it standalone or integrate with:** Git hooks, Claude Code, GitHub Copilot CLI, CI/CD pipelines, custom automation
 
 > **🤖 For AI Agents:** If you are an AI agent reading this, navigate to [docs/llms.txt](https://github.com/SonarSource/sonarqube-cli/blob/master/docs/llms.txt) for machine-readable
 > command documentation optimized for LLM consumption.
@@ -39,7 +39,7 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 - [Integrations](#integrations)
   - [Claude Code Integration](#claude-code-integration)
   - [Git Hooks](#git-hooks)
-  - [GitHub Copilot Integration](#github-copilot-integration)
+  - [GitHub Copilot CLI Integration](#github-copilot-cli-integration)
 - [Example Outputs](#example-outputs)
 - [Troubleshooting](#troubleshooting)
 - [State Management](#state-management)
@@ -52,7 +52,7 @@ The SonarQube CLI integrates enterprise-grade static analysis into your developm
 
 The SonarQube CLI is designed for three distinct use cases:
 
-1. **🤖 Agentic Use** — Built-in support for AI coding agents (Claude Code, GitHub Copilot) with pre-tool hooks that prevent secrets from being sent to LLM providers
+1. **🤖 Agentic Use** — Built-in support for AI coding agents (Claude Code, GitHub Copilot CLI) with pre-tool hooks that prevent secrets from being sent to LLM providers
    ```bash
    sonar integrate claude -g
    # Now Claude Code will automatically scan for secrets before processing your code
@@ -303,7 +303,7 @@ sonar integrate git --hook pre-commit --non-interactive
 # Skips all prompts, fails fast on errors
 ```
 
-### GitHub Copilot Integration
+### GitHub Copilot CLI Integration
 
 **Global setup:**
 
@@ -395,7 +395,7 @@ issues[1]:
     type: CODE_SMELL
 ```
 
-This format is designed for parsing by LLMs and can be used with Claude Code, GitHub Copilot, or custom AI workflows.
+This format is designed for parsing by LLMs and can be used with Claude Code, GitHub Copilot CLI, or custom AI workflows.
 
 ## Troubleshooting
 
