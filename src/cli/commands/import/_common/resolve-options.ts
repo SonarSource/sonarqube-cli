@@ -22,6 +22,7 @@ import { type SonarQubeClient } from '../../../../sonarqube/client';
 import { selectPrompt, withSpinner } from '../../../../ui';
 import { CommandFailedError, InvalidOptionError } from '../../_common/error';
 import { OrganizationCollection } from './organization-collection';
+import { RepositoryCollection } from './repository-collection';
 
 export async function resolveOrg(
   client: SonarQubeClient,
@@ -85,6 +86,78 @@ export async function resolveOrg(
 
     if (choice === LOAD_MORE) {
       eligible.loadMore();
+      continue;
+    }
+
+    return choice;
+  }
+}
+
+export async function resolveRepo(
+  client: SonarQubeClient,
+  orgKey: string,
+  opts: { repo?: string; nonInteractive?: boolean },
+): Promise<string> {
+  if (opts.repo) return opts.repo;
+
+  if (opts.nonInteractive) {
+    throw new InvalidOptionError(
+      '--repo is required in non-interactive mode',
+      'Pass --repo <slug> to specify a repository directly.',
+    );
+  }
+
+  const organizationId = await client.getOrganizationLegacyId(orgKey);
+  if (!organizationId) {
+    throw new CommandFailedError(`Organization '${orgKey}' not found.`, {
+      remediationHint: 'Check that the organization key is correct and that you have access to it.',
+    });
+  }
+
+  let repos: RepositoryCollection;
+  try {
+    repos = new RepositoryCollection(
+      await withSpinner('Loading repositories...', () =>
+        client.fetchAllDopRepositories(organizationId),
+      ),
+    );
+  } catch (err) {
+    throw new CommandFailedError(
+      `Failed to load repositories: ${err instanceof Error ? err.message : String(err)}`,
+      { remediationHint: 'Check your network connection and authentication, then retry.' },
+    );
+  }
+
+  if (repos.length === 0) {
+    throw new CommandFailedError('No repositories found for the selected organization.', {
+      remediationHint:
+        'The organization may have no repositories visible to its connected DevOps platform, or the platform connection may need to be reconfigured.',
+    });
+  }
+
+  const LOAD_MORE = Symbol('load-more');
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  while (true) {
+    const options: Array<{ value: string | typeof LOAD_MORE; label: string }> = repos.visible.map(
+      (repo) => ({
+        value: repo.slug,
+        label: repo.importedInCurrentOrg ? `${repo.slug} (already imported)` : repo.slug,
+      }),
+    );
+
+    if (repos.hasMore) {
+      options.push({ value: LOAD_MORE, label: 'Load more...' });
+    }
+
+    const choice = await selectPrompt('Select a repository', options);
+
+    if (choice === null) {
+      throw new CommandFailedError('Repository selection cancelled');
+    }
+
+    if (choice === LOAD_MORE) {
+      repos.loadMore();
       continue;
     }
 

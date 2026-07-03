@@ -56,6 +56,16 @@ interface ProjectData {
   issues: Required<IssueConfig>[];
 }
 
+export interface DopRepositoryConfig {
+  id: string;
+  name: string;
+  slug: string;
+  private?: boolean;
+  archived?: boolean;
+  boundProjectIds?: string[];
+  importedInCurrentOrg?: boolean;
+}
+
 export class ProjectBuilder {
   private readonly projectKey: string;
   private readonly issues: Required<IssueConfig>[] = [];
@@ -128,6 +138,7 @@ export class FakeSonarQubeServerBuilder {
   private systemVersion = '9.9.0.00001';
   private memberOrganizations: Organization[] = [];
   private memberOrganizationsTotal?: number;
+  private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
@@ -179,6 +190,16 @@ export class FakeSonarQubeServerBuilder {
 
   withOrganizationTotal(total: number): this {
     this.memberOrganizationsTotal = total;
+    return this;
+  }
+
+  /**
+   * Configure `/dop-translation/dop-repositories` for a given organization's legacy
+   * ID (the `id` field returned by `/organizations/organizations`, which defaults to
+   * the org key itself unless CAG/SQAA entitlement overrides it).
+   */
+  withDopRepositories(organizationId: string, repos: DopRepositoryConfig[]): this {
+    this.dopRepositoriesByOrgId.set(organizationId, repos);
     return this;
   }
 
@@ -302,6 +323,7 @@ export class FakeSonarQubeServerBuilder {
       systemVersion,
       memberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
+      dopRepositoriesByOrgId,
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
@@ -615,6 +637,31 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify([]), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/dop-translation/dop-repositories') {
+          const organizationId = query.organizationId;
+          const allRepos = organizationId ? (dopRepositoriesByOrgId.get(organizationId) ?? []) : [];
+          const pageSize = Number.parseInt(query.pageSize ?? '25', 10);
+          const pageIndex = Number.parseInt(query.pageIndex ?? '1', 10);
+          const start = (pageIndex - 1) * pageSize;
+          const pagedRepos = allRepos.slice(start, start + pageSize).map((r) => ({
+            id: r.id,
+            name: r.name,
+            slug: r.slug,
+            private: r.private ?? false,
+            archived: r.archived ?? false,
+            boundProjectIds: r.boundProjectIds ?? [],
+            importedInCurrentOrg: r.importedInCurrentOrg ?? false,
+          }));
+
+          return new Response(
+            JSON.stringify({
+              repositories: pagedRepos,
+              page: { pageIndex, pageSize, total: allRepos.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         if (path === '/api/settings/values' && req.method === 'GET') {

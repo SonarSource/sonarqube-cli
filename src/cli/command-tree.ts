@@ -221,6 +221,7 @@ list
 COMMAND_TREE.command('import', { hidden: true })
   .description('Import a repository from a connected DevOps platform into SonarQube')
   .option('--org <key>', 'SonarQube organization key')
+  .option('--repo <slug>', 'DevOps platform repository slug (e.g. my-org/my-repo)')
   .option('--non-interactive', 'Skip all prompts; require explicit flags')
   .authenticatedAction((auth, options: ImportOptions) => importHandler(options, auth));
 

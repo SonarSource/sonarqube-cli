@@ -20,5 +20,6 @@
 
 export interface ImportOptions {
   org?: string;
+  repo?: string;
   nonInteractive?: boolean;
 }

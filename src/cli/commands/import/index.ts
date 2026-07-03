@@ -21,7 +21,7 @@
 import type { ResolvedAuth } from '../../../lib/auth-resolver';
 import { SonarQubeClient } from '../../../sonarqube/client';
 import { info, intro, outro } from '../../../ui';
-import { resolveOrg } from './_common/resolve-options';
+import { resolveOrg, resolveRepo } from './_common/resolve-options';
 import type { ImportOptions } from './_common/types';
 
 export { type ImportOptions } from './_common/types';
@@ -34,5 +34,8 @@ export async function importHandler(options: ImportOptions, auth: ResolvedAuth):
   const orgKey = await resolveOrg(client, options);
   info(`Organization: ${orgKey}`);
 
-  outro('Organization selected', 'success');
+  const repoSlug = await resolveRepo(client, orgKey, options);
+  info(`Repository: ${repoSlug}`);
+
+  outro('Repository selected', 'success');
 }
