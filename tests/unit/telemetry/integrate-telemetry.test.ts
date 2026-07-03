@@ -78,7 +78,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
           'pre-commit-dependency-risks',
         ]),
       ],
-      featuresSkipped: ['sqaa-hooks'],
+      featuresDeclined: [],
+      featuresUninstalled: [],
       repoRoot: '/some/repo',
     });
 
@@ -89,7 +90,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       'pre-commit-secrets',
       'pre-commit-dependency-risks',
     ]);
-    expect(fields.features_skipped).toEqual(['sqaa-hooks']);
+    expect(fields.features_declined).toEqual([]);
+    expect(fields.features_uninstalled).toEqual([]);
     // repo_id is the SHA-256 hex of the canonical repo root.
     const expected = createHash('sha256').update(canonicalizePath('/some/repo')).digest('hex');
     expect(fields.repo_id).toBe(expected);
@@ -105,7 +107,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       nonInteractive: false,
       isFromRouter: true,
       installedFeatures: [makeInstalledFeature('sonar-secrets-hooks')],
-      featuresSkipped: [],
+      featuresDeclined: [],
+      featuresUninstalled: [],
       repoRoot: null,
     });
 
@@ -113,6 +116,27 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
     expect(fields.repo_id).toBeNull();
     expect(fields.is_global).toBe(true);
     expect(fields.is_from_router).toBe(true);
+  });
+
+  it('records declined and uninstalled features in separate fields', async () => {
+    // Interactive run: install one feature, decline another offered via `ask`,
+    // and remove a previously-installed one.
+    await emitIntegrationConfiguredTelemetry({
+      auth: AUTH,
+      integrationId: 'claude',
+      scope: 'project',
+      nonInteractive: false,
+      isFromRouter: false,
+      installedFeatures: [makeInstalledFeature('sonar-secrets-hooks')],
+      featuresDeclined: ['sqaa-instructions'],
+      featuresUninstalled: ['mcp-server'],
+      repoRoot: '/some/repo',
+    });
+
+    const [, fields] = emitSpy.mock.calls[0] as [ResolvedAuth, Record<string, unknown>];
+    expect(fields.features_installed).toEqual(['sonar-secrets-hooks']);
+    expect(fields.features_declined).toEqual(['sqaa-instructions']);
+    expect(fields.features_uninstalled).toEqual(['mcp-server']);
   });
 
   it('sets repo_id to null when repoRoot is null on project scope', async () => {
@@ -123,7 +147,8 @@ describe('emitIntegrationConfiguredTelemetry()', () => {
       nonInteractive: false,
       isFromRouter: false,
       installedFeatures: [makeInstalledFeature('sonar-secrets-hooks')],
-      featuresSkipped: [],
+      featuresDeclined: [],
+      featuresUninstalled: [],
       repoRoot: null,
     });
 

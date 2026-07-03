@@ -106,7 +106,7 @@ export interface FeatureApplication<TOptions = Record<string, unknown>> {
 export interface FeatureSelectionResult<TOptions = Record<string, unknown>> {
   toInstall: FeatureApplication<TOptions>[];
   toRemove: FeatureApplication<TOptions>[];
-  /** Ids of features offered (`ask`) and deliberately declined; feeds telemetry's `features_skipped`. */
+  /** Ids of features offered (`ask`) and deliberately declined; feeds telemetry's `features_declined`. */
   declined: string[];
 }
 

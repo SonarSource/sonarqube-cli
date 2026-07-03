@@ -34,8 +34,10 @@ export interface IntegrationConfiguredTelemetryParams {
   isFromRouter: boolean;
   /** Features actually installed by this run (including active subfeatures). */
   installedFeatures: InstalledIntegrationFeature[];
-  /** Feature ids the user declined (offered via `ask`) or chose to uninstall this run. */
-  featuresSkipped: string[];
+  /** Feature ids the user declined (offered via `ask`, never installed). */
+  featuresDeclined: string[];
+  /** Previously-installed feature ids the user removed this run. */
+  featuresUninstalled: string[];
   /** Repo root path when known (project scope, inside a git repo); null otherwise. */
   repoRoot: string | null;
 }
@@ -54,7 +56,8 @@ export async function emitIntegrationConfiguredTelemetry(
       integration_id: params.integrationId,
       repo_id: hashRepoRoot(params.repoRoot),
       features_installed: featuresInstalled,
-      features_skipped: params.featuresSkipped,
+      features_declined: params.featuresDeclined,
+      features_uninstalled: params.featuresUninstalled,
       is_global: params.scope === 'global',
       is_interactive: !params.nonInteractive,
       is_from_router: params.isFromRouter,

@@ -557,8 +557,10 @@ export interface IntegrationConfiguredEventPayload extends AnalysisEventIdentity
   repo_id: string | null;
   /** Installed feature ids, including active subfeature ids. */
   features_installed: string[];
-  /** Non-installed feature ids, including non-installed subfeature ids. */
-  features_skipped: string[];
+  /** Feature ids offered via an `ask` prompt that the user declined (never installed). */
+  features_declined: string[];
+  /** Previously-installed feature ids the user removed this run. */
+  features_uninstalled: string[];
   is_global: boolean;
   is_interactive: boolean;
   /** True when invoked via the bare `sonar integrate` router, not `sonar integrate <tool>`. */

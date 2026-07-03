@@ -153,7 +153,8 @@ export async function installIntegration<TOptions>({
         nonInteractive: nonInteractive ?? false,
         isFromRouter: isFromRouter ?? false,
         installedFeatures,
-        featuresSkipped: [...declined, ...toRemove.map((application) => application.feature.id)],
+        featuresDeclined: declined,
+        featuresUninstalled: toRemove.map((application) => application.feature.id),
         repoRoot: resolveRepoRootForScope(scope, targetRoot),
       });
     }

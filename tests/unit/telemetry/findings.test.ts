@@ -297,7 +297,8 @@ function makeIntegrationConfiguredFields(
     integration_id: 'claude',
     repo_id: 'a'.repeat(64),
     features_installed: ['sonar-secrets-hooks'],
-    features_skipped: ['sqaa-hooks'],
+    features_declined: ['sqaa-instructions'],
+    features_uninstalled: ['mcp-server'],
     is_global: false,
     is_interactive: true,
     is_from_router: false,
@@ -312,7 +313,8 @@ describe('emitIntegrationConfigured()', () => {
       makeIntegrationConfiguredFields({
         integration_id: 'git',
         features_installed: ['pre-commit-hook', 'pre-commit-secrets'],
-        features_skipped: ['pre-commit-dependency-risks'],
+        features_declined: ['pre-commit-dependency-risks'],
+        features_uninstalled: [],
         is_from_router: true,
       }),
     );
@@ -325,7 +327,8 @@ describe('emitIntegrationConfigured()', () => {
       'pre-commit-hook',
       'pre-commit-secrets',
     ]);
-    expect(configured.event_payload.features_skipped).toEqual(['pre-commit-dependency-risks']);
+    expect(configured.event_payload.features_declined).toEqual(['pre-commit-dependency-risks']);
+    expect(configured.event_payload.features_uninstalled).toEqual([]);
     expect(configured.event_payload.is_from_router).toBe(true);
     // Identity base is merged in.
     expect(configured.event_payload.cli_installation_id).toBe('install-id');
