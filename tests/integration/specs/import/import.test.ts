@@ -497,5 +497,39 @@ describe('sonar import', () => {
       },
       { timeout: 15000 },
     );
+
+    it(
+      'fetches only the first server page before showing the initial repo prompt',
+      async () => {
+        // 60 repos exceeds the 50-item server page cap, so an eager fetch-all
+        // would need 2 requests; the lazy loader should only need 1 to fill
+        // the first local page (10 items) the user actually sees.
+        const manyRepos = Array.from({ length: 60 }, (_, i) => ({
+          id: `repo-${i + 1}`,
+          name: `repo-${String(i + 1).padStart(2, '0')}`,
+          slug: `kevinmlsilva/repo-${String(i + 1).padStart(2, '0')}`,
+        }));
+
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopRepositories('my-org', manyRepos)
+          .start();
+        const serverUrl = server.baseUrl();
+        harness.withAuth(serverUrl, 'test-token');
+
+        const result = await harness.run('import --org my-org', {
+          stdin: '\r', // enter → selects the first repo without paging further
+          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('kevinmlsilva/repo-01');
+        const recorded = server.getRecordedRequests();
+        const repoRequests = recorded.filter((r) => r.path === '/dop-translation/dop-repositories');
+        expect(repoRequests).toHaveLength(1);
+      },
+      { timeout: 15000 },
+    );
   });
 });

@@ -116,9 +116,9 @@ export async function resolveRepo(
 
   let repos: RepositoryCollection;
   try {
-    repos = new RepositoryCollection(
-      await withSpinner('Loading repositories...', () =>
-        client.fetchAllDopRepositories(organizationId),
+    repos = await withSpinner('Loading repositories...', () =>
+      RepositoryCollection.create((pageIndex, pageSize) =>
+        client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
       ),
     );
   } catch (err) {
@@ -157,7 +157,7 @@ export async function resolveRepo(
     }
 
     if (choice === LOAD_MORE) {
-      repos.loadMore();
+      await repos.loadMore();
       continue;
     }
 

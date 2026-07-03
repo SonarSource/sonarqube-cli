@@ -540,32 +540,14 @@ export class SonarQubeClient {
     return all;
   }
 
+  /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
+  static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
+
   /**
-   * List the repositories visible to an organization's bound DevOps platform via
+   * Fetch one page of repositories visible to an organization's bound DevOps platform via
    * `/dop-translation/dop-repositories` (SonarQube Cloud only, region-specific API host).
    */
-  async fetchAllDopRepositories(organizationId: string): Promise<DopRepository[]> {
-    const PAGE_SIZE = 50; // server-enforced max
-    let pageIndex = 1;
-    const all: DopRepository[] = [];
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    while (true) {
-      const { repositories, total } = await this.fetchDopRepositoriesPage(
-        organizationId,
-        pageIndex,
-        PAGE_SIZE,
-      );
-
-      all.push(...repositories);
-      if (all.length >= total || repositories.length === 0) break;
-      pageIndex++;
-    }
-
-    return all;
-  }
-
-  private async fetchDopRepositoriesPage(
+  async fetchDopRepositoriesPage(
     organizationId: string,
     pageIndex: number,
     pageSize: number,
