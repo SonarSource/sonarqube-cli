@@ -82,6 +82,7 @@ import { cursorPreToolUse } from './commands/hook/cursor-pre-tool-use';
 import { cursorPromptSubmit } from './commands/hook/cursor-prompt-submit';
 import { gitPreCommit, type GitPreCommitOptions } from './commands/hook/git-pre-commit';
 import { gitPrePush } from './commands/hook/git-pre-push';
+import { importHandler, type ImportOptions } from './commands/import';
 import type { IntegrateAgentOptions } from './commands/integrate/_common/types';
 import { integrateAntigravity } from './commands/integrate/antigravity';
 import { integrateClaude } from './commands/integrate/claude';
@@ -215,6 +216,13 @@ list
   .addOption(pageOption)
   .addOption(pageSizeOption)
   .authenticatedAction((auth, options: ListProjectsOptions) => listProjects(options, auth));
+
+// Import repositories from DevOps platforms into SonarQube (hidden while in development)
+COMMAND_TREE.command('import', { hidden: true })
+  .description('Import a repository from a connected DevOps platform into SonarQube')
+  .option('--org <key>', 'SonarQube organization key')
+  .option('--non-interactive', 'Skip all prompts; require explicit flags')
+  .authenticatedAction((auth, options: ImportOptions) => importHandler(options, auth));
 
 COMMAND_TREE.command('api')
   .rootHelp({
