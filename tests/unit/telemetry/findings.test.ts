@@ -210,7 +210,7 @@ describe('emitAnalysisCompleted()', () => {
 
     const [event] = readLines(testSonarUserHome);
     expect(event.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-    const completedEvent = event;
+    const completedEvent = event as StoredAnalysisCompletedEvent;
     expect(completedEvent.event_payload.analyzer).toBe('sqaa');
     expect(completedEvent.event_payload.findings_count).toBe(2);
     expect(completedEvent.event_payload.exit_code).toBe(51);
@@ -521,7 +521,7 @@ describe('flushFindings()', () => {
       const requeued = readLines(testSonarUserHome);
       expect(requeued).toHaveLength(1);
       expect(requeued[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-      expect(requeued[0].event_payload.analysis_id).toBe('run-a');
+      expect((requeued[0] as StoredAnalysisCompletedEvent).event_payload.analysis_id).toBe('run-a');
     } finally {
       fetchSpy.mockRestore();
     }
@@ -617,7 +617,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
     expect(lines[0].metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(0);
     expect(completed.event_payload.findings_count).toBe(0);
@@ -641,7 +641,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
 
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(51);
@@ -670,7 +670,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     );
 
     const lines = readLines(testSonarUserHome);
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     const details = JSON.parse(completed.event_payload.details) as {
       files_with_findings_count: number;
       source: string;
@@ -684,7 +684,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.findings_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(2);
@@ -699,7 +699,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.exit_code).toBeNull();
   });
@@ -710,7 +710,7 @@ describe('scanAndEmitSecrets() — emitted event fields', () => {
     await scanAndEmitSecrets(SECRETS_CALLER_COMMANDS.analyzeSecrets, AUTH, resolvedRun(2, stdout));
 
     const lines = readLines(testSonarUserHome);
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.errors_count).toBe(2);
     expect(completed.event_payload.failures_count).toBe(1);
   });
@@ -733,7 +733,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
     const lines = readLines(testSonarUserHome);
     // a single Completed event carrying details (findings present)
     expect(lines).toHaveLength(1);
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.event_payload.failures_count).toBe(0);
     expect(completed.event_payload.exit_code).toBe(51);
     expect(completed.event_payload.details).not.toBe('');
@@ -752,7 +752,7 @@ describe('scanAndEmitSecrets() — wrapper behavior', () => {
 
     const lines = readLines(testSonarUserHome);
     expect(lines).toHaveLength(1);
-    const completed = lines[0];
+    const completed = lines[0] as StoredAnalysisCompletedEvent;
     expect(completed.metadata.event_type).toBe('Analytics.Cli.CliAnalysisCompleted');
     expect(completed.event_payload.failures_count).toBe(1);
     expect(completed.event_payload.exit_code).toBeNull();

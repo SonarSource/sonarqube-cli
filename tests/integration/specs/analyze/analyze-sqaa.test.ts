@@ -25,10 +25,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type {
-  StoredAnalysisCompletedEvent,
-  StoredAnalysisEvent,
-} from '../../../../src/lib/state.js';
+import type { StoredAnalysisCompletedEvent } from '../../../../src/lib/state.js';
 import { TELEMETRY_FLUSH_MODE_ENV } from '../../../../src/telemetry/index.js';
 import { SECRETS_CALLER_COMMANDS } from '../../../../src/telemetry/secrets-analysis-telemetry.js';
 import {
@@ -949,13 +946,13 @@ describe('analyze agentic — analysis telemetry', () => {
     return join(harness.cliHome.path, 'telemetry', 'findings.ndjson');
   }
 
-  function readAnalysisEvents(): StoredAnalysisEvent[] {
+  function readAnalysisEvents(): StoredAnalysisCompletedEvent[] {
     const path = findingsPath();
     if (!existsSync(path)) return [];
     return readFileSync(path, 'utf-8')
       .split('\n')
       .filter(Boolean)
-      .map((line) => JSON.parse(line) as StoredAnalysisEvent);
+      .map((line) => JSON.parse(line) as StoredAnalysisCompletedEvent);
   }
 
   function enableFlushTelemetry(): void {
@@ -1069,7 +1066,7 @@ describe('sonar analyze — analysis telemetry', () => {
     return readFileSync(path, 'utf-8')
       .split('\n')
       .filter(Boolean)
-      .map((line) => JSON.parse(line) as StoredAnalysisEvent)
+      .map((line) => JSON.parse(line) as StoredAnalysisCompletedEvent)
       .filter(
         (event): event is StoredAnalysisCompletedEvent =>
           event.metadata.event_type === 'Analytics.Cli.CliAnalysisCompleted' &&
