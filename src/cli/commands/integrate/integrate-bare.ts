@@ -37,6 +37,8 @@ import { integrateGit } from './git';
 export interface IntegrateBareOptions {
   project?: string;
   global?: boolean;
+  /** Marks handlers as invoked via the bare router; forwarded to telemetry only. */
+  isFromRouter?: boolean;
 }
 
 type Handler = (options: IntegrateBareOptions, auth: ResolvedAuth) => Promise<void>;
@@ -65,5 +67,5 @@ export async function integrateBare(
 
   if (!selected) throw new CommandFailedError('No integration selected');
 
-  await selected.handler(options, auth);
+  await selected.handler({ ...options, isFromRouter: true }, auth);
 }

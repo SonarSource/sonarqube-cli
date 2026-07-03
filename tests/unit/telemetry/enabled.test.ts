@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ENV_DO_NOT_TRACK } from '../../../src/lib/config-constants.js';
 import { getDefaultState } from '../../../src/lib/state.js';
@@ -27,9 +27,18 @@ import {
   isDoNotTrackRequested,
   isTelemetryEnabled,
 } from '../../../src/telemetry/enabled.js';
+import { restoreEnv } from '../../_common/isolated-cli-env.js';
+
+// Each test runs from an unset baseline; restore the preload's DO_NOT_TRACK afterwards
+// so we don't leak a cleared value that would re-enable telemetry for later tests.
+const PRELOAD_DO_NOT_TRACK = process.env[ENV_DO_NOT_TRACK];
+
+beforeEach(() => {
+  delete process.env[ENV_DO_NOT_TRACK];
+});
 
 afterEach(() => {
-  delete process.env[ENV_DO_NOT_TRACK];
+  restoreEnv(ENV_DO_NOT_TRACK, PRELOAD_DO_NOT_TRACK);
 });
 
 describe('isDoNotTrackRequested', () => {

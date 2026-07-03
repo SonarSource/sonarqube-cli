@@ -53,6 +53,7 @@ import {
 import { resolveTelemetryIdentity } from '../../../src/telemetry/identity.js';
 import * as userModule from '../../../src/telemetry/user.js';
 import * as ui from '../../../src/ui';
+import { restoreEnv } from '../../_common/isolated-cli-env.js';
 import { mockIdentityGetSafe } from './identity-api-mock.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -119,10 +120,18 @@ let saveStateSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 let testDir: string;
+// Preserve the preload's isolation env (DO_NOT_TRACK=1) so we don't leak a cleared
+// value to later tests, which would re-enable telemetry against the real ~/.sonar.
+let savedSonarUserHome: string | undefined;
+let savedDoNotTrack: string | undefined;
 
 beforeEach(() => {
+  savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+  savedDoNotTrack = process.env[ENV_DO_NOT_TRACK];
   testDir = mkdtempSync(join(tmpdir(), 'telemetry-test-'));
   process.env[ENV_SONAR_USER_HOME] = testDir;
+  // Enable telemetry for these tests; writes land in the isolated testDir.
+  delete process.env[ENV_DO_NOT_TRACK];
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
   saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
@@ -136,9 +145,9 @@ afterEach(() => {
   saveStateSpy.mockRestore();
   getUserIdSpy.mockRestore();
   spawnSpy.mockRestore();
-  delete process.env[ENV_SONAR_USER_HOME];
+  restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
+  restoreEnv(ENV_DO_NOT_TRACK, savedDoNotTrack);
   delete process.env[TELEMETRY_FLUSH_MODE_ENV];
-  delete process.env[ENV_DO_NOT_TRACK];
   delete process.env.CLAUDECODE;
   delete process.env.CLAUDE_CODE_ENTRYPOINT;
   delete process.env.CLAUDE_PROJECT_DIR;

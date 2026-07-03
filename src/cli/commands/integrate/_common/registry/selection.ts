@@ -93,6 +93,7 @@ export async function selectFeaturesForInvocation<TOptions>(
 ): Promise<FeatureSelectionResult<TOptions>> {
   const toInstall: FeatureApplication<TOptions>[] = [];
   const toRemove: FeatureApplication<TOptions>[] = [];
+  const declined: string[] = [];
 
   for (const application of applications) {
     const feature = application.feature;
@@ -100,14 +101,19 @@ export async function selectFeaturesForInvocation<TOptions>(
       if (await shouldRemoveInstalledFeature(feature, invocation)) {
         toRemove.push(application);
       } else {
-        toInstall.push(await materializeApplication(application, invocation));
+        toInstall.push(await materializeApplication(application, invocation, declined));
       }
-    } else if (await shouldInstallFeature(feature, invocation)) {
-      toInstall.push(await materializeApplication(application, invocation));
+    } else {
+      const outcome = await shouldInstallFeature(feature, invocation);
+      if (outcome === 'install') {
+        toInstall.push(await materializeApplication(application, invocation, declined));
+      } else if (outcome === 'declined') {
+        declined.push(feature.id);
+      }
     }
   }
 
-  return { toInstall, toRemove };
+  return { toInstall, toRemove, declined };
 }
 
 function isFeatureInstalled<TOptions>(
@@ -162,29 +168,41 @@ function warnFeatureRemoval(message: string): void {
   text(`  ${red('✗')}  ${message}`);
 }
 
+/** `install`: install it. `declined`: user was asked and said no. `skipped`: auto-skipped, no user decline. */
+type FeatureSelectionOutcome = 'install' | 'declined' | 'skipped';
+
 /**
  * For a container application, narrow its subfeatures to those whose
  * `shouldInstall` is active; non-container applications are returned unchanged.
+ * Declined subfeature ids are appended to `declined`.
  */
 async function materializeApplication<TOptions>(
   application: FeatureApplication<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
+  declined: string[],
 ): Promise<FeatureApplication<TOptions>> {
   const feature = application.feature;
   if (!isFeatureContainer(feature)) {
     return application;
   }
-  return { ...application, feature: await selectActiveSubfeatures(feature, invocation) };
+  return {
+    ...application,
+    feature: await selectActiveSubfeatures(feature, invocation, declined),
+  };
 }
 
 async function selectActiveSubfeatures<TOptions>(
   container: FeatureContainer<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
+  declined: string[],
 ): Promise<FeatureContainer<TOptions>> {
   const active: SubfeatureDeclaration<TOptions>[] = [];
   for (const subfeature of container.subfeatures) {
-    if (await shouldInstallFeature(subfeature, invocation)) {
+    const outcome = await shouldInstallFeature(subfeature, invocation);
+    if (outcome === 'install') {
       active.push(subfeature);
+    } else if (outcome === 'declined') {
+      declined.push(subfeature.id);
     }
   }
   return { ...container, subfeatures: active };
@@ -193,22 +211,22 @@ async function selectActiveSubfeatures<TOptions>(
 async function shouldInstallFeature<TOptions>(
   feature: FeatureDeclaration<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
-): Promise<boolean> {
+): Promise<FeatureSelectionOutcome> {
   const decision = normalizeDecision(await feature.shouldInstall?.(invocation));
   switch (decision.action) {
     case 'install':
       if (decision.message) {
         discreetSuccess(decision.message);
       }
-      return true;
+      return 'install';
     case 'skip':
       if (decision.message) {
         info(decision.message);
       }
-      return false;
+      return 'skipped';
     case 'ask': {
       if (invocation.nonInteractive) {
-        return true;
+        return 'install';
       }
       const defaultQuestion = feature.benefitDescription
         ? `Install ${feature.displayName}? (${feature.benefitDescription})`
@@ -217,7 +235,7 @@ async function shouldInstallFeature<TOptions>(
       if (confirmed === null) {
         throw new CommandFailedError('Installation cancelled');
       }
-      return confirmed;
+      return confirmed ? 'install' : 'declined';
     }
   }
 }

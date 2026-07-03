@@ -36,7 +36,7 @@ import type {
 import type { ResolvedAuth } from '../../../src/lib/auth-resolver.js';
 import { ENV_SONAR_USER_HOME } from '../../../src/lib/config-constants.js';
 import * as stateRepository from '../../../src/lib/repository/state-repository.js';
-import type { StoredAnalysisEvent } from '../../../src/lib/state.js';
+import type { StoredAnalysisCompletedEvent } from '../../../src/lib/state.js';
 import { getDefaultState } from '../../../src/lib/state.js';
 import * as stateManager from '../../../src/lib/state-manager.js';
 import {
@@ -106,13 +106,13 @@ function findingsPath(sonarUserHome: string): string {
   return join(sonarUserHome, 'sonarqube-cli', 'telemetry', 'findings.ndjson');
 }
 
-function readEvents(sonarUserHome: string): StoredAnalysisEvent[] {
+function readEvents(sonarUserHome: string): StoredAnalysisCompletedEvent[] {
   const path = findingsPath(sonarUserHome);
   if (!existsSync(path)) return [];
   return readFileSync(path, 'utf-8')
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as StoredAnalysisEvent);
+    .map((line) => JSON.parse(line) as StoredAnalysisCompletedEvent);
 }
 
 function makeTelemetryState(enabled = true) {
